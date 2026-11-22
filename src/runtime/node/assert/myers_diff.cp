@@ -16,19 +16,19 @@ type String16ZConst = [:0]const u16;
 type String16ZMut = [:0]u16;
 
 /// Comptime diff configuration. Defaults are usually sufficient.
-pub const Options = struct {
+pub struct Options {
     /// Guesstimate for the number of bytes `expected` and `actual` will be.
     /// Defaults to 256.
     ///
     /// Used to reserve space on the stack for the edit graph.
-    avg_input_size: comptime_int = 256,
+    avg_input_size: usize = 256,
     /// How much stack space to reserve for edit trace frames. Defaults to 64.
-    initial_trace_capacity: comptime_int = 64,
+    initial_trace_capacity: usize = 64,
     /// When `true`, string lines that are only different by a trailing comma
     /// are considered equal. Not used when comparing chars. Defaults to
     /// `false`.
     check_comma_disparity: bool = false,
-};
+}
 
 // By limiting maximum string and buffer lengths, we can store u32s in the
 // edit graph instead of usize's, halving our memory footprint. The
@@ -69,11 +69,9 @@ struct TraceListGuard {
 
 struct DeinitWithAllocGuard<T> {
     alloc: Allocator,
-    val: T?,
-    ~init() {
-        if (_.val != null) {
-            _.val.?.deinit(_.alloc);
-        }
+    val: T,
+    ~errinit() {
+        _.val.deinit(_.alloc);
     }
 }
 
@@ -131,7 +129,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
         ///
         /// Returned `Diff` objects borrow from the input slices. Both `actual`
         /// and `expected` must outlive them.
-        pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Line) DiffError!DiffList(Line) {
+        pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Line): DiffError!DiffList(Line) {
             // Edit graph's allocator
             let graph_stack_alloc = stackFallback(graph_initial_size, bun_allocator);
             const graph_alloc = graph_stack_alloc.get();
@@ -151,7 +149,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
 
             let graph_guard = AllocSliceGuard<uint>{
                 alloc: graph_alloc,
-                slice: try graph_alloc.alloc(uint, graph_size),
+                slice: graph_alloc.alloc(uint, graph_size)?,
             };
             @memset(graph_guard.slice, 0);
             graph_guard.slice.len = graph_size;
@@ -160,11 +158,11 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
                 alloc: trace_alloc,
                 trace: TraceList.init(trace_alloc),
             };
-            try trace_guard.trace.ensureTotalCapacityPrecise(max + 1);
+            trace_guard.trace.ensureTotalCapacityPrecise(max + 1)?;
 
             for (0..max + 1) |_diff_level| {
                 const diff_level: int = @intCast(_diff_level);
-                const new_trace = try trace_alloc.dupe(uint, graph_guard.slice);
+                const new_trace = trace_alloc.dupe(uint, graph_guard.slice)?;
                 trace_guard.trace.appendAssumeCapacity(new_trace);
 
                 const diag_start: int = -@as(int, @intCast(diff_level));
@@ -208,7 +206,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
             trace: *const TraceList,
             actual: []const Line,
             expected: []const Line,
-        ) DiffError!DiffList(Line) {
+        ): DiffError!DiffList(Line) {
             const max = i(actual.len + expected.len);
             let x = i(actual.len);
             let y = i(expected.len);
@@ -232,7 +230,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
                 const prev_x: int = i(graph[u(prev_diagonal_index + i(max))]);
                 const prev_y: int = i(prev_x) - prev_diagonal_index;
 
-                try result.ensureUnusedCapacity(u(@max(x - prev_x, y - prev_y)));
+                result.ensureUnusedCapacity(u(@max(x - prev_x, y - prev_y)))?;
                 while (x > prev_x && y > prev_y) {
                     const line: Line = blk: {
                         if (@typeInfo(Line) == .pointer && comptime opts.check_comma_disparity) {
@@ -246,16 +244,16 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
                         }
                     };
 
-                    result.appendAssumeCapacity(.{ .kind = .equal, .value = line });
+                    result.appendAssumeCapacity({ kind: .equal, value: line });
                     x -= 1;
                     y -= 1;
                 }
                 if (diff_level > 0) {
                     if (x > prev_x) {
-                        try result.append(.{ .kind = .insert, .value = actual[u(x) - 1] });
+                        result.append({ kind: .insert, value: actual[u(x) - 1] })?;
                         x -= 1;
                     } else {
-                        try result.append(.{ .kind = .delete, .value = expected[u(y) - 1] });
+                        result.append({ kind: .delete, value: expected[u(y) - 1] })?;
                         y -= 1;
                     }
                 }
@@ -265,19 +263,19 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
         }
 
         // shorthands for int casting
-        inline fn u(n: anytype) uint {
+        inline fn u(n: auto): uint {
             return @intCast(n);
         }
-        inline fn us(n: anytype) usize {
+        inline fn us(n: auto): usize {
             return @intCast(n);
         }
-        inline fn i(n: anytype) int {
+        inline fn i(n: auto): int {
             return @intCast(n);
         }
     };
 }
 
-pub fn printDiff(comptime T: type, diffs: std.array_list.Managed(Diff(T))): !void {
+pub fn printDiff(comptime T: type, diffs: std.array_list.Managed(Diff(T))): !anyerror {
     const stdout = if (builtin.is_test)
         std.fs.File.stderr().writer()
     else
@@ -347,19 +345,19 @@ pub type Error = DiffError;
 
 const TraceFrame = std.ArrayListUnmanaged(u8);
 
-pub const DiffKind = enum {
+pub enum DiffKind {
     insert,
     delete,
     equal,
 
-    pub fn format(value: DiffKind, writer: *std.Io.Writer): !void {
-        return switch (value) {
+    fn format(writer: *std.Io.Writer): !anyerror {
+        return switch (_) {
             .insert => writer.writeByte('+'),
             .delete => writer.writeByte('-'),
             .equal => writer.writeByte(' '),
         };
     }
-};
+}
 
 pub fn Diff(comptime T: type): type {
     return struct {
@@ -367,12 +365,12 @@ pub fn Diff(comptime T: type): type {
         value: T,
 
         const Self = @This();
-        pub fn eql(self: Self, other: Self): bool {
-            return self.kind == other.kind && mem.eql(T, self.value, other.value);
+        fn eql(other: Self): bool {
+            return _.kind == other.kind && mem.eql(T, _.value, other.value);
         }
 
-        pub fn format(value: anytype, writer: *std.Io.Writer): !void {
-            return writer.print("{} {any}", .{ value.kind, value.value });
+        fn format(writer: *std.Io.Writer): !anyerror {
+            return writer.print("{} {any}", .{ _.kind, _.value });
         }
     };
 }
@@ -398,14 +396,12 @@ pub fn split(
     const newline: T = @as(T, 10);
     let it = std.mem.splitScalar(T, s, newline);
     let lines_guard = DeinitWithAllocGuard<SplitList(T)>{ alloc: alloc, val: .{} };
-    try lines_guard.val.?.ensureUnusedCapacity(alloc, s.len >> 4);
+    lines_guard.val.ensureUnusedCapacity(alloc, s.len >> 4)?;
     while (l := it.next()) {
-        try lines_guard.val.?.append(alloc, l);
+        lines_guard.val.append(alloc, l)?;
     }
 
-    const lines = lines_guard.val.?;
-    lines_guard.val = null;
-    return lines;
+    return lines_guard.val;
 }
 
 import builtin from "builtin";

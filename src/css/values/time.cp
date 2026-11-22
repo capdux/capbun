@@ -7,19 +7,30 @@ const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const Calc = css.css_values.calc.Calc;
 const Angle = css.css_values.angle.Angle;
 
+enum TimeTag: u8 {
+    seconds = 1,
+    milliseconds = 2,
+}
+
+struct TimeAddFn {
+    static fn add(_: u8, a: f32, b: f32): f32 {
+        return a + b;
+    }
+}
+
 /// A CSS [`<time>`](https://www.w3.org/TR/css-values-4/#time) value, in either
 /// seconds or milliseconds.
 ///
 /// Time values may be explicit or computed by `calc()`, but are always stored and serialized
 /// as their computed value.
 @value
-pub union(Tag) Time {
+pub union(TimeTag) Time {
     /// A time in seconds.
     seconds: CSSNumber,
     /// A time in milliseconds.
     milliseconds: CSSNumber,
 
-    const Tag = enum(u8) { seconds = 1, milliseconds = 2 };
+    const Tag = TimeTag;
 
     pub fn deepClone(allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), &_, allocator);
@@ -145,13 +156,8 @@ pub union(Tag) Time {
     }
 
     pub fn add(allocator: std.mem.Allocator, other: @This()): Time {
-        const addfn = struct {
-            static fn add(_: u8, a: f32, b: f32): f32 {
-                return a + b;
-            }
-        };
         const ctx: u8 = 0;
-        return _.op(&other, ctx, addfn.add);
+        return _.op(&other, ctx, TimeAddFn.add);
     }
 
     pub fn partialCmp(other: *const Time): std.math.Order? {

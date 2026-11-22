@@ -63,6 +63,15 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const ptr_meta = @import("./meta.zig");
+pub const DeinitMode = enum {
+    deep,
+    shallow,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn MemoryDeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -178,8 +187,10 @@ pub fn intoRawWithAllocatorOpt(self: *@This()) ?PointerAndAllocatorPair {
             defer {
             self.* = undefined;
             }
-            const data = ((self.#pointer) orelse { return null; });
-            return .{ data, self.#allocator };
+            if ((self.#pointer == null)) {
+                return null;
+            }
+            return .{ self.#pointer.?, self.#allocator };
     }
 
 pub fn intoRawWithAllocatorNonOpt(self: *@This()) PointerAndAllocatorNonOpt {
@@ -197,7 +208,10 @@ pub fn takeImpl(self: *@This()) ?OwnedNonOptional {
             defer {
             self.* = Self.initNull();
             }
-            return OwnedNonOptional{ .#pointer = ((self.#pointer) orelse { return null; }), .#allocator = self.#allocator };
+            if ((self.#pointer == null)) {
+                return null;
+            }
+            return OwnedNonOptional{ .#pointer = self.#pointer.?, .#allocator = self.#allocator };
     }
 
 pub fn resetImpl(self: *@This()) void {
@@ -219,7 +233,6 @@ pub fn toUnmanaged(self: *@This()) Self.Unmanaged {
             self.* = undefined;
             }
             const UnmanagedType = Self.Unmanaged;
-            _ = &UnmanagedType;
             return UnmanagedType{ .#pointer = self.#pointer };
     }
 
@@ -230,7 +243,12 @@ pub fn toDynamic(self: *@This()) owned.Dynamic(Pointer) {
             defer {
             self.* = undefined;
             }
-            const data = (if (comptime info.isOptional()) ((self.#pointer) orelse { return owned.Dynamic(Pointer).initNull(); }) else self.#pointer);
+            if (comptime info.isOptional()) {
+                if ((self.#pointer == null)) {
+                    return owned.Dynamic(Pointer).initNull();
+                }
+            }
+            const data = (if (comptime info.isOptional()) self.#pointer.? else self.#pointer);
             var alloc_guard = MemoryDeinitGuard(Allocator){ .ptr = (blk: {
             break :blk (&self.#allocator);
 
@@ -258,7 +276,12 @@ pub fn deinitImpl(self: *@This(), comptime mode: DeinitMode) void {
             defer {
             self.* = undefined;
             }
-            const data = (if (comptime info.isOptional()) ((self.#pointer) orelse { return; }) else self.#pointer);
+            if (comptime info.isOptional()) {
+                if ((self.#pointer == null)) {
+                    return;
+                }
+            }
+            const data = (if (comptime info.isOptional()) self.#pointer.? else self.#pointer);
             if (comptime (mode == .deep)) {
                 _ = bun.memory.deinit(data);
             }
@@ -277,21 +300,20 @@ _ = self.getStdAllocator().free(data);
     const NonOptionalPointer = info.NonOptionalPointer;
     const Child = info.Child;
     const ConstPointer = AddConst(Pointer);
-    const DeinitMode = enum { deep, shallow };
-    pub const Unmanaged = owned.Unmanaged(Pointer, Allocator);
-    pub const alloc = (if ((info.kind() == .single)) allocSingle else allocSlice);
-    pub const allocIn = (if ((info.kind() == .single)) allocInSingle else allocInSlice);
+    const Unmanaged = owned.Unmanaged(Pointer, Allocator);
+    const alloc = (if ((info.kind() == .single)) allocSingle else allocSlice);
+    const allocIn = (if ((info.kind() == .single)) allocInSingle else allocInSlice);
     pub const new = (if ((info.kind() == .single)) newImpl else null);
     const PointerAndAllocatorNonOpt = struct { Pointer, Allocator };
     const PointerAndAllocatorPair = struct { NonOptionalPointer, Allocator };
-    pub const intoRawWithAllocator = (if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt);
+    const intoRawWithAllocator = (if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt);
     pub const initNull = (if (info.isOptional()) initNullImpl else null);
     const OwnedNonOptional = (if (info.isOptional()) OwnedIn(NonOptionalPointer, Allocator) else void);
     pub const take = (if (info.isOptional()) takeImpl else null);
     pub const reset = (if (info.isOptional()) resetImpl else null);
     const OwnedOptional = (if ((!info.isOptional())) OwnedIn(OptionalPtr(Pointer), Allocator) else void);
     pub const toOptional = (if ((!info.isOptional())) toOptionalImpl else null);
-    pub const allocator = (if (info.isOptional()) allocatorOpt else allocatorNonOpt);
+    const allocator = (if (info.isOptional()) allocatorOpt else allocatorNonOpt);
 };
 }
 
@@ -303,7 +325,12 @@ pub fn toManaged(self: *@This(), allocator: Allocator) Managed {
             defer {
             self.* = undefined;
             }
-            const data = (if (comptime info.isOptional()) ((self.#pointer) orelse { return Managed.initNull(); }) else self.#pointer);
+            if (comptime info.isOptional()) {
+                if ((self.#pointer == null)) {
+                    return Managed.initNull();
+                }
+            }
+            const data = (if (comptime info.isOptional()) self.#pointer.? else self.#pointer);
             return Managed.fromRawIn(data, allocator);
     }
 

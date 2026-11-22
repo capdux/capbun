@@ -76,6 +76,17 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const IPC = @import("./ipc.zig");
 pub const bun = @import("bun");
+pub const _HandledPromiseContext = struct {
+    globalThis: *jsc.JSGlobalObject,
+    promise: jsc.JSValue,
+
+pub fn callback(self: *_HandledPromiseContext) void {
+            _ = self.globalThis.bunVM().handledPromise(self.globalThis, self.promise);
+            _ = self.promise.unprotect();
+            _ = bun.default_allocator.destroy(self);
+    }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -190,22 +201,12 @@ pub export fn Bun__handleRejectedPromise(global: *JSGlobalObject, promise: *jsc.
 }
 
 pub export fn Bun__handleHandledPromise(global: *JSGlobalObject, promise: *jsc.JSPromise) callconv(.c) void {
-        const Context = struct {
-    globalThis: *jsc.JSGlobalObject,
-    promise: jsc.JSValue,
-
-pub fn callback(context: *@This()) void {
-            _ = context.globalThis.bunVM().handledPromise(context.globalThis, context.promise);
-            _ = context.promise.unprotect();
-            _ = bun.default_allocator.destroy(context);
-    }
-};
         _ = jsc.markBinding(@src());
         const promise_js = promise.toJS();
         _ = promise_js.protect();
-        const context = bun.handleOom(bun.default_allocator.create(Context));
+        const context = bun.handleOom(bun.default_allocator.create(_HandledPromiseContext));
         context.* = .{ .globalThis = global, .promise = promise_js };
-        _ = global.bunVM().eventLoop().enqueueTask(jsc.ManagedTask.New(Context, Context.callback).init(context));
+        _ = global.bunVM().eventLoop().enqueueTask(jsc.ManagedTask.New(_HandledPromiseContext, _HandledPromiseContext.callback).init(context));
 }
 
 pub export fn Bun__onDidAppendPlugin(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject) callconv(.c) void {

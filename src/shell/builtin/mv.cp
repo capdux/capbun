@@ -38,11 +38,16 @@ pub struct OptDerefGuard<T> {
     }
 }
 
-pub const ParseFlagResult = union(enum) {
-    continue_parsing,
-    done,
+pub union(enum) ParseFlagResult {
+    continue_parsing: void,
+    done: void,
     illegal_option: []const u8,
-};
+}
+
+pub union(enum) OptsParseError {
+    illegal_option: []const u8,
+    show_usage: void,
+}
 
 pub struct Opts {
     force_overwrite: bool = true,
@@ -51,10 +56,7 @@ pub struct Opts {
     no_overwrite: bool = false,
     verbose_output: bool = false,
 
-    pub const ParseError = union(enum) {
-        illegal_option: []const u8,
-        show_usage,
-    };
+    const ParseError = OptsParseError;
 }
 
 pub struct Args {
@@ -63,16 +65,16 @@ pub struct Args {
     target_fd: bun.FD? = null,
 }
 
-pub const CheckTargetState = union(enum) {
-    running,
-    done,
-};
+pub union(enum) CheckTargetState {
+    running: void,
+    done: void,
+}
 
 pub type OptionalFD = (bun.FD)?;
 type CStr = ([*:0]const u8);
 pub type FilepathSlice = []const CStr;
 
-pub const ShellMvCheckTargetTask = struct {
+pub struct ShellMvCheckTargetTask {
     mv: *Mv,
 
     cwd: bun.FD,
@@ -81,9 +83,9 @@ pub const ShellMvCheckTargetTask = struct {
 
     task: ShellTask(ShellMvCheckTargetTask, runFromThreadPool, runFromMainThread, debug),
 
-    pub fn runFromThreadPool(*_) {
+    fn runFromThreadPool(*_) {
         const fd = switch (ShellSyscall.openat(_.cwd, _.target, bun.O.RDONLY | bun.O.DIRECTORY, 0)) {
-            .err => |e| {
+            .err e => {
                 switch (e.getErrno()) {
                     .NOTDIR => {
                         _.result = { result: null };
@@ -94,22 +96,22 @@ pub const ShellMvCheckTargetTask = struct {
                 }
                 return;
             },
-            .result => |open_fd| open_fd,
+            .result open_fd => open_fd,
         };
         _.result = { result: fd };
     }
 
-    pub fn runFromMainThread(*_) {
+    fn runFromMainThread(*_) {
         _.mv.checkTargetTaskDone(_);
     }
 
-    pub fn runFromMainThreadMini(*_, _: *void) {
+    fn runFromMainThreadMini(*_, _: *void) {
         _.runFromMainThread();
     }
-};
+}
 
-pub const ShellMvBatchedTask = struct {
-    pub const BATCH_SIZE = 5;
+pub struct ShellMvBatchedTask {
+    const BATCH_SIZE = 5;
 
     mv: *Mv,
     sources: []const CStr,
@@ -124,7 +126,7 @@ pub const ShellMvBatchedTask = struct {
     task: ShellTask(ShellMvBatchedTask, runFromThreadPool, runFromMainThread, debug),
     event_loop: jsc.EventLoopHandle,
 
-    pub fn runFromThreadPool(*_) {
+    fn runFromThreadPool(*_) {
         if (_.sources.len > 1) return _.moveMultipleIntoDir();
 
         const src = _.sources[0][0..std.mem.len(_.sources[0]) :0];
@@ -137,7 +139,7 @@ pub const ShellMvBatchedTask = struct {
         }
 
         switch (Syscall.renameat(_.cwd, src, _.cwd, _.target)) {
-            .err => |e| {
+            .err e => {
                 if (e.getErrno() == .NOTDIR) {
                     _.err = e.withPath(_.target);
                 } else _.err = e;
@@ -146,7 +148,7 @@ pub const ShellMvBatchedTask = struct {
         }
     }
 
-    pub fn moveInDir(*_, src: [:0]const u8, buf: *bun.PathBuffer): bool {
+    fn moveInDir(*_, src: [:0]const u8, buf: *bun.PathBuffer): bool {
         const path_in_dir_ = bun.path.normalizeBuf(ResolvePath.basename(src), buf, .auto);
         if (path_in_dir_.len + 1 >= buf.len) {
             _.err = Syscall.Error.fromCode(Syscall.E.NAMETOOLONG, .rename);
@@ -156,7 +158,7 @@ pub const ShellMvBatchedTask = struct {
         const path_in_dir = buf[0..path_in_dir_.len :0];
 
         switch (Syscall.renameat(_.cwd, src, _.target_fd.?, path_in_dir)) {
-            .err => |e| {
+            .err e => {
                 const parts: [2][]const u8 = [
                     _.target[0..],
                     ResolvePath.basename(src),
@@ -193,14 +195,14 @@ pub const ShellMvBatchedTask = struct {
         * = dest.len;
     }
 
-    pub fn runFromMainThread(*_) {
+    fn runFromMainThread(*_) {
         _.mv.batchedMoveTaskDone(_);
     }
 
-    pub fn runFromMainThreadMini(*_, _: *void) {
+    fn runFromMainThreadMini(*_, _: *void) {
         _.runFromMainThread();
     }
-};
+}
 
 pub struct CheckTargetTaskState {
     task: ShellMvCheckTargetTask,
@@ -220,25 +222,25 @@ pub struct WaitingWriteErrState {
     exit_code: ExitCode,
 }
 
-pub const State = union(enum) {
-    idle,
+pub union(enum) State {
+    idle: void,
     check_target: CheckTargetTaskState,
     executing: ExecutingState,
-    done,
+    done: void,
     waiting_write_err: WaitingWriteErrState,
-    err,
-};
+    err: void,
+}
 
 @root struct Mv {
     opts: Opts = .{},
     args: Args = .{},
     state: State = .idle,
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         return _.next();
     }
 
-    pub fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
+    fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
         if (safeguard := _.bltn().stderr.needsIO()) {
             _.state = { waiting_write_err: { exit_code: exit_code } };
             return _.bltn().stderr.enqueue(_, buf, safeguard);
@@ -249,13 +251,13 @@ pub const State = union(enum) {
         return _.bltn().done(exit_code);
     }
 
-    pub fn next(*_): Yield {
+    fn next(*_): Yield {
         while (!(_.state == .done || _.state == .err)) {
             switch (_.state) {
                 .idle => {
                     if (e := _.parseOpts().asErr()) {
                         const buf = switch (e) {
-                            .illegal_option => |opt_str| _.bltn().fmtErrorArena(.mv, "illegal option -- {s}\n", .{opt_str}),
+                            .illegal_option opt_str => _.bltn().fmtErrorArena(.mv, "illegal option -- {s}\n", .{opt_str}),
                             .show_usage => Builtin.Kind.mv.usageString(),
                         };
 
@@ -288,7 +290,7 @@ pub const State = union(enum) {
 
                     let maybe_fd: bun.FD? = null;
                     switch (check_target.task.result.?) {
-                        .err => |e| {
+                        .err e => {
                             const errno = e.getErrno();
                             if (errno == .NOENT) {
                                 if (_.args.sources.len != 1) {
@@ -302,7 +304,7 @@ pub const State = union(enum) {
                                 return _.writeFailingError(buf, 1);
                             }
                         },
-                        .result => |open_fd| {
+                        .result open_fd => {
                             (maybe_fd = open_fd);
                         },
                     }
@@ -373,7 +375,7 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         const _err_guard = OptDerefGuard<jsc.SystemError>{ val: e };
         switch (_.state) {
             .waiting_write_err => {
@@ -387,7 +389,7 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn checkTargetTaskDone(*_, task: *ShellMvCheckTargetTask) {
+    fn checkTargetTaskDone(*_, task: *ShellMvCheckTargetTask) {
         * = unsafe { @intFromPtr(task) };
 
         if (comptime bun.Environment.allow_assert) {
@@ -400,7 +402,7 @@ pub const State = union(enum) {
         y.run();
     }
 
-    pub fn batchedMoveTaskDone(*_, task: *ShellMvBatchedTask) {
+    fn batchedMoveTaskDone(*_, task: *ShellMvBatchedTask) {
         if (comptime bun.Environment.allow_assert) {
             assert(_.state == .executing);
             assert(_.state.executing.tasks_done < _.state.executing.task_count);
@@ -437,7 +439,7 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         if (fd := _.args.target_fd) fd.toOptional().close();
         if (_.state == .executing) {
             if (err_val := _.state.executing.err) {
@@ -446,10 +448,10 @@ pub const State = union(enum) {
         }
     }
 
-    pub fn parseOpts(*_): Result(void, Opts.ParseError) {
+    fn parseOpts(*_): Result(void, Opts.ParseError) {
         const filepath_args = switch (_.parseFlags()) {
-            .ok => |args| args,
-            .err => |e| return { err: e },
+            .ok args => args,
+            .err e => return { err: e },
         };
 
         if (filepath_args.len < 2) {
@@ -462,7 +464,7 @@ pub const State = union(enum) {
         return .ok;
     }
 
-    pub fn parseFlags(*_): Result(FilepathSlice, Opts.ParseError) {
+    fn parseFlags(*_): Result(FilepathSlice, Opts.ParseError) {
         const args = _.bltn().argsSlice();
         let idx: usize = 0;
         if (args.len == 0) {
@@ -477,14 +479,14 @@ pub const State = union(enum) {
                     return { ok: filepath_args };
                 },
                 .continue_parsing => {},
-                .illegal_option => |opt_str| return { err: { illegal_option: opt_str } },
+                .illegal_option opt_str => return { err: { illegal_option: opt_str } },
             }
         }
 
         return { err: .show_usage };
     }
 
-    pub fn parseFlag(*_, flag: []const u8): ParseFlagResult {
+    fn parseFlag(*_, flag: []const u8): ParseFlagResult {
         if (flag.len == 0) return .done;
         if (flag[0] != '-') return .done;
 
@@ -521,7 +523,7 @@ pub const State = union(enum) {
         return .continue_parsing;
     }
 
-    pub inline fn bltn(*_): *Builtin {
+    inline fn bltn(*_): *Builtin {
         const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("mv", _)) };
         return @fieldParentPtr("impl", impl_);
     }

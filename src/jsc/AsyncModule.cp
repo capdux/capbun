@@ -42,17 +42,19 @@ pub struct PackageResolveError {
 }
 
 
+struct _DeferredDependencyError {
+    dependency: Dependency,
+    root_dependency_id: Install.DependencyID,
+    e: anyerror,
+}
+
 pub struct AsyncModuleQueue {
     pub const Map = std.ArrayListUnmanaged(AsyncModule);
     map: Map = .{},
     scheduled: u32 = 0,
     concurrent_task_count: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
 
-    const DeferredDependencyError = struct {
-        dependency: Dependency,
-        root_dependency_id: Install.DependencyID,
-        e: anyerror,
-    };
+    const DeferredDependencyError = _DeferredDependencyError;
 
     fn enqueue(*_, globalObject: *JSGlobalObject, opts: auto) {
         debug("enqueue: {s}", .{ opts.specifier });
@@ -811,11 +813,11 @@ pub struct AsyncModule {
 import Dependency from "../install/dependency.zig";
 import Fs from "../resolver/fs.zig";
 import options from "../bundler/options.zig";
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const dumpSource = @import("./RuntimeTranspilerStore.zig").dumpSource;
+import { PackageJSON } from "../resolver/package_json.zig";
+import { dumpSource } from "./RuntimeTranspilerStore.zig";
 
 import Install from "../install/install.zig";
-const PackageManager = @import("../install/install.zig").PackageManager;
+import { PackageManager } from "../install/install.zig";
 
 import bun from "bun";
 const Async = bun.Async;

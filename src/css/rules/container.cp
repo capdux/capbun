@@ -94,7 +94,7 @@ pub struct StyleQueryOperation {
 }
 
 /// Represents a style query within a container condition.
-pub const StyleQuery = union(enum) {
+pub union(enum) StyleQuery {
     /// A style feature, implicitly parenthesized.
     feature: css.Property,
 
@@ -104,7 +104,7 @@ pub const StyleQuery = union(enum) {
     /// A set of joint operations.
     operation: StyleQueryOperation,
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
             .feature => |f| try f.toCss(dest, false),
             .not => |c| {
@@ -124,7 +124,7 @@ pub const StyleQuery = union(enum) {
         }
     }
 
-    pub fn parseFeature(input: *css.Parser): Result(StyleQuery) {
+    static fn parseFeature(input: *css.Parser): Result(StyleQuery) {
         const property_id = switch (css.PropertyId.parse(input)) {
             .result => |vv| vv,
             .err => |e| return { err: e },
@@ -146,11 +146,11 @@ pub const StyleQuery = union(enum) {
         return { result: feature };
     }
 
-    pub fn createNegation(condition: *StyleQuery): StyleQuery {
+    static fn createNegation(condition: *StyleQuery): StyleQuery {
         return { not: condition };
     }
 
-    pub fn createOperation(operator: Operator, conditions: ArrayList(StyleQuery)): StyleQuery {
+    static fn createOperation(operator: Operator, conditions: ArrayList(StyleQuery)): StyleQuery {
         return {
             operation: {
                 operator: operator,
@@ -159,7 +159,7 @@ pub const StyleQuery = union(enum) {
         };
     }
 
-    pub fn needsParens(
+    fn needsParens(
         parent_operator: Operator?,
         _: *const css.Targets,
     ): bool {
@@ -170,14 +170,14 @@ pub const StyleQuery = union(enum) {
         };
     }
 
-    pub fn parseStyleQuery(input: *css.Parser): Result(@This()) {
+    static fn parseStyleQuery(input: *css.Parser): Result(@This()) {
         return { err: input.newErrorForNextToken() };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
-};
+}
 
 pub struct ContainerConditionOperation {
     operator: css.media_query.Operator,
@@ -188,7 +188,31 @@ pub struct ContainerConditionOperation {
     }
 }
 
-pub const ContainerCondition = union(enum) {
+pub struct ContainerConditionStyleQueryFns {
+    static inline fn adaptedParseQueryCondition(i: *css.Parser, flags: QueryConditionFlags): Result(StyleQuery) {
+        return css.media_query.parseQueryCondition(StyleQuery, i, flags);
+    }
+
+    static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ContainerCondition) {
+        if (res := i.tryParse(
+            adaptedParseQueryCondition,
+            .{
+                QueryConditionFlags{ .allow_or = true },
+            },
+        ).asValue()) {
+            return { result: { style: res } };
+        }
+
+        return { result: {
+            style: switch (StyleQuery.parseFeature(i)) {
+                .result => |vv| vv,
+                .err => |e| return { err: e },
+            },
+        } };
+    }
+}
+
+pub union(enum) ContainerCondition {
     /// A size container feature, implicitly parenthesized.
     feature: ContainerSizeFeature,
     /// A negation of a condition.
@@ -200,7 +224,7 @@ pub const ContainerCondition = union(enum) {
 
     const This = @This();
 
-    pub fn parse(input: *css.Parser): Result(ContainerCondition) {
+    static fn parse(input: *css.Parser): Result(ContainerCondition) {
         return css.media_query.parseQueryCondition(
             ContainerCondition,
             input,
@@ -211,7 +235,7 @@ pub const ContainerCondition = union(enum) {
         );
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         switch (_) {
             .feature => |f| try f.toCss(dest),
             .not => |c| {
@@ -231,7 +255,7 @@ pub const ContainerCondition = union(enum) {
         }
     }
 
-    pub fn parseFeature(input: *css.Parser): Result(ContainerCondition) {
+    static fn parseFeature(input: *css.Parser): Result(ContainerCondition) {
         const feature = switch (QueryFeature(ContainerSizeFeatureId).parse(input)) {
             .result => |vv| vv,
             .err => |e| return { err: e },
@@ -253,33 +277,10 @@ pub const ContainerCondition = union(enum) {
     }
 
     static fn parseStyleQuery(input: *css.Parser): Result(ContainerCondition) {
-        const Fns = struct {
-            pub inline fn adaptedParseQueryCondition(i: *css.Parser, flags: QueryConditionFlags): Result(StyleQuery) {
-                return css.media_query.parseQueryCondition(StyleQuery, i, flags);
-            }
-
-            static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ContainerCondition) {
-                if (i.tryParse(
-                    @This().adaptedParseQueryCondition,
-                    .{
-                        QueryConditionFlags{ .allow_or = true },
-                    },
-                ).asValue()) |res| {
-                    return { result: { style: res } };
-                }
-
-                return { result: {
-                    style: switch (StyleQuery.parseFeature(i)) {
-                        .result => |vv| vv,
-                        .err => |e| return { err: e },
-                    },
-                } };
-            }
-        };
-        return input.parseNestedBlock(ContainerCondition, @as(void, undefined), Fns.parseNestedBlockFn);
+        return input.parseNestedBlock(ContainerCondition, @as(void, undefined), ContainerConditionStyleQueryFns.parseNestedBlockFn);
     }
 
-    pub fn needsParens(
+    fn needsParens(
         parent_operator: Operator?,
         targets: *const css.Targets,
     ): bool {
@@ -291,10 +292,10 @@ pub const ContainerCondition = union(enum) {
         };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    static fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), this_ptr, allocator);
     }
-};
+}
 
 /// A [@container](https://drafts.csswg.org/css-contain-3/#container-rule) rule.
 pub fn ContainerRule(comptime R: type): type {

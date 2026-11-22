@@ -1,10 +1,10 @@
 
-const Serializable = struct {
+struct Serializable {
     @"type": Tag,
     object: string,
     value: B,
     loc: logger.Loc,
-};
+}
 
 pub enum Tag: u5 {
     b_identifier,
@@ -23,7 +23,7 @@ pub let icount: usize = 0;
     loc: logger.Loc,
     data: B,
 
-    pub fn jsonStringify(writer: auto)! {
+    fn jsonStringify(writer: auto)! {
         writer.write(Serializable{
             @"type": std.meta.activeTag(_.data),
             object: "binding",
@@ -57,10 +57,10 @@ pub fn toExpr(binding: *const Binding, wrapper: auto): Expr {
         .b_missing => {
             return Expr{ data: { e_missing: {} }, loc: loc };
         },
-        .b_identifier => |b| {
+        .b_identifier b => {
             return wrapper.wrapIdentifier(loc, b.ref);
         },
-        .b_array => |b| {
+        .b_array b => {
             let exprs = wrapper.allocator.alloc(Expr, b.items.len) catch unreachable;
             let i: usize = 0;
             while (i < exprs.len) : (i += 1) {
@@ -86,7 +86,7 @@ pub fn toExpr(binding: *const Binding, wrapper: auto): Expr {
                 loc,
             );
         },
-        .b_object => |b| {
+        .b_object b => {
             let properties = wrapper
                 .allocator
                 .alloc(G.Property, b.properties.len) catch unreachable;

@@ -27,14 +27,16 @@ pub struct FreeGuard<T> {
     }
 }
 
-pub struct LifecycleScriptTimeLog {
-    const Entry = struct {
-        package_name: string,
-        script_id: u8,
+pub struct LifecycleScriptTimeLogEntry {
+    package_name: string,
+    script_id: u8,
 
-        // nanosecond duration
-        duration: u64,
-    };
+    // nanosecond duration
+    duration: u64,
+}
+
+pub struct LifecycleScriptTimeLog {
+    const Entry = LifecycleScriptTimeLogEntry;
 
     mutex: bun.Mutex = {},
     list: std.ArrayListUnmanaged(Entry) = {},
@@ -111,7 +113,8 @@ pub fn determinePreinstallState(
     out_name_and_version_hash: *OptU64,
     out_patchfile_hash: *OptU64,
 ): PreinstallState {
-    switch (manager.getPreinstallState(pkg.@"meta".id)) {
+    const state = manager.getPreinstallState(pkg.@"meta".id);
+    switch (state) {
         .unknown => {
 
             // Do not automatically start downloading packages which are disabled
@@ -189,7 +192,7 @@ pub fn determinePreinstallState(
             manager.setPreinstallState(pkg.@"meta".id, lockfile, .extract);
             return .extract;
         },
-        else => |val| return val,
+        else => return state,
     }
 }
 
@@ -286,14 +289,14 @@ pub fn loadRootLifecycleScripts(client: *PackageManager, root_package: Package) 
 /// Used to be called from multiple threads; now single-threaded
 /// TODO: re-evaluate whether some variables still need to be atomic
 pub fn spawnPackageLifecycleScripts(
-    *_: *PackageManager,
+    client: *PackageManager,
     ctx: Command.Context,
     list: Lockfile.Package.Scripts.List,
     optional: bool,
     foreground: bool,
     install_ctx: LifecycleScriptSubprocess.InstallCtx?,
 )! {
-    const log_level = this.options.log_level;
+    const log_level = client.options.log_level;
     let any_scripts = false;
     for (maybe_item of list.items) {
         if (maybe_item != null) {
@@ -305,12 +308,12 @@ pub fn spawnPackageLifecycleScripts(
         return;
     }
 
-    this.ensureTempNodeGypScript()?;
+    client.ensureTempNodeGypScript()?;
 
     const cwd = list.cwd;
-    let this_transpiler = this.configureEnvForScripts(ctx, log_level)?;
+    let client_transpiler = client.configureEnvForScripts(ctx, log_level)?;
 
-    let script_env = this_transpiler.env.map.cloneWithAllocator(bun.default_allocator)?;
+    let script_env = client_transpiler.env.map.cloneWithAllocator(bun.default_allocator)?;
     const script_env_guard = PtrDeinitGuard<@TypeOf(script_env.map)>{ ptr: unsafe { &script_env.map } };
 
     const original_path = script_env.get("PATH") ?? "";
@@ -332,21 +335,21 @@ pub fn spawnPackageLifecycleScripts(
     PATH.append(original_path)?;
     script_env.put("PATH", PATH.slice())?;
 
-    const envp = script_env.createNullDelimitedEnvMap(this.allocator)?;
+    const envp = script_env.createNullDelimitedEnvMap(client.allocator)?;
 
     const shell_bin = shell_bin: {
         if (comptime Environment.isWindows) {
             break :shell_bin null;
         }
 
-        if (env_path := this.env.get("PATH")) {
+        if (env_path := client.env.get("PATH")) {
             break :shell_bin bun.cli.RunCommand.findShell(env_path, cwd);
         }
 
         break :shell_bin null;
     };
 
-    LifecycleScriptSubprocess.spawnPackageScripts(this, list, envp, shell_bin, optional, log_level, foreground, install_ctx)?;
+    LifecycleScriptSubprocess.spawnPackageScripts(client, list, envp, shell_bin, optional, log_level, foreground, install_ctx)?;
 }
 
 pub fn findTrustedDependenciesFromUpdateRequests(client: *PackageManager): std.AutoArrayHashMapUnmanaged(TruncatedPackageNameHash, void) {

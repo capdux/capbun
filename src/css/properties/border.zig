@@ -120,6 +120,38 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const BorderSideWidth = union(enum) {
+    thin: void,
+    medium: void,
+    thick: void,
+    length: Length,
+
+pub fn isCompatible(self: BorderSideWidth, browsers: bun.css.targets.Browsers) bool {
+            return (switch (self) {
+.length => |len| len.isCompatible(browsers),
+else => true,
+});
+    }
+
+pub fn deepClone(self: BorderSideWidth, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn default() BorderSideWidth {
+            return .medium;
+    }
+
+pub fn deinit(self: *BorderSideWidth, _: std.mem.Allocator) void {
+        _ = self;
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
 pub const BorderColor = struct {
     top: CssColor,
     right: CssColor,
@@ -312,6 +344,93 @@ pub fn toBorder(self: BorderShorthand, allocator: std.mem.Allocator) Border {
     }
 };
 
+pub const BorderProperty = packed struct(u32) {
+    @"top-color": bool = false,
+    @"bottom-color": bool = false,
+    @"left-color": bool = false,
+    @"right-color": bool = false,
+    @"block-start-color": bool = false,
+    @"block-end-color": bool = false,
+    @"inline-start-color": bool = false,
+    @"inline-end-color": bool = false,
+    @"top-width": bool = false,
+    @"bottom-width": bool = false,
+    @"left-width": bool = false,
+    @"right-width": bool = false,
+    @"block-start-width": bool = false,
+    @"block-end-width": bool = false,
+    @"inline-start-width": bool = false,
+    @"inline-end-width": bool = false,
+    @"top-style": bool = false,
+    @"bottom-style": bool = false,
+    @"left-style": bool = false,
+    @"right-style": bool = false,
+    @"block-start-style": bool = false,
+    @"block-end-style": bool = false,
+    @"inline-start-style": bool = false,
+    @"inline-end-style": bool = false,
+    __unused: u8 = 0,
+
+pub fn tryFromPropertyId(property_id: css.PropertyIdTag) ?@This() {
+            _ = @setEvalBranchQuota(10000);
+            const fields = bun.@"meta".EnumFields(css.PropertyIdTag);
+            inline for (fields) |field| {
+                if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(property_id))) {
+                    if (comptime std.mem.startsWith(u8, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), "border")) {
+                        if (@hasDecl(@This(), (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))) {
+                            return @field(@This(), (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name));
+                        }
+                    }
+                }
+            }
+            return null;
+    }
+    const @"border-top-color" = BorderProperty{ .@"top-color" = true };
+    const @"border-bottom-color" = BorderProperty{ .@"bottom-color" = true };
+    const @"border-left-color" = BorderProperty{ .@"left-color" = true };
+    const @"border-right-color" = BorderProperty{ .@"right-color" = true };
+    const @"border-block-start-color" = BorderProperty{ .@"block-start-color" = true };
+    const @"border-block-end-color" = BorderProperty{ .@"block-end-color" = true };
+    const @"border-inline-start-color" = BorderProperty{ .@"inline-start-color" = true };
+    const @"border-inline-end-color" = BorderProperty{ .@"inline-end-color" = true };
+    const @"border-top-width" = BorderProperty{ .@"top-width" = true };
+    const @"border-bottom-width" = BorderProperty{ .@"bottom-width" = true };
+    const @"border-left-width" = BorderProperty{ .@"left-width" = true };
+    const @"border-right-width" = BorderProperty{ .@"right-width" = true };
+    const @"border-block-start-width" = BorderProperty{ .@"block-start-width" = true };
+    const @"border-block-end-width" = BorderProperty{ .@"block-end-width" = true };
+    const @"border-inline-start-width" = BorderProperty{ .@"inline-start-width" = true };
+    const @"border-inline-end-width" = BorderProperty{ .@"inline-end-width" = true };
+    const @"border-top-style" = BorderProperty{ .@"top-style" = true };
+    const @"border-bottom-style" = BorderProperty{ .@"bottom-style" = true };
+    const @"border-left-style" = BorderProperty{ .@"left-style" = true };
+    const @"border-right-style" = BorderProperty{ .@"right-style" = true };
+    const @"border-block-start-style" = BorderProperty{ .@"block-start-style" = true };
+    const @"border-block-end-style" = BorderProperty{ .@"block-end-style" = true };
+    const @"border-inline-start-style" = BorderProperty{ .@"inline-start-style" = true };
+    const @"border-inline-end-style" = BorderProperty{ .@"inline-end-style" = true };
+    const @"border-block-color" = BorderProperty{ .@"block-start-color" = true, .@"block-end-color" = true };
+    const @"border-inline-color" = BorderProperty{ .@"inline-start-color" = true, .@"inline-end-color" = true };
+    const @"border-block-width" = BorderProperty{ .@"block-start-width" = true, .@"block-end-width" = true };
+    const @"border-inline-width" = BorderProperty{ .@"inline-start-width" = true, .@"inline-end-width" = true };
+    const @"border-block-style" = BorderProperty{ .@"block-start-style" = true, .@"block-end-style" = true };
+    const @"border-inline-style" = BorderProperty{ .@"inline-start-style" = true, .@"inline-end-style" = true };
+    const @"border-top" = BorderProperty{ .@"top-color" = true, .@"top-width" = true, .@"top-style" = true };
+    const @"border-bottom" = BorderProperty{ .@"bottom-color" = true, .@"bottom-width" = true, .@"bottom-style" = true };
+    const @"border-left" = BorderProperty{ .@"left-color" = true, .@"left-width" = true, .@"left-style" = true };
+    const @"border-right" = BorderProperty{ .@"right-color" = true, .@"right-width" = true, .@"right-style" = true };
+    const @"border-block-start" = BorderProperty{ .@"block-start-color" = true, .@"block-start-width" = true, .@"block-start-style" = true };
+    const @"border-block-end" = BorderProperty{ .@"block-end-color" = true, .@"block-end-width" = true, .@"block-end-style" = true };
+    const @"border-inline-start" = BorderProperty{ .@"inline-start-color" = true, .@"inline-start-width" = true, .@"inline-start-style" = true };
+    const @"border-inline-end" = BorderProperty{ .@"inline-end-color" = true, .@"inline-end-width" = true, .@"inline-end-style" = true };
+    const @"border-block" = BorderProperty{ .@"block-start-color" = true, .@"block-end-color" = true, .@"block-start-width" = true, .@"block-end-width" = true, .@"block-start-style" = true, .@"block-end-style" = true };
+    const @"border-inline" = BorderProperty{ .@"inline-start-color" = true, .@"inline-end-color" = true, .@"inline-start-width" = true, .@"inline-end-width" = true, .@"inline-start-style" = true, .@"inline-end-style" = true };
+    const @"border-width" = BorderProperty{ .@"left-width" = true, .@"right-width" = true, .@"top-width" = true, .@"bottom-width" = true };
+    const @"border-style" = BorderProperty{ .@"left-style" = true, .@"right-style" = true, .@"top-style" = true, .@"bottom-style" = true };
+    const @"border-color" = BorderProperty{ .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
+    const border = BorderProperty{ .@"left-width" = true, .@"right-width" = true, .@"top-width" = true, .@"bottom-width" = true, .@"left-style" = true, .@"right-style" = true, .@"top-style" = true, .@"bottom-style" = true, .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
+};
+
 pub const BorderHandler = struct {
     border_top: BorderShorthand = .{},
     border_bottom: BorderShorthand = .{},
@@ -327,173 +446,167 @@ pub const BorderHandler = struct {
     flushed_properties: BorderProperty = .{},
     has_any: bool = false,
 
+pub inline fn flushHelper(self: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: anytype, category: PropertyCategory) void {
+            if ((category != self.category)) {
+                _ = self.flush(d, c);
+            }
+            if (((((@field(@field(self, key), prop) != null) and (!(@field(@field(self, key), prop)).?.eql(val))) and (c.targets.browsers != null)) and (!css.generic.isCompatible(@TypeOf(val.*), val, c.targets.browsers.?)))) {
+                _ = self.flush(d, c);
+            }
+    }
+
+pub inline fn propertyHelper(self: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: anytype, category: PropertyCategory) void {
+            _ = self.flushHelper(d, c, key, prop, val, category);
+            @field(@field(self, key), prop) = css.generic.deepClone(@TypeOf(val.*), val, c.allocator);
+            self.category = category;
+            self.has_any = true;
+    }
+
+pub inline fn setBorderHelper(self: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, val: anytype, category: PropertyCategory) void {
+            if ((category != self.category)) {
+                _ = self.flush(d, c);
+            }
+            _ = @field(self, key).setBorder(c.allocator, val);
+            self.category = category;
+            self.has_any = true;
+    }
+
 pub fn handleProperty(self: *BorderHandler, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
             const allocator = context.allocator;
-            const flushHelper = (struct {
-
-pub inline fn flushHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: anytype, category: PropertyCategory) void {
-            if ((category != handler.category)) {
-                _ = handler.flush(d, c);
-            }
-            if (((((@field(@field(handler, key), prop) != null) and (!(@field(@field(handler, key), prop)).?.eql(val))) and (c.targets.browsers != null)) and (!css.generic.isCompatible(@TypeOf(val.*), val, c.targets.browsers.?)))) {
-                _ = handler.flush(d, c);
-            }
-    }
-}).flushHelper;
-            const propertyHelper = (struct {
-
-pub inline fn propertyHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: anytype, category: PropertyCategory) void {
-            _ = flushHelper(handler, d, c, key, prop, val, category);
-            @field(@field(handler, key), prop) = css.generic.deepClone(@TypeOf(val.*), val, c.allocator);
-            handler.category = category;
-            handler.has_any = true;
-    }
-}).propertyHelper;
-            const setBorderHelper = (struct {
-
-pub inline fn setBorderHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, val: anytype, category: PropertyCategory) void {
-            if ((category != handler.category)) {
-                _ = handler.flush(d, c);
-            }
-            _ = @field(handler, key).setBorder(c.allocator, val);
-            handler.category = category;
-            handler.has_any = true;
-    }
-}).setBorderHelper;
             switch (property.*) {
 .@"border-top-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_top", "color", val, .physical);
+_ = self.propertyHelper(dest, context, "border_top", "color", val, .physical);
 },
 .@"border-bottom-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_bottom", "color", val, .physical);
+_ = self.propertyHelper(dest, context, "border_bottom", "color", val, .physical);
 },
 .@"border-left-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_left", "color", val, .physical);
+_ = self.propertyHelper(dest, context, "border_left", "color", val, .physical);
 },
 .@"border-right-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_right", "color", val, .physical);
+_ = self.propertyHelper(dest, context, "border_right", "color", val, .physical);
 },
 .@"border-block-start-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_block_start", "color", val, .logical);
+_ = self.propertyHelper(dest, context, "border_block_start", "color", val, .logical);
 },
 .@"border-block-end-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_block_end", "color", val, .logical);
+_ = self.propertyHelper(dest, context, "border_block_end", "color", val, .logical);
 },
 .@"border-block-color" => |val| {
-_ = propertyHelper(self, dest, context, "border_block_start", "color", (&val.start), .logical);
-            _ = propertyHelper(self, dest, context, "border_block_end", "color", (&val.end), .logical);
+_ = self.propertyHelper(dest, context, "border_block_start", "color", (&val.start), .logical);
+            _ = self.propertyHelper(dest, context, "border_block_end", "color", (&val.end), .logical);
 },
 .@"border-inline-start-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_inline_start", "color", val, .logical);
+_ = self.propertyHelper(dest, context, "border_inline_start", "color", val, .logical);
 },
 .@"border-inline-end-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_inline_end", "color", val, .logical);
+_ = self.propertyHelper(dest, context, "border_inline_end", "color", val, .logical);
 },
 .@"border-inline-color" => |val| {
-_ = propertyHelper(self, dest, context, "border_inline_start", "color", (&val.start), .logical);
-            _ = propertyHelper(self, dest, context, "border_inline_end", "color", (&val.end), .logical);
+_ = self.propertyHelper(dest, context, "border_inline_start", "color", (&val.start), .logical);
+            _ = self.propertyHelper(dest, context, "border_inline_end", "color", (&val.end), .logical);
 },
 .@"border-top-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_top", "width", val, .physical);
+_ = self.propertyHelper(dest, context, "border_top", "width", val, .physical);
 },
 .@"border-bottom-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_bottom", "width", val, .physical);
+_ = self.propertyHelper(dest, context, "border_bottom", "width", val, .physical);
 },
 .@"border-left-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_left", "width", val, .physical);
+_ = self.propertyHelper(dest, context, "border_left", "width", val, .physical);
 },
 .@"border-right-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_right", "width", val, .physical);
+_ = self.propertyHelper(dest, context, "border_right", "width", val, .physical);
 },
 .@"border-block-start-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_block_start", "width", val, .logical);
+_ = self.propertyHelper(dest, context, "border_block_start", "width", val, .logical);
 },
 .@"border-block-end-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_block_end", "width", val, .logical);
+_ = self.propertyHelper(dest, context, "border_block_end", "width", val, .logical);
 },
 .@"border-block-width" => |val| {
-_ = propertyHelper(self, dest, context, "border_block_start", "width", (&val.start), .logical);
-            _ = propertyHelper(self, dest, context, "border_block_end", "width", (&val.end), .logical);
+_ = self.propertyHelper(dest, context, "border_block_start", "width", (&val.start), .logical);
+            _ = self.propertyHelper(dest, context, "border_block_end", "width", (&val.end), .logical);
 },
 .@"border-inline-start-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_inline_start", "width", val, .logical);
+_ = self.propertyHelper(dest, context, "border_inline_start", "width", val, .logical);
 },
 .@"border-inline-end-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_inline_end", "width", val, .logical);
+_ = self.propertyHelper(dest, context, "border_inline_end", "width", val, .logical);
 },
 .@"border-inline-width" => |val| {
-_ = propertyHelper(self, dest, context, "border_inline_start", "width", (&val.start), .logical);
-            _ = propertyHelper(self, dest, context, "border_inline_end", "width", (&val.end), .logical);
+_ = self.propertyHelper(dest, context, "border_inline_start", "width", (&val.start), .logical);
+            _ = self.propertyHelper(dest, context, "border_inline_end", "width", (&val.end), .logical);
 },
 .@"border-top-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_top", "style", val, .physical);
+_ = self.propertyHelper(dest, context, "border_top", "style", val, .physical);
 },
 .@"border-bottom-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_bottom", "style", val, .physical);
+_ = self.propertyHelper(dest, context, "border_bottom", "style", val, .physical);
 },
 .@"border-left-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_left", "style", val, .physical);
+_ = self.propertyHelper(dest, context, "border_left", "style", val, .physical);
 },
 .@"border-right-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_right", "style", val, .physical);
+_ = self.propertyHelper(dest, context, "border_right", "style", val, .physical);
 },
 .@"border-block-start-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_block_start", "style", val, .logical);
+_ = self.propertyHelper(dest, context, "border_block_start", "style", val, .logical);
 },
 .@"border-block-end-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_block_end", "style", val, .logical);
+_ = self.propertyHelper(dest, context, "border_block_end", "style", val, .logical);
 },
 .@"border-block-style" => |val| {
-_ = propertyHelper(self, dest, context, "border_block_start", "style", (&val.start), .logical);
-            _ = propertyHelper(self, dest, context, "border_block_end", "style", (&val.end), .logical);
+_ = self.propertyHelper(dest, context, "border_block_start", "style", (&val.start), .logical);
+            _ = self.propertyHelper(dest, context, "border_block_end", "style", (&val.end), .logical);
 },
 .@"border-inline-start-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_inline_start", "style", val, .logical);
+_ = self.propertyHelper(dest, context, "border_inline_start", "style", val, .logical);
 },
 .@"border-inline-end-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_inline_end", "style", val, .logical);
+_ = self.propertyHelper(dest, context, "border_inline_end", "style", val, .logical);
 },
 .@"border-inline-style" => |val| {
-_ = propertyHelper(self, dest, context, "border_inline_start", "style", (&val.start), .logical);
-            _ = propertyHelper(self, dest, context, "border_inline_end", "style", (&val.end), .logical);
+_ = self.propertyHelper(dest, context, "border_inline_start", "style", (&val.start), .logical);
+            _ = self.propertyHelper(dest, context, "border_inline_end", "style", (&val.end), .logical);
 },
 .@"border-top" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_top", val, .physical);
+_ = self.setBorderHelper(dest, context, "border_top", val, .physical);
 },
 .@"border-bottom" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_bottom", val, .physical);
+_ = self.setBorderHelper(dest, context, "border_bottom", val, .physical);
 },
 .@"border-left" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_left", val, .physical);
+_ = self.setBorderHelper(dest, context, "border_left", val, .physical);
 },
 .@"border-right" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_right", val, .physical);
+_ = self.setBorderHelper(dest, context, "border_right", val, .physical);
 },
 .@"border-block-start" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_block_start", val, .logical);
+_ = self.setBorderHelper(dest, context, "border_block_start", val, .logical);
 },
 .@"border-block-end" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_block_end", val, .logical);
+_ = self.setBorderHelper(dest, context, "border_block_end", val, .logical);
 },
 .@"border-inline-start" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_inline_start", val, .logical);
+_ = self.setBorderHelper(dest, context, "border_inline_start", val, .logical);
 },
 .@"border-inline-end" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_inline_end", val, .logical);
+_ = self.setBorderHelper(dest, context, "border_inline_end", val, .logical);
 },
 .@"border-block" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_block_start", val, .logical);
-            _ = setBorderHelper(self, dest, context, "border_block_end", val, .logical);
+_ = self.setBorderHelper(dest, context, "border_block_start", val, .logical);
+            _ = self.setBorderHelper(dest, context, "border_block_end", val, .logical);
 },
 .@"border-inline" => |*val| {
-_ = setBorderHelper(self, dest, context, "border_inline_start", val, .logical);
-            _ = setBorderHelper(self, dest, context, "border_inline_end", val, .logical);
+_ = self.setBorderHelper(dest, context, "border_inline_start", val, .logical);
+            _ = self.setBorderHelper(dest, context, "border_inline_end", val, .logical);
 },
 .@"border-width" => |*val| {
-_ = propertyHelper(self, dest, context, "border_top", "width", (&val.top), .physical);
-            _ = propertyHelper(self, dest, context, "border_right", "width", (&val.right), .physical);
-            _ = propertyHelper(self, dest, context, "border_bottom", "width", (&val.bottom), .physical);
-            _ = propertyHelper(self, dest, context, "border_left", "width", (&val.left), .physical);
+_ = self.propertyHelper(dest, context, "border_top", "width", (&val.top), .physical);
+            _ = self.propertyHelper(dest, context, "border_right", "width", (&val.right), .physical);
+            _ = self.propertyHelper(dest, context, "border_bottom", "width", (&val.bottom), .physical);
+            _ = self.propertyHelper(dest, context, "border_left", "width", (&val.left), .physical);
             _ = bun.clear((&self.border_block_start.width), context.allocator);
             _ = bun.clear((&self.border_block_end.width), context.allocator);
             _ = bun.clear((&self.border_inline_start.width), context.allocator);
@@ -501,10 +614,10 @@ _ = propertyHelper(self, dest, context, "border_top", "width", (&val.top), .phys
             self.has_any = true;
 },
 .@"border-style" => |*val| {
-_ = propertyHelper(self, dest, context, "border_top", "style", (&val.top), .physical);
-            _ = propertyHelper(self, dest, context, "border_right", "style", (&val.right), .physical);
-            _ = propertyHelper(self, dest, context, "border_bottom", "style", (&val.bottom), .physical);
-            _ = propertyHelper(self, dest, context, "border_left", "style", (&val.left), .physical);
+_ = self.propertyHelper(dest, context, "border_top", "style", (&val.top), .physical);
+            _ = self.propertyHelper(dest, context, "border_right", "style", (&val.right), .physical);
+            _ = self.propertyHelper(dest, context, "border_bottom", "style", (&val.bottom), .physical);
+            _ = self.propertyHelper(dest, context, "border_left", "style", (&val.left), .physical);
             _ = bun.clear((&self.border_block_start.style), context.allocator);
             _ = bun.clear((&self.border_block_end.style), context.allocator);
             _ = bun.clear((&self.border_inline_start.style), context.allocator);
@@ -512,10 +625,10 @@ _ = propertyHelper(self, dest, context, "border_top", "style", (&val.top), .phys
             self.has_any = true;
 },
 .@"border-color" => |*val| {
-_ = propertyHelper(self, dest, context, "border_top", "color", (&val.top), .physical);
-            _ = propertyHelper(self, dest, context, "border_right", "color", (&val.right), .physical);
-            _ = propertyHelper(self, dest, context, "border_bottom", "color", (&val.bottom), .physical);
-            _ = propertyHelper(self, dest, context, "border_left", "color", (&val.left), .physical);
+_ = self.propertyHelper(dest, context, "border_top", "color", (&val.top), .physical);
+            _ = self.propertyHelper(dest, context, "border_right", "color", (&val.right), .physical);
+            _ = self.propertyHelper(dest, context, "border_bottom", "color", (&val.bottom), .physical);
+            _ = self.propertyHelper(dest, context, "border_left", "color", (&val.left), .physical);
             _ = bun.clear((&self.border_block_start.color), context.allocator);
             _ = bun.clear((&self.border_block_end.color), context.allocator);
             _ = bun.clear((&self.border_inline_start.color), context.allocator);
@@ -583,6 +696,17 @@ pub fn flush(self: *BorderHandler, dest: *css.DeclarationList, context: *css.Pro
             _ = self.border_inline_end.reset(context.allocator);
     }
 
+pub inline fn unparsedProp(self: *BorderHandler, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) void {
+            var upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
+            _ = &upppppppppp;
+            _ = c.addUnparsedFallbacks((&upppppppppp));
+            _ = bun.bits.insert(BorderProperty, (&self.flushed_properties), @field(BorderProperty, id));
+    }
+
+pub inline fn unparsedLogicalProp(c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime ltr: []const u8, comptime rtl: []const u8) void {
+            _ = c.addLogicalRule(c.allocator, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, ltr, undefined)) }, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, rtl, undefined)) });
+    }
+
 pub fn flushUnparsed(self: *BorderHandler, unparsed: *const UnparsedProperty, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) void {
             const logical_supported = (!context.shouldCompileLogical(css.Feature.logical_borders));
             if (logical_supported) {
@@ -593,69 +717,54 @@ pub fn flushUnparsed(self: *BorderHandler, unparsed: *const UnparsedProperty, de
                 _ = bun.handleOom(dest.append(context.allocator, .{ .unparsed = up }));
                 return;
             }
-            const prop = (struct {
-
-pub inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) void {
-            var upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
-            _ = &upppppppppp;
-            _ = c.addUnparsedFallbacks((&upppppppppp));
-            _ = bun.bits.insert(BorderProperty, (&handler.flushed_properties), @field(BorderProperty, id));
-    }
-}).prop;
-            const logical_prop = (struct {
-
-pub inline fn logical_prop(c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime ltr: []const u8, comptime rtl: []const u8) void {
-            _ = c.addLogicalRule(c.allocator, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, ltr, undefined)) }, css.Property{ .unparsed = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, rtl, undefined)) });
-    }
-}).logical_prop;
             switch (unparsed.property_id) {
 .@"border-inline-start" => {
-_ = logical_prop(context, unparsed, "border-left", "border-right");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-left", "border-right");
 },
 .@"border-inline-start-width" => {
-_ = logical_prop(context, unparsed, "border-left-width", "border-right-width");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-left-width", "border-right-width");
 },
 .@"border-inline-start-color" => {
-_ = logical_prop(context, unparsed, "border-left-color", "border-right-color");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-left-color", "border-right-color");
 },
 .@"border-inline-start-style" => {
-_ = logical_prop(context, unparsed, "border-left-style", "border-right-style");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-left-style", "border-right-style");
 },
 .@"border-inline-end" => {
-_ = logical_prop(context, unparsed, "border-right", "border-left");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-right", "border-left");
 },
 .@"border-inline-end-width" => {
-_ = logical_prop(context, unparsed, "border-right-width", "border-left-width");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-right-width", "border-left-width");
 },
 .@"border-inline-end-color" => {
-_ = logical_prop(context, unparsed, "border-right-color", "border-left-color");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-right-color", "border-left-color");
 },
 .@"border-inline-end-style" => {
-_ = logical_prop(context, unparsed, "border-right-style", "border-left-style");
+_ = BorderHandler.unparsedLogicalProp(context, unparsed, "border-right-style", "border-left-style");
 },
 .@"border-block-start" => {
-_ = prop(self, context, unparsed, "border-top");
+_ = self.unparsedProp(context, unparsed, "border-top");
 },
 .@"border-block-start-width" => {
-_ = prop(self, context, unparsed, "border-top-width");
+_ = self.unparsedProp(context, unparsed, "border-top-width");
 },
 .@"border-block-start-color" => {
-_ = prop(self, context, unparsed, "border-top-color");
+_ = self.unparsedProp(context, unparsed, "border-top-color");
 },
 .@"border-block-start-style" => {
-_ = prop(self, context, unparsed, "border-top-style");
+_ = self.unparsedProp(context, unparsed, "border-top-style");
 },
 .@"border-block-end" => {
-_ = prop(self, context, unparsed, "border-bottom");
+_ = self.unparsedProp(context, unparsed, "border-bottom");
 },
 .@"border-block-end-width" => {
-_ = prop(self, context, unparsed, "border-bottom-width");
+_ = self.unparsedProp(context, unparsed, "border-bottom-width");
 },
 .@"border-block-end-color" => {
-_ = prop(self, context, unparsed, "border-bottom-color");
+_ = self.unparsedProp(context, unparsed, "border-bottom-color");
 },
 .@"border-block-end-style" => {
-_ = prop(self, context, unparsed, "border-bottom-style");
+_ = self.unparsedProp(context, unparsed, "border-bottom-style");
 },
 else => {
 var up = unparsed.deepClone(context.allocator);
@@ -1128,129 +1237,6 @@ pub const BorderInlineEnd = GenericBorder(LineStyle, 7);
 pub const BorderBlock = GenericBorder(LineStyle, 8);
 pub const BorderInline = GenericBorder(LineStyle, 9);
 pub const Border = GenericBorder(LineStyle, 10);
-pub const BorderSideWidth = union(enum) {
-    /// A UA defined `thin` value.
-    thin,
-    /// A UA defined `medium` value.
-    medium,
-    /// A UA defined `thick` value.
-    thick,
-    /// An explicit width.
-    length: Length,
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn isCompatible(this: *const @This(), browsers: bun.css.targets.Browsers) bool {
-        return switch (this.*) {
-            .length => |len| len.isCompatible(browsers),
-            else => true,
-        };
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-
-    pub fn default() BorderSideWidth {
-        return .medium;
-    }
-
-    pub fn deinit(_: *@This(), _: std.mem.Allocator) void {}
-
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
-    }
-};
-const BorderProperty = packed struct(u32) {
-    @"top-color": bool = false,
-    @"bottom-color": bool = false,
-    @"left-color": bool = false,
-    @"right-color": bool = false,
-    @"block-start-color": bool = false,
-    @"block-end-color": bool = false,
-    @"inline-start-color": bool = false,
-    @"inline-end-color": bool = false,
-    @"top-width": bool = false,
-    @"bottom-width": bool = false,
-    @"left-width": bool = false,
-    @"right-width": bool = false,
-    @"block-start-width": bool = false,
-    @"block-end-width": bool = false,
-    @"inline-start-width": bool = false,
-    @"inline-end-width": bool = false,
-    @"top-style": bool = false,
-    @"bottom-style": bool = false,
-    @"left-style": bool = false,
-    @"right-style": bool = false,
-    @"block-start-style": bool = false,
-    @"block-end-style": bool = false,
-    @"inline-start-style": bool = false,
-    @"inline-end-style": bool = false,
-    __unused: u8 = 0,
-
-    const @"border-top-color" = BorderProperty{ .@"top-color" = true };
-    const @"border-bottom-color" = BorderProperty{ .@"bottom-color" = true };
-    const @"border-left-color" = BorderProperty{ .@"left-color" = true };
-    const @"border-right-color" = BorderProperty{ .@"right-color" = true };
-    const @"border-block-start-color" = BorderProperty{ .@"block-start-color" = true };
-    const @"border-block-end-color" = BorderProperty{ .@"block-end-color" = true };
-    const @"border-inline-start-color" = BorderProperty{ .@"inline-start-color" = true };
-    const @"border-inline-end-color" = BorderProperty{ .@"inline-end-color" = true };
-    const @"border-top-width" = BorderProperty{ .@"top-width" = true };
-    const @"border-bottom-width" = BorderProperty{ .@"bottom-width" = true };
-    const @"border-left-width" = BorderProperty{ .@"left-width" = true };
-    const @"border-right-width" = BorderProperty{ .@"right-width" = true };
-    const @"border-block-start-width" = BorderProperty{ .@"block-start-width" = true };
-    const @"border-block-end-width" = BorderProperty{ .@"block-end-width" = true };
-    const @"border-inline-start-width" = BorderProperty{ .@"inline-start-width" = true };
-    const @"border-inline-end-width" = BorderProperty{ .@"inline-end-width" = true };
-    const @"border-top-style" = BorderProperty{ .@"top-style" = true };
-    const @"border-bottom-style" = BorderProperty{ .@"bottom-style" = true };
-    const @"border-left-style" = BorderProperty{ .@"left-style" = true };
-    const @"border-right-style" = BorderProperty{ .@"right-style" = true };
-    const @"border-block-start-style" = BorderProperty{ .@"block-start-style" = true };
-    const @"border-block-end-style" = BorderProperty{ .@"block-end-style" = true };
-    const @"border-inline-start-style" = BorderProperty{ .@"inline-start-style" = true };
-    const @"border-inline-end-style" = BorderProperty{ .@"inline-end-style" = true };
-
-    const @"border-block-color" = BorderProperty{ .@"block-start-color" = true, .@"block-end-color" = true };
-    const @"border-inline-color" = BorderProperty{ .@"inline-start-color" = true, .@"inline-end-color" = true };
-    const @"border-block-width" = BorderProperty{ .@"block-start-width" = true, .@"block-end-width" = true };
-    const @"border-inline-width" = BorderProperty{ .@"inline-start-width" = true, .@"inline-end-width" = true };
-    const @"border-block-style" = BorderProperty{ .@"block-start-style" = true, .@"block-end-style" = true };
-    const @"border-inline-style" = BorderProperty{ .@"inline-start-style" = true, .@"inline-end-style" = true };
-    const @"border-top" = BorderProperty{ .@"top-color" = true, .@"top-width" = true, .@"top-style" = true };
-    const @"border-bottom" = BorderProperty{ .@"bottom-color" = true, .@"bottom-width" = true, .@"bottom-style" = true };
-    const @"border-left" = BorderProperty{ .@"left-color" = true, .@"left-width" = true, .@"left-style" = true };
-    const @"border-right" = BorderProperty{ .@"right-color" = true, .@"right-width" = true, .@"right-style" = true };
-    const @"border-block-start" = BorderProperty{ .@"block-start-color" = true, .@"block-start-width" = true, .@"block-start-style" = true };
-    const @"border-block-end" = BorderProperty{ .@"block-end-color" = true, .@"block-end-width" = true, .@"block-end-style" = true };
-    const @"border-inline-start" = BorderProperty{ .@"inline-start-color" = true, .@"inline-start-width" = true, .@"inline-start-style" = true };
-    const @"border-inline-end" = BorderProperty{ .@"inline-end-color" = true, .@"inline-end-width" = true, .@"inline-end-style" = true };
-    const @"border-block" = BorderProperty{ .@"block-start-color" = true, .@"block-end-color" = true, .@"block-start-width" = true, .@"block-end-width" = true, .@"block-start-style" = true, .@"block-end-style" = true };
-    const @"border-inline" = BorderProperty{ .@"inline-start-color" = true, .@"inline-end-color" = true, .@"inline-start-width" = true, .@"inline-end-width" = true, .@"inline-start-style" = true, .@"inline-end-style" = true };
-    const @"border-width" = BorderProperty{ .@"left-width" = true, .@"right-width" = true, .@"top-width" = true, .@"bottom-width" = true };
-    const @"border-style" = BorderProperty{ .@"left-style" = true, .@"right-style" = true, .@"top-style" = true, .@"bottom-style" = true };
-    const @"border-color" = BorderProperty{ .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
-    const border = BorderProperty{ .@"left-width" = true, .@"right-width" = true, .@"top-width" = true, .@"bottom-width" = true, .@"left-style" = true, .@"right-style" = true, .@"top-style" = true, .@"bottom-style" = true, .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
-
-    pub fn tryFromPropertyId(property_id: css.PropertyIdTag) ?@This() {
-        @setEvalBranchQuota(10000);
-        const fields = bun.@"meta".EnumFields(css.PropertyIdTag);
-        inline for (fields) |field| {
-            if (field.value == @intFromEnum(property_id)) {
-                if (comptime std.mem.startsWith(u8, field.name, "border")) {
-                    if (@hasDecl(@This(), field.name)) {
-                        return @field(@This(), field.name);
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-};
 const BorderImageHandler = @import("./border_image.zig").BorderImageHandler;
 const BorderRadiusHandler = @import("./border_radius.zig").BorderRadiusHandler;
 const Allocator = std.mem.Allocator;

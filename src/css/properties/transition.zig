@@ -62,7 +62,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -164,7 +164,7 @@ _ = self.property(dest, context, Feature.transition_delay, "delays", (&x.*[0]), 
 _ = self.property(dest, context, Feature.transition_timing_function, "timing_functions", (&x.*[0]), x.*[1]);
 },
 .transition => |*x| {
-const val: *const SmallList(Transition,1) = (&x.*[0]);
+const val: *const SmallList(Transition, 1) = (&x.*[0]);
             const vp: VendorPrefix = x.*[1];
             var props_list = SmallList(PropertyId, 1).initCapacity(context.allocator, val.len());
             _ = &props_list;
@@ -268,20 +268,20 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
             _ = &_delays;
             var _timing_functions: ?TransitionTimingFunctions = bun.take((&self.timing_functions));
             _ = &_timing_functions;
-            var rtl_properties: ?SmallList(PropertyId,1) = null;
+            var rtl_properties: ?SmallList(PropertyId, 1) = null;
             _ = &rtl_properties;
             if ((_properties != null)) {
                 const p = (&_properties.?);
                 rtl_properties = expandProperties((&p[0]), context);
             }
             if (((((_properties != null) and (_durations != null)) and (_delays != null)) and (_timing_functions != null))) {
-                const properties: *SmallList(PropertyId,1) = (&_properties.?[0]);
+                const properties: *SmallList(PropertyId, 1) = (&_properties.?[0]);
                 const property_prefixes: *VendorPrefix = (&_properties.?[1]);
-                const durations: *SmallList(Time,1) = (&_durations.?[0]);
+                const durations: *SmallList(Time, 1) = (&_durations.?[0]);
                 const duration_prefixes: *VendorPrefix = (&_durations.?[1]);
-                const delays: *SmallList(Time,1) = (&_delays.?[0]);
+                const delays: *SmallList(Time, 1) = (&_delays.?[0]);
                 const delay_prefixes: *VendorPrefix = (&_delays.?[1]);
-                const timing_functions: *SmallList(EasingFunction,1) = (&_timing_functions.?[0]);
+                const timing_functions: *SmallList(EasingFunction, 1) = (&_timing_functions.?[0]);
                 const timing_prefixes: *VendorPrefix = (&_timing_functions.?[1]);
                 const intersection = VendorPrefix.bitwiseAnd(VendorPrefix.bitwiseAnd(VendorPrefix.bitwiseAnd(property_prefixes.*, duration_prefixes.*), delay_prefixes.*), timing_prefixes.*);
                 if ((!intersection.isEmpty())) {
@@ -301,7 +301,7 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 }
             }
             if ((_properties != null)) {
-                const properties: SmallList(PropertyId,1) = _properties.?[0];
+                const properties: SmallList(PropertyId, 1) = _properties.?[0];
                 const prefix: VendorPrefix = _properties.?[1];
                 _properties = null;
                 if ((!prefix.isEmpty())) {
@@ -315,7 +315,7 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 }
             }
             if ((_durations != null)) {
-                const durations: SmallList(Time,1) = _durations.?[0];
+                const durations: SmallList(Time, 1) = _durations.?[0];
                 const prefix: VendorPrefix = _durations.?[1];
                 _durations = null;
                 if ((!prefix.isEmpty())) {
@@ -323,7 +323,7 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 }
             }
             if ((_delays != null)) {
-                const delays: SmallList(Time,1) = _delays.?[0];
+                const delays: SmallList(Time, 1) = _delays.?[0];
                 const prefix: VendorPrefix = _delays.?[1];
                 _delays = null;
                 if ((!prefix.isEmpty())) {
@@ -331,7 +331,7 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
                 }
             }
             if ((_timing_functions != null)) {
-                const timing_functions: SmallList(EasingFunction,1) = _timing_functions.?[0];
+                const timing_functions: SmallList(EasingFunction, 1) = _timing_functions.?[0];
                 const prefix: VendorPrefix = _timing_functions.?[1];
                 _timing_functions = null;
                 if ((!prefix.isEmpty())) {
@@ -341,13 +341,11 @@ pub fn flush(self: *TransitionHandler, dest: *css.DeclarationList, context: *css
             _ = self.reset();
     }
 
-pub inline fn getTransitions(context: *const css.PropertyHandlerContext, properties: *SmallList(PropertyId,1), durations: *SmallList(Time,1), delays: *SmallList(Time,1), timing_functions: *SmallList(EasingFunction,1)) SmallList(Transition,1) {
-            const cycleBump = struct {
-
 pub inline fn cycleBump(idx: *u32, len: u32) void {
             idx.* = ((idx.* + 1) % len);
     }
-}.cycleBump;
+
+pub inline fn getTransitions(context: *const css.PropertyHandlerContext, properties: *SmallList(PropertyId, 1), durations: *SmallList(Time, 1), delays: *SmallList(Time, 1), timing_functions: *SmallList(EasingFunction, 1)) SmallList(Transition, 1) {
             var transitions = SmallList(Transition, 1).initCapacity(context.allocator, 1);
             _ = &transitions;
             var durations_idx: u32 = 0;
@@ -393,6 +391,18 @@ pub fn reset(self: *TransitionHandler) void {
     }
 };
 
+pub const LogicalPropertyId = union(enum) {
+    none: void,
+    block: LogicalBlockPayload,
+    @"inline": LogicalInlinePayload,
+};
+
+const TransitionProperties = struct { SmallList(PropertyId, 1), VendorPrefix };
+const TransitionDurations = struct { SmallList(Time, 1), VendorPrefix };
+const TransitionDelays = struct { SmallList(Time, 1), VendorPrefix };
+const TransitionTimingFunctions = struct { SmallList(EasingFunction, 1), VendorPrefix };
+const LogicalBlockPayload = struct { css.compat.Feature, []const PropertyId };
+const LogicalInlinePayload = struct { css.compat.Feature, []const PropertyId, []const PropertyId };
 const SmallList = css.SmallList;
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
@@ -402,37 +412,26 @@ const Time = css.css_values.time.Time;
 const EasingFunction = css.css_values.easing.EasingFunction;
 const VendorPrefix = css.VendorPrefix;
 const Feature = css.prefixes.Feature;
-const TransitionProperties = struct { SmallList(PropertyId, 1), VendorPrefix };
-const TransitionDurations = struct { SmallList(Time, 1), VendorPrefix };
-const TransitionDelays = struct { SmallList(Time, 1), VendorPrefix };
-const TransitionTimingFunctions = struct { SmallList(EasingFunction, 1), VendorPrefix };
-const LogicalPropertyId = union(enum) {
-    none,
-    block: struct { css.compat.Feature, []const PropertyId },
-    @"inline": struct { css.compat.Feature, []const PropertyId, []const PropertyId },
-};
 const Allocator = std.mem.Allocator;
 
-pub fn expandProperties(properties: *SmallList(PropertyId,1), context: *css.PropertyHandlerContext) ?SmallList(PropertyId,1) {
-        const replace = struct {
+pub inline fn replaceProperties(allocator: Allocator, propertiez: *SmallList(PropertyId, 1), props: []const PropertyId, i: u32) void {
+        (propertiez.mut(i)).* = props[0].deepClone(allocator);
+        if ((props.len > 1)) {
+            _ = propertiez.insertSlice(allocator, (i + 1), props[1..]);
+        }
+}
 
-pub inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId,1), props: []const PropertyId, i: u32) void {
-            (propertiez.mut(i)).* = props[0].deepClone(allocator);
-            if ((props.len > 1)) {
-                _ = propertiez.insertSlice(allocator, (i + 1), props[1..]);
-            }
-    }
-}.replace;
-        var rtl_properties: ?css.SmallList(PropertyId,1) = null;
+pub fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.PropertyHandlerContext) ?SmallList(PropertyId, 1) {
+        var rtl_properties: ?css.SmallList(PropertyId, 1) = null;
         _ = &rtl_properties;
         var i: u32 = 0;
         _ = &i;
         while ((i < properties.len())) {
             const result = getLogicalProperties(properties.at(i));
             if (((result == .block) and context.shouldCompileLogical(result.block[0]))) {
-                _ = replace(context.allocator, properties, result.block[1], i);
+                _ = replaceProperties(context.allocator, properties, result.block[1], i);
                 if ((rtl_properties != null)) {
-                    _ = replace(context.allocator, (&rtl_properties.?), result.block[1], i);
+                    _ = replaceProperties(context.allocator, (&rtl_properties.?), result.block[1], i);
                 }
                 i = (i + 1);
             } else {
@@ -442,9 +441,9 @@ pub inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId,1)
                     if ((rtl_properties == null)) {
                         rtl_properties = properties.deepClone(context.allocator);
                     }
-                    _ = replace(context.allocator, properties, ltr, i);
+                    _ = replaceProperties(context.allocator, properties, ltr, i);
                     if ((rtl_properties != null)) {
-                        _ = replace(context.allocator, (&rtl_properties.?), rtl, i);
+                        _ = replaceProperties(context.allocator, (&rtl_properties.?), rtl, i);
                     }
                     i = (i + @as(u32, @intCast(ltr.len)));
                 } else {

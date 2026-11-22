@@ -6,11 +6,11 @@ pub fn SkipTypescript(
     return struct {
         const P = js_parser.NewParser_(parser_feature__typescript, parser_feature__jsx, parser_feature__scan_only);
 
-        static fn skipTypescriptReturnType(p: *P): anyerror!void {
+        static fn skipTypescriptReturnType(p: *P)! {
             p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), false, undefined)?;
         }
 
-        static fn skipTypescriptReturnTypeWithMetadata(p: *P): anyerror!TypeScript.Metadata {
+        static fn skipTypescriptReturnTypeWithMetadata(p: *P): TypeScript.Metadata! {
             let result = TypeScript.Metadata.default;
             p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), true, &result)?;
             return result;
@@ -21,14 +21,14 @@ pub fn SkipTypescript(
             p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, false, undefined)?;
         }
 
-        static fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level): anyerror!TypeScript.Metadata {
+        static fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level): TypeScript.Metadata! {
             p.markTypeScriptOnly();
             let result = TypeScript.Metadata.default;
             p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, true, &result)?;
             return result;
         }
 
-        static fn skipTypeScriptBinding(p: *P): anyerror!void {
+        static fn skipTypeScriptBinding(p: *P)! {
             p.markTypeScriptOnly();
             switch (p.lexer.token) {
                 .t_identifier, .t_this => {
@@ -120,7 +120,7 @@ pub fn SkipTypescript(
             }
         }
 
-        static fn skipTypescriptFnArgs(p: *P): anyerror!void {
+        static fn skipTypescriptFnArgs(p: *P)! {
             p.markTypeScriptOnly();
 
             p.lexer.expect(.t_open_paren)?;
@@ -884,7 +884,7 @@ pub fn SkipTypescript(
 
         // This is the type parameter declarations that go with other symbol
         // declarations (class, function, type, etc.)
-        static fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag): anyerror!SkipTypeParameterResult {
+        static fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag): SkipTypeParameterResult! {
             p.markTypeScriptOnly();
 
             if (p.lexer.token != .t_less_than) {
@@ -1019,7 +1019,7 @@ pub fn SkipTypescript(
             return result;
         }
 
-        static fn skipTypeScriptTypeStmt(p: *P, opts: *ParseStatementOptions): anyerror!void {
+        static fn skipTypeScriptTypeStmt(p: *P, opts: *ParseStatementOptions)! {
             if (opts.is_export) {
                 switch (p.lexer.token) {
                     .t_open_brace => {
@@ -1070,7 +1070,7 @@ pub fn SkipTypescript(
             p.lexer.expectOrInsertSemicolon()?;
         }
 
-        static fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions): anyerror!void {
+        static fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions)! {
             const name = p.lexer.identifier;
             p.lexer.expect(.t_identifier)?;
 
@@ -1109,7 +1109,7 @@ pub fn SkipTypescript(
             p.skipTypeScriptObjectType()?;
         }
 
-        static fn skipTypeScriptTypeArguments(p: *P, comptime isInsideJSXElement: bool): anyerror!bool {
+        static fn skipTypeScriptTypeArguments(p: *P, comptime isInsideJSXElement: bool): bool! {
             p.markTypeScriptOnly();
             switch (p.lexer.token) {
                 .t_less_than, .t_less_than_equals, .t_less_than_less_than, .t_less_than_less_than_equals => {},
@@ -1226,7 +1226,7 @@ pub fn SkipTypescript(
                 }
             }
 
-            static fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P): anyerror!SkipTypeParameterResult {
+            static fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P): SkipTypeParameterResult! {
                 const result = p.skipTypeScriptTypeParameters({ allow_const_modifier: true })?;
                 if (p.lexer.token != .t_open_paren) {
                     return error.Backtrack;
@@ -1235,7 +1235,7 @@ pub fn SkipTypescript(
                 return result;
             }
 
-            static fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset): anyerror!bool {
+            static fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset): bool! {
                 p.lexer.expect(.t_extends)?;
                 p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, undefined)?;
 
@@ -1246,7 +1246,7 @@ pub fn SkipTypescript(
                 return true;
             }
 
-            static fn skipTypeScriptArrowArgsWithBacktracking(p: *P): anyerror!bool {
+            static fn skipTypeScriptArrowArgsWithBacktracking(p: *P): bool! {
                 p.skipTypescriptFnArgs()?;
                 p.lexer.expect(.t_equals_greater_than) catch
                     return error.Backtrack;
@@ -1254,8 +1254,8 @@ pub fn SkipTypescript(
                 return true;
             }
 
-            static fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P): anyerror!bool {
-                if (try p.skipTypeScriptTypeArguments(false)) {
+            static fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P): bool! {
+                if (p.skipTypeScriptTypeArguments(false)?) {
                     // Check the token after this and backtrack if it's the wrong one
                     if (!TypeScript.canFollowTypeArgumentsInExpression(p)) {
                         return error.Backtrack;
@@ -1265,7 +1265,7 @@ pub fn SkipTypescript(
                 return true;
             }
 
-            static fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P): anyerror!void {
+            static fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P)! {
                 p.lexer.expect(.t_colon)?;
 
                 p.skipTypescriptReturnType()?;

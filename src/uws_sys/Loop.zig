@@ -60,28 +60,21 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const InternalLoopData = @import("./InternalLoopData.zig").InternalLoopData;
 pub const LoopHandler = struct {
     loop: *Loop,
     cb: *const fn (*anyopaque, *Loop) callconv(.c) void,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn init(self: *LoopHandler, loop: *Loop, cb: *const fn (*anyopaque, *Loop) callconv(.c) void) void {
-            self.loop = loop;
-            self.cb = cb;
-    }
-
-pub fn removePost(self: *const LoopHandler) void {
+pub fn removePost(self: LoopHandler) void {
             {
                 _ = uws_loop_removePostHandler(self.loop, @as(*anyopaque, @ptrCast(@alignCast(self))), self.cb);
             }
     }
 
-pub fn removePre(self: *const LoopHandler) void {
+pub fn removePre(self: LoopHandler) void {
             {
                 _ = uws_loop_removePreHandler(self.loop, @as(*anyopaque, @ptrCast(@alignCast(self))), self.cb);
             }
@@ -148,8 +141,7 @@ pub fn subActive(self: *PosixLoop, value: u32) void {
 
 pub fn unrefCount(self: *PosixLoop, count: i32) void {
             self.num_polls = (self.num_polls - count);
-            var c_u32 = (if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(u32, @intFromEnum(count)) else cp_cast_int(u32, count));
-            _ = &c_u32;
+            const c_u32 = (if (comptime @typeInfo(@TypeOf(count)) == .@"enum") cp_cast_int(u32, @intFromEnum(count)) else cp_cast_int(u32, count));
             if ((self.active > c_u32)) {
                 self.active = (self.active - c_u32);
             } else {
@@ -201,7 +193,9 @@ pub fn nextTick(self: *PosixLoop, comptime UserType: type, user_data: UserType, 
             const Handler = struct {
 
 pub fn callback(data: *anyopaque) callconv(.c) void {
-            _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
+            {
+                _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
+            }
     }
 };
             {
@@ -233,7 +227,7 @@ pub const WindowsLoop = extern struct {
     pre: *bun.windows.libuv.uv_prepare_t,
     check: *bun.windows.libuv.uv_check_t,
 
-pub fn shouldEnableDateHeaderTimer(self: *const WindowsLoop) bool {
+pub fn shouldEnableDateHeaderTimer(self: WindowsLoop) bool {
             return self.internal_loop_data.shouldEnableDateHeaderTimer();
     }
 
@@ -247,7 +241,7 @@ pub fn get() *WindowsLoop {
             }
     }
 
-pub fn iterationNumber(self: *const WindowsLoop) u64 {
+pub fn iterationNumber(self: WindowsLoop) u64 {
             return self.internal_loop_data.iteration_nr;
     }
 
@@ -259,7 +253,7 @@ pub fn subActive(self: *WindowsLoop, val: u32) void {
             _ = self.uv_loop.subActive(val);
     }
 
-pub fn isActive(self: *const WindowsLoop) bool {
+pub fn isActive(self: WindowsLoop) bool {
             return self.uv_loop.isActive();
     }
 
@@ -268,7 +262,7 @@ pub fn wakeup(self: *WindowsLoop) void {
     }
 
 pub fn tickWithTimeout(self: *WindowsLoop, timespec: ?*const bun.timespec) void {
-        _ = timespec;
+            _ = &timespec;
             _ = us_loop_run(@as(*Loop, @ptrCast(@alignCast(self))));
     }
 
@@ -311,7 +305,9 @@ pub fn nextTick(self: *WindowsLoop, comptime UserType: type, user_data: UserType
             const Handler = struct {
 
 pub fn callback(data: *anyopaque) callconv(.c) void {
-            _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
+            {
+                _ = deferCallback(@as(UserType, @ptrCast(@alignCast(data))));
+            }
     }
 };
             {

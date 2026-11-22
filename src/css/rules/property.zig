@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -185,98 +185,106 @@ pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) This {
     const This = @This();
 };
 
+pub const PropertyDeclarationParser = struct {
+
+pub fn parseValue(p: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser) Result(Declaration) {
+            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("syntax", name)) {
+                const syntax = (switch (SyntaxString.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                p.syntax = syntax;
+            } else {
+                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("inherits", name)) {
+                    const location = input.currentSourceLocation();
+                    const ident = (switch (input.expectIdent()) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+                    var inherits: bool = false;
+                    _ = &inherits;
+                    if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("true", ident)) {
+                        inherits = true;
+                    } else {
+                        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("false", ident)) {
+                            inherits = false;
+                        } else {
+                            return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+                        }
+                    }
+                    p.inherits = inherits;
+                } else {
+                    if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("initial-value", name)) {
+                        const start = input.position();
+                        while (input.next().isOk()) {
+                        }
+                        const initial_value = input.sliceFrom(start);
+                        p.initial_value = initial_value;
+                    } else {
+                        return .{ .err = input.newCustomError(css.ParserError.invalid_declaration) };
+                    }
+                }
+            }
+            return .success;
+    }
+    pub const Declaration = void;
+    const Map = bun.ComptimeStringMap(std.@"meta".FieldEnum(PropertyRuleDeclarationParser), .{ .{ "syntax", .syntax }, .{ "inherits", .inherits }, .{ "initial-value", .initial_value } });
+};
+
+pub const PropertyRuleBodyItemParser = struct {
+
+pub fn parseQualified(_: *PropertyRuleDeclarationParser) bool {
+            return false;
+    }
+
+pub fn parseDeclarations(_: *PropertyRuleDeclarationParser) bool {
+            return true;
+    }
+};
+
+pub const PropertyAtRuleParser = struct {
+
+pub fn parsePrelude(_: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser) Result(Prelude) {
+            return .{ .err = input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
+
+pub fn parseBlock(_: *PropertyRuleDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(AtRule) {
+            return .{ .err = input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
+    }
+
+pub fn ruleWithoutBlock(_: *PropertyRuleDeclarationParser, _: Prelude, _: *const css.ParserState) css.Maybe(AtRule, void) {
+            return .{ .err = undefined };
+    }
+    pub const Prelude = void;
+    pub const AtRule = void;
+};
+
+pub const PropertyQualifiedRuleParser = struct {
+
+pub fn parsePrelude(_: *PropertyRuleDeclarationParser, input: *css.Parser) Result(Prelude) {
+            return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
+
+pub fn parseBlock(_: *PropertyRuleDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
+            return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
+    }
+    pub const Prelude = void;
+    pub const QualifiedRule = void;
+};
+
 pub const PropertyRuleDeclarationParser = struct {
     syntax: ?SyntaxString,
     inherits: ?bool,
     initial_value: ?[]const u8,
     const This = @This();
-    pub const DeclarationParser = struct {
-    
-    pub fn parseValue(p: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser) Result(Declaration) {
-                if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("syntax", name)) {
-                    const syntax = (switch (SyntaxString.parse(input)) {
-    .result => |vv| vv,
-    .err => |e| {
-    return .{ .err = e };
-    },
-    });
-                    p.syntax = syntax;
-                } else {
-                    if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("inherits", name)) {
-                        const location = input.currentSourceLocation();
-                        const ident = (switch (input.expectIdent()) {
-    .result => |vv| vv,
-    .err => |e| {
-    return .{ .err = e };
-    },
-    });
-                        var inherits: bool = false;
-                        _ = &inherits;
-                        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("true", ident)) {
-                            inherits = true;
-                        } else {
-                            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("false", ident)) {
-                                inherits = false;
-                            } else {
-                                return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
-                            }
-                        }
-                        p.inherits = inherits;
-                    } else {
-                        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("initial-value", name)) {
-                            const start = input.position();
-                            while (input.next().isOk()) {
-                            }
-                            const initial_value = input.sliceFrom(start);
-                            p.initial_value = initial_value;
-                        } else {
-                            return .{ .err = input.newCustomError(css.ParserError.invalid_declaration) };
-                        }
-                    }
-                }
-                return .success;
-        }
-        pub const Declaration = void;
-        const Map = bun.ComptimeStringMap(std.@"meta".FieldEnum(PropertyRuleDeclarationParser), .{ .{ "syntax", .syntax }, .{ "inherits", .inherits }, .{ "initial-value", .initial_value } });
-    };
-    pub const RuleBodyItemParser = struct {
-    
-    pub fn parseQualified(_: *PropertyRuleDeclarationParser) bool {
-                return false;
-        }
-    
-    pub fn parseDeclarations(_: *PropertyRuleDeclarationParser) bool {
-                return true;
-        }
-    };
-    pub const AtRuleParser = struct {
-    
-    pub fn parsePrelude(_: *PropertyRuleDeclarationParser, name: []const u8, input: *css.Parser) Result(Prelude) {
-                return .{ .err = input.newError(css.BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
-    
-    pub fn parseBlock(_: *PropertyRuleDeclarationParser, _: AtRuleParser.Prelude, _: *const css.ParserState, input: *css.Parser) Result(AtRuleParser.AtRule) {
-                return .{ .err = input.newError(css.BasicParseErrorKind.at_rule_body_invalid) };
-        }
-    
-    pub fn ruleWithoutBlock(_: *PropertyRuleDeclarationParser, _: AtRuleParser.Prelude, _: *const css.ParserState) css.Maybe(AtRuleParser.AtRule,void) {
-                return .{ .err = undefined };
-        }
-        pub const Prelude = void;
-        pub const AtRule = void;
-    };
-    pub const QualifiedRuleParser = struct {
-    
-    pub fn parsePrelude(_: *PropertyRuleDeclarationParser, input: *css.Parser) Result(Prelude) {
-                return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
-    
-    pub fn parseBlock(_: *PropertyRuleDeclarationParser, _: Prelude, _: *const css.ParserState, input: *css.Parser) Result(QualifiedRule) {
-                return .{ .err = input.newError(css.BasicParseErrorKind.qualified_rule_invalid) };
-        }
-        pub const Prelude = void;
-        pub const QualifiedRule = void;
-    };
+    pub const DeclarationParser = PropertyDeclarationParser;
+    pub const RuleBodyItemParser = PropertyRuleBodyItemParser;
+    pub const AtRuleParser = PropertyAtRuleParser;
+    pub const QualifiedRuleParser = PropertyQualifiedRuleParser;
 };
 
 const Result = css.Result;

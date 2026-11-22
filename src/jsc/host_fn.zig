@@ -182,16 +182,6 @@ pub fn __cp_deinit(self: *ExceptionThrowGuard) void {
 const string = []const u8;
 pub const JSHostFn = @TypeOf(_JSHostFn);
 pub const JSHostFnZig = @TypeOf(_JSHostFnZig);
-const private_ffi = struct {
-
-pub extern "c" fn Bun__CreateFFIFunctionWithDataValue(globalObject: *JSGlobalObject, symbolName: ?*const ZigString, argCount: u32, function: *const JSHostFn, data: *anyopaque) callconv(.c) JSValue;
-
-pub extern "c" fn Bun__CreateFFIFunctionValue(globalObject: *JSGlobalObject, symbolName: ?*const ZigString, argCount: u32, function: *const JSHostFn, add_ptr_field: bool, inputFunctionPtr: ?*anyopaque) callconv(.c) JSValue;
-
-pub extern "c" fn Bun__FFIFunction_getDataPtr(function: JSValue) callconv(.c) ?*anyopaque;
-
-pub extern "c" fn Bun__FFIFunction_setDataPtr(function: JSValue, data: ?*anyopaque) callconv(.c) void;
-};
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 const CallFrame = jsc.CallFrame;
@@ -211,8 +201,8 @@ pub fn _JSHostFnZig(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSEr
         return .zero;
 }
 
-pub fn JSHostFnZigWithContext(comptime ContextType: type) type {
-        const S = struct {
+pub fn _ZigWithContext(comptime ContextType: type) type {
+        return struct {
 
 pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
             _ = &ctx;
@@ -221,11 +211,10 @@ pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) 
             return .zero;
     }
 };
-        return @TypeOf(S.f);
 }
 
-pub fn JSHostFunctionTypeWithContext(comptime ContextType: type) type {
-        const S = struct {
+pub fn _FnTypeWithContext(comptime ContextType: type) type {
+        return struct {
 
 pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) JSValue {
             _ = &ctx;
@@ -234,7 +223,14 @@ pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) 
             return .zero;
     }
 };
-        return @TypeOf(S.f);
+}
+
+pub fn JSHostFnZigWithContext(comptime ContextType: type) type {
+        return @TypeOf(_ZigWithContext(ContextType).f);
+}
+
+pub fn JSHostFunctionTypeWithContext(comptime ContextType: type) type {
+        return @TypeOf(_FnTypeWithContext(ContextType).f);
 }
 
 pub fn toJSHostFn(comptime functionToWrap: JSHostFnZig) JSHostFn {
@@ -473,24 +469,32 @@ pub fn wrap4v(comptime func: anytype) @TypeOf(Wrap4vStruct(func).wrapped) {
         return Wrap4vStruct(func).wrapped;
 }
 
+extern "c" fn Bun__CreateFFIFunctionWithDataValue(globalObject: *JSGlobalObject, symbolName: ?*const ZigString, argCount: u32, function: *const JSHostFn, data: *anyopaque) callconv(.c) JSValue;
+
+extern "c" fn Bun__CreateFFIFunctionValue(globalObject: *JSGlobalObject, symbolName: ?*const ZigString, argCount: u32, function: *const JSHostFn, add_ptr_field: bool, inputFunctionPtr: ?*anyopaque) callconv(.c) JSValue;
+
+extern "c" fn Bun__FFIFunction_getDataPtr(function: JSValue) callconv(.c) ?*anyopaque;
+
+extern "c" fn Bun__FFIFunction_setDataPtr(function: JSValue, data: ?*anyopaque) callconv(.c) void;
+
 pub fn NewRuntimeFunction(globalObject: *JSGlobalObject, symbolName: ?*const ZigString, argCount: u32, functionPointer: *const JSHostFn, add_ptr_property: bool, inputFunctionPtr: ?*anyopaque) JSValue {
         _ = jsc.markBinding(@src());
-        return private_ffi.Bun__CreateFFIFunctionValue(globalObject, symbolName, argCount, functionPointer, add_ptr_property, inputFunctionPtr);
+        return Bun__CreateFFIFunctionValue(globalObject, symbolName, argCount, functionPointer, add_ptr_property, inputFunctionPtr);
 }
 
 pub fn getFunctionData(function: JSValue) ?*anyopaque {
         _ = jsc.markBinding(@src());
-        return private_ffi.Bun__FFIFunction_getDataPtr(function);
+        return Bun__FFIFunction_getDataPtr(function);
 }
 
 pub fn setFunctionData(function: JSValue, value: ?*anyopaque) void {
         _ = jsc.markBinding(@src());
-        return private_ffi.Bun__FFIFunction_setDataPtr(function, value);
+        return Bun__FFIFunction_setDataPtr(function, value);
 }
 
 pub fn NewFunctionWithData(globalObject: *JSGlobalObject, symbolName: ?*const ZigString, argCount: u32, comptime function: JSHostFnZig, data: *anyopaque) JSValue {
         _ = jsc.markBinding(@src());
-        return private_ffi.Bun__CreateFFIFunctionWithDataValue(globalObject, symbolName, argCount, toJSHostFn(function), data);
+        return Bun__CreateFFIFunctionWithDataValue(globalObject, symbolName, argCount, toJSHostFn(function), data);
 }
 
 pub fn DOMCallArgumentType(comptime Type: type) []const u8 {
@@ -544,7 +548,7 @@ pub fn DOMCall(comptime class_name: []const u8, comptime Container: type, compti
 }
 
 pub fn InstanceMethodType(comptime Container: type) type {
-        return *const fn(instance: *Container, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue;
+        return *const fn (*Container, *jsc.JSGlobalObject, *jsc.CallFrame) bun.JSError!jsc.JSValue;
 }
 
 pub fn Optional(comptime T: type) type {

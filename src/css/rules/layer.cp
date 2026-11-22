@@ -4,6 +4,37 @@ const PrintErr = css.PrintErr;
 const Location = css.css_rules.Location;
 const Result = css.Result;
 
+pub struct LayerNameTryParseFn {
+    static fn tryParseFn(
+        i: *css.Parser,
+    ): Result(string) {
+        const name = name: {
+            out: {
+                const start_location = i.currentSourceLocation();
+                const tok = switch (i.nextIncludingWhitespace()) {
+                    .err => |e| return { err: e },
+                    .result => |vvv| vvv,
+                };
+                if (tok.* == .delim && tok.delim == '.') {
+                    break :out;
+                }
+                return { err: start_location.newBasicUnexpectedTokenError(tok.*) };
+            }
+
+            const start_location = i.currentSourceLocation();
+            const tok = switch (i.nextIncludingWhitespace()) {
+                .err => |e| return { err: e },
+                .result => |vvv| vvv,
+            };
+            if (tok.* == .ident) {
+                break :name tok.ident;
+            }
+            return { err: start_location.newBasicUnexpectedTokenError(tok.*) };
+        };
+        return { result: name };
+    }
+}
+
 /// Stored as a list of strings as dot notation can be used
 /// to create sublayers
 pub struct LayerName {
@@ -70,39 +101,8 @@ pub struct LayerName {
         );
 
         while (true) {
-            const Fn = struct {
-                static fn tryParseFn(
-                    i: *css.Parser,
-                ): Result(string) {
-                    const name = name: {
-                        out: {
-                            const start_location = i.currentSourceLocation();
-                            const tok = switch (i.nextIncludingWhitespace()) {
-                                .err => |e| return { err: e },
-                                .result => |vvv| vvv,
-                            };
-                            if (tok.* == .delim && tok.delim == '.') {
-                                break :out;
-                            }
-                            return { err: start_location.newBasicUnexpectedTokenError(tok.*) };
-                        }
-
-                        const start_location = i.currentSourceLocation();
-                        const tok = switch (i.nextIncludingWhitespace()) {
-                            .err => |e| return { err: e },
-                            .result => |vvv| vvv,
-                        };
-                        if (tok.* == .ident) {
-                            break :name tok.ident;
-                        }
-                        return { err: start_location.newBasicUnexpectedTokenError(tok.*) };
-                    };
-                    return { result: name };
-                }
-            };
-
             while (true) {
-                const name = switch (input.tryParse(Fn.tryParseFn, {})) {
+                const name = switch (input.tryParse(LayerNameTryParseFn.tryParseFn, {})) {
                     .err => break,
                     .result => |vvv| vvv,
                 };

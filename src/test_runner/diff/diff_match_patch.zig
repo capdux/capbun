@@ -67,9 +67,19 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const DiffOperation = enum {
+    insert,
+    delete,
+    equal,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitWithAllocGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -141,7 +151,7 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const Config = struct {
+pub const Config = struct {
     diff_timeout: u64 = 1000,
     diff_edit_cost: u16 = 4,
     diff_check_lines_over: u64 = 100,
@@ -151,6 +161,61 @@ const Config = struct {
     patch_delete_threshold: f32 = 0.5,
     patch_margin: u16 = 4,
 };
+
+pub fn DmpDiff(comptime Unit: type) type {
+    return struct {
+        operation: DiffOperation,
+        text: []const Unit,
+
+pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+                _ = &fmt;
+                _ = &options;
+                _ = try writer.print("({s}, \"{s}\")", .{ (switch (self.operation) {
+.equal => "=",
+.insert => "+",
+.delete => "-",
+}), self.text });
+        }
+
+pub fn eql(self: @This(), b: DmpDiff(Unit)) bool {
+                return ((self.operation == b.operation) and std.mem.eql(Unit, self.text, b.text));
+        }
+        pub const Operation = DiffOperation;
+    };
+}
+
+pub fn DmpHalfMatchResult(comptime Unit: type) type {
+    return struct {
+        prefix_before: []const Unit,
+        suffix_before: []const Unit,
+        prefix_after: []const Unit,
+        suffix_after: []const Unit,
+        common_middle: []const Unit,
+
+pub fn deinit(self: @This(), alloc: std.mem.Allocator) void {
+                _ = alloc.free(self.prefix_before);
+                _ = alloc.free(self.suffix_before);
+                _ = alloc.free(self.prefix_after);
+                _ = alloc.free(self.suffix_after);
+                _ = alloc.free(self.common_middle);
+        }
+    };
+}
+
+pub fn DmpLinesToCharsResult(comptime Unit: type) type {
+    return struct {
+        chars_1: []const usize,
+        chars_2: []const usize,
+        line_array: std.ArrayListUnmanaged([]const Unit),
+
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+                _ = allocator.free(self.chars_1);
+                _ = allocator.free(self.chars_2);
+                _ = self.line_array.deinit(allocator);
+        }
+    };
+}
+
 const StringHashMapUnmanaged = bun.StringHashMapUnmanaged;
 
 pub fn DMP(comptime Unit: type) type {
@@ -1772,65 +1837,11 @@ _ = @compileError("Return type must be !void");
     const testing = std.testing;
     const Allocator = std.mem.Allocator;
     pub const default: DiffMatchPatch = .{ .config = .{} };
-    pub const Diff = struct {
-        operation: Operation,
-        text: []const Unit,
-    
-    pub fn format(value: Diff, _: anytype, _: anytype, writer: anytype) !void {
-                _ = try writer.print("({s}, \"{s}\")", .{ (switch (value.operation) {
-    .equal => "=",
-    .insert => "+",
-    .delete => "-",
-    }), value.text });
-        }
-    
-    pub fn eql(a: Diff, b: Diff) bool {
-                return ((a.operation == b.operation) and std.mem.eql(Unit, a.text, b.text));
-        }
-        pub const Operation = enum {
-                        insert,
-                        delete,
-                        equal,
-                    };
-        test eql {
-                const equal_a: Diff = .{ .operation = .equal, .text = "a" };
-                const insert_a: Diff = .{ .operation = .insert, .text = "a" };
-                const equal_b: Diff = .{ .operation = .equal, .text = "b" };
-                const delete_b: Diff = .{ .operation = .delete, .text = "b" };
-                _ = try testing.expect(equal_a.eql(equal_a));
-                _ = try testing.expect((!insert_a.eql(equal_a)));
-                _ = try testing.expect((!equal_a.eql(equal_b)));
-                _ = try testing.expect((!equal_a.eql(delete_b)));
-        }
-    };
+    pub const Diff = DmpDiff(Unit);
     pub const DiffError = error{OutOfMemory};
     const DiffList = std.ArrayListUnmanaged(Diff);
-    const HalfMatchResult = struct {
-        prefix_before: []const Unit,
-        suffix_before: []const Unit,
-        prefix_after: []const Unit,
-        suffix_after: []const Unit,
-        common_middle: []const Unit,
-    
-    pub fn deinit(hmr: HalfMatchResult, alloc: Allocator) void {
-                _ = alloc.free(hmr.prefix_before);
-                _ = alloc.free(hmr.suffix_before);
-                _ = alloc.free(hmr.prefix_after);
-                _ = alloc.free(hmr.suffix_after);
-                _ = alloc.free(hmr.common_middle);
-        }
-    };
-    const LinesToCharsResult = struct {
-        chars_1: []const usize,
-        chars_2: []const usize,
-        line_array: std.ArrayListUnmanaged([]const Unit),
-    
-    pub fn deinit(self: *@This(), allocator: Allocator) void {
-                _ = allocator.free(self.chars_1);
-                _ = allocator.free(self.chars_2);
-                _ = self.line_array.deinit(allocator);
-        }
-    };
+    const HalfMatchResult = DmpHalfMatchResult(Unit);
+    const LinesToCharsResult = DmpLinesToCharsResult(Unit);
     const DMPUsize = DMP(usize);
     test diffCommonPrefix {
             _ = try testing.expectEqual((if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)), diffCommonPrefix("abc", "xyz"));

@@ -65,7 +65,7 @@ struct DmpDiffListItemsFreeGuard<T> {
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-const Config = struct {
+struct Config {
     /// Number of milliseconds to map a diff before giving up (0 for infinity).
     diff_timeout: u64 = 1000,
     /// Cost of an empty edit operation in terms of edit characters.
@@ -89,7 +89,65 @@ const Config = struct {
     patch_delete_threshold: f32 = 0.5,
     /// Chunk size for context length.
     patch_margin: u16 = 4,
-};
+}
+
+pub enum DiffOperation {
+    insert,
+    delete,
+    equal,
+}
+
+pub struct DmpDiff<Unit> {
+    pub const Operation = DiffOperation;
+
+    operation: DiffOperation,
+    text: []const Unit,
+
+    fn format(comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: auto)! {
+        * = fmt;
+        * = options;
+        writer.print("({s}, \"{s}\")", .{
+            switch (_.operation) {
+                .equal => "=",
+                .insert => "+",
+                .delete => "-",
+            },
+            _.text,
+        })?;
+    }
+
+    fn eql(b: DmpDiff<Unit>): bool {
+        return _.operation == b.operation && std.mem.eql(Unit, _.text, b.text);
+    }
+}
+
+struct DmpHalfMatchResult<Unit> {
+    prefix_before: []const Unit,
+    suffix_before: []const Unit,
+    prefix_after: []const Unit,
+    suffix_after: []const Unit,
+    common_middle: []const Unit,
+
+    fn deinit(alloc: std.mem.Allocator) {
+        alloc.free(_.prefix_before);
+        alloc.free(_.suffix_before);
+        alloc.free(_.prefix_after);
+        alloc.free(_.suffix_after);
+        alloc.free(_.common_middle);
+    }
+}
+
+struct DmpLinesToCharsResult<Unit> {
+    chars_1: []const usize,
+    chars_2: []const usize,
+    line_array: std.ArrayListUnmanaged([]const Unit),
+
+    fn deinit(*_, allocator: std.mem.Allocator) {
+        allocator.free(_.chars_1);
+        allocator.free(_.chars_2);
+        _.line_array.deinit(allocator);
+    }
+}
 
 pub fn DMP(comptime Unit: type): type {
     return struct {
@@ -101,43 +159,7 @@ pub fn DMP(comptime Unit: type): type {
         /// DMP with default configuration options
         pub const default: DiffMatchPatch = .{ .config = .{} };
 
-        pub const Diff = struct {
-            pub const Operation = enum {
-                insert,
-                delete,
-                equal,
-            };
-
-            operation: Operation,
-            text: []const Unit,
-
-            pub fn format(value: Diff, _: anytype, _: anytype, writer: anytype) !void {
-                try writer.print("({s}, \"{s}\")", .{
-                    switch (value.operation) {
-                        .equal => "=",
-                        .insert => "+",
-                        .delete => "-",
-                    },
-                    value.text,
-                });
-            }
-
-            pub fn eql(a: Diff, b: Diff) bool {
-                return a.operation == b.operation and std.mem.eql(Unit, a.text, b.text);
-            }
-
-            test eql {
-                const equal_a: Diff = .{ .operation = .equal, .text = "a" };
-                const insert_a: Diff = .{ .operation = .insert, .text = "a" };
-                const equal_b: Diff = .{ .operation = .equal, .text = "b" };
-                const delete_b: Diff = .{ .operation = .delete, .text = "b" };
-
-                try testing.expect(equal_a.eql(equal_a));
-                try testing.expect(!insert_a.eql(equal_a));
-                try testing.expect(!equal_a.eql(equal_b));
-                try testing.expect(!equal_a.eql(delete_b));
-            }
-        };
+        pub const Diff = DmpDiff(Unit);
 
         config: Config,
 
@@ -410,21 +432,7 @@ pub fn DMP(comptime Unit: type): type {
             return dmp.diffBisect(allocator, before, after, deadline);
         }
 
-        const HalfMatchResult = struct {
-            prefix_before: []const Unit,
-            suffix_before: []const Unit,
-            prefix_after: []const Unit,
-            suffix_after: []const Unit,
-            common_middle: []const Unit,
-
-            pub fn deinit(hmr: HalfMatchResult, alloc: Allocator) void {
-                alloc.free(hmr.prefix_before);
-                alloc.free(hmr.suffix_before);
-                alloc.free(hmr.prefix_after);
-                alloc.free(hmr.suffix_after);
-                alloc.free(hmr.common_middle);
-            }
-        };
+        const HalfMatchResult = DmpHalfMatchResult(Unit);
 
         /// Do the two texts share a Substring which is at least half the length of
         /// the longer text?
@@ -855,17 +863,7 @@ pub fn DMP(comptime Unit: type): type {
             return diffs;
         }
 
-        const LinesToCharsResult = struct {
-            chars_1: []const usize,
-            chars_2: []const usize,
-            line_array: std.ArrayListUnmanaged([]const Unit),
-
-            pub fn deinit(self: *LinesToCharsResult, allocator: Allocator) void {
-                allocator.free(self.chars_1);
-                allocator.free(self.chars_2);
-                self.line_array.deinit(allocator);
-            }
-        };
+        const LinesToCharsResult = DmpLinesToCharsResult(Unit);
 
         /// Split two texts into a list of strings.  Reduce the texts to a string of
         /// hashes where each Unicode character represents one line.

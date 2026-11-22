@@ -13,7 +13,6 @@ import {
     JSError,
     jsc,
 } from "bun";
-import { meta, mem, fmt } from "std";
 import ArrayBufferSinkMod from "./ArrayBufferSink.zig";
 pub const ArrayBufferSink = ArrayBufferSinkMod;
 import bun from "bun";
@@ -28,7 +27,7 @@ const streams = webcore.streams;
 const stack_size = 1024;
 
 export class UTF8Fallback {
-    pub fn writeLatin1(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: anytype): streams.Result.Writable {
+    pub static fn writeLatin1(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: auto): streams.Result.Writable {
         const str = input.slice();
         if (strings.isAllASCII(str)) {
             return writeFn(
@@ -62,8 +61,8 @@ export class UTF8Fallback {
         }
     }
 
-    pub fn writeUTF16(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: anytype): streams.Result.Writable {
-        const str: []const u16 = mem.bytesAsSlice(u16, input.slice());
+    pub static fn writeUTF16(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: auto): streams.Result.Writable {
+        const str: []const u16 = std.mem.bytesAsSlice(u16, input.slice());
 
         if (stack_size >= str.len * 2) {
             let buf: [stack_size]u8 = undefined;
@@ -98,145 +97,151 @@ pub struct EnsureStillAliveGuard<T> {
     }
 }
 
+pub enum _SinkStatus {
+    ready,
+    closed,
+}
+
+pub union(enum) _SinkData {
+    utf16: streams.Result,
+    latin1: streams.Result,
+    bytes: streams.Result,
+}
+
+fn _WrapFunctions(comptime Wrapped: type): type {
+    return struct {
+        static fn onWrite(ctx: *!, data: streams.Result): streams.Result.Writable {
+            return Wrapped.write(cast(*Wrapped, ctx), data);
+        }
+        static fn onConnect(ctx: *!, signal: streams.Signal): sys.Maybe(void) {
+            return Wrapped.connect(cast(*Wrapped, ctx), signal);
+        }
+        static fn onWriteLatin1(ctx: *!, data: streams.Result): streams.Result.Writable {
+            return Wrapped.writeLatin1(cast(*Wrapped, ctx), data);
+        }
+        static fn onWriteUTF16(ctx: *!, data: streams.Result): streams.Result.Writable {
+            return Wrapped.writeUTF16(cast(*Wrapped, ctx), data);
+        }
+        static fn onEnd(ctx: *!, e: Syscall.Error?): sys.Maybe(void) {
+            return Wrapped.end(cast(*Wrapped, ctx), e);
+        }
+    };
+}
+
+pub struct _SinkVTable {
+    pub const WriteUTF16Fn = fn (ctx: *!, data: streams.Result): streams.Result.Writable;
+    pub const WriteUTF8Fn = fn (ctx: *!, data: streams.Result): streams.Result.Writable;
+    pub const WriteLatin1Fn = fn (ctx: *!, data: streams.Result): streams.Result.Writable;
+    pub const EndFn = fn (ctx: *!, e: MaybeSyscallErr): sys.Maybe(void);
+    pub const ConnectFn = fn (ctx: *!, signal: streams.Signal): sys.Maybe(void);
+
+    connect: ConnectFn,
+    write: WriteUTF8Fn,
+    writeLatin1: WriteLatin1Fn,
+    writeUTF16: WriteUTF16Fn,
+    end: EndFn,
+
+    static fn wrap(comptime Wrapped: type): _SinkVTable {
+        const Functions = _WrapFunctions(Wrapped);
+
+        return _SinkVTable{
+            write: Functions.onWrite,
+            writeLatin1: Functions.onWriteLatin1,
+            writeUTF16: Functions.onWriteUTF16,
+            end: Functions.onEnd,
+            connect: Functions.onConnect,
+        };
+    }
+}
+
 @root struct Sink {
     ptr: *!,
-    vtable: VTable,
-    status: Status = Status.closed,
+    vtable: _SinkVTable,
+    status: _SinkStatus = _SinkStatus.closed,
     used: bool = false,
 
     pub const pending = Sink{
-        .ptr = @ptrFromInt(0xaaaaaaaa),
-        .vtable = undefined,
+        ptr: @ptrFromInt(0xaaaaaaaa),
+        vtable: undefined,
     };
 
-    pub const Status = enum {
-        ready,
-        closed,
-    };
+    pub const Status = _SinkStatus;
+    pub const Data = _SinkData;
+    pub const VTable = _SinkVTable;
 
-    pub const Data = union(enum) {
-        utf16: streams.Result,
-        latin1: streams.Result,
-        bytes: streams.Result,
-    };
-
-    pub fn initWithType(comptime Type: type, handler: *Type): Sink {
+    static fn initWithType(comptime Type: type, handler: *Type): Sink {
         return .{
-            .ptr = unsafe { @as(*!, @ptrCast(handler)) },
-            .vtable = VTable.wrap(Type),
-            .status = .ready,
-            .used = false,
+            ptr: unsafe { @as(*!, @ptrCast(handler)) },
+            vtable: _SinkVTable.wrap(Type),
+            status: .ready,
+            used: false,
         };
     }
 
-    pub fn init(handler: anytype): Sink {
-        return initWithType(meta.Child(@TypeOf(handler)), handler);
+    static fn init(handler: auto): Sink {
+        return initWithType(std.meta.Child(@TypeOf(handler)), handler);
     }
 
-    pub const VTable = struct {
-        pub const WriteUTF16Fn = fn (ctx: *!, data: streams.Result) streams.Result.Writable;
-        pub const WriteUTF8Fn = fn (ctx: *!, data: streams.Result) streams.Result.Writable;
-        pub const WriteLatin1Fn = fn (ctx: *!, data: streams.Result) streams.Result.Writable;
-        pub const EndFn = fn (ctx: *!, err: MaybeSyscallErr) sys.Maybe(void);
-        pub const ConnectFn = fn (ctx: *!, signal: streams.Signal) sys.Maybe(void);
-
-        connect: ConnectFn,
-        write: WriteUTF8Fn,
-        writeLatin1: WriteLatin1Fn,
-        writeUTF16: WriteUTF16Fn,
-        end: EndFn,
-
-        pub static fn wrap(
-            comptime Wrapped: type,
-        ): VTable {
-            const Functions = struct {
-                pub static fn onWrite(ctx: *!, data: streams.Result): streams.Result.Writable {
-                    return Wrapped.write(cast(*Wrapped, ctx), data);
-                }
-                pub static fn onConnect(ctx: *!, signal: streams.Signal): sys.Maybe(void) {
-                    return Wrapped.connect(cast(*Wrapped, ctx), signal);
-                }
-                pub static fn onWriteLatin1(ctx: *!, data: streams.Result): streams.Result.Writable {
-                    return Wrapped.writeLatin1(cast(*Wrapped, ctx), data);
-                }
-                pub static fn onWriteUTF16(ctx: *!, data: streams.Result): streams.Result.Writable {
-                    return Wrapped.writeUTF16(cast(*Wrapped, ctx), data);
-                }
-                pub static fn onEnd(ctx: *!, err: Syscall.Error?): sys.Maybe(void) {
-                    return Wrapped.end(cast(*Wrapped, ctx), err);
-                }
-            };
-
-            return VTable{
-                .write = Functions.onWrite,
-                .writeLatin1 = Functions.onWriteLatin1,
-                .writeUTF16 = Functions.onWriteUTF16,
-                .end = Functions.onEnd,
-                .connect = Functions.onConnect,
-            };
-        }
-    };
-
-    pub fn end(*_, err: Syscall.Error?): sys.Maybe(void) {
+    fn end(*_, e: Syscall.Error?): sys.Maybe(void) {
         if (_.status == .closed) {
             return .success;
         }
 
         _.status = .closed;
-        return _.vtable.end(_.ptr, err);
+        return _.vtable.end(_.ptr, e);
     }
 
-    pub fn writeLatin1(*_, data: streams.Result): streams.Result.Writable {
+    fn writeLatin1(*_, data: streams.Result): streams.Result.Writable {
         if (_.status == .closed) {
             return .done;
         }
 
         const res = _.vtable.writeLatin1(_.ptr, data);
-        _.status = if ((res.isDone()) or _.status == .closed)
-            Status.closed
+        _.status = if ((res.isDone()) || _.status == .closed)
+            _SinkStatus.closed
         else
-            Status.ready;
+            _SinkStatus.ready;
         _.used = true;
         return res;
     }
 
-    pub fn writeBytes(*_, data: streams.Result): streams.Result.Writable {
+    fn writeBytes(*_, data: streams.Result): streams.Result.Writable {
         if (_.status == .closed) {
             return .done;
         }
 
         const res = _.vtable.write(_.ptr, data);
-        _.status = if ((res.isDone()) or _.status == .closed)
-            Status.closed
+        _.status = if ((res.isDone()) || _.status == .closed)
+            _SinkStatus.closed
         else
-            Status.ready;
+            _SinkStatus.ready;
         _.used = true;
         return res;
     }
 
-    pub fn writeUTF16(*_, data: streams.Result): streams.Result.Writable {
+    fn writeUTF16(*_, data: streams.Result): streams.Result.Writable {
         if (_.status == .closed) {
             return .done;
         }
 
         const res = _.vtable.writeUTF16(_.ptr, data);
-        _.status = if ((res.isDone()) or _.status == .closed)
-            Status.closed
+        _.status = if ((res.isDone()) || _.status == .closed)
+            _SinkStatus.closed
         else
-            Status.ready;
+            _SinkStatus.ready;
         _.used = true;
         return res;
     }
 
-    pub fn write(*_, data: Data): streams.Result.Writable {
+    fn write(*_, data: _SinkData): streams.Result.Writable {
         switch (data) {
-            .utf16 => |str| {
+            .utf16 str => {
                 return _.writeUTF16(str);
             },
-            .latin1 => |str| {
+            .latin1 str => {
                 return _.writeLatin1(str);
             },
-            .bytes => |bytes| {
+            .bytes bytes => {
                 return _.writeBytes(bytes);
             },
         }
@@ -327,24 +332,22 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
             jsc.markBinding(@src());
 
             if (comptime !@hasDecl(SinkType, "construct")) {
-                const Static = struct {
-                    pub const message = fmt.comptimePrint("{s} is not constructable", .{SinkType.name});
-                };
-                let err = jsc.SystemError{
-                    .message = bun.String.static(Static.message),
+                const message = std.fmt.comptimePrint("{s} is not constructable", .{SinkType.name});
+                let e = jsc.SystemError{
+                    .message = bun.String.static(message),
                     .code = bun.String.static(@tagName(.ERR_ILLEGAL_CONSTRUCTOR)),
                 };
-                return globalThis.throwValue(err.toErrorInstance(globalThis));
+                return globalThis.throwValue(e.toErrorInstance(globalThis));
             }
 
-            let this = new(SinkType, undefined);
-            this.construct(default_allocator);
-            return createObject(globalThis, @ptrCast(this), 0);
+            let inst = new(SinkType, undefined);
+            inst.construct(default_allocator);
+            return createObject(globalThis, @ptrCast(inst), 0);
         }
 
         pub fn finalize(ptr: *!) callconv(.c) void {
-            let this = cast(*ThisSink, ptr);
-            this.sink.finalize();
+            let inst = cast(*ThisSink, ptr);
+            inst.sink.finalize();
         }
 
         pub fn detach(this: *ThisSink, globalThis: *JSGlobalObject) void {
@@ -392,11 +395,11 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         pub fn write(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = getThis(globalThis, callframe)?;
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.throwValue(e);
                 }
             }
 
@@ -421,7 +424,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                     return JSValue.jsNumber(0);
                 }
 
-                let res = this.sink.writeBytes(
+                let res = inst.sink.writeBytes(
                     .{ .temporary = ByteList.fromBorrowedSliceDangerous(slice) },
                 );
                 return res.toJS(globalThis);
@@ -431,7 +434,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
                 return globalThis.throwValue(globalThis.toTypeError(.INVALID_ARG_TYPE, "write() expects a string, ArrayBufferView, or ArrayBuffer", .{}));
             }
 
-            const str = try arg_guard.val.toJSString(globalThis);
+            const str = arg_guard.val.toJSString(globalThis)?;
             const view = str.view(globalThis);
 
             if (view.isEmpty()) {
@@ -440,13 +443,13 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
             const str_guard = EnsureStillAliveGuard<@TypeOf(str)>{ val: str };
             if (view.is16Bit()) {
-                let res = this.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(
-                    mem.sliceAsBytes(view.utf16SliceAligned()),
+                let res = inst.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(
+                    std.mem.sliceAsBytes(view.utf16SliceAligned()),
                 ) });
                 return res.toJS(globalThis);
             }
 
-            let res = this.sink.writeLatin1(
+            let res = inst.sink.writeLatin1(
                 .{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) },
             );
             return res.toJS(globalThis);
@@ -454,23 +457,23 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = getThis(globalThis, callframe)?;
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.throwValue(e);
                 }
             }
 
             const args_list = callframe.arguments_old(4);
             const args = args_list.ptr[0..args_list.len];
-            if (args.len == 0 or !args[0].isString()) {
-                const err = globalThis.toTypeError(
+            if (args.len == 0 || !args[0].isString()) {
+                const e = globalThis.toTypeError(
                     if (args.len == 0) .MISSING_ARGS else .INVALID_ARG_TYPE,
                     "writeUTF8() expects a string",
                     .{},
                 );
-                return globalThis.throwValue(err);
+                return globalThis.throwValue(e);
             }
 
             const arg = args[0];
@@ -486,79 +489,79 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
             const str_guard = EnsureStillAliveGuard<@TypeOf(str)>{ val: str };
             if (str_guard.val.is16Bit()) {
-                return this.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
+                return inst.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
             }
 
-            return this.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
+            return inst.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
         }
 
         pub fn close(globalThis: *JSGlobalObject, sink_ptr: *!?) callconv(.c) JSValue {
             jsc.markBinding(@src());
-            const this: *ThisSink = cast(*ThisSink, sink_ptr orelse return .js_undefined);
+            const inst: *ThisSink = cast(*ThisSink, sink_ptr ?? return .js_undefined);
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.vm().throwError(globalThis, err) catch .zero;
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.vm().throwError(globalThis, e) catch .zero;
                 }
             }
 
-            return this.sink.end(null).toJS(globalThis) catch .zero;
+            return inst.sink.end(null).toJS(globalThis) catch .zero;
         }
 
         pub fn flush(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = getThis(globalThis, callframe)?;
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.throwValue(e);
                 }
             }
 
             defer {
-                if ((comptime @hasField(SinkType, "done")) and this.sink.done) {
-                    this.unprotect();
+                if ((comptime @hasField(SinkType, "done")) && inst.sink.done) {
+                    inst.unprotect();
                 }
             }
 
             if (comptime @hasDecl(SinkType, "flushFromJS")) {
-                const wait = callframe.argumentsCount() > 0 and callframe.argument(0).isBoolean() and callframe.argument(0).asBoolean();
-                const maybe_value: sys.Maybe(JSValue) = this.sink.flushFromJS(globalThis, wait);
+                const wait = callframe.argumentsCount() > 0 && callframe.argument(0).isBoolean() && callframe.argument(0).asBoolean();
+                const maybe_value: sys.Maybe(JSValue) = inst.sink.flushFromJS(globalThis, wait);
                 return switch (maybe_value) {
                     .result => |value| value,
-                    .err => |err| return globalThis.throwValue(try err.toJS(globalThis)),
+                    .err => |e| return globalThis.throwValue(e.toJS(globalThis)?),
                 };
             }
 
-            return this.sink.flush().toJS(globalThis);
+            return inst.sink.flush().toJS(globalThis);
         }
 
         pub fn start(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = getThis(globalThis, callframe)?;
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.throwValue(e);
                 }
             }
 
             if (comptime @hasField(streams.Start, abi_name)) {
-                return this.sink.start(
+                return inst.sink.start(
                     if (callframe.argumentsCount() > 0)
-                        try streams.Start.fromJSWithTag(
+                        streams.Start.fromJSWithTag(
                             globalThis,
                             callframe.argument(0),
                             comptime @field(streams.StartTag, abi_name),
-                        )
+                        )?
                     else
                         .empty,
                 ).toJS(globalThis);
             }
 
-            return this.sink.start(
+            return inst.sink.start(
                 if (callframe.argumentsCount() > 0)
-                    try streams.Start.fromJS(globalThis, callframe.argument(0))
+                    streams.Start.fromJS(globalThis, callframe.argument(0))?
                 else
                     .empty,
             ).toJS(globalThis);
@@ -566,19 +569,19 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         pub fn end(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = getThis(globalThis, callframe)?;
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.throwValue(e);
                 }
             }
 
-            const result = this.sink.endFromJS(globalThis).toJS(globalThis);
+            const result = inst.sink.endFromJS(globalThis).toJS(globalThis);
 
             if (comptime @hasDecl(SinkType, "protectJSWrapper")) {
-                if (this.sink.pending.state == .pending) {
-                    this.sink.protectJSWrapper(globalThis, callframe.this());
+                if (inst.sink.pending.state == .pending) {
+                    inst.sink.protectJSWrapper(globalThis, callframe.this());
                 }
             }
 
@@ -587,22 +590,22 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         pub fn endWithSink(ptr: *!, globalThis: *JSGlobalObject) callconv(jsc.conv) JSValue {
             jsc.markBinding(@src());
-            let this = cast(*ThisSink, ptr);
+            let inst = cast(*ThisSink, ptr);
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    return globalThis.throwValue(e);
                 }
             }
 
-            return this.sink.endFromJS(globalThis).toJS(globalThis) catch .zero;
+            return inst.sink.endFromJS(globalThis).toJS(globalThis) catch .zero;
         }
 
         pub fn updateRef(ptr: *!, value: bool) callconv(.c) void {
             jsc.markBinding(@src());
-            let this = cast(*ThisSink, ptr);
+            let inst = cast(*ThisSink, ptr);
             if (comptime @hasDecl(SinkType, "updateRef"))
-                this.sink.updateRef(value);
+                inst.sink.updateRef(value);
         }
 
         const jsWrite = jsc.toJSHostFn(@This().write);
@@ -612,9 +615,9 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         const jsConstruct = jsc.toJSHostFn(construct);
 
         fn jsGetInternalFd(ptr: *!) callconv(.c) JSValue {
-            let this = cast(*ThisSink, ptr);
+            let inst = cast(*ThisSink, ptr);
             if (comptime @hasDecl(SinkType, "getFd")) {
-                return JSValue.jsNumber(this.sink.getFd());
+                return JSValue.jsNumber(inst.sink.getFd());
             }
             return JSValue.null;
         }

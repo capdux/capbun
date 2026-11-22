@@ -257,21 +257,17 @@ pub fn jsEscapeRegExpForPackageNameMatching(global: *jsc.JSGlobalObject, call_fr
 }
 
 // ── unicode TestingAPIs ─────────────────────────────────────────────────────
-pub const UnicodeTestingAPIs = struct {
+pub struct UnicodeTestingAPIs {
     /// Used in JS tests, see `internal-for-testing.ts`.
     /// Exercises the `sentinel = true` path of `toUTF16AllocForReal`, which is
     /// otherwise only reachable from Windows-only code (`bun build --compile`
     /// metadata in `src/windows.zig`).
-    pub fn toUTF16AllocSentinel(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun.jsc.CallFrame): bun.JSError!bun.jsc.JSValue {
+    static fn toUTF16AllocSentinel(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun.jsc.CallFrame): bun.JSError!bun.jsc.JSValue {
         const arguments = callframe.arguments();
         if (arguments.len < 1) {
             return globalThis.throw("toUTF16AllocSentinel: expected 1 argument", .{});
         }
-        const opt_ab = arguments[0].asArrayBuffer(globalThis);
-        if (opt_ab == null) {
-            return globalThis.throw("toUTF16AllocSentinel: expected a Uint8Array", .{});
-        }
-        const array_buffer = opt_ab.?;
+        const array_buffer = arguments[0].asArrayBuffer(globalThis) ?? return globalThis.throw("toUTF16AllocSentinel: expected a Uint8Array", .{});
         const bytes = array_buffer.byteSlice();
 
         const allocator = bun.default_allocator;
@@ -286,4 +282,4 @@ pub const UnicodeTestingAPIs = struct {
         const _out_guard = DerefGuard<bun.String>{ ptr: &out };
         return out.toJS(globalThis);
     }
-};
+}

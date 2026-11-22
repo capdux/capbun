@@ -72,6 +72,16 @@ pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _WriteStatus = enum {
+    suspended,
+    failed,
+    is_actually_file,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -86,6 +96,14 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const Flags = packed struct(u8) {
+    pollable: bool = false,
+    nonblocking: bool = false,
+    is_socket: bool = false,
+    broken_pipe: bool = false,
+    __unused: u4 = 0,
+};
 
 pub const IOWriterChildPtr = struct {
     ptr: ChildPtrRaw,
@@ -952,11 +970,7 @@ drained = (drained + amt);
 pub const RefCount = bun.ptr.RefCount(@This(), "ref_count", asyncDeinit, .{});
 pub const ref = RefCount.ref;
 pub const deref = RefCount.deref;
-pub const WriteStatus = enum {
-    suspended,
-    failed,
-    is_actually_file,
-};
+pub const WriteStatus = _WriteStatus;
 const log = bun.Output.scoped(.IOWriter, .hidden);
 const debug = bun.Output.scoped(.IOWriter, .hidden);
 const MovableIfWindowsFd = bun.MovableIfWindowsFd;
@@ -967,13 +981,6 @@ const shell = bun.shell;
 const Interpreter = shell.Interpreter;
 const SmolList = shell.SmolList;
 const Yield = bun.shell.Yield;
-pub const Flags = packed struct(u8) {
-    pollable: bool = false,
-    nonblocking: bool = false,
-    is_socket: bool = false,
-    broken_pipe: bool = false,
-    __unused: u4 = 0,
-};
 pub const ChildPtrRaw = bun.TaggedPointerUnion(.{ Interpreter.Cmd, Interpreter.Pipeline, Interpreter.CondExpr, Interpreter.Subshell, Interpreter.Builtin.Cd, Interpreter.Builtin.Echo, Interpreter.Builtin.Export, Interpreter.Builtin.Ls, Interpreter.Builtin.Ls.ShellLsOutputTask, Interpreter.Builtin.Mv, Interpreter.Builtin.Pwd, Interpreter.Builtin.Rm, Interpreter.Builtin.Which, Interpreter.Builtin.Mkdir, Interpreter.Builtin.Mkdir.ShellMkdirOutputTask, Interpreter.Builtin.Touch, Interpreter.Builtin.Touch.ShellTouchOutputTask, Interpreter.Builtin.Cat, Interpreter.Builtin.Exit, Interpreter.Builtin.True, Interpreter.Builtin.False, Interpreter.Builtin.Yes, Interpreter.Builtin.Seq, Interpreter.Builtin.Dirname, Interpreter.Builtin.Basename, Interpreter.Builtin.Cp, Interpreter.Builtin.Cp.ShellCpOutputTask, shell.subproc.PipeReader.CapturedWriter });
 pub const ChildPtr = IOWriterChildPtr;
 pub const Writers = SmolList(Writer, 2);

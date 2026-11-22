@@ -1,8 +1,8 @@
 import { ACL } from "./acl.cp";
 import { StorageClass } from "./storage_class.cp";
 import * as bun from "bun";
-import * as std from "std";
 import * as multipart_options from "../runtime/webcore/s3/multipart_options.zig";
+import CredentialsJsc from "../runtime/webcore/s3/credentials_jsc.zig";
 
 const MultiPartUploadOptions = multipart_options.MultiPartUploadOptions;
 const jsc = bun.jsc;
@@ -28,7 +28,111 @@ struct SliceFreeGuard {
     }
 }
 
-pub const S3Credentials = struct {
+const DateResult = struct {
+    // numeric representation of year, month and day (excluding time components)
+    numeric_day: u64,
+    date: []const u8,
+};
+
+pub struct S3SignResult {
+    amz_date: []const u8,
+    host: []const u8,
+    authorization: []const u8,
+    url: []const u8,
+
+    content_disposition: []const u8 = "",
+    content_encoding: []const u8 = "",
+    content_md5: []const u8 = "",
+    session_token: []const u8 = "",
+    acl: ACL? = null,
+    storage_class: StorageClass? = null,
+    request_payer: bool = false,
+    _headers: [MAX_HEADERS]picohttp.Header = .{
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+        .{ .name = "", .value = "" },
+    },
+    _headers_len: u8 = 0,
+
+    pub const MAX_HEADERS = 11;
+
+    fn headers(): []const picohttp.Header {
+        return _._headers[0.._._headers_len];
+    }
+
+    fn mixWithHeader(headers_buffer: []picohttp.Header, header: picohttp.Header): []const picohttp.Header {
+        // copy the headers to buffer
+        const len = _._headers_len;
+        let i: usize = 0;
+        while (i < len) : (i += 1) {
+            headers_buffer[i] = _._headers[i];
+        }
+        headers_buffer[len] = header;
+        return headers_buffer[0 .. len + 1];
+    }
+
+    fn deinit() {
+        if (_.amz_date.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.amz_date);
+        }
+
+        if (_.session_token.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.session_token);
+        }
+
+        if (_.content_disposition.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.content_disposition);
+        }
+
+        if (_.content_encoding.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.content_encoding);
+        }
+
+        if (_.host.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.host);
+        }
+
+        if (_.authorization.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.authorization);
+        }
+
+        if (_.url.len > 0) {
+            bun.freeSensitive(bun.default_allocator, _.url);
+        }
+
+        if (_.content_md5.len > 0) {
+            bun.default_allocator.free(_.content_md5);
+        }
+    }
+}
+
+pub struct S3SignQueryOptions {
+    expires: usize = 86400,
+}
+
+pub struct S3SignOptions {
+    path: []const u8,
+    method: bun.http.Method,
+    content_hash: ([]const u8)? = null,
+    content_md5: ([]const u8)? = null,
+    search_params: ([]const u8)? = null,
+    content_disposition: ([]const u8)? = null,
+    content_type: ([]const u8)? = null,
+    content_encoding: ([]const u8)? = null,
+    acl: ACL? = null,
+    storage_class: StorageClass? = null,
+    request_payer: bool = false,
+}
+
+pub struct S3Credentials {
     ref_count: RefCount,
     accessKeyId: string,
     secretAccessKey: string,
@@ -36,331 +140,229 @@ pub const S3Credentials = struct {
     endpoint: string,
     bucket: string,
     sessionToken: string,
-    storage_class: ?StorageClass = null,
+    storage_class: StorageClass? = null,
     insecure_http: bool = false,
     virtual_hosted_style: bool = false,
 
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
+    pub const getCredentialsWithOptions = CredentialsJsc.getCredentialsWithOptions;
+    const log = bun.Output.scoped(.AWS, .visible);
+    pub const DIGESTED_HMAC_256_LEN = 32;
+    pub const SignResult = S3SignResult;
+    pub const SignQueryOptions = S3SignQueryOptions;
+    pub const SignOptions = S3SignOptions;
 
-        pub fn estimatedSize(this: *const @This()) usize {
-            return @sizeOf(S3Credentials) + this.accessKeyId.len + this.region.len + this.secretAccessKey.len + this.endpoint.len + this.bucket.len;
+    fn estimatedSize(): usize {
+        return @sizeOf(S3Credentials) + _.accessKeyId.len + _.region.len + _.secretAccessKey.len + _.endpoint.len + _.bucket.len;
+    }
+
+    static fn hashConst(acl: []const u8): u64 {
+        let hasher = std.hash.Wyhash.init(0);
+        let remain = acl;
+
+        let buf: [@sizeOf(@TypeOf(hasher.buf))]u8 = undefined;
+
+        while (remain.len > 0) {
+            const end = @min(hasher.buf.len, remain.len);
+
+            hasher.update(strings.copyLowercaseIfNeeded(remain[0..end], &buf));
+            remain = remain[end..];
         }
 
-        fn hashConst(acl: []const u8) u64 {
-            let hasher = std.hash.Wyhash.init(0);
-            let remain = acl;
+        return hasher.final();
+    }
 
-            let buf: [@sizeOf(@TypeOf(hasher.buf))]u8 = undefined;
+    fn dupe(): *S3Credentials {
+        return bun.new(S3Credentials, .{
+            .ref_count = .init(),
+            .accessKeyId = if (_.accessKeyId.len > 0)
+                bun.handleOom(bun.default_allocator.dupe(u8, _.accessKeyId))
+            else
+                "",
 
-            while (remain.len > 0) {
-                const end = @min(hasher.buf.len, remain.len);
+            .secretAccessKey = if (_.secretAccessKey.len > 0)
+                bun.handleOom(bun.default_allocator.dupe(u8, _.secretAccessKey))
+            else
+                "",
 
-                hasher.update(strings.copyLowercaseIfNeeded(remain[0..end], &buf));
-                remain = remain[end..];
-            }
+            .region = if (_.region.len > 0)
+                bun.handleOom(bun.default_allocator.dupe(u8, _.region))
+            else
+                "",
 
-            return hasher.final();
+            .endpoint = if (_.endpoint.len > 0)
+                bun.handleOom(bun.default_allocator.dupe(u8, _.endpoint))
+            else
+                "",
+
+            .bucket = if (_.bucket.len > 0)
+                bun.handleOom(bun.default_allocator.dupe(u8, _.bucket))
+            else
+                "",
+
+            .sessionToken = if (_.sessionToken.len > 0)
+                bun.handleOom(bun.default_allocator.dupe(u8, _.sessionToken))
+            else
+                "",
+
+            .insecure_http = _.insecure_http,
+            .virtual_hosted_style = _.virtual_hosted_style,
+        });
+    }
+
+    fn deinit(*_) {
+        if (_.accessKeyId.len > 0) {
+            bun.default_allocator.free(_.accessKeyId);
         }
-
-        pub const getCredentialsWithOptions = @import("../runtime/webcore/s3/credentials_jsc.zig").getCredentialsWithOptions;
-
-        pub fn dupe(this: *const @This()) *S3Credentials {
-            return bun.new(S3Credentials, .{
-                .ref_count = .init(),
-                .accessKeyId = if (this.accessKeyId.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.accessKeyId))
-                else
-                    "",
-
-                .secretAccessKey = if (this.secretAccessKey.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.secretAccessKey))
-                else
-                    "",
-
-                .region = if (this.region.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.region))
-                else
-                    "",
-
-                .endpoint = if (this.endpoint.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.endpoint))
-                else
-                    "",
-
-                .bucket = if (this.bucket.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.bucket))
-                else
-                    "",
-
-                .sessionToken = if (this.sessionToken.len > 0)
-                    bun.handleOom(bun.default_allocator.dupe(u8, this.sessionToken))
-                else
-                    "",
-
-                .insecure_http = this.insecure_http,
-                .virtual_hosted_style = this.virtual_hosted_style,
-            });
+        if (_.secretAccessKey.len > 0) {
+            bun.default_allocator.free(_.secretAccessKey);
         }
-        fn deinit(this: *@This()) void {
-            if (this.accessKeyId.len > 0) {
-                bun.default_allocator.free(this.accessKeyId);
-            }
-            if (this.secretAccessKey.len > 0) {
-                bun.default_allocator.free(this.secretAccessKey);
-            }
-            if (this.region.len > 0) {
-                bun.default_allocator.free(this.region);
-            }
-            if (this.endpoint.len > 0) {
-                bun.default_allocator.free(this.endpoint);
-            }
-            if (this.bucket.len > 0) {
-                bun.default_allocator.free(this.bucket);
-            }
-            if (this.sessionToken.len > 0) {
-                bun.default_allocator.free(this.sessionToken);
-            }
-            bun.destroy(this);
+        if (_.region.len > 0) {
+            bun.default_allocator.free(_.region);
         }
+        if (_.endpoint.len > 0) {
+            bun.default_allocator.free(_.endpoint);
+        }
+        if (_.bucket.len > 0) {
+            bun.default_allocator.free(_.bucket);
+        }
+        if (_.sessionToken.len > 0) {
+            bun.default_allocator.free(_.sessionToken);
+        }
+        bun.destroy(_);
+    }
 
-        const log = bun.Output.scoped(.AWS, .visible);
+    static fn getAMZDate(allocator: std.mem.Allocator): DateResult {
+        // Create UTC timestamp
+        const secs: u64 = @intCast(@divFloor(std.time.milliTimestamp(), 1000));
+        const utc_seconds = std.time.epoch.EpochSeconds{ .secs = secs };
+        const utc_day = utc_seconds.getEpochDay();
+        const year_and_day = utc_day.calculateYearDay();
+        const month_and_day = year_and_day.calculateMonthDay();
+        // Get UTC date components
+        const year = year_and_day.year;
+        const day = @as(u32, month_and_day.day_index) + 1; // this starts in 0
+        const month = month_and_day.month.numeric(); // starts in 1
 
-        const DateResult = struct {
-            // numeric representation of year, month and day (excluding time components)
-            numeric_day: u64,
-            date: []const u8,
+        // Get UTC time components
+        const time = utc_seconds.getDaySeconds();
+        const hours = time.getHoursIntoDay();
+        const minutes = time.getMinutesIntoHour();
+        const seconds = time.getSecondsIntoMinute();
+
+        // Format the date
+        return DateResult{
+            numeric_day: secs - time.secs,
+            date: std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{
+                year,
+                month,
+                day,
+                hours,
+                minutes,
+                seconds,
+            }) catch |e| bun.handleOom(e),
         };
+    }
 
-        pub fn getAMZDate(allocator: std.mem.Allocator) DateResult {
-            // We can also use Date.now() but would be slower and would add jsc dependency
-            // var buffer: [28]u8 = undefined;
-            // the code bellow is the same as new Date(Date.now()).toISOString()
-            // Date.now() ISO string via JS removed; uses libc gmtime_r
-
-            // Create UTC timestamp
-            const secs: u64 = @intCast(@divFloor(std.time.milliTimestamp(), 1000));
-            const utc_seconds = std.time.epoch.EpochSeconds{ .secs = secs };
-            const utc_day = utc_seconds.getEpochDay();
-            const year_and_day = utc_day.calculateYearDay();
-            const month_and_day = year_and_day.calculateMonthDay();
-            // Get UTC date components
-            const year = year_and_day.year;
-            const day = @as(u32, month_and_day.day_index) + 1; // this starts in 0
-            const month = month_and_day.month.numeric(); // starts in 1
-
-            // Get UTC time components
-            const time = utc_seconds.getDaySeconds();
-            const hours = time.getHoursIntoDay();
-            const minutes = time.getMinutesIntoHour();
-            const seconds = time.getSecondsIntoMinute();
-
-            // Format the date
-            return .{
-                .numeric_day = secs - time.secs,
-                .date = std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{
-                    year,
-                    month,
-                    day,
-                    hours,
-                    minutes,
-                    seconds,
-                }) catch |err| bun.handleOom(err),
-            };
-        }
-
-        pub const DIGESTED_HMAC_256_LEN = 32;
-        pub const SignResult = struct {
-            amz_date: []const u8,
-            host: []const u8,
-            authorization: []const u8,
-            url: []const u8,
-
-            content_disposition: []const u8 = "",
-            content_encoding: []const u8 = "",
-            content_md5: []const u8 = "",
-            session_token: []const u8 = "",
-            acl: ?ACL = null,
-            storage_class: ?StorageClass = null,
-            request_payer: bool = false,
-            _headers: [MAX_HEADERS]picohttp.Header = .{
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-                .{ .name = "", .value = "" },
-            },
-            _headers_len: u8 = 0,
-
-            pub const MAX_HEADERS = 11;
-
-            pub fn headers(this: *const @This()) []const picohttp.Header {
-                return this._headers[0..this._headers_len];
-            }
-
-            pub fn mixWithHeader(this: *const @This(), headers_buffer: []picohttp.Header, header: picohttp.Header) []const picohttp.Header {
-                // copy the headers to buffer
-                const len = this._headers_len;
-                let i: usize = 0;
-                while (i < len) : (i += 1) {
-                    headers_buffer[i] = this._headers[i];
-                }
-                headers_buffer[len] = header;
-                return headers_buffer[0 .. len + 1];
-            }
-
-            pub fn deinit(this: *const @This()) void {
-                if (this.amz_date.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.amz_date);
-                }
-
-                if (this.session_token.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.session_token);
-                }
-
-                if (this.content_disposition.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.content_disposition);
-                }
-
-                if (this.content_encoding.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.content_encoding);
-                }
-
-                if (this.host.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.host);
-                }
-
-                if (this.authorization.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.authorization);
-                }
-
-                if (this.url.len > 0) {
-                    bun.freeSensitive(bun.default_allocator, this.url);
-                }
-
-                if (this.content_md5.len > 0) {
-                    bun.default_allocator.free(this.content_md5);
-                }
-            }
-        };
-
-        pub const SignQueryOptions = struct {
-            expires: usize = 86400,
-        };
-        pub const SignOptions = struct {
-            path: []const u8,
-            method: bun.http.Method,
-            content_hash: ?[]const u8 = null,
-            content_md5: ?[]const u8 = null,
-            search_params: ?[]const u8 = null,
-            content_disposition: ?[]const u8 = null,
-            content_type: ?[]const u8 = null,
-            content_encoding: ?[]const u8 = null,
-            acl: ?ACL = null,
-            storage_class: ?StorageClass = null,
-            request_payer: bool = false,
-        };
-        /// This is not used for signing but for console.log output, is just nice to have
-        pub fn guessBucket(endpoint: []const u8) ?[]const u8 {
-            // check if is amazonaws.com
-            if (strings.indexOf(endpoint, ".amazonaws.com")) |_| {
-                // check if is .s3. virtual host style
-                if (strings.indexOf(endpoint, ".s3.")) |end| {
-                    // its https://bucket-name.s3.region-code.amazonaws.com/key-name
-                    const start = strings.indexOf(endpoint, "/") orelse {
-                        return endpoint[0..end];
-                    };
-                    return endpoint[start + 1 .. end];
-                }
-            } else if (strings.indexOf(endpoint, ".r2.cloudflarestorage.com")) |r2_start| {
-                // check if is <BUCKET>.<ACCOUNT_ID>.r2.cloudflarestorage.com
-                const end = strings.indexOf(endpoint, ".") orelse return null; // actually unreachable
-                if (end > 0 and r2_start == end) {
-                    // its https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-                    return null;
-                }
-                // ok its virtual host style
-                const start = strings.indexOf(endpoint, "/") orelse {
+    /// This is not used for signing but for console.log output, is just nice to have
+    static fn guessBucket(endpoint: []const u8): ([]const u8)? {
+        // check if is amazonaws.com
+        if (_ := strings.indexOf(endpoint, ".amazonaws.com")) {
+            // check if is .s3. virtual host style
+            if (end := strings.indexOf(endpoint, ".s3.")) {
+                // its https://bucket-name.s3.region-code.amazonaws.com/key-name
+                const start = strings.indexOf(endpoint, "/") ?? {
                     return endpoint[0..end];
                 };
                 return endpoint[start + 1 .. end];
             }
-            return null;
-        }
-        pub fn guessRegion(endpoint: []const u8) []const u8 {
-            if (endpoint.len > 0) {
-                if (strings.endsWith(endpoint, ".r2.cloudflarestorage.com")) return "auto";
-                if (strings.indexOf(endpoint, ".amazonaws.com")) |end| {
-                    if (strings.indexOf(endpoint, "s3.")) |start| {
-                        return endpoint[start + 3 .. end];
-                    }
-                }
-                // endpoint is informed but is not s3 so auto detect
-                return "auto";
+        } else if (r2_start := strings.indexOf(endpoint, ".r2.cloudflarestorage.com")) {
+            // check if is <BUCKET>.<ACCOUNT_ID>.r2.cloudflarestorage.com
+            const end = strings.indexOf(endpoint, ".") ?? return null; // actually unreachable
+            if (end > 0 && r2_start == end) {
+                // its https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+                return null;
             }
-
-            // no endpoint so we default to us-east-1 because s3.us-east-1.amazonaws.com is the default endpoint
-            return "us-east-1";
-        }
-        fn toHexChar(value: u8) !u8 {
-            return switch (value) {
-                0...9 => value + '0',
-                10...15 => (value - 10) + 'A',
-                else => error.InvalidHexChar,
+            // ok its virtual host style
+            const start = strings.indexOf(endpoint, "/") ?? {
+                return endpoint[0..end];
             };
+            return endpoint[start + 1 .. end];
         }
-        pub fn encodeURIComponent(input: []const u8, buffer: []u8, comptime encode_slash: bool) ![]const u8 {
-            let written: usize = 0;
+        return null;
+    }
 
-            for (input) |c| {
-                switch (c) {
-                    // RFC 3986 Unreserved Characters (do not encode)
-                    'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => {
-                        if (written >= buffer.len) return error.BufferTooSmall;
-                        buffer[written] = c;
-                        written += 1;
-                    },
-                    // All other characters need to be percent-encoded
-                    else => {
-                        if (!encode_slash and (c == '/' or c == '\\')) {
-                            if (written >= buffer.len) return error.BufferTooSmall;
-                            buffer[written] = if (c == '\\') '/' else c;
-                            written += 1;
-                            continue;
-                        }
-                        if (written + 3 > buffer.len) return error.BufferTooSmall;
-                        buffer[written] = '%';
-                        // Convert byte to hex
-                        const high_nibble: u8 = (c >> 4) & 0xF;
-                        const low_nibble: u8 = c & 0xF;
-                        buffer[written + 1] = try toHexChar(high_nibble);
-                        buffer[written + 2] = try toHexChar(low_nibble);
-                        written += 3;
-                    },
+    static fn guessRegion(endpoint: []const u8): []const u8 {
+        if (endpoint.len > 0) {
+            if (strings.endsWith(endpoint, ".r2.cloudflarestorage.com")) return "auto";
+            if (end := strings.indexOf(endpoint, ".amazonaws.com")) {
+                if (start := strings.indexOf(endpoint, "s3.")) {
+                    return endpoint[start + 3 .. end];
                 }
             }
-
-            return buffer[0..written];
+            // endpoint is informed but is not s3 so auto detect
+            return "auto";
         }
 
-        pub fn normalizeName(name: []const u8) []const u8 {
-            if (name.len == 0) return name;
-            return std.mem.trim(u8, name, "/\\");
+        // no endpoint so we default to us-east-1 because s3.us-east-1.amazonaws.com is the default endpoint
+        return "us-east-1";
+    }
+
+    static fn toHexChar(value: u8): u8! {
+        return switch (value) {
+            0..=9 => value + '0',
+            10..=15 => (value - 10) + 'A',
+            else => error.InvalidHexChar,
+        };
+    }
+
+    static fn encodeURIComponent(input: []const u8, buffer: []u8, comptime encode_slash: bool): ([]const u8)! {
+        let written: usize = 0;
+
+        for (c of input) {
+            switch (c) {
+                // RFC 3986 Unreserved Characters (do not encode)
+                'A'..='Z', 'a'..='z', '0'..='9', '-', '_', '.', '~' => {
+                    if (written >= buffer.len) return error.BufferTooSmall;
+                    buffer[written] = c;
+                    written += 1;
+                },
+                // All other characters need to be percent-encoded
+                else => {
+                    if (!encode_slash && (c == '/' || c == '\\')) {
+                        if (written >= buffer.len) return error.BufferTooSmall;
+                        buffer[written] = if (c == '\\') '/' else c;
+                        written += 1;
+                        continue;
+                    }
+                    if (written + 3 > buffer.len) return error.BufferTooSmall;
+                    buffer[written] = '%';
+                    // Convert byte to hex
+                    const high_nibble: u8 = (c >> 4) & 0xF;
+                    const low_nibble: u8 = c & 0xF;
+                    buffer[written + 1] = toHexChar(high_nibble)?;
+                    buffer[written + 2] = toHexChar(low_nibble)?;
+                    written += 3;
+                },
+            }
         }
 
-        pub fn signRequest(this: *const @This(), signOptions: SignOptions, comptime allow_empty_path: bool, signQueryOption: ?SignQueryOptions): !SignResult {
-            return s3CredentialsSignRequest(this, signOptions, allow_empty_path, signQueryOption);
-        }
-    };
+        return buffer[0..written];
+    }
 
-fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credentials.SignOptions, comptime allow_empty_path: bool, signQueryOption: S3Credentials.SignQueryOptions?): !S3Credentials.SignResult {
+    static fn normalizeName(name: []const u8): []const u8 {
+        if (name.len == 0) return name;
+        return std.mem.trim(u8, name, "/\\");
+    }
+
+    fn signRequest(signOptions: S3SignOptions, comptime allow_empty_path: bool, signQueryOption: S3SignQueryOptions?): S3SignResult! {
+        return s3CredentialsSignRequest(&_, signOptions, allow_empty_path, signQueryOption);
+    }
+}
+
+fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credentials.SignOptions, comptime allow_empty_path: bool, signQueryOption: S3Credentials.SignQueryOptions?): S3Credentials.SignResult! {
     const method = signOptions.method;
     const request_path = signOptions.path;
     const content_hash = signOptions.content_hash;
@@ -492,7 +494,7 @@ fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credent
 
     const amz_day = amz_date[0..8];
     const request_payer = signOptions.request_payer;
-    const header_key = SignedHeaders.Key{
+    const header_key = SignedHeadersKey{
         content_disposition: content_disposition != null,
         content_encoding: content_encoding != null,
         content_md5: content_md5 != null,
@@ -762,166 +764,215 @@ fn s3CredentialsSignRequest(creds: *const S3Credentials!, signOptions: S3Credent
     return result;
 }
 
-pub const S3CredentialsWithOptions = struct {
+pub struct S3CredentialsWithOptions {
     credentials: S3Credentials,
     options: MultiPartUploadOptions = .{},
-    acl: ?ACL = null,
-    storage_class: ?StorageClass = null,
-    content_disposition: ?string = null,
-    content_type: ?string = null,
-    content_encoding: ?string = null,
+    acl: ACL? = null,
+    storage_class: StorageClass? = null,
+    content_disposition: string? = null,
+    content_type: string? = null,
+    content_encoding: string? = null,
     request_payer: bool = false,
     changed_credentials: bool = false,
     virtual_hosted_style: bool = false,
-    _accessKeyIdSlice: ?jsc.ZigString.Slice = null,
-    _secretAccessKeySlice: ?jsc.ZigString.Slice = null,
-    _regionSlice: ?jsc.ZigString.Slice = null,
-    _endpointSlice: ?jsc.ZigString.Slice = null,
-    _bucketSlice: ?jsc.ZigString.Slice = null,
-    _sessionTokenSlice: ?jsc.ZigString.Slice = null,
-    _contentDispositionSlice: ?jsc.ZigString.Slice = null,
-    _contentTypeSlice: ?jsc.ZigString.Slice = null,
-    _contentEncodingSlice: ?jsc.ZigString.Slice = null,
+    _accessKeyIdSlice: jsc.ZigString.Slice? = null,
+    _secretAccessKeySlice: jsc.ZigString.Slice? = null,
+    _regionSlice: jsc.ZigString.Slice? = null,
+    _endpointSlice: jsc.ZigString.Slice? = null,
+    _bucketSlice: jsc.ZigString.Slice? = null,
+    _sessionTokenSlice: jsc.ZigString.Slice? = null,
+    _contentDispositionSlice: jsc.ZigString.Slice? = null,
+    _contentTypeSlice: jsc.ZigString.Slice? = null,
+    _contentEncodingSlice: jsc.ZigString.Slice? = null,
 
-    pub fn deinit(this: *@This()) void {
-        if (this._accessKeyIdSlice) |slice| slice.deinit();
-        if (this._secretAccessKeySlice) |slice| slice.deinit();
-        if (this._regionSlice) |slice| slice.deinit();
-        if (this._endpointSlice) |slice| slice.deinit();
-        if (this._bucketSlice) |slice| slice.deinit();
-        if (this._sessionTokenSlice) |slice| slice.deinit();
-        if (this._contentDispositionSlice) |slice| slice.deinit();
-        if (this._contentTypeSlice) |slice| slice.deinit();
-        if (this._contentEncodingSlice) |slice| slice.deinit();
+    fn deinit(*_) {
+        if (slice := _._accessKeyIdSlice) slice.deinit();
+        if (slice := _._secretAccessKeySlice) slice.deinit();
+        if (slice := _._regionSlice) slice.deinit();
+        if (slice := _._endpointSlice) slice.deinit();
+        if (slice := _._bucketSlice) slice.deinit();
+        if (slice := _._sessionTokenSlice) slice.deinit();
+        if (slice := _._contentDispositionSlice) slice.deinit();
+        if (slice := _._contentTypeSlice) slice.deinit();
+        if (slice := _._contentEncodingSlice) slice.deinit();
     }
-};
+}
+
+@packed(u7)
+struct SignedHeadersKey {
+    content_disposition: bool,
+    content_encoding: bool,
+    content_md5: bool,
+    acl: bool,
+    request_payer: bool,
+    session_token: bool,
+    storage_class: bool,
+}
 
 /// Comptime-generated lookup table for signed headers strings.
-    /// Headers must be in alphabetical order per AWS Signature V4 spec.
-    const SignedHeaders = struct {
-        const Key = packed struct(u7) {
-            content_disposition: bool,
-            content_encoding: bool,
-            content_md5: bool,
-            acl: bool,
-            request_payer: bool,
-            session_token: bool,
-            storage_class: bool,
-        };
+/// Headers must be in alphabetical order per AWS Signature V4 spec.
+struct SignedHeaders {
+    const Key = SignedHeadersKey;
 
-        fn generate(comptime key: Key) []const u8 {
-            return (if (key.content_disposition) "content-disposition;" else "") ++
-                (if (key.content_encoding) "content-encoding;" else "") ++
-                (if (key.content_md5) "content-md5;" else "") ++
-                "host;" ++
-                (if (key.acl) "x-amz-acl;" else "") ++
-                "x-amz-content-sha256;x-amz-date" ++
-                (if (key.request_payer) ";x-amz-request-payer" else "") ++
-                (if (key.session_token) ";x-amz-security-token" else "") ++
-                (if (key.storage_class) ";x-amz-storage-class" else "");
-        }
-
-        const table = init: {
-            let t: [128][]const u8 = undefined;
-            for (0..128) |i| {
-                t[i] = generate(@bitCast(@as(u7, @intCast(i))));
-            }
-            break :init t;
-        };
-
-        pub fn get(key: Key) []const u8 {
-            return table[@as(u7, @bitCast(key))];
-        }
-    };
-
-    /// Comptime-generated format strings for canonical request.
-    /// Uses the same key as SignedHeaders to select the right format.
-    const CanonicalRequest = struct {
-        fn fmtString(comptime key: SignedHeaders.Key) []const u8 {
-            return "{s}\n{s}\n{s}\n" ++ // method, path, query
-                (if (key.content_disposition) "content-disposition:{s}\n" else "") ++
-                (if (key.content_encoding) "content-encoding:{s}\n" else "") ++
-                (if (key.content_md5) "content-md5:{s}\n" else "") ++
-                "host:{s}\n" ++
-                (if (key.acl) "x-amz-acl:{s}\n" else "") ++
-                "x-amz-content-sha256:{s}\nx-amz-date:{s}\n" ++
-                (if (key.request_payer) "x-amz-request-payer:requester\n" else "") ++
-                (if (key.session_token) "x-amz-security-token:{s}\n" else "") ++
-                (if (key.storage_class) "x-amz-storage-class:{s}\n" else "") ++
-                "\n{s}\n{s}"; // signed_headers, hash
-        }
-
-        inline fn formatForKey(
-            comptime key: SignedHeaders.Key,
-            buf: []u8,
-            method: []const u8,
-            path: []const u8,
-            query: []const u8,
-            content_disposition: ?[]const u8,
-            content_encoding: ?[]const u8,
-            content_md5: ?[]const u8,
-            host: []const u8,
-            acl: ?[]const u8,
-            hash: []const u8,
-            date: []const u8,
-            session_token: ?[]const u8,
-            storage_class: ?[]const u8,
-            signed_headers: []const u8,
-        ) error{NoSpaceLeft}![]u8 {
-            return std.fmt.bufPrint(buf, fmtString(key), .{ method, path, query } ++
-                (if (key.content_disposition) .{content_disposition.?} else .{}) ++
-                (if (key.content_encoding) .{content_encoding.?} else .{}) ++
-                (if (key.content_md5) .{content_md5.?} else .{}) ++
-                .{host} ++
-                (if (key.acl) .{acl.?} else .{}) ++
-                .{ hash, date } ++
-                (if (key.session_token) .{session_token.?} else .{}) ++
-                (if (key.storage_class) .{storage_class.?} else .{}) ++
-                .{ signed_headers, hash });
-        }
-
-        pub fn format(
-            buf: []u8,
-            key: SignedHeaders.Key,
-            method: []const u8,
-            path: []const u8,
-            query: []const u8,
-            content_disposition: ?[]const u8,
-            content_encoding: ?[]const u8,
-            content_md5: ?[]const u8,
-            host: []const u8,
-            acl: ?[]const u8,
-            hash: []const u8,
-            date: []const u8,
-            session_token: ?[]const u8,
-            storage_class: ?[]const u8,
-            signed_headers: []const u8,
-        ) error{NoSpaceLeft}![]u8 {
-            // Dispatch to the right comptime-specialized function based on runtime key
-            return switch (@as(u7, @bitCast(key))) {
-                inline 0...127 => |idx| formatForKey(
-                    @bitCast(idx),
-                    buf,
-                    method,
-                    path,
-                    query,
-                    content_disposition,
-                    content_encoding,
-                    content_md5,
-                    host,
-                    acl,
-                    hash,
-                    date,
-                    session_token,
-                    storage_class,
-                    signed_headers,
-                ),
-            };
-        }
-    };
-
-    /// Returns true if the given slice contains any CR (\r) or LF (\n) characters,
-    /// which would allow HTTP header injection if used in a header value.
-    fn containsNewlineOrCR(value: []const u8): bool {
-        return strings.indexOfAny(value, "\r\n") != null;
+    static fn generate(comptime key: Key): []const u8 {
+        return (if (key.content_disposition) "content-disposition;" else "") ++
+            (if (key.content_encoding) "content-encoding;" else "") ++
+            (if (key.content_md5) "content-md5;" else "") ++
+            "host;" ++
+            (if (key.acl) "x-amz-acl;" else "") ++
+            "x-amz-content-sha256;x-amz-date" ++
+            (if (key.request_payer) ";x-amz-request-payer" else "") ++
+            (if (key.session_token) ";x-amz-security-token" else "") ++
+            (if (key.storage_class) ";x-amz-storage-class" else "");
     }
+
+    const table = init: {
+        let t: [128][]const u8 = undefined;
+        let i: usize = 0;
+        while (i < 128) : (i += 1) {
+            t[i] = generate(@bitCast(@as(u7, @intCast(i))));
+        }
+        break :init t;
+    };
+
+    static fn get(key: Key): []const u8 {
+        return table[@as(u7, @bitCast(key))];
+    }
+}
+
+/// Comptime-generated format strings for canonical request.
+/// Uses the same key as SignedHeaders to select the right format.
+struct CanonicalRequest {
+    static fn fmtString(comptime key: SignedHeaders.Key): []const u8 {
+        return "{s}\n{s}\n{s}\n" ++ // method, path, query
+            (if (key.content_disposition) "content-disposition:{s}\n" else "") ++
+            (if (key.content_encoding) "content-encoding:{s}\n" else "") ++
+            (if (key.content_md5) "content-md5:{s}\n" else "") ++
+            "host:{s}\n" ++
+            (if (key.acl) "x-amz-acl:{s}\n" else "") ++
+            "x-amz-content-sha256:{s}\nx-amz-date:{s}\n" ++
+            (if (key.request_payer) "x-amz-request-payer:requester\n" else "") ++
+            (if (key.session_token) "x-amz-security-token:{s}\n" else "") ++
+            (if (key.storage_class) "x-amz-storage-class:{s}\n" else "") ++
+            "\n{s}\n{s}"; // signed_headers, hash
+    }
+
+    static fn formatForKey(
+        comptime key: SignedHeaders.Key,
+        buf: []u8,
+        method: []const u8,
+        path: []const u8,
+        query: []const u8,
+        content_disposition: ([]const u8)?,
+        content_encoding: ([]const u8)?,
+        content_md5: ([]const u8)?,
+        host: []const u8,
+        acl: ([]const u8)?,
+        hash: []const u8,
+        date: []const u8,
+        session_token: ([]const u8)?,
+        storage_class: ([]const u8)?,
+        signed_headers: []const u8,
+    ): ([]u8)! {
+        return std.fmt.bufPrint(buf, fmtString(key), .{ method, path, query } ++
+            (if (key.content_disposition) .{content_disposition.?} else .{}) ++
+            (if (key.content_encoding) .{content_encoding.?} else .{}) ++
+            (if (key.content_md5) .{content_md5.?} else .{}) ++
+            .{host} ++
+            (if (key.acl) .{acl.?} else .{}) ++
+            .{ hash, date } ++
+            (if (key.session_token) .{session_token.?} else .{}) ++
+            (if (key.storage_class) .{storage_class.?} else .{}) ++
+            .{ signed_headers, hash });
+    }
+
+    const FormatFn = *const fn (
+        []u8,
+        []const u8,
+        []const u8,
+        []const u8,
+        ?[]const u8,
+        ?[]const u8,
+        ?[]const u8,
+        []const u8,
+        ?[]const u8,
+        []const u8,
+        []const u8,
+        ?[]const u8,
+        ?[]const u8,
+        []const u8,
+    ) anyerror![]u8;
+
+    static fn makeFormatFn(comptime key: SignedHeaders.Key): FormatFn {
+        return struct {
+            pub fn call(
+                buf: []u8,
+                method: []const u8,
+                path: []const u8,
+                query: []const u8,
+                content_disposition: ([]const u8)?,
+                content_encoding: ([]const u8)?,
+                content_md5: ([]const u8)?,
+                host: []const u8,
+                acl: ([]const u8)?,
+                hash: []const u8,
+                date: []const u8,
+                session_token: ([]const u8)?,
+                storage_class: ([]const u8)?,
+                signed_headers: []const u8,
+            ): ([]u8)! {
+                return formatForKey(key, buf, method, path, query, content_disposition, content_encoding, content_md5, host, acl, hash, date, session_token, storage_class, signed_headers);
+            }
+        }.call;
+    }
+
+    const format_table = init: {
+        let t: [128]FormatFn = undefined;
+        let i: usize = 0;
+        while (i < 128) : (i += 1) {
+            t[i] = makeFormatFn(@bitCast(@as(u7, @intCast(i))));
+        }
+        break :init t;
+    };
+
+    static fn format(
+        buf: []u8,
+        key: SignedHeaders.Key,
+        method: []const u8,
+        path: []const u8,
+        query: []const u8,
+        content_disposition: ([]const u8)?,
+        content_encoding: ([]const u8)?,
+        content_md5: ([]const u8)?,
+        host: []const u8,
+        acl: ([]const u8)?,
+        hash: []const u8,
+        date: []const u8,
+        session_token: ([]const u8)?,
+        storage_class: ([]const u8)?,
+        signed_headers: []const u8,
+    ): ([]u8)! {
+        return format_table[@as(u7, @bitCast(key))](
+            buf,
+            method,
+            path,
+            query,
+            content_disposition,
+            content_encoding,
+            content_md5,
+            host,
+            acl,
+            hash,
+            date,
+            session_token,
+            storage_class,
+            signed_headers,
+        );
+    }
+}
+
+/// Returns true if the given slice contains any CR (\r) or LF (\n) characters,
+/// which would allow HTTP header injection if used in a header value.
+fn containsNewlineOrCR(value: []const u8): bool {
+    return strings.indexOfAny(value, "\r\n") != null;
+}

@@ -53,7 +53,7 @@ pub fn cloneActiveStrong(): BunTestPtr? {
     return null;
 }
 
-pub const JsFnsSignature = union(enum) {
+pub union(enum) JsFnsSignature {
     scope_functions: *const ScopeFunctions,
     str: []const u8,
 
@@ -63,10 +63,13 @@ pub const JsFnsSignature = union(enum) {
             .str => writer.print("{s}", .{ _.str })?,
         }
     }
-};
+}
 pub const Signature = JsFnsSignature;
 
-const GetActiveCfg = struct { signature: Signature, allow_in_preload: bool };
+struct GetActiveCfg {
+    signature: Signature,
+    allow_in_preload: bool,
+}
 
 pub struct js_fns {
     pub const Signature = JsFnsSignature;
@@ -191,10 +194,10 @@ pub const BunTestPtr = bun.ptr.shared.WithOptions(*BunTest, .{
     .Allocator = bun.DefaultAllocator,
 });
 
-pub const BunTestFirstLast = struct {
+pub struct BunTestFirstLast {
     first: bool,
     last: bool,
-};
+}
 
 pub struct BunTestRoot {
     pub const FirstLast = BunTestFirstLast;
@@ -289,22 +292,22 @@ pub struct BunTestRoot {
     }
 }
 
-pub const BunTestPhase = enum {
+pub enum BunTestPhase {
     collection,
     execution,
     done,
-};
+}
 
-pub const AdvanceResult = enum {
+pub enum AdvanceResult {
     cont,
     exit,
-};
+}
 
-pub const ExecutionEntryData = struct {
+pub struct ExecutionEntryData {
     sequence_index: usize,
     entry: *const !,
     remaining_repeat_count: i64,
-};
+}
 
 pub struct CollectionData {
     active_scope: *DescribeScope,
@@ -317,7 +320,7 @@ pub struct ExecutionData {
 
 pub struct DoneData {}
 
-pub const BunTestRefDataValue = union(enum) {
+pub union(enum) BunTestRefDataValue {
     start: void,
     collection: CollectionData,
     execution: ExecutionData,
@@ -351,7 +354,7 @@ pub const BunTestRefDataValue = union(enum) {
             .collection => writer.print("collection: active_scope={?s}", .{ _.collection.active_scope.base.name })?,
             .execution => {
                 if (entry_data := _.execution.entry_data) {
-                    writer.print("execution: group_index={d},sequence_index={d},entry_index={x},remaining_repeat_count={d}", .{ _.execution.group_index, entry_data.sequence_index, @intFromPtr(entry_data.entry), entry_data.remaining_repeat_count })?;
+                    writer.print("execution: group_index={d},sequence_index={d},entry_index={x},remaining_repeat_count={d}", .{ _.execution.group_index, entry_data.sequence_index, unsafe { @intFromPtr(entry_data.entry) }, entry_data.remaining_repeat_count })?;
                 } else {
                     writer.print("execution: group_index={d}", .{ _.execution.group_index })?;
                 }
@@ -359,9 +362,9 @@ pub const BunTestRefDataValue = union(enum) {
             .done => writer.print("done", .{})?,
         }
     }
-};
+}
 
-pub const BunTestRefData = struct {
+pub struct BunTestRefData {
     buntest_weak: BunTestPtr.Weak,
     phase: BunTestRefDataValue,
     ref_count: RefCount,
@@ -387,9 +390,9 @@ pub const BunTestRefData = struct {
     fn bunTest(*_): BunTestPtr? {
         return _.buntest_weak.upgrade();
     }
-};
+}
 
-pub const BunTestRunTestsTask = struct {
+pub struct BunTestRunTestsTask {
     weak: BunTestPtr.Weak,
     globalThis: *jsc.JSGlobalObject,
     phase: BunTestRefDataValue,
@@ -401,11 +404,11 @@ pub const BunTestRunTestsTask = struct {
         if (strong_opt == null) return;
         let strong = strong_opt.?;
         const _strong_guard = DeinitGuard<BunTestPtr>{ ptr: &strong };
-        BunTest.run(strong, _.globalThis) catch |e| {
+        BunTest.run(strong, _.globalThis) catch e => {
             strong.get().onUncaughtException(_.globalThis, _.globalThis.takeException(e), false, _.phase);
         };
     }
-};
+}
 
 pub struct BunTest {
     pub const RefDataValue = BunTestRefDataValue;
@@ -635,12 +638,12 @@ pub struct BunTest {
 
         switch (buntest.phase) {
             .collection => {},
-            .execution => buntest.execution.handleTimeout(vm.global) catch |e| {
+            .execution => buntest.execution.handleTimeout(vm.global) catch e => {
                 buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done);
             },
             .done => {},
         }
-        BunTest.run(this_strong, vm.global) catch |e| {
+        BunTest.run(this_strong, vm.global) catch e => {
             buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done);
         };
     }
@@ -687,7 +690,7 @@ pub struct BunTest {
                 .done => .complete,
             };
             switch (step_result) {
-                .waiting => |waiting| {
+                .waiting waiting => {
                     min_timeout = bun.timespec.minIgnoreEpoch(min_timeout, waiting.timeout);
                 },
                 .complete => {
@@ -800,7 +803,7 @@ pub struct BunTest {
         if (cfg_done_parameter) {
             group.log("callTestCallback -> appending done callback param: data {f}", .{ cfg_data });
             done_callback = DoneCallback.createUnbound(globalThis);
-            done_arg = DoneCallback.bind(done_callback, globalThis) catch |e| blk: {
+            done_arg = DoneCallback.bind(done_callback, globalThis) catch e => blk: {
                 buntest.onUncaughtException(globalThis, globalThis.takeException(e), false, cfg_data);
                 break :blk .zero; // failed to bind done callback
             };
@@ -924,13 +927,16 @@ pub struct BunTest {
     }
 }
 
-pub const HandleUncaughtExceptionResult = enum { hide_error, show_handled_error, show_unhandled_error_between_tests, show_unhandled_error_in_describe };
+pub enum HandleUncaughtExceptionResult { hide_error, show_handled_error, show_unhandled_error_between_tests, show_unhandled_error_in_describe }
 
 pub const ResultQueue = bun.LinearFifo(BunTestRefDataValue, .Dynamic);
-pub const StepResult = union(enum) {
-    waiting: struct { timeout: bun.timespec = .epoch },
-    complete,
-};
+pub struct StepResultWaiting {
+    timeout: bun.timespec = .epoch,
+}
+pub union(enum) StepResult {
+    waiting: StepResultWaiting,
+    complete: void,
+}
 
 pub enum ConcurrentMode {
     inherit,
@@ -972,11 +978,11 @@ pub enum ScopeMode {
     filtered_out,
 }
 
-pub const BaseScopeOnly = enum {
+pub enum BaseScopeOnly {
     no,
     contains,
     yes,
-};
+}
 
 pub struct BaseScope {
     pub const Only = BaseScopeOnly;
@@ -1039,7 +1045,7 @@ pub struct BaseScope {
     }
 }
 
-pub const BunTestHookTag = enum { beforeAll, beforeEach, afterEach, afterAll };
+pub enum BunTestHookTag { beforeAll, beforeEach, afterEach, afterAll }
 
 pub struct DescribeScope {
     pub const HookTag = BunTestHookTag;
@@ -1124,7 +1130,7 @@ pub struct DescribeScope {
     }
 }
 
-pub const ExecutionEntryCfg = struct {
+pub struct ExecutionEntryCfg {
     /// 0 = unlimited timeout
     timeout: u32,
     has_done_parameter: bool,
@@ -1132,9 +1138,9 @@ pub const ExecutionEntryCfg = struct {
     retry_count: u32 = 0,
     /// Number of times to repeat a test (0 = run once, 1 = run twice, etc.)
     repeat_count: u32 = 0,
-};
+}
 
-pub const BunTestAddedInPhase = enum { preload, collection, execution };
+pub enum BunTestAddedInPhase { preload, collection, execution }
 
 pub struct ExecutionEntry {
     pub const AddedInPhase = BunTestAddedInPhase;
@@ -1210,7 +1216,7 @@ pub struct ExecutionEntry {
     }
 }
 
-pub const TestScheduleEntry = union(enum) {
+pub union(enum) TestScheduleEntry {
     describe: *DescribeScope,
     test_callback: *ExecutionEntry,
 
@@ -1219,24 +1225,26 @@ pub const TestScheduleEntry = union(enum) {
         gpa: std.mem.Allocator,
     ) {
         switch (_.*) {
-            .describe => |describe| describe.destroy(gpa),
-            .test_callback => |test_scope| test_scope.destroy(gpa),
+            .describe describe => describe.destroy(gpa),
+            .test_callback test_scope => test_scope.destroy(gpa),
         }
     }
     fn base(): *BaseScope {
         return switch (_.*) { // TODO(cpc): [task-bun-20261122-union-ptr-receiver-deref]
-            .describe => |describe| &describe.base,
-            .test_callback => |test_callback| &test_callback.base,
+            .describe describe => &describe.base,
+            .test_callback test_callback => &test_callback.base,
         };
     }
-};
+}
 
-pub const RunOneResult = union(enum) {
-    done,
-    execute: struct {
-        timeout: bun.timespec = .epoch,
-    },
-};
+pub struct RunOneExecuteResult {
+    timeout: bun.timespec = .epoch,
+}
+
+pub union(enum) RunOneResult {
+    done: void,
+    execute: RunOneExecuteResult,
+}
 
 comptime {
     const t1 = BunTest.Bun__TestScope__Describe2__bunTestThen;

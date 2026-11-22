@@ -55,31 +55,42 @@ struct ReadFileUVFinalizeGuard {
     }
 }
 
+fn readFileWrappedCall(comptime Function: anytype, b: *Blob, g: *JSGlobalObject, by: []u8): jsc.JSValue {
+    return jsc.toJSHostCall(g, @src(), Function, .{ b, g, by, .temporary });
+}
+
+fn ReadFileHandler(comptime Context: type, comptime callback: fn (ctx: Context, bytes: ReadFileResultType) anyerror!void): type {
+    return struct {
+        fn run(ptr: *!, bytes: ReadFileResultType) {
+            callback(cast(Context, ptr), bytes) catch {};
+        }
+    };
+}
+
 pub fn NewReadFileHandler(comptime Function: anytype): type {
     return struct {
         context: Blob,
         promise: JSPromise.Strong = .{},
         globalThis: *JSGlobalObject,
 
-        pub fn run(handler: *@This(), maybe_bytes: ReadFileResultType): !void {
+        fn run(handler: *@This(), maybe_bytes: ReadFileResultType): ! {
             let promise = handler.promise.swap();
             let blob_guard = DeinitGuard<Blob>{ val: handler.context.takeOwnership() };
             const globalThis = handler.globalThis;
             destroy(handler);
             switch (maybe_bytes) {
-                .result => |result| {
+                .result result => {
                     const bytes = result.buf;
                     if (blob_guard.val.size > 0)
                         blob_guard.val.size = @min(@as(SizeType, @truncate(bytes.len)), blob_guard.val.size);
-                    const WrappedFn = struct {
-                        pub fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8): jsc.JSValue {
-                            return jsc.toJSHostCall(g, @src(), Function, .{ b, g, by, .temporary });
+                    jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, struct {
+                        fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8): jsc.JSValue {
+                            return readFileWrappedCall(Function, b, g, by);
                         }
-                    };
-                    try jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, WrappedFn.wrapped, .{ &blob_guard.val, globalThis, bytes });
+                    }.wrapped, .{ &blob_guard.val, globalThis, bytes })?;
                 },
-                .err => |err| {
-                    try promise.reject(globalThis, err.toErrorInstanceWithAsyncStack(globalThis, promise));
+                .err e => {
+                    promise.reject(globalThis, e.toErrorInstanceWithAsyncStack(globalThis, promise))?;
                 },
             }
         }
@@ -126,11 +137,11 @@ export class ReadFile {
 
     pub fn update(*_) {
         if (Environment.isWindows) return;
-        switch (this.state.load(.monotonic)) {
+        switch (_.state.load(.monotonic)) {
             .closing => {
-                this.onFinish();
+                _.onFinish();
             },
-            .running => this.doReadLoop(),
+            .running => _.doReadLoop(),
         }
     }
 
@@ -181,17 +192,12 @@ export class ReadFile {
         comptime Context: type,
         context: Context,
         comptime callback: fn (ctx: Context, bytes: ReadFileResultType) anyerror!void,
-    ): !*ReadFile {
+    ): (*ReadFile)! {
         if (Environment.isWindows)
             @compileError("dont call this function on windows");
 
-        const Handler = struct {
-            pub fn run(ptr: *!, bytes: ReadFileResultType) {
-                callback(cast(Context, ptr), bytes) catch {};
-            }
-        };
-
-        return try ReadFile.createWithCtx(allocator, store, unsafe { @ptrCast(context) }, Handler.run, off, max_len);
+        const Handler = ReadFileHandler(Context, callback);
+        return ReadFile.createWithCtx(allocator, store, unsafe { @ptrCast(context) }, Handler.run, off, max_len)?;
     }
 
     @c static fn onReadable(request: *io.Request) {
@@ -201,22 +207,22 @@ export class ReadFile {
 
     pub fn onReady(*_) {
         bloblog("ReadFile.onReady", .{});
-        this.task = .{ .callback = &doReadLoopTask };
+        _.task = .{ .callback = &doReadLoopTask };
         if (Environment.isMac) {
-            this.close_after_io = this.io_request.scheduled;
+            _.close_after_io = _.io_request.scheduled;
         }
-        WorkPool.schedule(&this.task);
+        WorkPool.schedule(&_.task);
     }
 
     pub fn onIOError(*_, err: sys.Error) {
         bloblog("ReadFile.onIOError", .{});
-        this.errno = errnoToZigErr(err.errno);
-        this.system_error = err.toSystemError();
-        this.task = .{ .callback = &doReadLoopTask };
+        _.errno = errnoToZigErr(err.errno);
+        _.system_error = err.toSystemError();
+        _.task = .{ .callback = &doReadLoopTask };
         if (Environment.isMac) {
-            this.close_after_io = this.io_request.scheduled;
+            _.close_after_io = _.io_request.scheduled;
         }
-        WorkPool.schedule(&this.task);
+        WorkPool.schedule(&_.task);
     }
 
     static fn onRequestReadable(request: *io.Request): io.Action {
@@ -236,48 +242,48 @@ export class ReadFile {
 
     pub fn waitForReadable(*_) {
         bloblog("ReadFile.waitForReadable", .{});
-        this.close_after_io = true;
-        @atomicStore(@TypeOf(this.io_request.callback), &this.io_request.callback, &onRequestReadable, .seq_cst);
-        if (!this.io_request.scheduled)
-            io.Loop.get().schedule(&this.io_request);
+        _.close_after_io = true;
+        @atomicStore(@TypeOf(_.io_request.callback), &_.io_request.callback, &onRequestReadable, .seq_cst);
+        if (!_.io_request.scheduled)
+            io.Loop.get().schedule(&_.io_request);
     }
 
-    fn remainingBuffer(_: *const ReadFile, stack_buffer: []u8): []u8 {
-        const unused = unsafe { this.buffer.items.ptr[this.buffer.items.len..this.buffer.capacity] };
+    fn remainingBuffer(stack_buffer: []u8): []u8 {
+        const unused = unsafe { _.buffer.items.ptr[_.buffer.items.len.._.buffer.capacity] };
         let remaining = if (unused.len < stack_buffer.len) stack_buffer else unused;
-        return remaining[0..@min(remaining.len, this.max_length -| this.read_off)];
+        return remaining[0..@min(remaining.len, _.max_length -| _.read_off)];
     }
 
     pub fn doRead(*_, buffer: []u8, read_len: *usize, retry: *bool): bool {
         let result: sys.Maybe(usize) = brk: {
-            if (std.posix.S.ISSOCK(this.file_store.mode)) {
-                break :brk sys.recvNonBlock(this.opened_fd, buffer);
+            if (std.posix.S.ISSOCK(_.file_store.mode)) {
+                break :brk sys.recvNonBlock(_.opened_fd, buffer);
             }
-            break :brk sys.read(this.opened_fd, buffer);
+            break :brk sys.read(_.opened_fd, buffer);
         };
 
         while (true) {
             switch (result) {
                 .result => |res| {
                     read_len.* = @truncate(res);
-                    this.read_eof = res == 0;
+                    _.read_eof = res == 0;
                 },
                 .err => |err| {
                     switch (err.getErrno()) {
                         io.retry => {
-                            if (!this.could_block) {
+                            if (!_.could_block) {
                                 continue;
                             }
                             retry.* = true;
-                            this.read_eof = false;
+                            _.read_eof = false;
                             return true;
                         },
                         else => {
-                            this.errno = errnoToZigErr(err.errno);
-                            this.system_error = err.toSystemError();
-                            if (this.system_error.?.path.isEmpty()) {
-                                this.system_error.?.path = if (this.file_store.pathlike == .path)
-                                    BunString.cloneUTF8(this.file_store.pathlike.path.slice())
+                            _.errno = errnoToZigErr(err.errno);
+                            _.system_error = err.toSystemError();
+                            if (_.system_error.?.path.isEmpty()) {
+                                _.system_error.?.path = if (_.file_store.pathlike == .path)
+                                    BunString.cloneUTF8(_.file_store.pathlike.path.slice())
                                 else
                                     BunString.empty;
                             }
@@ -292,16 +298,16 @@ export class ReadFile {
     }
 
     pub fn then(*_, _: *JSGlobalObject): !void {
-        let cb = this.onCompleteCallback;
-        let cb_ctx = this.onCompleteCtx;
+        let cb = _.onCompleteCallback;
+        let cb_ctx = _.onCompleteCtx;
 
-        if (this.store == null and this.system_error != null) {
-            let system_error = this.system_error.?;
-            destroy(this);
+        if (_.store == null and _.system_error != null) {
+            let system_error = _.system_error.?;
+            destroy(_);
             cb(cb_ctx, ReadFileResultType { err = system_error });
             return;
-        } else if (this.store == null) {
-            destroy(this);
+        } else if (_.store == null) {
+            destroy(_);
             if (Environment.allow_assert) @panic("assertion failure - store should not be null");
             cb(cb_ctx, ReadFileResultType {
                 err = SystemError {
@@ -315,13 +321,13 @@ export class ReadFile {
             return;
         }
 
-        let store = this.store.?;
-        let buf = this.buffer.items;
+        let store = _.store.?;
+        let buf = _.buffer.items;
 
         const _store_guard = DerefGuard<Store>{ ptr: store };
-        let system_error = this.system_error;
-        let total_size = this.total_size;
-        destroy(this);
+        let system_error = _.system_error;
+        let total_size = _.total_size;
+        destroy(_);
 
         if (err := system_error) {
             cb(cb_ctx, ReadFileResultType { err = err });
@@ -332,34 +338,34 @@ export class ReadFile {
     }
 
     pub fn run(*_, task: *ReadFileTask) {
-        this.runAsync(task);
+        _.runAsync(task);
     }
 
     fn runAsync(*_, task: *ReadFileTask) {
         if (Environment.isWindows) return;
-        this.io_task = task;
+        _.io_task = task;
 
-        if (this.file_store.pathlike == .fd) {
-            this.opened_fd = this.file_store.pathlike.fd;
+        if (_.file_store.pathlike == .fd) {
+            _.opened_fd = _.file_store.pathlike.fd;
         }
-        this.getFd(runAsyncWithFD);
+        _.getFd(runAsyncWithFD);
     }
 
-    pub fn isAllowedToClose(_: *const ReadFile): bool {
-        return this.file_store.pathlike == .path;
+    pub fn isAllowedToClose(): bool {
+        return _.file_store.pathlike == .path;
     }
 
     fn onFinish(*_) {
-        let close_after_io = this.close_after_io;
-        this.size = @truncate(this.buffer.items.len);
+        let close_after_io = _.close_after_io;
+        _.size = @truncate(_.buffer.items.len);
 
-        if (this.doClose(this.isAllowedToClose())) {
+        if (_.doClose(_.isAllowedToClose())) {
             bloblog("ReadFile.onFinish() = deferred", .{});
             return;
         }
         if (!close_after_io) {
-            if (io_task := this.io_task) {
-                this.io_task = null;
+            if (io_task := _.io_task) {
+                _.io_task = null;
                 bloblog("ReadFile.onFinish() = immediately", .{});
                 io_task.onFinish();
             }
@@ -370,25 +376,25 @@ export class ReadFile {
         let stat: bun.Stat = switch (sys.fstat(fd)) {
             .result => |result| result,
             .err => |err| {
-                this.errno = errnoToZigErr(err.errno);
-                this.system_error = err.toSystemError();
+                _.errno = errnoToZigErr(err.errno);
+                _.system_error = err.toSystemError();
                 return;
             },
         };
 
-        if (store := this.store) {
+        if (store := _.store) {
             if (store.data == .file) {
                 store.data.file.last_modified = jsc.toJSTime(stat.mtime().sec, stat.mtime().nsec);
             }
         }
 
         if (bun.S.ISDIR(@intCast(stat.mode))) {
-            this.errno = error.EISDIR;
-            this.system_error = SystemError {
+            _.errno = error.EISDIR;
+            _.system_error = SystemError {
                 errno = @as(c_int, @intCast(@intFromEnum(sys.SystemErrno.EISDIR))),
                 code = BunString.static("EISDIR"),
-                path = if (this.file_store.pathlike == .path)
-                    BunString.cloneUTF8(this.file_store.pathlike.path.slice())
+                path = if (_.file_store.pathlike == .path)
+                    BunString.cloneUTF8(_.file_store.pathlike.path.slice())
                 else
                     BunString.empty,
                 message = BunString.static("Directories cannot be read like files"),
@@ -397,56 +403,56 @@ export class ReadFile {
             return;
         }
 
-        this.could_block = !isRegularFile(stat.mode);
-        this.total_size = @intCast(@min(@max(stat.size, 0), Blob.max_size));
+        _.could_block = !isRegularFile(stat.mode);
+        _.total_size = @intCast(@min(@max(stat.size, 0), Blob.max_size));
 
-        if (stat.size > 0 and !this.could_block) {
-            this.size = @min(this.total_size, this.max_length);
-        } else if (stat.size == 0 and this.could_block) {
-            this.size = @min(this.max_length, 4096);
+        if (stat.size > 0 and !_.could_block) {
+            _.size = @min(_.total_size, _.max_length);
+        } else if (stat.size == 0 and _.could_block) {
+            _.size = @min(_.max_length, 4096);
         }
 
-        if (this.offset > 0) {
-            switch (sys.setFileOffset(fd, this.offset)) {
+        if (_.offset > 0) {
+            switch (sys.setFileOffset(fd, _.offset)) {
                 .err, .result => {},
             }
         }
     }
 
     fn runAsyncWithFD(*_, fd: FD) {
-        if (this.errno != null) {
-            this.onFinish();
+        if (_.errno != null) {
+            _.onFinish();
             return;
         }
 
-        this.resolveSizeAndLastModified(fd);
-        if (this.errno != null)
-            return this.onFinish();
+        _.resolveSizeAndLastModified(fd);
+        if (_.errno != null)
+            return _.onFinish();
 
-        if (this.size == 0 and isRegularFile(this.file_store.mode)) {
-            this.buffer = .{};
-            this.byte_store = ByteStore.init(this.buffer.items, default_allocator);
-            this.onFinish();
+        if (_.size == 0 and isRegularFile(_.file_store.mode)) {
+            _.buffer = .{};
+            _.byte_store = ByteStore.init(_.buffer.items, default_allocator);
+            _.onFinish();
             return;
         }
 
-        if (!this.could_block or (this.size > 0 and this.size != Blob.max_size))
-            this.buffer = ArrayListUnmanaged(u8).initCapacity(default_allocator, this.size +| 16) catch |e| {
-                this.errno = e;
-                this.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
-                this.onFinish();
+        if (!_.could_block or (_.size > 0 and _.size != Blob.max_size))
+            _.buffer = ArrayListUnmanaged(u8).initCapacity(default_allocator, _.size +| 16) catch |e| {
+                _.errno = e;
+                _.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
+                _.onFinish();
                 return;
             };
-        this.read_off = @as(SizeType, 0);
+        _.read_off = @as(SizeType, 0);
 
-        if (this.could_block) {
+        if (_.could_block) {
             if (isReadable(fd) == .not_ready) {
-                this.waitForReadable();
+                _.waitForReadable();
                 return;
             }
         }
 
-        this.doReadLoop();
+        _.doReadLoop();
     }
 
     static fn doReadLoopTask(task: *WorkPoolTask) {
@@ -456,28 +462,28 @@ export class ReadFile {
 
     fn doReadLoop(*_) {
         if (Environment.isWindows) return;
-        while (this.state.load(.monotonic) == .running) {
+        while (_.state.load(.monotonic) == .running) {
             let stack_buffer: [65536]u8 = undefined;
-            let buffer = this.remainingBuffer(&stack_buffer);
+            let buffer = _.remainingBuffer(&stack_buffer);
 
-            if (buffer.len > 0 and this.errno == null and !this.read_eof) {
+            if (buffer.len > 0 and _.errno == null and !_.read_eof) {
                 let read_amount: usize = 0;
                 let retry = false;
-                let continue_reading = this.doRead(buffer, &read_amount, &retry);
+                let continue_reading = _.doRead(buffer, &read_amount, &retry);
                 let read = buffer[0..read_amount];
 
                 if (read.ptr == &stack_buffer) {
-                    if (this.buffer.capacity == 0) {
-                        handleOom(this.buffer.ensureTotalCapacityPrecise(default_allocator, read.len));
+                    if (_.buffer.capacity == 0) {
+                        handleOom(_.buffer.ensureTotalCapacityPrecise(default_allocator, read.len));
                     } else {
-                        handleOom(this.buffer.ensureUnusedCapacity(default_allocator, read.len));
+                        handleOom(_.buffer.ensureUnusedCapacity(default_allocator, read.len));
                     }
-                    this.buffer.appendSliceAssumeCapacity(read);
+                    _.buffer.appendSliceAssumeCapacity(read);
                 } else {
-                    this.buffer.items.len += read.len;
+                    _.buffer.items.len += read.len;
                 }
 
-                if (!this.read_eof and this.buffer.items.len >= this.max_length) {
+                if (!_.read_eof and _.buffer.items.len >= _.max_length) {
                     break;
                 }
 
@@ -485,15 +491,15 @@ export class ReadFile {
                     break;
                 }
 
-                if ((retry or (this.could_block and !this.read_eof))) {
-                    if ((this.could_block and !this.read_eof)) {
-                        switch (isReadable(this.opened_fd)) {
+                if ((retry or (_.could_block and !_.read_eof))) {
+                    if ((_.could_block and !_.read_eof)) {
+                        switch (isReadable(_.opened_fd)) {
                             .not_ready => {},
                             .ready, .hup => continue,
                         }
                     }
-                    this.read_eof = false;
-                    this.waitForReadable();
+                    _.read_eof = false;
+                    _.waitForReadable();
                     return;
                 }
                 continue;
@@ -501,15 +507,15 @@ export class ReadFile {
             break;
         }
 
-        if (this.system_error != null) {
-            this.buffer.clearAndFree(default_allocator);
+        if (_.system_error != null) {
+            _.buffer.clearAndFree(default_allocator);
         }
 
-        if (this.buffer.items.len + 16000 < this.buffer.capacity) {
-            this.buffer.shrinkAndFree(default_allocator, this.buffer.items.len);
+        if (_.buffer.items.len + 16000 < _.buffer.capacity) {
+            _.buffer.shrinkAndFree(default_allocator, _.buffer.items.len);
         }
-        this.byte_store = ByteStore.init(this.buffer.items, default_allocator);
-        this.onFinish();
+        _.byte_store = ByteStore.init(_.buffer.items, default_allocator);
+        _.onFinish();
     }
 }
 
@@ -570,58 +576,58 @@ export class ReadFileUV {
     pub fn finalize(*_) {
         log("ReadFileUV.finalize", .{});
         const _finalize_guard = ReadFileUVFinalizeGuard{
-            rf: this,
-            event_loop: this.event_loop,
+            rf: _,
+            event_loop: _.event_loop,
         };
 
-        let cb = this.on_complete_fn;
-        let cb_ctx = this.on_complete_data;
+        let cb = _.on_complete_fn;
+        let cb_ctx = _.on_complete_data;
 
-        if (err := this.system_error) {
+        if (err := _.system_error) {
             cb(cb_ctx, ReadFileResultType { err = err });
             return;
         }
 
-        cb(cb_ctx, .{ .result = .{ .buf = this.byte_store.slice(), .total_size = this.total_size, .is_temporary = true } });
+        cb(cb_ctx, .{ .result = .{ .buf = _.byte_store.slice(), .total_size = _.total_size, .is_temporary = true } });
     }
 
-    pub fn isAllowedToClose(_: *const ReadFileUV): bool {
-        return this.file_store.pathlike == .path;
+    pub fn isAllowedToClose(): bool {
+        return _.file_store.pathlike == .path;
     }
 
     fn onFinish(*_) {
         log("ReadFileUV.onFinish", .{});
-        let fd = this.opened_fd;
+        let fd = _.opened_fd;
         let needs_close = fd != invalid_fd;
 
-        this.size = @max(this.read_len, this.size);
-        this.total_size = @max(this.total_size, this.size);
+        _.size = @max(_.read_len, _.size);
+        _.total_size = @max(_.total_size, _.size);
 
         if (needs_close) {
-            if (this.doClose(this.isAllowedToClose())) {
+            if (_.doClose(_.isAllowedToClose())) {
                 return;
             }
         }
-        this.finalize();
+        _.finalize();
     }
 
     pub fn onFileOpen(*_, opened_fd: FD) {
         log("ReadFileUV.onFileOpen", .{});
-        if (this.errno != null) {
-            this.onFinish();
+        if (_.errno != null) {
+            _.onFinish();
             return;
         }
 
-        this.req.deinit();
-        this.req.data = this;
+        _.req.deinit();
+        _.req.data = _;
 
-        if (errno := libuv.uv_fs_fstat(this.loop, &this.req, opened_fd.uv(), &onFileInitialStat).errEnum()) {
-            this.errno = errnoToZigErr(errno);
-            this.system_error = sys.Error.fromCode(errno, .fstat).toSystemError();
-            this.onFinish();
+        if (errno := libuv.uv_fs_fstat(_.loop, &_.req, opened_fd.uv(), &onFileInitialStat).errEnum()) {
+            _.errno = errnoToZigErr(errno);
+            _.system_error = sys.Error.fromCode(errno, .fstat).toSystemError();
+            _.onFinish();
             return;
         }
-        this.req.data = this;
+        _.req.data = _;
     }
 
     @c static fn onFileInitialStat(req: *libuv.fs_t) {
@@ -694,55 +700,55 @@ export class ReadFileUV {
         self_uv.queueRead();
     }
 
-    fn remainingBuffer(_: *const ReadFileUV): []u8 {
-        let remaining = this.buffer.unusedCapacitySlice();
-        return remaining[0..@min(remaining.len, this.max_length -| this.read_off)];
+    fn remainingBuffer(): []u8 {
+        let remaining = _.buffer.unusedCapacitySlice();
+        return remaining[0..@min(remaining.len, _.max_length -| _.read_off)];
     }
 
     pub fn queueRead(*_) {
-        if ((this.remainingBuffer().len > 0 or !this.is_regular_file) and this.errno == null and !this.read_eof) {
-            log("ReadFileUV.queueRead - this.remainingBuffer().len = {d}", .{this.remainingBuffer().len});
-            if (!this.is_regular_file) {
-                this.buffer.ensureUnusedCapacity(this.byte_store.allocator, 4096) catch {
-                    this.errno = error.OutOfMemory;
-                    this.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
-                    this.onFinish();
+        if ((_.remainingBuffer().len > 0 or !_.is_regular_file) and _.errno == null and !_.read_eof) {
+            log("ReadFileUV.queueRead - this.remainingBuffer().len = {d}", .{_.remainingBuffer().len});
+            if (!_.is_regular_file) {
+                _.buffer.ensureUnusedCapacity(_.byte_store.allocator, 4096) catch {
+                    _.errno = error.OutOfMemory;
+                    _.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
+                    _.onFinish();
                     return;
                 };
             }
 
-            let buf = this.remainingBuffer();
+            let buf = _.remainingBuffer();
             let bufs: [1]libuv.uv_buf_t = .{
                 libuv.uv_buf_t.init(buf),
             };
-            this.req.assertCleanedUp();
+            _.req.assertCleanedUp();
             let res = libuv.uv_fs_read(
-                this.loop,
-                &this.req,
-                this.opened_fd.uv(),
+                _.loop,
+                &_.req,
+                _.opened_fd.uv(),
                 &bufs,
                 bufs.len,
-                @as(i64, @intCast(this.offset + this.read_off)),
+                @as(i64, @intCast(_.offset + _.read_off)),
                 &onRead,
             );
-            this.req.data = this;
+            _.req.data = _;
             if (errno := res.errEnum()) {
-                this.errno = errnoToZigErr(errno);
-                this.system_error = sys.Error.fromCode(errno, .read).toSystemError();
-                this.onFinish();
+                _.errno = errnoToZigErr(errno);
+                _.system_error = sys.Error.fromCode(errno, .read).toSystemError();
+                _.onFinish();
             }
         } else {
             log("ReadFileUV.queueRead done", .{});
-            this.byte_store = ByteStore.init(
-                this.buffer.toOwnedSlice(this.byte_store.allocator) catch {
-                    this.errno = error.OutOfMemory;
-                    this.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
-                    this.onFinish();
+            _.byte_store = ByteStore.init(
+                _.buffer.toOwnedSlice(_.byte_store.allocator) catch {
+                    _.errno = error.OutOfMemory;
+                    _.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
+                    _.onFinish();
                     return;
                 },
                 default_allocator,
             );
-            this.onFinish();
+            _.onFinish();
         }
     }
 

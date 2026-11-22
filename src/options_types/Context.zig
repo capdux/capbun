@@ -107,6 +107,23 @@ pub const DebugOptions = struct {
     output_file: []const u8 = "",
 };
 
+pub const MacroOptions = union(enum) {
+    unspecified: void,
+    disable: void,
+    map: MacroMap,
+};
+
+pub const ShardOptions_ = struct {
+    index: u32,
+    count: u32,
+};
+
+pub const TestReporters_ = struct {
+    dots: bool = false,
+    only_failures: bool = false,
+    junit: bool = false,
+};
+
 pub const TestOptions = struct {
     default_timeout_ms: u32 = (5 * std.time.ms_per_s),
     update_snapshots: bool = false,
@@ -140,15 +157,40 @@ pub inline fn testFilterRegex(self: TestOptions) OptRegularExpression {
                 return @ptrCast(@alignCast(self.test_filter_regex));
             }
     }
-    pub const ShardOptions = struct {
-        index: u32,
-        count: u32,
-    };
-    pub const TestReporters = struct {
-        dots: bool = false,
-        only_failures: bool = false,
-        junit: bool = false,
-    };
+    const ShardOptions = ShardOptions_;
+    const TestReporters = TestReporters_;
+};
+
+pub const DebuggerEnable = struct {
+    path_or_port: []const u8 = "",
+    wait_for_connection: bool = false,
+    set_breakpoint_on_first_line: bool = false,
+};
+
+pub const Debugger = union(enum) {
+    unspecified: void,
+    enable: DebuggerEnable,
+};
+
+pub const EvalOptions_ = struct {
+    script: []const u8 = "",
+    eval_and_print: bool = false,
+};
+
+pub const CpuProfOptions_ = struct {
+    enabled: bool = false,
+    name: []const u8 = "",
+    dir: []const u8 = "",
+    interval: u32 = 1000,
+    md_format: bool = false,
+    json_format: bool = false,
+};
+
+pub const HeapProfOptions_ = struct {
+    enabled: bool = false,
+    text_format: bool = false,
+    name: []const u8 = "",
+    dir: []const u8 = "",
 };
 
 pub const RuntimeOptions = struct {
@@ -169,24 +211,9 @@ pub const RuntimeOptions = struct {
     cron_period: []const u8 = "",
     cpu_prof: CpuProfOptions = .{},
     heap_prof: HeapProfOptions = .{},
-    pub const EvalOptions = struct {
-        script: []const u8 = "",
-        eval_and_print: bool = false,
-    };
-    pub const CpuProfOptions = struct {
-        enabled: bool = false,
-        name: []const u8 = "",
-        dir: []const u8 = "",
-        interval: u32 = 1000,
-        md_format: bool = false,
-        json_format: bool = false,
-    };
-    pub const HeapProfOptions = struct {
-        enabled: bool = false,
-        text_format: bool = false,
-        name: []const u8 = "",
-        dir: []const u8 = "",
-    };
+    const EvalOptions = EvalOptions_;
+    const CpuProfOptions = CpuProfOptions_;
+    const HeapProfOptions = HeapProfOptions_;
 };
 
 const StringListOpt = ?[]const []const u8;
@@ -196,18 +223,5 @@ pub const Context = *ContextData;
 const logger = bun.logger;
 const api = bun.schema.api;
 const PackageBundleMap = bun.StringArrayHashMapUnmanaged(BundleEnums.BundlePackage);
-pub const MacroOptions = union(enum) {
-    unspecified: void,
-    disable: void,
-    map: MacroMap,
-};
 pub const MacroImportReplacementMap = bun.StringArrayHashMap(string);
 pub const MacroMap = bun.StringArrayHashMapUnmanaged(MacroImportReplacementMap);
-pub const Debugger = union(enum) {
-    unspecified: void,
-    enable: struct {
-        path_or_port: []const u8 = "",
-        wait_for_connection: bool = false,
-        set_breakpoint_on_first_line: bool = false,
-    },
-};

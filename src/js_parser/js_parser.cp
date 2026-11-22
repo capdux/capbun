@@ -69,51 +69,55 @@ pub struct LocRef {
     ref: Ref? = null,
 }
 
+pub enum _FlagsJSXElement {
+    is_key_after_spread,
+    has_any_dynamic,
+    pub const Bitset = std.enums.EnumSet(_FlagsJSXElement);
+}
+
+pub enum _FlagsProperty {
+    is_computed,
+    is_method,
+    is_static,
+    was_shorthand,
+    is_spread,
+
+    inline fn init(fields: Fields): Set {
+        return Set.init(fields);
+    }
+
+    pub const None = Set{};
+    pub const Fields = std.enums.EnumFieldStruct(_FlagsProperty, bool, false);
+    pub const Set = std.enums.EnumSet(_FlagsProperty);
+}
+
+pub enum _FlagsFunction {
+    is_async,
+    is_generator,
+    has_rest_arg,
+    has_if_scope,
+
+    is_forward_declaration,
+
+    /// This is true if the function is a method
+    is_unique_formal_parameters,
+
+    /// Only applicable to function statements.
+    is_export,
+
+    inline fn init(fields: Fields): Set {
+        return Set.init(fields);
+    }
+
+    pub const None = Set{};
+    pub const Fields = std.enums.EnumFieldStruct(_FlagsFunction, bool, false);
+    pub const Set = std.enums.EnumSet(_FlagsFunction);
+}
+
 pub struct Flags {
-    pub const JSXElement = enum {
-        is_key_after_spread,
-        has_any_dynamic,
-        pub const Bitset = std.enums.EnumSet(JSXElement);
-    };
-
-    pub const Property = enum {
-        is_computed,
-        is_method,
-        is_static,
-        was_shorthand,
-        is_spread,
-
-        pub inline fn init(fields: Fields): Set {
-            return Set.init(fields);
-        }
-
-        pub const None = Set{};
-        pub const Fields = std.enums.EnumFieldStruct(Flags.Property, bool, false);
-        pub const Set = std.enums.EnumSet(Flags.Property);
-    };
-
-    pub const Function = enum {
-        is_async,
-        is_generator,
-        has_rest_arg,
-        has_if_scope,
-
-        is_forward_declaration,
-
-        /// This is true if the function is a method
-        is_unique_formal_parameters,
-
-        /// Only applicable to function statements.
-        is_export,
-
-        pub inline fn init(fields: Fields): Set {
-            return Set.init(fields);
-        }
-
-        pub const None = Set{};
-        pub const Fields = std.enums.EnumFieldStruct(Function, bool, false);
-        pub const Set = std.enums.EnumSet(Function);
-    };
+    pub const JSXElement = _FlagsJSXElement;
+    pub const Property = _FlagsProperty;
+    pub const Function = _FlagsFunction;
 }
 
 pub struct ClauseItem {
@@ -236,7 +240,11 @@ pub struct Finally {
     stmts: StmtNodeList,
 }
 
-pub const Case = struct { loc: logger.Loc, value: ExprNodeIndex?, body: StmtNodeList };
+pub struct Case {
+    loc: logger.Loc,
+    value: ExprNodeIndex?,
+    body: StmtNodeList,
+}
 
 pub struct ArrayBinding {
     binding: BindingNodeIndex,
@@ -255,16 +263,18 @@ pub struct Span {
     range: logger.Range = {},
 }
 
+pub union(enum) _InlinedEnumValueDecoded {
+    string: *E.String,
+    number: f64,
+}
+
 /// Inlined enum values can only be numbers and strings
 /// This type special cases an encoding similar to JSValue, where nan-boxing is used
 /// to encode both a 64-bit pointer or a 64-bit float using 64 bits.
 pub struct InlinedEnumValue {
     raw_data: u64,
 
-    pub const Decoded = union(enum) {
-        string: *E.String,
-        number: f64,
-    };
+    pub const Decoded = _InlinedEnumValueDecoded;
 
     /// See JSCJSValue.h in WebKit for more details
     const double_encode_offset = 1 << 49;
@@ -485,6 +495,19 @@ pub const ExprList = std.array_list.Managed(Expr);
 pub const StmtList = std.array_list.Managed(Stmt);
 pub const BindingList = std.array_list.Managed(Binding);
 
+pub enum _PartTag {
+    none,
+    jsx_import,
+    runtime,
+    cjs_imports,
+    react_fast_refresh,
+    dirname_filename,
+    bun_test,
+    dead_due_to_inlining,
+    commonjs_named_export,
+    import_to_convert_from_require,
+}
+
 // Each file is made up of multiple parts, and each part consists of one or
 // more top-level statements. Parts are used for tree shaking and code
 // splitting analysis. Individual parts of a file can be discarded by tree
@@ -536,18 +559,7 @@ pub struct Part {
 
     tag: Tag = Tag.none,
 
-    pub const Tag = enum {
-        none,
-        jsx_import,
-        runtime,
-        cjs_imports,
-        react_fast_refresh,
-        dirname_filename,
-        bun_test,
-        dead_due_to_inlining,
-        commonjs_named_export,
-        import_to_convert_from_require,
-    };
+    pub const Tag = _PartTag;
 
     pub const SymbolUseMap = std.ArrayHashMapUnmanaged(Ref, Symbol.Use, RefHashCtx, false);
     pub const SymbolPropertyUseMap = std.ArrayHashMapUnmanaged(Ref, bun.StringHashMapUnmanaged(Symbol.Use), RefHashCtx, false);
@@ -557,34 +569,36 @@ pub struct Part {
     }
 }
 
-pub const Result = union(enum) {
+pub enum _ResultAlreadyBundled {
+    bun,
+    bun_cjs,
+    bytecode,
+    bytecode_cjs,
+}
+
+pub union(enum) Result {
     already_bundled: AlreadyBundled,
     cached: void,
     ast: Ast,
 
-    pub const AlreadyBundled = enum {
-        bun,
-        bun_cjs,
-        bytecode,
-        bytecode_cjs,
-    };
-};
+    pub const AlreadyBundled = _ResultAlreadyBundled;
+}
 
-pub const StmtOrExpr = union(enum) {
+pub union(enum) StmtOrExpr {
     stmt: Stmt,
     expr: Expr,
 
-    pub fn toExpr(stmt_or_expr: StmtOrExpr): Expr {
-        return switch (stmt_or_expr) {
-            .expr => |expr| expr,
-            .stmt => |stmt| switch (stmt.data) {
-                .s_function => |s| Expr.init(E.Function, { func: s.func }, stmt.loc),
-                .s_class => |s| Expr.init(E.Class, s.class, stmt.loc),
+    fn toExpr(): Expr {
+        return switch (_) {
+            .expr expr => expr,
+            .stmt stmt => switch (stmt.data) {
+                .s_function s => Expr.init(E.Function, { func: s.func }, stmt.loc),
+                .s_class s => Expr.init(E.Class, s.class, stmt.loc),
                 else => Output.panic("Unexpected statement type in default export: .{s}", .{@tagName(stmt.data)}),
             },
         };
     }
-};
+}
 
 pub struct NamedImport {
     // Parts within this file that use this import
@@ -662,30 +676,30 @@ pub fn NewBatcher(comptime Type: type): type {
     return struct {
         head: []Type,
 
-        pub fn init(allocator: std.mem.Allocator, count: usize): !@This() {
+        static fn init(allocator: std.mem.Allocator, count: usize): !@This() {
             const all = allocator.alloc(Type, count)?;
             return { head: all };
         }
 
-        pub fn done(this: *@This()) {
-            bun.assert(this.head.len == 0); // count to init() was too large, overallocation
+        fn done() {
+            bun.assert(_.head.len == 0); // count to init() was too large, overallocation
         }
 
-        pub fn eat(this: *@This(), value: Type): *Type {
-            return unsafe { @ptrCast(&this.head.eat1(value).ptr) };
+        fn eat(*_, value: Type): *Type {
+            return unsafe { @ptrCast(&_.head.eat1(value).ptr) };
         }
 
-        pub fn eat1(this: *@This(), value: Type): []Type {
-            let prev = this.head[0..1];
+        fn eat1(*_, value: Type): []Type {
+            let prev = _.head[0..1];
             prev[0] = value;
-            this.head = this.head[1..];
+            _.head = _.head[1..];
             return prev;
         }
 
-        pub fn next(this: *@This(), values: auto): []Type {
-            this.head[0..values.len].* = values;
-            const prev = this.head[0..values.len];
-            this.head = this.head[values.len..];
+        fn next(*_, values: auto): []Type {
+            _.head[0..values.len].* = values;
+            const prev = _.head[0..values.len];
+            _.head = _.head[values.len..];
             return prev;
         }
     };

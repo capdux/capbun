@@ -7,6 +7,11 @@ const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const CSSInteger = css.css_values.number.CSSInteger;
 const CSSIntegerFns = css.css_values.number.CSSIntegerFns;
 
+struct EasingClosure {
+    loc: css.SourceLocation,
+    function: []const u8,
+}
+
 pub struct EasingCubicBezier {
     /// The x-position of the first point in the curve.
     x1: CSSNumber,
@@ -96,13 +101,12 @@ pub union(enum) EasingFunction {
             .result => |vv| vv,
             .err => |e| return { err: e },
         };
-        const Closure = struct { loc: css.SourceLocation, function: []const u8 };
         return input.parseNestedBlock(
             EasingFunction,
-            &Closure{ .loc = location, .function = function },
+            &EasingClosure{ loc: location, function: function },
             struct {
                 fn parse(
-                    closure: *const Closure,
+                    closure: *const EasingClosure,
                     i: *css.Parser,
                 ): Result(EasingFunction) {
                     if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(closure.function, "cubic-bezier")) {

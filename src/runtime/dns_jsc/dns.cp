@@ -352,6 +352,38 @@ pub fn normalizeDNSName(name: string, backend: *GetAddrInfo.Backend): string {
     return name;
 }
 
+@packed(u16) pub struct CAresCacheConfig {
+    pending_cache: bool = false,
+    entry_cache: bool = false,
+    pos_in_pending: u5 = 0,
+    name_len: u9 = 0,
+}
+
+pub fn ResolvePendingCacheKey(comptime request_type: type, comptime cares_type: type, comptime type_name: []const u8): type {
+    return struct {
+        hash: u64,
+        len: u16,
+        lookup: *request_type = undefined,
+
+        fn append(*_, cares_lookup: *CAresLookup(cares_type, type_name)) {
+            const tail = _.lookup.tail;
+            tail.next = cares_lookup;
+            _.lookup.tail = cares_lookup;
+        }
+
+        static fn init(name: []const u8): @This() {
+            let hasher = std.hash.Wyhash.init(0);
+            hasher.update(name);
+            const h = hasher.final();
+            return @This(){
+                hash: h,
+                len: @as(u16, @truncate(name.len)),
+                lookup: undefined,
+            };
+        }
+    };
+}
+
 pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const u8): type {
     return struct {
         const request_type = @This();
@@ -403,35 +435,9 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
             return request;
         }
 
-        pub const CacheConfig = packed struct(u16) {
-            pending_cache: bool = false,
-            entry_cache: bool = false,
-            pos_in_pending: u5 = 0,
-            name_len: u9 = 0,
-        };
+        pub const CacheConfig = CAresCacheConfig;
 
-        pub const PendingCacheKey = struct {
-            hash: u64,
-            len: u16,
-            lookup: *request_type = undefined,
-
-            pub fn append(self: *PendingCacheKey, cares_lookup: *CAresLookup(cares_type, type_name)) void {
-                const tail = self.lookup.tail;
-                tail.next = cares_lookup;
-                self.lookup.tail = cares_lookup;
-            }
-
-            pub fn init(name: []const u8) PendingCacheKey {
-                let hasher = std.hash.Wyhash.init(0);
-                hasher.update(name);
-                const hash = hasher.final();
-                return PendingCacheKey{
-                    .hash = hash,
-                    .len = @as(u16, @truncate(name.len)),
-                    .lookup = undefined,
-                };
-            }
-        };
+        pub const PendingCacheKey = ResolvePendingCacheKey(@This(), cares_type, type_name);
 
         pub fn onCaresComplete(self: *@This(), err_: ?c_ares.Error, timeout: i32, result: ?*cares_type) void {
             if (self.resolver_for_caching) |resolver| {
@@ -457,13 +463,36 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
     };
 }
 
+pub struct GetHostByAddrInfoPendingCacheKey {
+    hash: u64,
+    len: u16,
+    lookup: *GetHostByAddrInfoRequest = undefined,
+
+    fn append(*_, cares_lookup: *CAresReverse) {
+        const tail = _.lookup.tail;
+        tail.next = cares_lookup;
+        _.lookup.tail = cares_lookup;
+    }
+
+    static fn init(name: []const u8): GetHostByAddrInfoPendingCacheKey {
+        let hasher = std.hash.Wyhash.init(0);
+        hasher.update(name);
+        const hash = hasher.final();
+        return GetHostByAddrInfoPendingCacheKey{
+            hash: hash,
+            len: @as(u16, @truncate(name.len)),
+            lookup: undefined,
+        };
+    }
+}
+
 pub struct GetHostByAddrInfoRequest {
     const request_type = @This();
     const log = Output.scoped(@This(), .visible);
 
     resolver_for_caching: (*Resolver)? = null,
     hash: u64 = 0,
-    cache: CacheConfig = .{},
+    cache: CAresCacheConfig = .{},
     head: CAresReverse,
     tail: *CAresReverse = undefined,
 
@@ -507,35 +536,8 @@ pub struct GetHostByAddrInfoRequest {
         return request;
     }
 
-    pub const CacheConfig = packed struct(u16) {
-        pending_cache: bool = false,
-        entry_cache: bool = false,
-        pos_in_pending: u5 = 0,
-        name_len: u9 = 0,
-    };
-
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *request_type = undefined,
-
-        pub fn append(self: *PendingCacheKey, cares_lookup: *CAresReverse) void {
-            const tail = self.lookup.tail;
-            tail.next = cares_lookup;
-            self.lookup.tail = cares_lookup;
-        }
-
-        pub fn init(name: []const u8) PendingCacheKey {
-            let hasher = std.hash.Wyhash.init(0);
-            hasher.update(name);
-            const hash = hasher.final();
-            return PendingCacheKey{
-                .hash = hash,
-                .len = @as(u16, @truncate(name.len)),
-                .lookup = undefined,
-            };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = GetHostByAddrInfoPendingCacheKey;
 
     pub fn onCaresComplete(_: *@This(), err_: c_ares.Error?, timeout: i32, result: (*c_ares.struct_hostent)?) {
         if (resolver := _.resolver_for_caching) {
@@ -617,13 +619,36 @@ pub struct CAresNameInfo {
     }
 }
 
+pub struct GetNameInfoPendingCacheKey {
+    hash: u64,
+    len: u16,
+    lookup: *GetNameInfoRequest = undefined,
+
+    fn append(*_, cares_lookup: *CAresNameInfo) {
+        const tail = _.lookup.tail;
+        tail.next = cares_lookup;
+        _.lookup.tail = cares_lookup;
+    }
+
+    static fn init(name: []const u8): GetNameInfoPendingCacheKey {
+        let hasher = std.hash.Wyhash.init(0);
+        hasher.update(name);
+        const hash = hasher.final();
+        return GetNameInfoPendingCacheKey{
+            hash: hash,
+            len: @as(u16, @truncate(name.len)),
+            lookup: undefined,
+        };
+    }
+}
+
 pub struct GetNameInfoRequest {
     const request_type = @This();
     const log = Output.scoped(@This(), .visible);
 
     resolver_for_caching: (*Resolver)? = null,
     hash: u64 = 0,
-    cache: CacheConfig = .{},
+    cache: CAresCacheConfig = .{},
     head: CAresNameInfo,
     tail: *CAresNameInfo = undefined,
 
@@ -659,35 +684,8 @@ pub struct GetNameInfoRequest {
         return request;
     }
 
-    pub const CacheConfig = packed struct(u16) {
-        pending_cache: bool = false,
-        entry_cache: bool = false,
-        pos_in_pending: u5 = 0,
-        name_len: u9 = 0,
-    };
-
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *request_type = undefined,
-
-        pub fn append(self: *PendingCacheKey, cares_lookup: *CAresNameInfo) void {
-            const tail = self.lookup.tail;
-            tail.next = cares_lookup;
-            self.lookup.tail = cares_lookup;
-        }
-
-        pub fn init(name: []const u8) PendingCacheKey {
-            let hasher = std.hash.Wyhash.init(0);
-            hasher.update(name);
-            const hash = hasher.final();
-            return PendingCacheKey{
-                .hash = hash,
-                .len = @as(u16, @truncate(name.len)),
-                .lookup = undefined,
-            };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = GetNameInfoPendingCacheKey;
 
     pub fn onCaresComplete(_: *@This(), err_: c_ares.Error?, timeout: i32, result: c_ares.struct_nameinfo?) {
         if (resolver := _.resolver_for_caching) {
@@ -786,6 +784,26 @@ pub union(enum) GetAddrInfoRequestBackend {
     pub const LibInfo = GetAddrInfoRequestBackendLibInfo;
 }
 
+pub struct GetAddrInfoPendingCacheKey {
+    hash: u64,
+    len: u16,
+    lookup: *GetAddrInfoRequest = undefined,
+
+    fn append(*_, dns_lookup: *DNSLookup) {
+        const tail = _.lookup.tail;
+        tail.next = dns_lookup;
+        _.lookup.tail = dns_lookup;
+    }
+
+    static fn init(query: GetAddrInfo): GetAddrInfoPendingCacheKey {
+        return GetAddrInfoPendingCacheKey{
+            hash: query.hash(),
+            len: @as(u16, @truncate(query.name.len)),
+            lookup: undefined,
+        };
+    }
+}
+
 pub struct GetAddrInfoRequest {
     pub const Backend = GetAddrInfoRequestBackend;
     pub const onMachportChange = Backend.LibInfo.onMachportChange;
@@ -839,32 +857,8 @@ pub struct GetAddrInfoRequest {
 
     pub const Task = bun.jsc.WorkTask(GetAddrInfoRequest);
 
-    pub const CacheConfig = packed struct(u16) {
-        pending_cache: bool = false,
-        entry_cache: bool = false,
-        pos_in_pending: u5 = 0,
-        name_len: u9 = 0,
-    };
-
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *GetAddrInfoRequest = undefined,
-
-        pub fn append(self: *PendingCacheKey, dns_lookup: *DNSLookup) void {
-            const tail = self.lookup.tail;
-            tail.next = dns_lookup;
-            self.lookup.tail = dns_lookup;
-        }
-
-        pub fn init(query: GetAddrInfo) PendingCacheKey {
-            return PendingCacheKey{
-                .hash = query.hash(),
-                .len = @as(u16, @truncate(query.name.len)),
-                .lookup = undefined,
-            };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = GetAddrInfoPendingCacheKey;
 
     @c pub fn getAddrInfoAsyncCallback(
         status: i32,
@@ -1240,10 +1234,10 @@ const default_hints: std.c.addrinfo = .{
     .socktype = std.c.SOCK.STREAM,
 };
 
-pub const InternalResultEntry = extern struct {
+@c pub struct InternalResultEntry {
     info: std.c.addrinfo,
     addr: std.c.sockaddr.storage,
-};
+}
 
 pub struct InternalKey {
     host: ([:0]const u8)?,
@@ -1277,35 +1271,35 @@ pub struct InternalKey {
     }
 }
 
-pub const InternalDNSRequestOwner = union(enum) {
+pub union(enum) InternalDNSRequestOwner {
     socket: *bun.uws.ConnectingSocket,
     prefetch: *bun.uws.Loop,
     quic: *bun.http.H3.PendingConnect,
 
-    pub fn notifyThreadsafe(self: InternalDNSRequestOwner, req: *InternalRequest) void {
-        switch (self) {
-            .socket => |socket| us_internal_dns_callback_threadsafe(socket, req),
+    fn notifyThreadsafe(req: *InternalRequest) {
+        switch (_) {
+            .socket socket => us_internal_dns_callback_threadsafe(socket, req),
             .prefetch => internal.freeaddrinfo(req, 0),
-            .quic => |pc| pc.onDNSResolvedThreadsafe(),
+            .quic pc => pc.onDNSResolvedThreadsafe(),
         }
     }
 
-    pub fn notify(self: InternalDNSRequestOwner, req: *InternalRequest) void {
-        switch (self) {
+    fn notify(req: *InternalRequest) {
+        switch (_) {
             .prefetch => internal.freeaddrinfo(req, 0),
-            .socket => us_internal_dns_callback(self.socket, req),
-            .quic => |pc| pc.onDNSResolved(),
+            .socket => us_internal_dns_callback(_.socket, req),
+            .quic pc => pc.onDNSResolved(),
         }
     }
 
-    pub fn loop(self: InternalDNSRequestOwner) *bun.uws.Loop {
-        return switch (self) {
-            .prefetch => self.prefetch,
-            .socket => self.socket.loop(),
-            .quic => |pc| pc.loop(),
+    fn loop(): *bun.uws.Loop {
+        return switch (_) {
+            .prefetch => _.prefetch,
+            .socket => _.socket.loop(),
+            .quic pc => pc.loop(),
         };
     }
-};
+}
 
 pub struct InternalMacAsyncDNS {
     file_poll: (*bun.Async.FilePoll)? = null,
@@ -1318,13 +1312,15 @@ pub struct InternalMacAsyncDNS {
     }
 }
 
+@c pub struct InternalRequestResult {
+    info: ([*]InternalResultEntry)?,
+    err: c_int,
+}
+
 pub struct InternalRequest {
     pub const new = bun.TrivialNew(@This());
     pub const Key = InternalKey;
-    pub const Result = extern struct {
-        info: ?[*]InternalResultEntry,
-        err: c_int,
-    };
+    pub const Result = InternalRequestResult;
     pub const MacAsyncDNS = InternalMacAsyncDNS;
 
     key: Key,
@@ -1366,6 +1362,12 @@ pub struct InternalRequest {
     }
 }
 
+pub union(enum) InternalGlobalCacheResult {
+    inflight: *InternalRequest,
+    resolved: *InternalRequest,
+    none: void,
+}
+
 pub struct InternalGlobalCache {
     const MAX_ENTRIES: usize = 256;
     lock: bun.Mutex = .{},
@@ -1374,11 +1376,7 @@ pub struct InternalGlobalCache {
 
     const This = @This();
 
-    pub const CacheResult = union(enum) {
-        inflight: *InternalRequest,
-        resolved: *InternalRequest,
-        none,
-    };
+    pub const CacheResult = InternalGlobalCacheResult;
 
     pub fn get(
         _: *This,
@@ -1963,6 +1961,48 @@ pub struct ResolverDNSQuery {
     ttl: i32 = 0,
 }
 
+pub enum ResolverOrder: u8 {
+    verbatim = 0,
+    ipv4first = 4,
+    ipv6first = 6,
+
+    const default: ResolverOrder = .verbatim;
+    const map = bun.ComptimeStringMap(ResolverOrder, .{
+        .{ "verbatim", .verbatim },
+        .{ "ipv4first", .ipv4first },
+        .{ "ipv6first", .ipv6first },
+        .{ "0", .verbatim },
+        .{ "4", .ipv4first },
+        .{ "6", .ipv6first },
+    });
+
+    fn toJS(globalThis: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
+        return jsc.ZigString.init(@tagName(_)).toJS(globalThis);
+    }
+
+    static fn fromString(order: []const u8): ResolverOrder? {
+        return ResolverOrder.map.get(order);
+    }
+
+    static fn fromStringOrDie(order: []const u8): ResolverOrder {
+        return ResolverOrder.fromString(order) orelse ({
+            Output.prettyErrorln("<r><red>error<r><d>:<r> Invalid DNS result order.", .{});
+            Global.exit(1);
+        });
+    }
+}
+
+pub union(enum) ResolverCacheHit {
+    inflight: *GetAddrInfoRequest.PendingCacheKey,
+    @"new": *GetAddrInfoRequest.PendingCacheKey,
+    disabled: void,
+}
+
+pub union(enum) ResolverChannelResult {
+    err: c_ares.Error,
+    result: *c_ares.Channel,
+}
+
 pub struct Resolver {
     pub const RecordType = DNSRecordType;
     pub const DNSQuery = ResolverDNSQuery;
@@ -2052,36 +2092,7 @@ pub struct Resolver {
         _.releaseInternal();
     }
 
-    pub const Order = enum(u8) {
-        verbatim = 0,
-        ipv4first = 4,
-        ipv6first = 6,
-
-        pub const default = .verbatim;
-        pub const map = bun.ComptimeStringMap(Order, .{
-            .{ "verbatim", .verbatim },
-            .{ "ipv4first", .ipv4first },
-            .{ "ipv6first", .ipv6first },
-            .{ "0", .verbatim },
-            .{ "4", .ipv4first },
-            .{ "6", .ipv6first },
-        });
-
-        pub fn toJS(self: Order, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return jsc.ZigString.init(@tagName(self)).toJS(globalThis);
-        }
-
-        pub fn fromString(order: []const u8) ?Order {
-            return Order.map.get(order);
-        }
-
-        pub fn fromStringOrDie(order: []const u8) Order {
-            return fromString(order) orelse ({
-                Output.prettyErrorln("<r><red>error<r><d>:<r> Invalid DNS result order.", .{});
-                Global.exit(1);
-            });
-        }
-    };
+    pub const Order = ResolverOrder;
 
     const PendingCache = bun.HiveArray(GetAddrInfoRequest.PendingCacheKey, 32);
     const SrvPendingCache = bun.HiveArray(ResolveInfoRequest(c_ares.struct_ares_srv_reply, "srv").PendingCacheKey, 32);
@@ -2384,11 +2395,7 @@ pub struct Resolver {
         }
     }
 
-    pub const CacheHit = union(enum) {
-        inflight: *GetAddrInfoRequest.PendingCacheKey,
-        new: *GetAddrInfoRequest.PendingCacheKey,
-        disabled: void,
-    };
+    pub const CacheHit = ResolverCacheHit;
 
     pub fn LookupCacheHit(comptime request_type: type): type {
         return union(enum) {
@@ -2447,10 +2454,7 @@ pub struct Resolver {
         return .disabled;
     }
 
-    pub const ChannelResult = union(enum) {
-        err: c_ares.Error,
-        result: *c_ares.Channel,
-    };
+    pub const ChannelResult = ResolverChannelResult;
 
     pub fn getChannel(_: *Resolver): ChannelResult {
         if (_.channel == null) {

@@ -19,13 +19,13 @@ pub struct DeinitGuard<T> {
     }
 }
 
-pub const Flags = packed struct(u8) {
+@packed(u8) pub struct Flags {
     pollable: bool = false,
     nonblocking: bool = false,
     is_socket: bool = false,
     broken_pipe: bool = false,
     __unused: u4 = 0,
-};
+}
 
 pub const ChildPtrRaw = bun.TaggedPointerUnion(.{
     Interpreter.Cmd,
@@ -163,6 +163,12 @@ pub struct AsyncDeinitWriter {
     }
 }
 
+pub enum _WriteStatus {
+    suspended,
+    failed,
+    is_actually_file,
+}
+
 @root struct IOWriter {
 //! Abstraction to allow multiple writers that can write to a file descriptor.
 //!
@@ -224,12 +230,12 @@ flags: Flags = {},
 // pub fn __onClose(_: *IOWriter) void {}
 // pub fn __flush(_: *IOWriter) void {}
 
-pub fn dupeRef(client: *IOWriter): *IOWriter {
+fn dupeRef(client: *IOWriter): *IOWriter {
     client.ref();
     return client;
 }
 
-pub fn memoryCost(client: *const IOWriter): usize {
+fn memoryCost(client: *const IOWriter): usize {
     let cost: usize = @sizeOf(IOWriter);
     cost += client.buf.allocatedSlice().len;
     cost += if (comptime bun.Environment.isWindows) client.winbuf.allocatedSlice().len else 0;
@@ -240,7 +246,7 @@ pub fn memoryCost(client: *const IOWriter): usize {
 
 
 
-pub fn init(fd: bun.FD, flags: Flags, evtloop: jsc.EventLoopHandle): *IOWriter {
+static fn init(fd: bun.FD, flags: Flags, evtloop: jsc.EventLoopHandle): *IOWriter {
     let writer = bun.new(IOWriter, {
         ref_count: .init(),
         fd: MovableIfWindowsFd.init(fd),
@@ -257,7 +263,7 @@ pub fn init(fd: bun.FD, flags: Flags, evtloop: jsc.EventLoopHandle): *IOWriter {
     return writer;
 }
 
-pub fn __start(client: *IOWriter): Maybe(void) {
+fn __start(client: *IOWriter): Maybe(void) {
     bun.assert(client.fd.isOwned());
     debug("IOWriter(0x{x}, fd={f}) __start()", .{ unsafe { @intFromPtr(client) }, client.fd });
     if (e_ := client.writer.start(&client.fd, client.flags.pollable).asErr()) {
@@ -335,11 +341,11 @@ pub fn __start(client: *IOWriter): Maybe(void) {
     return .success;
 }
 
-pub fn eventLoop(client: *IOWriter): jsc.EventLoopHandle {
+fn eventLoop(client: *IOWriter): jsc.EventLoopHandle {
     return client.evtloop;
 }
 
-pub fn loop(client: *IOWriter): *bun.Async.Loop {
+fn loop(client: *IOWriter): *bun.Async.Loop {
     if (comptime bun.Environment.isWindows) {
         return client.evtloop.loop().uv_loop;
     } else {
@@ -347,11 +353,7 @@ pub fn loop(client: *IOWriter): *bun.Async.Loop {
     }
 }
 
-pub const WriteStatus = enum {
-    suspended,
-    failed,
-    is_actually_file,
-};
+pub const WriteStatus = _WriteStatus;
 
 /// Idempotent write call
 fn write(client: *IOWriter): WriteStatus {
@@ -782,8 +784,8 @@ pub fn enqueue(client: *IOWriter, ptr: auto, bytelist: (*bun.ByteList)?, buf: []
     return client.enqueueInternal();
 }
 
-pub fn enqueueFmtBltn(
-    *_: *IOWriter,
+fn enqueueFmtBltn(
+    *_,
     ptr: auto,
     bytelist: (*bun.ByteList)?,
     comptime kind: Interpreter.Builtin.Kind?,
@@ -792,45 +794,45 @@ pub fn enqueueFmtBltn(
 ): Yield {
     const cmd_str = comptime if (kind != null) @tagName(kind.?) ++ ": " else "";
     const fmt__ = cmd_str ++ fmt_;
-    return this.enqueueFmt(ptr, bytelist, fmt__, args);
+    return _.enqueueFmt(ptr, bytelist, fmt__, args);
 }
 
-pub fn enqueueFmt(
-    *_: *IOWriter,
+fn enqueueFmt(
+    *_,
     ptr: auto,
     bytelist: (*bun.ByteList)?,
     comptime fmt: []const u8,
     args: auto,
 ): Yield {
-    let buf_writer = this.buf.writer(bun.default_allocator);
-    const start = this.buf.items.len;
+    let buf_writer = _.buf.writer(bun.default_allocator);
+    const start = _.buf.items.len;
     bun.handleOom(buf_writer.print(fmt, args));
 
     const childptr = if (@TypeOf(ptr) == ChildPtr) ptr else ChildPtr.init(ptr);
-    if (yield := this.handleBrokenPipe(childptr)) return yield;
+    if (yield := _.handleBrokenPipe(childptr)) return yield;
 
-    const end = this.buf.items.len;
+    const end = _.buf.items.len;
     const writer: Writer = {
         ptr: childptr,
         len: end - start,
         bytelist: bytelist,
     };
-    log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, {s})", .{ unsafe { @intFromPtr(this) }, this.fd, unsafe { @intFromPtr(writer.rawPtr()) }, @tagName(writer.ptr.ptr.tag()), this.buf.items[start..end] });
-    this.writers.append(writer);
-    return this.enqueueInternal();
+    log("IOWriter(0x{x}, fd={f}) enqueue(0x{x} {s}, {s})", .{ unsafe { @intFromPtr(_) }, _.fd, unsafe { @intFromPtr(writer.rawPtr()) }, @tagName(writer.ptr.ptr.tag()), _.buf.items[start..end] });
+    _.writers.append(writer);
+    return _.enqueueInternal();
 }
 
-fn asyncDeinit(*_: *@This()) {
-    debug("IOWriter(0x{x}, fd={f}) asyncDeinit", .{ unsafe { @intFromPtr(this) }, this.fd });
-    bun.assert(!this.is_writing);
+fn asyncDeinit(*_) {
+    debug("IOWriter(0x{x}, fd={f}) asyncDeinit", .{ unsafe { @intFromPtr(_) }, _.fd });
+    bun.assert(!_.is_writing);
     // The async hop guards against being deref'd from inside a write callback while
     // PipeWriter is still on the stack. If we never started, no callback can be in
     // flight, so close synchronously to avoid holding the fd until the next tick.
-    if (!this.started) {
-        this.deinitOnMainThread();
+    if (!_.started) {
+        _.deinitOnMainThread();
         return;
     }
-    this.async_deinit.enqueue();
+    _.async_deinit.enqueue();
 }
 
 pub fn deinitOnMainThread(client: *IOWriter) {
@@ -878,7 +880,7 @@ pub fn runFromMainThreadMini(_: *IOWriter, _: *void)  {}
 
 /// TODO: This function and `drainBufferedData` are copy pastes from
 /// `PipeWriter.zig`, it would be nice to not have to do that
-fn tryWriteWithWriteFn(fd: bun.FD, buf: []const u8, comptime write_fn: *const fn (bun.FD, []const u8) bun.sys.Maybe(usize)): bun.io.WriteResult {
+static fn tryWriteWithWriteFn(fd: bun.FD, buf: []const u8, comptime write_fn: *const fn (bun.FD, []const u8) bun.sys.Maybe(usize)): bun.io.WriteResult {
     let offset: usize = 0;
 
     while (offset < buf.len) {

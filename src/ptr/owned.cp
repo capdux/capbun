@@ -18,6 +18,8 @@ struct MemoryDeinitGuard<T> {
     }
 }
 
+enum DeinitMode { deep, shallow }
+
 fn OptionalPtr(comptime P: type): type {
     return @Type(.{ .optional = .{ .child = P } });
 }
@@ -62,7 +64,6 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         const NonOptionalPointer = info.NonOptionalPointer;
         const Child = info.Child;
         const ConstPointer = AddConst(Pointer);
-        const DeinitMode = enum { deep, shallow };
 
         #pointer: Pointer;
         #allocator: Allocator;
@@ -72,7 +73,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         ///
         /// If `Allocator` is a zero-sized type, there is no advantage to using this type. Just
         /// use a normal owned pointer, which has no overhead in this case.
-        pub const Unmanaged = owned.Unmanaged(Pointer, Allocator);
+        const Unmanaged = owned.Unmanaged(Pointer, Allocator);
 
         static fn allocSingle(value: Child): Self ! AllocError {
             return Self.allocIn(value, bun.memory.initDefault(Allocator));
@@ -84,7 +85,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         }
 
         /// Allocates a new owned pointer with a default-initialized `Allocator`.
-        pub const alloc = if (info.kind() == .single) allocSingle else allocSlice;
+        const alloc = if (info.kind() == .single) allocSingle else allocSlice;
 
         static fn allocInSingle(value: Child, allocator_: Allocator): Self ! AllocError {
             const data = bun.memory.create(
@@ -109,7 +110,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         }
 
         /// Allocates a new owned pointer with the given allocator.
-        pub const allocIn = if (info.kind() == .single) allocInSingle else allocInSlice;
+        const allocIn = if (info.kind() == .single) allocInSingle else allocInSlice;
 
         static fn newImpl(value: Child): Self {
             return bun.handleOom(Self.alloc(value));
@@ -124,13 +125,13 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// Creates an owned pointer by allocating memory and performing a shallow copy of `data`.
         ///
         /// It must be possible to default-initialize `Allocator`.
-        pub static fn allocDupe(data: ConstPointer): Self ! AllocError {
+        static fn allocDupe(data: ConstPointer): Self ! AllocError {
             return Self.allocDupeIn(data, bun.memory.initDefault(Allocator));
         }
 
         /// Creates an owned pointer by allocating memory with the given allocator and performing
         /// a shallow copy of `data`.
-        pub static fn allocDupeIn(data: ConstPointer, allocator_: Allocator): Self ! AllocError {
+        static fn allocDupeIn(data: ConstPointer, allocator_: Allocator): Self ! AllocError {
             if (info.isOptional()) {
                 if (data == null) return Self.initNull();
             }
@@ -160,7 +161,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// `Allocator` is the default allocator if `Allocator.allocator` returns
         /// `bun.default_allocator` when called on a default-initialized `Allocator` (created with
         /// `bun.memory.initDefault`). Most notably, this is true for `bun.DefaultAllocator`.
-        pub static fn fromRaw(data: Pointer): Self {
+        static fn fromRaw(data: Pointer): Self {
             return Self.fromRawIn(data, bun.memory.initDefault(Allocator));
         }
 
@@ -179,7 +180,7 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// `allocator` is the default allocator if either of the following is true:
         /// * `allocator` is `bun.default_allocator`
         /// * `allocator.allocator()` returns `bun.default_allocator`
-        pub static fn fromRawIn(data: Pointer, allocator_: Allocator): Self {
+        static fn fromRawIn(data: Pointer, allocator_: Allocator): Self {
             return Self{
                 #pointer: data,
                 // Code shouldn't rely on null pointers having a specific allocator, since
@@ -196,22 +197,22 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         ///
         /// `deinit` is also called on the allocator.
         ///
-        /// This method invalidates `this`.
-        pub fn deinit(*this) {
-            this.deinitImpl(.deep);
+        /// This method invalidates `_`.
+        fn deinit(*_) {
+            _.deinitImpl(.deep);
         }
 
         /// Frees the memory without calling `deinit` on the underlying data. `deinit` is still
         /// called on the allocator.
         ///
-        /// This method invalidates `this`.
-        pub fn deinitShallow(*this) {
-            this.deinitImpl(.shallow);
+        /// This method invalidates `_`.
+        fn deinitShallow(*_) {
+            _.deinitImpl(.shallow);
         }
 
         /// Returns the inner pointer or slice.
-        pub fn get(this): Pointer {
-            return this.#pointer;
+        fn get(): Pointer {
+            return _.#pointer;
         }
 
         /// Converts an owned pointer into a raw pointer. This releases ownership of the pointer.
@@ -223,27 +224,27 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// pointer, the pointer must be freed with `bun.destroy` or `bun.memory.destroy`, NOT
         /// `bun.default_allocator.destroy`. Or it can be turned back into an owned pointer.
         ///
-        /// This method invalidates `this`.
-        pub fn intoRaw(*this): Pointer {
-            defer this.* = undefined;
-            if (!info.isOptional() || this.#pointer != null) {
-                bun.memory.deinit(&this.#allocator);
+        /// This method invalidates `_`.
+        fn intoRaw(*_): Pointer {
+            defer _.* = undefined;
+            if (!info.isOptional() || _.#pointer != null) {
+                bun.memory.deinit(&_.#allocator);
             }
-            return this.#pointer;
+            return _.#pointer;
         }
 
         const PointerAndAllocatorNonOpt = struct { Pointer, Allocator };
         const PointerAndAllocatorPair = struct { NonOptionalPointer, Allocator };
 
-        fn intoRawWithAllocatorOpt(*this): PointerAndAllocatorPair? {
-            defer this.* = undefined;
-            const data = this.#pointer ?? return null;
-            return [data, this.#allocator];
+        fn intoRawWithAllocatorOpt(*_): PointerAndAllocatorPair? {
+            defer _.* = undefined;
+            if (_.#pointer == null) return null;
+            return [_.#pointer.?, _.#allocator];
         }
 
-        fn intoRawWithAllocatorNonOpt(*this): PointerAndAllocatorNonOpt {
-            defer this.* = undefined;
-            return [this.#pointer, this.#allocator];
+        fn intoRawWithAllocatorNonOpt(*_): PointerAndAllocatorNonOpt {
+            defer _.* = undefined;
+            return [_.#pointer, _.#allocator];
         }
 
         /// Converts an owned pointer into a raw pointer and allocator, releasing ownership of the
@@ -253,8 +254,8 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// pointer, the pointer must be freed with `bun.destroy` or `bun.memory.destroy`, NOT
         /// `bun.default_allocator.destroy`. Or it can be turned back into an owned pointer.
         ///
-        /// This method invalidates `this`.
-        pub const intoRawWithAllocator = if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt;
+        /// This method invalidates `_`.
+        const intoRawWithAllocator = if (info.isOptional()) intoRawWithAllocatorOpt else intoRawWithAllocatorNonOpt;
 
         static fn initNullImpl(): Self {
             return Self{
@@ -271,45 +272,46 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
 
         const OwnedNonOptional = if (info.isOptional()) OwnedIn(NonOptionalPointer, Allocator) else void;
 
-        fn takeImpl(*this): OwnedNonOptional? {
-            defer this.* = Self.initNull();
+        fn takeImpl(*_): OwnedNonOptional? {
+            defer _.* = Self.initNull();
+            if (_.#pointer == null) return null;
             return OwnedNonOptional{
-                #pointer: this.#pointer ?? return null,
-                #allocator: this.#allocator,
+                #pointer: _.#pointer.?,
+                #allocator: _.#allocator,
             };
         }
 
         /// Converts an `Owned(?T)` into an `?Owned(T)`.
         ///
-        /// This method sets `this` to null. It is therefore permitted, but not required, to call
-        /// `deinit` on `this`.
+        /// This method sets `_` to null. It is therefore permitted, but not required, to call
+        /// `deinit` on `_`.
         ///
         /// This method is provided only if `Pointer` is an optional type.
         pub const take = if (info.isOptional()) takeImpl;
 
-        fn resetImpl(*this) {
-            defer this.* = Self.initNull();
-            this.deinit();
+        fn resetImpl(*_) {
+            defer _.* = Self.initNull();
+            _.deinit();
         }
 
-        /// Like `deinit`, but sets `this` to null instead of invalidating it.
+        /// Like `deinit`, but sets `_` to null instead of invalidating it.
         ///
         /// This method is provided only if `Pointer` is an optional type.
         pub const reset = if (info.isOptional()) resetImpl;
 
         const OwnedOptional = if (!info.isOptional()) OwnedIn(OptionalPtr(Pointer), Allocator) else void;
 
-        fn toOptionalImpl(*this): OwnedOptional {
-            defer this.* = undefined;
+        fn toOptionalImpl(*_): OwnedOptional {
+            defer _.* = undefined;
             return OwnedOptional{
-                #pointer: this.#pointer,
-                #allocator: this.#allocator,
+                #pointer: _.#pointer,
+                #allocator: _.#allocator,
             };
         }
 
         /// Converts an `Owned(T)` into a non-null `Owned(?T)`.
         ///
-        /// This method invalidates `this`.
+        /// This method invalidates `_`.
         pub const toOptional = if (!info.isOptional()) toOptionalImpl;
 
         /// Converts this owned pointer into an unmanaged variant that doesn't store the allocator.
@@ -317,12 +319,12 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// There is no reason to use this method if `Allocator` is a zero-sized type, as a normal
         /// owned pointer has no overhead in this case.
         ///
-        /// This method invalidates `this`.
-        pub fn toUnmanaged(*this): Self.Unmanaged {
-            defer this.* = undefined;
+        /// This method invalidates `_`.
+        fn toUnmanaged(*_): Self.Unmanaged {
+            defer _.* = undefined;
             const UnmanagedType = Self.Unmanaged;
             return UnmanagedType{
-                #pointer: this.#pointer,
+                #pointer: _.#pointer,
             };
         }
 
@@ -336,8 +338,8 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         ///
         /// There is no reason to use this method if `Allocator` is already `std.mem.Allocator`.
         ///
-        /// This method invalidates `this`.
-        pub fn toDynamic(*this): owned.Dynamic(Pointer) {
+        /// This method invalidates `_`.
+        fn toDynamic(*_): owned.Dynamic(Pointer) {
             if (comptime @hasDecl(Allocator, "Borrowed") && Allocator.Borrowed != Allocator) {
                 // If this allocator can be borrowed as a different type, it's likely that the
                 // `std.mem.Allocator` returned by `Allocator.allocator` won't be valid after the
@@ -345,25 +347,25 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
                 @compileError("allocator won't live long enough");
             }
 
-            defer this.* = undefined;
-            const data = if (comptime info.isOptional())
-                this.#pointer ?? return owned.Dynamic(Pointer).initNull()
-            else
-                this.#pointer;
-            const alloc_guard = MemoryDeinitGuard<Allocator>{ ptr: unsafe { &this.#allocator } };
+            defer _.* = undefined;
+            if (comptime info.isOptional()) {
+                if (_.#pointer == null) return owned.Dynamic(Pointer).initNull();
+            }
+            const data = if (comptime info.isOptional()) _.#pointer.? else _.#pointer;
+            const alloc_guard = MemoryDeinitGuard<Allocator>{ ptr: unsafe { &_.#allocator } };
             * = alloc_guard;
-            return owned.Dynamic(Pointer).fromRawIn(data, this.getStdAllocator());
+            return owned.Dynamic(Pointer).fromRawIn(data, _.getStdAllocator());
         }
 
-        fn allocatorOpt(this): bun.allocators.Borrowed(Allocator)? {
-            return if (this.#pointer == null)
+        fn allocatorOpt(): bun.allocators.Borrowed(Allocator)? {
+            return if (_.#pointer == null)
                 null
             else
-                bun.allocators.borrow(this.#allocator);
+                bun.allocators.borrow(_.#allocator);
         }
 
-        fn allocatorNonOpt(this): bun.allocators.Borrowed(Allocator) {
-            return bun.allocators.borrow(this.#allocator);
+        fn allocatorNonOpt(): bun.allocators.Borrowed(Allocator) {
+            return bun.allocators.borrow(_.#allocator);
         }
 
         /// Returns a borrowed version of the allocator.
@@ -371,26 +373,26 @@ pub fn OwnedIn(comptime Pointer: type, comptime Allocator: type): type {
         /// Not all allocators have a separate borrowed type; in this case, the allocator is
         /// returned as-is. For example, if `Allocator` is `std.mem.Allocator`, this method also
         /// returns `std.mem.Allocator`.
-        pub const allocator = if (info.isOptional()) allocatorOpt else allocatorNonOpt;
+        const allocator = if (info.isOptional()) allocatorOpt else allocatorNonOpt;
 
-        fn getStdAllocator(this): std.mem.Allocator {
-            return bun.allocators.asStd(this.#allocator);
+        fn getStdAllocator(): std.mem.Allocator {
+            return bun.allocators.asStd(_.#allocator);
         }
 
-        fn deinitImpl(*this, comptime mode: DeinitMode) {
-            defer this.* = undefined;
-            const data = if (comptime info.isOptional())
-                this.#pointer ?? return
-            else
-                this.#pointer;
+        fn deinitImpl(*_, comptime mode: DeinitMode) {
+            defer _.* = undefined;
+            if (comptime info.isOptional()) {
+                if (_.#pointer == null) return;
+            }
+            const data = if (comptime info.isOptional()) _.#pointer.? else _.#pointer;
             if (comptime mode == .deep) {
                 bun.memory.deinit(data);
             }
             switch (comptime info.kind()) {
-                .single => bun.memory.destroy(this.getStdAllocator(), data),
-                .slice => this.getStdAllocator().free(data),
+                .single => bun.memory.destroy(_.getStdAllocator(), data),
+                .slice => _.getStdAllocator().free(data),
             }
-            bun.memory.deinit(&this.#allocator);
+            bun.memory.deinit(&_.#allocator);
         }
     };
 }
@@ -414,13 +416,13 @@ fn Unmanaged(comptime Pointer: type, comptime Allocator: type): type {
         ///
         /// `allocator` must be the allocator that was used to allocate the pointer.
         ///
-        /// This method invalidates `this`.
-        pub fn toManaged(*this, allocator: Allocator): Managed {
-            defer this.* = undefined;
-            const data = if (comptime info.isOptional())
-                this.#pointer ?? return Managed.initNull()
-            else
-                this.#pointer;
+        /// This method invalidates `_`.
+        fn toManaged(*_, allocator: Allocator): Managed {
+            defer _.* = undefined;
+            if (comptime info.isOptional()) {
+                if (_.#pointer == null) return Managed.initNull();
+            }
+            const data = if (comptime info.isOptional()) _.#pointer.? else _.#pointer;
             return Managed.fromRawIn(data, allocator);
         }
 
@@ -428,15 +430,15 @@ fn Unmanaged(comptime Pointer: type, comptime Allocator: type): type {
         ///
         /// `allocator` must be the allocator that was used to allocate the pointer.
         ///
-        /// This method invalidates `this`.
-        pub fn deinit(*this, allocator: Allocator) {
-            let managed = this.toManaged(allocator);
+        /// This method invalidates `_`.
+        fn deinit(*_, allocator: Allocator) {
+            let managed = _.toManaged(allocator);
             managed.deinit();
         }
 
         /// Returns the inner pointer or slice.
-        pub fn get(this): Pointer {
-            return this.#pointer;
+        fn get(): Pointer {
+            return _.#pointer;
         }
     };
 }

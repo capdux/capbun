@@ -325,12 +325,17 @@ pub fn enqueuePackageForDownload(
     }
 }
 
-const DependencyToEnqueue = union(enum) {
+struct DependencyResolution {
+    package_id: PackageID,
+    resolution: Resolution,
+}
+
+union(enum) DependencyToEnqueue {
     pending: DependencyID,
-    resolution: struct { package_id: PackageID, resolution: Resolution },
+    resolution: DependencyResolution,
     not_found: void,
     failure: anyerror,
-};
+}
 
 pub fn enqueueDependencyToRoot(
     mgr: *PackageManager,

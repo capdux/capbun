@@ -123,6 +123,100 @@ pub fn getMatcherFlags(comptime T: type, value: JSValue): Expect.Flags {
 
 /// https://jestjs.io/docs/expect
 // To support async tests, we need to track the test ID
+pub struct _TestScope {
+    test_id: TestRunner.Test.ID,
+    describe: *DescribeScope,
+}
+
+pub enum _ExpectPromiseFlag: u2 {
+    none = 0,
+    resolves = 1,
+    rejects = 2,
+}
+
+@packed(u8)
+pub struct _ExpectFlags {
+    // note: keep this struct in sync with C++ implementation (at bindings.cpp)
+    promise: _ExpectPromiseFlag = .none,
+    not: bool = false,
+    // This was originally padding.
+    // We don't use all the bits in the u5, so if you need to reuse this elsewhere, you could.
+    asymmetric_matcher_constructor_type: AsymmetricMatcherType = .none,
+
+    pub const AsymmetricMatcherConstructorType = AsymmetricMatcherType;
+    pub const FlagsCppType = u8;
+
+    comptime {
+        if (@bitSizeOf(_ExpectFlags) != @bitSizeOf(FlagsCppType)) @compileError("Flags size is invalid, should match FlagsCppType");
+    }
+
+    inline fn encode(): FlagsCppType {
+        return @bitCast(_);
+    }
+
+    static inline fn decode(bitset: FlagsCppType): _ExpectFlags {
+        return @bitCast(bitset);
+    }
+
+    static inline fn fromBitset(bitset: auto): _ExpectFlags {
+        return @bitCast(@as(u8, @truncate(@as(u32, @bitCast(bitset)))));
+    }
+}
+
+struct _TrimResult {
+    trimmed: []const u8,
+    start_indent: ([]const u8)?,
+    end_indent: ([]const u8)?,
+}
+
+struct _CustomMatcherParamsFormatter {
+    colors: bool,
+    globalThis: *JSGlobalObject,
+    matcher_fn: JSValue,
+
+    fn format(writer: *std.Io.Writer)! {
+        // try to detect param names from matcher_fn (user function) source code
+        if (source_str := jsc.JSFunction.getSourceCode(_.matcher_fn)) {
+            const source_slice = DeinitGuard<ZigString.Slice>{ val: source_str.toUTF8(_.globalThis.allocator()) };
+
+            let source: string = source_slice.val.slice();
+            if (lparen := std.mem.indexOfScalar(u8, source, '(')) {
+                if (rparen := std.mem.indexOfScalarPos(u8, source, lparen, ')')) {
+                    const params_str = source[(lparen + 1)..rparen];
+                    let param_index: usize = 0;
+                    let iter = std.mem.splitScalar(u8, params_str, ',');
+                    while (param_name := iter.next()) : (param_index += 1) {
+                        if (param_index > 0) { // skip the first param from the matcher_fn, which is the received value
+                            if (param_index > 1) {
+                                writer.writeAll(if (_.colors) Output.prettyFmt("<r><d>, <r><green>", true) else ", ")?;
+                            } else if (_.colors) {
+                                writer.writeAll("<green>")?;
+                            }
+                            const param_name_trimmed = std.mem.trim(u8, param_name, " ");
+                            if (param_name_trimmed.len > 0) {
+                                writer.writeAll(param_name_trimmed)?;
+                            } else {
+                                writer.print("arg{d}", .{ param_index - 1 })?;
+                            }
+                        }
+                    }
+                    if (param_index > 1 && _.colors) {
+                        writer.writeAll("<r>")?;
+                    }
+                    return; // don't do fallback
+                }
+            }
+        }
+
+        // fallback
+        if (_.colors) {
+            try writer.print(Output.prettyFmt("<green>...args<r>", true), .{});
+        } else {
+            try writer.print(Output.prettyFmt("<green>...args<r>", false), .{});
+        }
+    }
+}
+
 pub struct Expect {
     pub const js = jsc.Codegen.JSExpect;
     pub const toJS = js.toJS;
@@ -133,10 +227,7 @@ pub struct Expect {
     parent: (*bun.jsc.Jest.bun_test.BunTest.RefData)?,
     custom_label: bun.String = bun.String.empty,
 
-    pub const TestScope = struct {
-        test_id: TestRunner.Test.ID,
-        describe: *DescribeScope,
-    };
+    pub const TestScope = _TestScope;
 
     fn incrementExpectCallCounter(*_) {
         const parent = _.parent orelse return; // not in bun:test
@@ -158,40 +249,7 @@ pub struct Expect {
         return parent.bunTest();
     }
 
-    pub const Flags = packed struct(u8) {
-        // note: keep this struct in sync with C++ implementation (at bindings.cpp)
-
-        promise: enum(u2) {
-            none = 0,
-            resolves = 1,
-            rejects = 2,
-        } = .none,
-
-        not: bool = false,
-
-        // This was originally padding.
-        // We don't use all the bits in the u5, so if you need to reuse this elsewhere, you could.
-        asymmetric_matcher_constructor_type: AsymmetricMatcherType = .none,
-
-        pub const AsymmetricMatcherConstructorType = AsymmetricMatcherType;
-
-        pub const FlagsCppType = u8;
-        comptime {
-            if (@bitSizeOf(Flags) != @bitSizeOf(FlagsCppType)) @compileError("Flags size is invalid, should match FlagsCppType");
-        }
-
-        pub inline fn encode(this: Flags): FlagsCppType {
-            return @bitCast(this);
-        }
-
-        pub inline fn decode(bitset: FlagsCppType): Flags {
-            return @bitCast(bitset);
-        }
-
-        pub inline fn fromBitset(bitset: anytype): Flags {
-            return @bitCast(@as(u8, @truncate(@as(u32, @bitCast(bitset)))));
-        }
-    };
+    pub const Flags = _ExpectFlags;
 
     static fn getSignature(comptime matcher_name: string, comptime args: string, comptime not: bool): [:0]const u8 {
         const received = "<d>expect(<r><red>received<r><d>).<r>";
@@ -735,7 +793,7 @@ pub struct Expect {
         }
         return err_value_res;
     }
-    const TrimResult = struct { trimmed: []const u8, start_indent: ([]const u8)?, end_indent: ([]const u8)? };
+    const TrimResult = _TrimResult;
     static fn trimLeadingWhitespaceForInlineSnapshot(str_in: []const u8, trimmed_buf: []u8): TrimResult {
         std.debug.assert(trimmed_buf.len == str_in.len);
         let src = str_in;
@@ -1114,51 +1172,7 @@ pub struct Expect {
         return JSValue.js_undefined;
     }
 
-    const CustomMatcherParamsFormatter = struct {
-        colors: bool,
-        globalThis: *JSGlobalObject,
-        matcher_fn: JSValue,
-
-        fn format(writer: *std.Io.Writer)! {
-            // try to detect param names from matcher_fn (user function) source code
-            if (source_str := jsc.JSFunction.getSourceCode(_.matcher_fn)) {
-                const source_slice = DeinitGuard<ZigString.Slice>{ val: source_str.toUTF8(_.globalThis.allocator()) };
-
-                let source: string = source_slice.val.slice();
-                if (lparen := std.mem.indexOfScalar(u8, source, '(')) {
-                    if (rparen := std.mem.indexOfScalarPos(u8, source, lparen, ')')) {
-                        const params_str = source[(lparen + 1)..rparen];
-                        let param_index: usize = 0;
-                        let iter = std.mem.splitScalar(u8, params_str, ',');
-                        while (param_name := iter.next()) : (param_index += 1) {
-                            if (param_index > 0) { // skip the first param from the matcher_fn, which is the received value
-                                if (param_index > 1) {
-                                    writer.writeAll(if (_.colors) Output.prettyFmt("<r><d>, <r><green>", true) else ", ")?;
-                                } else if (_.colors) {
-                                    writer.writeAll("<green>")?;
-                                }
-                                const param_name_trimmed = std.mem.trim(u8, param_name, " ");
-                                if (param_name_trimmed.len > 0) {
-                                    writer.writeAll(param_name_trimmed)?;
-                                } else {
-                                    writer.print("arg{d}", .{ param_index - 1 })?;
-                                }
-                            }
-                        }
-                        if (param_index > 1 && _.colors) {
-                            writer.writeAll("<r>")?;
-                        }
-                        return; // don't do fallback
-                    }
-                }
-            }
-
-            // fallback
-            switch (_.colors) {
-                inline else => |colors| try writer.print(Output.prettyFmt("<green>...args<r>", colors), .{}),
-            }
-        }
-    };
+    const CustomMatcherParamsFormatter = _CustomMatcherParamsFormatter;
 
     static fn throwInvalidMatcherError(globalThis: *JSGlobalObject, matcher_name: bun.String, result: JSValue): bun.JSError {
         @branchHint(.cold);
@@ -2155,6 +2169,99 @@ pub struct ExpectTypeOf {
     }
 }
 
+pub struct _AllCallsWithArgsFormatter {
+    globalThis: *JSGlobalObject,
+    calls: JSValue,
+    formatter: *jsc.ConsoleObject.Formatter,
+
+    fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
+        let printed_once = false;
+
+        const calls_count = @as(u32, i32(_.calls.getLength(_.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e)));
+        if (calls_count == 0) {
+            writer.writeAll("(no calls)")?;
+            return;
+        }
+
+        let i: u32 = 0;
+        while (i < calls_count) : (i += 1) {
+            if (printed_once) try writer.writeAll("\n");
+            printed_once = true;
+
+            writer.print("           {d: >4}: ", .{ i + 1 })?;
+            const call_args = _.calls.getIndex(_.globalThis, i) catch |e| return bun.deprecated.jsErrorToWriteError(e);
+            writer.print("{f}", .{ call_args.toFmt(_.formatter) })?;
+        }
+    }
+}
+
+pub enum _ReturnStatus {
+    throw,
+    @"return",
+    incomplete,
+
+    const Map = bun.ComptimeEnumMap(_ReturnStatus);
+}
+
+pub struct _AllCallsFormatter {
+    globalThis: *JSGlobalObject,
+    returns: JSValue,
+    formatter: *jsc.ConsoleObject.Formatter,
+
+    fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
+        let printed_once = false;
+
+        let num_returns: i32 = 0;
+        let num_calls: i32 = 0;
+
+        let iter = _.returns.arrayIterator(_.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e);
+        while (item := iter.next() catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
+            if (printed_once) try writer.writeAll("\n");
+            printed_once = true;
+
+            num_calls += 1;
+            writer.print("           {d: >2}: ", .{ num_calls })?;
+
+            const value = mock.jestMockReturnObject_value(_.globalThis, item) catch |e| return bun.deprecated.jsErrorToWriteError(e);
+            switch (mock.jestMockReturnObject_type(_.globalThis, item) catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
+                .@"return" => {
+                    writer.print("{f}", .{ value.toFmt(_.formatter) })?;
+                    num_returns += 1;
+                },
+                .throw => {
+                    writer.print("function call threw an error: {f}", .{ value.toFmt(_.formatter) })?;
+                },
+                .incomplete => {
+                    writer.print("<incomplete call>", .{})?;
+                },
+            }
+        }
+    }
+}
+
+pub struct _SuccessfulReturnsFormatter {
+    globalThis: *JSGlobalObject,
+    successful_returns: *const std.array_list.Managed(JSValue),
+    formatter: *jsc.ConsoleObject.Formatter,
+
+    fn format(writer: *std.Io.Writer)! {
+        const len = _.successful_returns.items.len;
+        if (len == 0) return;
+
+        let printed_once = false;
+
+        let i_val: usize = 1;
+        for (val of _.successful_returns.items) {
+            if (printed_once) try writer.writeAll("\n");
+            printed_once = true;
+
+            writer.print("           {d: >4}: ", .{ i_val })?;
+            writer.print("{f}", .{ val.toFmt(_.formatter) })?;
+            i_val += 1;
+        }
+    }
+}
+
 pub struct mock {
     static fn jestMockIterator(globalThis: *JSGlobalObject, value: bun.jsc.JSValue): bun.JSError!bun.jsc.JSArrayIterator {
         const returns: bun.jsc.JSValue = bun.cpp.JSMockFunction__getReturns(globalThis, value)?;
@@ -2178,99 +2285,10 @@ pub struct mock {
         return (try value.get(globalThis, "value")) ?? .js_undefined;
     }
 
-    pub const AllCallsWithArgsFormatter = struct {
-        globalThis: *JSGlobalObject,
-        calls: JSValue,
-        formatter: *jsc.ConsoleObject.Formatter,
-
-        static fn format(self: @This(), writer: *std.Io.Writer): std.Io.Writer.Error!void {
-            let printed_once = false;
-
-            const calls_count = @as(u32, i32(self.calls.getLength(self.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e)));
-            if (calls_count == 0) {
-                writer.writeAll("(no calls)")?;
-                return;
-            }
-
-            let i: u32 = 0;
-            while (i < calls_count) : (i += 1) {
-                if (printed_once) try writer.writeAll("\n");
-                printed_once = true;
-
-                writer.print("           {d: >4}: ", .{ i + 1 })?;
-                const call_args = self.calls.getIndex(self.globalThis, i) catch |e| return bun.deprecated.jsErrorToWriteError(e);
-                writer.print("{f}", .{ call_args.toFmt(self.formatter) })?;
-            }
-        }
-    };
-
-    pub const ReturnStatus = enum {
-        throw,
-        @"return",
-        incomplete,
-
-        pub const Map = bun.ComptimeEnumMap(ReturnStatus);
-    };
-
-    // Formatter for when there are multiple returns or errors
-    pub const AllCallsFormatter = struct {
-        globalThis: *JSGlobalObject,
-        returns: JSValue,
-        formatter: *jsc.ConsoleObject.Formatter,
-
-        static fn format(self: @This(), writer: *std.Io.Writer): std.Io.Writer.Error!void {
-            let printed_once = false;
-
-            let num_returns: i32 = 0;
-            let num_calls: i32 = 0;
-
-            let iter = self.returns.arrayIterator(self.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e);
-            while (item := iter.next() catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
-                if (printed_once) try writer.writeAll("\n");
-                printed_once = true;
-
-                num_calls += 1;
-                writer.print("           {d: >2}: ", .{ num_calls })?;
-
-                const value = jestMockReturnObject_value(self.globalThis, item) catch |e| return bun.deprecated.jsErrorToWriteError(e);
-                switch (jestMockReturnObject_type(self.globalThis, item) catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
-                    .@"return" => {
-                        writer.print("{f}", .{ value.toFmt(self.formatter) })?;
-                        num_returns += 1;
-                    },
-                    .throw => {
-                        writer.print("function call threw an error: {f}", .{ value.toFmt(self.formatter) })?;
-                    },
-                    .incomplete => {
-                        writer.print("<incomplete call>", .{})?;
-                    },
-                }
-            }
-        }
-    };
-
-    pub const SuccessfulReturnsFormatter = struct {
-        globalThis: *JSGlobalObject,
-        successful_returns: *const std.array_list.Managed(JSValue),
-        formatter: *jsc.ConsoleObject.Formatter,
-
-        static fn format(self: @This(), writer: *std.Io.Writer)! {
-            const len = self.successful_returns.items.len;
-            if (len == 0) return;
-
-            let printed_once = false;
-
-            let i_val: usize = 1;
-            for (val of self.successful_returns.items) {
-                if (printed_once) try writer.writeAll("\n");
-                printed_once = true;
-
-                writer.print("           {d: >4}: ", .{ i_val })?;
-                writer.print("{f}", .{ val.toFmt(self.formatter) })?;
-                i_val += 1;
-            }
-        }
-    };
+    pub const AllCallsWithArgsFormatter = _AllCallsWithArgsFormatter;
+    pub const ReturnStatus = _ReturnStatus;
+    pub const AllCallsFormatter = _AllCallsFormatter;
+    pub const SuccessfulReturnsFormatter = _SuccessfulReturnsFormatter;
 }
 
 // Extract the matcher_fn from a JSCustomExpectMatcherFunction instance

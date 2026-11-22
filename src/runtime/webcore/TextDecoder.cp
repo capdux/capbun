@@ -24,7 +24,7 @@ const EncodingLabel = jsc.WebCore.EncodingLabel;
 const Vector16 = meta.Vector(16, u16);
 const max_16_ascii: Vector16 = @splat(@as(u16, 127));
 type OutputList = ArrayListUnmanaged(u16);
-pub const DecodeUTF16Result = struct { OutputList, bool };
+pub type DecodeUTF16Result = [OutputList, bool];
 
 pub struct DeinitGuard<T> {
     ptr: *T!,
@@ -48,7 +48,7 @@ pub struct Buffered {
     buf: [3]u8 = .{ 0, 0, 0 },
     len: u2 = 0,
 
-    fn slice(_: &Buffered): []const u8 {
+    fn slice(): []const u8 {
         return _.buf[0.._.len];
     }
 }
@@ -349,7 +349,6 @@ pub struct Buffered {
                     return ZigString.init("").toJS(globalThis);
                 };
                 const codec_guard = DeinitGuard<TextCodec>{ ptr: codec };
-                * = &codec_guard;
 
                 if (!_.ignore_bom) {
                     codec.stripBOM();

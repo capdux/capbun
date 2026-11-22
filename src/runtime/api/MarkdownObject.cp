@@ -372,7 +372,53 @@ fn renderAST(
 ///
 /// Uses HTML tag names (h1-h6, p, blockquote, a, em, strong, etc.).
 /// Text content is plain JS strings in children arrays.
+/// Component overrides keyed by HTML tag name.
+/// When set, the value replaces the string tag name in the `type` field.
+struct ParseComponents {
+    h1: JSValue = .zero,
+    h2: JSValue = .zero,
+    h3: JSValue = .zero,
+    h4: JSValue = .zero,
+    h5: JSValue = .zero,
+    h6: JSValue = .zero,
+    p: JSValue = .zero,
+    blockquote: JSValue = .zero,
+    ul: JSValue = .zero,
+    ol: JSValue = .zero,
+    li: JSValue = .zero,
+    pre: JSValue = .zero,
+    hr: JSValue = .zero,
+    html: JSValue = .zero,
+    table: JSValue = .zero,
+    thead: JSValue = .zero,
+    tbody: JSValue = .zero,
+    tr: JSValue = .zero,
+    th: JSValue = .zero,
+    td: JSValue = .zero,
+    em: JSValue = .zero,
+    strong: JSValue = .zero,
+    a: JSValue = .zero,
+    img: JSValue = .zero,
+    code: JSValue = .zero,
+    del: JSValue = .zero,
+    math: JSValue = .zero,
+    u: JSValue = .zero,
+    br: JSValue = .zero,
+}
+
+struct ParseStackEntry {
+    children: JSValue,
+    block_type: md.BlockType? = null,
+    span_type: md.SpanType? = null,
+    data: u32 = 0,
+    flags: u32 = 0,
+    detail: md.SpanDetail = {},
+}
+
 struct ParseRenderer {
+    const Components = ParseComponents;
+    const StackEntry = ParseStackEntry;
+
     #globalObject: *jsc.JSGlobalObject,
     #marked_args: *jsc.MarkedArgumentBuffer,
     #stack: std.ArrayListUnmanaged(StackEntry) = {},
@@ -381,49 +427,6 @@ struct ParseRenderer {
     #heading_tracker: md.helpers.HeadingIdTracker = md.helpers.HeadingIdTracker.init(false),
     #components: Components = {},
     #react_version: u8? = null,
-
-    /// Component overrides keyed by HTML tag name.
-    /// When set, the value replaces the string tag name in the `type` field.
-    const Components = struct {
-        h1: JSValue = .zero,
-        h2: JSValue = .zero,
-        h3: JSValue = .zero,
-        h4: JSValue = .zero,
-        h5: JSValue = .zero,
-        h6: JSValue = .zero,
-        p: JSValue = .zero,
-        blockquote: JSValue = .zero,
-        ul: JSValue = .zero,
-        ol: JSValue = .zero,
-        li: JSValue = .zero,
-        pre: JSValue = .zero,
-        hr: JSValue = .zero,
-        html: JSValue = .zero,
-        table: JSValue = .zero,
-        thead: JSValue = .zero,
-        tbody: JSValue = .zero,
-        tr: JSValue = .zero,
-        th: JSValue = .zero,
-        td: JSValue = .zero,
-        em: JSValue = .zero,
-        strong: JSValue = .zero,
-        a: JSValue = .zero,
-        img: JSValue = .zero,
-        code: JSValue = .zero,
-        del: JSValue = .zero,
-        math: JSValue = .zero,
-        u: JSValue = .zero,
-        br: JSValue = .zero,
-    };
-
-    const StackEntry = struct {
-        children: JSValue,
-        block_type: md.BlockType? = null,
-        span_type: md.SpanType? = null,
-        data: u32 = 0,
-        flags: u32 = 0,
-        detail: md.SpanDetail = {},
-    };
 
     static fn init(
         globalObject: *jsc.JSGlobalObject,
@@ -828,7 +831,45 @@ struct ParseRenderer {
 /// appends to the top buffer, and each leave pops the buffer, calls
 /// the JS callback with the accumulated children, and appends the
 /// callback's return value to the parent buffer.
+struct JsCallbacks {
+    heading: JSValue = .zero,
+    paragraph: JSValue = .zero,
+    blockquote: JSValue = .zero,
+    code: JSValue = .zero,
+    list: JSValue = .zero,
+    listItem: JSValue = .zero,
+    hr: JSValue = .zero,
+    table: JSValue = .zero,
+    thead: JSValue = .zero,
+    tbody: JSValue = .zero,
+    tr: JSValue = .zero,
+    th: JSValue = .zero,
+    td: JSValue = .zero,
+    html: JSValue = .zero,
+    strong: JSValue = .zero,
+    emphasis: JSValue = .zero,
+    link: JSValue = .zero,
+    image: JSValue = .zero,
+    codespan: JSValue = .zero,
+    strikethrough: JSValue = .zero,
+    text: JSValue = .zero,
+}
+
+struct JsStackEntry {
+    buffer: std.ArrayListUnmanaged(u8) = {},
+    block_type: md.BlockType = .doc,
+    data: u32 = 0,
+    flags: u32 = 0,
+    /// For ul/ol: number of li children seen so far (next li's index).
+    /// For li: this item's 0-based index within its parent list.
+    child_index: u32 = 0,
+    detail: md.SpanDetail = {},
+}
+
 struct JsCallbackRenderer {
+    const Callbacks = JsCallbacks;
+    const StackEntry = JsStackEntry;
+
     #globalObject: *jsc.JSGlobalObject,
     #allocator: std.mem.Allocator,
     #src_text: []const u8,
@@ -848,41 +889,6 @@ struct JsCallbackRenderer {
         (self.#stack.append(bun.default_allocator, {}))?;
         return self;
     }
-
-    const Callbacks = struct {
-        heading: JSValue = .zero,
-        paragraph: JSValue = .zero,
-        blockquote: JSValue = .zero,
-        code: JSValue = .zero,
-        list: JSValue = .zero,
-        listItem: JSValue = .zero,
-        hr: JSValue = .zero,
-        table: JSValue = .zero,
-        thead: JSValue = .zero,
-        tbody: JSValue = .zero,
-        tr: JSValue = .zero,
-        th: JSValue = .zero,
-        td: JSValue = .zero,
-        html: JSValue = .zero,
-        strong: JSValue = .zero,
-        emphasis: JSValue = .zero,
-        link: JSValue = .zero,
-        image: JSValue = .zero,
-        codespan: JSValue = .zero,
-        strikethrough: JSValue = .zero,
-        text: JSValue = .zero,
-    };
-
-    const StackEntry = struct {
-        buffer: std.ArrayListUnmanaged(u8) = {},
-        block_type: md.BlockType = .doc,
-        data: u32 = 0,
-        flags: u32 = 0,
-        /// For ul/ol: number of li children seen so far (next li's index).
-        /// For li: this item's 0-based index within its parent list.
-        child_index: u32 = 0,
-        detail: md.SpanDetail = {},
-    };
 
     fn extractCallbacks(*_, opts: JSValue): bun.JSError!void {
         if (opts.isUndefinedOrNull() || !opts.isObject()) return;
@@ -1253,7 +1259,7 @@ fn extractLanguage(src_text: []const u8, info_beg: u32): []const u8 {
 }
 
 // Cached tag string indices - must match BunMarkdownTagStrings.h
-const TagIndex = enum(u8) {
+enum TagIndex: u8 {
     h1 = 0,
     h2 = 1,
     h3 = 2,
@@ -1284,7 +1290,7 @@ const TagIndex = enum(u8) {
     math = 27,
     u = 28,
     br = 29,
-};
+}
 
 fn getCachedTagString(globalObject: *jsc.JSGlobalObject, tag: TagIndex): JSValue {
     return BunMarkdownTagStrings__getTagString(globalObject, @intFromEnum(tag));

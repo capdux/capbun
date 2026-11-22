@@ -91,12 +91,12 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             return job;
         }
 
-        pub fn createAndSchedule(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) void {
+        pub fn createAndSchedule(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) {
             let job = create(global, ctx, callback.withAsyncContextIfNeeded(global));
             job.schedule();
         }
 
-        pub fn runTask(task: *jsc.WorkPoolTask) void {
+        pub fn runTask(task: *jsc.WorkPoolTask) {
             const job: *@This() = @fieldParentPtr("task", task);
             let vm = job.vm;
             defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
@@ -104,7 +104,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             job.ctx.runTask(vm.global);
         }
 
-        pub fn runFromJS(job: *@This()) void {
+        pub fn runFromJS(job: *@This()) {
             const _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             const vm = job.vm;
 
@@ -112,26 +112,22 @@ fn ExternCryptoJob(comptime name: []const u8): type {
                 return;
             }
 
-            const callback_opt = job.callback.trySwap();
-            if (callback_opt == null) {
-                return;
+            if (callback := job.callback.trySwap()) {
+                job.ctx.runFromJS(vm.global, callback) catch e => {
+                    const reported = vm.global.reportUncaughtException(vm.global.takeException(e).asException(vm.global.vm()).?);
+                    * = reported;
+                };
             }
-            const callback = callback_opt.?;
-
-            job.ctx.runFromJS(vm.global, callback) catch |e| {
-                const reported = vm.global.reportUncaughtException(vm.global.takeException(e).asException(vm.global.vm()).?);
-                _ = reported;
-            };
         }
 
-        fn deinit(job: *@This()) void {
+        fn deinit(job: *@This()) {
             job.ctx.deinit();
             job.poll.unref(job.vm);
             job.callback.deinit();
             bun.destroy(job);
         }
 
-        pub fn schedule(job: *@This()) callconv(.c) void {
+        pub fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
             jsc.WorkPool.schedule(&job.task);
         }
@@ -197,18 +193,18 @@ fn CryptoJob(comptime Ctx: type): type {
             // ctx already owns (e.g. `Scrypt` has already protected its password/salt buffers in
             // `fromJS`). `deinit` handles all of that; `poll.unref` is a no-op while inactive.
             let _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
-            try job.ctx.init(global);
+            job.ctx.init(global)?;
             job.any_task = jsc.AnyTask.New(@This(), &runFromJS).init(job);
             _guard.ptr = null;
             return job;
         }
 
-        pub fn initAndSchedule(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx) JSError!void {
-            let job = try init(global, callback, ctx);
+        pub fn initAndSchedule(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx): JSError!void {
+            let job = init(global, callback, ctx)?;
             job.schedule();
         }
 
-        pub fn runTask(task: *jsc.WorkPoolTask) void {
+        pub fn runTask(task: *jsc.WorkPoolTask) {
             const job: *@This() = @fieldParentPtr("task", task);
             let vm = job.vm;
             defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
@@ -216,7 +212,7 @@ fn CryptoJob(comptime Ctx: type): type {
             job.ctx.runTask(job.ctx.result);
         }
 
-        pub fn runFromJS(job: *@This()) void {
+        pub fn runFromJS(job: *@This()) {
             const _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             const vm = job.vm;
 
@@ -224,59 +220,56 @@ fn CryptoJob(comptime Ctx: type): type {
                 return;
             }
 
-            const callback_opt = job.callback.trySwap();
-            if (callback_opt == null) {
-                return;
+            if (callback := job.callback.trySwap()) {
+                job.ctx.runFromJS(vm.global, callback);
             }
-            const callback = callback_opt.?;
-
-            job.ctx.runFromJS(vm.global, callback);
         }
 
-        fn deinit(job: *@This()) void {
+        fn deinit(job: *@This()) {
             job.ctx.deinit();
             job.poll.unref(job.vm);
             job.callback.deinit();
             bun.destroy(job);
         }
 
-        pub fn schedule(job: *@This()) callconv(.c) void {
+        pub fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
             jsc.WorkPool.schedule(&job.task);
         }
     };
 }
 
+pub struct RandomJobCtx {
+    value: JSValue,
+    bytes: [*]u8!,
+    offset: u32,
+    length: usize,
+
+    result: void = undefined,
+
+    fn init(*_, _: *JSGlobalObject)! {
+        _.value.protect();
+    }
+
+    fn runTask(*_, _: void) {
+        unsafe {
+            bun.csprng(_.bytes[_.offset..][0.._.length]);
+        }
+    }
+
+    fn runFromJS(global: *JSGlobalObject, callback: JSValue) {
+        const vm = global.bunVM();
+        vm.eventLoop().runCallback(callback, global, .js_undefined, &.{ .@"null", _.value });
+    }
+
+    fn deinit(*_) {
+        _.value.unprotect();
+    }
+}
+
 pub struct random {
-    pub const JobCtx = struct {
-        value: JSValue,
-        bytes: [*]u8!,
-        offset: u32,
-        length: usize,
-
-        result: void = undefined,
-
-        fn init(*_, _: *JSGlobalObject)! {
-            _.value.protect();
-        }
-
-        fn runTask(*_, _: void) {
-            unsafe {
-                bun.csprng(_.bytes[_.offset..][0.._.length]);
-            }
-        }
-
-        fn runFromJS(*_, global: *JSGlobalObject, callback: JSValue) {
-            const vm = global.bunVM();
-            vm.eventLoop().runCallback(callback, global, .js_undefined, &.{ .@"null", _.value });
-        }
-
-        fn deinit(*_) {
-            _.value.unprotect();
-        }
-    };
-
-    pub const Job = CryptoJob(JobCtx);
+    pub const JobCtx = RandomJobCtx;
+    pub const Job = CryptoJob(RandomJobCtx);
 
     const max_possible_length = @min(jsc.ArrayBuffer.max_size, std.math.maxInt(i32));
     const max_range = 0xffff_ffff_ffff;
@@ -524,7 +517,6 @@ fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.J
 
     const output_opt = out_arraybuffer.asArrayBuffer(globalThis);
     if (output_opt == null) {
-        data.deinit();
         return globalThis.throwOutOfMemory();
     }
     const output = output_opt.?;

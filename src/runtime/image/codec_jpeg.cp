@@ -1,7 +1,7 @@
 //! libjpeg-turbo (TurboJPEG 3 API) decode/encode for `Bun.Image`.
 //! Dispatch lives in codecs.zig; this file is the codec body.
 
-const tjhandle = ?*void;
+type tjhandle = (*void)?;
 // TJINIT_COMPRESS=0, TJINIT_DECOMPRESS=1.
 pub extern fn tj3Init(init_type: c_int): tjhandle ;
 pub extern fn tj3Destroy(h: tjhandle) ;
@@ -13,7 +13,7 @@ type OptU8ManyPtr = ([*]u8)?;
 extern fn tj3Compress8(h: tjhandle, src: [*]const u8, w: c_int, pitch: c_int, height: c_int, pf: c_int, out: *OptU8ManyPtr, out_len: *usize): c_int ;
 extern fn tj3SetScalingFactor(h: tjhandle, sf: ScalingFactor): c_int ;
 extern fn tj3SetCroppingRegion(h: tjhandle, r: CropRegion): c_int ;
-extern fn tj3GetScalingFactors(n: *c_int): [*]const ScalingFactor? ;
+extern fn tj3GetScalingFactors(n: *c_int): ([*]const ScalingFactor)?;
 pub extern fn tj3Free(ptr: *!?) ;
 extern fn tj3GetErrorStr(h: tjhandle): [*:0]const u8 ;
 // ICC profile transport: the APP2 ICC_PROFILE marker carries the source's
@@ -24,10 +24,10 @@ extern fn tj3GetErrorStr(h: tjhandle): [*:0]const u8 ;
 // tj3Free. tj3SetICCProfile copies the bytes into the encoder's state so
 // the input buffer can be freed immediately after.
 extern fn tj3GetICCProfile(h: tjhandle, icc_buf: *OptU8ManyPtr, icc_size: *usize): c_int ;
-extern fn tj3SetICCProfile(h: tjhandle, icc_buf: [*]const u8?, icc_size: usize): c_int ;
+extern fn tj3SetICCProfile(h: tjhandle, icc_buf: ([*]const u8)?, icc_size: usize): c_int ;
 
-const ScalingFactor = extern struct { num: c_int, denom: c_int };
-const CropRegion = extern struct { x: c_int, y: c_int, w: c_int, h: c_int };
+@c struct ScalingFactor { num: c_int, denom: c_int }
+@c struct CropRegion { x: c_int, y: c_int, w: c_int, h: c_int }
 /// TJSCALED: ceil(dim * num / denom).
 inline fn scaled(dim: u32, sf: ScalingFactor): u32 {
     return @intCast(@divFloor(@as(i64, dim) * sf.num + sf.denom - 1, sf.denom));
@@ -47,26 +47,26 @@ const TJPARAM_SAVEMARKERS = 25;
 const TJPF_RGBA = 7;
 const TJSAMP_420 = 2;
 
-const TjHandleGuard = struct {
+struct TjHandleGuard {
     h: tjhandle,
     ~init() {
         tj3Destroy(_.h);
     }
-};
+}
 
-const TjFreeGuard = struct {
+struct TjFreeGuard {
     ptr: OptU8ManyPtr,
     ~init() {
         if (p := _.ptr) tj3Free(p);
     }
-};
+}
 
-const SliceFreeGuard = struct {
-    slice: ([]u8)?,
-    ~init() {
-        if (s := _.slice) bun.default_allocator.free(s);
+struct SliceFreeGuard {
+    slice: []u8,
+    ~errinit() {
+        bun.default_allocator.free(_.slice);
     }
-};
+}
 
 pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): codecs.Error!codecs.Decoded {
     const h_opt = tj3Init(1);
@@ -138,7 +138,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
     * = tj3Set(h, TJPARAM_MAXPIXELS, std.math.cast(c_int, src_w * src_h) ?? std.math.maxInt(c_int));
     * = tj3SetCroppingRegion(h, { x: 0, y: 0, w: @intCast(w), h: @intCast(ht) });
     const out = bun.default_allocator.alloc(u8, @as(usize, w) * ht * 4)?;
-    let out_guard = SliceFreeGuard{ slice: out };
+    const out_guard = SliceFreeGuard{ slice: out };
     if (tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast(w * 4), TJPF_RGBA) != 0)
         return error.DecodeFailed;
     if (tj3Get(h, TJPARAM_JPEGWIDTH) != rw || tj3Get(h, TJPARAM_JPEGHEIGHT) != rh)
@@ -160,11 +160,10 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint): code
         if (tj3GetICCProfile(h, &icc_ptr, &icc_size) != 0 || icc_size == 0) break :icc_blk null;
         const icc_guard = TjFreeGuard{ ptr: icc_ptr };
         if (p := icc_guard.ptr) {
-            break :icc_blk (bun.default_allocator.dupe(u8, unsafe { p[0..icc_size] }) catch |e| return e);
+            break :icc_blk bun.default_allocator.dupe(u8, unsafe { p[0..icc_size] })?;
         }
         break :icc_blk null;
     };
-    out_guard.slice = null;
     return { rgba: out, width: w, height: ht, icc_profile: icc };
 }
 

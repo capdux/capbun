@@ -258,6 +258,28 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const StatHash = @import("./fs/stat_hash.zig");
 pub const path_handler = @import("../paths/resolve_path.zig");
 pub const bun = @import("bun");
+pub const _EntryKind = enum {
+    dir,
+    file,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _RealFSEntriesOptionTag = enum {
+    entries,
+    @"err",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const RealFSModKeyError = error{
+    Unusable,
+};
+
 pub fn DeinitWithAllocGuard(comptime T: type, comptime A: type) type {
     return struct {
         ptr: ?*T,
@@ -345,11 +367,13 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const _PreallocateCounts = struct {
+    pub const dir_entry: usize = 2048;
+    const files: usize = 4096;
+};
+
 pub const Preallocate = struct {
-    pub const Counts = struct {
-        pub const dir_entry: usize = 2048;
-        pub const files: usize = 4096;
-    };
+    pub const Counts = _PreallocateCounts;
 };
 
 pub const NodeJSPathName = struct {
@@ -528,6 +552,12 @@ else => false,
             }
             return .{ .dir = dir, .base = base, .ext = ext, .filename = (if ((dir.len > 0)) _path[(dir.len + 1)..] else _path) };
     }
+};
+
+pub const _PathPackageRelative = struct {
+    path: []const u8,
+    name: []const u8,
+    is_parent_package: bool = false,
 };
 
 pub const Path = struct {
@@ -774,12 +804,39 @@ pub fn keyForIncrementalGraph(path: *const Path) []const u8 {
     const ns_dataurl = "dataurl";
     const ns_file = "file";
     const ns_macro = "macro";
-    pub const PackageRelative = struct {
-        path: []const u8,
-        name: []const u8,
-        is_parent_package: bool = false,
-    };
+    const PackageRelative = _PathPackageRelative;
     pub const empty = Fs.Path.init("");
+};
+
+pub const _DirEntryErr = struct {
+    original_err: anyerror,
+    canonical_error: anyerror,
+};
+
+pub const _EntryDifferentCase = struct {
+    dir: []const u8,
+    query: []const u8,
+    actual: []const u8,
+};
+
+pub const _EntryLookup = struct {
+    entry: *Entry,
+    diff_case: ?_EntryDifferentCase,
+    pub const DifferentCase = _EntryDifferentCase;
+};
+
+pub const _EntryCache = struct {
+    symlink: PathString = PathString.empty,
+    fd: FD = .invalid,
+    kind: _EntryKind = .file,
+};
+
+pub const _EmptyRlimit = struct {
+};
+
+pub const _RealFSLimit = struct {
+    pub var handles: usize = 0;
+    pub var handles_before: _RlimitType = std.mem.zeroes(_RlimitType);
 };
 
 pub const DirEntry = struct {
@@ -949,10 +1006,7 @@ pub fn eql(self: @This(), _key: []const u8, b: []const u8) bool {
     }
     pub const EntryMap = bun.StringHashMapUnmanaged(*Entry);
     pub const EntryStore = allocators.BSSList(Entry, Preallocate.Counts.files);
-    pub const Err = struct {
-        original_err: anyerror,
-        canonical_error: anyerror,
-    };
+    const Err = _DirEntryErr;
 };
 
 pub const Entry = struct {
@@ -994,24 +1048,21 @@ pub fn symlink(entry: *Entry, fs: *RealFS, store_fd: bool) []const u8 {
             }
             return entry.cache.symlink.slice();
     }
-    pub const Lookup = struct {
-        entry: *Entry,
-        diff_case: ?DifferentCase,
-        pub const DifferentCase = struct {
-            dir: []const u8,
-            query: []const u8,
-            actual: []const u8,
-        };
-    };
-    pub const Cache = struct {
-        symlink: PathString = PathString.empty,
-        fd: FD = .invalid,
-        kind: Kind = .file,
-    };
-    pub const Kind = enum {
-                dir,
-                file,
-            };
+    pub const Lookup = _EntryLookup;
+    const Cache = _EntryCache;
+    const Kind = _EntryKind;
+};
+
+pub const RealFSEntriesOption = union(_RealFSEntriesOptionTag) {
+    entries: *DirEntry,
+    @"err": DirEntry.Err,
+    const Tag = _RealFSEntriesOptionTag;
+    const Map = allocators.BSSMap(RealFSEntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
+};
+
+pub const PathContentsPair = struct {
+    path: Path,
+    contents: []const u8,
 };
 
 pub const RealFSModKey = struct {
@@ -1682,10 +1733,7 @@ cache.symlink = PathString.init(try FileSystem.FilenameStore.instance.append(str
     });
     pub const TmpfilePosix = RealFSTmpfilePosix;
     pub const TmpfileWindows = RealFSTmpfileWindows;
-    pub const Limit = struct {
-                pub var handles: usize = 0;
-                pub var handles_before = std.mem.zeroes(if (Environment.isPosix) std.posix.rlimit else struct {});
-            };
+    const Limit = _RealFSLimit;
 };
 
 pub const FileSystem = struct {
@@ -1863,6 +1911,7 @@ pub fn printLimits() void {
     pub const Implementation = Fs.RealFS;
 };
 
+pub const _RlimitType = if (Environment.isPosix) std.posix.rlimit else _EmptyRlimit;
 var get_platform_tempdir = bun.once(RealFS.#platformTempDir);
 var _entries_option_map: *RealFSEntriesOption.Map = undefined;
 var _entries_option_map_loaded: bool = false;
@@ -1870,23 +1919,7 @@ pub const Fs = @This();
 pub const debug = Output.scoped(.fs, .hidden);
 threadlocal var normalize_buf: [1024]u8 = undefined;
 threadlocal var join_buf: [1024]u8 = undefined;
-pub const RealFSEntriesOption = union(Tag) {
-    entries: *DirEntry,
-    @"err": DirEntry.Err,
-    pub const Tag = enum {
-            entries,
-            @"err",
-        };
-    pub const Map = allocators.BSSMap(RealFSEntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
-};
 threadlocal var temp_entries_option: RealFSEntriesOption = undefined;
-pub const PathContentsPair = struct {
-    path: Path,
-    contents: []const u8,
-};
-pub const RealFSModKeyError = error{
-            Unusable,
-        };
 const Environment = bun.Environment;
 const FD = bun.FD;
 const FeatureFlags = bun.FeatureFlags;

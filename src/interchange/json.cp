@@ -2,50 +2,56 @@ pub const Expr = js_ast.Expr;
 
 const LEXER_DEBUGGER_WORKAROUND = false;
 
-const IdentityContext = struct {
-    pub fn eql(_: @This(), a: u64, b: u64) bool {
+struct IdentityContext {
+    fn eql(a: u64, b: u64): bool {
+        const _ctx = _;
+        * = _ctx;
         return a == b;
     }
 
-    pub fn hash(_: @This(), a: u64) u64 {
+    fn hash(a: u64): u64 {
+        const _ctx = _;
+        * = _ctx;
         return a;
     }
-};
+}
 
 const PoolHashMap = std.HashMap(u64, void, IdentityContext, 80);
 const PoolLinkedList = bun.deprecated.SinglyLinkedList(PoolHashMap);
-threadlocal let pool_list: PoolLinkedList = undefined;
-threadlocal let pool_loaded: bool = false;
+@tls let pool_list: PoolLinkedList = undefined;
+@tls let pool_loaded: bool = false;
 
-const HashMapPool = struct {
-    pub const HashMap = PoolHashMap;
-    pub const LinkedList = PoolLinkedList;
+struct HashMapPool {
+    type HashMap = PoolHashMap;
+    type LinkedList = PoolLinkedList;
 
-    static fn get(_: std.mem.Allocator): *PoolLinkedList.Node {
+    static fn get(_: std.mem.Allocator): *PoolLinkedList.Node! {
         if (pool_loaded) {
-            if (pool_list.popFirst()) |node| {
-                node.data.clearRetainingCapacity();
+            if (node := pool_list.popFirst()) {
+                unsafe {
+                    node.data.clearRetainingCapacity();
+                }
                 return node;
             }
         }
 
         const new_node = default_allocator.create(PoolLinkedList.Node) catch unreachable;
         unsafe {
-            new_node.* = PoolLinkedList.Node{ .data = PoolHashMap.initContext(default_allocator, IdentityContext{}) };
+            new_node.* = PoolLinkedList.Node{ data: PoolHashMap.initContext(default_allocator, IdentityContext{}) };
         }
         return new_node;
     }
 
-    pub fn release(node: *PoolLinkedList.Node) void {
+    static fn release(node: *PoolLinkedList.Node!) {
         if (pool_loaded) {
             pool_list.prepend(node);
             return;
         }
 
-        pool_list = PoolLinkedList{ .first = node };
+        pool_list = PoolLinkedList{ first: node };
         pool_loaded = true;
     }
-};
+}
 
 pub struct OptDeinitGuard<T> {
     ptr: *T!,
@@ -78,7 +84,7 @@ fn DuplicateNodeGuard(comptime Enabled: bool): type {
     };
 }
 
-fn newExpr(t: anytype, loc: logger.Loc): Expr {
+fn newExpr(t: auto, loc: logger.Loc): Expr {
     const Type = @TypeOf(t);
     if (comptime @typeInfo(Type) == .pointer) {
         @compileError("Unexpected pointer");
@@ -86,7 +92,7 @@ fn newExpr(t: anytype, loc: logger.Loc): Expr {
 
     if (comptime Environment.allow_assert) {
         if (comptime Type == E.Object) {
-            for (t.properties.slice()) |prop| {
+            for (prop of t.properties.slice()) {
                 // json should never have an initializer set
                 bun.assert(prop.initializer == null);
                 bun.assert(prop.key != null);
@@ -98,7 +104,7 @@ fn newExpr(t: anytype, loc: logger.Loc): Expr {
     return Expr.init(Type, t, loc);
 }
 
-fn parseJSONMaybeTrailingComma(*p: anytype, comptime opts: js_lexer.JSONOptions, closer: js_lexer.T): !bool {
+fn parseJSONMaybeTrailingComma(p: *auto, comptime opts: js_lexer.JSONOptions, closer: js_lexer.T): !bool {
     const comma_range = p.lexer.range();
     try p.lexer.expect(.t_comma);
 
@@ -112,7 +118,7 @@ fn parseJSONMaybeTrailingComma(*p: anytype, comptime opts: js_lexer.JSONOptions,
     return true;
 }
 
-fn parseJSONExpr(*p: anytype, comptime opts: js_lexer.JSONOptions, comptime maybe_auto_quote: bool, comptime force_utf8: bool): !Expr {
+fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_auto_quote: bool, comptime force_utf8: bool): !Expr {
     if (!p.stack_check.isSafeToRecurse()) {
         try bun.throwStackOverflow();
     }
@@ -322,35 +328,35 @@ fn JSONLikeParser_(
         list_allocator: std.mem.Allocator,
         stack_check: bun.StackCheck,
 
-        pub fn init(allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log): Parser! {
+        static fn init(allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log): !Parser {
             return initWithListAllocator(allocator, allocator, source_, log);
         }
 
-        pub fn initWithListAllocator(allocator: std.mem.Allocator, list_allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log): Parser! {
+        static fn initWithListAllocator(allocator: std.mem.Allocator, list_allocator: std.mem.Allocator, source_: *const logger.Source, log: *logger.Log): !Parser {
             Expr.Data.Store.assert();
             Stmt.Data.Store.assert();
 
             return Parser{
-                .lexer = try Lexer.init(log, source_, allocator),
-                .allocator = allocator,
-                .log = log,
-                .list_allocator = list_allocator,
-                .stack_check = bun.StackCheck.init(),
+                lexer: Lexer.init(log, source_, allocator)?,
+                allocator: allocator,
+                log: log,
+                list_allocator: list_allocator,
+                stack_check: bun.StackCheck.init(),
             };
         }
 
-        pub inline fn source(p: *const Parser) *const logger.Source {
+        inline fn source(p: *const Parser): *const logger.Source! {
             return &p.lexer.source;
         }
 
         const Parser = @This();
 
-        pub fn parseExpr(p: *Parser, comptime maybe_auto_quote: bool, comptime force_utf8: bool) anyerror!Expr {
-            return parseJSONExpr(p, opts, maybe_auto_quote, force_utf8);
+        fn parseExpr(*_, comptime maybe_auto_quote: bool, comptime force_utf8: bool): !Expr {
+            return parseJSONExpr(_, opts, maybe_auto_quote, force_utf8);
         }
 
-        pub fn parseMaybeTrailingComma(p: *Parser, closer: js_lexer.T) !bool {
-            return parseJSONMaybeTrailingComma(p, opts, closer);
+        fn parseMaybeTrailingComma(*_, closer: js_lexer.T): !bool {
+            return parseJSONMaybeTrailingComma(_, opts, closer);
         }
     };
 }
@@ -369,167 +375,167 @@ const package_json_version_checker_opts = if (LEXER_DEBUGGER_WORKAROUND) js_lexe
 };
 const PackageJSONLexer = js_lexer.NewLexer(package_json_version_checker_opts);
 
-@value class PackageJSONVersionChecker {
-    lexer: PackageJSONLexer;
-    source: *const logger.Source;
-    log: *logger.Log;
-    allocator: std.mem.Allocator;
-    depth: usize = 0;
-    stack_check: bun.StackCheck;
+struct PackageJSONVersionChecker {
+    lexer: PackageJSONLexer,
+    source: *const logger.Source,
+    log: *logger.Log,
+    allocator: std.mem.Allocator,
+    depth: usize = 0,
+    stack_check: bun.StackCheck,
 
-    found_version_buf: [1024]u8 = undefined;
-    found_name_buf: [1024]u8 = undefined;
+    found_version_buf: [1024]u8 = undefined,
+    found_name_buf: [1024]u8 = undefined,
 
-    found_name: []const u8 = "";
-    found_version: []const u8 = "";
+    found_name: []const u8 = "",
+    found_version: []const u8 = "",
 
-    has_found_name: bool = false;
-    has_found_version: bool = false;
+    has_found_name: bool = false,
+    has_found_version: bool = false,
 
-    name_loc: logger.Loc = logger.Loc.Empty;
+    name_loc: logger.Loc = logger.Loc.Empty,
 
-    pub static fn init(allocator: std.mem.Allocator, source: *const logger.Source, log: *logger.Log): !PackageJSONVersionChecker {
+    static fn init(allocator: std.mem.Allocator, source: *const logger.Source, log: *logger.Log): !PackageJSONVersionChecker {
         return PackageJSONVersionChecker{
-            .lexer = try PackageJSONLexer.init(log, source, allocator),
-            .allocator = allocator,
-            .log = log,
-            .source = source,
-            .stack_check = bun.StackCheck.init(),
+            lexer: PackageJSONLexer.init(log, source, allocator)?,
+            allocator: allocator,
+            log: log,
+            source: source,
+            stack_check: bun.StackCheck.init(),
         };
     }
 
-    pub fn parseExpr(*this): !Expr {
-        if (!this.stack_check.isSafeToRecurse()) {
-            try bun.throwStackOverflow();
+    fn parseExpr(*_): !Expr {
+        if (!_.stack_check.isSafeToRecurse()) {
+            bun.throwStackOverflow()?;
         }
 
-        const loc = this.lexer.loc();
+        const loc = _.lexer.loc();
 
-        if (this.has_found_name and this.has_found_version) return newExpr(std.mem.zeroes(E.Missing), loc);
+        if (_.has_found_name && _.has_found_version) return newExpr(std.mem.zeroes(E.Missing), loc);
 
-        switch (this.lexer.token) {
+        switch (_.lexer.token) {
             .t_false => {
-                try this.lexer.next();
+                _.lexer.next()?;
                 return newExpr(E.Boolean{
-                    .value = false,
+                    value: false,
                 }, loc);
             },
             .t_true => {
-                try this.lexer.next();
+                _.lexer.next()?;
                 return newExpr(E.Boolean{
-                    .value = true,
+                    value: true,
                 }, loc);
             },
             .t_null => {
-                try this.lexer.next();
+                _.lexer.next()?;
                 return newExpr(std.mem.zeroes(E.Null), loc);
             },
             .t_string_literal => {
-                const str: E.String = try this.lexer.toEString();
+                const str: E.String = _.lexer.toEString()?;
 
-                try this.lexer.next();
+                _.lexer.next()?;
                 return newExpr(str, loc);
             },
             .t_numeric_literal => {
-                const value = this.lexer.number;
-                try this.lexer.next();
-                return newExpr(E.Number{ .value = value }, loc);
+                const value = _.lexer.number;
+                _.lexer.next()?;
+                return newExpr(E.Number{ value: value }, loc);
             },
             .t_minus => {
-                try this.lexer.next();
-                const value = this.lexer.number;
-                try this.lexer.expect(.t_numeric_literal);
-                return newExpr(E.Number{ .value = -value }, loc);
+                _.lexer.next()?;
+                const value = _.lexer.number;
+                _.lexer.expect(.t_numeric_literal)?;
+                return newExpr(E.Number{ value: -value }, loc);
             },
             .t_open_bracket => {
-                try this.lexer.next();
+                _.lexer.next()?;
                 let has_exprs = false;
 
-                while (this.lexer.token != .t_close_bracket) {
+                while (_.lexer.token != .t_close_bracket) {
                     if (has_exprs) {
-                        if (!try this.parseMaybeTrailingComma(.t_close_bracket)) {
+                        if (!(_.parseMaybeTrailingComma(.t_close_bracket)?)) {
                             break;
                         }
                     }
 
-                    * = try this.parseExpr();
+                    * = _.parseExpr()?;
                     has_exprs = true;
                 }
 
-                try this.lexer.expect(.t_close_bracket);
+                _.lexer.expect(.t_close_bracket)?;
                 return newExpr(std.mem.zeroes(E.Missing), loc);
             },
             .t_open_brace => {
-                try this.lexer.next();
-                this.depth += 1;
-                defer this.depth -= 1;
+                _.lexer.next()?;
+                _.depth += 1;
+                defer _.depth -= 1;
 
                 let has_properties = false;
-                while (this.lexer.token != .t_close_brace) {
+                while (_.lexer.token != .t_close_brace) {
                     if (has_properties) {
-                        if (!try this.parseMaybeTrailingComma(.t_close_brace)) {
+                        if (!(_.parseMaybeTrailingComma(.t_close_brace)?)) {
                             break;
                         }
                     }
 
-                    const str = try this.lexer.toEString();
-                    const key_range = this.lexer.range();
+                    const str = _.lexer.toEString()?;
+                    const key_range = _.lexer.range();
 
                     const key = newExpr(str, key_range.loc);
-                    try this.lexer.expect(.t_string_literal);
+                    _.lexer.expect(.t_string_literal)?;
 
-                    try this.lexer.expect(.t_colon);
+                    _.lexer.expect(.t_colon)?;
 
-                    const value = try this.parseExpr();
+                    const value = _.parseExpr()?;
 
-                    if (this.depth == 1) {
+                    if (_.depth == 1) {
                         // if you have multiple "name" fields in the package.json....
                         // first one wins
-                        if (key.data == .e_string and value.data == .e_string) {
-                            if (!this.has_found_name and strings.eqlComptime(key.data.e_string.data, "name")) {
+                        if (key.data == .e_string && value.data == .e_string) {
+                            if (!_.has_found_name && strings.eqlComptime(key.data.e_string.data, "name")) {
                                 const len = @min(
                                     value.data.e_string.data.len,
-                                    this.found_name_buf.len,
+                                    _.found_name_buf.len,
                                 );
 
-                                bun.copy(u8, &this.found_name_buf, value.data.e_string.data[0..len]);
-                                this.found_name = this.found_name_buf[0..len];
-                                this.has_found_name = true;
-                                this.name_loc = value.loc;
-                            } else if (!this.has_found_version and strings.eqlComptime(key.data.e_string.data, "version")) {
+                                bun.copy(u8, &_.found_name_buf, value.data.e_string.data[0..len]);
+                                _.found_name = _.found_name_buf[0..len];
+                                _.has_found_name = true;
+                                _.name_loc = value.loc;
+                            } else if (!_.has_found_version && strings.eqlComptime(key.data.e_string.data, "version")) {
                                 const len = @min(
                                     value.data.e_string.data.len,
-                                    this.found_version_buf.len,
+                                    _.found_version_buf.len,
                                 );
-                                bun.copy(u8, &this.found_version_buf, value.data.e_string.data[0..len]);
-                                this.found_version = this.found_version_buf[0..len];
-                                this.has_found_version = true;
+                                bun.copy(u8, &_.found_version_buf, value.data.e_string.data[0..len]);
+                                _.found_version = _.found_version_buf[0..len];
+                                _.has_found_version = true;
                             }
                         }
                     }
 
-                    if (this.has_found_name and this.has_found_version) return newExpr(std.mem.zeroes(E.Missing), loc);
+                    if (_.has_found_name && _.has_found_version) return newExpr(std.mem.zeroes(E.Missing), loc);
 
                     has_properties = true;
                 }
 
-                try this.lexer.expect(.t_close_brace);
+                _.lexer.expect(.t_close_brace)?;
                 return newExpr(std.mem.zeroes(E.Missing), loc);
             },
             else => {
-                try this.lexer.unexpected();
+                _.lexer.unexpected()?;
                 return error.ParserError;
             },
         }
     }
 
-    pub fn parseMaybeTrailingComma(*this, closer: js_lexer.T): !bool {
-        const comma_range = this.lexer.range();
-        try this.lexer.expect(.t_comma);
+    fn parseMaybeTrailingComma(*_, closer: js_lexer.T): !bool {
+        const comma_range = _.lexer.range();
+        _.lexer.expect(.t_comma)?;
 
-        if (this.lexer.token == closer) {
+        if (_.lexer.token == closer) {
             if (comptime !package_json_version_checker_opts.allow_trailing_commas) {
-                this.log.addRangeError(this.source(), comma_range, "JSON does not support trailing commas") catch unreachable;
+                _.log.addRangeError(_.source, comma_range, "JSON does not support trailing commas") catch unreachable;
             }
             return false;
         }
@@ -591,65 +597,73 @@ pub fn toAST(
                     return Expr.init(js_ast.E.String, js_ast.E.String.init(value), logger.Loc.Empty);
                 }
 
-                const exprs = try allocator.alloc(Expr, value.len);
-                for (exprs, 0..) |*ex, i| ex.* = try toAST(allocator, @TypeOf(value[i]), value[i]);
+                const exprs = allocator.alloc(Expr, value.len)?;
+                let i: usize = 0;
+                for (*ex of exprs) {
+                    ex.* = toAST(allocator, @TypeOf(value[i]), value[i])?;
+                    i += 1;
+                }
 
-                return Expr.init(js_ast.E.Array, js_ast.E.Array{ .items = exprs }, logger.Loc.Empty);
+                return Expr.init(js_ast.E.Array, js_ast.E.Array{ items: exprs }, logger.Loc.Empty);
             },
-            else => @compileError(std.fmt.comptimePrint("Unable to stringify type '{s}'", .{@typeName(Type)})),
+            else => @compileError(std.fmt.comptimePrint("Unable to stringify type '{s}'", [@typeName(Type)])),
         },
-        .array => |Array| {
+        .array Array => {
             if (Array.child == u8) {
                 return Expr.init(js_ast.E.String, js_ast.E.String.init(value), logger.Loc.Empty);
             }
 
-            const exprs = try allocator.alloc(Expr, value.len);
-            for (exprs, 0..) |*ex, i| ex.* = try toAST(allocator, @TypeOf(value[i]), value[i]);
+            const exprs = allocator.alloc(Expr, value.len)?;
+            let i: usize = 0;
+            for (*ex of exprs) {
+                ex.* = toAST(allocator, @TypeOf(value[i]), value[i])?;
+                i += 1;
+            }
 
-            return Expr.init(js_ast.E.Array, js_ast.E.Array{ .items = exprs }, logger.Loc.Empty);
+            return Expr.init(js_ast.E.Array, js_ast.E.Array{ items: exprs }, logger.Loc.Empty);
         },
-        .@"struct" => |Struct| {
+        .@"struct" Struct => {
             const fields: []const std.builtin.Type.StructField = Struct.fields;
-            let properties = try BabyList(js_ast.G.Property).initCapacity(allocator, fields.len);
+            let properties = BabyList(js_ast.G.Property).initCapacity(allocator, fields.len)?;
 
-            inline for (fields) |field| {
+            inline for (field of fields) {
                 properties.appendAssumeCapacity(G.Property{
-                    .key = Expr.init(E.String, E.String{ .data = field.name }, logger.Loc.Empty),
-                    .value = try toAST(allocator, field.type, @field(value, field.name)),
+                    key: Expr.init(E.String, E.String{ data: field.name }, logger.Loc.Empty),
+                    value: toAST(allocator, field.type, @field(value, field.name))?,
                 });
             }
 
             return Expr.init(
                 js_ast.E.Object,
                 js_ast.E.Object{
-                    .properties = properties,
-                    .is_single_line = properties.len <= 1,
+                    properties: properties,
+                    is_single_line: properties.len <= 1,
                 },
                 logger.Loc.Empty,
             );
         },
         .null => {
-            return Expr{ .data = .{ .e_null = .{} }, .loc = logger.Loc{} };
+            return Expr{ data: { e_null: .{} }, loc: logger.Loc{} };
         },
         .optional => {
-            if (value) |_value| {
-                return try toAST(allocator, @TypeOf(_value), _value);
+            if (_value := value) {
+                return toAST(allocator, @TypeOf(_value), _value)?;
             } else {
-                return Expr{ .data = .{ .e_null = .{} }, .loc = logger.Loc{} };
+                return Expr{ data: { e_null: .{} }, loc: logger.Loc{} };
             }
         },
         .@"enum" => {
             * = std.meta.intToEnum(Type, @intFromEnum(value)) catch {
-                return Expr{ .data = .{ .e_null = .{} }, .loc = logger.Loc{} };
+                return Expr{ data: { e_null: .{} }, loc: logger.Loc{} };
             };
 
             return toAST(allocator, string, @as(string, @tagName(value)));
         },
-        .error_set => return try toAST(allocator, string, bun.asByteSlice(@errorName(value))),
-        .@"union" => |Union| {
+        .error_set => return toAST(allocator, string, bun.asByteSlice(@errorName(value)))?,
+        .@"union" Union => {
             const info = Union;
-            if (info.tag_type) |UnionTagType| {
-                inline for (info.fields) |u_field| {
+            if (UnionTagType := info.tag_type) {
+                inline for (u_field of info.fields) {
                     if (value == @field(UnionTagType, u_field.name)) {
                         const StructType = @Type(
                             .{
@@ -786,10 +800,10 @@ pub fn parsePackageJSONUTF8(
     return try parser.parseExpr(false, true);
 }
 
-pub const JsonResult = struct {
+pub struct JsonResult {
     root: Expr,
     indentation: Indentation = .{},
-};
+}
 
 pub fn parsePackageJSONUTF8WithOpts(
     source: *const logger.Source,
@@ -905,16 +919,18 @@ pub fn parseForMacro(source: *const logger.Source, log: *logger.Log, allocator: 
     return try parser.parseExpr(false, false);
 }
 
-pub const JSONParseResult = struct {
-    expr: Expr,
-    tag: Tag,
+pub enum JSONParseTag {
+    expr,
+    ascii,
+    empty,
+}
 
-    pub const Tag = enum {
-        expr,
-        ascii,
-        empty,
-    };
-};
+pub struct JSONParseResult {
+    expr: Expr,
+    tag: JSONParseTag,
+
+    type Tag = JSONParseTag;
+}
 
 pub fn parseForBundling(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): !JSONParseResult {
     switch (source.contents.len) {
@@ -938,7 +954,7 @@ pub fn parseForBundling(source: *const logger.Source, log: *logger.Log, allocato
     let parser = try JSONParser.init(allocator, source.*, log);
     const result = try parser.parseExpr(false, true);
     return JSONParseResult{
-        .tag = if (!LEXER_DEBUGGER_WORKAROUND and parser.lexer.is_ascii_only) JSONParseResult.Tag.ascii else JSONParseResult.Tag.expr,
+        .tag = if (!LEXER_DEBUGGER_WORKAROUND && parser.lexer.is_ascii_only) JSONParseResult.Tag.ascii else JSONParseResult.Tag.expr,
         .expr = result,
     };
 }
@@ -965,7 +981,7 @@ pub fn parseEnvJSON(source: *const logger.Source, log: *logger.Log, allocator: s
     let parser = try DotEnvJSONParser.init(allocator, source, log);
 
     switch (source.contents[0]) {
-        '{', '[', '0'...'9', '"', '\'' => {
+        '{', '[', '0'..='9', '"', '\'' => {
             return try parser.parseExpr(false, false);
         },
         else => {
@@ -1019,10 +1035,9 @@ pub fn parseTSConfig(source: *const logger.Source, log: *logger.Log, allocator: 
     return parser.parseExpr(false, force_utf8);
 }
 
-const std = @import("std");
 const expect = std.testing.expect;
 
-const bun = @import("bun");
+import bun from "bun";
 const Environment = bun.Environment;
 const MutableString = bun.MutableString;
 const Output = bun.Output;

@@ -199,21 +199,23 @@ pub struct MediaQuery {
         return _.qualifier == null && _.media_type == .all && _.condition == null;
     }
 
+type OptQualifier = Qualifier?;
+type OptMediaType = MediaType?;
+
+fn _tryParseQualifierAndMediaType(i: *css.Parser): Result(struct { OptQualifier, OptMediaType }) {
+    const qualifier = switch (i.tryParse(Qualifier.parse, {})) {
+        .result => |vv| vv,
+        .err => null,
+    };
+    const media_type = switch (MediaType.parse(i)) {
+        .result => |vv| vv,
+        .err => |e| return { err: e },
+    };
+    return { result: .{ qualifier, media_type } };
+}
+
     static fn parse(input: *css.Parser): Result(MediaQuery) {
-        const Fn = struct {
-            static fn tryParseFn(i: *css.Parser) Result(struct { ?Qualifier, ?MediaType }) {
-                const qualifier = switch (i.tryParse(Qualifier.parse, {})) {
-                    .result => |vv| vv,
-                    .err => null,
-                };
-                const media_type = switch (MediaType.parse(i)) {
-                    .result => |vv| vv,
-                    .err => |e| return { err: e },
-                };
-                return { result: .{ qualifier, media_type } };
-            }
-        };
-        const q_and_m = switch (input.tryParse(Fn.tryParseFn, {})) {
+        const q_and_m = switch (input.tryParse(_tryParseQualifierAndMediaType, {})) {
             .result => |v| v,
             .err => .{ null, null },
         };
@@ -290,13 +292,13 @@ pub struct MediaQuery {
 }
 
 /// Flags for `parse_query_condition`.
-pub const QueryConditionFlags = packed struct(u8) {
+@packed(u8) pub struct QueryConditionFlags {
     /// Whether to allow top-level "or" boolean logic.
     allow_or: bool = false,
     /// Whether to allow style container queries.
     allow_style: bool = false,
     __unused: u6 = 0,
-};
+}
 
 pub fn toCssWithParensIfNeeded(
     v: auto,

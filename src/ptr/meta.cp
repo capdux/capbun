@@ -5,6 +5,11 @@ pub enum PointerKind {
     slice,
 }
 
+pub struct PointerParseOptions {
+    allow_const: bool = true,
+    allow_slices: bool = true,
+}
+
 pub struct PointerInfo {
     const Self = @This();
 
@@ -24,28 +29,25 @@ pub struct PointerInfo {
     /// For example, if `Pointer` is `?[]u8`, this is `u8`.
     Child: type;
 
-    pub fn kind(): PointerKind {
-        return switch (@typeInfo(this.NonOptionalPointer).pointer.size) {
+    fn kind(): PointerKind {
+        return switch (@typeInfo(_.NonOptionalPointer).pointer.size) {
             .one => .single,
             .slice => .slice,
             else => @compileError("unreachable"),
         };
     }
 
-    pub fn isOptional(): bool {
-        return @typeInfo(this.Pointer) == .optional;
+    fn isOptional(): bool {
+        return @typeInfo(_.Pointer) == .optional;
     }
 
-    pub fn isConst(): bool {
-        return @typeInfo(this.NonOptionalPointer).pointer.is_const;
+    fn isConst(): bool {
+        return @typeInfo(_.NonOptionalPointer).pointer.is_const;
     }
 
-    pub const ParseOptions = struct {
-        allow_const: bool = true,
-        allow_slices: bool = true,
-    };
+    pub const ParseOptions = PointerParseOptions;
 
-    pub static fn parse(comptime Pointer: type, comptime options: ParseOptions): Self {
+    static fn parse(comptime Pointer: type, comptime options: ParseOptions): Self {
         const NonOptionalPointer = switch (@typeInfo(Pointer)) {
             .optional => |opt| opt.child,
             else => Pointer,

@@ -10,15 +10,15 @@ const Execution = bun_test.Execution;
 const ConcurrentGroup = bun_test.Execution.ConcurrentGroup;
 const ExecutionSequence = bun_test.Execution.ExecutionSequence;
 
-const EntryList = struct {
+struct EntryList {
     first: (*ExecutionEntry)? = null,
     last: (*ExecutionEntry)? = null,
-    pub fn prepend(*_, current: *ExecutionEntry) {
+    fn prepend(*_, current: *ExecutionEntry) {
         current.next = _.first;
         _.first = current;
         if (_.last == null) _.last = current;
     }
-    pub fn append(*_, current: *ExecutionEntry) {
+    fn append(*_, current: *ExecutionEntry) {
         if (bun.Environment.ci_assert && current.added_in_phase != .preload) bun.assert(current.next == null);
         current.next = null;
         if (last := _.last) {
@@ -30,7 +30,7 @@ const EntryList = struct {
             _.last = current;
         }
     }
-};
+}
 
 pub struct Config {
     always_use_hooks: bool,
@@ -42,7 +42,7 @@ pub struct AllOrderResult {
     end: usize,
     pub const empty: AllOrderResult = { start: 0, end: 0 };
 
-    pub static fn setFailureSkipTo(aor: AllOrderResult, order: *Order) {
+    static fn setFailureSkipTo(aor: AllOrderResult, order: *Order) {
         if (aor.start == 0 && aor.end == 0) return;
         const skip_to = order.groups.items.len;
         for (*group of order.groups.items[aor.start..aor.end]) {
@@ -58,7 +58,7 @@ pub struct AllOrderResult {
     previous_group_was_concurrent: bool = false,
     cfg: Config,
 
-    pub static fn init(gpa: std.mem.Allocator, arena_allocator: std.mem.Allocator, cfg: Config): Order {
+    static fn init(gpa: std.mem.Allocator, arena_allocator: std.mem.Allocator, cfg: Config): Order {
         return {
             groups: std.array_list.Managed(ConcurrentGroup).init(gpa),
             sequences: std.array_list.Managed(ExecutionSequence).init(gpa),
@@ -67,19 +67,19 @@ pub struct AllOrderResult {
         };
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         _.groups.deinit();
         _.sequences.deinit();
     }
 
-    pub fn generateOrderSub(*_, current: TestScheduleEntry): bun.JSError!void {
+    fn generateOrderSub(*_, current: TestScheduleEntry): bun.JSError!void {
         switch (current) {
-            .describe => |describe| _.generateOrderDescribe(describe)?,
-            .test_callback => |test_callback| _.generateOrderTest(test_callback)?,
+            .describe describe => _.generateOrderDescribe(describe)?,
+            .test_callback test_callback => _.generateOrderTest(test_callback)?,
         }
     }
 
-    pub fn generateAllOrder(*_, entries: []const *ExecutionEntry): bun.JSError!AllOrderResult {
+    fn generateAllOrder(*_, entries: []const *ExecutionEntry): AllOrderResult!bun.JSError {
         const start = _.groups.items.len;
         for (entry of entries) {
             if (bun.Environment.ci_assert && entry.added_in_phase != .preload) bun.assert(entry.next == null);
@@ -98,7 +98,7 @@ pub struct AllOrderResult {
         return AllOrderResult{ start: start, end: end };
     }
 
-    pub fn generateOrderDescribe(*_, current: *DescribeScope): bun.JSError!void {
+    fn generateOrderDescribe(*_, current: *DescribeScope): bun.JSError!void {
         if (current.failed) return;
         const use_hooks = _.cfg.always_use_hooks || current.base.has_callback;
 
@@ -132,7 +132,7 @@ pub struct AllOrderResult {
         afterall_order.setFailureSkipTo(_);
     }
 
-    pub fn generateOrderTest(*_, current: *ExecutionEntry): bun.JSError!void {
+    fn generateOrderTest(*_, current: *ExecutionEntry): bun.JSError!void {
         bun.assert(current.base.has_callback == (current.callback != null));
         const use_each_hooks = current.base.has_callback;
 
@@ -183,7 +183,7 @@ pub struct AllOrderResult {
         _.appendOrExtendConcurrentGroup(current.base.concurrent, sequences_start, sequences_end)?;
     }
 
-    pub fn appendOrExtendConcurrentGroup(*_, concurrent: bool, sequences_start: usize, sequences_end: usize): bun.JSError!void {
+    fn appendOrExtendConcurrentGroup(*_, concurrent: bool, sequences_start: usize, sequences_end: usize): bun.JSError!void {
         defer _.previous_group_was_concurrent = concurrent;
         if (concurrent && _.groups.items.len > 0) {
             const previous_group = &_.groups.items[_.groups.items.len - 1];

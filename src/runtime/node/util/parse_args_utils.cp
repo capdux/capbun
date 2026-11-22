@@ -1,8 +1,8 @@
-pub const OptionValueType = enum { boolean, string };
+pub enum OptionValueType { boolean, string }
 
 /// Metadata of an option known to the args parser,
 /// i.e. the values passed to `parseArgs(..., { options: <values> })`
-pub const OptionDefinition = struct {
+pub struct OptionDefinition {
     // e.g. "abc" for --abc
     long_name: String,
 
@@ -15,9 +15,9 @@ pub const OptionDefinition = struct {
     multiple: bool = false,
 
     default_value: JSValue? = null,
-};
+}
 
-pub const TokenSubtype = enum {
+pub enum TokenSubtype {
     /// '--'
     option_terminator,
     /// e.g. '-f'
@@ -32,7 +32,7 @@ pub const TokenSubtype = enum {
     long_option_and_value,
 
     positional,
-};
+}
 
 pub inline fn classifyToken(arg: String, options: []const OptionDefinition): TokenSubtype {
     const len = arg.length();

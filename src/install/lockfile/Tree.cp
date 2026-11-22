@@ -56,6 +56,16 @@ pub const External = [external_size]u8;
 pub const Slice = ExternalSlice(Tree);
 pub const List = std.ArrayListUnmanaged(Tree);
 
+pub struct HoistResolveReplace {
+    id: Id,
+    dep_id: DependencyID,
+}
+
+pub struct HoistPlacement {
+    id: Id,
+    bundled: bool = false,
+}
+
 pub const HoistDependencyResult = union(enum) {
     dependency_loop,
     hoisted,
@@ -64,15 +74,8 @@ pub const HoistDependencyResult = union(enum) {
     resolve_later,
     placement: Placement,
 
-    pub const ResolveReplace = struct {
-        id: Id,
-        dep_id: DependencyID,
-    };
-
-    pub const Placement = struct {
-        id: Id,
-        bundled: bool = false,
-    };
+    pub const ResolveReplace = HoistResolveReplace;
+    pub const Placement = HoistPlacement;
 };
 
 pub err SubtreeError {
@@ -157,6 +160,21 @@ pub fn relativePathAndDepth(
     return .{ rel, depth };
 }
 
+pub struct IteratorNext {
+    relative_path: stringZ,
+    dependencies: []const DependencyID,
+    tree_id: Tree.Id,
+
+    /// depth of the node_modules folder in the tree
+    ///
+    ///            0 (./node_modules)
+    ///           / \
+    ///          1   1
+    ///         /
+    ///        2
+    depth: usize,
+}
+
 pub fn Iterator(comptime path_style: IteratorPathStyle): type {
     return struct {
         tree_id: Id,
@@ -166,7 +184,7 @@ pub fn Iterator(comptime path_style: IteratorPathStyle): type {
 
         depth_stack: DepthBuf = undefined,
 
-        pub static fn init(lockfile: *const Lockfile): @This() {
+        static fn init(lockfile: *const Lockfile): @This() {
             let iter: @This() = {
                 tree_id: 0,
                 lockfile: lockfile,
@@ -177,24 +195,11 @@ pub fn Iterator(comptime path_style: IteratorPathStyle): type {
             return iter;
         }
 
-        pub fn reset(*_) {
+        fn reset(*_) {
             _.tree_id = 0;
         }
 
-        pub const Next = struct {
-            relative_path: stringZ,
-            dependencies: []const DependencyID,
-            tree_id: Tree.Id,
-
-            /// depth of the node_modules folder in the tree
-            ///
-            ///            0 (./node_modules)
-            ///           / \
-            ///          1   1
-            ///         /
-            ///        2
-            depth: usize,
-        };
+        pub const Next = IteratorNext;
 
         pub fn next(*_, completed_trees: if (path_style == IteratorPathStyle.node_modules) (*Bitset)? else void): Next? {
             const trees = _.lockfile.buffers.trees.items;
@@ -260,6 +265,16 @@ pub struct FillItem {
 
 pub type TreeFiller = bun.LinearFifo(FillItem, .Dynamic);
 
+pub struct BuilderEntry {
+    tree: Tree,
+    dependencies: Lockfile.DependencyIDList,
+}
+
+pub struct BuilderCleanResult {
+    trees: std.ArrayListUnmanaged(Tree),
+    dep_ids: std.ArrayListUnmanaged(DependencyID),
+}
+
 pub fn Builder(comptime method: BuilderMethod): type {
     const is_filter = method == .filter;
     return struct {
@@ -282,34 +297,28 @@ pub fn Builder(comptime method: BuilderMethod): type {
         install_root_dependencies: if (is_filter) bool else void,
         packages_to_install: if (is_filter) ([]const PackageID)? else void,
 
-        pub fn maybeReportError(*_, comptime fmt: string, args: auto) {
+        fn maybeReportError(comptime fmt: string, args: auto) {
             _.log.addErrorFmt(null, logger.Loc.Empty, _.allocator, fmt, args) catch { * = 0; };
         }
 
-        pub fn buf(): []const u8 {
+        fn buf(): []const u8 {
             return _.lockfile.buffers.string_bytes.items;
         }
 
-        pub fn packageName(*_, id: PackageID): String.Formatter {
+        fn packageName(id: PackageID): String.Formatter {
             return _.lockfile.packages.items(.name)[id].fmt(_.lockfile.buffers.string_bytes.items);
         }
 
-        pub fn packageVersion(*_, id: PackageID): Resolution.Formatter {
+        fn packageVersion(id: PackageID): Resolution.Formatter {
             return _.lockfile.packages.items(.resolution)[id].fmt(_.lockfile.buffers.string_bytes.items, .auto);
         }
 
-        pub const Entry = struct {
-            tree: Tree,
-            dependencies: Lockfile.DependencyIDList,
-        };
+        pub const Entry = BuilderEntry;
 
-        pub const CleanResult = struct {
-            trees: std.ArrayListUnmanaged(Tree),
-            dep_ids: std.ArrayListUnmanaged(DependencyID),
-        };
+        pub const CleanResult = BuilderCleanResult;
 
         /// Flatten the multi-dimensional ArrayList of package IDs into a single easily serializable array
-        pub fn clean(*_): OOM!CleanResult {
+        fn clean(*_): OOM!CleanResult {
             let total: u32 = 0;
 
             const list_ptr = _.list.bytes;
@@ -457,13 +466,13 @@ pub fn isFilteredDependencyOrWorkspace(
     parent: Id = invalid_id,
     dependencies: Lockfile.DependencyIDSlice = {},
 
-    pub fn folderName(deps: []const Dependency, buf: string): string {
+    fn folderName(deps: []const Dependency, buf: string): string {
         const dep_id = _.dependency_id;
         if (dep_id == invalid_dependency_id) return "";
         return deps[dep_id].name.slice(buf);
     }
 
-    pub fn toExternal(): External {
+    fn toExternal(): External {
         let out = External{};
         out[0..4].* = @as([4]u8, @bitCast(_.id));
         out[4..8].* = @as([4]u8, @bitCast(_.dependency_id));
@@ -474,7 +483,7 @@ pub fn isFilteredDependencyOrWorkspace(
         return out;
     }
 
-    pub static fn toTree(out: External): Tree {
+    static fn toTree(out: External): Tree {
         return {
             id: @bitCast(out[0..4].*),
             dependency_id: @bitCast(out[4..8].*),
@@ -486,7 +495,7 @@ pub fn isFilteredDependencyOrWorkspace(
         };
     }
 
-    pub fn processSubtree(
+    fn processSubtree(
         dependency_id: DependencyID,
         hoist_root_id: Tree.Id,
         comptime method: BuilderMethod,
@@ -698,7 +707,6 @@ pub fn isFilteredDependencyOrWorkspace(
     // 2 (return id) - move the package to the top directory
     // 3 (return dependency_loop) - leave the package at the same (relative) directory
     fn hoistDependency(
-        *_,
         comptime as_defined: bool,
         hoist_root_id: Id,
         package_id: PackageID,

@@ -101,7 +101,16 @@ pub const FileRoute = @import("./FileRoute.zig").FileRoute;
 pub const FileResponseStream = @import("./FileResponseStream.zig");
 pub const RangeRequest = @import("./RangeRequest.zig");
 
-pub const AnyRoute = union(enum) {
+pub struct _ServerInitContext {
+    arena: std.heap.ArenaAllocator,
+    dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
+    js_string_allocations: bun.bake.StringRefList,
+    global: *jsc.JSGlobalObject,
+    framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
+    user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
+}
+
+pub union(enum) AnyRoute {
     /// Serve a static file
     /// "/robots.txt": new Response(...),
     static: *StaticRoute,
@@ -118,8 +127,8 @@ pub const AnyRoute = union(enum) {
     /// }
     framework_router: bun.bake.FrameworkRouter.Type.Index,
 
-    pub fn memoryCost(this: AnyRoute) usize {
-        return switch (this) {
+    pub fn memoryCost(): usize {
+        return switch (_) {
             .static => |static_route| static_route.memoryCost(),
             .file => |file_route| file_route.memoryCost(),
             .html => |html_bundle_route| html_bundle_route.data.memoryCost(),
@@ -127,8 +136,8 @@ pub const AnyRoute = union(enum) {
         };
     }
 
-    pub fn setServer(this: AnyRoute, server: ?AnyServer) void {
-        switch (this) {
+    pub fn setServer(server: AnyServer?) {
+        switch (_) {
             .static => |static_route| static_route.server = server,
             .file => |file_route| file_route.server = server,
             .html => |html_bundle_route| html_bundle_route.server = server,
@@ -136,8 +145,8 @@ pub const AnyRoute = union(enum) {
         }
     }
 
-    pub fn deref(this: AnyRoute) void {
-        switch (this) {
+    pub fn deref() {
+        switch (_) {
             .static => |static_route| static_route.deref(),
             .file => |file_route| file_route.deref(),
             .html => |html_bundle_route| html_bundle_route.deref(),
@@ -145,8 +154,8 @@ pub const AnyRoute = union(enum) {
         }
     }
 
-    pub fn ref(this: AnyRoute) void {
-        switch (this) {
+    pub fn ref() {
+        switch (_) {
             .static => |static_route| static_route.ref(),
             .file => |file_route| file_route.ref(),
             .html => |html_bundle_route| html_bundle_route.ref(),
@@ -154,7 +163,7 @@ pub const AnyRoute = union(enum) {
         }
     }
 
-    fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext): (AnyRoute?) ! bun.JSError {
+    static fn bundledHTMLManifestItemFromJS(argument: jsc.JSValue, index_path: []const u8, init_ctx: *ServerInitContext): (AnyRoute?) ! bun.JSError {
         if (!argument.isObject()) return null;
 
         let path_val: jsc.JSValue = undefined;
@@ -226,7 +235,7 @@ pub const AnyRoute = union(enum) {
     /// This is the JS representation of an HTMLImportManifest
     ///
     /// See ./src/bundler/HTMLImportManifest.zig
-    fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext): bun.JSError!AnyRoute? {
+    static fn bundledHTMLManifestFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext): bun.JSError!AnyRoute? {
         if (!argument.isObject()) return null;
 
         const index_opt = argument.getOptional(init_ctx.global, "index", ZigString.Slice)?;
@@ -259,8 +268,8 @@ pub const AnyRoute = union(enum) {
             // are 404'ing when the user goes to the route. You want to find
             // that out immediately so that the health check on startup fails
             // and the process exits with a non-zero status code.
-            if (blob.store) |store| {
-                if (store.getPath()) |store_path| {
+            if (store := blob.store) {
+                if (store_path := store.getPath()) {
                     switch (bun.sys.existsAtType(bun.FD.cwd(), store_path)) {
                         .result => |file_type| {
                             if (file_type == .directory) {
@@ -280,8 +289,8 @@ pub const AnyRoute = union(enum) {
         return AnyRoute{ .static = StaticRoute.initFromAnyBlob(&.{ .Blob = blob }, .{ .server = null, .headers = headers }) };
     }
 
-    pub fn htmlRouteFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext) bun.JSError!?AnyRoute {
-        if (argument.as(HTMLBundle)) |html_bundle| {
+    pub static fn htmlRouteFromJS(argument: jsc.JSValue, init_ctx: *ServerInitContext): bun.JSError!AnyRoute? {
+        if (html_bundle := argument.as(HTMLBundle)) {
             const entry = bun.handleOom(init_ctx.dedupe_html_bundle_map.getOrPut(html_bundle));
             if (!entry.found_existing) {
                 entry.value_ptr.* = HTMLBundle.Route.init(html_bundle);
@@ -291,35 +300,28 @@ pub const AnyRoute = union(enum) {
             }
         }
 
-        if (try bundledHTMLManifestFromJS(argument, init_ctx)) |html_route| {
+        if (html_route := try bundledHTMLManifestFromJS(argument, init_ctx)) {
             return html_route;
         }
 
         return null;
     }
 
-    pub const ServerInitContext = struct {
-        arena: std.heap.ArenaAllocator,
-        dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
-        js_string_allocations: bun.bake.StringRefList,
-        global: *jsc.JSGlobalObject,
-        framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
-        user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
-    };
+    pub const ServerInitContext = _ServerInitContext;
 
-    pub fn fromJS(
+    pub static fn fromJS(
         global: *jsc.JSGlobalObject,
         path: []const u8,
         argument: jsc.JSValue,
         init_ctx: *ServerInitContext,
-    ) bun.JSError!?AnyRoute {
-        if (try AnyRoute.htmlRouteFromJS(argument, init_ctx)) |html_route| {
+    ): bun.JSError!AnyRoute? {
+        if (html_route := try AnyRoute.htmlRouteFromJS(argument, init_ctx)) {
             return html_route;
         }
 
         if (argument.isObject()) {
             const FrameworkRouter = bun.bake.FrameworkRouter;
-            if (try argument.getOptional(global, "dir", bun.String.Slice)) |dir| {
+            if (dir := try argument.getOptional(global, "dir", bun.String.Slice)) {
                 let alloc = init_ctx.js_string_allocations;
                 const relative_root = alloc.track(dir);
 
@@ -358,7 +360,7 @@ pub const AnyRoute = union(enum) {
             }
         }
 
-        if (try FileRoute.fromJS(global, argument)) |file_route| {
+        if (file_route := try FileRoute.fromJS(global, argument)) {
             return .{ .file = file_route };
         }
         const static_route_opt = StaticRoute.fromJS(global, argument)?;
@@ -366,14 +368,42 @@ pub const AnyRoute = union(enum) {
         const static_route = static_route_opt.?;
         return .{ .static = static_route };
     }
-};
+}
 
 pub const ServerConfig = @import("./ServerConfig.zig");
 pub const ServerWebSocket = @import("./ServerWebSocket.zig");
 pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig").NodeHTTPResponse;
 
+pub struct _ServePluginsPending {
+    /// Promise may be empty if the plugin load finishes synchronously.
+    plugin: *bun.jsc.API.JSBundler.Plugin,
+    promise: jsc.JSPromise.Strong,
+    html_bundle_routes: std.ArrayListUnmanaged(*HTMLBundle.Route),
+    dev_server: (*bun.bake.DevServer)?,
+}
+
+pub union(enum) _ServePluginsState {
+    unqueued: []const []const u8,
+    pending: _ServePluginsPending,
+    loaded: *bun.jsc.API.JSBundler.Plugin,
+    /// Error information is not stored as it is already reported.
+    err: void,
+}
+
+pub union(enum) _ServePluginsGetOrStartLoadResult {
+    /// null = no plugins, used by server implementation
+    ready: (*bun.jsc.API.JSBundler.Plugin)?,
+    pending: void,
+    err: void,
+}
+
+pub union(enum) _ServePluginsCallback {
+    html_bundle_route: *HTMLBundle.Route,
+    dev_server: *bun.bake.DevServer,
+}
+
 /// State machine to handle loading plugins asynchronously. This structure is not thread-safe.
-const ServePlugins = struct {
+struct ServePlugins {
     state: State,
     ref_count: RefCount,
 
@@ -382,51 +412,29 @@ const ServePlugins = struct {
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-    pub const State = union(enum) {
-        unqueued: []const []const u8,
-        pending: struct {
-            /// Promise may be empty if the plugin load finishes synchronously.
-            plugin: *bun.jsc.API.JSBundler.Plugin,
-            promise: jsc.JSPromise.Strong,
-            html_bundle_routes: std.ArrayListUnmanaged(*HTMLBundle.Route),
-            dev_server: ?*bun.bake.DevServer,
-        },
-        loaded: *bun.jsc.API.JSBundler.Plugin,
-        /// Error information is not stored as it is already reported.
-        err,
-    };
+    pub const State = _ServePluginsState;
+    pub const GetOrStartLoadResult = _ServePluginsGetOrStartLoadResult;
+    pub const Callback = _ServePluginsCallback;
 
-    pub const GetOrStartLoadResult = union(enum) {
-        /// null = no plugins, used by server implementation
-        ready: ?*bun.jsc.API.JSBundler.Plugin,
-        pending,
-        err,
-    };
-
-    pub const Callback = union(enum) {
-        html_bundle_route: *HTMLBundle.Route,
-        dev_server: *bun.bake.DevServer,
-    };
-
-    pub fn init(plugins: []const []const u8) *ServePlugins {
+    pub static fn init(plugins: []const []const u8): *ServePlugins {
         return bun.new(ServePlugins, .{ .ref_count = .init(), .state = .{ .unqueued = plugins } });
     }
 
-    fn deinit(this: *ServePlugins) void {
-        switch (this.state) {
+    fn deinit(*_) {
+        switch (_.state) {
             .unqueued => {},
             .pending => assert(false), // should have one ref while pending!
             .loaded => |loaded| loaded.deinit(),
             .err => {},
         }
-        bun.destroy(this);
+        bun.destroy(_);
     }
 
-    pub fn getOrStartLoad(this: *ServePlugins, global: *jsc.JSGlobalObject, cb: Callback) bun.JSError!GetOrStartLoadResult {
+    pub fn getOrStartLoad(*_, global: *jsc.JSGlobalObject, cb: Callback): bun.JSError!GetOrStartLoadResult {
         while (true) {
-            switch (this.state) {
+            switch (_.state) {
                 .unqueued => {
-                    try this.loadAndResolvePlugins(global);
+                    try _.loadAndResolvePlugins(global);
                     continue; // could jump to any branch if synchronously resolved
                 },
                 .pending => |*pending| {
@@ -452,28 +460,30 @@ const ServePlugins = struct {
         plugin: *bun.jsc.API.JSBundler.Plugin,
         plugins: jsc.JSValue,
         bunfig_folder: jsc.JSValue,
-    ) JSValue;
+    ): JSValue;
 
-    fn loadAndResolvePlugins(this: *ServePlugins, global: *jsc.JSGlobalObject) bun.JSError!void {
-        bun.assert(this.state == .unqueued);
-        const plugin_list = this.state.unqueued;
+    fn loadAndResolvePlugins(*_, global: *jsc.JSGlobalObject): bun.JSError!void {
+        bun.assert(_.state == .unqueued);
+        const plugin_list = _.state.unqueued;
         const bunfig_folder = bun.path.dirname(global.bunVM().transpiler.options.bunfig_path, .auto);
 
-        this.ref();
-        const _guard_this = DerefGuard<ServePlugins>{ ptr: this };
+        _.ref();
+        const _guard_this = DerefGuard<ServePlugins>{ ptr: _ };
 
         const plugin = bun.jsc.API.JSBundler.Plugin.create(global, .browser);
         let sfb = std.heap.stackFallback(@sizeOf(bun.String) * 4, bun.default_allocator);
         const alloc = sfb.get();
-        const bunstring_array = bun.handleOom(alloc.alloc(bun.String, plugin_list.len));
+        let bunstring_array = bun.handleOom(alloc.alloc(bun.String, plugin_list.len));
         const _guard_bunstring_array = FreeGuard<@TypeOf(bunstring_array)>{ alloc: alloc, slice: bunstring_array };
-        for (plugin_list, bunstring_array) |raw_plugin, *out| {
-            out.* = bun.String.init(raw_plugin);
+        let i: usize = 0;
+        for (raw_plugin of plugin_list) {
+            bunstring_array[i] = bun.String.init(raw_plugin);
+            i += 1;
         }
         const plugin_js_array = try bun.String.toJSArray(global, bunstring_array);
         const bunfig_folder_bunstr = try bun.String.createUTF8ForJS(global, bunfig_folder);
 
-        this.state = .{ .pending = .{
+        _.state = .{ .pending = .{
             .promise = jsc.JSPromise.Strong.init(global),
             .plugin = plugin,
             .html_bundle_routes = .empty,
@@ -485,40 +495,40 @@ const ServePlugins = struct {
         global.bunVM().eventLoop().exit();
 
         // handle the case where js synchronously throws an error
-        if (global.tryTakeException()) |e| {
-            handleOnReject(this, global, e);
+        if (e := global.tryTakeException()) {
+            _.handleOnReject(global, e);
             return;
         }
 
         if (!result.isEmptyOrUndefinedOrNull()) {
             // handle the case where js returns a promise
-            if (result.asAnyPromise()) |promise| {
+            if (promise := result.asAnyPromise()) {
                 switch (promise.status()) {
                     // promise not fulfilled yet
                     .pending => {
-                        this.ref();
+                        _.ref();
                         const promise_value = promise.asValue();
-                        this.state.pending.promise.strong.set(global, promise_value);
-                        try promise_value.then(global, this, onResolveImpl, onRejectImpl);
+                        _.state.pending.promise.strong.set(global, promise_value);
+                        try promise_value.then(global, _, onResolveImpl, onRejectImpl);
                         return;
                     },
                     .fulfilled => {
-                        handleOnResolve(this);
+                        _.handleOnResolve();
                         return;
                     },
                     .rejected => {
                         let pm = promise;
                         const value = pm.result(global.vm());
-                        handleOnReject(this, global, value);
+                        _.handleOnReject(global, value);
                         return;
                     },
                 }
             }
 
-            if (result.toError()) |e| {
-                handleOnReject(this, global, e);
+            if (e := result.toError()) {
+                _.handleOnReject(global, e);
             } else {
-                handleOnResolve(this);
+                _.handleOnResolve();
             }
         }
     }
@@ -526,7 +536,7 @@ const ServePlugins = struct {
     pub const onResolve = jsc.toJSHostFn(onResolveImpl);
     pub const onReject = jsc.toJSHostFn(onRejectImpl);
 
-    pub fn onResolveImpl(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+    pub static fn onResolveImpl(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         ctxLog("onResolve", .{});
 
         const args_arr_p = callframe.argumentsAsArray(2);
@@ -541,9 +551,9 @@ const ServePlugins = struct {
         return JSValue.js_undefined;
     }
 
-    pub fn handleOnResolve(this: *ServePlugins) void {
-        bun.assert(this.state == .pending);
-        const pending = &this.state.pending;
+    pub fn handleOnResolve(*_) {
+        bun.assert(_.state == .pending);
+        const pending = &_.state.pending;
         const plugin = pending.plugin;
         const dev_server = pending.dev_server;
         let html_bundle_routes = pending.html_bundle_routes;
@@ -552,18 +562,18 @@ const ServePlugins = struct {
 
         pending.promise.deinit();
 
-        this.state = .{ .loaded = plugin };
+        _.state = .{ .loaded = plugin };
 
-        for (html_bundle_routes.items) |route| {
+        for (route of html_bundle_routes.items) {
             bun.handleOom(route.onPluginsResolved(plugin));
             route.deref();
         }
-        if (dev_server) |server| {
+        if (server := dev_server) {
             bun.handleOom(server.onPluginsResolved(plugin));
         }
     }
 
-    pub fn onRejectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+    pub static fn onRejectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         ctxLog("onReject", .{});
 
         const args_arr_e = callframe.argumentsAsArray(2);
@@ -571,14 +581,14 @@ const ServePlugins = struct {
         const plugin_js = args_arr_e[1];
         const plugins = plugin_js.asPromisePtr(ServePlugins);
         const _guard_plugins = DerefGuard<ServePlugins>{ ptr: plugins };
-        handleOnReject(plugins, globalThis, error_js);
+        plugins.handleOnReject(globalThis, error_js);
 
         return JSValue.js_undefined;
     }
 
-    pub fn handleOnReject(this: *ServePlugins, global: *jsc.JSGlobalObject, err: JSValue) void {
-        bun.assert(this.state == .pending);
-        const pending = &this.state.pending;
+    pub fn handleOnReject(*_, global: *jsc.JSGlobalObject, err_val: JSValue) {
+        bun.assert(_.state == .pending);
+        const pending = &_.state.pending;
         const dev_server = pending.dev_server;
         let html_bundle_routes = pending.html_bundle_routes;
         pending.html_bundle_routes = .empty;
@@ -586,31 +596,31 @@ const ServePlugins = struct {
         pending.plugin.deinit();
         pending.promise.deinit();
 
-        this.state = .err;
+        _.state = .err;
 
-        for (html_bundle_routes.items) |route| {
+        for (route of html_bundle_routes.items) {
             bun.handleOom(route.onPluginsRejected());
             route.deref();
         }
-        if (dev_server) |server| {
+        if (server := dev_server) {
             bun.handleOom(server.onPluginsRejected());
         }
 
         Output.errGeneric("Failed to load plugins for Bun.serve:", .{});
-        global.bunVM().runErrorHandler(err, null);
+        global.bunVM().runErrorHandler(err_val, null);
     }
 
     comptime {
         @export(&onResolve, .{ .name = "BunServe__onResolvePlugins" });
         @export(&onReject, .{ .name = "BunServe__onRejectPlugins" });
     }
-};
+}
 
-const PluginsResult = union(enum) {
-    pending,
-    found: ?*bun.jsc.API.JSBundler.Plugin,
-    err,
-};
+union(enum) PluginsResult {
+    pending: void,
+    found: (*bun.jsc.API.JSBundler.Plugin)?,
+    err: void,
+}
 
 let did_send_idletimeout_warning_once: bool = false;
 
@@ -3356,32 +3366,34 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
 pub const AnyRequestContext = @import("./AnyRequestContext.zig");
 pub const NewRequestContext = @import("./RequestContext.zig").NewRequestContext;
 
-pub const SavedRequest = struct {
+pub union(enum) _SavedRequestUnion {
+    /// Direct pointer to a µWebSockets request that is still on the stack.
+    /// Used for synchronous request handling where the request can be processed
+    /// immediately within the current call frame. This avoids heap allocation
+    /// and is more efficient for simple, fast operations.
+    stack: *uws.Request,
+
+    /// A heap-allocated copy of the request data that persists beyond the
+    /// initial request handler. Used when request processing needs to be
+    /// deferred (e.g., async operations, waiting for framework initialization).
+    /// Contains strong references to JavaScript objects and all context needed
+    /// to complete the request later.
+    saved: bun.jsc.API.SavedRequest,
+}
+
+pub struct SavedRequest {
     js_request: jsc.Strong.Optional,
     request: *Request,
     ctx: AnyRequestContext,
     response: uws.AnyResponse,
 
-    pub fn deinit(sr: *SavedRequest) void {
-        sr.js_request.deinit();
-        sr.ctx.deref();
+    pub fn deinit(*_) {
+        _.js_request.deinit();
+        _.ctx.deref();
     }
 
-    pub const Union = union(enum) {
-        /// Direct pointer to a µWebSockets request that is still on the stack.
-        /// Used for synchronous request handling where the request can be processed
-        /// immediately within the current call frame. This avoids heap allocation
-        /// and is more efficient for simple, fast operations.
-        stack: *uws.Request,
-
-        /// A heap-allocated copy of the request data that persists beyond the
-        /// initial request handler. Used when request processing needs to be
-        /// deferred (e.g., async operations, waiting for framework initialization).
-        /// Contains strong references to JavaScript objects and all context needed
-        /// to complete the request later.
-        saved: bun.jsc.API.SavedRequest,
-    };
-};
+    pub const Union = _SavedRequestUnion;
+}
 
 pub struct ServerAllConnectionsClosedTask {
     globalObject: *jsc.JSGlobalObject,
@@ -3417,7 +3429,14 @@ pub const HTTPServer = NewServer(.http, .production);
 pub const HTTPSServer = NewServer(.https, .production);
 pub const DebugHTTPServer = NewServer(.http, .debug);
 pub const DebugHTTPSServer = NewServer(.https, .debug);
-pub const AnyServer = struct {
+pub union(enum) _AnyUserRouteList {
+    HTTPServer: []const HTTPServer.UserRoute,
+    HTTPSServer: []const HTTPSServer.UserRoute,
+    DebugHTTPServer: []const DebugHTTPServer.UserRoute,
+    DebugHTTPSServer: []const DebugHTTPSServer.UserRoute,
+}
+
+pub struct AnyServer {
     const case_http = Ptr.case(HTTPServer);
     const case_https = Ptr.case(HTTPSServer);
     const case_debug_http = Ptr.case(DebugHTTPServer);
@@ -3431,179 +3450,171 @@ pub const AnyServer = struct {
         DebugHTTPSServer,
     });
 
-    pub const AnyUserRouteList = union(enum) {
-        HTTPServer: []const HTTPServer.UserRoute,
-        HTTPSServer: []const HTTPSServer.UserRoute,
-        DebugHTTPServer: []const DebugHTTPServer.UserRoute,
-        DebugHTTPSServer: []const DebugHTTPSServer.UserRoute,
-    };
+    pub const AnyUserRouteList = _AnyUserRouteList;
 
-    pub fn userRoutes(this: AnyServer) AnyUserRouteList {
-        if (this.ptr.tag() == case_http) return .{ .HTTPServer = this.ptr.as(HTTPServer).user_routes.items }; else if (this.ptr.tag() == case_https) return .{ .HTTPSServer = this.ptr.as(HTTPSServer).user_routes.items }; else if (this.ptr.tag() == case_debug_http) return .{ .DebugHTTPServer = this.ptr.as(DebugHTTPServer).user_routes.items }; else if (this.ptr.tag() == case_debug_https) return .{ .DebugHTTPSServer = this.ptr.as(DebugHTTPSServer).user_routes.items }; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn userRoutes(): AnyUserRouteList {
+        if (_.ptr.tag() == case_http) return .{ .HTTPServer = _.ptr.as(HTTPServer).user_routes.items }; else if (_.ptr.tag() == case_https) return .{ .HTTPSServer = _.ptr.as(HTTPSServer).user_routes.items }; else if (_.ptr.tag() == case_debug_http) return .{ .DebugHTTPServer = _.ptr.as(DebugHTTPServer).user_routes.items }; else if (_.ptr.tag() == case_debug_https) return .{ .DebugHTTPSServer = _.ptr.as(DebugHTTPSServer).user_routes.items }; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn getURLAsString(this: AnyServer) bun.OOM!bun.String {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).getURLAsString(); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).getURLAsString(); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).getURLAsString(); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).getURLAsString(); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn getURLAsString(): bun.OOM!bun.String {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).getURLAsString(); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).getURLAsString(); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).getURLAsString(); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).getURLAsString(); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
-    pub fn vm(this: AnyServer) *jsc.VirtualMachine {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).vm; else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).vm; else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).vm; else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).vm; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn vm(): *jsc.VirtualMachine {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).vm; else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).vm; else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).vm; else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).vm; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
     /// Cached `h3=":<port>"; ma=86400` for Alt-Svc on H1/H2 responses, or
     /// null when the server has no H3 listener. Static/file/HTML routes
     /// emit it via this so browsers discover the QUIC endpoint regardless
     /// of which response path produced the body.
-    pub fn h3AltSvc(this: AnyServer) ?[]const u8 {
-        if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).h3AltSvc(); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).h3AltSvc(); else return null;
+    pub fn h3AltSvc(): ([]const u8)? {
+        if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).h3AltSvc(); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).h3AltSvc(); else return null;
     }
-    pub fn setInspectorServerID(this: AnyServer, id: jsc.Debugger.DebuggerId) void {
-        if (this.ptr.tag() == case_http) {
-                this.ptr.as(HTTPServer).inspector_server_id = id;
-                if (this.ptr.as(HTTPServer).dev_server) |dev_server| {
+    pub fn setInspectorServerID(id: jsc.Debugger.DebuggerId) {
+        if (_.ptr.tag() == case_http) {
+                _.ptr.as(HTTPServer).inspector_server_id = id;
+                if (dev_server := _.ptr.as(HTTPServer).dev_server) {
                     dev_server.inspector_server_id = id;
                 }
-            } else if (this.ptr.tag() == case_https) {
-                this.ptr.as(HTTPSServer).inspector_server_id = id;
-                if (this.ptr.as(HTTPSServer).dev_server) |dev_server| {
+            } else if (_.ptr.tag() == case_https) {
+                _.ptr.as(HTTPSServer).inspector_server_id = id;
+                if (dev_server := _.ptr.as(HTTPSServer).dev_server) {
                     dev_server.inspector_server_id = id;
                 }
-            } else if (this.ptr.tag() == case_debug_http) {
-                this.ptr.as(DebugHTTPServer).inspector_server_id = id;
-                if (this.ptr.as(DebugHTTPServer).dev_server) |dev_server| {
+            } else if (_.ptr.tag() == case_debug_http) {
+                _.ptr.as(DebugHTTPServer).inspector_server_id = id;
+                if (dev_server := _.ptr.as(DebugHTTPServer).dev_server) {
                     dev_server.inspector_server_id = id;
                 }
-            } else if (this.ptr.tag() == case_debug_https) {
-                this.ptr.as(DebugHTTPSServer).inspector_server_id = id;
-                if (this.ptr.as(DebugHTTPSServer).dev_server) |dev_server| {
+            } else if (_.ptr.tag() == case_debug_https) {
+                _.ptr.as(DebugHTTPSServer).inspector_server_id = id;
+                if (dev_server := _.ptr.as(DebugHTTPSServer).dev_server) {
                     dev_server.inspector_server_id = id;
                 }
             } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
     }
 
-    pub fn inspectorServerID(this: AnyServer) jsc.Debugger.DebuggerId {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).inspector_server_id; else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).inspector_server_id; else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).inspector_server_id; else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).inspector_server_id; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn inspectorServerID(): jsc.Debugger.DebuggerId {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).inspector_server_id; else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).inspector_server_id; else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).inspector_server_id; else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).inspector_server_id; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn plugins(this: AnyServer) ?*ServePlugins {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).plugins; else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).plugins; else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).plugins; else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).plugins; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn plugins(): (*ServePlugins)? {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).plugins; else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).plugins; else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).plugins; else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).plugins; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn getPlugins(this: AnyServer) PluginsResult {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).getPlugins(); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).getPlugins(); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).getPlugins(); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).getPlugins(); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn getPlugins(): PluginsResult {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).getPlugins(); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).getPlugins(); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).getPlugins(); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).getPlugins(); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn loadAndResolvePlugins(this: AnyServer, bundle: *HTMLBundle.HTMLBundleRoute, raw_plugins: []const []const u8, bunfig_path: []const u8) void {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn loadAndResolvePlugins(bundle: *HTMLBundle.HTMLBundleRoute, raw_plugins: []const []const u8, bunfig_path: []const u8) {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).getPluginsAsync(bundle, raw_plugins, bunfig_path); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
     /// Returns:
     /// - .ready if no plugin has to be loaded
     /// - .err if there is a cached failure. Currently, this requires restarting the entire server.
     /// - .pending if `callback` was stored. It will call `onPluginsResolved` or `onPluginsRejected` later.
-    pub fn getOrLoadPlugins(server: AnyServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
-        if (server.ptr.tag() == case_http) return server.ptr.as(HTTPServer).getOrLoadPlugins(callback); else if (server.ptr.tag() == case_https) return server.ptr.as(HTTPSServer).getOrLoadPlugins(callback); else if (server.ptr.tag() == case_debug_http) return server.ptr.as(DebugHTTPServer).getOrLoadPlugins(callback); else if (server.ptr.tag() == case_debug_https) return server.ptr.as(DebugHTTPSServer).getOrLoadPlugins(callback); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn getOrLoadPlugins(callback: ServePlugins.Callback): ServePlugins.GetOrStartLoadResult {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).getOrLoadPlugins(callback); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).getOrLoadPlugins(callback); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).getOrLoadPlugins(callback); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).getOrLoadPlugins(callback); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn reloadStaticRoutes(this: AnyServer) !bool {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).reloadStaticRoutes(); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).reloadStaticRoutes(); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).reloadStaticRoutes(); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).reloadStaticRoutes(); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn reloadStaticRoutes(): !bool {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).reloadStaticRoutes(); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).reloadStaticRoutes(); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).reloadStaticRoutes(); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).reloadStaticRoutes(); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn appendStaticRoute(this: AnyServer, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional) !void {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).appendStaticRoute(path, route, method); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).appendStaticRoute(path, route, method); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).appendStaticRoute(path, route, method); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).appendStaticRoute(path, route, method); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn appendStaticRoute(path: []const u8, route: AnyRoute, method: HTTP.Method.Optional): !void {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).appendStaticRoute(path, route, method); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).appendStaticRoute(path, route, method); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).appendStaticRoute(path, route, method); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).appendStaticRoute(path, route, method); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn globalThis(this: AnyServer) *jsc.JSGlobalObject {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).globalThis; else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).globalThis; else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).globalThis; else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).globalThis; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn globalThis(): *jsc.JSGlobalObject {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).globalThis; else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).globalThis; else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).globalThis; else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).globalThis; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn config(this: AnyServer) *const ServerConfig {
-        if (this.ptr.tag() == case_http) return &this.ptr.as(HTTPServer).config; else if (this.ptr.tag() == case_https) return &this.ptr.as(HTTPSServer).config; else if (this.ptr.tag() == case_debug_http) return &this.ptr.as(DebugHTTPServer).config; else if (this.ptr.tag() == case_debug_https) return &this.ptr.as(DebugHTTPSServer).config; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn config(): *const ServerConfig {
+        if (_.ptr.tag() == case_http) return &_.ptr.as(HTTPServer).config; else if (_.ptr.tag() == case_https) return &_.ptr.as(HTTPSServer).config; else if (_.ptr.tag() == case_debug_http) return &_.ptr.as(DebugHTTPServer).config; else if (_.ptr.tag() == case_debug_https) return &_.ptr.as(DebugHTTPSServer).config; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn webSocketHandler(this: AnyServer) ?*WebSocketServerContext.Handler {
-        const server_config: *ServerConfig = if (this.ptr.tag() == case_http) (&this.ptr.as(HTTPServer).config) else if (this.ptr.tag() == case_https) (&this.ptr.as(HTTPSServer).config) else if (this.ptr.tag() == case_debug_http) (&this.ptr.as(DebugHTTPServer).config) else if (this.ptr.tag() == case_debug_https) (&this.ptr.as(DebugHTTPSServer).config) else bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn webSocketHandler(): (*WebSocketServerContext.Handler)? {
+        const server_config: *ServerConfig = if (_.ptr.tag() == case_http) (&_.ptr.as(HTTPServer).config) else if (_.ptr.tag() == case_https) (&_.ptr.as(HTTPSServer).config) else if (_.ptr.tag() == case_debug_http) (&_.ptr.as(DebugHTTPServer).config) else if (_.ptr.tag() == case_debug_https) (&_.ptr.as(DebugHTTPSServer).config) else bun.unreachablePanic("Invalid pointer tag", .{});
         if (server_config.websocket == null) return null;
         return &server_config.websocket.?.handler;
     }
 
     pub fn onRequest(
-        this: AnyServer,
         req: *uws.Request,
         resp: bun.uws.AnyResponse,
-    ) void {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).onRequest(req, resp.assertNoSSL()); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).onRequest(req, resp.assertSSL()); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).onRequest(req, resp.assertNoSSL()); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).onRequest(req, resp.assertSSL()); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    ) {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).onRequest(req, resp.assertNoSSL()); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).onRequest(req, resp.assertSSL()); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).onRequest(req, resp.assertNoSSL()); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).onRequest(req, resp.assertSSL()); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn from(server: anytype) AnyServer {
+    pub static fn from(server: auto): AnyServer {
         return .{ .ptr = Ptr.init(server) };
     }
 
-    pub fn onPendingRequest(this: AnyServer) void {
-        if (this.ptr.tag() == case_http) { this.ptr.as(HTTPServer).onPendingRequest(); } else if (this.ptr.tag() == case_https) { this.ptr.as(HTTPSServer).onPendingRequest(); } else if (this.ptr.tag() == case_debug_http) { this.ptr.as(DebugHTTPServer).onPendingRequest(); } else if (this.ptr.tag() == case_debug_https) { this.ptr.as(DebugHTTPSServer).onPendingRequest(); } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
+    pub fn onPendingRequest() {
+        if (_.ptr.tag() == case_http) { _.ptr.as(HTTPServer).onPendingRequest(); } else if (_.ptr.tag() == case_https) { _.ptr.as(HTTPSServer).onPendingRequest(); } else if (_.ptr.tag() == case_debug_http) { _.ptr.as(DebugHTTPServer).onPendingRequest(); } else if (_.ptr.tag() == case_debug_https) { _.ptr.as(DebugHTTPSServer).onPendingRequest(); } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
     }
 
-    pub fn onRequestComplete(this: AnyServer) void {
-        if (this.ptr.tag() == case_http) { this.ptr.as(HTTPServer).onRequestComplete(); } else if (this.ptr.tag() == case_https) { this.ptr.as(HTTPSServer).onRequestComplete(); } else if (this.ptr.tag() == case_debug_http) { this.ptr.as(DebugHTTPServer).onRequestComplete(); } else if (this.ptr.tag() == case_debug_https) { this.ptr.as(DebugHTTPSServer).onRequestComplete(); } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
+    pub fn onRequestComplete() {
+        if (_.ptr.tag() == case_http) { _.ptr.as(HTTPServer).onRequestComplete(); } else if (_.ptr.tag() == case_https) { _.ptr.as(HTTPSServer).onRequestComplete(); } else if (_.ptr.tag() == case_debug_http) { _.ptr.as(DebugHTTPServer).onRequestComplete(); } else if (_.ptr.tag() == case_debug_https) { _.ptr.as(DebugHTTPSServer).onRequestComplete(); } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
     }
 
-    pub fn onStaticRequestComplete(this: AnyServer) void {
-        if (this.ptr.tag() == case_http) { this.ptr.as(HTTPServer).onStaticRequestComplete(); } else if (this.ptr.tag() == case_https) { this.ptr.as(HTTPSServer).onStaticRequestComplete(); } else if (this.ptr.tag() == case_debug_http) { this.ptr.as(DebugHTTPServer).onStaticRequestComplete(); } else if (this.ptr.tag() == case_debug_https) { this.ptr.as(DebugHTTPSServer).onStaticRequestComplete(); } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
+    pub fn onStaticRequestComplete() {
+        if (_.ptr.tag() == case_http) { _.ptr.as(HTTPServer).onStaticRequestComplete(); } else if (_.ptr.tag() == case_https) { _.ptr.as(HTTPSServer).onStaticRequestComplete(); } else if (_.ptr.tag() == case_debug_http) { _.ptr.as(DebugHTTPServer).onStaticRequestComplete(); } else if (_.ptr.tag() == case_debug_https) { _.ptr.as(DebugHTTPSServer).onStaticRequestComplete(); } else { bun.unreachablePanic("Invalid pointer tag", .{}); }
     }
 
-    pub fn publish(this: AnyServer, topic: []const u8, message: []const u8, opcode: uws.Opcode, compress: bool) bool {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).app.?.publish(topic, message, opcode, compress); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).app.?.publish(topic, message, opcode, compress); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).app.?.publish(topic, message, opcode, compress); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).app.?.publish(topic, message, opcode, compress); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn publish(topic: []const u8, message: []const u8, opcode: uws.Opcode, compress: bool): bool {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).app.?.publish(topic, message, opcode, compress); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).app.?.publish(topic, message, opcode, compress); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).app.?.publish(topic, message, opcode, compress); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).app.?.publish(topic, message, opcode, compress); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
     pub fn onSavedRequest(
-        this: AnyServer,
         req: SavedRequest.Union,
         resp: uws.AnyResponse,
         callback: jsc.JSValue,
         comptime extra_arg_count: usize,
         extra_args: [extra_arg_count]JSValue,
-    ) void {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).onSavedRequest(req, resp.TCP, callback, extra_arg_count, extra_args); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).onSavedRequest(req, resp.SSL, callback, extra_arg_count, extra_args); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).onSavedRequest(req, resp.TCP, callback, extra_arg_count, extra_args); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).onSavedRequest(req, resp.SSL, callback, extra_arg_count, extra_args); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    ) {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).onSavedRequest(req, resp.TCP, callback, extra_arg_count, extra_args); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).onSavedRequest(req, resp.SSL, callback, extra_arg_count, extra_args); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).onSavedRequest(req, resp.TCP, callback, extra_arg_count, extra_args); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).onSavedRequest(req, resp.SSL, callback, extra_arg_count, extra_args); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
     pub fn prepareAndSaveJsRequestContext(
-        server: AnyServer,
         req: *uws.Request,
         resp: uws.AnyResponse,
         global: *jsc.JSGlobalObject,
-        method: ?bun.http.Method,
-    ) bun.JSError!?SavedRequest {
-        if (server.ptr.tag() == case_http) {
-            if (ctx := server.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) {
+        method: bun.http.Method?,
+    ): bun.JSError!SavedRequest? {
+        if (_.ptr.tag() == case_http) {
+            if (ctx := _.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) {
                 return ctx.save(global, req, resp.TCP);
             }
             return null;
-        } else if (server.ptr.tag() == case_https) {
-            if (ctx := server.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) {
+        } else if (_.ptr.tag() == case_https) {
+            if (ctx := _.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) {
                 return ctx.save(global, req, resp.SSL);
             }
             return null;
-        } else if (server.ptr.tag() == case_debug_http) {
-            if (ctx := server.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) {
+        } else if (_.ptr.tag() == case_debug_http) {
+            if (ctx := _.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) {
                 return ctx.save(global, req, resp.TCP);
             }
             return null;
-        } else if (server.ptr.tag() == case_debug_https) {
-            if (ctx := server.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) {
+        } else if (_.ptr.tag() == case_debug_https) {
+            if (ctx := _.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) {
                 return ctx.save(global, req, resp.SSL);
             }
             return null;
         } else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
-    pub fn numSubscribers(this: AnyServer, topic: []const u8) u32 {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).app.?.numSubscribers(topic); else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).app.?.numSubscribers(topic); else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).app.?.numSubscribers(topic); else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).app.?.numSubscribers(topic); else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn numSubscribers(topic: []const u8): u32 {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).app.?.numSubscribers(topic); else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).app.?.numSubscribers(topic); else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).app.?.numSubscribers(topic); else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).app.?.numSubscribers(topic); else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
 
-    pub fn devServer(this: AnyServer) ?*bun.bake.DevServer {
-        if (this.ptr.tag() == case_http) return this.ptr.as(HTTPServer).dev_server; else if (this.ptr.tag() == case_https) return this.ptr.as(HTTPSServer).dev_server; else if (this.ptr.tag() == case_debug_http) return this.ptr.as(DebugHTTPServer).dev_server; else if (this.ptr.tag() == case_debug_https) return this.ptr.as(DebugHTTPSServer).dev_server; else return bun.unreachablePanic("Invalid pointer tag", .{});
+    pub fn devServer(): (*bun.bake.DevServer)? {
+        if (_.ptr.tag() == case_http) return _.ptr.as(HTTPServer).dev_server; else if (_.ptr.tag() == case_https) return _.ptr.as(HTTPSServer).dev_server; else if (_.ptr.tag() == case_debug_http) return _.ptr.as(DebugHTTPServer).dev_server; else if (_.ptr.tag() == case_debug_https) return _.ptr.as(DebugHTTPSServer).dev_server; else return bun.unreachablePanic("Invalid pointer tag", .{});
     }
-};
+}
 
 @export @c fn Server__setIdleTimeout(server: jsc.JSValue, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject)  {
-    Server__setIdleTimeout_(server, seconds, globalThis) catch |e| {
+    Server__setIdleTimeout_(server, seconds, globalThis) catch e => {
         if (e == error.OutOfMemory) {
             * = globalThis.throwOutOfMemoryValue();
         }

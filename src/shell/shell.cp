@@ -84,13 +84,17 @@ struct JsStringsGuard<T> {
 };
 
 /// The strings in this type are allocated with event loop ctx allocator
-pub const ShellErr = union(enum) {
+pub struct ShellErrInvalidArgs {
+    val: []const u8 = "",
+}
+
+pub union(enum) ShellErr {
     sys: jsc.SystemError,
     custom: []const u8,
-    invalid_arguments: struct { val: []const u8 = "" },
+    invalid_arguments: ShellErrInvalidArgs,
     todo: []const u8,
 
-    pub fn newSys(e: anytype): @This() {
+    static fn newSys(e: auto): ShellErr {
         return .{
             .sys = switch (@TypeOf(e)) {
                 Syscall.Error => e.toShellSystemError(),
@@ -100,66 +104,65 @@ pub const ShellErr = union(enum) {
         };
     }
 
-    pub fn format(this: *const ShellErr, writer: *std.Io.Writer) !void {
-        return switch (this.*) {
-            .sys => |e| writer.print("bun: {f}: {f}", .{ e.message, e.path }),
-            .custom => |msg| writer.print("bun: {s}", .{msg}),
-            .invalid_arguments => |args| writer.print("bun: invalid arguments: {s}", .{args.val}),
-            .todo => |msg| writer.print("bun: TODO: {s}", .{msg}),
+    fn format(writer: *std.Io.Writer)! {
+        return switch (_) {
+            .sys e => writer.print("bun: {f}: {f}", .{ e.message, e.path }),
+            .custom msg => writer.print("bun: {s}", .{msg}),
+            .invalid_arguments args => writer.print("bun: invalid arguments: {s}", .{args.val}),
+            .todo msg => writer.print("bun: TODO: {s}", .{msg}),
         };
     }
 
-    pub fn throwJS(this: *const @This(), globalThis: *jsc.JSGlobalObject): bun.JSError {
-        const _guard_err = ShellErrThrowGuard{ ptr: this };
-        switch (this.*) {
+    fn throwJS(globalThis: *jsc.JSGlobalObject): bun.JSError {
+        const _guard_err = ShellErrThrowGuard{ ptr: &_ };
+        switch (_) {
             .sys => {
-                const e = this.sys.toErrorInstance(globalThis);
+                const e = _.sys.toErrorInstance(globalThis);
                 return globalThis.throwValue(e);
             },
             .custom => {
-                const err_value = bun.String.cloneUTF8(this.custom).toErrorInstance(globalThis);
+                const err_value = bun.String.cloneUTF8(_.custom).toErrorInstance(globalThis);
                 return globalThis.throwValue(err_value);
-                // this.bunVM().allocator.free(jsc.ZigString.untagged(str._unsafe_ptr_do_not_use)[0..str.len]);
             },
             .invalid_arguments => {
-                return globalThis.throwInvalidArguments("{s}", .{this.invalid_arguments.val});
+                return globalThis.throwInvalidArguments("{s}", .{_.invalid_arguments.val});
             },
             .todo => {
-                return globalThis.throwTODO(this.todo);
+                return globalThis.throwTODO(_.todo);
             },
         }
     }
 
-    pub fn throwMini(this: @This()): noreturn {
-        const _guard_err = ShellErrValGuard{ val: this };
-        switch (this) {
-            .sys => |e| {
+    fn throwMini(): noreturn {
+        const _guard_err = ShellErrValGuard{ val: _ };
+        switch (_) {
+            .sys e => {
                 bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: {f}: {f}<r>", .{ e.message, e.path });
             },
-            .custom => |custom| {
+            .custom custom => {
                 bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>{s}<r>", .{custom});
             },
-            .invalid_arguments => |invalid_arguments| {
+            .invalid_arguments invalid_arguments => {
                 bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: invalid arguments: {s}<r>", .{invalid_arguments.val});
             },
-            .todo => |todo| {
+            .todo todo => {
                 bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>TODO: {s}<r>", .{todo});
             },
         }
         bun.Global.exit(1);
     }
 
-    pub fn deinit(this: *const @This(), allocator: Allocator) void {
-        switch (this.*) {
+    fn deinit(allocator: Allocator) {
+        switch (_) {
             .sys => {
-                this.sys.deref();
+                _.sys.deref();
             },
-            .custom => allocator.free(this.custom),
+            .custom => allocator.free(_.custom),
             .invalid_arguments => {},
-            .todo => allocator.free(this.todo),
+            .todo => allocator.free(_.todo),
         }
     }
-};
+}
 
 pub fn Result(comptime T: auto): type {
     return union(enum) {
@@ -355,780 +358,683 @@ pub struct GlobalMini {
 
 // const GlobalHandle = if (jsc.EventLoopKind == .js) GlobalJS else GlobalMini;
 
-pub struct AST {
-    pub const Script = struct {
-        stmts: []Stmt,
+pub struct ASTScript {
+    stmts: []ASTStmt,
 
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = 0;
-            for (*stmt of this.stmts) {
-                cost += stmt.memoryCost();
-            }
-            return cost;
+    fn memoryCost(): usize {
+        let cost: usize = 0;
+        for (stmt of _.stmts) {
+            cost += stmt.memoryCost();
         }
-    };
+        return cost;
+    }
+}
 
-    pub const Stmt = struct {
-        exprs: []Expr,
+pub struct ASTStmt {
+    exprs: []ASTExpr,
 
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = 0;
-            for (*expr of this.exprs) {
-                cost += expr.memoryCost();
-            }
-            return cost;
+    fn memoryCost(): usize {
+        let cost: usize = 0;
+        for (expr of _.exprs) {
+            cost += expr.memoryCost();
         }
-    };
+        return cost;
+    }
+}
 
-    pub const Expr = union(Expr.Tag) {
-        assign: []Assign,
-        binary: *Binary,
-        pipeline: *Pipeline,
-        cmd: *Cmd,
-        subshell: *Subshell,
-        @"if": *If,
-        condexpr: *CondExpr,
-        /// Valid async (`&`) expressions:
-        /// - pipeline
-        /// - cmd
-        /// - subshell
-        /// - if
-        /// - condexpr
-        /// Note that commands in a pipeline cannot be async
-        /// TODO: Extra indirection for essentially a boolean feels bad for performance
-        /// could probably find a more efficient way to encode this information.
-        async: *Expr,
+pub enum ASTExprTag {
+    assign,
+    binary,
+    pipeline,
+    cmd,
+    subshell,
+    @"if",
+    condexpr,
+    @"async",
+}
 
-        fn memoryCost(this: *const @This()): usize {
-            return switch (this.*) {
-                .assign => |assign| brk: {
-                    let cost: usize = 0;
-                    let idx: usize = 0;
-                    while (idx < assign.len) : (idx += 1) {
-                        cost += assign[idx].memoryCost();
-                    }
-                    break :brk cost;
-                },
-                .binary => |binary| binary.memoryCost(),
-                .pipeline => |pipeline| pipeline.memoryCost(),
-                .cmd => |cmd| cmd.memoryCost(),
-                .subshell => |subshell| subshell.memoryCost(),
-                .@"if" => |if_node| if_node.memoryCost(),
-                .condexpr => |condexpr| condexpr.memoryCost(),
-                .async => |async| async.memoryCost(),
-            };
-        }
+pub union(ASTExprTag) ASTExpr {
+    assign: []ASTAssign,
+    binary: *ASTBinary,
+    pipeline: *ASTPipeline,
+    cmd: *ASTCmd,
+    subshell: *ASTSubshell,
+    @"if": *ASTIf,
+    condexpr: *ASTCondExpr,
+    @"async": *ASTExpr,
 
-        fn asPipelineItem(this: *@This()) ?PipelineItem {
-            return switch (this.*) {
-                .assign => .{ .assigns = this.assign },
-                .cmd => .{ .cmd = this.cmd },
-                .subshell => .{ .subshell = this.subshell },
-                .@"if" => .{ .@"if" = this.@"if" },
-                .condexpr => .{ .condexpr = this.condexpr },
-                else => null,
-            };
-        }
+    const Tag = ASTExprTag;
 
-        pub const Tag = enum {
-            assign,
-            binary,
-            pipeline,
-            cmd,
-            subshell,
-            @"if",
-            condexpr,
-            async,
+    fn memoryCost(): usize {
+        return switch (_) {
+            .assign assign => brk: {
+                let cost: usize = 0;
+                let idx: usize = 0;
+                while (idx < assign.len) : (idx += 1) {
+                    cost += assign[idx].memoryCost();
+                }
+                break :brk cost;
+            },
+            .binary binary => binary.memoryCost(),
+            .pipeline pipeline => pipeline.memoryCost(),
+            .cmd cmd => cmd.memoryCost(),
+            .subshell subshell => subshell.memoryCost(),
+            .@"if" if_node => if_node.memoryCost(),
+            .condexpr condexpr => condexpr.memoryCost(),
+            .@"async" a => a.memoryCost(),
         };
-    };
+    }
 
-    /// https://www.gnu.org/software/bash/manual/bash.html#Bash-Conditional-Expressions
-    pub const CondExpr = struct {
-        op: Op,
-        args: ArgList = ArgList.zeroes,
-
-        const ArgList = SmolList(Atom, 2);
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(Op);
-            cost += this.args.memoryCost();
-            return cost;
-        }
-
-        // args: SmolList(1, comptime INLINED_MAX: comptime_int)
-        pub const Op = enum {
-            /// -a file
-            ///   True if file exists.
-            @"-a",
-
-            /// -b file
-            ///   True if file exists and is a block special file.
-            @"-b",
-
-            /// -c file
-            ///   True if file exists and is a character special file.
-            @"-c",
-
-            /// -d file
-            ///   True if file exists and is a directory.
-            @"-d",
-
-            /// -e file
-            ///   True if file exists.
-            @"-e",
-
-            /// -f file
-            ///   True if file exists and is a regular file.
-            @"-f",
-
-            /// -g file
-            ///   True if file exists and its set-group-id bit is set.
-            @"-g",
-
-            /// -h file
-            ///   True if file exists and is a symbolic link.
-            @"-h",
-
-            /// -k file
-            ///   True if file exists and its "sticky" bit is set.
-            @"-k",
-
-            /// -p file
-            ///   True if file exists and is a named pipe (FIFO).
-            @"-p",
-
-            /// -r file
-            ///   True if file exists and is readable.
-            @"-r",
-
-            /// -s file
-            ///   True if file exists and has a size greater than zero.
-            @"-s",
-
-            /// -t fd
-            ///   True if file descriptor fd is open and refers to a terminal.
-            @"-t",
-
-            /// -u file
-            ///   True if file exists and its set-user-id bit is set.
-            @"-u",
-
-            /// -w file
-            ///   True if file exists and is writable.
-            @"-w",
-
-            /// -x file
-            ///   True if file exists and is executable.
-            @"-x",
-
-            /// -G file
-            ///   True if file exists and is owned by the effective group id.
-            @"-G",
-
-            /// -L file
-            ///   True if file exists and is a symbolic link.
-            @"-L",
-
-            /// -N file
-            ///   True if file exists and has been modified since it was last read.
-            @"-N",
-
-            /// -O file
-            ///   True if file exists and is owned by the effective user id.
-            @"-O",
-
-            /// -S file
-            ///   True if file exists and is a socket.
-            @"-S",
-
-            /// file1 -ef file2
-            ///   True if file1 and file2 refer to the same device and inode numbers.
-            @"-ef",
-
-            /// file1 -nt file2
-            ///   True if file1 is newer than file2, or if file1 exists and file2 does not.
-            @"-nt",
-
-            /// file1 -ot file2
-            ///   True if file1 is older than file2, or if file2 exists and file1 does not.
-            @"-ot",
-
-            /// -o optname
-            ///   True if the shell option optname is enabled.
-            @"-o",
-
-            /// -v varname
-            ///   True if the shell variable varname is set.
-            @"-v",
-
-            /// -R varname
-            ///   True if the shell variable varname is set and is a name reference.
-            @"-R",
-
-            /// -z string
-            ///   True if the length of string is zero.
-            @"-z",
-
-            /// -n string
-            ///   True if the length of string is non-zero.
-            @"-n",
-
-            /// string1 == string2
-            ///   True if the strings are equal.
-            @"==",
-
-            /// string1 != string2
-            ///   True if the strings are not equal.
-            @"!=",
-
-            /// string1 < string2
-            ///   True if string1 sorts before string2 lexicographically.
-            @"<",
-
-            /// string1 > string2
-            ///   True if string1 sorts after string2 lexicographically.
-            @">",
-
-            /// arg1 OP arg2
-            ///   OP is one of ‘-eq’, ‘-ne’, ‘-lt’, ‘-le’, ‘-gt’, or ‘-ge’.
-            ///   These arithmetic binary operators return true if arg1 is equal to, not equal to, less than,
-            ///   less than or equal to, greater than, or greater than or equal to arg2, respectively.
-            @"-eq",
-            @"-ne",
-            @"-lt",
-            @"-le",
-            @"-gt",
-            @"-ge",
-
-            pub const SUPPORTED: []const Op = &.{
-                .@"-f",
-                .@"-z",
-                .@"-n",
-                .@"-d",
-                .@"-c",
-                .@"==",
-                .@"!=",
-            };
-
-            fn isSupported(op: Op): bool {
-                comptime let idx: usize = 0;
-                inline while (idx < SUPPORTED.len) : (idx += 1) {
-                    if (SUPPORTED[idx] == op) return true;
-                }
-                return false;
-            }
-
-            const SINGLE_ARG_OPS: []const std.builtin.Type.EnumField = brk: {
-                const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(AST.CondExpr.Op);
-                const count = count: {
-                    let count: usize = 0;
-                    let idx: usize = 0;
-                    while (idx < fields.len) : (idx += 1) {
-                        const f = fields[idx];
-                        if (f.name[0] == '-' and f.name.len == 2) {
-                            count += 1;
-                        }
-                    }
-                    break :count count;
-                };
-                let ret: [count]std.builtin.Type.EnumField = undefined;
-                let len: usize = 0;
-                let idx2: usize = 0;
-                while (idx2 < fields.len) : (idx2 += 1) {
-                    const f = fields[idx2];
-                    if (f.name[0] == '-' and f.name.len == 2) {
-                        ret[len] = f;
-                        len += 1;
-                    }
-                }
-                const final = ret[0..].*;
-                break :brk &final;
-            };
-
-            const BINARY_OPS: []const std.builtin.Type.EnumField = brk: {
-                const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(AST.CondExpr.Op);
-                const count = count: {
-                    let count: usize = 0;
-                    let idx: usize = 0;
-                    while (idx < fields.len) : (idx += 1) {
-                        const f = fields[idx];
-                        if (!(f.name[0] == '-' and f.name.len == 2)) {
-                            count += 1;
-                        }
-                    }
-                    break :count count;
-                };
-                let ret: [count]std.builtin.Type.EnumField = undefined;
-                let len: usize = 0;
-                let idx2: usize = 0;
-                while (idx2 < fields.len) : (idx2 += 1) {
-                    const f = fields[idx2];
-                    if (!(f.name[0] == '-' and f.name.len == 2)) {
-                        ret[len] = f;
-                        len += 1;
-                    }
-                }
-                const final = ret[0..].*;
-                break :brk &final;
-            };
+    fn asPipelineItem(): ASTPipelineItem? {
+        return switch (_) {
+            .assign => .{ .assigns = _.assign },
+            .cmd => .{ .cmd = _.cmd },
+            .subshell => .{ .subshell = _.subshell },
+            .@"if" => .{ .@"if" = _.@"if" },
+            .condexpr => .{ .condexpr = _.condexpr },
+            else => null,
         };
+    }
+}
 
-        fn to_expr(this: @This(), alloc: Allocator): !Expr {
-            const condexpr = try alloc.create(CondExpr);
-            condexpr.* = this;
-            return .{
-                .condexpr = condexpr,
-            };
+const _AST_SUPPORTED_OPS: [7]ASTCondExprOp = [
+    .@"-f",
+    .@"-z",
+    .@"-n",
+    .@"-d",
+    .@"-c",
+    .@"==",
+    .@"!=",
+];
+
+pub enum ASTCondExprOp {
+    @"-a",
+    @"-b",
+    @"-c",
+    @"-d",
+    @"-e",
+    @"-f",
+    @"-g",
+    @"-h",
+    @"-k",
+    @"-p",
+    @"-r",
+    @"-s",
+    @"-t",
+    @"-u",
+    @"-w",
+    @"-x",
+    @"-G",
+    @"-L",
+    @"-N",
+    @"-O",
+    @"-S",
+    @"-ef",
+    @"-nt",
+    @"-ot",
+    @"-o",
+    @"-v",
+    @"-R",
+    @"-z",
+    @"-n",
+    @"==",
+    @"!=",
+    @"<",
+    @">",
+    @"-eq",
+    @"-ne",
+    @"-lt",
+    @"-le",
+    @"-gt",
+    @"-ge",
+
+    const SUPPORTED: []const ASTCondExprOp = _AST_SUPPORTED_OPS[0..];
+
+    static fn isSupported(op: ASTCondExprOp): bool {
+        comptime let idx: usize = 0;
+        inline while (idx < _AST_SUPPORTED_OPS.len) : (idx += 1) {
+            if (_AST_SUPPORTED_OPS[idx] == op) return true;
         }
-    };
+        return false;
+    }
 
-    pub const Subshell = struct {
-        script: Script,
-        redirect: Redirect? = null,
-        redirect_flags: RedirectFlags = RedirectFlags{ stdin: false },
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(Subshell);
-            cost += this.script.memoryCost();
-            if (*redirect := this.redirect) {
-                cost += redirect.memoryCost();
+    const SINGLE_ARG_OPS: []const std.builtin.Type.EnumField = brk: {
+        const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(ASTCondExprOp);
+        const count = count: {
+            let count: usize = 0;
+            let idx: usize = 0;
+            while (idx < fields.len) : (idx += 1) {
+                const f = fields[idx];
+                if (f.name[0] == '-' and f.name.len == 2) {
+                    count += 1;
+                }
             }
-            return cost;
-        }
-    };
-
-    /// TODO: If we know cond/then/elif/else is just a single command we don't need to store the stmt
-    pub const If = struct {
-        cond: SmolList(Stmt, 1) = SmolList(Stmt, 1).zeroes,
-        then: SmolList(Stmt, 1) = SmolList(Stmt, 1).zeroes,
-        /// From the spec:
-        ///
-        /// else_part        : Elif compound_list Then else_part
-        ///                  | Else compound_list
-        ///
-        /// If len is:
-        /// - 0                                   => no else
-        /// - 1                                   => just else
-        /// - 2n (n is # of elif/then branches)   => n elif/then branches
-        /// - 2n + 1                              => n elif/then branches and an else branch
-        else_parts: SmolList(SmolList(Stmt, 1), 1) = SmolList(SmolList(Stmt, 1), 1).zeroes,
-
-        fn to_expr(this: @This(), alloc: Allocator): !Expr {
-            const @"if" = try alloc.create(If);
-            @"if".* = this;
-            return .{
-                .@"if" = @"if",
-            };
-        }
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(If);
-            cost += this.cond.memoryCost();
-            cost += this.then.memoryCost();
-            cost += this.else_parts.memoryCost();
-            return cost;
-        }
-    };
-
-    pub const Binary = struct {
-        op: Op,
-        left: Expr,
-        right: Expr,
-
-        const Op = enum { And, Or };
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(Binary);
-            cost += this.left.memoryCost();
-            cost += this.right.memoryCost();
-            return cost;
-        }
-    };
-
-    pub const Pipeline = struct {
-        items: []PipelineItem,
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = 0;
-            for (*item of this.items) {
-                cost += item.memoryCost();
-            }
-            return cost;
-        }
-    };
-
-    pub const PipelineItem = union(enum) {
-        cmd: *Cmd,
-        assigns: []Assign,
-        subshell: *Subshell,
-        @"if": *If,
-        condexpr: *CondExpr,
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = 0;
-            switch (this.*) {
-                .cmd => |cmd| {
-                    cost += cmd.memoryCost();
-                },
-                .assigns => |assigns| {
-                    for (*assign of assigns) {
-                        cost += assign.memoryCost();
-                    }
-                },
-                .subshell => |subshell| {
-                    cost += subshell.memoryCost();
-                },
-                .@"if" => |if_node| {
-                    cost += if_node.memoryCost();
-                },
-                .condexpr => |condexpr| {
-                    cost += condexpr.memoryCost();
-                },
-            }
-            return cost;
-        }
-    };
-
-    pub const CmdOrAssigns = union(CmdOrAssigns.Tag) {
-        cmd: Cmd,
-        assigns: []Assign,
-
-        pub const Tag = enum { cmd, assigns };
-
-        fn to_pipeline_item(this: @This(), alloc: Allocator): PipelineItem {
-            switch (this) {
-                .cmd => |cmd| {
-                    const cmd_ptr = alloc.create(Cmd)?;
-                    cmd_ptr.* = cmd;
-                    return { cmd: cmd_ptr };
-                },
-                .assigns => |assigns| {
-                    return { assign: assigns };
-                },
+            break :count count;
+        };
+        let ret: [count]std.builtin.Type.EnumField = undefined;
+        let len: usize = 0;
+        let idx2: usize = 0;
+        while (idx2 < fields.len) : (idx2 += 1) {
+            const f = fields[idx2];
+            if (f.name[0] == '-' and f.name.len == 2) {
+                ret[len] = f;
+                len += 1;
             }
         }
-
-        fn to_expr(this: @This(), alloc: Allocator): !Expr {
-            switch (this) {
-                .cmd => |cmd| {
-                    const cmd_ptr = try alloc.create(Cmd);
-                    cmd_ptr.* = cmd;
-                    return .{ .cmd = cmd_ptr };
-                },
-                .assigns => |assigns| {
-                    return .{ .assign = assigns };
-                },
-            }
-        }
+        const final = ret[0..].*;
+        break :brk &final;
     };
 
-    /// A "buffer" from a JS object can be piped from and to, and also have
-    /// output from commands redirected into it. Only BunFile, ArrayBufferView
-    /// are supported.
-    pub const JSBuf = struct {
-        idx: u32,
-
-        fn new(idx: u32): JSBuf {
-            return { idx: idx };
+    const BINARY_OPS: []const std.builtin.Type.EnumField = brk: {
+        const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(ASTCondExprOp);
+        const count = count: {
+            let count: usize = 0;
+            let idx: usize = 0;
+            while (idx < fields.len) : (idx += 1) {
+                const f = fields[idx];
+                if (!(f.name[0] == '-' and f.name.len == 2)) {
+                    count += 1;
+                }
+            }
+            break :count count;
+        };
+        let ret: [count]std.builtin.Type.EnumField = undefined;
+        let len: usize = 0;
+        let idx2: usize = 0;
+        while (idx2 < fields.len) : (idx2 += 1) {
+            const f = fields[idx2];
+            if (!(f.name[0] == '-' and f.name.len == 2)) {
+                ret[len] = f;
+                len += 1;
+            }
         }
+        const final = ret[0..].*;
+        break :brk &final;
     };
+}
 
-    /// A Subprocess from JS
-    pub const JSProc = struct { idx: JSValue };
+pub struct ASTCondExpr {
+    op: Op,
+    args: ArgList = ArgList.zeroes,
 
-    pub const Assign = struct {
-        label: []const u8,
-        value: Atom,
+    const ArgList = SmolList(ASTAtom, 2);
+    pub const Op = ASTCondExprOp;
 
-        fn new(label: []const u8, value: Atom): Assign {
-            return {
-                label: label,
-                value: value,
-            };
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(Op);
+        cost += _.args.memoryCost();
+        return cost;
+    }
+
+    fn to_expr(alloc: Allocator): !ASTExpr {
+        const condexpr = alloc.create(ASTCondExpr)?;
+        condexpr.* = _;
+        return .{
+            .condexpr = condexpr,
+        };
+    }
+}
+
+pub struct ASTSubshell {
+    script: ASTScript,
+    redirect: ASTRedirect? = null,
+    redirect_flags: ASTRedirectFlags = ASTRedirectFlags{ stdin: false },
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTSubshell);
+        cost += _.script.memoryCost();
+        if (redirect := _.redirect) {
+            cost += redirect.memoryCost();
+        }
+        return cost;
+    }
+}
+
+pub struct ASTIf {
+    cond: SmolList(ASTStmt, 1) = SmolList(ASTStmt, 1).zeroes,
+    then: SmolList(ASTStmt, 1) = SmolList(ASTStmt, 1).zeroes,
+    else_parts: SmolList(SmolList(ASTStmt, 1), 1) = SmolList(SmolList(ASTStmt, 1), 1).zeroes,
+
+    fn to_expr(alloc: Allocator): !ASTExpr {
+        const @"if" = alloc.create(ASTIf)?;
+        @"if".* = _;
+        return .{
+            .@"if" = @"if",
+        };
+    }
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTIf);
+        cost += _.cond.memoryCost();
+        cost += _.then.memoryCost();
+        cost += _.else_parts.memoryCost();
+        return cost;
+    }
+}
+
+enum _ASTBinaryOp { And, Or }
+
+pub struct ASTBinary {
+    op: Op,
+    left: ASTExpr,
+    right: ASTExpr,
+
+    pub const Op = _ASTBinaryOp;
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTBinary);
+        cost += _.left.memoryCost();
+        cost += _.right.memoryCost();
+        return cost;
+    }
+}
+
+pub struct ASTPipeline {
+    items: []ASTPipelineItem,
+
+    fn memoryCost(): usize {
+        let cost: usize = 0;
+        for (item of _.items) {
+            cost += item.memoryCost();
+        }
+        return cost;
+    }
+}
+
+pub union(enum) ASTPipelineItem {
+    cmd: *ASTCmd,
+    assigns: []ASTAssign,
+    subshell: *ASTSubshell,
+    @"if": *ASTIf,
+    condexpr: *ASTCondExpr,
+
+    fn memoryCost(): usize {
+        let cost: usize = 0;
+        switch (_) {
+            .cmd cmd => {
+                cost += cmd.memoryCost();
+            },
+            .assigns assigns => {
+                for (assign of assigns) {
+                    cost += assign.memoryCost();
+                }
+            },
+            .subshell subshell => {
+                cost += subshell.memoryCost();
+            },
+            .@"if" if_node => {
+                cost += if_node.memoryCost();
+            },
+            .condexpr condexpr => {
+                cost += condexpr.memoryCost();
+            },
+        }
+        return cost;
+    }
+}
+
+pub enum ASTCmdOrAssignsTag { cmd, assigns }
+
+pub union(ASTCmdOrAssignsTag) ASTCmdOrAssigns {
+    cmd: ASTCmd,
+    assigns: []ASTAssign,
+
+    const Tag = ASTCmdOrAssignsTag;
+
+    fn to_pipeline_item(alloc: Allocator): ASTPipelineItem {
+        switch (_) {
+            .cmd cmd => {
+                const cmd_ptr = alloc.create(ASTCmd)?;
+                cmd_ptr.* = cmd;
+                return { cmd: cmd_ptr };
+            },
+            .assigns assigns => {
+                return { assign: assigns };
+            },
+        }
+    }
+
+    fn to_expr(alloc: Allocator): !ASTExpr {
+        switch (_) {
+            .cmd cmd => {
+                const cmd_ptr = alloc.create(ASTCmd)?;
+                cmd_ptr.* = cmd;
+                return .{ .cmd = cmd_ptr };
+            },
+            .assigns assigns => {
+                return .{ .assign = assigns };
+            },
+        }
+    }
+}
+
+pub struct ASTJSBuf {
+    idx: u32,
+
+    static fn new(idx: u32): ASTJSBuf {
+        return { idx: idx };
+    }
+}
+
+pub struct ASTJSProc {
+    idx: JSValue,
+}
+
+pub struct ASTAssign {
+    label: []const u8,
+    value: ASTAtom,
+
+    static fn new(label: []const u8, value: ASTAtom): ASTAssign {
+        return {
+            label: label,
+            value: value,
+        };
+    }
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTAssign);
+        cost += _.label.len;
+        cost += _.value.memoryCost();
+        return cost;
+    }
+}
+
+pub struct ASTCmd {
+    assigns: []ASTAssign,
+    name_and_args: []ASTAtom,
+    redirect: ASTRedirectFlags = ASTRedirectFlags{ stdin: false },
+    redirect_file: ASTRedirect? = null,
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTCmd);
+        for (assign of _.assigns) {
+            cost += assign.memoryCost();
+        }
+        for (atom of _.name_and_args) {
+            cost += atom.memoryCost();
         }
 
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(Assign);
-            cost += this.label.len;
-            cost += this.value.memoryCost();
-            return cost;
+        if (redirect_file := _.redirect_file) {
+            cost += redirect_file.memoryCost();
         }
-    };
+        return cost;
+    }
+}
 
-    pub const Cmd = struct {
-        assigns: []Assign,
-        name_and_args: []Atom,
-        redirect: RedirectFlags = RedirectFlags{ stdin: false },
-        redirect_file: Redirect? = null,
+pub enum ASTRedirectIOKind { stdin, stdout, stderr }
 
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(Cmd);
-            for (*assign of this.assigns) {
-                cost += assign.memoryCost();
-            }
-            for (*atom of this.name_and_args) {
-                cost += atom.memoryCost();
-            }
+@packed(u8) pub struct ASTRedirectFlags {
+    stdin: bool = false,
+    stdout: bool = false,
+    stderr: bool = false,
+    append: bool = false,
+    duplicate_out: bool = false,
+    __unused: u3 = 0,
 
-            if (*redirect_file := this.redirect_file) {
-                cost += redirect_file.memoryCost();
-            }
-            return cost;
-        }
-    };
+    inline fn isEmpty(): bool {
+        return @as(u8, @bitCast(_)) == 0;
+    }
 
-    /// Bit flags for redirects:
-    /// -  `>`  = Redirect.Stdout
-    /// -  `1>` = Redirect.Stdout
-    /// -  `2>` = Redirect.Stderr
-    /// -  `&>` = Redirect.Stdout | Redirect.Stderr
-    /// -  `>>` = Redirect.Append | Redirect.Stdout
-    /// - `1>>` = Redirect.Append | Redirect.Stdout
-    /// - `2>>` = Redirect.Append | Redirect.Stderr
-    /// - `&>>` = Redirect.Append | Redirect.Stdout | Redirect.Stderr
-    ///
-    /// Multiple redirects are not supported yet.
-    pub const RedirectFlags = packed struct(u8) {
-        stdin: bool = false,
-        stdout: bool = false,
-        stderr: bool = false,
-        append: bool = false,
-        /// 1>&2 === stdout=true and duplicate_out=true
-        /// 2>&1 === stderr=true and duplicate_out=true
-        duplicate_out: bool = false,
-        __unused: u3 = 0,
+    fn redirectsElsewhere(io_kind: ASTRedirectIOKind): bool {
+        return switch (io_kind) {
+            .stdin => _.stdin,
+            .stdout => if (_.duplicate_out) !_.stdout else _.stdout,
+            .stderr => if (_.duplicate_out) !_.stderr else _.stderr,
+        };
+    }
 
-        pub inline fn isEmpty(this: @This()): bool {
-            return @as(u8, @bitCast(this)) == 0;
-        }
+    static fn @"2>&1"(): ASTRedirectFlags {
+        return .{ .stderr = true, .duplicate = true };
+    }
 
-        pub fn redirectsElsewhere(this: @This(), io_kind: enum { stdin, stdout, stderr }): bool {
-            return switch (io_kind) {
-                .stdin => this.stdin,
-                .stdout => if (this.duplicate_out) !this.stdout else this.stdout,
-                .stderr => if (this.duplicate_out) !this.stderr else this.stderr,
-            };
-        }
+    static fn @"1>&2"(): ASTRedirectFlags {
+        return .{ .stdout = true, .duplicate = true };
+    }
 
-        pub fn @"2>&1"() RedirectFlags {
-            return .{ .stderr = true, .duplicate = true };
-        }
+    fn toFlags(): i32 {
+        const read_write_flags: i32 = if (_.stdin) bun.O.RDONLY else bun.O.WRONLY | bun.O.CREAT;
+        const extra: i32 = if (_.append) bun.O.APPEND else bun.O.TRUNC;
+        const final_flags: i32 = if (_.stdin) read_write_flags else extra | read_write_flags;
+        return final_flags;
+    }
 
-        pub fn @"1>&2"() RedirectFlags {
-            return .{ .stdout = true, .duplicate = true };
-        }
+    static fn @"<"(): ASTRedirectFlags {
+        return .{ .stdin = true };
+    }
 
-        pub fn toFlags(this: @This()): i32 {
-            const read_write_flags: i32 = if (this.stdin) bun.O.RDONLY else bun.O.WRONLY | bun.O.CREAT;
-            const extra: i32 = if (this.append) bun.O.APPEND else bun.O.TRUNC;
-            const final_flags: i32 = if (this.stdin) read_write_flags else extra | read_write_flags;
-            return final_flags;
-        }
+    static fn @"<<"(): ASTRedirectFlags {
+        return .{ .stdin = true, .append = true };
+    }
 
-        pub fn @"<"() RedirectFlags {
-            return .{ .stdin = true };
-        }
+    static fn @">"(): ASTRedirectFlags {
+        return .{ .stdout = true };
+    }
 
-        pub fn @"<<"() RedirectFlags {
-            return .{ .stdin = true, .append = true };
-        }
+    static fn @">>"(): ASTRedirectFlags {
+        return .{ .append = true, .stdout = true };
+    }
 
-        pub fn @">"() RedirectFlags {
-            return .{ .stdout = true };
-        }
+    static fn @"&>"(): ASTRedirectFlags {
+        return .{ .stdout = true, .stderr = true };
+    }
 
-        pub fn @">>"() RedirectFlags {
-            return .{ .append = true, .stdout = true };
-        }
+    static fn @"&>>"(): ASTRedirectFlags {
+        return .{ .append = true, .stdout = true, .stderr = true };
+    }
 
-        pub fn @"&>"() RedirectFlags {
-            return .{ .stdout = true, .stderr = true };
-        }
+    static fn merge(a: ASTRedirectFlags, b: ASTRedirectFlags): ASTRedirectFlags {
+        const anum: u8 = @bitCast(a);
+        const bnum: u8 = @bitCast(b);
+        return @bitCast(anum | bnum);
+    }
+}
 
-        pub fn @"&>>"() RedirectFlags {
-            return .{ .append = true, .stdout = true, .stderr = true };
-        }
+pub union(enum) ASTRedirect {
+    atom: ASTAtom,
+    jsbuf: ASTJSBuf,
 
-        fn merge(a: RedirectFlags, b: RedirectFlags): RedirectFlags {
-            const anum: u8 = @bitCast(a);
-            const bnum: u8 = @bitCast(b);
-            return @bitCast(anum | bnum);
-        }
-    };
+    fn memoryCost(): usize {
+        return switch (_) {
+            .atom atom => atom.memoryCost(),
+            .jsbuf => @sizeOf(ASTJSBuf),
+        };
+    }
+}
 
-    pub const Redirect = union(enum) {
-        atom: Atom,
-        jsbuf: JSBuf,
+pub enum ASTAtomTag: u8 { simple, compound }
 
-        fn memoryCost(this: *const @This()): usize {
-            return switch (this.*) {
-                .atom => |*atom| atom.memoryCost(),
-                .jsbuf => @sizeOf(JSBuf),
-            };
-        }
-    };
+pub union(ASTAtomTag) ASTAtom {
+    simple: ASTSimpleAtom,
+    compound: ASTCompoundAtom,
 
-    pub const Atom = union(Atom.Tag) {
-        simple: SimpleAtom,
-        compound: CompoundAtom,
+    const Tag = ASTAtomTag;
 
-        pub const Tag = enum(u8) { simple, compound };
+    fn memoryCost(): usize {
+        return switch (_) {
+            .simple simple => simple.memoryCost(),
+            .compound compound => compound.memoryCost(),
+        };
+    }
 
-        fn memoryCost(this: *const @This()): usize {
-            return switch (this.*) {
-                .simple => |*simple| simple.memoryCost(),
-                .compound => |*compound| compound.memoryCost(),
-            };
-        }
-
-        fn merge(this: Atom, right: Atom, allocator: Allocator): !Atom {
-            if (this == .simple && right == .simple) {
-                let atoms = allocator.alloc(SimpleAtom, 2)?;
-                atoms[0] = this.simple;
-                atoms[1] = right.simple;
-                return { compound: {
-                    atoms: atoms,
-                    brace_expansion_hint: this.simple == .brace_begin || this.simple == .brace_end || right.simple == .brace_begin || right.simple == .brace_end,
-                    glob_hint: this.simple == .asterisk || this.simple == .double_asterisk || right.simple == .asterisk || right.simple == .double_asterisk,
-                } };
-            }
-
-            if (this == .compound && right == .compound) {
-                let atoms = allocator.alloc(SimpleAtom, this.compound.atoms.len + right.compound.atoms.len)?;
-                @memcpy(atoms[0..this.compound.atoms.len], this.compound.atoms);
-                @memcpy(atoms[this.compound.atoms.len .. this.compound.atoms.len + right.compound.atoms.len], right.compound.atoms);
-                return { compound: {
-                    atoms: atoms,
-                    brace_expansion_hint: this.compound.brace_expansion_hint || right.compound.brace_expansion_hint,
-                    glob_hint: this.compound.glob_hint || right.compound.glob_hint,
-                } };
-            }
-
-            if (this == .simple) {
-                let atoms = allocator.alloc(SimpleAtom, 1 + right.compound.atoms.len)?;
-                atoms[0] = this.simple;
-                @memcpy(atoms[1 .. right.compound.atoms.len + 1], right.compound.atoms);
-                return { compound: {
-                    atoms: atoms,
-                    brace_expansion_hint: this.simple == .brace_begin || this.simple == .brace_end || right.compound.brace_expansion_hint,
-                    glob_hint: this.simple == .asterisk || this.simple == .double_asterisk || right.compound.glob_hint,
-                } };
-            }
-
-            let atoms = allocator.alloc(SimpleAtom, 1 + this.compound.atoms.len)?;
-            @memcpy(atoms[0..this.compound.atoms.len], this.compound.atoms);
-            atoms[this.compound.atoms.len] = right.simple;
+    fn merge(right: ASTAtom, allocator: Allocator): !ASTAtom {
+        if (_ == .simple && right == .simple) {
+            let atoms = allocator.alloc(ASTSimpleAtom, 2)?;
+            atoms[0] = _.simple;
+            atoms[1] = right.simple;
             return { compound: {
                 atoms: atoms,
-                brace_expansion_hint: right.simple == .brace_begin || right.simple == .brace_end || this.compound.brace_expansion_hint,
-                glob_hint: right.simple == .asterisk || right.simple == .double_asterisk || this.compound.glob_hint,
+                brace_expansion_hint: _.simple == .brace_begin || _.simple == .brace_end || right.simple == .brace_begin || right.simple == .brace_end,
+                glob_hint: _.simple == .asterisk || _.simple == .double_asterisk || right.simple == .asterisk || right.simple == .double_asterisk,
             } };
         }
 
-        fn atomsLen(this: *const @This()): u32 {
-            return switch (this.*) {
-                .simple => 1,
-                .compound => @intCast(this.compound.atoms.len),
-            };
+        if (_ == .compound && right == .compound) {
+            let atoms = allocator.alloc(ASTSimpleAtom, _.compound.atoms.len + right.compound.atoms.len)?;
+            @memcpy(atoms[0.._.compound.atoms.len], _.compound.atoms);
+            @memcpy(atoms[_.compound.atoms.len .. _.compound.atoms.len + right.compound.atoms.len], right.compound.atoms);
+            return { compound: {
+                atoms: atoms,
+                brace_expansion_hint: _.compound.brace_expansion_hint || right.compound.brace_expansion_hint,
+                glob_hint: _.compound.glob_hint || right.compound.glob_hint,
+            } };
         }
 
-        fn new_simple(atom: SimpleAtom): Atom {
-            return { simple: atom };
+        if (_ == .simple) {
+            let atoms = allocator.alloc(ASTSimpleAtom, 1 + right.compound.atoms.len)?;
+            atoms[0] = _.simple;
+            @memcpy(atoms[1 .. right.compound.atoms.len + 1], right.compound.atoms);
+            return { compound: {
+                atoms: atoms,
+                brace_expansion_hint: _.simple == .brace_begin || _.simple == .brace_end || right.compound.brace_expansion_hint,
+                glob_hint: _.simple == .asterisk || _.simple == .double_asterisk || right.compound.glob_hint,
+            } };
         }
 
-        fn is_compound(this: *const @This()): bool {
-            switch (this.*) {
-                .compound => return true,
-                .simple => return false,
-            }
+        let atoms = allocator.alloc(ASTSimpleAtom, 1 + _.compound.atoms.len)?;
+        @memcpy(atoms[0.._.compound.atoms.len], _.compound.atoms);
+        atoms[_.compound.atoms.len] = right.simple;
+        return { compound: {
+            atoms: atoms,
+            brace_expansion_hint: right.simple == .brace_begin || right.simple == .brace_end || _.compound.brace_expansion_hint,
+            glob_hint: right.simple == .asterisk || right.simple == .double_asterisk || _.compound.glob_hint,
+        } };
+    }
+
+    fn atomsLen(): u32 {
+        return switch (_) {
+            .simple => 1,
+            .compound => @intCast(_.compound.atoms.len),
+        };
+    }
+
+    static fn new_simple(atom: ASTSimpleAtom): ASTAtom {
+        return { simple: atom };
+    }
+
+    fn is_compound(): bool {
+        switch (_.*) {
+            .compound => return true,
+            .simple => return false,
         }
+    }
 
-        fn has_expansions(this: *const @This()): bool {
-            return this.has_glob_expansion() || this.has_brace_expansion();
+    fn has_expansions(): bool {
+        return _.has_glob_expansion() || _.has_brace_expansion();
+    }
+
+    fn has_glob_expansion(): bool {
+        return switch (_) {
+            .simple => _.simple.glob_hint(),
+            .compound => _.compound.glob_hint,
+        };
+    }
+
+    fn has_brace_expansion(): bool {
+        return switch (_) {
+            .simple => false,
+            .compound => _.compound.brace_expansion_hint,
+        };
+    }
+
+    fn hasTildeExpansion(): bool {
+        return switch (_) {
+            .simple => _.simple == .tilde,
+            .compound => _.compound.atoms.len > 0 && _.compound.atoms[0] == .tilde,
+        };
+    }
+}
+
+pub struct ASTCmdSubst {
+    script: ASTScript,
+    quoted: bool = false,
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTCmdSubst);
+        cost += _.script.memoryCost();
+        return cost;
+    }
+}
+
+pub union(enum) ASTSimpleAtom {
+    Var: []const u8,
+    VarArgv: u8,
+    Text: []const u8,
+    quoted_empty: void,
+    asterisk: void,
+    double_asterisk: void,
+    brace_begin: void,
+    brace_end: void,
+    comma: void,
+    tilde: void,
+    cmd_subst: ASTCmdSubst,
+
+    fn glob_hint(): bool {
+        return switch (_) {
+            .Var => false,
+            .VarArgv => false,
+            .Text => false,
+            .quoted_empty => false,
+            .asterisk => true,
+            .double_asterisk => true,
+            .brace_begin => false,
+            .brace_end => false,
+            .comma => false,
+            .cmd_subst => false,
+            .tilde => false,
+        };
+    }
+
+    fn memoryCost(): usize {
+        return switch (_) {
+            .Var => _.Var.len,
+            .Text => _.Text.len,
+            .cmd_subst => _.cmd_subst.memoryCost(),
+            else => 0,
+        } + @sizeOf(ASTSimpleAtom);
+    }
+}
+
+pub struct ASTCompoundAtom {
+    atoms: []ASTSimpleAtom,
+    brace_expansion_hint: bool = false,
+    glob_hint: bool = false,
+
+    fn memoryCost(): usize {
+        let cost: usize = @sizeOf(ASTCompoundAtom);
+        cost += _.#atomsMemoryCost();
+        return cost;
+    }
+
+    fn #atomsMemoryCost(): usize {
+        let cost: usize = 0;
+        for (atom of _.atoms) {
+            cost += atom.memoryCost();
         }
+        return cost;
+    }
+}
 
-        fn has_glob_expansion(this: *const @This()): bool {
-            return switch (this.*) {
-                .simple => this.simple.glob_hint(),
-                .compound => this.compound.glob_hint,
-            };
-        }
-
-        fn has_brace_expansion(this: *const @This()): bool {
-            return switch (this.*) {
-                .simple => false,
-                .compound => this.compound.brace_expansion_hint,
-            };
-        }
-
-        fn hasTildeExpansion(this: *const @This()): bool {
-            return switch (this.*) {
-                .simple => this.simple == .tilde,
-                .compound => this.compound.atoms.len > 0 && this.compound.atoms[0] == .tilde,
-            };
-        }
-    };
-
-    pub const SimpleAtom = union(enum) {
-        Var: []const u8,
-        VarArgv: u8,
-        Text: []const u8,
-        /// An empty string from a quoted context (e.g. "", '', or ${''}). Preserved as an
-        /// explicit empty argument during expansion, unlike unquoted empty text which is dropped.
-        quoted_empty,
-        asterisk,
-        double_asterisk,
-        brace_begin,
-        brace_end,
-        comma,
-        tilde,
-        cmd_subst: struct {
-            script: Script,
-            quoted: bool = false,
-
-            fn memoryCost(this: *const @This()): usize {
-                let cost: usize = @sizeOf(@This());
-                cost += this.script.memoryCost();
-                return cost;
-            }
-        },
-
-        fn glob_hint(this: @This()): bool {
-            return switch (this) {
-                .Var => false,
-                .VarArgv => false,
-                .Text => false,
-                .quoted_empty => false,
-                .asterisk => true,
-                .double_asterisk => true,
-                .brace_begin => false,
-                .brace_end => false,
-                .comma => false,
-                .cmd_subst => false,
-                .tilde => false,
-            };
-        }
-
-        fn memoryCost(this: *const @This()): usize {
-            return switch (this.*) {
-                .Var => this.Var.len,
-                .Text => this.Text.len,
-                .cmd_subst => this.cmd_subst.memoryCost(),
-                else => 0,
-            } + @sizeOf(SimpleAtom);
-        }
-    };
-
-    pub const CompoundAtom = struct {
-        atoms: []SimpleAtom,
-        brace_expansion_hint: bool = false,
-        glob_hint: bool = false,
-
-        fn memoryCost(this: *const @This()): usize {
-            let cost: usize = @sizeOf(CompoundAtom);
-            cost += this.#atomsMemoryCost();
-            return cost;
-        }
+pub struct AST {
+    pub const Script = ASTScript;
+    pub const Stmt = ASTStmt;
+    pub const Expr = ASTExpr;
+    pub const CondExpr = ASTCondExpr;
+    pub const Subshell = ASTSubshell;
+    pub const If = ASTIf;
+    pub const Binary = ASTBinary;
+    pub const Pipeline = ASTPipeline;
+    const PipelineItem = ASTPipelineItem;
+    const CmdOrAssigns = ASTCmdOrAssigns;
+    const JSBuf = ASTJSBuf;
+    const JSProc = ASTJSProc;
+    pub const Assign = ASTAssign;
+    pub const Cmd = ASTCmd;
+    pub const RedirectFlags = ASTRedirectFlags;
+    const Redirect = ASTRedirect;
+    pub const Atom = ASTAtom;
+    pub const SimpleAtom = ASTSimpleAtom;
+    const CompoundAtom = ASTCompoundAtom;
+}
 
         fn #atomsMemoryCost(this: *const @This()) usize {
             let cost: usize = 0;
@@ -1140,18 +1046,20 @@ pub struct AST {
     };
 }
 
-pub const SubshellKind = enum {
+pub enum SubshellKind {
     cmd_subst,
     normal,
-    fn closing_tok(this: SubshellKind): TokenTag {
-        return switch (this) {
+    fn closing_tok(): TokenTag {
+        return switch (_) {
             .cmd_subst => TokenTag.CmdSubstEnd,
             .normal => TokenTag.CloseParen,
         };
     }
-};
+}
 
-pub const ParserError = struct { msg: []const u8 };
+pub struct ParserError {
+    msg: []const u8,
+}
 
 pub enum IfClauseTok {
     @"if",
@@ -1178,12 +1086,12 @@ pub enum IfClauseTok {
     }
 };
 
-pub const ParsedRedirect = struct {
+pub struct ParsedRedirect {
     flags: AST.RedirectFlags = AST.RedirectFlags{ stdin: false },
     redirect: AST.Redirect? = null,
-};
+}
 
-pub const Parser = struct {
+pub struct Parser {
     strpool: []const u8,
     tokens: []const Token,
     alloc: Allocator,
@@ -2216,7 +2124,7 @@ pub const Parser = struct {
         const error_msg = std.fmt.allocPrint(_.alloc, "Expected a command, assignment, or subshell but got: {s}", .{@tagName(kind)})?;
         _.errors.append({ msg: error_msg })?;
     }
-};
+}
 
 pub enum TokenTag {
     Pipe,
@@ -2251,75 +2159,103 @@ pub enum TokenTag {
     Eof,
 }
 
-pub const Token = union(TokenTag) {
-    /// |
-    Pipe,
-    /// ||
-    DoublePipe,
-    /// &
-    Ampersand,
-    /// &&
-    DoubleAmpersand,
+pub struct _TokenTextRange {
+    start: u32,
+    end: u32,
+
+    fn len(): u32 {
+        if (bun.Environment.allow_assert) assert(_.start <= _.end);
+        return _.end - _.start;
+    }
+
+    fn slice(buf: []const u8): []const u8 {
+        return buf[_.start.._.end];
+    }
+}
+
+pub union(TokenTag) Token {
+    Pipe: void,
+    DoublePipe: void,
+    Ampersand: void,
+    DoubleAmpersand: void,
 
     Redirect: AST.RedirectFlags,
 
-    /// $
-    Dollar,
-    // `*`
-    Asterisk,
-    DoubleAsterisk,
+    Dollar: void,
+    Asterisk: void,
+    DoubleAsterisk: void,
 
-    /// =
-    Eq,
-    /// ;
-    Semicolon,
-    /// \n (unescaped newline)
-    Newline,
+    Eq: void,
+    Semicolon: void,
+    Newline: void,
 
-    BraceBegin,
-    Comma,
-    BraceEnd,
-    CmdSubstBegin,
-    /// When cmd subst is wrapped in quotes, then it should be interpreted as literal string, not word split-ed arguments to a cmd.
-    /// We lose quotation context in the AST, so we don't know how to disambiguate that.
-    /// So this is a quick hack to give the AST that context.
-    ///
-    /// This matches this shell behaviour:
-    /// echo test$(echo "1    2") -> test1 2\n
-    /// echo "test$(echo "1    2")" -> test1    2\n
-    CmdSubstQuoted,
-    CmdSubstEnd,
-    OpenParen,
-    CloseParen,
+    BraceBegin: void,
+    Comma: void,
+    BraceEnd: void,
+    CmdSubstBegin: void,
+    CmdSubstQuoted: void,
+    CmdSubstEnd: void,
+    OpenParen: void,
+    CloseParen: void,
 
-    Var: TextRange,
+    Var: _TokenTextRange,
     VarArgv: u8,
-    Text: TextRange,
-    /// Quotation information is lost from the lexer -> parser stage and it is
-    /// helpful to disambiguate from regular text and quoted text
-    SingleQuotedText: TextRange,
-    DoubleQuotedText: TextRange,
+    Text: _TokenTextRange,
+    SingleQuotedText: _TokenTextRange,
+    DoubleQuotedText: _TokenTextRange,
     JSObjRef: u32,
 
-    DoubleBracketOpen,
-    DoubleBracketClose,
+    DoubleBracketOpen: void,
+    DoubleBracketClose: void,
 
-    Delimit,
-    Eof,
+    Delimit: void,
+    Eof: void,
 
-    pub const TextRange = struct {
-        start: u32,
-        end: u32,
+    const TextRange = _TokenTextRange;
 
-        pub fn len(range: TextRange): u32 {
-            if (bun.Environment.allow_assert) assert(range.start <= range.end);
-            return range.end - range.start;
-        }
-
-        pub fn slice(range: TextRange, buf: []const u8): []const u8 {
-            return buf[range.start..range.end];
-        }
-    };
+    fn asHumanReadable(strpool: []const u8): []const u8 {
+        const varargv_strings = blk: {
+            let res: [10][2]u8 = undefined;
+            let i: usize = 0;
+            while (i < res.len) : (i += 1) {
+                res[i][0] = '$';
+                res[i][1] = @as(u8, @intCast(i)) + '0';
+            }
+            break :blk res;
+        };
+        return switch (_) {
+            .Pipe => "`|`",
+            .DoublePipe => "`||`",
+            .Ampersand => "`&`",
+            .DoubleAmpersand => "`&&`",
+            .Redirect => "`>`",
+            .Dollar => "`$`",
+            .Asterisk => "`*`",
+            .DoubleAsterisk => "`**`",
+            .Eq => "`=`",
+            .Semicolon => "`;`",
+            .Newline => "`\n`",
+            .BraceBegin => "`{`",
+            .Comma => "`,`",
+            .BraceEnd => "`}`",
+            .CmdSubstBegin => "`$(`",
+            .CmdSubstQuoted => "CmdSubstQuoted",
+            .CmdSubstEnd => "`)`",
+            .OpenParen => "`(`",
+            .CloseParen => "`)",
+            .Var => strpool[_.Var.start.._.Var.end],
+            .VarArgv => &varargv_strings[_.VarArgv],
+            .Text => strpool[_.Text.start.._.Text.end],
+            .SingleQuotedText => strpool[_.SingleQuotedText.start.._.SingleQuotedText.end],
+            .DoubleQuotedText => strpool[_.DoubleQuotedText.start.._.DoubleQuotedText.end],
+            .JSObjRef => "JSObjRef",
+            .DoubleBracketOpen => "[[",
+            .DoubleBracketClose => "]]",
+            .Delimit => "Delimit",
+            .Eof => "EOF",
+        };
+    }
+}
 
     pub fn asHumanReadable(this: Token, strpool: []const u8): []const u8 {
         const varargv_strings = blk: {
@@ -3494,16 +3430,18 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
     };
 }
 
-pub const StringEncoding = enum { ascii, wtf8, utf16 };
+pub enum StringEncoding { ascii, wtf8, utf16 }
+
+@packed(u8) struct _SrcAsciiIndexValue {
+    char: u7,
+    escaped: bool = false,
+}
 
 struct SrcAscii {
     bytes: []const u8,
     i: usize,
 
-    const IndexValue = packed struct(u8) {
-        char: u7,
-        escaped: bool = false,
-    };
+    const IndexValue = _SrcAsciiIndexValue;
 
     static fn init(bytes: []const u8): SrcAscii {
         return {
@@ -3527,6 +3465,11 @@ struct SrcAscii {
     }
 }
 
+struct _SrcUnicodeIndexValue {
+    char: u32,
+    width: u8,
+}
+
 struct SrcUnicode {
     const Cursor = CodepointIterator.Cursor;
 
@@ -3534,10 +3477,7 @@ struct SrcUnicode {
     cursor: Cursor,
     next_cursor: Cursor,
 
-    const IndexValue = struct {
-        char: u32,
-        width: u8,
-    };
+    const IndexValue = _SrcUnicodeIndexValue;
 
     static fn nextCursor(iter: *const CodepointIterator, cursor: *Cursor) {
         if (!iter.next(cursor)) {
@@ -3764,34 +3704,38 @@ pub fn hasEqSign(str: []const u8): u32? {
 
 type EnvStrZ = [:0]const u8;
 
+struct _ShellCmdEnvIterEntry {
+    key: _ShellCmdEnvIterKey,
+    value: _ShellCmdEnvIterValue,
+}
+
+struct _ShellCmdEnvIterValue {
+    val: [:0]const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        writer.writeAll(_.val)?;
+    }
+}
+
+struct _ShellCmdEnvIterKey {
+    val: []const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        writer.writeAll(_.val)?;
+    }
+
+    fn eqlComptime(comptime str: []const u8): bool {
+        return bun.strings.eqlComptime(_.val, str);
+    }
+}
+
 pub struct CmdEnvIter {
     env: *const bun.StringArrayHashMap(EnvStrZ),
     iter: bun.StringArrayHashMap(EnvStrZ).Iterator,
 
-    const Entry = struct {
-        key: Key,
-        value: Value,
-    };
-
-    const Value = struct {
-        val: [:0]const u8,
-
-        fn format(this: *const Value, writer: *std.Io.Writer)! {
-            writer.writeAll(this.val)?;
-        }
-    };
-
-    const Key = struct {
-        val: []const u8,
-
-        fn format(this: *const Key, writer: *std.Io.Writer)! {
-            writer.writeAll(this.val)?;
-        }
-
-        fn eqlComptime(this: Key, comptime str: []const u8): bool {
-            return bun.strings.eqlComptime(this.val, str);
-        }
-    };
+    const Entry = _ShellCmdEnvIterEntry;
+    const Value = _ShellCmdEnvIterValue;
+    const Key = _ShellCmdEnvIterKey;
 
     static fn fromEnv(env: *const bun.StringArrayHashMap(EnvStrZ)): CmdEnvIter {
         const iter = env.iterator();

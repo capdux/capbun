@@ -1,4 +1,4 @@
-pub const ResolvedSource = extern struct {
+@c pub struct ResolvedSource {
     /// Specifier's lifetime is the caller from C++
     /// https://github.com/oven-sh/bun/issues/9521
     specifier: bun.String = bun.String.empty,
@@ -26,7 +26,7 @@ pub const ResolvedSource = extern struct {
     already_bundled: bool = false,
 
     // -- Bytecode cache fields --
-    bytecode_cache: ?[*]u8 = null,
+    bytecode_cache: ([*]u8)? = null,
     bytecode_cache_size: usize = 0,
     module_info: *!? = null,
     /// The file path used as the source origin for bytecode cache validation.
@@ -36,7 +36,7 @@ pub const ResolvedSource = extern struct {
     bytecode_origin_path: bun.String = bun.String.empty,
 
     pub const Tag = @import("ResolvedSourceTag").ResolvedSourceTag;
-};
+}
 
 import bun from "bun";
 

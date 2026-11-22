@@ -209,40 +209,40 @@ pub enum LineStyle {
 }
 
 /// A value for the [border-width](https://www.w3.org/TR/css-backgrounds-3/#border-width) property.
-pub const BorderSideWidth = union(enum) {
+pub union(enum) BorderSideWidth {
     /// A UA defined `thin` value.
-    thin,
+    thin: void,
     /// A UA defined `medium` value.
-    medium,
+    medium: void,
     /// A UA defined `thick` value.
-    thick,
+    thick: void,
     /// An explicit width.
     length: Length,
 
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn isCompatible(this: *const @This(), browsers: bun.css.targets.Browsers): bool {
-        return switch (this.*) {
+    fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+        return switch (_) {
             .length => |len| len.isCompatible(browsers),
             else => true,
         };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn default(): BorderSideWidth {
+    static fn default(): BorderSideWidth {
         return .medium;
     }
 
-    pub fn deinit(_: *@This(), _: std.mem.Allocator) void {}
+    fn deinit(*_, _: std.mem.Allocator) {}
 
-    pub fn eql(this: *const @This(), other: *const @This()): bool {
-        return css.implementEql(@This(), this, other);
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 // TODO: fallbacks
 /// A value for the [border-color](https://drafts.csswg.org/css-backgrounds/#propdef-border-color) shorthand property.
@@ -572,7 +572,7 @@ struct BorderShorthand {
     }
 }
 
-const BorderProperty = packed struct(u32) {
+@packed(u32) struct BorderProperty {
     @"top-color": bool = false,
     @"bottom-color": bool = false,
     @"left-color": bool = false,
@@ -645,10 +645,10 @@ const BorderProperty = packed struct(u32) {
     const @"border-color" = BorderProperty{ .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
     const border = BorderProperty{ .@"left-width" = true, .@"right-width" = true, .@"top-width" = true, .@"bottom-width" = true, .@"left-style" = true, .@"right-style" = true, .@"top-style" = true, .@"bottom-style" = true, .@"left-color" = true, .@"right-color" = true, .@"top-color" = true, .@"bottom-color" = true };
 
-    pub fn tryFromPropertyId(property_id: css.PropertyIdTag): ?@This() {
+    static fn tryFromPropertyId(property_id: css.PropertyIdTag): (@This())? {
         @setEvalBranchQuota(10000);
         const fields = bun.@"meta".EnumFields(css.PropertyIdTag);
-        inline for (fields) |field| {
+        inline for (field of fields) {
             if (field.value == @intFromEnum(property_id)) {
                 if (comptime std.mem.startsWith(u8, field.name, "border")) {
                     if (@hasDecl(@This(), field.name)) {
@@ -660,7 +660,7 @@ const BorderProperty = packed struct(u32) {
 
         return null;
     }
-};
+}
 
 pub struct BorderHandler {
     border_top: BorderShorthand = {},
@@ -677,6 +677,33 @@ pub struct BorderHandler {
     flushed_properties: BorderProperty = {},
     has_any: bool = false,
 
+    inline fn flushHelper(*_, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: auto, category: PropertyCategory) {
+        if (category != _.category) {
+            _.flush(d, c);
+        }
+
+        if (@field(@field(_, key), prop) != null && !@field(@field(_, key), prop).?.eql(val) && c.targets.browsers != null && !css.generic.isCompatible(@TypeOf(val.*), val, c.targets.browsers.?)) {
+            _.flush(d, c);
+        }
+    }
+
+    inline fn propertyHelper(*_, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: auto, category: PropertyCategory) {
+        _.flushHelper(d, c, key, prop, val, category);
+        @field(@field(_, key), prop) = css.generic.deepClone(@TypeOf(val.*), val, c.allocator);
+        _.category = category;
+        _.has_any = true;
+    }
+
+    inline fn setBorderHelper(*_, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, val: auto, category: PropertyCategory) {
+        if (category != _.category) {
+            _.flush(d, c);
+        }
+
+        @field(_, key).setBorder(c.allocator, val);
+        _.category = category;
+        _.has_any = true;
+    }
+
     fn handleProperty(
         *_,
         property: *const css.Property,
@@ -685,171 +712,138 @@ pub struct BorderHandler {
     ): bool {
         const allocator = context.allocator;
 
-        const flushHelper = struct {
-            inline fn flushHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: auto, category: PropertyCategory) {
-                if (category != handler.category) {
-                    handler.flush(d, c);
-                }
-
-                if (@field(@field(handler, key), prop) != null && !@field(@field(handler, key), prop).?.eql(val) && c.targets.browsers != null && !css.generic.isCompatible(@TypeOf(val.*), val, c.targets.browsers.?)) {
-                    handler.flush(d, c);
-                }
-            }
-        }.flushHelper;
-
-        const propertyHelper = struct {
-            inline fn propertyHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, comptime prop: []const u8, val: auto, category: PropertyCategory) {
-                flushHelper(handler, d, c, key, prop, val, category);
-                @field(@field(handler, key), prop) = css.generic.deepClone(@TypeOf(val.*), val, c.allocator);
-                handler.category = category;
-                handler.has_any = true;
-            }
-        }.propertyHelper;
-
-        const setBorderHelper = struct {
-            inline fn setBorderHelper(handler: *BorderHandler, d: *css.DeclarationList, c: *css.PropertyHandlerContext, comptime key: []const u8, val: auto, category: PropertyCategory) {
-                if (category != handler.category) {
-                    handler.flush(d, c);
-                }
-
-                @field(handler, key).setBorder(c.allocator, val);
-                handler.category = category;
-                handler.has_any = true;
-            }
-        }.setBorderHelper;
-
         switch (property.*) {
-            .@"border-top-color" => |*val| propertyHelper(_, dest, context, "border_top", "color", val, .physical),
-            .@"border-bottom-color" => |*val| propertyHelper(_, dest, context, "border_bottom", "color", val, .physical),
-            .@"border-left-color" => |*val| propertyHelper(_, dest, context, "border_left", "color", val, .physical),
-            .@"border-right-color" => |*val| propertyHelper(_, dest, context, "border_right", "color", val, .physical),
-            .@"border-block-start-color" => |*val| propertyHelper(_, dest, context, "border_block_start", "color", val, .logical),
-            .@"border-block-end-color" => |*val| propertyHelper(_, dest, context, "border_block_end", "color", val, .logical),
+            .@"border-top-color" => |*val| _.propertyHelper(dest, context, "border_top", "color", val, .physical),
+            .@"border-bottom-color" => |*val| _.propertyHelper(dest, context, "border_bottom", "color", val, .physical),
+            .@"border-left-color" => |*val| _.propertyHelper(dest, context, "border_left", "color", val, .physical),
+            .@"border-right-color" => |*val| _.propertyHelper(dest, context, "border_right", "color", val, .physical),
+            .@"border-block-start-color" => |*val| _.propertyHelper(dest, context, "border_block_start", "color", val, .logical),
+            .@"border-block-end-color" => |*val| _.propertyHelper(dest, context, "border_block_end", "color", val, .logical),
             .@"border-block-color" => |val| {
-                propertyHelper(_, dest, context, "border_block_start", "color", &val.start, .logical);
-                propertyHelper(_, dest, context, "border_block_end", "color", &val.end, .logical);
+                _.propertyHelper(dest, context, "border_block_start", "color", &val.start, .logical);
+                _.propertyHelper(dest, context, "border_block_end", "color", &val.end, .logical);
             },
-            .@"border-inline-start-color" => |*val| propertyHelper(_, dest, context, "border_inline_start", "color", val, .logical),
-            .@"border-inline-end-color" => |*val| propertyHelper(_, dest, context, "border_inline_end", "color", val, .logical),
+            .@"border-inline-start-color" => |*val| _.propertyHelper(dest, context, "border_inline_start", "color", val, .logical),
+            .@"border-inline-end-color" => |*val| _.propertyHelper(dest, context, "border_inline_end", "color", val, .logical),
             .@"border-inline-color" => |val| {
-                propertyHelper(_, dest, context, "border_inline_start", "color", &val.start, .logical);
-                propertyHelper(_, dest, context, "border_inline_end", "color", &val.end, .logical);
+                _.propertyHelper(dest, context, "border_inline_start", "color", &val.start, .logical);
+                _.propertyHelper(dest, context, "border_inline_end", "color", &val.end, .logical);
             },
-            .@"border-top-width" => |*val| propertyHelper(_, dest, context, "border_top", "width", val, .physical),
-            .@"border-bottom-width" => |*val| propertyHelper(_, dest, context, "border_bottom", "width", val, .physical),
-            .@"border-left-width" => |*val| propertyHelper(_, dest, context, "border_left", "width", val, .physical),
-            .@"border-right-width" => |*val| propertyHelper(_, dest, context, "border_right", "width", val, .physical),
-            .@"border-block-start-width" => |*val| propertyHelper(_, dest, context, "border_block_start", "width", val, .logical),
-            .@"border-block-end-width" => |*val| propertyHelper(_, dest, context, "border_block_end", "width", val, .logical),
+            .@"border-top-width" => |*val| _.propertyHelper(dest, context, "border_top", "width", val, .physical),
+            .@"border-bottom-width" => |*val| _.propertyHelper(dest, context, "border_bottom", "width", val, .physical),
+            .@"border-left-width" => |*val| _.propertyHelper(dest, context, "border_left", "width", val, .physical),
+            .@"border-right-width" => |*val| _.propertyHelper(dest, context, "border_right", "width", val, .physical),
+            .@"border-block-start-width" => |*val| _.propertyHelper(dest, context, "border_block_start", "width", val, .logical),
+            .@"border-block-end-width" => |*val| _.propertyHelper(dest, context, "border_block_end", "width", val, .logical),
             .@"border-block-width" => |val| {
-                propertyHelper(_, dest, context, "border_block_start", "width", &val.start, .logical);
-                propertyHelper(_, dest, context, "border_block_end", "width", &val.end, .logical);
+                _.propertyHelper(dest, context, "border_block_start", "width", &val.start, .logical);
+                _.propertyHelper(dest, context, "border_block_end", "width", &val.end, .logical);
             },
-            .@"border-inline-start-width" => |*val| propertyHelper(_, dest, context, "border_inline_start", "width", val, .logical),
-            .@"border-inline-end-width" => |*val| propertyHelper(_, dest, context, "border_inline_end", "width", val, .logical),
+            .@"border-inline-start-width" => |*val| _.propertyHelper(dest, context, "border_inline_start", "width", val, .logical),
+            .@"border-inline-end-width" => |*val| _.propertyHelper(dest, context, "border_inline_end", "width", val, .logical),
             .@"border-inline-width" => |val| {
-                propertyHelper(_, dest, context, "border_inline_start", "width", &val.start, .logical);
-                propertyHelper(_, dest, context, "border_inline_end", "width", &val.end, .logical);
+                _.propertyHelper(dest, context, "border_inline_start", "width", &val.start, .logical);
+                _.propertyHelper(dest, context, "border_inline_end", "width", &val.end, .logical);
             },
-            .@"border-top-style" => |*val| propertyHelper(_, dest, context, "border_top", "style", val, .physical),
-            .@"border-bottom-style" => |*val| propertyHelper(_, dest, context, "border_bottom", "style", val, .physical),
-            .@"border-left-style" => |*val| propertyHelper(_, dest, context, "border_left", "style", val, .physical),
-            .@"border-right-style" => |*val| propertyHelper(_, dest, context, "border_right", "style", val, .physical),
-            .@"border-block-start-style" => |*val| propertyHelper(_, dest, context, "border_block_start", "style", val, .logical),
-            .@"border-block-end-style" => |*val| propertyHelper(_, dest, context, "border_block_end", "style", val, .logical),
+            .@"border-top-style" => |*val| _.propertyHelper(dest, context, "border_top", "style", val, .physical),
+            .@"border-bottom-style" => |*val| _.propertyHelper(dest, context, "border_bottom", "style", val, .physical),
+            .@"border-left-style" => |*val| _.propertyHelper(dest, context, "border_left", "style", val, .physical),
+            .@"border-right-style" => |*val| _.propertyHelper(dest, context, "border_right", "style", val, .physical),
+            .@"border-block-start-style" => |*val| _.propertyHelper(dest, context, "border_block_start", "style", val, .logical),
+            .@"border-block-end-style" => |*val| _.propertyHelper(dest, context, "border_block_end", "style", val, .logical),
             .@"border-block-style" => |val| {
-                propertyHelper(_, dest, context, "border_block_start", "style", &val.start, .logical);
-                propertyHelper(_, dest, context, "border_block_end", "style", &val.end, .logical);
+                _.propertyHelper(dest, context, "border_block_start", "style", &val.start, .logical);
+                _.propertyHelper(dest, context, "border_block_end", "style", &val.end, .logical);
             },
-            .@"border-inline-start-style" => |*val| propertyHelper(_, dest, context, "border_inline_start", "style", val, .logical),
-            .@"border-inline-end-style" => |*val| propertyHelper(_, dest, context, "border_inline_end", "style", val, .logical),
+            .@"border-inline-start-style" => |*val| _.propertyHelper(dest, context, "border_inline_start", "style", val, .logical),
+            .@"border-inline-end-style" => |*val| _.propertyHelper(dest, context, "border_inline_end", "style", val, .logical),
             .@"border-inline-style" => |val| {
-                propertyHelper(_, dest, context, "border_inline_start", "style", &val.start, .logical);
-                propertyHelper(_, dest, context, "border_inline_end", "style", &val.end, .logical);
+                _.propertyHelper(dest, context, "border_inline_start", "style", &val.start, .logical);
+                _.propertyHelper(dest, context, "border_inline_end", "style", &val.end, .logical);
             },
-            .@"border-top" => |*val| setBorderHelper(_, dest, context, "border_top", val, .physical),
-            .@"border-bottom" => |*val| setBorderHelper(_, dest, context, "border_bottom", val, .physical),
-            .@"border-left" => |*val| setBorderHelper(_, dest, context, "border_left", val, .physical),
-            .@"border-right" => |*val| setBorderHelper(_, dest, context, "border_right", val, .physical),
-            .@"border-block-start" => |*val| setBorderHelper(_, dest, context, "border_block_start", val, .logical),
-            .@"border-block-end" => |*val| setBorderHelper(_, dest, context, "border_block_end", val, .logical),
-            .@"border-inline-start" => |*val| setBorderHelper(_, dest, context, "border_inline_start", val, .logical),
-            .@"border-inline-end" => |*val| setBorderHelper(_, dest, context, "border_inline_end", val, .logical),
+            .@"border-top" => |*val| _.setBorderHelper(dest, context, "border_top", val, .physical),
+            .@"border-bottom" => |*val| _.setBorderHelper(dest, context, "border_bottom", val, .physical),
+            .@"border-left" => |*val| _.setBorderHelper(dest, context, "border_left", val, .physical),
+            .@"border-right" => |*val| _.setBorderHelper(dest, context, "border_right", val, .physical),
+            .@"border-block-start" => |*val| _.setBorderHelper(dest, context, "border_block_start", val, .logical),
+            .@"border-block-end" => |*val| _.setBorderHelper(dest, context, "border_block_end", val, .logical),
+            .@"border-inline-start" => |*val| _.setBorderHelper(dest, context, "border_inline_start", val, .logical),
+            .@"border-inline-end" => |*val| _.setBorderHelper(dest, context, "border_inline_end", val, .logical),
             .@"border-block" => |*val| {
-                setBorderHelper(_, dest, context, "border_block_start", val, .logical);
-                setBorderHelper(_, dest, context, "border_block_end", val, .logical);
+                _.setBorderHelper(dest, context, "border_block_start", val, .logical);
+                _.setBorderHelper(dest, context, "border_block_end", val, .logical);
             },
             .@"border-inline" => |*val| {
-                setBorderHelper(_, dest, context, "border_inline_start", val, .logical);
-                setBorderHelper(_, dest, context, "border_inline_end", val, .logical);
+                _.setBorderHelper(dest, context, "border_inline_start", val, .logical);
+                _.setBorderHelper(dest, context, "border_inline_end", val, .logical);
             },
             .@"border-width" => |*val| {
-                propertyHelper(_, dest, context, "border_top", "width", &val.top, .physical);
-                propertyHelper(_, dest, context, "border_right", "width", &val.right, .physical);
-                propertyHelper(_, dest, context, "border_bottom", "width", &val.bottom, .physical);
-                propertyHelper(_, dest, context, "border_left", "width", &val.left, .physical);
+                _.propertyHelper(dest, context, "border_top", "width", &val.top, .physical);
+                _.propertyHelper(dest, context, "border_right", "width", &val.right, .physical);
+                _.propertyHelper(dest, context, "border_bottom", "width", &val.bottom, .physical);
+                _.propertyHelper(dest, context, "border_left", "width", &val.left, .physical);
 
-                bun.clear(&this.border_block_start.width, context.allocator);
-                bun.clear(&this.border_block_end.width, context.allocator);
-                bun.clear(&this.border_inline_start.width, context.allocator);
-                bun.clear(&this.border_inline_end.width, context.allocator);
-                this.has_any = true;
+                bun.clear(&_.border_block_start.width, context.allocator);
+                bun.clear(&_.border_block_end.width, context.allocator);
+                bun.clear(&_.border_inline_start.width, context.allocator);
+                bun.clear(&_.border_inline_end.width, context.allocator);
+                _.has_any = true;
             },
             .@"border-style" => |*val| {
-                propertyHelper(_, dest, context, "border_top", "style", &val.top, .physical);
-                propertyHelper(_, dest, context, "border_right", "style", &val.right, .physical);
-                propertyHelper(_, dest, context, "border_bottom", "style", &val.bottom, .physical);
-                propertyHelper(_, dest, context, "border_left", "style", &val.left, .physical);
+                _.propertyHelper(dest, context, "border_top", "style", &val.top, .physical);
+                _.propertyHelper(dest, context, "border_right", "style", &val.right, .physical);
+                _.propertyHelper(dest, context, "border_bottom", "style", &val.bottom, .physical);
+                _.propertyHelper(dest, context, "border_left", "style", &val.left, .physical);
 
-                bun.clear(&this.border_block_start.style, context.allocator);
-                bun.clear(&this.border_block_end.style, context.allocator);
-                bun.clear(&this.border_inline_start.style, context.allocator);
-                bun.clear(&this.border_inline_end.style, context.allocator);
-                this.has_any = true;
+                bun.clear(&_.border_block_start.style, context.allocator);
+                bun.clear(&_.border_block_end.style, context.allocator);
+                bun.clear(&_.border_inline_start.style, context.allocator);
+                bun.clear(&_.border_inline_end.style, context.allocator);
+                _.has_any = true;
             },
             .@"border-color" => |*val| {
-                propertyHelper(_, dest, context, "border_top", "color", &val.top, .physical);
-                propertyHelper(_, dest, context, "border_right", "color", &val.right, .physical);
-                propertyHelper(_, dest, context, "border_bottom", "color", &val.bottom, .physical);
-                propertyHelper(_, dest, context, "border_left", "color", &val.left, .physical);
+                _.propertyHelper(dest, context, "border_top", "color", &val.top, .physical);
+                _.propertyHelper(dest, context, "border_right", "color", &val.right, .physical);
+                _.propertyHelper(dest, context, "border_bottom", "color", &val.bottom, .physical);
+                _.propertyHelper(dest, context, "border_left", "color", &val.left, .physical);
 
-                bun.clear(&this.border_block_start.color, context.allocator);
-                bun.clear(&this.border_block_end.color, context.allocator);
-                bun.clear(&this.border_inline_start.color, context.allocator);
-                bun.clear(&this.border_inline_end.color, context.allocator);
-                this.has_any = true;
+                bun.clear(&_.border_block_start.color, context.allocator);
+                bun.clear(&_.border_block_end.color, context.allocator);
+                bun.clear(&_.border_inline_start.color, context.allocator);
+                bun.clear(&_.border_inline_end.color, context.allocator);
+                _.has_any = true;
             },
             .border => |*val| {
-                this.border_top.setBorder(context.allocator, val);
-                this.border_bottom.setBorder(context.allocator, val);
-                this.border_left.setBorder(context.allocator, val);
-                this.border_right.setBorder(context.allocator, val);
+                _.border_top.setBorder(context.allocator, val);
+                _.border_bottom.setBorder(context.allocator, val);
+                _.border_left.setBorder(context.allocator, val);
+                _.border_right.setBorder(context.allocator, val);
 
-                this.border_block_start.reset(allocator);
-                this.border_block_end.reset(allocator);
-                this.border_inline_start.reset(allocator);
-                this.border_inline_end.reset(allocator);
+                _.border_block_start.reset(allocator);
+                _.border_block_end.reset(allocator);
+                _.border_inline_start.reset(allocator);
+                _.border_inline_end.reset(allocator);
 
                 // Setting the `border` property resets `border-image`
-                this.border_image_handler.reset(allocator);
-                this.has_any = true;
+                _.border_image_handler.reset(allocator);
+                _.has_any = true;
             },
             .unparsed => |*val| {
                 if (isBorderProperty(val.property_id)) {
-                    this.flush(dest, context);
-                    this.flushUnparsed(val, dest, context);
+                    _.flush(dest, context);
+                    _.flushUnparsed(val, dest, context);
                 } else {
-                    if (this.border_image_handler.willFlush(property)) {
-                        this.flush(dest, context);
+                    if (_.border_image_handler.willFlush(property)) {
+                        _.flush(dest, context);
                     }
-                    return this.border_image_handler.handleProperty(property, dest, context) || this.border_radius_handler.handleProperty(property, dest, context);
+                    return _.border_image_handler.handleProperty(property, dest, context) || _.border_radius_handler.handleProperty(property, dest, context);
                 }
             },
             else => {
-                if (this.border_image_handler.willFlush(property)) {
-                    this.flush(dest, context);
+                if (_.border_image_handler.willFlush(property)) {
+                    _.flush(dest, context);
                 }
-                return this.border_image_handler.handleProperty(property, dest, context) || this.border_radius_handler.handleProperty(property, dest, context);
+                return _.border_image_handler.handleProperty(property, dest, context) || _.border_radius_handler.handleProperty(property, dest, context);
             },
         }
 
@@ -1445,6 +1439,35 @@ pub struct BorderHandler {
         _.border_inline_end.reset(context.allocator);
     }
 
+    inline fn unparsedProp(*_, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) {
+        let upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
+        c.addUnparsedFallbacks(&upppppppppp);
+        bun.bits.insert(BorderProperty, &_.flushed_properties, @field(BorderProperty, id));
+    }
+
+    inline fn unparsedLogicalProp(
+        c: *css.PropertyHandlerContext,
+        up: *const UnparsedProperty,
+        comptime ltr: []const u8,
+        comptime rtl: []const u8,
+    ) {
+        c.addLogicalRule(
+            c.allocator,
+            css.Property{
+                unparsed: up.withPropertyId(
+                    c.allocator,
+                    @unionInit(css.PropertyId, ltr, undefined),
+                ),
+            },
+            css.Property{
+                unparsed: up.withPropertyId(
+                    c.allocator,
+                    @unionInit(css.PropertyId, rtl, undefined),
+                ),
+            },
+        );
+    }
+
     fn flushUnparsed(*_, unparsed: *const UnparsedProperty, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
         const logical_supported = !context.shouldCompileLogical(css.Feature.logical_borders);
         if (logical_supported) {
@@ -1455,56 +1478,23 @@ pub struct BorderHandler {
             return;
         }
 
-        const prop = struct {
-            inline fn prop(handler: *BorderHandler, c: *css.PropertyHandlerContext, up: *const UnparsedProperty, comptime id: []const u8) {
-                let upppppppppp = up.withPropertyId(c.allocator, @unionInit(css.PropertyId, id, undefined));
-                c.addUnparsedFallbacks(&upppppppppp);
-                bun.bits.insert(BorderProperty, &handler.flushed_properties, @field(BorderProperty, id));
-            }
-        }.prop;
-
-        const logical_prop = struct {
-            inline fn logical_prop(
-                c: *css.PropertyHandlerContext,
-                up: *const UnparsedProperty,
-                comptime ltr: []const u8,
-                comptime rtl: []const u8,
-            ) {
-                c.addLogicalRule(
-                    c.allocator,
-                    css.Property{
-                        unparsed: up.withPropertyId(
-                            c.allocator,
-                            @unionInit(css.PropertyId, ltr, undefined),
-                        ),
-                    },
-                    css.Property{
-                        unparsed: up.withPropertyId(
-                            c.allocator,
-                            @unionInit(css.PropertyId, rtl, undefined),
-                        ),
-                    },
-                );
-            }
-        }.logical_prop;
-
         switch (unparsed.property_id) {
-            .@"border-inline-start" => logical_prop(context, unparsed, "border-left", "border-right"),
-            .@"border-inline-start-width" => logical_prop(context, unparsed, "border-left-width", "border-right-width"),
-            .@"border-inline-start-color" => logical_prop(context, unparsed, "border-left-color", "border-right-color"),
-            .@"border-inline-start-style" => logical_prop(context, unparsed, "border-left-style", "border-right-style"),
-            .@"border-inline-end" => logical_prop(context, unparsed, "border-right", "border-left"),
-            .@"border-inline-end-width" => logical_prop(context, unparsed, "border-right-width", "border-left-width"),
-            .@"border-inline-end-color" => logical_prop(context, unparsed, "border-right-color", "border-left-color"),
-            .@"border-inline-end-style" => logical_prop(context, unparsed, "border-right-style", "border-left-style"),
-            .@"border-block-start" => prop(_, context, unparsed, "border-top"),
-            .@"border-block-start-width" => prop(_, context, unparsed, "border-top-width"),
-            .@"border-block-start-color" => prop(_, context, unparsed, "border-top-color"),
-            .@"border-block-start-style" => prop(_, context, unparsed, "border-top-style"),
-            .@"border-block-end" => prop(_, context, unparsed, "border-bottom"),
-            .@"border-block-end-width" => prop(_, context, unparsed, "border-bottom-width"),
-            .@"border-block-end-color" => prop(_, context, unparsed, "border-bottom-color"),
-            .@"border-block-end-style" => prop(_, context, unparsed, "border-bottom-style"),
+            .@"border-inline-start" => unparsedLogicalProp(context, unparsed, "border-left", "border-right"),
+            .@"border-inline-start-width" => unparsedLogicalProp(context, unparsed, "border-left-width", "border-right-width"),
+            .@"border-inline-start-color" => unparsedLogicalProp(context, unparsed, "border-left-color", "border-right-color"),
+            .@"border-inline-start-style" => unparsedLogicalProp(context, unparsed, "border-left-style", "border-right-style"),
+            .@"border-inline-end" => unparsedLogicalProp(context, unparsed, "border-right", "border-left"),
+            .@"border-inline-end-width" => unparsedLogicalProp(context, unparsed, "border-right-width", "border-left-width"),
+            .@"border-inline-end-color" => unparsedLogicalProp(context, unparsed, "border-right-color", "border-left-color"),
+            .@"border-inline-end-style" => unparsedLogicalProp(context, unparsed, "border-right-style", "border-left-style"),
+            .@"border-block-start" => _.unparsedProp(context, unparsed, "border-top"),
+            .@"border-block-start-width" => _.unparsedProp(context, unparsed, "border-top-width"),
+            .@"border-block-start-color" => _.unparsedProp(context, unparsed, "border-top-color"),
+            .@"border-block-start-style" => _.unparsedProp(context, unparsed, "border-top-style"),
+            .@"border-block-end" => _.unparsedProp(context, unparsed, "border-bottom"),
+            .@"border-block-end-width" => _.unparsedProp(context, unparsed, "border-bottom-width"),
+            .@"border-block-end-color" => _.unparsedProp(context, unparsed, "border-bottom-color"),
+            .@"border-block-end-style" => _.unparsedProp(context, unparsed, "border-bottom-style"),
             else => {
                 let up = unparsed.deepClone(context.allocator);
                 context.addUnparsedFallbacks(&up);

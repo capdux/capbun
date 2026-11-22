@@ -72,6 +72,16 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const s3client = @import("../s3/client.zig");
+pub const StoreSerializeTag = enum(u8) {
+    file = 0,
+    bytes = 1,
+    empty = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -102,6 +112,87 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const StoreS3UnlinkWrapper = struct {
+    promise: JSPromise.Strong,
+    store: *Store,
+    global: *JSGlobalObject,
+
+pub fn resolve(result: S3DeleteResult, opaque_self: ?*anyopaque) !void {
+            var wrap: *StoreS3UnlinkWrapper = (blk: {
+            break :blk @ptrCast(@alignCast(opaque_self.?));
+
+});
+            _ = &wrap;
+            var wrap_guard = DeinitPtrGuard(StoreS3UnlinkWrapper){ .ptr = wrap };
+            _ = &wrap_guard;
+            var __wrap_guard_moved = false; _ = &__wrap_guard_moved;
+            defer if (!__wrap_guard_moved) { __wrap_guard_moved = true; const __T = @TypeOf(wrap_guard); if (@typeInfo(__T) == .optional) { if (wrap_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { wrap_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = wrap_guard; _drop_val.__cp_deinit(); } };
+            const globalObject = wrap.global;
+            switch (result) {
+.success => {
+_ = try wrap.promise.resolve(globalObject, .true);
+},
+.not_found, .failure => |e| {
+_ = try wrap.promise.reject(globalObject, e.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()));
+},
+}
+    }
+
+pub fn deinit(self: *StoreS3UnlinkWrapper) void {
+            _ = self.store.deref();
+            _ = self.promise.deinit();
+            _ = destroy(self);
+    }
+};
+
+pub const StoreS3ListObjectsWrapper = struct {
+    promise: JSPromise.Strong,
+    store: *Store,
+    resolvedlistOptions: S3ListObjectsOptions,
+    global: *JSGlobalObject,
+
+pub fn resolve(result: S3ListObjectsResult, opaque_self: ?*anyopaque) !void {
+            var wrap: *StoreS3ListObjectsWrapper = (blk: {
+            break :blk @ptrCast(@alignCast(opaque_self.?));
+
+});
+            _ = &wrap;
+            var wrap_guard = DeinitPtrGuard(StoreS3ListObjectsWrapper){ .ptr = wrap };
+            _ = &wrap_guard;
+            var __wrap_guard_moved = false; _ = &__wrap_guard_moved;
+            defer if (!__wrap_guard_moved) { __wrap_guard_moved = true; const __T = @TypeOf(wrap_guard); if (@typeInfo(__T) == .optional) { if (wrap_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { wrap_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = wrap_guard; _drop_val.__cp_deinit(); } };
+            const globalObject = wrap.global;
+            switch (result) {
+.success => |list_result| {
+var list_result_mut = list_result;
+            _ = &list_result_mut;
+            var list_result_guard = DeinitGuard(@TypeOf(list_result_mut)){ .val = list_result_mut };
+            _ = &list_result_guard;
+            var __list_result_guard_moved = false; _ = &__list_result_guard_moved;
+            defer if (!__list_result_guard_moved) { __list_result_guard_moved = true; const __T = @TypeOf(list_result_guard); if (@typeInfo(__T) == .optional) { if (list_result_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { list_result_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = list_result_guard; _drop_val.__cp_deinit(); } };
+            const list_result_js = (blk_catch_0: { break :blk_catch_0 ((list_result_mut.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return wrap.promise.reject(globalObject, error.JSError); }); });
+            _ = try wrap.promise.resolve(globalObject, list_result_js);
+},
+inline .not_found, .failure => |e| {
+_ = try wrap.promise.reject(globalObject, e.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()));
+},
+}
+    }
+
+pub fn deinit(self: *StoreS3ListObjectsWrapper) void {
+            _ = self.store.deref();
+            _ = self.promise.deinit();
+            _ = self.resolvedlistOptions.deinit();
+            _ = destroy(self);
+    }
+};
+
+pub const StoreData = union(enum) {
+    bytes: StoreBytes,
+    file: StoreFile,
+    s3: StoreS3,
+};
+
 pub const StoreFile = struct {
     pathlike: Node.PathOrFileDescriptor,
     mime_type: MimeType = .other,
@@ -111,7 +202,7 @@ pub const StoreFile = struct {
     max_size: SizeType = Blob.max_size,
     last_modified: jsc.JSTimeType = jsc.init_timestamp,
 
-pub fn unlink(self: *const StoreFile, globalThis: *JSGlobalObject) JSError!JSValue {
+pub fn unlink(self: StoreFile, globalThis: *JSGlobalObject) JSError!JSValue {
             return (switch (self.pathlike) {
 .path => |path_like| Node.fs.Async.unlink.create(globalThis, undefined, .{ .path = .{ .encoded_slice = (switch (path_like) {
 .encoded_slice => |slice| try slice.toOwned(default_allocator),
@@ -121,7 +212,7 @@ else => try ZigString.fromUTF8(path_like.slice()).toSliceClone(default_allocator
 });
     }
 
-pub fn isSeekable(self: *const StoreFile) ?bool {
+pub fn isSeekable(self: StoreFile) ?bool {
             if (self.seekable) |seekable| {
                 _ = &seekable;
                 return seekable;
@@ -146,8 +237,7 @@ pub const StoreS3 = struct {
     storage_class: ?StorageClass = null,
     request_payer: bool = false,
 
-pub fn isSeekable(self: *const StoreS3) ?bool {
-        _ = self;
+pub fn isSeekable() ?bool {
             return true;
     }
 
@@ -156,7 +246,7 @@ pub fn getCredentials(self: *const StoreS3) *S3Credentials {
             return self.credentials.?;
     }
 
-pub fn getCredentialsWithOptions(self: *const StoreS3, options: ?JSValue, globalObject: *JSGlobalObject) JSError!S3CredentialsWithOptions {
+pub fn getCredentialsWithOptions(self: StoreS3, options: ?JSValue, globalObject: *JSGlobalObject) JSError!S3CredentialsWithOptions {
             return S3Credentials.getCredentialsWithOptions((self.getCredentials()).*, self.options, options, self.acl, self.storage_class, self.request_payer, globalObject);
     }
 
@@ -184,39 +274,7 @@ pub fn path(self: *const StoreS3) []const u8 {
             return path_name;
     }
 
-pub fn unlink(self: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: ?JSValue) JSError!JSValue {
-            const Wrapper = struct {
-    promise: JSPromise.Strong,
-    store: *Store,
-    global: *JSGlobalObject,
-
-pub fn resolve(result: S3DeleteResult, opaque_self: ?*anyopaque) !void {
-            var wrap: *@This() = (blk: {
-            break :blk @ptrCast(@alignCast(opaque_self.?));
-
-});
-            _ = &wrap;
-            var wrap_guard = DeinitPtrGuard(@This()){ .ptr = wrap };
-            _ = &wrap_guard;
-            var __wrap_guard_moved = false; _ = &__wrap_guard_moved;
-            defer if (!__wrap_guard_moved) { __wrap_guard_moved = true; const __T = @TypeOf(wrap_guard); if (@typeInfo(__T) == .optional) { if (wrap_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { wrap_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = wrap_guard; _drop_val.__cp_deinit(); } };
-            const globalObject = wrap.global;
-            switch (result) {
-.success => {
-_ = try wrap.promise.resolve(globalObject, .true);
-},
-.not_found, .failure => |err| {
-_ = try wrap.promise.reject(globalObject, err.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()));
-},
-}
-    }
-
-pub fn deinit(wrap: *@This()) void {
-            _ = wrap.store.deref();
-            _ = wrap.promise.deinit();
-            _ = destroy(wrap);
-    }
-};
+pub fn unlink(self: StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: ?JSValue) JSError!JSValue {
             var promise = JSPromise.Strong.init(globalThis);
             _ = &promise;
             const value_fn = (if (@typeInfo(@TypeOf(JSPromise.Strong)) == .@"enum") @intFromEnum(JSPromise.Strong) else JSPromise.Strong.value);
@@ -234,57 +292,16 @@ pub fn deinit(wrap: *@This()) void {
             defer if (!__aws_options_guard_moved) { __aws_options_guard_moved = true; const __T = @TypeOf(aws_options_guard); if (@typeInfo(__T) == .optional) { if (aws_options_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { aws_options_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = aws_options_guard; _drop_val.__cp_deinit(); } };
             _ = store.ref();
             _ = try s3Delete((&aws_options.credentials), self.path(), (blk: {
-            break :blk @ptrCast((&Wrapper.resolve));
+            break :blk @ptrCast((&StoreS3UnlinkWrapper.resolve));
 
-}), bun.new(Wrapper, .{ .promise = promise, .store = store, .global = globalThis }), proxy, aws_options.request_payer);
+}), bun.new(StoreS3UnlinkWrapper, .{ .promise = promise, .store = store, .global = globalThis }), proxy, aws_options.request_payer);
             return value;
     }
 
-pub fn listObjects(self: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: ?JSValue) JSError!JSValue {
+pub fn listObjects(self: StoreS3, store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: ?JSValue) JSError!JSValue {
             if (((!listOptions.isEmptyOrUndefinedOrNull()) and (!listOptions.isObject()))) {
                 return globalThis.throwInvalidArguments("S3Client.listObjects() needs a S3ListObjectsOption as it's first argument", .{});
             }
-            const Wrapper = struct {
-    promise: JSPromise.Strong,
-    store: *Store,
-    resolvedlistOptions: S3ListObjectsOptions,
-    global: *JSGlobalObject,
-
-pub fn resolve(result: S3ListObjectsResult, opaque_self: ?*anyopaque) !void {
-            var wrap: *@This() = (blk: {
-            break :blk @ptrCast(@alignCast(opaque_self.?));
-
-});
-            _ = &wrap;
-            var wrap_guard = DeinitPtrGuard(@This()){ .ptr = wrap };
-            _ = &wrap_guard;
-            var __wrap_guard_moved = false; _ = &__wrap_guard_moved;
-            defer if (!__wrap_guard_moved) { __wrap_guard_moved = true; const __T = @TypeOf(wrap_guard); if (@typeInfo(__T) == .optional) { if (wrap_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { wrap_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = wrap_guard; _drop_val.__cp_deinit(); } };
-            const globalObject = wrap.global;
-            switch (result) {
-.success => |list_result| {
-var list_result_mut = list_result;
-            _ = &list_result_mut;
-            var list_result_guard = DeinitGuard(@TypeOf(list_result_mut)){ .val = list_result_mut };
-            _ = &list_result_guard;
-            var __list_result_guard_moved = false; _ = &__list_result_guard_moved;
-            defer if (!__list_result_guard_moved) { __list_result_guard_moved = true; const __T = @TypeOf(list_result_guard); if (@typeInfo(__T) == .optional) { if (list_result_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { list_result_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = list_result_guard; _drop_val.__cp_deinit(); } };
-            const list_result_js = (blk_catch_0: { break :blk_catch_0 ((list_result_mut.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return wrap.promise.reject(globalObject, error.JSError); }); });
-            _ = try wrap.promise.resolve(globalObject, list_result_js);
-},
-inline .not_found, .failure => |err| {
-_ = try wrap.promise.reject(globalObject, err.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()));
-},
-}
-    }
-
-pub fn deinit(wrap: *@This()) void {
-            _ = wrap.store.deref();
-            _ = wrap.promise.deinit();
-            _ = wrap.resolvedlistOptions.deinit();
-            _ = destroy(wrap);
-    }
-};
             var promise = JSPromise.Strong.init(globalThis);
             _ = &promise;
             const value_fn = (if (@typeInfo(@TypeOf(JSPromise.Strong)) == .@"enum") @intFromEnum(JSPromise.Strong) else JSPromise.Strong.value);
@@ -304,9 +321,9 @@ pub fn deinit(wrap: *@This()) void {
             _ = &options;
             _ = store.ref();
             _ = try s3ListObjects((&aws_options.credentials), options, (blk: {
-            break :blk @ptrCast((&Wrapper.resolve));
+            break :blk @ptrCast((&StoreS3ListObjectsWrapper.resolve));
 
-}), bun.new(Wrapper, .{ .promise = promise, .store = store, .resolvedlistOptions = options, .global = globalThis }), proxy);
+}), bun.new(StoreS3ListObjectsWrapper, .{ .promise = promise, .store = store, .resolvedlistOptions = options, .global = globalThis }), proxy);
             return value;
     }
 
@@ -319,7 +336,7 @@ pub fn init(pathlike: node.PathLike, mime_type: ?MimeType, credentials: S3Creden
             return StoreS3{ .credentials = credentials.dupe(), .pathlike = pathlike, .mime_type = ((mime_type) orelse (.other)), .options = .{}, .acl = null, .storage_class = null, .request_payer = false };
     }
 
-pub fn estimatedSize(self: *const StoreS3) usize {
+pub fn estimatedSize(self: StoreS3) usize {
             var cred_size = (if ((self.credentials != null)) self.credentials.?.estimatedSize() else 0);
             _ = &cred_size;
             return (self.pathlike.estimatedSize() + cred_size);
@@ -411,11 +428,11 @@ pub fn deinit(self: *StoreBytes) void {
             self.cap = (if (comptime @typeInfo(SizeType) == .@"enum") @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
     }
 
-pub fn asArrayList(self: *const StoreBytes) ArrayListUnmanaged(u8) {
+pub fn asArrayList(self: StoreBytes) ArrayListUnmanaged(u8) {
             return self.asArrayListLeak();
     }
 
-pub fn asArrayListLeak(self: *const StoreBytes) ArrayListUnmanaged(u8) {
+pub fn asArrayListLeak(self: StoreBytes) ArrayListUnmanaged(u8) {
             return .{ .items = (if ((self.ptr != null)) (blk: {
             break :blk self.ptr.?[0..self.len];
 
@@ -637,16 +654,8 @@ pub fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator) !*Store
     pub const S3 = StoreS3;
     pub const Bytes = StoreBytes;
     pub const Map = std.HashMap(u64, *WebCore.Blob.Store, IdentityContext(u64), 80);
-    pub const Data = union(enum) {
-        bytes: StoreBytes,
-        file: StoreFile,
-        s3: StoreS3,
-    };
-    pub const SerializeTag = enum(u8) {
-            file = 0,
-            bytes = 1,
-            empty = 2,
-        };
+    pub const Data = StoreData;
+    pub const SerializeTag = StoreSerializeTag;
 };
 
 const default_allocator = bun.default_allocator;

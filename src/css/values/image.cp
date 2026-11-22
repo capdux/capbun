@@ -9,9 +9,9 @@ const VendorPrefix = css.VendorPrefix;
 const UrlDependency = css.dependencies.UrlDependency;
 
 /// A CSS [`<image>`](https://www.w3.org/TR/css-images-3/#image-values) value.
-pub const Image = union(enum) {
+pub union(enum) Image {
     /// The `none` keyword.
-    none,
+    none: void,
     /// A `url()`.
     url: Url,
     /// A gradient.
@@ -22,115 +22,124 @@ pub const Image = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn deinit(_: *@This(), _: std.mem.Allocator) void {
+    fn deinit(*_, allocator: Allocator) {
+        * = allocator;
         // TODO: implement this
         // Right now not implementing this.
         // It is not a bug to implement this since all memory allocated in CSS parser is allocated into arena.
     }
 
-    pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers) bool {
-        return switch (this.*) {
-            .gradient => |g| switch (g.*) {
-                .linear => |linear| css.Feature.isCompatible(.linear_gradient, browsers) and linear.isCompatible(browsers),
-                .repeating_linear => |repeating_linear| css.Feature.isCompatible(.repeating_linear_gradient, browsers) and repeating_linear.isCompatible(browsers),
-                .radial => |radial| css.Feature.isCompatible(.radial_gradient, browsers) and radial.isCompatible(browsers),
-                .repeating_radial => |repeating_radial| css.Feature.isCompatible(.repeating_radial_gradient, browsers) and repeating_radial.isCompatible(browsers),
-                .conic => |conic| css.Feature.isCompatible(.conic_gradient, browsers) and conic.isCompatible(browsers),
-                .repeating_conic => |repeating_conic| css.Feature.isCompatible(.repeating_conic_gradient, browsers) and repeating_conic.isCompatible(browsers),
+    fn isCompatible(browsers: css.targets.Browsers): bool {
+        return switch (_) {
+            .gradient g => switch (g.*) {
+                .linear linear => css.Feature.isCompatible(.linear_gradient, browsers) && linear.isCompatible(browsers),
+                .repeating_linear repeating_linear => css.Feature.isCompatible(.repeating_linear_gradient, browsers) && repeating_linear.isCompatible(browsers),
+                .radial radial => css.Feature.isCompatible(.radial_gradient, browsers) && radial.isCompatible(browsers),
+                .repeating_radial repeating_radial => css.Feature.isCompatible(.repeating_radial_gradient, browsers) && repeating_radial.isCompatible(browsers),
+                .conic conic => css.Feature.isCompatible(.conic_gradient, browsers) && conic.isCompatible(browsers),
+                .repeating_conic repeating_conic => css.Feature.isCompatible(.repeating_conic_gradient, browsers) && repeating_conic.isCompatible(browsers),
                 .@"webkit-gradient" => css.prefixes.Feature.isWebkitGradient(browsers),
             },
-            .image_set => |image_set| image_set.isCompatible(browsers),
+            .image_set image_set => image_set.isCompatible(browsers),
             .url, .none => true,
         };
     }
 
-    pub fn getPrefixed(this: *const @This(), allocator: Allocator, prefix: css.VendorPrefix) Image {
-        return switch (this.*) {
-            .gradient => |grad| .{ .gradient = bun.create(allocator, Gradient, grad.getPrefixed(allocator, prefix)) },
-            .image_set => |image_set| .{ .image_set = image_set.getPrefixed(allocator, prefix) },
-            else => this.deepClone(allocator),
+    fn getPrefixed(allocator: Allocator, prefix: css.VendorPrefix): Image {
+        return switch (_) {
+            .gradient grad => Image{ gradient: bun.create(allocator, Gradient, grad.getPrefixed(allocator, prefix)) },
+            .image_set image_set => Image{ image_set: image_set.getPrefixed(allocator, prefix) },
+            else => _.deepClone(allocator),
         };
     }
 
-    pub fn getNecessaryPrefixes(this: *const @This(), targets: css.targets.Targets) css.VendorPrefix {
-        return switch (this.*) {
-            .gradient => |grad| grad.getNecessaryPrefixes(targets),
-            .image_set => |*image_set| image_set.getNecessaryPrefixes(targets),
-            else => css.VendorPrefix{ .none = true },
+    fn getNecessaryPrefixes(targets: css.targets.Targets): css.VendorPrefix {
+        return switch (_) {
+            .gradient grad => grad.getNecessaryPrefixes(targets),
+            .image_set => _.image_set.getNecessaryPrefixes(targets),
+            else => css.VendorPrefix{ none: true },
         };
     }
 
-    pub fn hasVendorPrefix(this: *const @This()) bool {
-        const prefix = this.getVendorPrefix();
-        return !prefix.isEmpty() and prefix != VendorPrefix{ .none = true };
+    fn hasVendorPrefix(): bool {
+        const prefix = _.getVendorPrefix();
+        return !prefix.isEmpty() && prefix != VendorPrefix{ none: true };
     }
 
     /// Returns the vendor prefix used in the image value.
-    pub fn getVendorPrefix(this: *const @This()) VendorPrefix {
-        return switch (this.*) {
-            .gradient => |a| a.getVendorPrefix(),
-            .image_set => |a| a.getVendorPrefix(),
-            else => .{},
+    fn getVendorPrefix(): VendorPrefix {
+        return switch (_) {
+            .gradient a => a.getVendorPrefix(),
+            .image_set a => a.getVendorPrefix(),
+            else => VendorPrefix{},
         };
     }
 
     /// Needed to satisfy ImageFallback interface
-    pub fn getImage(this: *const @This()) *const Image {
-        return this;
+    fn getImage(): *const Image {
+        return &_;
     }
 
     /// Needed to satisfy ImageFallback interface
-    pub fn withImage(_: *const @This(), _: Allocator, image: Image) @This() {
+    fn withImage(allocator: Allocator, image: Image): @This() {
+        const self_val = _;
+        * = self_val;
+        * = allocator;
         return image;
     }
 
-    pub fn default() Image {
+    static fn default(): Image {
         return .none;
     }
 
-    pub inline fn eql(this: *const Image, other: *const Image) bool {
-        return css.implementEql(@This(), this, other);
+    fn eql(other: *const Image): bool {
+        return css.implementEql(@This(), _.getImage(), other);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), _.getImage(), allocator);
     }
 
     /// Returns a legacy `-webkit-gradient()` value for the image.
     ///
     /// May return an error in case the gradient cannot be converted.
-    pub fn getLegacyWebkit(this: *const @This(), allocator: Allocator) ?Image {
-        return switch (this.*) {
-            .gradient => |gradient| Image{ .gradient = bun.create(allocator, Gradient, gradient.getLegacyWebkit(allocator) orelse return null) },
-            else => this.deepClone(allocator),
+    fn getLegacyWebkit(allocator: Allocator): Image? {
+        return switch (_) {
+            .gradient gradient => {
+                if (legacy := gradient.getLegacyWebkit(allocator)) {
+                    return Image{ gradient: bun.create(allocator, Gradient, legacy) };
+                } else return null;
+            },
+            else => _.deepClone(allocator),
         };
     }
 
-    pub fn getFallbacks(this: *@This(), allocator: Allocator, targets: css.targets.Targets) css.SmallList(Image, 6) {
+    fn getFallbacks(*_, allocator: Allocator, targets: css.targets.Targets): css.SmallList(Image, 6) {
         const ColorFallbackKind = css.ColorFallbackKind;
         // Determine which prefixes and color fallbacks are needed.
-        const prefixes = this.getNecessaryPrefixes(targets);
-        const fallbacks = this.getNecessaryFallbacks(targets);
-        let res = css.SmallList(Image, 6){};
+        const prefixes = _.getNecessaryPrefixes(targets);
+        const fallbacks = _.getNecessaryFallbacks(targets);
+        const SmallListImage = css.SmallList(Image, 6);
+        let res = SmallListImage{};
 
         // Get RGB fallbacks if needed.
-        let rgb = if (fallbacks.rgb)
-            this.getFallback(allocator, ColorFallbackKind.RGB)
+        let rgb: Image? = if (fallbacks.rgb)
+            _.getFallback(allocator, ColorFallbackKind{ rgb: true })
         else
             null;
 
         // Prefixed properties only support RGB.
-        let prefix_image = this;
-        if (rgb != null) {
-            prefix_image = &rgb.?;
+        let prefix_image: Image = _.*;
+        if (r := rgb) {
+            prefix_image = r;
         }
 
         // Legacy -webkit-gradient()
-        if (prefixes.webkit and
-            if (targets.browsers) |browsers| css.prefixes.Feature.isWebkitGradient(browsers) else false and
-                prefix_image.* == .gradient)
+        if (prefixes.webkit &&
+            (if (browsers := targets.browsers) css.prefixes.Feature.isWebkitGradient(browsers) else false) &&
+            prefix_image == .gradient)
         {
-            if (prefix_image.getLegacyWebkit(allocator)) |legacy| {
+            if (legacy := prefix_image.getLegacyWebkit(allocator)) {
                 res.append(allocator, legacy);
             }
         }
@@ -150,54 +159,55 @@ pub const Image = union(enum) {
 
         if (prefixes.none) {
             // Unprefixed, rgb fallback.
-            if (rgb) |r| {
+            if (r := rgb) {
                 res.append(allocator, r);
             }
 
             // P3 fallback.
             if (fallbacks.p3) {
-                res.append(allocator, this.getFallback(allocator, ColorFallbackKind.P3));
+                res.append(allocator, _.getFallback(allocator, ColorFallbackKind{ p3: true }));
             }
 
             // Convert original to lab if needed (e.g. if oklab is not supported but lab is).
             if (fallbacks.lab) {
-                this.* = this.getFallback(allocator, ColorFallbackKind.LAB);
+                _.* = _.getFallback(allocator, ColorFallbackKind{ lab: true });
             }
-        } else if (res.pop()) |last| {
+        } else if (last := res.pop()) {
             // Prefixed property with no unprefixed version.
             // Replace self with the last prefixed version so that it doesn't
             // get duplicated when the caller pushes the original value.
-            this.* = last;
+            _.* = last;
         }
 
         return res;
     }
 
-    pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) Image {
-        return switch (this.*) {
-            .gradient => |grad| .{ .gradient = bun.create(allocator, Gradient, grad.getFallback(allocator, kind)) },
-            else => this.deepClone(allocator),
+    fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): Image {
+        return switch (_) {
+            .gradient grad => Image{ gradient: bun.create(allocator, Gradient, grad.getFallback(allocator, kind)) },
+            else => _.deepClone(allocator),
         };
     }
 
-    pub fn getNecessaryFallbacks(this: *const @This(), targets: css.targets.Targets) css.ColorFallbackKind {
-        return switch (this.*) {
-            .gradient => |grad| grad.getNecessaryFallbacks(targets),
+    fn getNecessaryFallbacks(targets: css.targets.Targets): css.ColorFallbackKind {
+        return switch (_) {
+            .gradient grad => grad.getNecessaryFallbacks(targets),
             else => css.ColorFallbackKind{},
         };
     }
+}
 
-    // pub fn parse(input: *css.Parser) Result(Image) {
-    //     _ = input; // autofix
-    //     @panic(css.todo_stuff.depth);
-    // }
+struct ImageSetParseFn {
+    static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ArrayList(ImageSetOption)) {
+        return i.parseCommaSeparated(ImageSetOption, ImageSetOption.parse);
+    }
+}
 
-    // pub fn toCss(this: *const Image, dest: *css.Printer) css.PrintErr!void {
-    //     _ = this; // autofix
-    //     _ = dest; // autofix
-    //     @panic(css.todo_stuff.depth);
-    // }
-};
+struct FileTypeParseFn {
+    static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(Str) {
+        return i.expectString();
+    }
+}
 
 /// A CSS [`image-set()`](https://drafts.csswg.org/css-images-4/#image-set-notation) value.
 ///
@@ -225,13 +235,7 @@ pub struct ImageSet {
             } else return .{ .err = location.newUnexpectedTokenError(.{ .ident = f }) };
         };
 
-        const Fn = struct {
-            static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ArrayList(ImageSetOption)) {
-                return i.parseCommaSeparated(ImageSetOption, ImageSetOption.parse);
-            }
-        };
-
-        const options = switch (input.parseNestedBlock(ArrayList(ImageSetOption), @as(void, undefined), Fn.parseNestedBlockFn)) {
+        const options = switch (input.parseNestedBlock(ArrayList(ImageSetOption), @as(void, undefined), ImageSetParseFn.parseNestedBlockFn)) {
             .result => |vv| vv,
             .err => |e| return .{ .err = e },
         };
@@ -275,11 +279,13 @@ pub struct ImageSet {
     }
 
     fn eql(other: *const ImageSet): bool {
-        return css.implementEql(@This(), &_, other);
+        let arr: [1]ImageSet = [ _ ];
+        return css.implementEql(@This(), &arr[0], other);
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        let arr: [1]ImageSet = [ _ ];
+        return css.implementDeepClone(@This(), &arr[0], allocator);
     }
 
     fn getVendorPrefix(): VendorPrefix {
@@ -347,7 +353,7 @@ pub struct ImageSetOption {
         is_prefixed: bool,
     ): PrintErr!void {
         if (_.image == .url && !is_prefixed) {
-            const url_ptr: *const css.Url = &_.image.url;
+            const url_ptr: *const Url = &_.image.url;
             const _dep: UrlDependency? = if (dest.dependencies != null)
                 UrlDependency.new(dest.allocator, url_ptr, dest.filename(), try dest.getImportRecords())
             else
@@ -392,7 +398,8 @@ pub struct ImageSetOption {
     }
 
     fn deepClone(allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), &_, allocator);
+        let arr: [1]ImageSetOption = [ _ ];
+        return css.implementDeepClone(@This(), &arr[0], allocator);
     }
 
     static fn eql(lhs: *const ImageSetOption, rhs: *const ImageSetOption): bool {
@@ -404,12 +411,7 @@ type Str = []const u8;
 
 fn parseFileType(input: *css.Parser): Result(Str) {
     if (e := input.expectFunctionMatching("type").asErr()) return .{ .err = e };
-    const Fn = struct {
-        static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(Str) {
-            return i.expectString();
-        }
-    };
-    return input.parseNestedBlock(Str, @as(void, undefined), Fn.parseNestedBlockFn);
+    return input.parseNestedBlock(Str, @as(void, undefined), FileTypeParseFn.parseNestedBlockFn);
 }
 
 import bun from "bun";

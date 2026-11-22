@@ -46,12 +46,12 @@ pub struct ExecState {
     err: jsc.SystemError? = null,
 }
 
-pub const State = union(enum) {
-    idle,
+pub union(enum) State {
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
-};
+    waiting_write_err: void,
+    done: void,
+}
 
 pub struct Opts {
     access_time_only: bool = false,
@@ -63,12 +63,12 @@ pub struct Opts {
     timestamp: ([]const u8)? = null,
     time: ([]const u8)? = null,
 
-    pub fn parse(*_, args: []const [*:0]const u8): Result(FilepathArgs, ParseError) {
+    fn parse(*_, args: []const [*:0]const u8): Result(FilepathArgs, ParseError) {
         const Parse = FlagParser(*Opts);
         return Parse.parseFlags(_, args);
     }
 
-    pub fn parseLong(*_, flag: []const u8): ParseFlagResult? {
+    fn parseLong(*_, flag: []const u8): ParseFlagResult? {
         * = flag.len;
         if (bun.strings.eqlComptime(flag, "--no-create")) {
             return .{
@@ -97,7 +97,7 @@ pub struct Opts {
         return null;
     }
 
-    pub fn parseShort(*_, char: u8, smallflags: []const u8, i: usize): ParseFlagResult? {
+    fn parseShort(*_, char: u8, smallflags: []const u8, i: usize): ParseFlagResult? {
         switch (char) {
             'a' => {
                 return .{ .unsupported = unsupportedFlag("-a") };
@@ -129,7 +129,7 @@ pub struct Opts {
     }
 }
 
-pub const ShellTouchTask = struct {
+pub struct ShellTouchTask {
     touch: *Touch,
 
     opts: Opts,
@@ -141,11 +141,11 @@ pub const ShellTouchTask = struct {
     event_loop: jsc.EventLoopHandle,
     concurrent_task: jsc.EventLoopTask,
 
-    pub fn format(this: *const ShellTouchTask, writer: auto)! {
-        (writer.print("ShellTouchTask(0x{x}, filepath={s})", .{ @intFromPtr(this), this.filepath }))?;
+    fn format(writer: auto)! {
+        (writer.print("ShellTouchTask(0x{x}, filepath={s})", .{ unsafe { @intFromPtr(&_) }, _.filepath }))?;
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         if (e := _.err) {
             let err_obj = e;
             err_obj.deref();
@@ -153,7 +153,7 @@ pub const ShellTouchTask = struct {
         bun.default_allocator.destroy(_);
     }
 
-    pub fn create(touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8): *ShellTouchTask {
+    static fn create(touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8): *ShellTouchTask {
         let task = bun.handleOom(bun.default_allocator.create(ShellTouchTask));
         task.* = ShellTouchTask{
             .touch = touch,
@@ -166,21 +166,21 @@ pub const ShellTouchTask = struct {
         return task;
     }
 
-    pub fn schedule(*_) {
+    fn schedule(*_) {
         debug("{f} schedule", .{_});
         WorkPool.schedule(&_.task);
     }
 
-    pub fn runFromMainThread(*_) {
+    fn runFromMainThread(*_) {
         debug("{f} runFromJS", .{_});
         _.touch.onShellTouchTaskDone(_);
     }
 
-    pub fn runFromMainThreadMini(*_, _: *void) {
+    fn runFromMainThreadMini(*_, _: *void) {
         _.runFromMainThread();
     }
 
-    pub static fn runFromThreadPool(task: *jsc.WorkPoolTask) {
+    static fn runFromThreadPool(task: *jsc.WorkPoolTask) {
         let task_self: *ShellTouchTask = @fieldParentPtr("task", task);
         debug("{f} runFromThreadPool", .{task_self});
 
@@ -209,10 +209,10 @@ pub const ShellTouchTask = struct {
             if (err_.getErrno() == .NOENT) {
                 const perm = 0o664;
                 switch (Syscall.open(filepath, bun.O.CREAT | bun.O.WRONLY, perm)) {
-                    .result => |fd| {
+                    .result fd => {
                         fd.close();
                     },
-                    .err => |e| {
+                    .err e => {
                         task_self.err = e.withPath(filepath).toShellSystemError();
                     },
                 }
@@ -227,9 +227,9 @@ pub const ShellTouchTask = struct {
             task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
         }
     }
-};
+}
 
-const ShellTouchOutputTaskVTable = struct {
+struct ShellTouchOutputTaskVTable {
     static fn writeErr(parent: *Touch, childptr: auto, errbuf: []const u8): Yield? {
         parent.state.exec.output_waiting += 1;
         if (safeguard := parent.bltn().stderr.needsIO()) {
@@ -261,7 +261,7 @@ const ShellTouchOutputTaskVTable = struct {
     static fn onDone(parent: *Touch): Yield {
         return parent.next();
     }
-};
+}
 
 pub const ShellTouchOutputTask = OutputTask(Touch, .{
     .writeErr = ShellTouchOutputTaskVTable.writeErr,
@@ -275,22 +275,22 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
     opts: Opts = .{},
     state: State = .idle,
 
-    pub fn format(writer: auto)! {
+    fn format(writer: auto)! {
         (writer.print("Touch(0x{x}, state={s})", .{ unsafe { @intFromPtr(&_) }, @tagName(_.state) }))?;
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         log("{f} deinit", .{_});
     }
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         const filepath_args_opt = switch (_.opts.parse(_.bltn().argsSlice())) {
-            .ok => |f_args| f_args,
-            .err => |e| {
+            .ok f_args => f_args,
+            .err e => {
                 const buf = switch (e) {
-                    .illegal_option => |opt_str| _.bltn().fmtErrorArena(.touch, "illegal option -- {s}\n", .{opt_str}),
+                    .illegal_option opt_str => _.bltn().fmtErrorArena(.touch, "illegal option -- {s}\n", .{opt_str}),
                     .show_usage => Builtin.Kind.touch.usageString(),
-                    .unsupported => |unsupported| _.bltn().fmtErrorArena(.touch, "unsupported option, please open a GitHub issue -- {s}\n", .{unsupported}),
+                    .unsupported unsupported => _.bltn().fmtErrorArena(.touch, "unsupported option, please open a GitHub issue -- {s}\n", .{unsupported}),
                 };
 
                 return _.writeFailingError(buf, 1);
@@ -311,7 +311,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
         return _.next();
     }
 
-    pub fn next(*_): Yield {
+    fn next(*_): Yield {
         switch (_.state) {
             .idle => @panic("Invalid state"),
             .exec => {
@@ -327,7 +327,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
                 }
 
                 exec.started = true;
-                exec.tasks_count = exec.args.len;
+                exec.tasks_count = bun.len(exec.args);
 
                 for (dir_to_mk_ of exec.args) {
                     const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
@@ -341,7 +341,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
         }
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         if (err := e) err.deref();
 
         if (_.state == .waiting_write_err) {
@@ -351,7 +351,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
         return _.next();
     }
 
-    pub fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
+    fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
         if (safeguard := _.bltn().stderr.needsIO()) {
             _.state = .waiting_write_err;
             return _.bltn().stderr.enqueue(_, buf, safeguard);
@@ -362,7 +362,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
         return _.bltn().done(exit_code);
     }
 
-    pub fn onShellTouchTaskDone(*_, task: *ShellTouchTask) {
+    fn onShellTouchTaskDone(*_, task: *ShellTouchTask) {
         log("{f} onShellTouchTaskDone {f} tasks_done={d} tasks_count={d}", .{ _, task, _.state.exec.tasks_done, _.state.exec.tasks_count });
 
         const _task_guard = DestroyGuard<ShellTouchTask>{ alloc: bun.default_allocator, ptr: unsafe { task } };
@@ -387,7 +387,7 @@ pub const ShellTouchOutputTask = OutputTask(Touch, .{
         y_next.run();
     }
 
-    pub inline fn bltn(*_): *Builtin {
+    inline fn bltn(*_): *Builtin {
         const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("touch", _)) };
         return @fieldParentPtr("impl", impl_);
     }

@@ -90,75 +90,67 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const Source = @import("./source.zig").Source;
-const FileType = @import("./pipes.zig").FileType;
-const PollOrFd = @import("./pipes.zig").PollOrFd;
-const Async = bun.Async;
-const Environment = bun.Environment;
-const OOM = bun.OOM;
-const jsc = bun.jsc;
-const uv = bun.windows.libuv;
-const log = bun.Output.scoped(.PipeWriter, .hidden);
 pub const WriteResult = union(enum) {
     done: usize,
     wrote: usize,
     pending: usize,
     err: bun.sys.Error,
 };
+
 pub const StreamBuffer = struct {
     list: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(bun.default_allocator),
     cursor: usize = 0,
 
-pub fn reset(self: *@This()) void {
+pub fn reset(self: *StreamBuffer) void {
             self.cursor = 0;
             _ = self.maybeShrink();
             _ = self.list.clearRetainingCapacity();
     }
 
-pub fn maybeShrink(self: *@This()) void {
+pub fn maybeShrink(self: *StreamBuffer) void {
             if ((self.list.capacity > std.heap.pageSize())) {
                 _ = self.list.expandToCapacity();
                 _ = self.list.shrinkAndFree(std.heap.pageSize());
             }
     }
 
-pub fn memoryCost(self: *const @This()) usize {
+pub fn memoryCost(self: StreamBuffer) usize {
             return self.list.capacity;
     }
 
-pub fn size(self: *const @This()) usize {
+pub fn size(self: StreamBuffer) usize {
             return (self.list.items.len - self.cursor);
     }
 
-pub fn isEmpty(self: *const @This()) bool {
+pub fn isEmpty(self: StreamBuffer) bool {
             return (self.size() == 0);
     }
 
-pub fn isNotEmpty(self: *const @This()) bool {
+pub fn isNotEmpty(self: StreamBuffer) bool {
             return (self.size() > 0);
     }
 
-pub fn write(self: *@This(), buffer: []const u8) OOM!void {
+pub fn write(self: *StreamBuffer, buffer: []const u8) !void {
             _ = try self.list.appendSlice(buffer);
     }
 
-pub fn wrote(self: *@This(), amount: usize) void {
+pub fn wrote(self: *StreamBuffer, amount: usize) void {
             self.cursor = (self.cursor + amount);
     }
 
-pub fn writeAssumeCapacity(self: *@This(), buffer: []const u8) void {
+pub fn writeAssumeCapacity(self: *StreamBuffer, buffer: []const u8) void {
             _ = self.list.appendSliceAssumeCapacity(buffer);
     }
 
-pub fn ensureUnusedCapacity(self: *@This(), capacity: usize) OOM!void {
+pub fn ensureUnusedCapacity(self: *StreamBuffer, capacity: usize) !void {
             return self.list.ensureUnusedCapacity(capacity);
     }
 
-pub fn writeTypeAsBytes(self: *@This(), comptime T: type, data: *const T) OOM!void {
+pub fn writeTypeAsBytes(self: *StreamBuffer, comptime T: type, data: *const T) !void {
             _ = try self.write(std.mem.asBytes(data));
     }
 
-pub fn writeTypeAsBytesAssumeCapacity(self: *@This(), comptime T: type, data: T) void {
+pub fn writeTypeAsBytesAssumeCapacity(self: *StreamBuffer, comptime T: type, data: T) void {
             var byte_list = bun.ByteList.moveFromList((&self.list));
             _ = &byte_list;
             defer {
@@ -167,7 +159,7 @@ pub fn writeTypeAsBytesAssumeCapacity(self: *@This(), comptime T: type, data: T)
             _ = byte_list.writeTypeAsBytesAssumeCapacity(T, data);
     }
 
-pub fn writeOrFallback(self: *@This(), buffer: anytype, comptime writeFn: anytype) OOM![]const u8 {
+pub fn writeOrFallback(self: *StreamBuffer, buffer: anytype, comptime writeFn: anytype) OOM![]const u8 {
             if (comptime ((@TypeOf(writeFn) == @TypeOf((&writeLatin1))) and (writeFn == (&writeLatin1)))) {
                 if (bun.strings.isAllASCII(buffer)) {
                     return buffer;
@@ -202,7 +194,7 @@ pub fn writeOrFallback(self: *@This(), buffer: anytype, comptime writeFn: anytyp
             }
     }
 
-pub fn writeLatin1(self: *@This(), buffer: []const u8, comptime check_ascii: bool) OOM!void {
+pub fn writeLatin1(self: *StreamBuffer, buffer: []const u8, comptime check_ascii: bool) !void {
             if (comptime check_ascii) {
                 if (bun.strings.isAllASCII(buffer)) {
                     return self.write(buffer);
@@ -216,7 +208,7 @@ pub fn writeLatin1(self: *@This(), buffer: []const u8, comptime check_ascii: boo
             _ = try byte_list.writeLatin1(self.list.allocator, buffer);
     }
 
-pub fn writeUTF16(self: *@This(), buffer: []const u16) OOM!void {
+pub fn writeUTF16(self: *StreamBuffer, buffer: []const u16) !void {
             var byte_list = bun.ByteList.moveFromList((&self.list));
             _ = &byte_list;
             defer {
@@ -225,17 +217,27 @@ pub fn writeUTF16(self: *@This(), buffer: []const u16) OOM!void {
             _ = try byte_list.writeUTF16(self.list.allocator, buffer);
     }
 
-pub fn slice(self: *const @This()) []const u8 {
+pub fn slice(self: *const StreamBuffer) []const u8 {
             return self.list.items[self.cursor..];
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *StreamBuffer) void {
             self.cursor = 0;
             if ((self.list.capacity > 0)) {
                 _ = self.list.clearAndFree();
             }
     }
 };
+
+const Source = @import("./source.zig").Source;
+const FileType = @import("./pipes.zig").FileType;
+const PollOrFd = @import("./pipes.zig").PollOrFd;
+const Async = bun.Async;
+const Environment = bun.Environment;
+const OOM = bun.OOM;
+const jsc = bun.jsc;
+const uv = bun.windows.libuv;
+const log = bun.Output.scoped(.PipeWriter, .hidden);
 pub const BufferedWriter = (if (bun.Environment.isPosix) PosixBufferedWriter else WindowsBufferedWriter);
 pub const StreamingWriter = (if (bun.Environment.isPosix) PosixStreamingWriter else WindowsStreamingWriter);
 

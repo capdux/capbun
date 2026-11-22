@@ -37,24 +37,24 @@ struct DeinitWithAllocGuard<T> {
     }
 }
 
-const BufferData = struct {
+struct BufferData {
     size: usize,
     name: []const u8,
     @"type": type,
     alignment: usize,
-};
+}
 
-const BufferSortContext = struct {
+struct BufferSortContext {
     data: []BufferData,
-    fn swap(ctx: BufferSortContext, lhs: usize, rhs: usize) {
-        const tmp = ctx.data[lhs];
-        ctx.data[lhs] = ctx.data[rhs];
-        ctx.data[rhs] = tmp;
+    fn swap(lhs: usize, rhs: usize) {
+        const tmp = _.data[lhs];
+        _.data[lhs] = _.data[rhs];
+        _.data[rhs] = tmp;
     }
-    fn lessThan(ctx: BufferSortContext, lhs: usize, rhs: usize): bool {
-        return ctx.data[lhs].alignment > ctx.data[rhs].alignment;
+    fn lessThan(lhs: usize, rhs: usize): bool {
+        return _.data[lhs].alignment > _.data[rhs].alignment;
     }
-};
+}
 
 const sizes = blk: {
     const fields = std.@"meta".fields(Lockfile.Buffers);

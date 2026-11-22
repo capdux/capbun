@@ -20,127 +20,127 @@ pub struct NumberScopePoolGuard {
     }
 }
 
-pub const NoOpRenamer = struct {
+pub struct NoOpRenamer {
     symbols: js_ast.Symbol.Map,
     source: *const logger.Source,
 
-    pub fn init(symbols: js_ast.Symbol.Map, source: *const logger.Source) NoOpRenamer {
-        return NoOpRenamer{ .symbols = symbols, .source = source };
+    static fn init(symbols: js_ast.Symbol.Map, source: *const logger.Source): NoOpRenamer {
+        return NoOpRenamer{ symbols: symbols, source: source };
     }
 
     pub const originalName = nameForSymbol;
 
-    pub fn nameForSymbol(renamer: *NoOpRenamer, symbol_ref: Ref) string {
+    fn nameForSymbol(symbol_ref: Ref): string {
         if (symbol_ref.isSourceContentsSlice()) {
-            return renamer.source.contents[symbol_ref.sourceIndex() .. symbol_ref.sourceIndex() + symbol_ref.innerIndex()];
+            return _.source.contents[symbol_ref.sourceIndex() .. symbol_ref.sourceIndex() + symbol_ref.innerIndex()];
         }
 
-        const resolved = renamer.symbols.follow(symbol_ref);
+        const resolved = _.symbols.follow(symbol_ref);
 
-        if (renamer.symbols.getConst(resolved)) |symbol| {
+        if (symbol := _.symbols.getConst(resolved)) {
             return symbol.original_name;
         } else {
-            Output.panic("Invalid symbol {f} in {s}", .{ symbol_ref, renamer.source.path.text });
+            Output.panic("Invalid symbol {f} in {s}", .{ symbol_ref, _.source.path.text });
         }
     }
 
-    pub fn toRenamer(this: *NoOpRenamer) Renamer {
-        return .{
-            .NoOpRenamer = this,
+    fn toRenamer(*_): Renamer {
+        return {
+            NoOpRenamer: unsafe { _ },
         };
     }
-};
+}
 
-pub const Renamer = union(enum) {
+pub union(enum) Renamer {
     NumberRenamer: *NumberRenamer,
     NoOpRenamer: *NoOpRenamer,
     MinifyRenamer: *MinifyRenamer,
 
-    pub fn symbols(this: Renamer) js_ast.Symbol.Map {
-        return switch (this) {
+    fn symbols(): js_ast.Symbol.Map {
+        return switch (_) {
             inline else => |r| r.symbols,
         };
     }
 
-    pub fn nameForSymbol(renamer: Renamer, symbol_ref: Ref) string {
-        return switch (renamer) {
+    fn nameForSymbol(symbol_ref: Ref): string {
+        return switch (_) {
             inline else => |r| r.nameForSymbol(symbol_ref),
         };
     }
 
-    pub fn originalName(renamer: Renamer, symbol_ref: Ref) ?string {
-        return switch (renamer) {
+    fn originalName(symbol_ref: Ref): string? {
+        return switch (_) {
             inline else => |r| r.originalName(symbol_ref),
         };
     }
 
-    pub fn deinit(renamer: Renamer, allocator: std.mem.Allocator) void {
-        switch (renamer) {
-            .NumberRenamer => |r| r.deinit(),
-            .MinifyRenamer => |r| r.deinit(allocator),
+    fn deinit(allocator: std.mem.Allocator) {
+        switch (_) {
+            .NumberRenamer r => r.deinit(),
+            .MinifyRenamer r => r.deinit(allocator),
             else => {},
         }
     }
-};
+}
 
-pub const InlineString = struct {
-    bytes: [15]u8 = [_]u8{0} ** 15,
+pub struct InlineString {
+    bytes: [15]u8 = std.mem.zeroes([15]u8),
     len: u8 = 0,
 
-    pub fn init(str: []const u8): InlineString {
-        let this: InlineString = .{};
-        this.len = @as(u8, @intCast(@min(str.len, 15)));
+    static fn init(str: []const u8): InlineString {
+        let out: InlineString = .{};
+        out.len = @as(u8, @intCast(@min(str.len, 15)));
         let i: usize = 0;
-        while (i < this.len) {
-            this.bytes[i] = str[i];
+        while (i < out.len) {
+            out.bytes[i] = str[i];
             i += 1;
         }
-        return this;
+        return out;
     }
 
     // do not make this *const || you will run into memory bugs.
     // we cannot let the compiler decide to copy this struct because
     // that would cause this to become a pointer to stack memory.
-    pub fn slice(this: *InlineString): string {
-        return this.bytes[0..this.len];
+    fn slice(*_): string {
+        return _.bytes[0.._.len];
     }
-};
+}
 
-pub const TinyString = union(enum) {
+pub union(enum) TinyString {
     inline_string: InlineString,
     string: string,
 
-    pub fn init(input: string, allocator: std.mem.Allocator): !TinyString {
+    static fn init(input: string, allocator: std.mem.Allocator): TinyString! {
         if (input.len <= 15) {
-            return TinyString{ .inline_string = InlineString.init(input) };
+            return TinyString{ inline_string: InlineString.init(input) };
         } else {
-            return TinyString{ .string = allocator.dupe(u8, input)? };
+            return TinyString{ string: allocator.dupe(u8, input)? };
         }
     }
 
     // do not make this *const || you will run into memory bugs.
     // we cannot let the compiler decide to copy this struct because
     // that would cause this to become a pointer to stack memory.
-    pub fn slice(this: *TinyString): string {
-        return switch (this.*) {
-            .inline_string => this.inline_string.slice(),
-            .string => this.string,
+    fn slice(*_): string {
+        return switch (_.*) {
+            .inline_string => _.inline_string.slice(),
+            .string => _.string,
         };
     }
-};
+}
 
-pub const SymbolSlot = struct {
+pub struct SymbolSlot {
     // Most minified names are under 15 bytes
     // Instead of allocating a string for every symbol slot
     // We can store the string inline!
     // But we have to be very careful of where it's used.
     // Or we WILL run into memory bugs.
-    name: TinyString = TinyString{ .string = "" },
+    name: TinyString = TinyString{ string: "" },
     count: u32 = 0,
     needs_capital_for_jsx: bool = false,
 
     pub const List = std.EnumArray(js_ast.Symbol.SlotNamespace, std.array_list.Managed(SymbolSlot));
-};
+}
 
 pub struct MinifyRenamer {
     reserved_names: bun.StringHashMapUnmanaged(u32),
@@ -456,14 +456,14 @@ pub fn assignNestedScopeSlotsHelper(sorted_members: *std.array_list.Managed(u32)
     return slot_counts;
 }
 
-pub const StableSymbolCount = struct {
+pub struct StableSymbolCount {
     stable_source_index: u32,
     ref: Ref,
     count: u32,
 
     pub const Array = std.array_list.Managed(StableSymbolCount);
 
-    pub fn lessThan(_: void, i: StableSymbolCount, j: StableSymbolCount) bool {
+    static fn lessThan(_: void, i: StableSymbolCount, j: StableSymbolCount): bool {
         if (i.count > j.count) return true;
         if (i.count < j.count) return false;
         if (i.stable_source_index < j.stable_source_index) return true;
@@ -471,20 +471,20 @@ pub const StableSymbolCount = struct {
 
         return i.ref.innerIndex() < j.ref.innerIndex();
     }
-};
+}
 
-const SlotAndCount = packed struct(u64) {
+@packed(u64) struct SlotAndCount {
     slot: u32,
     count: u32,
 
     pub const Array = std.array_list.Managed(SlotAndCount);
 
-    pub fn lessThan(_: void, a: SlotAndCount, b: SlotAndCount) bool {
+    static fn lessThan(_: void, a: SlotAndCount, b: SlotAndCount): bool {
         if (a.count > b.count) return true;
         if (a.count < b.count) return false;
         return a.slot < b.slot;
     }
-};
+}
 
 pub union(enum) NameUse {
     unused: void,
@@ -827,45 +827,45 @@ pub struct NumberRenamer {
     }
 }
 
-pub const ExportRenamer = struct {
+pub struct ExportRenamer {
     string_buffer: bun.MutableString,
     used: bun.StringHashMap(u32),
     count: isize = 0,
 
-    pub fn init(allocator: std.mem.Allocator) ExportRenamer {
+    static fn init(allocator: std.mem.Allocator): ExportRenamer {
         return ExportRenamer{
             string_buffer: MutableString.initEmpty(allocator),
             used: bun.StringHashMap(u32).init(allocator),
         };
     }
 
-    pub fn clearRetainingCapacity(this: *ExportRenamer) void {
-        this.used.clearRetainingCapacity();
-        this.string_buffer.reset();
+    fn clearRetainingCapacity(*_) {
+        _.used.clearRetainingCapacity();
+        _.string_buffer.reset();
     }
 
-    pub fn deinit(this: *ExportRenamer) void {
-        this.used.deinit();
-        this.string_buffer.deinit();
+    fn deinit(*_) {
+        _.used.deinit();
+        _.string_buffer.deinit();
     }
 
-    pub fn nextRenamedName(this: *ExportRenamer, input: []const u8) string {
-        let entry = this.used.getOrPut(input) catch unreachable;
+    fn nextRenamedName(*_, input: []const u8): string {
+        let entry = _.used.getOrPut(input) catch unreachable;
         let tries: u32 = 1;
         if (entry.found_existing) {
             while (true) {
-                this.string_buffer.reset();
-                let writer = this.string_buffer.writer();
+                _.string_buffer.reset();
+                let writer = _.string_buffer.writer();
                 writer.print("{s}{d}", .{ input, tries }) catch unreachable;
                 tries += 1;
-                const attempt = this.string_buffer.slice();
-                entry = this.used.getOrPut(attempt) catch unreachable;
+                const attempt = _.string_buffer.slice();
+                entry = _.used.getOrPut(attempt) catch unreachable;
                 if (!entry.found_existing) {
-                    const to_use = this.string_buffer.allocator.dupe(u8, attempt) catch unreachable;
+                    const to_use = _.string_buffer.allocator.dupe(u8, attempt) catch unreachable;
                     entry.key_ptr.* = to_use;
                     entry.value_ptr.* = tries;
 
-                    entry = this.used.getOrPut(input) catch unreachable;
+                    entry = _.used.getOrPut(input) catch unreachable;
                     entry.value_ptr.* = tries;
                     return to_use;
                 }
@@ -877,12 +877,12 @@ pub const ExportRenamer = struct {
         return entry.key_ptr.*;
     }
 
-    pub fn nextMinifiedName(this: *ExportRenamer, allocator: std.mem.Allocator) !string {
-        const name = try js_ast.NameMinifier.defaultNumberToMinifiedName(allocator, this.count);
-        this.count += 1;
+    fn nextMinifiedName(*_, allocator: std.mem.Allocator): string! {
+        const name = js_ast.NameMinifier.defaultNumberToMinifiedName(allocator, _.count)?;
+        _.count += 1;
         return name;
     }
-};
+}
 
 pub fn computeInitialReservedNames(
     allocator: std.mem.Allocator,

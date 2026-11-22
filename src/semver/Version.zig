@@ -4,7 +4,470 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 pub const bun = @import("bun");
+pub const _ChangedVersion = enum {
+    major,
+    minor,
+    patch,
+    pre,
+    build,
+    none,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _PinnedVersion = enum {
+    major,
+    minor,
+    patch,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TagParseState = enum {
+    none,
+    pre,
+    build,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub fn VersionTag(comptime IntType: type) type {
+    return extern struct {
+        pre: ExternalString = ExternalString{  },
+        build: ExternalString = ExternalString{  },
+
+pub fn orderPre(self: @This(), rhs: VersionTag(IntType), lhs_buf: []const u8, rhs_buf: []const u8) std.math.Order {
+                const lhs_str = self.pre.slice(lhs_buf);
+                const rhs_str = rhs.pre.slice(rhs_buf);
+                var lhs_itr = strings.split(lhs_str, ".");
+                _ = &lhs_itr;
+                var rhs_itr = strings.split(rhs_str, ".");
+                _ = &rhs_itr;
+                while (true) {
+                    const lhs_part = lhs_itr.next();
+                    const rhs_part = rhs_itr.next();
+                    if (((lhs_part == null) and (rhs_part == null))) {
+                        return .eq;
+                    }
+                    if ((rhs_part == null)) {
+                        return .gt;
+                    }
+                    if ((lhs_part == null)) {
+                        return .lt;
+                    }
+                    const lhs_uint: ?IntType = (blk_catch_0: { break :blk_catch_0 ((std.fmt.parseUnsigned(IntType, lhs_part.?, 10)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); });
+                    const rhs_uint: ?IntType = (blk_catch_1: { break :blk_catch_1 ((std.fmt.parseUnsigned(IntType, rhs_part.?, 10)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); });
+                    if (((lhs_uint != null) and (rhs_uint == null))) {
+                        return .lt;
+                    }
+                    if (((lhs_uint == null) and (rhs_uint != null))) {
+                        return .gt;
+                    }
+                    if (((lhs_uint == null) and (rhs_uint == null))) {
+                        const ord = strings.order(lhs_part.?, rhs_part.?);
+                        if ((ord == .eq)) {
+                            continue;
+                        }
+                        return ord;
+                    }
+                    const ord = std.math.order(lhs_uint.?, rhs_uint.?);
+                    if ((ord == .eq)) {
+                        continue;
+                    }
+                    return ord;
+                }
+                _ = unreachable;
+        }
+
+pub fn order(self: @This(), rhs: VersionTag(IntType), lhs_buf: []const u8, rhs_buf: []const u8) std.math.Order {
+                if (((!self.pre.isEmpty()) and (!rhs.pre.isEmpty()))) {
+                    return self.orderPre(rhs, lhs_buf, rhs_buf);
+                }
+                const pre_order = self.pre.order((blk: {
+                break :blk (&rhs.pre);
+
+}), lhs_buf, rhs_buf);
+                if ((pre_order != .eq)) {
+                    return pre_order;
+                }
+                return self.build.order((blk: {
+                break :blk (&rhs.build);
+
+}), lhs_buf, rhs_buf);
+        }
+
+pub fn orderWithoutBuild(self: @This(), rhs: VersionTag(IntType), lhs_buf: []const u8, rhs_buf: []const u8) std.math.Order {
+                if (((!self.pre.isEmpty()) and (!rhs.pre.isEmpty()))) {
+                    return self.orderPre(rhs, lhs_buf, rhs_buf);
+                }
+                return self.pre.order((blk: {
+                break :blk (&rhs.pre);
+
+}), lhs_buf, rhs_buf);
+        }
+
+pub fn cloneInto(self: @This(), slice: []const u8, buf: *SliceU8) VersionTag(IntType) {
+                var pre: String = (if (@typeInfo(@TypeOf(self.pre)) == .@"enum") @intFromEnum(self.pre) else self.pre.value);
+                _ = &pre;
+                var build: String = (if (@typeInfo(@TypeOf(self.build)) == .@"enum") @intFromEnum(self.build) else self.build.value);
+                _ = &build;
+                if (self.pre.isInline()) {
+                    pre = (if (@typeInfo(@TypeOf(self.pre)) == .@"enum") @intFromEnum(self.pre) else self.pre.value);
+                } else {
+                    const pre_slice = self.pre.slice(slice);
+                    _ = bun.copy(u8, buf.*, pre_slice);
+                    pre = String.init(buf.*, buf.*[0..pre_slice.len]);
+                    buf.* = (if (comptime @typeInfo(SliceU8) == .@"enum") @as(SliceU8, @enumFromInt(buf.*[pre_slice.len..])) else @as(SliceU8, buf.*[pre_slice.len..]));
+                }
+                if (self.build.isInline()) {
+                    build = (if (@typeInfo(@TypeOf(self.build)) == .@"enum") @intFromEnum(self.build) else self.build.value);
+                } else {
+                    const build_slice = self.build.slice(slice);
+                    _ = bun.copy(u8, buf.*, build_slice);
+                    build = String.init(buf.*, buf.*[0..build_slice.len]);
+                    buf.* = (if (comptime @typeInfo(SliceU8) == .@"enum") @as(SliceU8, @enumFromInt(buf.*[build_slice.len..])) else @as(SliceU8, buf.*[build_slice.len..]));
+                }
+                return @This(){ .pre = .{ .value = pre, .hash = self.pre.hash }, .build = .{ .value = build, .hash = self.build.hash } };
+        }
+
+pub inline fn hasPre(self: @This()) bool {
+                return (!self.pre.isEmpty());
+        }
+
+pub inline fn hasBuild(self: @This()) bool {
+                return (!self.build.isEmpty());
+        }
+
+pub fn eql(self: @This(), rhs: VersionTag(IntType)) bool {
+                return (self.pre.hash == rhs.pre.hash);
+        }
+
+pub fn parse(sliced_string: SlicedString) VersionTagResult(IntType) {
+                return parseWithPreCount(sliced_string, 0);
+        }
+
+pub fn parseWithPreCount(sliced_string: SlicedString, initial_pre_count: u32) VersionTagResult(IntType) {
+                var input = sliced_string.slice;
+                _ = &input;
+                var build_count: u32 = 0;
+                _ = &build_count;
+                var pre_count: u32 = initial_pre_count;
+                _ = &pre_count;
+                for (cp_iter_slice(input)) |c| {
+                    _ = &c;
+                    switch (c) {
+' ' => {
+break;
+},
+'+' => {
+build_count = (build_count + 1);
+},
+'-' => {
+pre_count = (pre_count + 1);
+},
+else => {
+
+},
+}
+                }
+                if (((build_count == 0) and (pre_count == 0))) {
+                    return VersionTagResult(IntType){ .len = 0 };
+                }
+                var result = VersionTagResult(IntType){  };
+                _ = &result;
+                var state = TagParseState.none;
+                _ = &state;
+                var start: usize = 0;
+                _ = &start;
+                var i: usize = 0;
+                _ = &i;
+                while ((i < input.len)) : (i = (i + 1)) {
+                    const c = input[@as(usize, @intCast(i))];
+                    switch (c) {
+'+' => {
+if (((state == .pre) or ((state == .none) and (initial_pre_count > 0)))) {
+                        result.tag.pre = sliced_string.sub(input[start..i]).external();
+                    }
+                    if ((state != .build)) {
+                        state = .build;
+                        start = (i + 1);
+                    }
+},
+'-' => {
+if ((state != .pre)) {
+                        state = .pre;
+                        start = (i + 1);
+                    }
+},
+97...122, 65...90, 48...57, '.' => {
+
+},
+else => {
+switch (state) {
+.none => {
+
+},
+.pre => {
+result.tag.pre = sliced_string.sub(input[start..i]).external();
+                    state = TagParseState.none;
+},
+.build => {
+result.tag.build = sliced_string.sub(input[start..i]).external();
+                    if (comptime Environment.isDebug) {
+                        _ = assert((!strings.containsChar(result.tag.build.slice(sliced_string.buf), 45)));
+                    }
+                    state = TagParseState.none;
+},
+}
+                    result.len = @truncate(i);
+                    break;
+},
+}
+                }
+                if (((state == .none) and (initial_pre_count > 0))) {
+                    state = .pre;
+                    start = 0;
+                }
+                switch (state) {
+.none => {
+
+},
+.pre => {
+result.tag.pre = sliced_string.sub(input[start..i]).external();
+                state = TagParseState.none;
+},
+.build => {
+result.tag.build = sliced_string.sub(input[start..i]).external();
+                state = TagParseState.none;
+},
+}
+                result.len = @as(u32, @truncate(i));
+                return result;
+        }
+        const SliceU8 = []u8;
+        pub const TagResult = VersionTagResult(IntType);
+    };
+}
+
+pub fn VersionTagResult(comptime IntType: type) type {
+    return struct {
+        tag: VersionTag(IntType) = .{},
+        len: u32 = 0,
+    };
+}
+
+pub fn VersionFormatter(comptime IntType: type) type {
+    return struct {
+        version: VersionType(IntType),
+        input: []const u8,
+
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+                const v = self.version;
+                _ = try writer.print("{d}.{d}.{d}", .{ v.major, v.minor, v.patch });
+                if (v.tag.hasPre()) {
+                    const pre = v.tag.pre.slice(self.input);
+                    _ = try writer.writeAll("-");
+                    _ = try writer.writeAll(pre);
+                }
+                if (v.tag.hasBuild()) {
+                    const build = v.tag.build.slice(self.input);
+                    _ = try writer.writeAll("+");
+                    _ = try writer.writeAll(build);
+                }
+        }
+    };
+}
+
+pub fn VersionDiffFormatter(comptime IntType: type) type {
+    return struct {
+        version: VersionType(IntType),
+        buf: []const u8,
+        other: VersionType(IntType),
+        other_buf: []const u8,
+
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+                if ((!Output.enable_ansi_colors_stdout)) {
+                    const formatter = VersionFormatter(IntType){ .version = self.version, .input = self.buf };
+                    return VersionFormatter(IntType).format(formatter, writer);
+                }
+                const diff = ((self.version.whichVersionIsDifferent(self.other, self.buf, self.other_buf)) orelse (.none));
+                switch (diff) {
+.major => {
+_ = try writer.print(Output.prettyFmt("<r><b><red>{d}.{d}.{d}", true), .{ self.version.major, self.version.minor, self.version.patch });
+},
+.minor => {
+if ((self.version.major == 0)) {
+                    _ = try writer.print(Output.prettyFmt("<d>{d}.<r><b><red>{d}.{d}", true), .{ self.version.major, self.version.minor, self.version.patch });
+                } else {
+                    _ = try writer.print(Output.prettyFmt("<d>{d}.<r><b><yellow>{d}.{d}", true), .{ self.version.major, self.version.minor, self.version.patch });
+                }
+},
+.patch => {
+if (((self.version.major == 0) and (self.version.minor == 0))) {
+                    _ = try writer.print(Output.prettyFmt("<d>{d}.{d}.<r><b><red>{d}", true), .{ self.version.major, self.version.minor, self.version.patch });
+                } else {
+                    _ = try writer.print(Output.prettyFmt("<d>{d}.{d}.<r><b><green>{d}", true), .{ self.version.major, self.version.minor, self.version.patch });
+                }
+},
+.none, .pre, .build => {
+_ = try writer.print(Output.prettyFmt("<d>{d}.{d}.{d}", true), .{ self.version.major, self.version.minor, self.version.patch });
+},
+}
+                var set_color = false;
+                _ = &set_color;
+                if (self.version.tag.hasPre()) {
+                    if (self.other.tag.hasPre()) {
+                        const pre = self.version.tag.pre.slice(self.buf);
+                        const other_pre = self.other.tag.pre.slice(self.other_buf);
+                        var first = true;
+                        _ = &first;
+                        var i: usize = 0;
+                        _ = &i;
+                        for (cp_iter_slice(pre)) |c| {
+                            _ = &c;
+                            if ((((!set_color) and (i < other_pre.len)) and (c != other_pre[@as(usize, @intCast(i))]))) {
+                                set_color = true;
+                                _ = try writer.writeAll(Output.prettyFmt("<r><b><red>", true));
+                            }
+                            if (first) {
+                                first = false;
+                                _ = try writer.writeByte(45);
+                            }
+                            _ = try writer.writeByte(c);
+                            i = (i + 1);
+                        }
+                    } else {
+                        _ = try writer.print(Output.prettyFmt("<r><b><red>-{f}", true), .{ self.version.tag.pre.fmt(self.buf) });
+                        set_color = true;
+                    }
+                }
+                if (self.version.tag.hasBuild()) {
+                    if (self.other.tag.hasBuild()) {
+                        const build = self.version.tag.build.slice(self.buf);
+                        const other_build = self.other.tag.build.slice(self.other_buf);
+                        var first = true;
+                        _ = &first;
+                        var i: usize = 0;
+                        _ = &i;
+                        for (cp_iter_slice(build)) |c| {
+                            _ = &c;
+                            if ((((!set_color) and (i < other_build.len)) and (c != other_build[@as(usize, @intCast(i))]))) {
+                                set_color = true;
+                                _ = try writer.writeAll(Output.prettyFmt("<r><b><red>", true));
+                            }
+                            if (first) {
+                                first = false;
+                                _ = try writer.writeByte(43);
+                            }
+                            _ = try writer.writeByte(c);
+                            i = (i + 1);
+                        }
+                    } else {
+                        if ((!set_color)) {
+                            _ = try writer.print(Output.prettyFmt("<r><b><red>+{f}", true), .{ self.version.tag.build.fmt(self.buf) });
+                        } else {
+                            _ = try writer.print("+{f}", .{ self.version.tag.build.fmt(self.other_buf) });
+                        }
+                    }
+                }
+                _ = try writer.writeAll(Output.prettyFmt("<r>", true));
+        }
+    };
+}
+
+pub fn VersionPartial(comptime IntType: type) type {
+    return struct {
+        major: ?IntType = null,
+        minor: ?IntType = null,
+        patch: ?IntType = null,
+        tag: VersionTag(IntType) = VersionTag(IntType){  },
+
+pub fn min(self: @This()) VersionType(IntType) {
+                return .{ .major = ((self.major) orelse (0)), .minor = ((self.minor) orelse (0)), .patch = ((self.patch) orelse (0)), .tag = self.tag };
+        }
+
+pub fn max(self: @This()) VersionType(IntType) {
+                return .{ .major = ((self.major) orelse (std.math.maxInt(IntType))), .minor = ((self.minor) orelse (std.math.maxInt(IntType))), .patch = ((self.patch) orelse (std.math.maxInt(IntType))), .tag = self.tag };
+        }
+    };
+}
+
+pub fn VersionParseResult(comptime IntType: type) type {
+    return struct {
+        wildcard: Query.Token.Wildcard = .none,
+        valid: bool = true,
+        version: VersionPartial(IntType) = .{},
+        len: u32 = 0,
+    };
+}
+
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
@@ -17,755 +480,142 @@ pub const Version = VersionType(u64);
 pub const OldV2Version = VersionType(u32);
 
 pub fn VersionType(comptime IntType: type) type {
+        const padding_len: usize = (if ((IntType == u32)) 4 else 0);
         return extern struct {
-            major: IntType = 0,
-            minor: IntType = 0,
-            patch: IntType = 0,
-            _tag_padding: [if (IntType == u32) 4 else 0]u8 = .{0} ** if (IntType == u32) 4 else 0, // [see padding_checker.zig]
-            tag: Tag = .{},
+        major: IntType = 0,
+        minor: IntType = 0,
+        patch: IntType = 0,
+        _tag_padding: [padding_len]u8 = .{0} ** padding_len, // [see padding_checker.zig]
+        tag: Tag = .{},
 
-            const This = @This();
+        const This = @This();
+        pub const Formatter = VersionFormatter(IntType);
+        pub const DiffFormatter = VersionDiffFormatter(IntType);
+        pub const ChangedVersion = _ChangedVersion;
+        pub const Partial = VersionPartial(IntType);
+        pub const PinnedVersion = _PinnedVersion;
+        pub const Tag = VersionTag(IntType);
+        pub const ParseResult = VersionParseResult(IntType);
 
-            pub fn migrate(this: This) VersionType(u64) {
-                if (comptime IntType != u32) {
-                    @compileError("unexpected IntType");
-                }
-
-                return .{
-                    .major = this.major,
-                    .minor = this.minor,
-                    .patch = this.patch,
-                    ._tag_padding = .{},
-                    .tag = .{
-                        .pre = this.tag.pre,
-                        .build = this.tag.build,
-                    },
-                };
+        pub fn migrate(this: This) VersionType(u64) {
+            if (comptime IntType != u32) {
+                @compileError("unexpected IntType");
             }
 
-            /// Assumes that there is only one buffer for all the strings
-            pub fn sortGt(ctx: []const u8, lhs: This, rhs: This) bool {
-                return orderFn(ctx, lhs, rhs) == .gt;
-            }
-
-            pub fn orderFn(ctx: []const u8, lhs: This, rhs: This) std.math.Order {
-                return lhs.order(rhs, ctx, ctx);
-            }
-
-            pub fn isZero(this: This) bool {
-                return this.patch == 0 and this.minor == 0 and this.major == 0;
-            }
-
-            pub fn parseUTF8(slice: []const u8) ParseResult {
-                return parse(.{ .buf = slice, .slice = slice });
-            }
-
-            pub fn cloneInto(this: This, slice: []const u8, buf: *[]u8) This {
-                return .{
-                    .major = this.major,
-                    .minor = this.minor,
-                    .patch = this.patch,
-                    .tag = this.tag.cloneInto(slice, buf),
-                };
-            }
-
-            pub inline fn len(this: *const This) u32 {
-                return this.tag.build.len + this.tag.pre.len;
-            }
-
-            pub const Formatter = struct {
-                version: This,
-                input: string,
-
-                pub fn format(formatter: Formatter, writer: *std.Io.Writer) !void {
-                    const self = formatter.version;
-                    try writer.print("{d}.{d}.{d}", .{ self.major, self.minor, self.patch });
-
-                    if (self.tag.hasPre()) {
-                        const pre = self.tag.pre.slice(formatter.input);
-                        try writer.writeAll("-");
-                        try writer.writeAll(pre);
-                    }
-
-                    if (self.tag.hasBuild()) {
-                        const build = self.tag.build.slice(formatter.input);
-                        try writer.writeAll("+");
-                        try writer.writeAll(build);
-                    }
-                }
+            return .{
+                .major = this.major,
+                .minor = this.minor,
+                .patch = this.patch,
+                ._tag_padding = .{},
+                .tag = .{
+                    .pre = this.tag.pre,
+                    .build = this.tag.build,
+                },
             };
+        }
 
-            pub fn fmt(this: This, input: string) Formatter {
-                return .{ .version = this, .input = input };
-            }
+        /// Assumes that there is only one buffer for all the strings
+        pub fn sortGt(ctx: []const u8, lhs: This, rhs: This) bool {
+            return orderFn(ctx, lhs, rhs) == .gt;
+        }
 
-            pub const DiffFormatter = struct {
-                version: This,
-                buf: string,
-                other: This,
-                other_buf: string,
+        pub fn orderFn(ctx: []const u8, lhs: This, rhs: This) std.math.Order {
+            return lhs.order(rhs, ctx, ctx);
+        }
 
-                pub fn format(this: DiffFormatter, writer: *std.Io.Writer) !void {
-                    if (!Output.enable_ansi_colors_stdout) {
-                        // print normally if no colors
-                        const formatter: Formatter = .{ .version = this.version, .input = this.buf };
-                        return Formatter.format(formatter, writer);
-                    }
+        pub fn isZero(this: This) bool {
+            return this.patch == 0 and this.minor == 0 and this.major == 0;
+        }
 
-                    const diff = this.version.whichVersionIsDifferent(this.other, this.buf, this.other_buf) orelse .none;
+        pub fn parseUTF8(slice: []const u8) ParseResult {
+            return parse(.{ .buf = slice, .slice = slice });
+        }
 
-                    switch (diff) {
-                        .major => try writer.print(Output.prettyFmt("<r><b><red>{d}.{d}.{d}", true), .{
-                            this.version.major, this.version.minor, this.version.patch,
-                        }),
-                        .minor => {
-                            if (this.version.major == 0) {
-                                try writer.print(Output.prettyFmt("<d>{d}.<r><b><red>{d}.{d}", true), .{
-                                    this.version.major, this.version.minor, this.version.patch,
-                                });
-                            } else {
-                                try writer.print(Output.prettyFmt("<d>{d}.<r><b><yellow>{d}.{d}", true), .{
-                                    this.version.major, this.version.minor, this.version.patch,
-                                });
-                            }
-                        },
-                        .patch => {
-                            if (this.version.major == 0 and this.version.minor == 0) {
-                                try writer.print(Output.prettyFmt("<d>{d}.{d}.<r><b><red>{d}", true), .{
-                                    this.version.major, this.version.minor, this.version.patch,
-                                });
-                            } else {
-                                try writer.print(Output.prettyFmt("<d>{d}.{d}.<r><b><green>{d}", true), .{
-                                    this.version.major, this.version.minor, this.version.patch,
-                                });
-                            }
-                        },
-                        .none, .pre, .build => try writer.print(Output.prettyFmt("<d>{d}.{d}.{d}", true), .{
-                            this.version.major, this.version.minor, this.version.patch,
-                        }),
-                    }
-
-                    // might be pre or build. loop through all characters, and insert <red> on
-                    // first diff.
-
-                    var set_color = false;
-                    if (this.version.tag.hasPre()) {
-                        if (this.other.tag.hasPre()) {
-                            const pre = this.version.tag.pre.slice(this.buf);
-                            const other_pre = this.other.tag.pre.slice(this.other_buf);
-
-                            var first = true;
-                            for (pre, 0..) |c, i| {
-                                if (!set_color and i < other_pre.len and c != other_pre[i]) {
-                                    set_color = true;
-                                    try writer.writeAll(Output.prettyFmt("<r><b><red>", true));
-                                }
-                                if (first) {
-                                    first = false;
-                                    try writer.writeByte('-');
-                                }
-                                try writer.writeByte(c);
-                            }
-                        } else {
-                            try writer.print(Output.prettyFmt("<r><b><red>-{f}", true), .{this.version.tag.pre.fmt(this.buf)});
-                            set_color = true;
-                        }
-                    }
-
-                    if (this.version.tag.hasBuild()) {
-                        if (this.other.tag.hasBuild()) {
-                            const build = this.version.tag.build.slice(this.buf);
-                            const other_build = this.other.tag.build.slice(this.other_buf);
-
-                            var first = true;
-                            for (build, 0..) |c, i| {
-                                if (!set_color and i < other_build.len and c != other_build[i]) {
-                                    set_color = true;
-                                    try writer.writeAll(Output.prettyFmt("<r><b><red>", true));
-                                }
-                                if (first) {
-                                    first = false;
-                                    try writer.writeByte('+');
-                                }
-                                try writer.writeByte(c);
-                            }
-                        } else {
-                            if (!set_color) {
-                                try writer.print(Output.prettyFmt("<r><b><red>+{f}", true), .{this.version.tag.build.fmt(this.buf)});
-                            } else {
-                                try writer.print("+{f}", .{this.version.tag.build.fmt(this.other_buf)});
-                            }
-                        }
-                    }
-
-                    try writer.writeAll(Output.prettyFmt("<r>", true));
-                }
+        pub fn cloneInto(this: This, slice: []const u8, buf: *[]u8) This {
+            return .{
+                .major = this.major,
+                .minor = this.minor,
+                .patch = this.patch,
+                .tag = this.tag.cloneInto(slice, buf),
             };
+        }
 
-            pub fn diffFmt(this: This, other: This, this_buf: string, other_buf: string) DiffFormatter {
-                return .{
-                    .version = this,
-                    .buf = this_buf,
-                    .other = other,
-                    .other_buf = other_buf,
-                };
-            }
+        pub inline fn len(this: *const This) u32 {
+            return this.tag.build.len + this.tag.pre.len;
+        }
 
-            pub const ChangedVersion = enum {
-                major,
-                minor,
-                patch,
-                pre,
-                build,
-                none,
+        pub fn fmt(this: This, input: string) Formatter {
+            return Formatter{ .version = this, .input = input };
+        }
+
+        pub fn diffFmt(this: This, other: This, this_buf: string, other_buf: string) DiffFormatter {
+            return DiffFormatter{
+                .version = this,
+                .buf = this_buf,
+                .other = other,
+                .other_buf = other_buf,
             };
-
-            pub fn whichVersionIsDifferent(
-                left: This,
-                right: This,
-                left_buf: string,
-                right_buf: string,
-            ) ?ChangedVersion {
-                if (left.major != right.major) return .major;
-                if (left.minor != right.minor) return .minor;
-                if (left.patch != right.patch) return .patch;
-
-                if (left.tag.hasPre() != right.tag.hasPre()) return .pre;
-                if (!left.tag.hasPre() and !right.tag.hasPre()) return null;
-                if (left.tag.orderPre(right.tag, left_buf, right_buf) != .eq) return .pre;
-
-                if (left.tag.hasBuild() != right.tag.hasBuild()) return .build;
-                if (!left.tag.hasBuild() and !right.tag.hasBuild()) return null;
-                return if (left.tag.build.order(&right.tag.build, left_buf, right_buf) != .eq)
-                    .build
-                else
-                    null;
-            }
-
-            pub fn count(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
-                if (this.tag.hasPre() and !this.tag.pre.isInline()) builder.count(this.tag.pre.slice(buf));
-                if (this.tag.hasBuild() and !this.tag.build.isInline()) builder.count(this.tag.build.slice(buf));
-            }
-
-            pub fn append(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) This {
-                var that = this.*;
-
-                if (this.tag.hasPre() and !this.tag.pre.isInline()) that.tag.pre = builder.append(ExternalString, this.tag.pre.slice(buf));
-                if (this.tag.hasBuild() and !this.tag.build.isInline()) that.tag.build = builder.append(ExternalString, this.tag.build.slice(buf));
-
-                return that;
-            }
-
-            pub const Partial = struct {
-                major: ?IntType = null,
-                minor: ?IntType = null,
-                patch: ?IntType = null,
-                tag: Tag = .{},
-
-                pub fn min(this: Partial) This {
-                    return .{
-                        .major = this.major orelse 0,
-                        .minor = this.minor orelse 0,
-                        .patch = this.patch orelse 0,
-                        .tag = this.tag,
-                    };
-                }
-
-                pub fn max(this: Partial) This {
-                    return .{
-                        .major = this.major orelse std.math.maxInt(IntType),
-                        .minor = this.minor orelse std.math.maxInt(IntType),
-                        .patch = this.patch orelse std.math.maxInt(IntType),
-                        .tag = this.tag,
-                    };
-                }
-            };
-
-            pub fn eql(lhs: This, rhs: This) bool {
-                return lhs.major == rhs.major and lhs.minor == rhs.minor and lhs.patch == rhs.patch and rhs.tag.eql(lhs.tag);
-            }
-
-            pub const PinnedVersion = enum {
-                major, // ^
-                minor, // ~
-                patch, // =
-            };
-
-            /// Modified version of pnpm's `whichVersionIsPinned`
-            /// https://github.com/pnpm/pnpm/blob/bc0618cf192a9cafd0ab171a3673e23ed0869bbd/packages/which-version-is-pinned/src/index.ts#L9
-            ///
-            /// Differences:
-            /// - It's not used for workspaces
-            /// - `npm:` is assumed already removed from aliased versions
-            /// - Invalid input is considered major pinned (important because these strings are coming
-            ///    from package.json)
-            ///
-            /// The goal of this function is to avoid a complete parse of semver that's unused
-            pub fn whichVersionIsPinned(input: string) PinnedVersion {
-                const version = strings.trim(input, strings.whitespace_chars);
-
-                var i: usize = 0;
-
-                const pinned: PinnedVersion = pinned: {
-                    for (0..version.len) |j| {
-                        switch (version[j]) {
-                            // newlines & whitespace
-                            ' ',
-                            '\t',
-                            '\n',
-                            '\r',
-                            std.ascii.control_code.vt,
-                            std.ascii.control_code.ff,
-
-                            // version separators
-                            'v',
-                            '=',
-                            => {},
-
-                            else => |c| {
-                                i = j;
-
-                                switch (c) {
-                                    '~', '^' => {
-                                        i += 1;
-
-                                        for (i..version.len) |k| {
-                                            switch (version[k]) {
-                                                ' ',
-                                                '\t',
-                                                '\n',
-                                                '\r',
-                                                std.ascii.control_code.vt,
-                                                std.ascii.control_code.ff,
-                                                => {
-                                                    // `v` and `=` not included.
-                                                    // `~v==1` would update to `^1.1.0` if versions `1.0.0`, `1.0.1`, `1.1.0`, and `2.0.0` are available
-                                                    // note that `~` changes to `^`
-                                                },
-
-                                                else => {
-                                                    i = k;
-                                                    break :pinned if (c == '~') .minor else .major;
-                                                },
-                                            }
-                                        }
-
-                                        // entire version after `~` is whitespace. invalid
-                                        return .major;
-                                    },
-
-                                    '0'...'9' => break :pinned .patch,
-
-                                    // could be invalid, could also be valid range syntax (>=, ...)
-                                    // either way, pin major
-                                    else => return .major,
-                                }
-                            },
-                        }
-                    }
-
-                    // entire semver is whitespace, `v`, and `=`. Invalid
-                    return .major;
-                };
-
-                // `pinned` is `.major`, `.minor`, or `.patch`. Check for each version core number:
-                // - if major is missing, return `if (pinned == .patch) .major else pinned`
-                // - if minor is missing, return `if (pinned == .patch) .minor else pinned`
-                // - if patch is missing, return `pinned`
-                // - if there's whitespace or non-digit characters between core numbers, return `.major`
-                // - if the end is reached, return `pinned`
-
-                // major
-                if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
-                var d = version[i];
-                while (std.ascii.isDigit(d)) {
-                    i += 1;
-                    if (i >= version.len) return if (pinned == .patch) .major else pinned;
-                    d = version[i];
-                }
-
-                if (d != '.') return .major;
-
-                // minor
-                i += 1;
-                if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
-                d = version[i];
-                while (std.ascii.isDigit(d)) {
-                    i += 1;
-                    if (i >= version.len) return if (pinned == .patch) .minor else pinned;
-                    d = version[i];
-                }
-
-                if (d != '.') return .major;
-
-                // patch
-                i += 1;
-                if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
-                d = version[i];
-                while (std.ascii.isDigit(d)) {
-                    i += 1;
-
-                    // patch is done and at input end, valid
-                    if (i >= version.len) return pinned;
-                    d = version[i];
-                }
-
-                // Skip remaining valid pre/build tag characters and whitespace.
-                // Does not validate whitespace used inside pre/build tags.
-                if (!validPreOrBuildTagCharacter(d) or std.ascii.isWhitespace(d)) return .major;
-                i += 1;
-
-                // at this point the semver is valid so we can return pinned if it ends
-                if (i >= version.len) return pinned;
-                d = version[i];
-                while (validPreOrBuildTagCharacter(d) and !std.ascii.isWhitespace(d)) {
-                    i += 1;
-                    if (i >= version.len) return pinned;
-                    d = version[i];
-                }
-
-                // We've come across a character that is not valid for tags or is whitespace.
-                // Trailing whitespace was trimmed so we can assume there's another range
-                return .major;
-            }
-
-            fn validPreOrBuildTagCharacter(c: u8) bool {
-                return switch (c) {
-                    '-', '+', '.', 'A'...'Z', 'a'...'z', '0'...'9' => true,
-                    else => false,
-                };
-            }
-
-            pub fn isTaggedVersionOnly(input: []const u8) bool {
-                const version = strings.trim(input, strings.whitespace_chars);
-
-                // first needs to be a-z
-                if (version.len == 0 or !std.ascii.isAlphabetic(version[0])) return false;
-
-                for (1..version.len) |i| {
-                    if (!std.ascii.isAlphanumeric(version[i])) return false;
-                }
-
-                return true;
-            }
-
-            pub fn orderWithoutTag(
-                lhs: This,
-                rhs: This,
-            ) std.math.Order {
-                if (lhs.major < rhs.major) return .lt;
-                if (lhs.major > rhs.major) return .gt;
-                if (lhs.minor < rhs.minor) return .lt;
-                if (lhs.minor > rhs.minor) return .gt;
-                if (lhs.patch < rhs.patch) return .lt;
-                if (lhs.patch > rhs.patch) return .gt;
-
-                if (lhs.tag.hasPre()) {
-                    if (!rhs.tag.hasPre()) return .lt;
-                } else {
-                    if (rhs.tag.hasPre()) return .gt;
-                }
-
-                return .eq;
-            }
-
-            pub fn order(
-                lhs: This,
-                rhs: This,
-                lhs_buf: []const u8,
-                rhs_buf: []const u8,
-            ) std.math.Order {
-                const order_without_tag = orderWithoutTag(lhs, rhs);
-                if (order_without_tag != .eq) return order_without_tag;
-
-                return lhs.tag.order(rhs.tag, lhs_buf, rhs_buf);
-            }
-
-            pub fn orderWithoutBuild(
-                lhs: This,
-                rhs: This,
-                lhs_buf: []const u8,
-                rhs_buf: []const u8,
-            ) std.math.Order {
-                const order_without_tag = orderWithoutTag(lhs, rhs);
-                if (order_without_tag != .eq) return order_without_tag;
-
-                return lhs.tag.orderWithoutBuild(rhs.tag, lhs_buf, rhs_buf);
-            }
-
-            pub const Tag = extern struct {
-                pre: ExternalString = ExternalString{},
-                build: ExternalString = ExternalString{},
-
-                pub fn orderPre(lhs: Tag, rhs: Tag, lhs_buf: []const u8, rhs_buf: []const u8) std.math.Order {
-                    const lhs_str = lhs.pre.slice(lhs_buf);
-                    const rhs_str = rhs.pre.slice(rhs_buf);
-
-                    // 1. split each by '.', iterating through each one looking for integers
-                    // 2. compare as integers, or if not possible compare as string
-                    // 3. whichever is greater is the greater one
-                    //
-                    // 1.0.0-canary.0.0.0.0.0.0 < 1.0.0-canary.0.0.0.0.0.1
-
-                    var lhs_itr = strings.split(lhs_str, ".");
-                    var rhs_itr = strings.split(rhs_str, ".");
-
-                    while (true) {
-                        const lhs_part = lhs_itr.next();
-                        const rhs_part = rhs_itr.next();
-
-                        if (lhs_part == null and rhs_part == null) return .eq;
-
-                        // if right is null, left is greater than.
-                        if (rhs_part == null) return .gt;
-
-                        // if left is null, left is less than.
-                        if (lhs_part == null) return .lt;
-
-                        const lhs_uint: ?IntType = std.fmt.parseUnsigned(IntType, lhs_part.?, 10) catch null;
-                        const rhs_uint: ?IntType = std.fmt.parseUnsigned(IntType, rhs_part.?, 10) catch null;
-
-                        // a part that doesn't parse as an integer is greater than a part that does
-                        // https://github.com/npm/node-semver/blob/816c7b2cbfcb1986958a290f941eddfd0441139e/internal/identifiers.js#L12
-                        if (lhs_uint != null and rhs_uint == null) return .lt;
-                        if (lhs_uint == null and rhs_uint != null) return .gt;
-
-                        if (lhs_uint == null and rhs_uint == null) {
-                            switch (strings.order(lhs_part.?, rhs_part.?)) {
-                                .eq => {
-                                    // continue to the next part
-                                    continue;
-                                },
-                                else => |not_equal| return not_equal,
-                            }
-                        }
-
-                        switch (std.math.order(lhs_uint.?, rhs_uint.?)) {
-                            .eq => continue,
-                            else => |not_equal| return not_equal,
-                        }
-                    }
-
-                    unreachable;
-                }
-
-                pub fn order(
-                    lhs: Tag,
-                    rhs: Tag,
-                    lhs_buf: []const u8,
-                    rhs_buf: []const u8,
-                ) std.math.Order {
-                    if (!lhs.pre.isEmpty() and !rhs.pre.isEmpty()) {
-                        return lhs.orderPre(rhs, lhs_buf, rhs_buf);
-                    }
-
-                    const pre_order = lhs.pre.order(&rhs.pre, lhs_buf, rhs_buf);
-                    if (pre_order != .eq) return pre_order;
-
-                    return lhs.build.order(&rhs.build, lhs_buf, rhs_buf);
-                }
-
-                pub fn orderWithoutBuild(
-                    lhs: Tag,
-                    rhs: Tag,
-                    lhs_buf: []const u8,
-                    rhs_buf: []const u8,
-                ) std.math.Order {
-                    if (!lhs.pre.isEmpty() and !rhs.pre.isEmpty()) {
-                        return lhs.orderPre(rhs, lhs_buf, rhs_buf);
-                    }
-
-                    return lhs.pre.order(&rhs.pre, lhs_buf, rhs_buf);
-                }
-
-                pub fn cloneInto(this: Tag, slice: []const u8, buf: *[]u8) Tag {
-                    var pre: String = this.pre.value;
-                    var build: String = this.build.value;
-
-                    if (this.pre.isInline()) {
-                        pre = this.pre.value;
-                    } else {
-                        const pre_slice = this.pre.slice(slice);
-                        bun.copy(u8, buf.*, pre_slice);
-                        pre = String.init(buf.*, buf.*[0..pre_slice.len]);
-                        buf.* = buf.*[pre_slice.len..];
-                    }
-
-                    if (this.build.isInline()) {
-                        build = this.build.value;
-                    } else {
-                        const build_slice = this.build.slice(slice);
-                        bun.copy(u8, buf.*, build_slice);
-                        build = String.init(buf.*, buf.*[0..build_slice.len]);
-                        buf.* = buf.*[build_slice.len..];
-                    }
-
-                    return .{
-                        .pre = .{
-                            .value = pre,
-                            .hash = this.pre.hash,
-                        },
-                        .build = .{
-                            .value = build,
-                            .hash = this.build.hash,
-                        },
-                    };
-                }
-
-                pub inline fn hasPre(this: Tag) bool {
-                    return !this.pre.isEmpty();
-                }
-
-                pub inline fn hasBuild(this: Tag) bool {
-                    return !this.build.isEmpty();
-                }
-
-                pub fn eql(lhs: Tag, rhs: Tag) bool {
-                    return lhs.pre.hash == rhs.pre.hash;
-                }
-
-                pub const TagResult = struct {
-                    tag: Tag = Tag{},
-                    len: u32 = 0,
-                };
-
-                var multi_tag_warn = false;
-                // TODO: support multiple tags
-
-                pub fn parse(sliced_string: SlicedString) TagResult {
-                    return parseWithPreCount(sliced_string, 0);
-                }
-
-                pub fn parseWithPreCount(sliced_string: SlicedString, initial_pre_count: u32) TagResult {
-                    var input = sliced_string.slice;
-                    var build_count: u32 = 0;
-                    var pre_count: u32 = initial_pre_count;
-
-                    for (input) |c| {
-                        switch (c) {
-                            ' ' => break,
-                            '+' => {
-                                build_count += 1;
-                            },
-                            '-' => {
-                                pre_count += 1;
-                            },
-                            else => {},
-                        }
-                    }
-
-                    if (build_count == 0 and pre_count == 0) {
-                        return TagResult{
-                            .len = 0,
-                        };
-                    }
-
-                    const State = enum { none, pre, build };
-                    var result = TagResult{};
-                    // Common case: no allocation is necessary.
-                    var state = State.none;
-                    var start: usize = 0;
-
-                    var i: usize = 0;
-
-                    while (i < input.len) : (i += 1) {
-                        const c = input[i];
-                        switch (c) {
-                            '+' => {
-                                // qualifier  ::= ( '-' pre )? ( '+' build )?
-                                if (state == .pre or state == .none and initial_pre_count > 0) {
-                                    result.tag.pre = sliced_string.sub(input[start..i]).external();
-                                }
-
-                                if (state != .build) {
-                                    state = .build;
-                                    start = i + 1;
-                                }
-                            },
-                            '-' => {
-                                if (state != .pre) {
-                                    state = .pre;
-                                    start = i + 1;
-                                }
-                            },
-
-                            // only continue if character is a valid pre/build tag character
-                            // https://semver.org/#spec-item-9
-                            'a'...'z', 'A'...'Z', '0'...'9', '.' => {},
-
-                            else => {
-                                switch (state) {
-                                    .none => {},
-                                    .pre => {
-                                        result.tag.pre = sliced_string.sub(input[start..i]).external();
-
-                                        state = State.none;
-                                    },
-                                    .build => {
-                                        result.tag.build = sliced_string.sub(input[start..i]).external();
-                                        if (comptime Environment.isDebug) {
-                                            assert(!strings.containsChar(result.tag.build.slice(sliced_string.buf), '-'));
-                                        }
-                                        state = State.none;
-                                    },
-                                }
-                                result.len = @truncate(i);
-                                break;
-                            },
-                        }
-                    }
-
-                    if (state == .none and initial_pre_count > 0) {
-                        state = .pre;
-                        start = 0;
-                    }
-
-                    switch (state) {
-                        .none => {},
-                        .pre => {
-                            result.tag.pre = sliced_string.sub(input[start..i]).external();
-                            // a pre can contain multiple consecutive tags
-                            // checking for "-" prefix is not enough, as --canary.67e7966.0 is a valid tag
-                            state = State.none;
-                        },
-                        .build => {
-                            // a build can contain multiple consecutive tags
-                            result.tag.build = sliced_string.sub(input[start..i]).external();
-
-                            state = State.none;
-                        },
-                    }
-                    result.len = @as(u32, @truncate(i));
-
-                    return result;
-                }
-            };
-
-            pub const ParseResult = struct {
-                wildcard: Query.Token.Wildcard = .none,
-                valid: bool = true,
-                version: This.Partial = .{},
-                len: u32 = 0,
-            };
-
-            pub fn parse(sliced_string: SlicedString) ParseResult {
-                var input = sliced_string.slice;
-                var result = ParseResult{};
-
-                var part_i: u8 = 0;
-                var part_start_i: usize = 0;
-                var last_char_i: usize = 0;
-
-                if (input.len == 0) {
-                    result.valid = false;
-                    return result;
-                }
-                var is_done = false;
-
-                var i: usize = 0;
-
-                for (0..input.len) |c| {
-                    switch (input[c]) {
+        }
+
+        pub fn whichVersionIsDifferent(
+            left: This,
+            right: This,
+            left_buf: string,
+            right_buf: string,
+        ) ?_ChangedVersion {
+            if (left.major != right.major) return .major;
+            if (left.minor != right.minor) return .minor;
+            if (left.patch != right.patch) return .patch;
+
+            if (left.tag.hasPre() != right.tag.hasPre()) return .pre;
+            if (!left.tag.hasPre() and !right.tag.hasPre()) return null;
+            if (left.tag.orderPre(right.tag, left_buf, right_buf) != .eq) return .pre;
+
+            if (left.tag.hasBuild() != right.tag.hasBuild()) return .build;
+            if (!left.tag.hasBuild() and !right.tag.hasBuild()) return null;
+            return if (left.tag.build.order(&right.tag.build, left_buf, right_buf) != .eq)
+                .build
+            else
+                null;
+        }
+
+        pub fn count(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
+            if (this.tag.hasPre() and !this.tag.pre.isInline()) builder.count(this.tag.pre.slice(buf));
+            if (this.tag.hasBuild() and !this.tag.build.isInline()) builder.count(this.tag.build.slice(buf));
+        }
+
+        pub fn append(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) This {
+            var that = this.*;
+
+            if (this.tag.hasPre() and !this.tag.pre.isInline()) that.tag.pre = builder.append(ExternalString, this.tag.pre.slice(buf));
+            if (this.tag.hasBuild() and !this.tag.build.isInline()) that.tag.build = builder.append(ExternalString, this.tag.build.slice(buf));
+
+            return that;
+        }
+
+        pub fn eql(lhs: This, rhs: This) bool {
+            return lhs.major == rhs.major and lhs.minor == rhs.minor and lhs.patch == rhs.patch and rhs.tag.eql(lhs.tag);
+        }
+
+        /// Modified version of pnpm's `whichVersionIsPinned`
+        /// https://github.com/pnpm/pnpm/blob/bc0618cf192a9cafd0ab171a3673e23ed0869bbd/packages/which-version-is-pinned/src/index.ts#L9
+        ///
+        /// Differences:
+        /// - It's not used for workspaces
+        /// - `npm:` is assumed already removed from aliased versions
+        /// - Invalid input is considered major pinned (important because these strings are coming
+        ///    from package.json)
+        ///
+        /// The goal of this function is to avoid a complete parse of semver that's unused
+        pub fn whichVersionIsPinned(input: string) _PinnedVersion {
+            const version = strings.trim(input, strings.whitespace_chars);
+
+            var i: usize = 0;
+
+            const pinned: _PinnedVersion = pinned: {
+                var j: usize = 0;
+                while (j < version.len) : (j += 1) {
+                    switch (version[j]) {
                         // newlines & whitespace
                         ' ',
                         '\t',
@@ -778,218 +628,412 @@ pub fn VersionType(comptime IntType: type) type {
                         'v',
                         '=',
                         => {},
-                        else => {
-                            i = c;
-                            break;
+
+                        else => |c| {
+                            i = j;
+
+                            switch (c) {
+                                '~', '^' => {
+                                    i += 1;
+
+                                    var k: usize = i;
+                                    while (k < version.len) : (k += 1) {
+                                        switch (version[k]) {
+                                            ' ',
+                                            '\t',
+                                            '\n',
+                                            '\r',
+                                            std.ascii.control_code.vt,
+                                            std.ascii.control_code.ff,
+                                            => {},
+
+                                            else => {
+                                                i = k;
+                                                break :pinned if (c == '~') .minor else .major;
+                                            },
+                                        }
+                                    }
+
+                                    // entire version after `~` is whitespace. invalid
+                                    return .major;
+                                },
+
+                                '0'...'9' => break :pinned .patch,
+
+                                // could be invalid, could also be valid range syntax (>=, ...)
+                                // either way, pin major
+                                else => return .major,
+                            }
                         },
                     }
                 }
 
-                if (i == input.len) {
-                    result.valid = false;
-                    return result;
-                }
+                // entire semver is whitespace, `v`, and `=`. Invalid
+                return .major;
+            };
 
-                // two passes :(
-                while (i < input.len) {
-                    if (is_done) {
+            // major
+            if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
+            var d = version[i];
+            while (std.ascii.isDigit(d)) {
+                i += 1;
+                if (i >= version.len) return if (pinned == .patch) .major else pinned;
+                d = version[i];
+            }
+
+            if (d != '.') return .major;
+
+            // minor
+            i += 1;
+            if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
+            d = version[i];
+            while (std.ascii.isDigit(d)) {
+                i += 1;
+                if (i >= version.len) return if (pinned == .patch) .minor else pinned;
+                d = version[i];
+            }
+
+            if (d != '.') return .major;
+
+            // patch
+            i += 1;
+            if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
+            d = version[i];
+            while (std.ascii.isDigit(d)) {
+                i += 1;
+
+                // patch is done and at input end, valid
+                if (i >= version.len) return pinned;
+                d = version[i];
+            }
+
+            // Skip remaining valid pre/build tag characters and whitespace.
+            // Does not validate whitespace used inside pre/build tags.
+            if (!validPreOrBuildTagCharacter(d) or std.ascii.isWhitespace(d)) return .major;
+            i += 1;
+
+            // at this point the semver is valid so we can return pinned if it ends
+            if (i >= version.len) return pinned;
+            d = version[i];
+            while (validPreOrBuildTagCharacter(d) and !std.ascii.isWhitespace(d)) {
+                i += 1;
+                if (i >= version.len) return pinned;
+                d = version[i];
+            }
+
+            // We've come across a character that is not valid for tags or is whitespace.
+            // Trailing whitespace was trimmed so we can assume there's another range
+            return .major;
+        }
+
+        fn validPreOrBuildTagCharacter(c: u8) bool {
+            return switch (c) {
+                '-', '+', '.', 'A'...'Z', 'a'...'z', '0'...'9' => true,
+                else => false,
+            };
+        }
+
+        pub fn isTaggedVersionOnly(input: []const u8) bool {
+            const version = strings.trim(input, strings.whitespace_chars);
+
+            // first needs to be a-z
+            if (version.len == 0 or !std.ascii.isAlphabetic(version[0])) return false;
+
+            var i: usize = 1;
+            while (i < version.len) : (i += 1) {
+                if (!std.ascii.isAlphanumeric(version[i])) return false;
+            }
+
+            return true;
+        }
+
+        pub fn orderWithoutTag(
+            lhs: This,
+            rhs: This,
+        ) std.math.Order {
+            if (lhs.major < rhs.major) return .lt;
+            if (lhs.major > rhs.major) return .gt;
+            if (lhs.minor < rhs.minor) return .lt;
+            if (lhs.minor > rhs.minor) return .gt;
+            if (lhs.patch < rhs.patch) return .lt;
+            if (lhs.patch > rhs.patch) return .gt;
+
+            if (lhs.tag.hasPre()) {
+                if (!rhs.tag.hasPre()) return .lt;
+            } else {
+                if (rhs.tag.hasPre()) return .gt;
+            }
+
+            return .eq;
+        }
+
+        pub fn order(
+            lhs: This,
+            rhs: This,
+            lhs_buf: []const u8,
+            rhs_buf: []const u8,
+        ) std.math.Order {
+            const order_without_tag = orderWithoutTag(lhs, rhs);
+            if (order_without_tag != .eq) return order_without_tag;
+
+            return lhs.tag.order(rhs.tag, lhs_buf, rhs_buf);
+        }
+
+        pub fn orderWithoutBuild(
+            lhs: This,
+            rhs: This,
+            lhs_buf: []const u8,
+            rhs_buf: []const u8,
+        ) std.math.Order {
+            const order_without_tag = orderWithoutTag(lhs, rhs);
+            if (order_without_tag != .eq) return order_without_tag;
+
+            return lhs.tag.orderWithoutBuild(rhs.tag, lhs_buf, rhs_buf);
+        }
+
+        pub fn parse(sliced_string: SlicedString) ParseResult {
+            var input = sliced_string.slice;
+            var result = ParseResult{};
+
+            var part_i: u8 = 0;
+            var part_start_i: usize = 0;
+            var last_char_i: usize = 0;
+
+            if (input.len == 0) {
+                result.valid = false;
+                return result;
+            }
+            var is_done = false;
+
+            var i: usize = 0;
+
+            var c_idx: usize = 0;
+            while (c_idx < input.len) : (c_idx += 1) {
+                switch (input[c_idx]) {
+                    // newlines & whitespace
+                    ' ',
+                    '\t',
+                    '\n',
+                    '\r',
+                    std.ascii.control_code.vt,
+                    std.ascii.control_code.ff,
+
+                    // version separators
+                    'v',
+                    '=',
+                    => {},
+                    else => {
+                        i = c_idx;
                         break;
-                    }
+                    },
+                }
+            }
 
-                    switch (input[i]) {
-                        ' ' => {
-                            is_done = true;
-                            break;
-                        },
-                        '|', '^', '#', '&', '%', '!' => {
-                            is_done = true;
-                            if (i > 0) {
-                                i -= 1;
-                            }
-                            break;
-                        },
-                        '0'...'9' => {
-                            part_start_i = i;
+            if (i == input.len) {
+                result.valid = false;
+                return result;
+            }
+
+            // two passes :(
+            while (i < input.len) {
+                if (is_done) {
+                    break;
+                }
+
+                switch (input[i]) {
+                    ' ' => {
+                        is_done = true;
+                        break;
+                    },
+                    '|', '^', '#', '&', '%', '!' => {
+                        is_done = true;
+                        if (i > 0) {
+                            i -= 1;
+                        }
+                        break;
+                    },
+                    '0'...'9' => {
+                        part_start_i = i;
+                        i += 1;
+
+                        while (i < input.len and switch (input[i]) {
+                            '0'...'9' => true,
+                            else => false,
+                        }) {
                             i += 1;
+                        }
 
-                            while (i < input.len and switch (input[i]) {
-                                '0'...'9' => true,
-                                else => false,
-                            }) {
-                                i += 1;
-                            }
+                        last_char_i = i;
 
-                            last_char_i = i;
+                        switch (part_i) {
+                            0 => {
+                                result.version.major = parseVersionNumber(input[part_start_i..last_char_i]);
+                                part_i = 1;
+                            },
+                            1 => {
+                                result.version.minor = parseVersionNumber(input[part_start_i..last_char_i]);
+                                part_i = 2;
+                            },
+                            2 => {
+                                result.version.patch = parseVersionNumber(input[part_start_i..last_char_i]);
+                                part_i = 3;
+                            },
+                            else => {},
+                        }
 
+                        if (i < input.len and switch (input[i]) {
+                            // `.` is expected only if there are remaining core version numbers
+                            '.' => part_i != 3,
+                            else => false,
+                        }) {
+                            i += 1;
+                        }
+                    },
+                    '.' => {
+                        result.valid = false;
+                        is_done = true;
+                        break;
+                    },
+                    '-', '+' => {
+                        // Just a plain tag with no version is invalid.
+                        if (part_i < 2 and result.wildcard == .none) {
+                            result.valid = false;
+                            is_done = true;
+                            break;
+                        }
+
+                        part_start_i = i;
+                        while (i < input.len and switch (input[i]) {
+                            ' ' => true,
+                            else => false,
+                        }) {
+                            i += 1;
+                        }
+                        const tag_result = Tag.parse(sliced_string.sub(input[part_start_i..]));
+                        result.version.tag = tag_result.tag;
+                        i += tag_result.len;
+                        break;
+                    },
+                    'x', '*', 'X' => {
+                        part_start_i = i;
+                        i += 1;
+
+                        while (i < input.len and switch (input[i]) {
+                            'x', '*', 'X' => true,
+                            else => false,
+                        }) {
+                            i += 1;
+                        }
+
+                        last_char_i = i;
+
+                        if (i < input.len and switch (input[i]) {
+                            '.' => true,
+                            else => false,
+                        }) {
+                            i += 1;
+                        }
+
+                        if (result.wildcard == .none) {
                             switch (part_i) {
                                 0 => {
-                                    result.version.major = parseVersionNumber(input[part_start_i..last_char_i]);
+                                    result.wildcard = Query.Token.Wildcard.major;
                                     part_i = 1;
                                 },
                                 1 => {
-                                    result.version.minor = parseVersionNumber(input[part_start_i..last_char_i]);
+                                    result.wildcard = Query.Token.Wildcard.minor;
                                     part_i = 2;
                                 },
                                 2 => {
-                                    result.version.patch = parseVersionNumber(input[part_start_i..last_char_i]);
+                                    result.wildcard = Query.Token.Wildcard.patch;
                                     part_i = 3;
                                 },
                                 else => {},
                             }
+                        }
+                    },
+                    else => |c| {
 
-                            if (i < input.len and switch (input[i]) {
-                                // `.` is expected only if there are remaining core version numbers
-                                '.' => part_i != 3,
-                                else => false,
-                            }) {
-                                i += 1;
-                            }
-                        },
-                        '.' => {
-                            result.valid = false;
-                            is_done = true;
-                            break;
-                        },
-                        '-', '+' => {
-                            // Just a plain tag with no version is invalid.
-                            if (part_i < 2 and result.wildcard == .none) {
-                                result.valid = false;
-                                is_done = true;
-                                break;
-                            }
-
+                        // Some weirdo npm packages in the wild have a version like "1.0.0rc.1"
+                        // npm just expects that to work...even though it has no "-" qualifier.
+                        if (result.wildcard == .none and part_i >= 2 and switch (c) {
+                            'a'...'z', 'A'...'Z' => true,
+                            else => false,
+                        }) {
                             part_start_i = i;
-                            while (i < input.len and switch (input[i]) {
-                                ' ' => true,
-                                else => false,
-                            }) {
-                                i += 1;
-                            }
-                            const tag_result = Tag.parse(sliced_string.sub(input[part_start_i..]));
+                            const tag_result = Tag.parseWithPreCount(sliced_string.sub(input[part_start_i..]), 1);
                             result.version.tag = tag_result.tag;
                             i += tag_result.len;
-                            break;
-                        },
-                        'x', '*', 'X' => {
-                            part_start_i = i;
-                            i += 1;
-
-                            while (i < input.len and switch (input[i]) {
-                                'x', '*', 'X' => true,
-                                else => false,
-                            }) {
-                                i += 1;
-                            }
-
-                            last_char_i = i;
-
-                            if (i < input.len and switch (input[i]) {
-                                '.' => true,
-                                else => false,
-                            }) {
-                                i += 1;
-                            }
-
-                            if (result.wildcard == .none) {
-                                switch (part_i) {
-                                    0 => {
-                                        result.wildcard = Query.Token.Wildcard.major;
-                                        part_i = 1;
-                                    },
-                                    1 => {
-                                        result.wildcard = Query.Token.Wildcard.minor;
-                                        part_i = 2;
-                                    },
-                                    2 => {
-                                        result.wildcard = Query.Token.Wildcard.patch;
-                                        part_i = 3;
-                                    },
-                                    else => {},
-                                }
-                            }
-                        },
-                        else => |c| {
-
-                            // Some weirdo npm packages in the wild have a version like "1.0.0rc.1"
-                            // npm just expects that to work...even though it has no "-" qualifier.
-                            if (result.wildcard == .none and part_i >= 2 and switch (c) {
-                                'a'...'z', 'A'...'Z' => true,
-                                else => false,
-                            }) {
-                                part_start_i = i;
-                                const tag_result = Tag.parseWithPreCount(sliced_string.sub(input[part_start_i..]), 1);
-                                result.version.tag = tag_result.tag;
-                                i += tag_result.len;
-                                is_done = true;
-                                last_char_i = i;
-                                break;
-                            }
-
-                            last_char_i = 0;
-                            result.valid = false;
                             is_done = true;
+                            last_char_i = i;
                             break;
-                        },
-                    }
+                        }
+
+                        last_char_i = 0;
+                        result.valid = false;
+                        is_done = true;
+                        break;
+                    },
                 }
-
-                if (result.wildcard == .none) {
-                    switch (part_i) {
-                        0 => {
-                            result.wildcard = Query.Token.Wildcard.major;
-                        },
-                        1 => {
-                            result.wildcard = Query.Token.Wildcard.minor;
-                        },
-                        2 => {
-                            result.wildcard = Query.Token.Wildcard.patch;
-                        },
-                        else => {},
-                    }
-                }
-
-                result.len = @as(u32, @intCast(i));
-
-                return result;
             }
 
-            fn parseVersionNumber(input: string) ?IntType {
-                // max decimal u64 is 18446744073709551615
-                var bytes: [20]u8 = undefined;
-                var byte_i: u8 = 0;
-
-                assert(input[0] != '.');
-
-                for (input) |char| {
-                    switch (char) {
-                        'X', 'x', '*' => return null,
-                        '0'...'9' => {
-                            // out of bounds
-                            if (byte_i + 1 > bytes.len) return null;
-                            bytes[byte_i] = char;
-                            byte_i += 1;
-                        },
-                        ' ', '.' => break,
-                        // ignore invalid characters
-                        else => {},
-                    }
+            if (result.wildcard == .none) {
+                switch (part_i) {
+                    0 => {
+                        result.wildcard = Query.Token.Wildcard.major;
+                    },
+                    1 => {
+                        result.wildcard = Query.Token.Wildcard.minor;
+                    },
+                    2 => {
+                        result.wildcard = Query.Token.Wildcard.patch;
+                    },
+                    else => {},
                 }
-
-                // If there are no numbers
-                if (byte_i == 0) return null;
-
-                if (comptime Environment.isDebug) {
-                    return std.fmt.parseInt(IntType, bytes[0..byte_i], 10) catch |err| {
-                        Output.prettyErrorln("ERROR {s} parsing version: \"{s}\", bytes: {s}", .{
-                            @errorName(err),
-                            input,
-                            bytes[0..byte_i],
-                        });
-                        return 0;
-                    };
-                }
-
-                return std.fmt.parseInt(IntType, bytes[0..byte_i], 10) catch 0;
             }
-        };
+
+            result.len = @as(u32, @intCast(i));
+
+            return result;
+        }
+
+        fn parseVersionNumber(input: string) ?IntType {
+            // max decimal u64 is 18446744073709551615
+            var bytes: [20]u8 = undefined;
+            var byte_i: u8 = 0;
+
+            assert(input[0] != '.');
+
+            for (input) |char| {
+                switch (char) {
+                    'X', 'x', '*' => return null,
+                    '0'...'9' => {
+                        // out of bounds
+                        if (byte_i + 1 > bytes.len) return null;
+                        bytes[byte_i] = char;
+                        byte_i += 1;
+                    },
+                    ' ', '.' => break,
+                    // ignore invalid characters
+                    else => {},
+                }
+            }
+
+            // If there are no numbers
+            if (byte_i == 0) return null;
+
+            if (comptime Environment.isDebug) {
+                return std.fmt.parseInt(IntType, bytes[0..byte_i], 10) catch |e| {
+                    Output.prettyErrorln("ERROR {s} parsing version: \"{s}\", bytes: {s}", .{
+                        @errorName(e),
+                        input,
+                        bytes[0..byte_i],
+                    });
+                    return 0;
+                };
+            }
+
+        return std.fmt.parseInt(IntType, bytes[0..byte_i], 10) catch 0;
+    }
+    };
 }

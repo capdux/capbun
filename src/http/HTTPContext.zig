@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 const SocketHandler = @import("../uws_sys/socket.zig").SocketHandler;
 const SocketGroup = @import("../uws_sys/SocketGroup.zig").SocketGroup;
@@ -69,6 +69,239 @@ pub const ProxyTunnel = @import("./ProxyTunnel.zig");
 pub const DeadSocket = struct {
     garbage: u8 = 0,
 };
+
+pub fn _PooledSocket(comptime ssl: bool) type {
+    return struct {
+        http_socket: SocketHandler(ssl),
+        hostname_buf: [MAX_KEEPALIVE_HOSTNAME]u8 = undefined,
+        hostname_len: u8 = 0,
+        port: u16 = 0,
+        did_have_handshaking_error_while_reject_unauthorized_is_false: bool = false,
+        ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr = null,
+        owner: *HTTPContext(ssl),
+        proxy_tunnel: ?ProxyTunnel.RefPtr = null,
+        target_hostname: []const u8 = "",
+        target_port: u16 = 0,
+        proxy_auth_hash: u64 = 0,
+        h2_session: ?*bun.http.H2.ClientSession = null,
+
+pub fn isTunnel(self: @This()) bool {
+                return (self.proxy_tunnel != null);
+        }
+
+pub fn isH2(self: @This()) bool {
+                return (self.h2_session != null);
+        }
+    };
+}
+
+pub fn _ExistingSocket(comptime ssl: bool) type {
+    return struct {
+        socket: SocketHandler(ssl),
+        tunnel: ?*ProxyTunnel,
+        h2_session: ?*bun.http.H2.ClientSession,
+
+pub fn hasTunnel(self: @This()) bool {
+                return (self.tunnel != null);
+        }
+
+pub fn hasH2(self: @This()) bool {
+                return (self.h2_session != null);
+        }
+    };
+}
+
+pub fn _Handler(comptime ssl: bool) type {
+    return struct {
+
+pub fn onOpen(ptr: AnyPtr, socket: SocketHandler(ssl)) void {
+                const active = HTTPContext(ssl).getTagged(ptr);
+                if (active.get(bun.http)) |client| {
+                    _ = &client;
+                    _ = (blk_catch_0: { break :blk_catch_0 ((client.onOpen((comptime ssl), socket)) catch |__ce_0| { _ = &__ce_0; _ = HTTPContext(ssl).terminateSocket(socket);
+                    return; }); });
+                    return;
+                }
+                _ = HTTPContext(ssl).terminateSocket(socket);
+        }
+
+pub fn onHandshake(ptr: AnyPtr, socket: SocketHandler(ssl), success: i32, ssl_error: bun.uws.us_bun_verify_error_t) void {
+                const handshake_success = (if ((success == 1)) true else false);
+                const handshake_error = bun.http.HTTPCertError{ .error_no = ssl_error.error_no, .code = (if ((ssl_error.code == null)) "" else ssl_error.code[0..bun.len(ssl_error.code) :0]), .reason = (if ((ssl_error.reason == null)) "" else ssl_error.reason[0..bun.len(ssl_error.reason) :0]) };
+                const active = HTTPContext(ssl).getTagged(ptr);
+                if (active.get(bun.http)) |client| {
+                    _ = &client;
+                    client.flags.did_have_handshaking_error = (handshake_error.error_no != 0);
+                    if (handshake_success) {
+                        if (client.flags.reject_unauthorized) {
+                            if (client.flags.did_have_handshaking_error) {
+                                _ = client.closeAndFail(bun.BoringSSL.c.getCertErrorFromNo(handshake_error.error_no), (comptime ssl), socket);
+                                return;
+                            }
+                            const ssl_ptr: *bun.BoringSSL.c.SSL = (blk: {
+                            break :blk @ptrCast(socket.getNativeHandle());
+
+});
+                            if ((!client.checkServerIdentity((comptime ssl), socket, handshake_error, ssl_ptr, true))) {
+                                return;
+                            }
+                        }
+                        return client.firstCall((comptime ssl), socket);
+                    } else {
+                        if (client.flags.did_have_handshaking_error) {
+                            _ = client.closeAndFail(bun.BoringSSL.c.getCertErrorFromNo(handshake_error.error_no), (comptime ssl), socket);
+                            return;
+                        }
+                        _ = client.closeAndFail(error.ConnectionRefused, (comptime ssl), socket);
+                        return;
+                    }
+                }
+                if (socket.isClosed()) {
+                    _ = HTTPContext(ssl).markSocketAsDead(socket);
+                    return;
+                }
+                if (handshake_success) {
+                    if (active.is(_PooledSocket(ssl))) {
+                        _ = socket.setTimeout(0);
+                        _ = socket.setTimeoutMinutes(5);
+                        return;
+                    }
+                }
+                _ = HTTPContext(ssl).terminateSocket(socket);
+        }
+
+pub fn onClose(ptr: AnyPtr, socket: SocketHandler(ssl), _: c_int, _: OptionalAnyPtr) void {
+                const tagged = HTTPContext(ssl).getTagged(ptr);
+                _ = HTTPContext(ssl).markSocketAsDead(socket);
+                if (tagged.get(bun.http)) |client| {
+                    _ = &client;
+                    return client.onClose((comptime ssl), socket);
+                }
+                if (tagged.get(bun.http.H2.ClientSession)) |session| {
+                    _ = &session;
+                    return session.onClose(error.ConnectionClosed);
+                }
+        }
+
+pub fn addMemoryBackToPool(pooled: *_PooledSocket(ssl)) void {
+                if (pooled.ssl_config) |*s| {
+                    _ = &s;
+                    _ = (s.*).deinit();
+                }
+                pooled.ssl_config = null;
+                if (pooled.proxy_tunnel) |*rp| {
+                    _ = &rp;
+                    _ = (rp.*).deref();
+                }
+                pooled.proxy_tunnel = null;
+                if ((pooled.target_hostname.len > 0)) {
+                    _ = bun.default_allocator.free(pooled.target_hostname);
+                    pooled.target_hostname = "";
+                }
+                if (pooled.h2_session) |s| {
+                    _ = &s;
+                    _ = s.deref();
+                }
+                pooled.h2_session = null;
+                _ = bun.assert(pooled.owner.pending_sockets.put(pooled));
+        }
+
+pub fn onData(ptr: AnyPtr, socket: SocketHandler(ssl), buf: []const u8) void {
+                const tagged = HTTPContext(ssl).getTagged(ptr);
+                if (tagged.get(bun.http)) |client| {
+                    _ = &client;
+                    return client.onData((comptime ssl), buf, client.getSslCtx(ssl), socket);
+                } else {
+                    if (tagged.get(bun.http.H2.ClientSession)) |session| {
+                        _ = &session;
+                        return session.onData(buf);
+                    } else {
+                        if (tagged.is(_PooledSocket(ssl))) {
+                            const pooled = tagged.as(_PooledSocket(ssl));
+                            if ((pooled.proxy_tunnel != null)) {
+                                _ = HTTPContext(ssl).terminateSocket(socket);
+                                return;
+                            }
+                            if (pooled.h2_session) |session| {
+                                _ = &session;
+                                _ = session.onIdleData(buf);
+                                if ((!session.canPool())) {
+                                    _ = HTTPContext(ssl).terminateSocket(socket);
+                                }
+                                return;
+                            }
+                            if (bun.strings.eqlComptime(buf, bun.http.end_of_chunked_http1_1_encoding_response_body)) {
+                                return;
+                            }
+                            return;
+                        }
+                    }
+                }
+                _ = HTTPContext(ssl).terminateSocket(socket);
+        }
+
+pub fn onWritable(ptr: AnyPtr, socket: SocketHandler(ssl)) void {
+                const tagged = HTTPContext(ssl).getTagged(ptr);
+                if (tagged.get(bun.http)) |client| {
+                    _ = &client;
+                    return client.onWritable(false, (comptime ssl), socket);
+                } else {
+                    if (tagged.get(bun.http.H2.ClientSession)) |session| {
+                        _ = &session;
+                        return session.onWritable();
+                    } else {
+                        if (tagged.is(_PooledSocket(ssl))) {
+                        } else {
+                            _ = HTTPContext(ssl).terminateSocket(socket);
+                        }
+                    }
+                }
+        }
+
+pub fn onLongTimeout(ptr: AnyPtr, socket: SocketHandler(ssl)) void {
+                const tagged = HTTPContext(ssl).getTagged(ptr);
+                if (tagged.get(bun.http)) |client| {
+                    _ = &client;
+                    return client.onTimeout((comptime ssl), socket);
+                }
+                if (tagged.get(bun.http.H2.ClientSession)) |session| {
+                    _ = &session;
+                    _ = HTTPContext(ssl).markSocketAsDead(socket);
+                    _ = session.onClose(error.Timeout);
+                }
+                _ = HTTPContext(ssl).terminateSocket(socket);
+        }
+
+pub fn onTimeout(ptr: AnyPtr, socket: SocketHandler(ssl)) void {
+                _ = onLongTimeout(ptr, socket);
+        }
+
+pub fn onConnectError(ptr: AnyPtr, socket: SocketHandler(ssl), _: c_int) void {
+                const tagged = HTTPContext(ssl).getTagged(ptr);
+                _ = HTTPContext(ssl).markTaggedSocketAsDead(socket, tagged);
+                if (tagged.get(bun.http)) |client| {
+                    _ = &client;
+                    _ = client.onConnectError();
+                }
+        }
+
+pub fn onEnd(ptr: AnyPtr, socket: SocketHandler(ssl)) void {
+                const tagged = HTTPContext(ssl).getTagged(ptr);
+                _ = HTTPContext(ssl).markTaggedSocketAsDead(socket, tagged);
+                _ = socket.close(.failure);
+                if (tagged.get(bun.http)) |client| {
+                    _ = &client;
+                    _ = client.onClose((comptime ssl), socket);
+                    return;
+                }
+                if (tagged.get(bun.http.H2.ClientSession)) |session| {
+                    _ = &session;
+                    _ = session.onClose(error.ConnectionClosed);
+                    return;
+                }
+        }
+    };
+}
 
 pub fn HTTPContext(comptime ssl: bool) type {
     return struct {
@@ -345,7 +578,7 @@ pub fn initWithClientConfig(self: *@This(), client: *bun.http) bun.http.InitErro
                     _ = @compileError("ssl only");
                 }
                 const opts = client.tls_props.?.get().asUSocketsForClientVerification();
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.initWithOpts((&opts))) catch |e| { _ = &e; return e; }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((self.initWithOpts((&opts))) catch |e| { _ = &e; return e; }); });
         }
 
 pub fn initWithOpts(self: *@This(), opts: *const bun.uws.SocketContext.BunSocketContextOptions) bun.http.InitError!void {
@@ -373,9 +606,12 @@ pub fn initWithThreadOpts(self: *@This(), init_opts: *const bun.http.HTTPThread.
                 if ((!ssl)) {
                     _ = @compileError("ssl only");
                 }
-                var opts: bun.uws.SocketContext.BunSocketContextOptions = .{ .ca = (if ((init_opts.ca.len > 0)) @ptrCast(@constCast(init_opts.ca)) else null), .ca_count = @intCast(init_opts.ca.len), .ca_file_name = (if ((init_opts.abs_ca_file_name.len > 0)) init_opts.abs_ca_file_name else null), .request_cert = 1 };
+                var opts: bun.uws.SocketContext.BunSocketContextOptions = .{ .ca = (if ((init_opts.ca.len > 0)) (blk: {
+                break :blk @ptrCast(@constCast(init_opts.ca));
+
+}) else null), .ca_count = @intCast(init_opts.ca.len), .ca_file_name = (if ((init_opts.abs_ca_file_name.len > 0)) init_opts.abs_ca_file_name else null), .request_cert = 1 };
                 _ = &opts;
-                _ = (blk_catch_1: { break :blk_catch_1 ((self.initWithOpts((&opts))) catch |e| { _ = &e; return e; }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((self.initWithOpts((&opts))) catch |e| { _ = &e; return e; }); });
         }
 
 pub fn deinit(self: *@This()) void {
@@ -490,229 +726,11 @@ pub fn releaseSocket(self: *@This(), socket: HTTPSocket, did_have_handshaking_er
         }
         pub const is_ssl: bool = ssl;
         pub const HTTPSocket = SocketHandler(ssl);
-        pub const PooledSocket = struct {
-            http_socket: HTTPSocket,
-            hostname_buf: [MAX_KEEPALIVE_HOSTNAME]u8 = undefined,
-            hostname_len: u8 = 0,
-            port: u16 = 0,
-            did_have_handshaking_error_while_reject_unauthorized_is_false: bool = false,
-            ssl_config: ?bun.api.server.ServerConfig.SSLConfig.SharedPtr = null,
-            owner: *HTTPContext(ssl),
-            proxy_tunnel: ?ProxyTunnel.RefPtr = null,
-            target_hostname: []const u8 = "",
-            target_port: u16 = 0,
-            proxy_auth_hash: u64 = 0,
-            h2_session: ?*bun.http.H2.ClientSession = null,
-        
-        pub fn isTunnel(self: @This()) bool {
-                    return (self.proxy_tunnel != null);
-            }
-        
-        pub fn isH2(self: @This()) bool {
-                    return (self.h2_session != null);
-            }
-        };
-        pub const ExistingSocket = struct {
-            socket: HTTPSocket,
-            tunnel: ?*ProxyTunnel,
-            h2_session: ?*bun.http.H2.ClientSession,
-        
-        pub fn hasTunnel(self: @This()) bool {
-                    return (self.tunnel != null);
-            }
-        
-        pub fn hasH2(self: @This()) bool {
-                    return (self.h2_session != null);
-            }
-        };
+        pub const PooledSocket = _PooledSocket(ssl);
+        pub const ExistingSocket = _ExistingSocket(ssl);
         pub const ActiveSocket = bun.ptr.TaggedPointerUnion(.{ DeadSocket, bun.http, PooledSocket, bun.http.H2.ClientSession });
         pub const PooledSocketHiveAllocator = bun.HiveArray(PooledSocket, pool_size);
-        pub const Handler = struct {
-        
-        pub fn onOpen(ptr: AnyPtr, socket: HTTPSocket) void {
-                    const active = getTagged(ptr);
-                    if (active.get(bun.http)) |client| {
-                        _ = &client;
-                        _ = (blk_catch_0: { break :blk_catch_0 ((client.onOpen((comptime ssl), socket)) catch |__ce_0| { _ = &__ce_0; _ = terminateSocket(socket);
-                        return; }); });
-                        return;
-                    }
-                    _ = terminateSocket(socket);
-            }
-        
-        pub fn onHandshake(ptr: AnyPtr, socket: HTTPSocket, success: i32, ssl_error: bun.uws.us_bun_verify_error_t) void {
-                    const handshake_success = (if ((success == 1)) true else false);
-                    const handshake_error = bun.http.HTTPCertError{ .error_no = ssl_error.error_no, .code = (if ((ssl_error.code == null)) "" else ssl_error.code[0..bun.len(ssl_error.code) :0]), .reason = (if ((ssl_error.reason == null)) "" else ssl_error.reason[0..bun.len(ssl_error.reason) :0]) };
-                    const active = getTagged(ptr);
-                    if (active.get(bun.http)) |client| {
-                        _ = &client;
-                        client.flags.did_have_handshaking_error = (handshake_error.error_no != 0);
-                        if (handshake_success) {
-                            if (client.flags.reject_unauthorized) {
-                                if (client.flags.did_have_handshaking_error) {
-                                    _ = client.closeAndFail(bun.BoringSSL.c.getCertErrorFromNo(handshake_error.error_no), (comptime ssl), socket);
-                                    return;
-                                }
-                                const ssl_ptr: *bun.BoringSSL.c.SSL = @ptrCast(socket.getNativeHandle());
-                                if ((!client.checkServerIdentity((comptime ssl), socket, handshake_error, ssl_ptr, true))) {
-                                    return;
-                                }
-                            }
-                            return client.firstCall((comptime ssl), socket);
-                        } else {
-                            if (client.flags.did_have_handshaking_error) {
-                                _ = client.closeAndFail(bun.BoringSSL.c.getCertErrorFromNo(handshake_error.error_no), (comptime ssl), socket);
-                                return;
-                            }
-                            _ = client.closeAndFail(error.ConnectionRefused, (comptime ssl), socket);
-                            return;
-                        }
-                    }
-                    if (socket.isClosed()) {
-                        _ = markSocketAsDead(socket);
-                        return;
-                    }
-                    if (handshake_success) {
-                        if (active.is(PooledSocket)) {
-                            _ = socket.setTimeout(0);
-                            _ = socket.setTimeoutMinutes(5);
-                            return;
-                        }
-                    }
-                    _ = terminateSocket(socket);
-            }
-        
-        pub fn onClose(ptr: AnyPtr, socket: HTTPSocket, _: c_int, _: OptionalAnyPtr) void {
-                    const tagged = getTagged(ptr);
-                    _ = markSocketAsDead(socket);
-                    if (tagged.get(bun.http)) |client| {
-                        _ = &client;
-                        return client.onClose((comptime ssl), socket);
-                    }
-                    if (tagged.get(bun.http.H2.ClientSession)) |session| {
-                        _ = &session;
-                        return session.onClose(error.ConnectionClosed);
-                    }
-            }
-        
-        pub fn addMemoryBackToPool(pooled: *PooledSocket) void {
-                    if (pooled.ssl_config) |*s| {
-                        _ = &s;
-                        _ = (s.*).deinit();
-                    }
-                    pooled.ssl_config = null;
-                    if (pooled.proxy_tunnel) |*rp| {
-                        _ = &rp;
-                        _ = (rp.*).deref();
-                    }
-                    pooled.proxy_tunnel = null;
-                    if ((pooled.target_hostname.len > 0)) {
-                        _ = bun.default_allocator.free(pooled.target_hostname);
-                        pooled.target_hostname = "";
-                    }
-                    if (pooled.h2_session) |s| {
-                        _ = &s;
-                        _ = s.deref();
-                    }
-                    pooled.h2_session = null;
-                    _ = bun.assert(pooled.owner.pending_sockets.put(pooled));
-            }
-        
-        pub fn onData(ptr: AnyPtr, socket: HTTPSocket, buf: []const u8) void {
-                    const tagged = getTagged(ptr);
-                    if (tagged.get(bun.http)) |client| {
-                        _ = &client;
-                        return client.onData((comptime ssl), buf, client.getSslCtx(ssl), socket);
-                    } else {
-                        if (tagged.get(bun.http.H2.ClientSession)) |session| {
-                            _ = &session;
-                            return session.onData(buf);
-                        } else {
-                            if (tagged.is(PooledSocket)) {
-                                const pooled = tagged.as(PooledSocket);
-                                if ((pooled.proxy_tunnel != null)) {
-                                    _ = terminateSocket(socket);
-                                    return;
-                                }
-                                if (pooled.h2_session) |session| {
-                                    _ = &session;
-                                    _ = session.onIdleData(buf);
-                                    if ((!session.canPool())) {
-                                        _ = terminateSocket(socket);
-                                    }
-                                    return;
-                                }
-                                if (bun.strings.eqlComptime(buf, bun.http.end_of_chunked_http1_1_encoding_response_body)) {
-                                    return;
-                                }
-                                return;
-                            }
-                        }
-                    }
-                    _ = terminateSocket(socket);
-            }
-        
-        pub fn onWritable(ptr: AnyPtr, socket: HTTPSocket) void {
-                    const tagged = getTagged(ptr);
-                    if (tagged.get(bun.http)) |client| {
-                        _ = &client;
-                        return client.onWritable(false, (comptime ssl), socket);
-                    } else {
-                        if (tagged.get(bun.http.H2.ClientSession)) |session| {
-                            _ = &session;
-                            return session.onWritable();
-                        } else {
-                            if (tagged.is(PooledSocket)) {
-                            } else {
-                                _ = terminateSocket(socket);
-                            }
-                        }
-                    }
-            }
-        
-        pub fn onLongTimeout(ptr: AnyPtr, socket: HTTPSocket) void {
-                    const tagged = getTagged(ptr);
-                    if (tagged.get(bun.http)) |client| {
-                        _ = &client;
-                        return client.onTimeout((comptime ssl), socket);
-                    }
-                    if (tagged.get(bun.http.H2.ClientSession)) |session| {
-                        _ = &session;
-                        _ = markSocketAsDead(socket);
-                        _ = session.onClose(error.Timeout);
-                    }
-                    _ = terminateSocket(socket);
-            }
-        
-        pub fn onTimeout(ptr: AnyPtr, socket: HTTPSocket) void {
-                    _ = onLongTimeout(ptr, socket);
-            }
-        
-        pub fn onConnectError(ptr: AnyPtr, socket: HTTPSocket, _: c_int) void {
-                    const tagged = getTagged(ptr);
-                    _ = markTaggedSocketAsDead(socket, tagged);
-                    if (tagged.get(bun.http)) |client| {
-                        _ = &client;
-                        _ = client.onConnectError();
-                    }
-            }
-        
-        pub fn onEnd(ptr: AnyPtr, socket: HTTPSocket) void {
-                    const tagged = getTagged(ptr);
-                    _ = markTaggedSocketAsDead(socket, tagged);
-                    _ = socket.close(.failure);
-                    if (tagged.get(bun.http)) |client| {
-                        _ = &client;
-                        _ = client.onClose((comptime ssl), socket);
-                        return;
-                    }
-                    if (tagged.get(bun.http.H2.ClientSession)) |session| {
-                        _ = &session;
-                        _ = session.onClose(error.ConnectionClosed);
-                        return;
-                    }
-            }
-        };
+        pub const Handler = _Handler(ssl);
         pub const ActiveSocketHandler = Handler;
         pub const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
         pub const ref = RefCount.ref;

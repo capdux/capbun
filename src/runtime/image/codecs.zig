@@ -174,6 +174,24 @@ pub const Error = error{
     BackendUnavailable,
 };
 
+pub const Filter = enum(i32) {
+    box = 0,
+    bilinear = 1,
+    lanczos3 = 2,
+    mitchell = 3,
+    nearest = 4,
+    cubic = 5,
+    lanczos2 = 6,
+    mks2013 = 7,
+    mks2021 = 8,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const Map = bun.ComptimeStringMap(Filter, .{ .{ "box", .box }, .{ "bilinear", .bilinear }, .{ "linear", .bilinear }, .{ "lanczos3", .lanczos3 }, .{ "mitchell", .mitchell }, .{ "nearest", .nearest }, .{ "cubic", .cubic }, .{ "lanczos2", .lanczos2 }, .{ "mks2013", .mks2013 }, .{ "mks2021", .mks2021 } });
+};
+
 pub const Decoded = struct {
     rgba: []u8,
     width: u32,
@@ -215,16 +233,13 @@ pub fn __cp_deinit(self: *@This()) void {
 
 pub fn DefaultAllocSliceGuard(comptime T: type) type {
     return struct {
-        slice: ?[]T,
-        __cp_dropped: bool = false,
+        slice: []T,
+        __cp_errdropped: bool = false,
 
-pub fn __cp_deinit(self: *@This()) void {
-            if (self.__cp_dropped) return;
-            self.__cp_dropped = true;
-                if (self.slice) |s| {
-                    _ = &s;
-                    _ = bun.default_allocator.free(s);
-                }
+pub fn __cp_errdeinit(self: *@This()) void {
+            if (self.__cp_errdropped) return;
+            self.__cp_errdropped = true;
+                _ = bun.default_allocator.free(self.slice);
         }
     };
 }
@@ -270,33 +285,6 @@ pub var backend: Backend = (if ((system_backend != null)) .system else .bun);
 pub const ExtMap = bun.ComptimeStringMap(Format, .{ .{ "jpg", .jpeg }, .{ "jpeg", .jpeg }, .{ "png", .png }, .{ "webp", .webp }, .{ "heic", .heic }, .{ "heif", .heic }, .{ "avif", .avif }, .{ "bmp", .bmp }, .{ "gif", .gif }, .{ "tif", .tiff }, .{ "tiff", .tiff } });
 pub const Err = Error;
 pub const default_max_pixels: u64 = (16383 * 16383);
-pub const Filter = enum(i32) {
-    box = 0,
-    bilinear = 1,
-    lanczos3 = 2,
-    mitchell = 3,
-    nearest = 4,
-    cubic = 5, // Catmull-Rom
-    lanczos2 = 6,
-    mks2013 = 7, // Magic Kernel Sharp
-    mks2021 = 8,
-
-    /// `JSValue.toEnum` lookup table. Hand-listed (not `ComptimeEnumMap`) so
-    /// Sharp's `'linear'` alias can map to `.bilinear`; the auto-generated
-    /// error message still lists only the canonical tags.
-    pub const Map = bun.ComptimeStringMap(Filter, .{
-        .{ "box", .box },
-        .{ "bilinear", .bilinear },
-        .{ "linear", .bilinear },
-        .{ "lanczos3", .lanczos3 },
-        .{ "mitchell", .mitchell },
-        .{ "nearest", .nearest },
-        .{ "cubic", .cubic },
-        .{ "lanczos2", .lanczos2 },
-        .{ "mks2013", .mks2013 },
-        .{ "mks2021", .mks2021 },
-    });
-};
 
 pub inline fn useSystem() bool {
         return (backend == .system);
@@ -472,14 +460,13 @@ pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter) Er
         var block_guard = DefaultAllocSliceGuard(u8){ .slice = block };
         _ = &block_guard;
         var __block_guard_moved = false; _ = &__block_guard_moved;
-        defer if (!__block_guard_moved) { __block_guard_moved = true; const __T = @TypeOf(block_guard); if (@typeInfo(__T) == .optional) { if (block_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { block_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = block_guard; _drop_val.__cp_deinit(); } };
+        errdefer if (!__block_guard_moved) { __block_guard_moved = true; const __T = @TypeOf(block_guard); if (@typeInfo(__T) == .optional) { if (block_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { block_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = block_guard; _drop_val.__cp_errdeinit(); } };
         if ((bun_image_resize_rgba8(src.ptr, @intCast(sw), @intCast(sh), block.ptr, @intCast(dw), @intCast(dh), @intFromEnum(f), (blk: {
         break :blk (block.ptr + out_sz);
 
 })) != 0)) {
             return error.OutOfMemory;
         }
-        block_guard.slice = null;
         return bun.handleOom(bun.default_allocator.realloc(block, out_sz));
 }
 

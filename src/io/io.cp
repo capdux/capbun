@@ -259,7 +259,7 @@ pub struct Loop {
                         },
 
                         .close close => {
-                            if (close.poll.flags.contains(.poll_readable) or close.poll.flags.contains(.poll_writable)) {
+                            if (close.poll.flags.contains(.poll_readable) || close.poll.flags.contains(.poll_writable)) {
                                 const i = events_list.items.len;
                                 assert(i + 1 <= events_list.capacity);
                                 events_list.items.len += 1;
@@ -352,238 +352,243 @@ const EventType = if (Environment.isLinux) linux.epoll_event else KEvent;
 
 type RequestCallback = *const fn (*Request) Action;
 
-pub const Request = struct {
-    next: ?*Request = null,
+pub struct Request {
+    next: (*Request)? = null,
     callback: RequestCallback,
     scheduled: bool = false,
 
-    pub const Queue = bun.UnboundedQueue(Request, .next);
-};
+    const Queue = bun.UnboundedQueue(Request, .next);
+}
 
-pub const ActionFileAction = struct {
+pub struct ActionFileAction {
     fd: bun.FD,
     poll: *Poll,
     ctx: *!,
-    tag: Pollable.Tag,
-    onError: *const fn (*!, sys.Error) void,
-};
+    tag: PollableTag,
+    onError: *const fn (*!, sys.Error),
+}
 
-pub const ActionCloseAction = struct {
+pub struct ActionCloseAction {
     fd: bun.FD,
     poll: *Poll,
     ctx: *!,
-    tag: Pollable.Tag,
-    onDone: *const fn (*!) void,
-};
+    tag: PollableTag,
+    onDone: *const fn (*!),
+}
 
 export union(enum) Action {
     readable: ActionFileAction,
     writable: ActionFileAction,
     close: ActionCloseAction,
 
-    pub const FileAction = ActionFileAction;
-    pub const CloseAction = ActionCloseAction;
+    const FileAction = ActionFileAction;
+    const CloseAction = ActionCloseAction;
 }
 
-const Pollable = struct {
-    const Tag = enum(bun.TaggedPointer.Tag) {
-        empty,
-        ReadFile,
-        WriteFile,
+pub enum PollableTag: bun.TaggedPointer.Tag {
+    empty,
+    ReadFile,
+    WriteFile,
 
-        pub fn Type(comptime T: Tag) type {
-            return switch (T) {
-                .ReadFile => ReadFile,
-                .WriteFile => WriteFile,
-                .empty => @compileError("unreachable"),
-            };
-        }
-    };
+    static fn Type(comptime T: PollableTag): type {
+        return switch (T) {
+            .ReadFile => ReadFile,
+            .WriteFile => WriteFile,
+            .empty => @compileError("unreachable"),
+        };
+    }
+}
+
+struct Pollable {
+    pub const Tag = PollableTag;
 
     value: bun.TaggedPointer,
 
-    pub fn init(t: Tag, p: *Poll) Pollable {
+    static fn init(t: PollableTag, p: *Poll): Pollable {
         return Pollable{
-            .value = bun.TaggedPointer.init(p, @intFromEnum(t)),
+            value: bun.TaggedPointer.init(p, @intFromEnum(t)),
         };
     }
 
-    pub fn from(int: u64) Pollable {
-        return Pollable{ .value = bun.TaggedPointer.from(int) };
+    static fn from(int: u64): Pollable {
+        return Pollable{ value: bun.TaggedPointer.from(int) };
     }
 
-    pub fn poll(this: Pollable) *Poll {
-        return this.value.get(Poll);
+    fn poll(): *Poll {
+        return _.value.get(Poll);
     }
 
-    pub fn tag(this: Pollable) Tag {
-        if (this.value.data == 0) return .empty;
-        return @enumFromInt(this.value.data);
+    fn tag(): PollableTag {
+        if (_.value.data == 0) return .empty;
+        return @enumFromInt(_.value.data);
     }
 
-    pub fn get(this: Pollable, comptime t: Tag) *Tag.Type(t) {
-        return this.value.get(Tag.Type(t));
+    fn get(comptime t: PollableTag): *PollableTag.Type(t) {
+        return _.value.get(PollableTag.Type(t));
     }
 
-    pub fn ptr(this: Pollable) *! {
-        return this.value.to();
+    fn ptr(): *! {
+        return _.value.to();
     }
-};
+}
 
-pub const Poll = struct {
-    flags: Flags.Set = Flags.Set.initEmpty(),
+pub enum PollFlags {
+    poll_readable,
+    poll_writable,
+    poll_process,
+    poll_machport,
+
+    readable,
+    writable,
+    process,
+    eof,
+    hup,
+    machport,
+
+    fifo,
+    tty,
+
+    one_shot,
+    needs_rearm,
+
+    closed,
+
+    nonblocking,
+
+    was_ever_registered,
+    ignore_updates,
+
+    cancelled,
+    registered,
+
+    const Set = std.EnumSet(PollFlags);
+    const Struct = std.enums.EnumFieldStruct(PollFlags, bool, false);
+
+    static fn fromKQueueEvent(kqueue_event: KEvent): Set {
+        let flags = Set{};
+        if (kqueue_event.filter == std.posix.system.EVFILT.READ) {
+            flags.insert(PollFlags.readable);
+            log("readable", .{});
+            if (kqueue_event.flags & EV_EOF != 0) {
+                flags.insert(PollFlags.hup);
+                log("hup", .{});
+            }
+        } else if (kqueue_event.filter == std.posix.system.EVFILT.WRITE) {
+            flags.insert(PollFlags.writable);
+            log("writable", .{});
+            if (kqueue_event.flags & EV_EOF != 0) {
+                flags.insert(PollFlags.hup);
+                log("hup", .{});
+            }
+        } else if (kqueue_event.filter == std.posix.system.EVFILT.PROC) {
+            log("proc", .{});
+            flags.insert(PollFlags.process);
+        } else if (comptime Environment.isMac) {
+            if (kqueue_event.filter == std.posix.system.EVFILT.MACHPORT) {
+                log("machport", .{});
+                flags.insert(PollFlags.machport);
+            }
+        }
+        return flags;
+    }
+
+    static fn fromEpollEvent(epoll: std.os.linux.epoll_event): Set {
+        let flags = Set{};
+        if (epoll.events & std.os.linux.EPOLL.IN != 0) {
+            flags.insert(PollFlags.readable);
+            log("readable", .{});
+        }
+        if (epoll.events & std.os.linux.EPOLL.OUT != 0) {
+            flags.insert(PollFlags.writable);
+            log("writable", .{});
+        }
+        if (epoll.events & std.os.linux.EPOLL.ERR != 0) {
+            flags.insert(PollFlags.eof);
+            log("eof", .{});
+        }
+        if (epoll.events & std.os.linux.EPOLL.HUP != 0) {
+            flags.insert(PollFlags.hup);
+            log("hup", .{});
+        }
+        return flags;
+    }
+
+    static fn applyKQueue(
+        comptime action: @Type(.enum_literal),
+        tag: PollableTag,
+        poll: *Poll,
+        fd: bun.FD,
+        kqueue_event: *KEvent,
+    ) {
+        log("register({s}, {f})", .{ @tagName(action), fd });
+        defer {
+            switch (comptime action) {
+                .readable => poll.flags.insert(PollFlags.poll_readable),
+                .writable => poll.flags.insert(PollFlags.poll_writable),
+                .cancel => {
+                    if (poll.flags.contains(PollFlags.poll_readable)) {
+                        poll.flags.remove(PollFlags.poll_readable);
+                    } else if (poll.flags.contains(PollFlags.poll_writable)) {
+                        poll.flags.remove(PollFlags.poll_writable);
+                    } else {
+                        unreachable;
+                    }
+                },
+                else => @compileError("unreachable"),
+            }
+
+            if (comptime Environment.isMac && Environment.allow_assert && action != .cancel) {
+                Poll.generation_number_monotonic += 1;
+                poll.generation_number = Poll.generation_number_monotonic;
+            }
+        }
+
+        const one_shot_flag = std.posix.system.EV.ONESHOT;
+        const udata: usize = unsafe { @intFromPtr(Pollable.init(tag, poll).ptr()) };
+        const kevent_pair = switch (comptime action) {
+            .readable => .{ std.posix.system.EVFILT.READ, std.c.EV.ADD | one_shot_flag },
+            .writable => .{ std.posix.system.EVFILT.WRITE, std.c.EV.ADD | one_shot_flag },
+            .cancel => if (poll.flags.contains(.poll_readable))
+                .{ std.posix.system.EVFILT.READ, std.c.EV.DELETE }
+            else if (poll.flags.contains(.poll_writable))
+                .{ std.posix.system.EVFILT.WRITE, std.c.EV.DELETE }
+            else
+                unreachable,
+            else => @compileError("invalid action: " ++ @tagName(action)),
+        };
+        const filter: i16 = kevent_pair[0];
+        const flags_: u16 = kevent_pair[1];
+        kqueue_event.* = std.mem.zeroes(KEvent);
+        kqueue_event.ident = @intCast(fd.native());
+        kqueue_event.filter = filter;
+        kqueue_event.flags = flags_;
+        kqueue_event.udata = udata;
+        if (comptime @hasField(KEvent, "ext")) {
+            const gen: u64 = if (comptime action == .cancel) poll.generation_number else Poll.generation_number_monotonic;
+            kqueue_event.ext = .{ gen, 0 };
+        }
+    }
+}
+
+pub struct Poll {
+    flags: PollFlags.Set = PollFlags.Set.initEmpty(),
     generation_number: GenerationNumberInt = 0,
 
-    const GenerationNumberInt = if (Environment.isMac and Environment.allow_assert) u64 else u0;
+    const GenerationNumberInt = if (Environment.isMac && Environment.allow_assert) u64 else u0;
 
     static let generation_number_monotonic: GenerationNumberInt = 0;
 
-    pub const Tag = Pollable.Tag;
+    pub const Tag = PollableTag;
+    const Flags = PollFlags;
 
-    pub const Flags = enum {
-        poll_readable,
-        poll_writable,
-        poll_process,
-        poll_machport,
-
-        readable,
-        writable,
-        process,
-        eof,
-        hup,
-        machport,
-
-        fifo,
-        tty,
-
-        one_shot,
-        needs_rearm,
-
-        closed,
-
-        nonblocking,
-
-        was_ever_registered,
-        ignore_updates,
-
-        cancelled,
-        registered,
-
-        pub const Set = std.EnumSet(Flags);
-        pub const Struct = std.enums.EnumFieldStruct(Flags, bool, false);
-
-        pub fn fromKQueueEvent(kqueue_event: KEvent) Flags.Set {
-            let flags = Flags.Set{};
-            if (kqueue_event.filter == std.posix.system.EVFILT.READ) {
-                flags.insert(Flags.readable);
-                log("readable", .{});
-                if (kqueue_event.flags & EV_EOF != 0) {
-                    flags.insert(Flags.hup);
-                    log("hup", .{});
-                }
-            } else if (kqueue_event.filter == std.posix.system.EVFILT.WRITE) {
-                flags.insert(Flags.writable);
-                log("writable", .{});
-                if (kqueue_event.flags & EV_EOF != 0) {
-                    flags.insert(Flags.hup);
-                    log("hup", .{});
-                }
-            } else if (kqueue_event.filter == std.posix.system.EVFILT.PROC) {
-                log("proc", .{});
-                flags.insert(Flags.process);
-            } else if (comptime Environment.isMac) {
-                if (kqueue_event.filter == std.posix.system.EVFILT.MACHPORT) {
-                    log("machport", .{});
-                    flags.insert(Flags.machport);
-                }
-            }
-            return flags;
-        }
-
-        pub fn fromEpollEvent(epoll: std.os.linux.epoll_event) Flags.Set {
-            let flags = Flags.Set{};
-            if (epoll.events & std.os.linux.EPOLL.IN != 0) {
-                flags.insert(Flags.readable);
-                log("readable", .{});
-            }
-            if (epoll.events & std.os.linux.EPOLL.OUT != 0) {
-                flags.insert(Flags.writable);
-                log("writable", .{});
-            }
-            if (epoll.events & std.os.linux.EPOLL.ERR != 0) {
-                flags.insert(Flags.eof);
-                log("eof", .{});
-            }
-            if (epoll.events & std.os.linux.EPOLL.HUP != 0) {
-                flags.insert(Flags.hup);
-                log("hup", .{});
-            }
-            return flags;
-        }
-
-        pub fn applyKQueue(
-            comptime action: @Type(.enum_literal),
-            tag: Pollable.Tag,
-            poll: *Poll,
-            fd: bun.FD,
-            kqueue_event: *KEvent,
-        ) void {
-            log("register({s}, {f})", .{ @tagName(action), fd });
-            defer {
-                switch (comptime action) {
-                    .readable => poll.flags.insert(Flags.poll_readable),
-                    .writable => poll.flags.insert(Flags.poll_writable),
-                    .cancel => {
-                        if (poll.flags.contains(Flags.poll_readable)) {
-                            poll.flags.remove(Flags.poll_readable);
-                        } else if (poll.flags.contains(Flags.poll_writable)) {
-                            poll.flags.remove(Flags.poll_writable);
-                        } else {
-                            unreachable;
-                        }
-                    },
-                    else => @compileError("unreachable"),
-                }
-
-                if (comptime Environment.isMac and Environment.allow_assert and action != .cancel) {
-                    generation_number_monotonic += 1;
-                    poll.generation_number = generation_number_monotonic;
-                }
-            }
-
-            const one_shot_flag = std.posix.system.EV.ONESHOT;
-            const udata: usize = @intFromPtr(Pollable.init(tag, poll).ptr());
-            const filter: i16, const flags_: u16 = switch (comptime action) {
-                .readable => .{ std.posix.system.EVFILT.READ, std.c.EV.ADD | one_shot_flag },
-                .writable => .{ std.posix.system.EVFILT.WRITE, std.c.EV.ADD | one_shot_flag },
-                .cancel => if (poll.flags.contains(.poll_readable))
-                    .{ std.posix.system.EVFILT.READ, std.c.EV.DELETE }
-                else if (poll.flags.contains(.poll_writable))
-                    .{ std.posix.system.EVFILT.WRITE, std.c.EV.DELETE }
-                else
-                    unreachable,
-                else => @compileError("invalid action: " ++ @tagName(action)),
-            };
-            kqueue_event.* = std.mem.zeroes(KEvent);
-            kqueue_event.ident = @intCast(fd.native());
-            kqueue_event.filter = filter;
-            kqueue_event.flags = flags_;
-            kqueue_event.udata = udata;
-            if (comptime @hasField(KEvent, "ext")) {
-                const gen: u64 = if (comptime action == .cancel) poll.generation_number else generation_number_monotonic;
-                kqueue_event.ext = .{ gen, 0 };
-            }
-        }
-    };
-
-    pub fn unregisterWithFd(this: *Poll, watcher_fd: bun.FD, fd: bun.FD) void {
-        _ = linux.epoll_ctl(
+    fn unregisterWithFd(*_, watcher_fd: bun.FD, fd: bun.FD) {
+        * = linux.epoll_ctl(
             watcher_fd.cast(),
             linux.EPOLL.CTL_DEL,
             fd.cast(),
             null,
         );
-        this.flags.remove(.registered);
+        _.flags.remove(.registered);
     }
 
     static fn onUpdateKQueue(
@@ -601,13 +606,13 @@ pub const Poll = struct {
 
             inline else => |t| {
                 const poll = pollable.poll();
-                let this: *Pollable.Tag.Type(t) = unsafe { @alignCast(@fieldParentPtr("io_poll", poll)) };
+                let item: *PollableTag.Type(t) = unsafe { @alignCast(@fieldParentPtr("io_poll", poll)) };
                 if (event.flags == std.c.EV.ERROR) {
                     log("error({d}) = {d}", .{ event.ident, event.data });
-                    this.onIOError(bun.sys.Error.fromCode(@enumFromInt(event.data), .kevent));
+                    item.onIOError(bun.sys.Error.fromCode(@enumFromInt(event.data), .kevent));
                 } else {
                     log("ready({d}) = {d}", .{ event.ident, event.data });
-                    this.onReady();
+                    item.onReady();
                 }
             },
         }
@@ -615,27 +620,27 @@ pub const Poll = struct {
 
     static fn onUpdateEpoll(
         poll: *Poll,
-        tag: Pollable.Tag,
+        tag: PollableTag,
         event: linux.epoll_event,
     ) {
         switch (tag) {
             .empty => {},
 
             inline else => |t| {
-                let this: *Pollable.Tag.Type(t) = unsafe { @alignCast(@fieldParentPtr("io_poll", poll)) };
+                let item: *PollableTag.Type(t) = unsafe { @alignCast(@fieldParentPtr("io_poll", poll)) };
                 if ((event.events & linux.EPOLL.ERR) != 0) {
                     const errno = bun.sys.getErrno(event.events);
                     log("error() = {s}", .{@tagName(errno)});
-                    this.onIOError(bun.sys.Error.fromCode(errno, .epoll_ctl));
+                    item.onIOError(bun.sys.Error.fromCode(errno, .epoll_ctl));
                 } else {
                     log("ready()", .{});
-                    this.onReady();
+                    item.onReady();
                 }
             },
         }
     }
 
-    pub fn registerForEpoll(this: *Poll, tag: Pollable.Tag, loop: *Loop, comptime flag: Flags, one_shot: bool, fd: bun.FD) bun.sys.Maybe(void) {
+    fn registerForEpoll(*_, tag: PollableTag, loop: *Loop, comptime flag: PollFlags, one_shot: bool, fd: bun.FD): bun.sys.Maybe(void) {
         const watcher_fd = loop.pollfd();
 
         log("register: {s} ({f})", .{ @tagName(flag), fd });
@@ -643,11 +648,11 @@ pub const Poll = struct {
         bun.assert(fd != bun.invalid_fd);
 
         if (one_shot) {
-            this.flags.insert(.one_shot);
+            _.flags.insert(.one_shot);
         }
 
         if (comptime Environment.isLinux) {
-            const one_shot_flag: u32 = if (!this.flags.contains(.one_shot)) 0 else linux.EPOLL.ONESHOT;
+            const one_shot_flag: u32 = if (!_.flags.contains(.one_shot)) 0 else linux.EPOLL.ONESHOT;
 
             const flags: u32 = switch (comptime flag) {
                 .process,
@@ -659,9 +664,9 @@ pub const Poll = struct {
 
             let event = std.mem.zeroes(linux.epoll_event);
             event.events = flags;
-            event.data.u64 = unsafe { @intFromPtr(Pollable.init(tag, this).ptr()) };
+            event.data.u64 = unsafe { @intFromPtr(Pollable.init(tag, _).ptr()) };
 
-            const op: u32 = if (this.flags.contains(.was_ever_registered) or this.flags.contains(.needs_rearm)) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD;
+            const op: u32 = if (_.flags.contains(.was_ever_registered) || _.flags.contains(.needs_rearm)) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD;
 
             const ctl = linux.epoll_ctl(
                 watcher_fd.cast(),
@@ -670,26 +675,26 @@ pub const Poll = struct {
                 &event,
             );
 
-            if (bun.sys.Maybe(void).errnoSys(ctl, .epoll_ctl)) |errno| {
+            if (errno := bun.sys.Maybe(void).errnoSys(ctl, .epoll_ctl)) {
                 return errno;
             }
-            this.flags.insert(.registered);
-            this.flags.insert(.was_ever_registered);
+            _.flags.insert(.registered);
+            _.flags.insert(.was_ever_registered);
         } else {
             @compileError("epoll not supported on this platform");
         }
 
-        this.flags.insert(switch (flag) {
+        _.flags.insert(switch (flag) {
             .poll_readable => .poll_readable,
             .poll_process => if (comptime Environment.isLinux) .poll_readable else .poll_process,
             .poll_writable => .poll_writable,
             else => @compileError("unreachable"),
         });
-        this.flags.remove(.needs_rearm);
+        _.flags.remove(.needs_rearm);
 
         return .success;
     }
-};
+}
 
 pub const retry = bun.sys.E.AGAIN;
 

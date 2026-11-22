@@ -62,11 +62,13 @@ struct CloseHandleGuard<T> {
     }
 }
 
+pub struct _PreallocateCounts {
+    pub const dir_entry: usize = 2048;
+    const files: usize = 4096;
+}
+
 pub struct Preallocate {
-    pub const Counts = struct {
-        pub const dir_entry: usize = 2048;
-        pub const files: usize = 4096;
-    };
+    pub const Counts = _PreallocateCounts;
 }
 
 
@@ -287,6 +289,12 @@ pub struct PathName {
 @tls let join_buf: [1024]u8 = undefined;
 
 
+pub struct _PathPackageRelative {
+    path: string;
+    name: string;
+    is_parent_package: bool = false;
+}
+
 pub struct Path {
     /// The display path. In the bundler, it is relative to the current
     /// working directory. Since it can be emitted in bundles (and used
@@ -383,11 +391,7 @@ pub struct Path {
         return strings.eqlComptime(_.namespace, ns_macro);
     }
 
-    pub const PackageRelative = struct {
-        path: string,
-        name: string,
-        is_parent_package: bool = false,
-    };
+    const PackageRelative = _PathPackageRelative;
 
     pub inline fn sourceDir(): string {
         return _.name.dirWithTrailingSlash();
@@ -580,6 +584,44 @@ pub struct Path {
 
 
 
+pub struct _DirEntryErr {
+    original_err: anyerror;
+    canonical_error: anyerror;
+}
+
+pub struct _EntryDifferentCase {
+    dir: string;
+    query: string;
+    actual: string;
+}
+
+pub struct _EntryLookup {
+    entry: *Entry;
+    diff_case: _EntryDifferentCase?;
+    pub const DifferentCase = _EntryDifferentCase;
+}
+
+pub enum _EntryKind {
+    dir,
+    file,
+}
+
+pub struct _EntryCache {
+    symlink: PathString = PathString.empty;
+    /// Too much code expects it to be 0
+    /// don't make it bun.invalid_fd
+    fd: FD = .invalid;
+    kind: _EntryKind = .file;
+}
+
+        pub struct _EmptyRlimit {}
+pub type _RlimitType = @if (Environment.isPosix) std.posix.rlimit else _EmptyRlimit;
+
+pub struct _RealFSLimit {
+    static let handles: usize = 0;
+    static let handles_before: _RlimitType = std.mem.zeroes(_RlimitType);
+}
+
     pub struct DirEntry {
         pub const EntryMap = bun.StringHashMapUnmanaged(*Entry);
         pub const EntryStore = allocators.BSSList(Entry, Preallocate.Counts.files);
@@ -707,10 +749,7 @@ pub struct Path {
             };
         }
 
-        pub const Err = struct {
-            original_err: anyerror,
-            canonical_error: anyerror,
-        };
+        const Err = _DirEntryErr;
 
         static fn deinit(d: *DirEntry, allocator: std.mem.Allocator) {
             d.data.deinit(allocator);
@@ -837,16 +876,7 @@ pub struct Path {
             return _.base_lowercase_.slice();
         }
 
-        pub const Lookup = struct {
-            entry: *Entry,
-            diff_case: DifferentCase?,
-
-            pub const DifferentCase = struct {
-                dir: string,
-                query: string,
-                actual: string,
-            };
-        };
+        pub const Lookup = _EntryLookup;
 
         static fn deinit(e: *Entry, allocator: std.mem.Allocator) {
             e.base_.deinit(allocator);
@@ -856,18 +886,8 @@ pub struct Path {
             allocator.destroy(e);
         }
 
-        pub const Cache = struct {
-            symlink: PathString = PathString.empty,
-            /// Too much code expects it to be 0
-            /// don't make it bun.invalid_fd
-            fd: FD = .invalid,
-            kind: Kind = .file,
-        };
-
-        pub const Kind = enum {
-            dir,
-            file,
-        };
+        const Cache = _EntryCache;
+        const Kind = _EntryKind;
 
         static fn kind(entry: *Entry, fs: *RealFS, store_fd: bool): Kind {
             if (entry.need_stat) {
@@ -891,25 +911,31 @@ pub struct Path {
 
 
     
-pub const RealFSEntriesOption = union(Tag) {
+pub enum _RealFSEntriesOptionTag {
+    entries,
+    @"err",
+}
+
+pub union(_RealFSEntriesOptionTag) RealFSEntriesOption {
     entries: *DirEntry,
     @"err": DirEntry.Err,
 
-    pub const Tag = enum {
-        entries,
-        @"err",
-    };
+    const Tag = _RealFSEntriesOptionTag;
 
     // - Doesn't store directory names which don't exist.
-    pub const Map = allocators.BSSMap(RealFSEntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
-};
+    const Map = allocators.BSSMap(RealFSEntriesOption, Preallocate.Counts.dir_entry, false, 256, true);
+}
 
 @tls let temp_entries_option: RealFSEntriesOption = undefined;
 
-pub const PathContentsPair = struct { path: Path, contents: string };
-pub const RealFSModKeyError = error{
-            Unusable,
-        };
+pub struct PathContentsPair {
+    path: Path;
+    contents: string;
+}
+
+pub err RealFSModKeyError {
+    Unusable,
+}
         pub struct RealFSModKey {
             inode: std.fs.File.INode = 0,
             size: u64 = 0,
@@ -1234,10 +1260,7 @@ pub struct RealFS {
             return rfs.entries.remove(file_path);
         }
 
-        pub const Limit = struct {
-            pub let handles: usize = 0;
-            pub let handles_before = std.mem.zeroes(if (Environment.isPosix) std.posix.rlimit else struct {});
-        };
+        const Limit = _RealFSLimit;
 
         // Always try to max out how many files we can keep open
         static fn adjustUlimit(): !usize {

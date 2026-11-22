@@ -65,6 +65,17 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const TermiosField = enum {
+    iflag,
+    oflag,
+    lflag,
+    cflag,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T,
@@ -202,6 +213,23 @@ pub const PtyResult = struct {
     hpcon: if (Environment.isWindows) HPCON else void,
 };
 
+const OpenPtyTermios = extern struct {
+    c_iflag: u32,
+    c_oflag: u32,
+    c_cflag: u32,
+    c_lflag: u32,
+    c_cc: [20]u8,
+    c_ispeed: u32,
+    c_ospeed: u32,
+};
+
+const Winsize = extern struct {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16,
+    ws_ypixel: u16,
+};
+
 pub const LibUtil = struct {
 
 pub fn getHandle() ?*anyopaque {
@@ -223,6 +251,18 @@ pub fn getHandle() ?*anyopaque {
 pub fn getOpenPty() ?OpenPtyFn {
             return bun.sys.dlsymWithHandle(OpenPtyFn, "openpty", getHandle);
     }
+};
+
+pub const PseudoConsoleRunner = struct {
+
+pub fn run(h: bun.windows.HPCON) void {
+            _ = bun.windows.ClosePseudoConsole(h);
+    }
+};
+
+pub const PosixIoctl = struct {
+    const TIOCSWINSZ: c_ulong = (if (Environment.isMac) 2148037735 else 21524);
+    const IoctlWinsize = Winsize;
 };
 
 pub const Terminal = @This();
@@ -518,9 +558,9 @@ pub fn resize(self: *Terminal, globalObject: *jsc.JSGlobalObject, callframe: *js
         return globalObject.throw("resize() requires valid rows argument", .{});
 };
         if (comptime Environment.isPosix) {
-            var winsize = PosixIoctl.Winsize{ .ws_row = new_rows, .ws_col = new_cols, .ws_xpixel = 0, .ws_ypixel = 0 };
+            var winsize = PosixIoctl.IoctlWinsize{ .ws_row = new_rows, .ws_col = new_cols, .ws_xpixel = 0, .ws_ypixel = 0 };
             _ = &winsize;
-            const ioctl_result = PosixIoctl.ioctl(self.master_fd.cast(), PosixIoctl.TIOCSWINSZ, (&winsize));
+            const ioctl_result = ioctl(self.master_fd.cast(), PosixIoctl.TIOCSWINSZ, (&winsize));
             if ((ioctl_result != 0)) {
                 return globalObject.throw("Failed to resize terminal", .{});
             }
@@ -758,60 +798,19 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const log = bun.Output.scoped(.Terminal, .hidden);
 pub const CreatePtyError = error{ OpenPtyFailed, DupFailed, NotSupported };
-pub const TermiosField = enum { iflag, oflag, lflag, cflag };
 const Termios = (if (Environment.isPosix) std.posix.termios else void);
 const HANDLE = bun.windows.HANDLE;
 const HPCON = bun.windows.HPCON;
 var pipe_serial = std.atomic.Value(u32).init(0);
 const InitError = error{ OpenPtyFailed, DupFailed, NotSupported, WriterStartFailed, ReaderStartFailed };
-const OpenPtyTermios = extern struct {
-    c_iflag: u32,
-    c_oflag: u32,
-    c_cflag: u32,
-    c_lflag: u32,
-    c_cc: [20]u8,
-    c_ispeed: u32,
-    c_ospeed: u32,
-};
-const Winsize = extern struct {
-    ws_row: u16,
-    ws_col: u16,
-    ws_xpixel: u16,
-    ws_ypixel: u16,
-};
-const MacOpenPty = struct {
-    extern "c" fn openpty(
-        amaster: *c_int,
-        aslave: *c_int,
-        name: ?[*]u8,
-        termp: ?*const OpenPtyTermios,
-        winp: ?*const Winsize,
-    ) c_int;
-};
 var libutil_handle: ?*anyopaque = null;
 var libutil_loaded: bool = false;
-const PseudoConsoleRunner = struct {
 
-pub fn run(h: bun.windows.HPCON) void {
-            _ = bun.windows.ClosePseudoConsole(h);
-    }
-};
-const PosixIoctl = struct {
-    const TIOCSWINSZ: c_ulong = if (Environment.isMac) 0x80087467 else 0x5414;
-
-    const Winsize = extern struct {
-        ws_row: u16,
-        ws_col: u16,
-        ws_xpixel: u16,
-        ws_ypixel: u16,
-    };
-
-    extern "c" fn ioctl(fd: c_int, request: c_ulong, ...) c_int;
-};
+extern "c" fn openpty(amaster: *c_int, aslave: *c_int, name: ?[*]u8, termp: ?*const OpenPtyTermios, winp: ?*const Winsize) callconv(.c) c_int;
 
 pub fn getOpenPtyFn() ?OpenPtyFn {
         if (comptime Environment.isMac) {
-            return (&MacOpenPty.openpty);
+            return (&openpty);
         }
         if (comptime Environment.isLinux) {
             return LibUtil.getOpenPty();
@@ -1007,3 +1006,5 @@ pub fn setTermios(fd: bun.FD, termios_p: *const Termios) bool {
         _ = (blk_catch_7: { break :blk_catch_7 ((std.posix.tcsetattr(fd.cast(), .NOW, termios_p.*)) catch |__ce_7| { _ = &__ce_7; return false; }); });
         return true;
 }
+
+extern "c" fn ioctl(fd: c_int, request: c_ulong, ...) callconv(.c) c_int;

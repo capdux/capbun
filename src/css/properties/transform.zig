@@ -222,6 +222,202 @@ pub fn eql(lhs: *const @This(), other: *const @This()) bool {
     }
 };
 
+pub const TransformTranslate = struct {
+    x: LengthPercentage,
+    y: LengthPercentage,
+
+pub fn deepClone(self: TransformTranslate, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const TransformTranslate3d = struct {
+    x: LengthPercentage,
+    y: LengthPercentage,
+    z: Length,
+
+pub fn deepClone(self: TransformTranslate3d, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const TransformScale = struct {
+    x: NumberOrPercentage,
+    y: NumberOrPercentage,
+
+pub fn deepClone(self: TransformScale, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const TransformScale3d = struct {
+    x: NumberOrPercentage,
+    y: NumberOrPercentage,
+    z: NumberOrPercentage,
+
+pub fn deepClone(self: TransformScale3d, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const TransformRotate3d = struct {
+    x: f32,
+    y: f32,
+    z: f32,
+    angle: Angle,
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+
+pub fn deepClone(self: TransformRotate3d, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+};
+
+pub const TransformSkew = struct {
+    x: Angle,
+    y: Angle,
+
+pub fn deepClone(self: TransformSkew, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const Transform = union(enum) {
+    translate: TransformTranslate,
+    translate_x: LengthPercentage,
+    translate_y: LengthPercentage,
+    translate_z: Length,
+    translate_3d: TransformTranslate3d,
+    scale: TransformScale,
+    scale_x: NumberOrPercentage,
+    scale_y: NumberOrPercentage,
+    scale_z: NumberOrPercentage,
+    scale_3d: TransformScale3d,
+    rotate: Angle,
+    rotate_x: Angle,
+    rotate_y: Angle,
+    rotate_z: Angle,
+    rotate_3d: TransformRotate3d,
+    skew: TransformSkew,
+    skew_x: Angle,
+    skew_y: Angle,
+    perspective: Length,
+    matrix: Matrix(f32),
+    matrix_3d: Matrix3d(f32),
+
+pub fn deepClone(self: Transform, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+    pub const parse = parseTransform;
+    pub const toCss = toCssTransform;
+};
+
+pub const Perspective = union(enum) {
+    none: void,
+    length: Length,
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+
+pub fn deepClone(self: Perspective, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
+pub const TranslateXYZ = struct {
+    x: LengthPercentage,
+    y: LengthPercentage,
+    z: Length,
+
+pub fn __generateDeepClone() void {
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const Translate = union(enum) {
+    none: void,
+    xyz: TranslateXYZ,
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+
+pub fn deepClone(self: Translate, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+    pub const parse = parseTranslate;
+    pub const toCss = toCssTranslate;
+    pub const toTransform = toTransformTranslate;
+};
+
 pub const Rotate = struct {
     x: f32,
     y: f32,
@@ -338,6 +534,39 @@ pub fn deepClone(self: Rotate, allocator: std.mem.Allocator) @This() {
     }
 };
 
+pub const ScaleXYZ = struct {
+    x: NumberOrPercentage,
+    y: NumberOrPercentage,
+    z: NumberOrPercentage,
+
+pub fn __generateDeepClone() void {
+    }
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+};
+
+pub const Scale = union(enum) {
+    none: void,
+    xyz: ScaleXYZ,
+
+pub fn eql(lhs: *const @This(), other: *const @This()) bool {
+            return css.implementEql(@This(), lhs, other);
+    }
+
+pub fn deepClone(self: Scale, allocator: std.mem.Allocator) @This() {
+            const s = self;
+            return css.implementDeepClone(@This(), (blk: {
+            break :blk (&s);
+
+}), allocator);
+    }
+    pub const parse = parseScale;
+    pub const toCss = toCssScale;
+    pub const toTransform = toTransformScale;
+};
+
 pub const TransformHandler = struct {
     transform: ?TransformAndPrefix = null,
     translate: ?Translate = null,
@@ -450,190 +679,6 @@ const LengthPercentage = css.css_values.length.LengthPercentage;
 const Length = css.css_values.length.LengthValue;
 const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 const Angle = css.css_values.angle.Angle;
-pub const Transform = union(enum) {
-    translate: struct {
-        x: LengthPercentage,
-        y: LengthPercentage,
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-    translate_x: LengthPercentage,
-    translate_y: LengthPercentage,
-    translate_z: Length,
-    translate_3d: struct {
-        x: LengthPercentage,
-        y: LengthPercentage,
-        z: Length,
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-    scale: struct {
-        x: NumberOrPercentage,
-        y: NumberOrPercentage,
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-    scale_x: NumberOrPercentage,
-    scale_y: NumberOrPercentage,
-    scale_z: NumberOrPercentage,
-    scale_3d: struct {
-        x: NumberOrPercentage,
-        y: NumberOrPercentage,
-        z: NumberOrPercentage,
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-    rotate: Angle,
-    rotate_x: Angle,
-    rotate_y: Angle,
-    rotate_z: Angle,
-    rotate_3d: struct {
-        x: f32,
-        y: f32,
-        z: f32,
-        angle: Angle,
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    skew: struct {
-        x: Angle,
-        y: Angle,
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-    skew_x: Angle,
-    skew_y: Angle,
-    perspective: Length,
-    matrix: Matrix(f32),
-    matrix_3d: Matrix3d(f32),
-
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
-    }
-
-pub fn eql(self: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), self, other);
-    }
-    pub const parse = parseTransform;
-    pub const toCss = toCssTransform;
-};
-pub const Perspective = union(enum) {
-    /// No perspective transform is applied.
-    none,
-    /// Distance to the center of projection.
-    length: Length,
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const Translate = union(enum) {
-    /// The "none" keyword.
-    none,
-
-    /// The x, y, and z translations.
-    xyz: struct {
-        /// The x translation.
-        x: LengthPercentage,
-        /// The y translation.
-        y: LengthPercentage,
-        /// The z translation.
-        z: Length,
-
-        pub fn __generateDeepClone() void {}
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-
-    pub const parse = parseTranslate;
-    pub const toCss = toCssTranslate;
-    pub const toTransform = toTransformTranslate;
-
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const Scale = union(enum) {
-    /// The "none" keyword.
-    none,
-
-    /// Scale on the x, y, and z axis.
-    xyz: struct {
-        /// Scale on the x axis.
-        x: NumberOrPercentage,
-        /// Scale on the y axis.
-        y: NumberOrPercentage,
-        /// Scale on the z axis.
-        z: NumberOrPercentage,
-
-        pub fn __generateDeepClone() void {}
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-
-    pub const parse = parseScale;
-    pub const toCss = toCssScale;
-    pub const toTransform = toTransformScale;
-
-    pub fn eql(this: *const @This(), other: *const @This()) bool {
-        return css.implementEql(@This(), this, other);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
 const TransformAndPrefix = struct { TransformList, VendorPrefix };
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;

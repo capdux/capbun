@@ -22,23 +22,25 @@ const BorderImage = css.css_properties.border_image.BorderImage;
 
 const VendorPrefix = css.VendorPrefix;
 
+struct ClipPathShape {
+    /// A basic shape.
+    // todo_stuff.think_about_mem_mgmt
+    shape: *BasicShape,
+    /// A reference box that the shape is positioned according to.
+    reference_box: GeometryBox,
+}
+
 /// A value for the [clip-path](https://www.w3.org/TR/css-masking-1/#the-clip-path) property.
-const ClipPath = union(enum) {
+union(enum) ClipPath {
     /// No clip path.
-    None,
+    None: void,
     /// A url reference to an SVG path element.
     Url: Url,
     /// A basic shape, positioned according to the reference box.
-    Shape: struct {
-        /// A basic shape.
-        // todo_stuff.think_about_mem_mgmt
-        shape: *BasicShape,
-        /// A reference box that the shape is positioned according to.
-        reference_box: GeometryBox,
-    },
+    Shape: ClipPathShape,
     /// A reference box.
     Box: GeometryBox,
-};
+}
 
 /// A [`<geometry-box>`](https://www.w3.org/TR/css-masking-1/#typedef-geometry-box) value
 /// as used in the `mask-clip` and `clip-path` properties.
@@ -75,7 +77,7 @@ pub enum GeometryBox {
 }
 
 /// A CSS [`<basic-shape>`](https://www.w3.org/TR/css-shapes-1/#basic-shape-functions) value.
-pub const BasicShape = union(enum) {
+pub union(enum) BasicShape {
     /// An inset rectangle.
     Inset: InsetRect,
     /// A circle.
@@ -84,7 +86,7 @@ pub const BasicShape = union(enum) {
     Ellipse: Ellipse,
     /// A polygon.
     Polygon: Polygon,
-};
+}
 
 /// An [`inset()`](https://www.w3.org/TR/css-shapes-1/#funcdef-inset) rectangle shape.
 struct InsetRect {
@@ -122,14 +124,14 @@ pub struct Polygon {
 
 /// A [`<shape-radius>`](https://www.w3.org/TR/css-shapes-1/#typedef-shape-radius) value
 /// that defines the radius of a `circle()` or `ellipse()` shape.
-pub const ShapeRadius = union(enum) {
+pub union(enum) ShapeRadius {
     /// An explicit length or percentage.
     LengthPercentage: LengthPercentage,
     /// The length from the center to the closest side of the box.
-    ClosestSide,
+    ClosestSide: void,
     /// The length from the center to the farthest side of the box.
-    FarthestSide,
-};
+    FarthestSide: void,
+}
 
 /// A point within a `polygon()` shape.
 ///
@@ -163,23 +165,24 @@ pub enum MaskMode {
 }
 
 /// A value for the [mask-clip](https://www.w3.org/TR/css-masking-1/#the-mask-clip) property.
-pub const MaskClip = union(enum) {
+pub union(enum) MaskClip {
     /// A geometry box.
     @"geometry-box": GeometryBox,
     /// The painted content is not clipped.
-    @"no-clip",
+    @"no-clip": void,
 
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        const s = _;
+        return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
-};
+}
 
 /// A value for the [mask-composite](https://www.w3.org/TR/css-masking-1/#the-mask-composite) property.
 pub enum MaskComposite {

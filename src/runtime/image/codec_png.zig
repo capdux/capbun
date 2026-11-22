@@ -50,6 +50,39 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const bun = @import("bun");
 pub const codecs = @import("./codecs.zig");
 pub const quantize = @import("./quantize.zig");
+pub const spng_ctx = opaque {
+};
+
+const Iccp = extern struct {
+    profile_name: [80]u8,
+    profile_len: usize,
+    profile: ?[*]u8,
+};
+
+const Ihdr = extern struct {
+    width: u32,
+    height: u32,
+    bit_depth: u8,
+    color_type: u8,
+    compression_method: u8 = 0,
+    filter_method: u8 = 0,
+    interlace_method: u8 = 0,
+};
+
+const Plte = extern struct {
+    n_entries: u32,
+    entries: [256][4]u8,
+};
+
+const Trns = extern struct {
+    gray: u16 = 0,
+    red: u16 = 0,
+    green: u16 = 0,
+    blue: u16 = 0,
+    n_type3_entries: u32,
+    type3_alpha: [256]u8,
+};
+
 pub const SpngCtxGuard = struct {
     ctx: *spng_ctx,
     __cp_dropped: bool = false,
@@ -62,16 +95,13 @@ pub fn __cp_deinit(self: *SpngCtxGuard) void {
 };
 
 pub const SliceFreeGuard = struct {
-    slice: ?[]u8,
-    __cp_dropped: bool = false,
+    slice: []u8,
+    __cp_errdropped: bool = false,
 
-pub fn __cp_deinit(self: *SliceFreeGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            if (self.slice) |s| {
-                _ = &s;
-                _ = bun.default_allocator.free(s);
-            }
+pub fn __cp_errdeinit(self: *SliceFreeGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = bun.default_allocator.free(self.slice);
     }
 };
 
@@ -88,26 +118,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const spng_ctx = opaque {};
-const Iccp = extern struct {
-    /// PNG's Latin-1 iCCP keyword (1-79 chars + NUL). libspng requires it
-    /// non-empty on encode; the PNG spec marks it purely informational
-    /// (the profile bytes are what describe the colour space), so on
-    /// encode we always write the literal `"ICC Profile"`. The source
-    /// keyword is not threaded through `Decoded`.
-    profile_name: [80]u8,
-    profile_len: usize,
-    profile: ?[*]u8,
-};
-const Ihdr = extern struct {
-    width: u32,
-    height: u32,
-    bit_depth: u8,
-    color_type: u8,
-    compression_method: u8 = 0,
-    filter_method: u8 = 0,
-    interlace_method: u8 = 0,
-};
 const SPNG_CTX_ENCODER = 2;
 const SPNG_FMT_RGBA8 = 1;
 const SPNG_FMT_PNG = 256;
@@ -117,18 +127,6 @@ const SPNG_IMG_COMPRESSION_LEVEL = 2;
 const SPNG_ENCODE_TO_BUFFER = 12;
 const SPNG_COLOR_TYPE_INDEXED = 3;
 const SPNG_COLOR_TYPE_TRUECOLOR_ALPHA = 6;
-const Plte = extern struct {
-    n_entries: u32,
-    entries: [256][4]u8, // r,g,b,alpha(reserved)
-};
-const Trns = extern struct {
-    gray: u16 = 0,
-    red: u16 = 0,
-    green: u16 = 0,
-    blue: u16 = 0,
-    n_type3_entries: u32,
-    type3_alpha: [256]u8,
-};
 
 extern "c" fn spng_ctx_new(flags: c_int) callconv(.c) ?*spng_ctx;
 
@@ -186,7 +184,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64) codecs.Error!codecs.Decoded {
         var out_guard = SliceFreeGuard{ .slice = out };
         _ = &out_guard;
         var __out_guard_moved = false; _ = &__out_guard_moved;
-        defer if (!__out_guard_moved) { __out_guard_moved = true; const __T = @TypeOf(out_guard); if (@typeInfo(__T) == .optional) { if (out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = out_guard; _drop_val.__cp_deinit(); } };
+        errdefer if (!__out_guard_moved) { __out_guard_moved = true; const __T = @TypeOf(out_guard); if (@typeInfo(__T) == .optional) { if (out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { out_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = out_guard; _drop_val.__cp_errdeinit(); } };
         if ((spng_decode_image(ctx, out.ptr, out.len, SPNG_FMT_RGBA8, SPNG_DECODE_TRNS) != 0)) {
             return error.DecodeFailed;
         }
@@ -196,7 +194,6 @@ pub fn decode(bytes: []const u8, max_pixels: u64) codecs.Error!codecs.Decoded {
         break :blk iccp.profile.?[0..iccp.profile_len];
 
 })) else null);
-        out_guard.slice = null;
         return .{ .rgba = out, .width = ihdr.width, .height = ihdr.height, .icc_profile = icc };
 }
 
@@ -283,12 +280,13 @@ pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, d
         _ = &plte;
         var trns: Trns = .{ .n_type3_entries = q_guard.val.colors, .type3_alpha = undefined };
         _ = &trns;
+        const alpha255: u8 = 255;
         {
             var i: i32 = 0;
             _ = &i;
             const __end_0 = q_guard.val.colors;
             while (i < __end_0) : (i += 1) {
-                plte.entries[cp_cast_int(usize, i)] = .{ q_guard.val.palette[@as(usize, @intCast((i * 4)))], q_guard.val.palette[@as(usize, @intCast(((i * 4) + 1)))], q_guard.val.palette[@as(usize, @intCast(((i * 4) + 2)))], 255 };
+                plte.entries[cp_cast_int(usize, i)] = .{ q_guard.val.palette[@as(usize, @intCast((i * 4)))], q_guard.val.palette[@as(usize, @intCast(((i * 4) + 1)))], q_guard.val.palette[@as(usize, @intCast(((i * 4) + 2)))], alpha255 };
                 trns.type3_alpha[cp_cast_int(usize, i)] = q_guard.val.palette[@as(usize, @intCast(((i * 4) + 3)))];
             }
         }

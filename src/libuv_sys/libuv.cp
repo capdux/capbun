@@ -568,20 +568,20 @@ pub type uv_idle_cb = uv_idle_cb_fn?;
     idle_next: [*c]uv_idle_t,
     idle_cb: uv_idle_cb,
 
-    pub fn init(*_: *@This(), loop: *Loop) {
-        @memset(std.mem.asBytes(this), 0);
+    fn init(*_, loop: *Loop) {
+        @memset(std.mem.asBytes(_), 0);
 
-        if (uv_idle_init(loop, this) != 0) {
+        if (uv_idle_init(loop, _) != 0) {
             @panic("internal error: uv_idle_init failed");
         }
     }
 
-    pub fn start(*_: *@This(), cb: uv_idle_cb) {
-        * = uv_idle_start(this, cb);
+    fn start(*_, cb: uv_idle_cb) {
+        * = uv_idle_start(_, cb);
     }
 
-    pub fn stop(*_: *@This()) {
-        * = uv_idle_stop(this);
+    fn stop(*_) {
+        * = uv_idle_stop(_);
     }
 }
 pub const uv_idle_t = struct_uv_idle_s;
@@ -618,16 +618,16 @@ pub type uv_async_cb = uv_async_cb_fn?;
     pub const isActive = handle_impl.isActive;
     pub const fd = handle_impl.fd;
 
-    pub fn init(*_: *@This(), loop: *Loop, callback: uv_async_cb) {
-        @memset(std.mem.asBytes(this), 0);
+    fn init(*_, loop: *Loop, callback: uv_async_cb) {
+        @memset(std.mem.asBytes(_), 0);
 
-        if (uv_async_init(loop, @ptrCast(this), callback) != 0) {
+        if (unsafe { uv_async_init(loop, @ptrCast(_), callback) } != 0) {
             @panic("internal error: uv_async_init failed");
         }
     }
 
-    pub fn send(*_: *@This()) {
-        * = uv_async_send(this);
+    fn send(*_) {
+        * = uv_async_send(_);
     }
 }
 pub const uv_async_t = struct_uv_async_s;
@@ -796,13 +796,13 @@ pub type PAFD_POLL_INFO = [*c]struct__AFD_POLL_INFO;
     len: ULONG,
     base: [*]u8,
 
-    pub fn init(input: []const u8): uv_buf_t {
+    static fn init(input: []const u8): uv_buf_t {
         bun.assert(input.len <= @as(usize, std.math.maxInt(ULONG)));
-        return { len: @truncate(input.len), base: @constCast(input.ptr) };
+        return { len: @truncate(input.len), base: unsafe { @constCast(input.ptr) } };
     }
 
-    pub fn slice(_: *const @This()): []u8 {
-        return this.base[0..this.len];
+    fn slice(): []u8 {
+        return unsafe { _.base[0.._.len] };
     }
 }
 pub const uv_file = c_int;
@@ -1280,30 +1280,30 @@ pub type uv_timer_cb = uv_timer_cb_fn?;
     start_id: u64,
     timer_cb: uv_timer_cb,
 
-    pub fn init(*_: *@This(), loop: *Loop) {
-        if (uv_timer_init(loop, this) != 0) {
+    fn init(*_, loop: *Loop) {
+        if (uv_timer_init(loop, _) != 0) {
             @panic("internal error: uv_timer_init failed");
         }
     }
 
-    pub fn start(*_: *@This(), timeout: u64, repeat: u64, callback: uv_timer_cb) {
-        if (uv_timer_start(this, callback, timeout, repeat) != 0) {
+    fn start(*_, timeout: u64, repeat: u64, callback: uv_timer_cb) {
+        if (uv_timer_start(_, callback, timeout, repeat) != 0) {
             @panic("internal error: uv_timer_start failed");
         }
     }
 
-    pub fn stop(*_: *@This()) {
-        if (uv_timer_stop(this) != 0) {
+    fn stop(*_) {
+        if (uv_timer_stop(_) != 0) {
             @panic("internal error: uv_timer_stop failed");
         }
     }
 
-    pub fn unref(*_: *@This()) {
-        uv_unref(@ptrCast(@alignCast(this)));
+    fn unref(*_) {
+        unsafe { uv_unref(@ptrCast(@alignCast(_))); }
     }
 
-    pub fn ref(*_: *@This()) {
-        uv_ref(@ptrCast(@alignCast(this)));
+    fn ref(*_) {
+        unsafe { uv_ref(@ptrCast(@alignCast(_))); }
     }
 }
 @c struct struct_unnamed_413 {
@@ -1336,17 +1336,17 @@ pub type uv_write_cb = uv_write_cb_fn?;
     event_handle: HANDLE,
     wait_handle: HANDLE,
 
-    pub fn write(req: *@This(), stream: *uv_stream_t, input: *uv_buf_t, context: auto, comptime onWrite: auto): Maybe(void) {
+    fn write(*_, stream: *uv_stream_t, input: *uv_buf_t, context: auto, comptime onWrite: auto): Maybe(void) {
         if (callback := comptime onWrite) {
             const Wrapper = struct {
                 @callconv("c") pub fn uvWriteCb(handler: *uv_write_t, status: ReturnCode) {
-                    callback(@ptrCast(@alignCast(handler.data)), status);
+                    unsafe { callback(@ptrCast(@alignCast(handler.data)), status); }
                 }
             };
 
-            req.data = context;
+            _.data = context;
 
-            const rc = uv_write(req, stream, @ptrCast(input), 1, &Wrapper.uvWriteCb);
+            const rc = unsafe { uv_write(_, stream, @ptrCast(input), 1, &Wrapper.uvWriteCb) };
             bun.sys.syslog("uv_write({d}) = {d}", .{ input.len, rc.int() });
 
             if (e := rc.toError(.write)) {
@@ -1356,7 +1356,7 @@ pub type uv_write_cb = uv_write_cb_fn?;
             return .success;
         }
 
-        const rc = uv_write(req, stream, @ptrCast(input), 1, null);
+        const rc = unsafe { uv_write(_, stream, @ptrCast(input), 1, null) };
         if (e := rc.toError(.write)) {
             return { err: e };
         }
@@ -1434,59 +1434,59 @@ pub const uv_write_t = struct_uv_write_s;
         return .success;
     }
 
-    pub fn open(*_, file: bun.FD): Maybe(void) {
+    fn open(*_, file: bun.FD): Maybe(void) {
         const uv_fd = file.uv();
         if (e := uv_pipe_open(_, uv_fd).toError(.open)) return { err: e };
 
         return .success;
     }
 
-    pub fn listenNamedPipe(*_: *@This(), named_pipe: []const u8, backlog: i32, context: auto, comptime onClientConnect: *const (fn (@TypeOf(context), ReturnCode) void)): Maybe(void) {
-        if (e := this.bind(named_pipe, UV_PIPE_NO_TRUNCATE).asErr()) {
+    fn listenNamedPipe(*_, named_pipe: []const u8, backlog: i32, context: auto, comptime onClientConnect: *const (fn (@TypeOf(context), ReturnCode) void)): Maybe(void) {
+        if (e := _.bind(named_pipe, UV_PIPE_NO_TRUNCATE).asErr()) {
             return { err: e };
         }
-        return this.listen(backlog, context, onClientConnect);
+        return _.listen(backlog, context, onClientConnect);
     }
 
-    pub fn bind(*_: *@This(), named_pipe: []const u8, flags: i32): Maybe(void) {
-        if (e := uv_pipe_bind2(this, named_pipe.ptr, named_pipe.len, i32(flags)).toError(.bind2)) {
+    fn bind(*_, named_pipe: []const u8, flags: i32): Maybe(void) {
+        if (e := uv_pipe_bind2(_, named_pipe.ptr, named_pipe.len, i32(flags)).toError(.bind2)) {
             return { err: e };
         }
         return .success;
     }
 
-    pub fn connect(*_: *@This(), req: *uv_connect_t, name: []const u8, context: auto, comptime onConnect: *const (fn (@TypeOf(context), ReturnCode) void)): Maybe(void) {
-        this.data = @ptrCast(context);
+    fn connect(*_, req: *uv_connect_t, name: []const u8, context: auto, comptime onConnect: *const (fn (@TypeOf(context), ReturnCode) void)): Maybe(void) {
+        _.data = unsafe { @ptrCast(context) };
         const Wrapper = struct {
             @callconv("c") pub fn uvConnectCb(handle: *uv_connect_t, status: ReturnCode) {
-                onConnect(@ptrCast(@alignCast(handle.data)), status);
+                unsafe { onConnect(@ptrCast(@alignCast(handle.data)), status); }
             }
         };
-        if (e := uv_pipe_connect2(req, this, @ptrCast(name.ptr), name.len, UV_PIPE_NO_TRUNCATE, &Wrapper.uvConnectCb).toError(.connect2)) {
+        if (e := unsafe { uv_pipe_connect2(req, _, @ptrCast(name.ptr), name.len, UV_PIPE_NO_TRUNCATE, &Wrapper.uvConnectCb) }.toError(.connect2)) {
             return { err: e };
         }
         return .success;
     }
 
-    pub fn setPendingInstancesCount(*_: *@This(), count: i32) {
-        uv_pipe_pending_instances(this, count);
+    fn setPendingInstancesCount(*_, count: i32) {
+        uv_pipe_pending_instances(_, count);
     }
 
-    pub fn asStream(*_: *@This()): *uv_stream_t {
-        return @ptrCast(this);
+    fn asStream(*_): *uv_stream_t {
+        return unsafe { @ptrCast(_) };
     }
 
     /// Close the pipe handle (if needed) and then free it.
     /// Handles all states: never-initialized (loop == null), already closing,
     /// or active. After uv_pipe_init the handle is in the event loop's
     /// handle_queue; freeing without uv_close corrupts that list.
-    pub fn closeAndDestroy(*_: *@This()) {
-        if (this.loop == null) {
+    fn closeAndDestroy(*_) {
+        if (_.loop == null) {
             // Never initialized — safe to free directly.
-            bun.destroy(this);
-        } else if (!this.isClosing()) {
+            bun.destroy(_);
+        } else if (!_.isClosing()) {
             // Initialized and not yet closing — must uv_close first.
-            this.close(&onCloseDestroy);
+            _.close(&onCloseDestroy);
         }
         // else: already closing — the pending close callback owns the lifetime.
     }
@@ -1703,12 +1703,12 @@ pub type uv_exit_cb = uv_exit_cb_fn?;
     pub const isActive = handle_impl.isActive;
     pub const fd = handle_impl.fd;
 
-    pub fn kill(*_: *@This(), signum: c_int): ReturnCode {
-        return uv_process_kill(@ptrCast(@alignCast(this)), signum);
+    fn kill(*_, signum: c_int): ReturnCode {
+        return unsafe { uv_process_kill(@ptrCast(@alignCast(_)), signum) };
     }
 
-    pub fn getPid(_: *const @This()): c_int {
-        return uv_process_get_pid(@ptrCast(@alignCast(this)));
+    fn getPid(): c_int {
+        return unsafe { uv_process_get_pid(@ptrCast(@alignCast(_))) };
     }
 }
 @c union union_unnamed_428 {
@@ -2011,7 +2011,7 @@ pub type uv_fs_cb = FSCallback?;
     // This assertion tripping is a sign that .deinit() is going to cause invalid memory access
     fn assertInitialized() {
         if (bun.Environment.allow_assert) {
-            if (@intFromPtr(_.loop) == 0xAAAAAAAAAAAA0000) {
+            if (unsafe { @intFromPtr(_.loop) } == 0xAAAAAAAAAAAA0000) {
                 @panic("uv_fs_t was not initialized");
             }
         }
@@ -2020,7 +2020,7 @@ pub type uv_fs_cb = FSCallback?;
     // This assertion tripping is a sign that a memory leak may happen
     fn assertCleanedUp() {
         if (bun.Environment.allow_assert) {
-            if (@intFromPtr(_.loop) == 0xAAAAAAAAAAAA0000) {
+            if (unsafe { @intFromPtr(_.loop) } == 0xAAAAAAAAAAAA0000) {
                 return;
             }
             if ((_.flags & UV_FS_CLEANEDUP) != 0) {
@@ -2032,7 +2032,7 @@ pub type uv_fs_cb = FSCallback?;
 
     fn ptrAs(*_, comptime T: type): T {
         _.assertInitialized();
-        return @ptrCast(_.ptr);
+        return unsafe { @ptrCast(_.ptr) };
     }
 
     /// This value is designed to to be used as the initial value for libuv fs actions.
@@ -2187,8 +2187,8 @@ pub const uv_utsname_t = struct_uv_utsname_s;
     f_ffree: u64,
     f_spare: [4]u64,
 
-    pub fn init(*_: *align(1) struct_uv_statfs_s): bun.StatFS {
-        return this.*;
+    fn init(*_: *align(1) struct_uv_statfs_s): bun.StatFS {
+        return _.*;
     }
 }
 pub const uv_statfs_t = struct_uv_statfs_s;
@@ -2280,20 +2280,20 @@ pub const uv_clock_id = c_uint;
     ctim: uv_timespec_t,
     birthtim: uv_timespec_t,
 
-    pub fn atime(_: @This()): uv_timespec_t {
-        return self.atim;
+    fn atime(): uv_timespec_t {
+        return _.atim;
     }
 
-    pub fn mtime(_: @This()): uv_timespec_t {
-        return self.mtim;
+    fn mtime(): uv_timespec_t {
+        return _.mtim;
     }
 
-    pub fn ctime(_: @This()): uv_timespec_t {
-        return self.ctim;
+    fn ctime(): uv_timespec_t {
+        return _.ctim;
     }
 
-    pub fn birthtime(_: @This()): uv_timespec_t {
-        return self.birthtim;
+    fn birthtime(): uv_timespec_t {
+        return _.birthtim;
     }
 }
 const uv_fs_poll_cb_fn = *const fn ([*c]uv_fs_poll_t, c_int, [*c]const uv_stat_t, [*c]const uv_stat_t) callconv(.c) void;
@@ -3072,31 +3072,31 @@ pub const addrinfo = std.os.windows.ws2_32.addrinfo;
 // https://docs.libuv.org/en/v1.x/stream.html
 fn StreamMixin(comptime Type: type): type {
     return struct {
-        pub fn getWriteQueueSize(*_): usize {
-            return uv_stream_get_write_queue_size(@ptrCast(_));
+        fn getWriteQueueSize(*_): usize {
+            return unsafe { uv_stream_get_write_queue_size(@ptrCast(_)) };
         }
 
-        pub fn listen(*_, backlog: i32, context: auto, comptime onConnect: *const (fn (@TypeOf(context), ReturnCode) void)): Maybe(void) {
-            _.data = @ptrCast(context);
+        fn listen(*_, backlog: i32, context: auto, comptime onConnect: *const (fn (@TypeOf(context), ReturnCode) void)): Maybe(void) {
+            _.data = unsafe { @ptrCast(context) };
             const Wrapper = struct {
                 @callconv("c") pub fn uvConnectCb(handle: *uv_stream_t, status: ReturnCode) {
-                    onConnect(@ptrCast(@alignCast(handle.data)), status);
+                    unsafe { onConnect(@ptrCast(@alignCast(handle.data)), status); }
                 }
             };
-            if (e := uv_listen(@ptrCast(_), backlog, &Wrapper.uvConnectCb).toError(.listen)) {
+            if (e := unsafe { uv_listen(@ptrCast(_), backlog, &Wrapper.uvConnectCb) }.toError(.listen)) {
                 return { err: e };
             }
             return .success;
         }
 
-        pub fn accept(*_, client: *Type): Maybe(void) {
-            if (e := uv_accept(@ptrCast(_), @ptrCast(client)).toError(.accept)) {
+        fn accept(*_, client: *Type): Maybe(void) {
+            if (e := unsafe { uv_accept(@ptrCast(_), @ptrCast(client)) }.toError(.accept)) {
                 return { err: e };
             }
             return .success;
         }
 
-        pub fn readStart(
+        fn readStart(
             *_,
             context: auto,
             comptime alloc_cb: *const (fn (@TypeOf(context), suggested_size: usize) []u8),
@@ -3104,42 +3104,42 @@ fn StreamMixin(comptime Type: type): type {
             comptime read_cb: *const (fn (@TypeOf(context), data: []const u8) void),
         ): Maybe(void) {
             const Context = @TypeOf(context);
-            _.data = @ptrCast(context);
+            _.data = unsafe { @ptrCast(context) };
             const Wrapper = struct {
                 @callconv("c") pub fn uvAllocb(req: *uv_stream_t, suggested_size: usize, buffer: *uv_buf_t) {
-                    const context_data: Context = @ptrCast(@alignCast(req.data));
+                    const context_data: Context = unsafe { @ptrCast(@alignCast(req.data)) };
                     buffer.* = uv_buf_t.init(alloc_cb(context_data, suggested_size));
                 }
                 @callconv("c") pub fn uvReadcb(req: *uv_stream_t, nreads: isize, buffer: *uv_buf_t) {
-                    const context_data: Context = @ptrCast(@alignCast(req.data));
+                    const context_data: Context = unsafe { @ptrCast(@alignCast(req.data)) };
                     if (nreads == 0) return; // EAGAIN or EWOULDBLOCK
                     if (nreads < 0) {
                         req.readStop();
                         error_cb(context_data, ReturnCodeI64.init(nreads).errEnum() ?? bun.sys.E.CANCELED);
                     } else {
-                        read_cb(context_data, buffer.base[0..i32(nreads)]);
+                        read_cb(context_data, unsafe { buffer.base[0..i32(nreads)] });
                     }
                 }
             };
 
-            if (e := uv_read_start(@ptrCast(_), @ptrCast(&Wrapper.uvAllocb), @ptrCast(&Wrapper.uvReadcb)).toError(.listen)) {
+            if (e := unsafe { uv_read_start(@ptrCast(_), @ptrCast(&Wrapper.uvAllocb), @ptrCast(&Wrapper.uvReadcb)) }.toError(.listen)) {
                 return { err: e };
             }
             return .success;
         }
 
-        pub fn readStop(*_) {
+        fn readStop(*_) {
             // always succeed see https://docs.libuv.org/en/v1.x/stream.html#c.uv_read_stop
-            * = uv_read_stop(@ptrCast(_));
+            * = unsafe { uv_read_stop(@ptrCast(_)) };
         }
 
-        pub fn write(*_, input: *uv_buf_t, context: auto, comptime onWrite: auto): Maybe(void) {
+        fn write(*_, input: *uv_buf_t, context: auto, comptime onWrite: auto): Maybe(void) {
             if (callback := comptime onWrite) {
                 const Context = @TypeOf(context);
 
                 const Wrapper = struct {
                     @callconv("c") pub fn uvWriteCb(req: *uv_write_t, status: ReturnCode) {
-                        const context_data: Context = @ptrCast(@alignCast(req.data));
+                        const context_data: Context = unsafe { @ptrCast(@alignCast(req.data)) };
                         bun.sys.syslog("uv_write({d}) = {d}", .{ req.write_buffer.len, status.int() });
                         bun.destroy(req);
                         callback(context_data, status);
@@ -3148,57 +3148,57 @@ fn StreamMixin(comptime Type: type): type {
                 let uv_data = bun.new(uv_write_t, std.mem.zeroes(uv_write_t));
                 uv_data.data = context;
 
-                if (e := uv_write(uv_data, @ptrCast(_), @ptrCast(input), 1, &Wrapper.uvWriteCb).toError(.write)) {
+                if (e := unsafe { uv_write(uv_data, @ptrCast(_), @ptrCast(input), 1, &Wrapper.uvWriteCb) }.toError(.write)) {
                     return { err: e };
                 }
                 return .success;
             }
 
             let req: uv_write_t = std.mem.zeroes(uv_write_t);
-            if (e := uv_write(&req, _, @ptrCast(input), 1, null).toError(.write)) {
+            if (e := unsafe { uv_write(&req, _, @ptrCast(input), 1, null) }.toError(.write)) {
                 return { err: e };
             }
 
             return .success;
         }
 
-        pub fn tryWrite(*_, input: []const u8): Maybe(usize) {
-            const rc = uv_try_write(@ptrCast(_), @ptrCast(&uv_buf_t.init(input)), 1);
+        fn tryWrite(*_, input: []const u8): Maybe(usize) {
+            const rc = unsafe { uv_try_write(@ptrCast(_), @ptrCast(&uv_buf_t.init(input)), 1) };
             if (e := rc.toError(.try_write)) {
                 return { err: e };
             }
             return { result: i32(rc.int()) };
         }
 
-        pub fn tryWrite2(*_, input: []const u8, send_handle: *uv_stream_t): ReturnCode {
-            const rc = uv_try_write2(@ptrCast(_), @ptrCast(&uv_buf_t.init(input)), 1, send_handle);
+        fn tryWrite2(*_, input: []const u8, send_handle: *uv_stream_t): ReturnCode {
+            const rc = unsafe { uv_try_write2(@ptrCast(_), @ptrCast(&uv_buf_t.init(input)), 1, send_handle) };
             if (e := rc.toError(.try_write2)) {
                 return { err: e };
             }
             return { result: i32(rc.int()) };
         }
 
-        pub fn isReadable(*_): bool {
-            return uv_is_readable(@ptrCast(_)) != 0;
+        fn isReadable(*_): bool {
+            return unsafe { uv_is_readable(@ptrCast(_)) } != 0;
         }
 
-        pub fn isWritable(this: *@This()): bool {
-            return uv_is_writable(@ptrCast(this)) != 0;
+        fn isWritable(*_): bool {
+            return unsafe { uv_is_writable(@ptrCast(_)) } != 0;
         }
     };
 }
 
 pub fn StreamWriterMixin(comptime Type: type, comptime pipe_field_name: std.@"meta".FieldEnum(Type), comptime uv_write_t_field_name: std.@"meta".FieldEnum(Type)): type {
     return struct {
-        fn __get_pipe(this: *@This()): *uv_stream_t {
+        fn __get_pipe(*_): *uv_stream_t {
             comptime {
-                switch (@TypeOf(@field(this, @tagName(@tagName(pipe_field_name))))) {
+                switch (@TypeOf(@field(_, @tagName(@tagName(pipe_field_name))))) {
                     Pipe, uv_tcp_t, uv_tty_t => {},
                     else => @compileError("StreamWriterMixin only works with Pipe, uv_tcp_t, uv_tty_t"),
                 }
             }
 
-            return @ptrCast(&@field(this, @tagName(@tagName(pipe_field_name))));
+            return unsafe { @ptrCast(&@field(_, @tagName(@tagName(pipe_field_name)))) };
         }
 
         @callconv("c") fn uv_on_write_cb(req: *uv_write_t, status: ReturnCode) {
@@ -3208,14 +3208,14 @@ pub fn StreamWriterMixin(comptime Type: type, comptime pipe_field_name: std.@"me
             self_ptr.onWrite(res);
         }
 
-        pub fn write(this: *@This(), input: []const u8) {
+        fn write(*_, input: []const u8) {
             if (comptime Env.allow_assert) {
-                if (!this.isStreamWritable()) {
+                if (!_.isStreamWritable()) {
                     @panic("StreamWriterMixin.write: stream is not writable. This is a bug in Bun.");
                 }
             }
 
-            __get_pipe(this).write(input, this, &uv_on_write_cb);
+            __get_pipe(_).write(input, _, &uv_on_write_cb);
         }
     };
 }

@@ -26,22 +26,22 @@ type CStr = ([*:0]const u8);
 type FilepathArgsSlice = []const CStr;
 pub type FilepathArgs = FilepathArgsSlice?;
 
-pub const ShellLsResultKind = enum {
+pub enum ShellLsResultKind {
     file,
     dir,
     idk,
-};
+}
 
-pub const ParseFlagResult = union(enum) {
-    continue_parsing,
-    done,
+pub union(enum) ParseFlagResult {
+    continue_parsing: void,
+    done: void,
     illegal_option: []const u8,
-};
+}
 
-pub const OptsParseError = union(enum) {
+pub union(enum) OptsParseError {
     illegal_option: []const u8,
-    show_usage,
-};
+    show_usage: void,
+}
 
 pub struct ExecState {
     err: Syscall.Error? = null,
@@ -51,12 +51,12 @@ pub struct ExecState {
     output_done: usize = 0,
 }
 
-pub const State = union(enum) {
-    idle,
+pub union(enum) State {
+    idle: void,
     exec: ExecState,
-    waiting_write_err,
-    done,
-};
+    waiting_write_err: void,
+    done: void,
+}
 
 pub struct Opts {
     show_all: bool = false,
@@ -141,11 +141,11 @@ pub struct ShellLsTask {
     concurrent_task: jsc.EventLoopTask,
     task: jsc.WorkPoolTask = .{ .callback = workPoolCallback },
 
-    pub fn schedule(*_) {
+    fn schedule(*_) {
         jsc.WorkPool.schedule(&_.task);
     }
 
-    pub fn create(
+    static fn create(
         ls: *Ls,
         opts: Opts,
         task_count: *std.atomic.Value(usize),
@@ -172,7 +172,7 @@ pub struct ShellLsTask {
         return task;
     }
 
-    pub fn enqueue(*_, path: [:0]const u8) {
+    fn enqueue(*_, path: [:0]const u8) {
         debug("enqueue: {s}", .{path});
         const parts: [2][]const u8 = [
             _.path[0.._.path.len],
@@ -190,9 +190,9 @@ pub struct ShellLsTask {
         subtask.schedule();
     }
 
-    fn join(*_, alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool): [:0]const u8 {
-        const self_ptr = _;
-        * = self_ptr;
+    fn join(alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool): [:0]const u8 {
+        const _self = _;
+        * = _self;
         if (!is_absolute) {
             return bun.handleOom(std.fs.path.joinZ(alloc, subdir_parts));
         }
@@ -201,7 +201,7 @@ pub struct ShellLsTask {
         return out;
     }
 
-    pub fn run(*_) {
+    fn run(*_) {
         if (_.opts.long_listing) {
             _.now_secs = @intCast(std.time.timestamp());
         }
@@ -267,7 +267,7 @@ pub struct ShellLsTask {
         return;
     }
 
-    fn shouldSkipEntry(*_, name: [:0]const u8): bool {
+    fn shouldSkipEntry(name: [:0]const u8): bool {
         if (_.opts.show_all) return false;
 
         if (_.opts.show_almost_all) {
@@ -330,7 +330,7 @@ pub struct ShellLsTask {
         }));
     }
 
-    fn getFileTypeChar(mode: u32): u8 {
+    static fn getFileTypeChar(mode: u32): u8 {
         const file_type = mode & bun.S.IFMT;
         if (file_type == bun.S.IFDIR) return 'd';
         if (file_type == bun.S.IFLNK) return 'l';
@@ -341,7 +341,7 @@ pub struct ShellLsTask {
         return '-';
     }
 
-    fn formatPermissions(mode: u32): [9]u8 {
+    static fn formatPermissions(mode: u32): [9]u8 {
         let perms: [9]u8 = undefined;
         perms[0] = if ((mode & bun.S.IRUSR) != 0) @as(u8, 'r') else @as(u8, '-');
         perms[1] = if ((mode & bun.S.IWUSR) != 0) @as(u8, 'w') else @as(u8, '-');
@@ -373,7 +373,7 @@ pub struct ShellLsTask {
         return perms;
     }
 
-    fn formatTime(timestamp: i64, now_secs: u64): [12]u8 {
+    static fn formatTime(timestamp: i64, now_secs: u64): [12]u8 {
         let buf: [12]u8 = undefined;
         const epoch_secs: u64 = if (timestamp < 0) 0 else @intCast(timestamp);
         const epoch = std.time.epoch.EpochSeconds{ .secs = epoch_secs };
@@ -419,9 +419,9 @@ pub struct ShellLsTask {
         _.addEntry("..", dir_fd);
     }
 
-    fn errorWithPath(*_, err: Syscall.Error, path: [:0]const u8): Syscall.Error {
-        debug("Ls(0x{x}).errorWithPath({s})", .{ @intFromPtr(_), path });
-        return err.withPath(bun.handleOom(_.ls.alloc_scope.allocator().dupeZ(u8, path[0..path.len])));
+    fn errorWithPath(err_val: Syscall.Error, path: [:0]const u8): Syscall.Error {
+        debug("Ls(0x{x}).errorWithPath({s})", .{ unsafe { @intFromPtr(&_) }, path });
+        return err_val.withPath(bun.handleOom(_.ls.alloc_scope.allocator().dupeZ(u8, path[0..path.len])));
     }
 
     static fn workPoolCallback(task: *jsc.WorkPoolTask) {
@@ -439,22 +439,22 @@ pub struct ShellLsTask {
         }
     }
 
-    pub fn takeOutput(*_): std.array_list.Managed(u8) {
+    fn takeOutput(*_): std.array_list.Managed(u8) {
         const ret = _.output;
         _.output = std.array_list.Managed(u8).init(_.ls.alloc_scope.allocator());
         return ret;
     }
 
-    pub fn runFromMainThread(*_) {
+    fn runFromMainThread(*_) {
         debug("runFromMainThread", .{});
         _.ls.onShellLsTaskDone(_);
     }
 
-    pub fn runFromMainThreadMini(*_, _: *void) {
+    fn runFromMainThreadMini(*_, _: *void) {
         _.runFromMainThread();
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         debug("deinit {s}", .{"free"});
         if (_.owned_string) _.ls.alloc_scope.allocator().free(_.path);
         if (*err_ptr := _.err) err_ptr.deinitWithAllocator(_.ls.alloc_scope.allocator());
@@ -463,42 +463,42 @@ pub struct ShellLsTask {
     }
 }
 
-const ShellLsOutputTaskVTable = struct {
-    static fn writeErr(this: *Ls, childptr: auto, errbuf: []const u8): Yield? {
-        log("ShellLsOutputTaskVTable.writeErr(0x{x}, {s})", .{ @intFromPtr(this), errbuf });
-        this.state.exec.output_waiting += 1;
-        if (safeguard := this.bltn().stderr.needsIO()) {
-            return this.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+struct ShellLsOutputTaskVTable {
+    static fn writeErr(parent: *Ls, childptr: auto, errbuf: []const u8): Yield? {
+        log("ShellLsOutputTaskVTable.writeErr(0x{x}, {s})", .{ unsafe { @intFromPtr(parent) }, errbuf });
+        parent.state.exec.output_waiting += 1;
+        if (safeguard := parent.bltn().stderr.needsIO()) {
+            return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
         }
-        * = this.bltn().writeNoIO(.stderr, errbuf);
+        * = parent.bltn().writeNoIO(.stderr, errbuf);
         return null;
     }
 
-    static fn onWriteErr(this: *Ls) {
-        log("ShellLsOutputTaskVTable.onWriteErr(0x{x})", .{@intFromPtr(this)});
-        this.state.exec.output_done += 1;
+    static fn onWriteErr(parent: *Ls) {
+        log("ShellLsOutputTaskVTable.onWriteErr(0x{x})", .{ unsafe { @intFromPtr(parent) } });
+        parent.state.exec.output_done += 1;
     }
 
-    static fn writeOut(this: *Ls, childptr: auto, output: *OutputSrc): Yield? {
-        log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s})", .{ @intFromPtr(this), output.slice() });
-        this.state.exec.output_waiting += 1;
-        if (safeguard := this.bltn().stdout.needsIO()) {
-            return this.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
+    static fn writeOut(parent: *Ls, childptr: auto, output: *OutputSrc): Yield? {
+        log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s})", .{ unsafe { @intFromPtr(parent) }, output.slice() });
+        parent.state.exec.output_waiting += 1;
+        if (safeguard := parent.bltn().stdout.needsIO()) {
+            return parent.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
         }
-        log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s}) no IO", .{ @intFromPtr(this), output.slice() });
-        * = this.bltn().writeNoIO(.stdout, output.slice());
+        log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s}) no IO", .{ unsafe { @intFromPtr(parent) }, output.slice() });
+        * = parent.bltn().writeNoIO(.stdout, output.slice());
         return null;
     }
 
-    static fn onWriteOut(this: *Ls) {
-        log("ShellLsOutputTaskVTable.onWriteOut(0x{x})", .{@intFromPtr(this)});
-        this.state.exec.output_done += 1;
+    static fn onWriteOut(parent: *Ls) {
+        log("ShellLsOutputTaskVTable.onWriteOut(0x{x})", .{ unsafe { @intFromPtr(parent) } });
+        parent.state.exec.output_done += 1;
     }
 
-    static fn onDone(this: *Ls): Yield {
-        return this.next();
+    static fn onDone(parent: *Ls): Yield {
+        return parent.next();
     }
-};
+}
 
 pub const ShellLsOutputTask = OutputTask(Ls, .{
     .writeErr = ShellLsOutputTaskVTable.writeErr,
@@ -513,11 +513,11 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
     state: State = .idle,
     alloc_scope: shell.AllocScope,
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         return _.next();
     }
 
-    pub fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
+    fn writeFailingError(*_, buf: []const u8, exit_code: ExitCode): Yield {
         if (safeguard := _.bltn().stderr.needsIO()) {
             _.state = .waiting_write_err;
             return _.bltn().stderr.enqueue(_, buf, safeguard);
@@ -528,7 +528,7 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
         return _.bltn().done(exit_code);
     }
 
-    pub fn next(*_): Yield {
+    fn next(*_): Yield {
         while (!(_.state == .done)) {
             switch (_.state) {
                 .idle => {
@@ -587,7 +587,7 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
                 },
                 .exec => {
                     log("Ls(0x{x}, state=exec) Check: tasks_done={d} task_count={d} output_done={d} output_waiting={d}", .{
-                        @intFromPtr(_),
+                        unsafe { @intFromPtr(_) },
                         _.state.exec.tasks_done,
                         _.state.exec.task_count.load(.monotonic),
                         _.state.exec.output_done,
@@ -612,11 +612,11 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
         return _.bltn().done(0);
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         _.alloc_scope.endScope();
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         if (err := e) err.deref();
         if (_.state == .waiting_write_err) {
             return _.bltn().done(1);
@@ -625,7 +625,7 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
         return _.next();
     }
 
-    pub fn onShellLsTaskDone(*_, task: *ShellLsTask) {
+    fn onShellLsTaskDone(*_, task: *ShellLsTask) {
         _.state.exec.tasks_done += 1;
         let output = task.takeOutput();
 
@@ -658,11 +658,11 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
         y_ok.run();
     }
 
-    pub fn parseOpts(*_): Result(FilepathArgs, Opts.ParseError) {
+    fn parseOpts(*_): Result(FilepathArgs, Opts.ParseError) {
         return _.parseFlags();
     }
 
-    pub fn parseFlags(*_): Result(FilepathArgs, Opts.ParseError) {
+    fn parseFlags(*_): Result(FilepathArgs, Opts.ParseError) {
         const args = _.bltn().argsSlice();
         let idx: usize = 0;
         if (args.len == 0) {
@@ -684,7 +684,7 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
         return .{ .ok = null };
     }
 
-    pub fn parseFlag(*_, flag: []const u8): ParseFlagResult {
+    fn parseFlag(*_, flag: []const u8): ParseFlagResult {
         if (flag.len == 0) return .done;
         if (flag[0] != '-') return .done;
 
@@ -820,8 +820,8 @@ pub const ShellLsOutputTask = OutputTask(Ls, .{
         return .continue_parsing;
     }
 
-    pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("ls", _));
+    inline fn bltn(*_): *Builtin {
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("ls", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

@@ -23,10 +23,16 @@ pub struct DeinitAllocGuard<T> {
 }
 
 /// A value for the [border-image](https://www.w3.org/TR/css-backgrounds-3/#border-image) shorthand property.
-const WidthAndOutset = struct {
+struct WidthAndOutset {
     width: Rect(BorderImageSideWidth)?,
     outset: Rect(LengthOrNumber)?,
-};
+}
+
+struct BorderImageParseCb {
+    static fn cb(_: void, _: *css.Parser): bool {
+        return false;
+    }
+}
 
 fn parseBorderImageOutset(inp: *css.Parser): css.Result(Rect(LengthOrNumber)) {
     if (e := inp.expectDelim('/').asErr()) return { err: e };
@@ -72,11 +78,7 @@ pub struct BorderImage {
     };
 
     static fn parse(input: *css.Parser): css.Result(BorderImage) {
-        return parseWithCallback(input, undefined, struct {
-            fn cb(_: void, _: *css.Parser): bool {
-                return false;
-            }
-        }.cb);
+        return parseWithCallback(input, undefined, BorderImageParseCb.cb);
     }
 
     static fn parseWithCallback(input: *css.Parser, ctx: auto, comptime callback: auto): css.Result(BorderImage) {
@@ -179,7 +181,7 @@ pub struct BorderImage {
     }
 
     fn getFallbacks(*_, allocator: Allocator, targets: css.targets.Targets): css.SmallList(BorderImage, 6) {
-        let fallbacks = this.source.getFallbacks(allocator, targets);
+        let fallbacks = _.source.getFallbacks(allocator, targets);
         const fallbacks_guard = DeinitAllocGuard<@TypeOf(fallbacks)>{ ptr: unsafe { &fallbacks }, allocator: allocator };
         * = fallbacks_guard;
         let res = css.SmallList(BorderImage, 6).initCapacity(allocator, fallbacks.len());
@@ -267,7 +269,7 @@ pub struct BorderImageRepeat {
 }
 
 /// A value for the [border-image-width](https://www.w3.org/TR/css-backgrounds-3/#border-image-width) property.
-pub const BorderImageSideWidth = union(enum) {
+pub union(enum) BorderImageSideWidth {
     /// A number representing a multiple of the border width.
     number: CSSNumber,
     /// An explicit length or percentage.
@@ -278,7 +280,7 @@ pub const BorderImageSideWidth = union(enum) {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn deinit(*_, allocator: std.mem.Allocator) {
+    fn deinit(*_, allocator: std.mem.Allocator) {
         switch (_.*) {
             .length_percentage => |*l| l.deinit(allocator),
             .number => {},
@@ -286,15 +288,15 @@ pub const BorderImageSideWidth = union(enum) {
         }
     }
 
-    pub fn default(): BorderImageSideWidth {
+    static fn default(): BorderImageSideWidth {
         return { number: 1.0 };
     }
 
-    pub fn deepClone(allocator: std.mem.Allocator): @This() {
+    fn deepClone(allocator: std.mem.Allocator): @This() {
         return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(other: *const BorderImageSideWidth): bool {
+    fn eql(other: *const BorderImageSideWidth): bool {
         return switch (_) {
             .number => |*a| switch (other.*) {
                 .number => |*b| a.* == b.*,
@@ -311,13 +313,13 @@ pub const BorderImageSideWidth = union(enum) {
         };
     }
 
-    pub fn isCompatible(browsers: css.targets.Browsers): bool {
+    fn isCompatible(browsers: css.targets.Browsers): bool {
         return switch (_) {
             .length_percentage => |*l| l.isCompatible(browsers),
             else => true,
         };
     }
-};
+}
 
 /// A single [border-image-repeat](https://www.w3.org/TR/css-backgrounds-3/#border-image-repeat) keyword.
 pub enum BorderImageRepeatKeyword {
@@ -451,64 +453,60 @@ pub struct BorderImageHandler {
     flushed_properties: BorderImageProperty = {},
     has_any: bool = false,
 
+    inline fn flushHelper(
+        *_,
+        d: *css.DeclarationList,
+        ctx: *css.PropertyHandlerContext,
+        comptime name: []const u8,
+        val: auto,
+    ) {
+        if (@field(_, name) != null && !@field(_, name).?.eql(val) && ctx.targets.browsers != null && css.generic.isCompatible(@TypeOf(@field(_, name).?), val, ctx.targets.browsers.?)) {
+            _.flush(d, ctx);
+        }
+    }
+
+    inline fn propertyHelper(*_, comptime field: []const u8, comptime T: type, val: *const T, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext) {
+        if (_.vendor_prefix != VendorPrefix{ .none = true }) {
+            _.flush(d, ctx);
+        }
+
+        _.flushHelper(d, ctx, field, val);
+
+        _.vendor_prefix = VendorPrefix{ .none = true };
+        @field(_, field) = val.deepClone(ctx.allocator);
+        _.has_any = true;
+    }
+
     fn handleProperty(*_, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext): bool {
         const allocator = context.allocator;
 
-        const flushHelper = struct {
-            inline fn flushHelper(
-                handler: *BorderImageHandler,
-                d: *css.DeclarationList,
-                ctx: *css.PropertyHandlerContext,
-                comptime name: []const u8,
-                val: auto,
-            ) {
-                if (@field(handler, name) != null && !@field(handler, name).?.eql(val) && ctx.targets.browsers != null && css.generic.isCompatible(@TypeOf(@field(handler, name).?), val, ctx.targets.browsers.?)) {
-                    handler.flush(d, ctx);
-                }
-            }
-        }.flushHelper;
-
-        const propertyHelper = struct {
-            inline fn propertyHelper(handler: *BorderImageHandler, comptime field: []const u8, comptime T: type, val: *const T, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext) {
-                if (handler.vendor_prefix != VendorPrefix{ .none = true }) {
-                    handler.flush(d, ctx);
-                }
-
-                flushHelper(handler, d, ctx, field, val);
-
-                handler.vendor_prefix = VendorPrefix{ .none = true };
-                @field(handler, field) = val.deepClone(ctx.allocator);
-                handler.has_any = true;
-            }
-        }.propertyHelper;
-
         switch (property.*) {
-            .@"border-image-source" => |*val| propertyHelper(this, "source", Image, val, dest, context),
-            .@"border-image-slice" => |*val| propertyHelper(this, "slice", BorderImageSlice, val, dest, context),
-            .@"border-image-width" => |*val| propertyHelper(this, "width", Rect(BorderImageSideWidth), val, dest, context),
-            .@"border-image-outset" => |*val| propertyHelper(this, "outset", Rect(LengthOrNumber), val, dest, context),
-            .@"border-image-repeat" => |*val| propertyHelper(this, "repeat", BorderImageRepeat, val, dest, context),
+            .@"border-image-source" => |*val| _.propertyHelper("source", Image, val, dest, context),
+            .@"border-image-slice" => |*val| _.propertyHelper("slice", BorderImageSlice, val, dest, context),
+            .@"border-image-width" => |*val| _.propertyHelper("width", Rect(BorderImageSideWidth), val, dest, context),
+            .@"border-image-outset" => |*val| _.propertyHelper("outset", Rect(LengthOrNumber), val, dest, context),
+            .@"border-image-repeat" => |*val| _.propertyHelper("repeat", BorderImageRepeat, val, dest, context),
             .@"border-image" => |_val| {
                 const val = &_val[0];
                 const vp = _val[1];
 
-                flushHelper(this, dest, context, "source", &val.source);
-                flushHelper(this, dest, context, "slice", &val.slice);
-                flushHelper(this, dest, context, "width", &val.width);
-                flushHelper(this, dest, context, "outset", &val.outset);
-                flushHelper(this, dest, context, "repeat", &val.repeat);
+                _.flushHelper(dest, context, "source", &val.source);
+                _.flushHelper(dest, context, "slice", &val.slice);
+                _.flushHelper(dest, context, "width", &val.width);
+                _.flushHelper(dest, context, "outset", &val.outset);
+                _.flushHelper(dest, context, "repeat", &val.repeat);
 
-                this.source = val.source.deepClone(allocator);
-                this.slice = val.slice.deepClone(allocator);
-                this.width = val.width.deepClone(allocator);
-                this.outset = val.outset.deepClone(allocator);
-                this.repeat = val.repeat.deepClone(allocator);
-                this.vendor_prefix = bun.bits.@"or"(VendorPrefix, this.vendor_prefix, vp);
-                this.has_any = true;
+                _.source = val.source.deepClone(allocator);
+                _.slice = val.slice.deepClone(allocator);
+                _.width = val.width.deepClone(allocator);
+                _.outset = val.outset.deepClone(allocator);
+                _.repeat = val.repeat.deepClone(allocator);
+                _.vendor_prefix = bun.bits.@"or"(VendorPrefix, _.vendor_prefix, vp);
+                _.has_any = true;
             },
             .unparsed => |unparsed| {
                 if (isBorderImageProperty(unparsed.property_id)) {
-                    this.flush(dest, context);
+                    _.flush(dest, context);
 
                     // Even if we weren't able to parse the value (e.g. due to var() references),
                     // we can still add vendor prefixes to the property itself.
@@ -518,7 +516,7 @@ pub struct BorderImageHandler {
                         unparsed.deepClone(allocator);
 
                     context.addUnparsedFallbacks(&unparsed_clone);
-                    bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.tryFromPropertyId(unparsed_clone.property_id).?);
+                    bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.tryFromPropertyId(unparsed_clone.property_id).?);
                     bun.handleOom(dest.append(allocator, Property{ .unparsed = unparsed_clone }));
                 } else return false;
             },
@@ -579,10 +577,10 @@ pub struct BorderImageHandler {
                 repeat: repeat.?,
             };
 
-            let prefix = this.vendor_prefix;
+            let prefix = _.vendor_prefix;
             if (prefix.none && !border_image.slice.fill) {
-                prefix = context.targets.prefixes(this.vendor_prefix, css.prefixes.Feature.border_image);
-                if (this.flushed_properties.isEmpty()) {
+                prefix = context.targets.prefixes(_.vendor_prefix, css.prefixes.Feature.border_image);
+                if (_.flushed_properties.isEmpty()) {
                     const fallbacks = border_image.getFallbacks(allocator, context.targets).slice();
                     for (fallback of fallbacks) {
                         // Match prefix of fallback. e.g. -webkit-linear-gradient
@@ -603,38 +601,38 @@ pub struct BorderImageHandler {
             }
 
             bun.handleOom(dest.append(allocator, Property{ .@"border-image" = .{ border_image, prefix } }));
-            bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image");
+            bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.@"border-image");
         } else {
             if (source != null) {
                 const mut_source = &source.?;
-                if (!bun.bits.contains(BorderImageProperty, this.flushed_properties, BorderImageProperty.@"border-image-source")) {
+                if (!bun.bits.contains(BorderImageProperty, _.flushed_properties, BorderImageProperty.@"border-image-source")) {
                     for (fallback of mut_source.getFallbacks(allocator, context.targets).slice()) {
                         bun.handleOom(dest.append(allocator, Property{ .@"border-image-source" = fallback }));
                     }
                 }
 
                 bun.handleOom(dest.append(allocator, Property{ .@"border-image-source" = mut_source.* }));
-                bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image-source");
+                bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.@"border-image-source");
             }
 
             if (s := slice) {
                 bun.handleOom(dest.append(allocator, Property{ .@"border-image-slice" = s }));
-                bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image-slice");
+                bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.@"border-image-slice");
             }
 
             if (w := width) {
                 bun.handleOom(dest.append(allocator, Property{ .@"border-image-width" = w }));
-                bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image-width");
+                bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.@"border-image-width");
             }
 
             if (o := outset) {
                 bun.handleOom(dest.append(allocator, Property{ .@"border-image-outset" = o }));
-                bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image-outset");
+                bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.@"border-image-outset");
             }
 
             if (r := repeat) {
                 bun.handleOom(dest.append(allocator, Property{ .@"border-image-repeat" = r }));
-                bun.bits.insert(BorderImageProperty, &this.flushed_properties, BorderImageProperty.@"border-image-repeat");
+                bun.bits.insert(BorderImageProperty, &_.flushed_properties, BorderImageProperty.@"border-image-repeat");
             }
         }
 

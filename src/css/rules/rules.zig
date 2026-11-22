@@ -144,6 +144,14 @@ const dependencies = css.dependencies;
 const debug = bun.Output.scoped(.CSS_MINIFY, .visible);
 const ArrayList = std.ArrayListUnmanaged;
 
+pub fn IncompatibleRuleEntry(comptime AtRule: type) type {
+        return struct {
+    rule: style.StyleRule(AtRule),
+    supports: ArrayList(css.CssRule(AtRule)),
+    logical: ArrayList(css.CssRule(AtRule)),
+};
+}
+
 pub fn CssRule(comptime Rule: type) type {
         _ = &Rule;
         return union(enum) {
@@ -381,13 +389,9 @@ const Selector = css.selector.Selector;
                 const logical = context.handler_context.getAdditionalRules(AtRule, sty);
                 _ = debug("LOGICAL: {d}\n", .{ logical.items.len });
                 const StyleRule = style.StyleRule(AtRule);
-                const IncompatibleRuleEntry = struct {
-    rule: StyleRule,
-    supports: ArrayList(css.CssRule(AtRule)),
-    logical: ArrayList(css.CssRule(AtRule)),
-};
-                var incompatible_rules: css.SmallList(IncompatibleRuleEntry, 1) = incompatible_rules: {
-                var incompatible_rules = css.SmallList(IncompatibleRuleEntry, 1).initCapacity(context.allocator, incompatible.len());
+                const Entry = IncompatibleRuleEntry(AtRule);
+                var incompatible_rules: css.SmallList(Entry, 1) = incompatible_rules: {
+                var incompatible_rules = css.SmallList(Entry, 1).initCapacity(context.allocator, incompatible.len());
                 _ = &incompatible_rules;
                 for (cp_iter_slice(incompatible.slice_mut())) |sel| {
                     _ = &sel;
@@ -397,7 +401,7 @@ const Selector = css.selector.Selector;
                     _ = clone.updatePrefix(context);
                     const s = context.handler_context.getSupportsRules(AtRule, (&clone));
                     const l = context.handler_context.getAdditionalRules(AtRule, (&clone));
-                    _ = incompatible_rules.append(context.allocator, IncompatibleRuleEntry{ .rule = clone, .supports = s, .logical = l });
+                    _ = incompatible_rules.append(context.allocator, Entry{ .rule = clone, .supports = s, .logical = l });
                 }
                 break :incompatible_rules incompatible_rules;
 };
@@ -410,7 +414,7 @@ const Selector = css.selector.Selector;
                 _ = &_incompatible_guard;
                 var ___incompatible_guard_moved = false; _ = &___incompatible_guard_moved;
                 defer if (!___incompatible_guard_moved) { ___incompatible_guard_moved = true; const __T = @TypeOf(_incompatible_guard); if (@typeInfo(__T) == .optional) { if (_incompatible_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _incompatible_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _incompatible_guard; _drop_val.__cp_deinit(); } };
-                var _incompatible_rules_guard = DeinitWithAllocGuard(css.SmallList(IncompatibleRuleEntry, 1)){ .ptr = (blk: {
+                var _incompatible_rules_guard = DeinitWithAllocGuard(css.SmallList(Entry, 1)){ .ptr = (blk: {
                 break :blk (&incompatible_rules);
 
 }), .allocator = context.allocator };

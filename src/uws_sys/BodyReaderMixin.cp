@@ -1,5 +1,4 @@
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 const uws = bun.uws;
 
 pub struct DeinitGuard<T> {
@@ -10,75 +9,61 @@ pub struct DeinitGuard<T> {
     }
 }
 
-pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime onBody: anytype, comptime onError: anytype): type {
+pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime onBody: auto, comptime onError: auto): type {
     * = Wrap;
     return struct {
         body: std.array_list.Managed(u8),
 
-        pub fn init(allocator: std.mem.Allocator) @This() {
-            return .{ .body = .init(allocator) };
+        static fn init(allocator: std.mem.Allocator): @This() {
+            return @This(){ body: std.array_list.Managed(u8).init(allocator) };
         }
 
-        pub fn readBody(*_, resp: auto) {
-            const ctx = _;
-            const Mixin = @This();
-            const Response = @TypeOf(resp);
-            const handlers = struct {
-                fn onDataGeneric(mixin: *Mixin, r: Response, chunk: []const u8, last: bool) void {
-                    const any_resp = uws.AnyResponse.init(r);
-                    onData(mixin, any_resp, chunk, last) catch |e| {
-                        if (e == error.OutOfMemory) return mixin.onOOM(any_resp);
-                        return mixin.onInvalid(any_resp);
-                    };
-                }
-                fn onAborted(mixin: *Mixin, _: Response) void {
-                    mixin.body.clearAndFree();
-                    onError(@fieldParentPtr(field, mixin));
-                }
+        static fn onDataGeneric(mixin: *@This(), r: auto, chunk: []const u8, last: bool) {
+            const any_resp = uws.AnyResponse.init(r);
+            mixin.onData(any_resp, chunk, last) catch |e| {
+                if (e == error.OutOfMemory) return mixin.fail(any_resp, "500 Internal Server Error");
+                return mixin.fail(any_resp, "400 Bad Request");
             };
-            resp.onData(ctx, handlers.onDataGeneric);
-            resp.onAborted(ctx, handlers.onAborted);
         }
 
-        fn onData(ctx: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: bool) !void {
+        static fn onAborted(mixin: *@This(), _: auto) {
+            mixin.body.clearAndFree();
+            onError(@fieldParentPtr(field, mixin));
+        }
+
+        fn readBody(*_, resp: auto) {
+            const ctx = _;
+            resp.onData(ctx, @This().onDataGeneric);
+            resp.onAborted(ctx, @This().onAborted);
+        }
+
+        fn onData(*_, resp: uws.AnyResponse, chunk: []const u8, last: bool)! {
+            const ctx = _;
             if (last) {
                 let body_guard = DeinitGuard<@TypeOf(ctx.body)>{ val: ctx.body };
-                ctx.body = .init(ctx.body.allocator);
+                ctx.body = std.array_list.Managed(u8).init(ctx.body.allocator);
                 resp.clearOnData();
                 if (body_guard.val.items.len > 0) {
-                    try body_guard.val.appendSlice(chunk);
-                    try onBody(@fieldParentPtr(field, ctx), body_guard.val.items, resp);
+                    body_guard.val.appendSlice(chunk)?;
+                    onBody(@fieldParentPtr(field, ctx), body_guard.val.items, resp)?;
                 } else {
-                    try onBody(@fieldParentPtr(field, ctx), chunk, resp);
+                    onBody(@fieldParentPtr(field, ctx), chunk, resp)?;
                 }
             } else {
-                try ctx.body.appendSlice(chunk);
+                ctx.body.appendSlice(chunk)?;
             }
         }
 
-        fn onOOM(ctx: *@This(), r: uws.AnyResponse) void {
+        fn fail(*_, r: uws.AnyResponse, status: string) {
+            const ctx = _;
             let body = ctx.body;
-            ctx.body = .init(ctx.body.allocator);
+            ctx.body = std.array_list.Managed(u8).init(ctx.body.allocator);
             body.deinit();
             r.clearAborted();
             r.clearOnData();
             r.clearOnWritable();
 
-            r.writeStatus("500 Internal Server Error");
-            r.endWithoutBody(false);
-
-            onError(@fieldParentPtr(field, ctx));
-        }
-
-        fn onInvalid(ctx: *@This(), r: uws.AnyResponse) void {
-            let body = ctx.body;
-            ctx.body = .init(ctx.body.allocator);
-            body.deinit();
-            r.clearAborted();
-            r.clearOnData();
-            r.clearOnWritable();
-
-            r.writeStatus("400 Bad Request");
+            r.writeStatus(status);
             r.endWithoutBody(false);
 
             onError(@fieldParentPtr(field, ctx));

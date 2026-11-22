@@ -84,6 +84,7 @@ pub const Seq = @import("./builtin/seq.zig");
 pub const Dirname = @import("./builtin/dirname.zig");
 pub const Basename = @import("./builtin/basename.zig");
 pub const Cp = @import("./builtin/cp.zig");
+pub const result_mod = @import("../bun_core/result.zig");
 pub const Kind = enum {
     cat,
     touch,
@@ -157,7 +158,7 @@ pub fn fromStr(str: []const u8) ?Builtin.Kind {
             return result;
     }
     
-    pub const DISABLED_ON_POSIX: []const Kind = (&.{ .cat, .cp });
+    pub const DISABLED_ON_POSIX: [2]Kind = .{ .cat, .cp };
 };
 
 pub fn PtrDerefGuard(comptime T: type) type {
@@ -185,6 +186,28 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const Impl = union(Kind) {
+    cat: Cat,
+    touch: Touch,
+    mkdir: Mkdir,
+    @"export": Export,
+    cd: Cd,
+    echo: Echo,
+    pwd: Pwd,
+    which: Which,
+    rm: Rm,
+    mv: Mv,
+    ls: Ls,
+    exit: Exit,
+    true: True,
+    false: False,
+    yes: Yes,
+    seq: Seq,
+    dirname: Dirname,
+    basename: Basename,
+    cp: Cp,
+};
 
 pub const ArrayBuf = struct {
     buf: jsc.ArrayBuffer.Strong,
@@ -330,6 +353,11 @@ else => false,
     }
 };
 
+pub const BuiltinIO = struct {
+    pub const Output = BuiltinIOOutput;
+    pub const Input = BuiltinIOInput;
+};
+
 pub const Builtin = @This();
 
 kind: Kind,
@@ -345,7 +373,7 @@ args: *const std.array_list.Managed(OptStringZ),
 args_slice: ?[]const [:0]const u8 = null,
 @"impl": Impl,
 
-pub fn argsSlice(self: *Builtin) []const CStr {
+pub fn argsSlice(self: *const Builtin) []const CStr {
         const args_raw = self.args.items[1..];
         const args_len = ((std.mem.indexOfScalar(OptStringZ, args_raw, null)) orelse (@panic("bad")));
         if ((args_len == 0)) {
@@ -398,7 +426,7 @@ pub fn callImplWithType(self: *Builtin, comptime BuiltinImpl: type, comptime Ret
         return @call(.auto, @field(BuiltinImpl, field), args);
 }
 
-pub inline fn allocator(self: *Builtin) Allocator {
+pub inline fn allocator(self: Builtin) Allocator {
         return self.parentCmd().base.interpreter.allocator;
 }
 
@@ -631,7 +659,7 @@ const globalObject = interpreter.event_loop.js.global;
         return null;
 }
 
-pub inline fn eventLoop(self: *Builtin) jsc.EventLoopHandle {
+pub inline fn eventLoop(self: Builtin) jsc.EventLoopHandle {
         return self.parentCmd().base.eventLoop();
 }
 
@@ -640,7 +668,7 @@ pub inline fn throw(self: *Builtin, e: *const bun.shell.ShellErr) void {
         }
 }
 
-pub inline fn parentCmd(self: *Builtin) *const Cmd {
+pub inline fn parentCmd(self: *const Builtin) *const Cmd {
         const union_ptr: *const Cmd.Exec = @fieldParentPtr("bltn", self);
         return @fieldParentPtr("exec", union_ptr);
 }
@@ -691,7 +719,7 @@ else => null,
 });
 }
 
-pub fn readStdinNoIO(self: *Builtin) []const u8 {
+pub fn readStdinNoIO(self: *const Builtin) []const u8 {
         return (switch (self.stdin) {
 .arraybuf => |buf| buf.buf.slice(),
 .buf => |buf| buf.items[0..],
@@ -738,7 +766,7 @@ return Maybe(usize).initResult(buf.len);
 }
 }
 
-pub fn taskErrorToString(self: *Builtin, comptime kind: Kind, e: anytype) []const u8 {
+pub fn taskErrorToString(self: *const Builtin, comptime kind: Kind, e: anytype) []const u8 {
         if ((@TypeOf(e) == Syscall.Error)) {
             if (e.getErrorCodeTagName()) |entry| {
                 _ = &entry;
@@ -773,7 +801,7 @@ pub fn taskErrorToString(self: *Builtin, comptime kind: Kind, e: anytype) []cons
         }
 }
 
-pub fn fmtErrorArena(self: *Builtin, comptime kind: ?Kind, comptime fmt_: []const u8, args: anytype) []u8 {
+pub fn fmtErrorArena(self: *const Builtin, comptime kind: ?Kind, comptime fmt_: []const u8, args: anytype) []u8 {
         const cmd_str = (comptime (if ((kind != null)) (@tagName(kind.?) ++ ": ") else ""));
         const fmt = (cmd_str ++ fmt_);
         return bun.handleOom(std.fmt.allocPrint(self.@"arena".allocator(), fmt, args));
@@ -798,31 +826,6 @@ const IOReader = Interpreter.IOReader;
 const IOWriter = Interpreter.IOWriter;
 const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
-pub const Result = @import("../bun_core/result.zig").Result;
+pub const Result = result_mod.Result;
 const empty_args: [0][*:0]const u8 = undefined;
-pub const Impl = union(Kind) {
-    cat: Cat,
-    touch: Touch,
-    mkdir: Mkdir,
-    @"export": Export,
-    cd: Cd,
-    echo: Echo,
-    pwd: Pwd,
-    which: Which,
-    rm: Rm,
-    mv: Mv,
-    ls: Ls,
-    exit: Exit,
-    true: True,
-    false: False,
-    yes: Yes,
-    seq: Seq,
-    dirname: Dirname,
-    basename: Basename,
-    cp: Cp,
-};
-pub const BuiltinIO = struct {
-    pub const Output = BuiltinIOOutput;
-    pub const Input = BuiltinIOInput;
-};
 pub const Tag = Kind;

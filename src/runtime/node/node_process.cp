@@ -92,7 +92,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         if (execArgv := worker.execArgv) {
             const array = jsc.JSValue.createEmptyArray(globalObject, execArgv.len)?;
             for (i of 0..execArgv.len) {
-                try array.putIndex(globalObject, u32(i), try bun.String.init(execArgv[i]).toJS(globalObject));
+                array.putIndex(globalObject, u32(i), bun.String.init(execArgv[i]).toJS(globalObject)?)?;
             }
             return array;
         }
@@ -109,7 +109,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
             // appendOptionsEnv inserts starting at index 1, so we need a placeholder.
             if (bun.bun_options_argc > 0) {
                 if (opts := bun.env_var.BUN_OPTIONS.get()) {
-                    try args.append(bun.String.empty); // placeholder for insert-at-1
+                    args.append(bun.String.empty)?; // placeholder for insert-at-1
                     bun.appendOptionsEnv(opts, bun.String, &args)?;
                     * = args.orderedRemove(0); // remove placeholder
                 }
@@ -124,7 +124,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
 
             const array = jsc.JSValue.createEmptyArray(globalObject, args.items.len)?;
             for (idx of 0..args.items.len) {
-                try array.putIndex(globalObject, u32(idx), try args.items[idx].toJS(globalObject));
+                array.putIndex(globalObject, u32(idx), args.items[idx].toJS(globalObject)?)?;
             }
             return array;
         }
@@ -279,9 +279,9 @@ pub const getCwd = jsc.host_fn.wrap1(getCwd_);
 fn getCwd_(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     let buf: bun.PathBuffer = undefined;
     switch (bun.api.node.path.getCwd(&buf)) {
-        .result => |r| return jsc.ZigString.init(r).withEncoding().toJS(globalObject),
-        .err => |e| {
-            return globalObject.throwValue(try e.toJS(globalObject));
+        .result r => return jsc.ZigString.init(r).withEncoding().toJS(globalObject),
+        .err e => {
+            return globalObject.throwValue(e.toJS(globalObject)?);
         },
     }
 }
@@ -303,10 +303,10 @@ fn setCwd_(globalObject: *jsc.JSGlobalObject, to: *jsc.ZigString): bun.JSError!j
             // However, this might be called many times in a row, so we use a pre-allocated buffer
             // that way we don't have to worry about garbage collector
             const into_cwd_buf = switch (bun.sys.getcwd(&buf)) {
-                .result => |r| r,
-                .err => |e| {
+                .result r => r,
+                .err e => {
                     * = Syscall.chdir(fs.top_level_dir, fs.top_level_dir);
-                    return globalObject.throwValue(try e.toJS(globalObject));
+                    return globalObject.throwValue(e.toJS(globalObject)?);
                 },
             };
             @memcpy(fs.top_level_dir_buf[0..into_cwd_buf.len], into_cwd_buf);
@@ -324,8 +324,8 @@ fn setCwd_(globalObject: *jsc.JSGlobalObject, to: *jsc.ZigString): bun.JSError!j
             let str = bun.String.cloneUTF8(withoutTrailingSlash(fs.top_level_dir));
             return str.transferToJS(globalObject);
         },
-        .err => |e| {
-            return globalObject.throwValue(try e.toJS(globalObject));
+        .err e => {
+            return globalObject.throwValue(e.toJS(globalObject)?);
         },
     }
 }

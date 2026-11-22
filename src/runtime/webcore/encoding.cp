@@ -28,11 +28,11 @@ struct FreeGuard<T> {
     }
 }
 
-pub const Types = struct {
+pub struct Types {
     pub const U16Slice = []align(1) u16;
     pub const U16SliceAligned = []u16;
     pub const U16Ptr = [*]align(1) u16;
-};
+}
 
 @export @c fn Bun__encoding__writeLatin1(input: [*]const u8, len: usize, to: [*]u8, to_len: usize, encoding: u8): usize {
     return switch (@as(Encoding, @enumFromInt(encoding))) {
@@ -107,10 +107,10 @@ pub const Types = struct {
     return toString(unsafe { input[0..len] }, globalObject, @enumFromInt(encoding)) catch return .zero;
 }
 
-pub fn toString(input: []const u8, globalObject: *JSGlobalObject, encoding: Encoding): JSError!JSValue {
+pub fn toString(input: []const u8, globalObject: *JSGlobalObject, encoding: Encoding): JSValue ! JSError {
     return switch (encoding) {
-        .buffer, .utf8 => try toStringComptime(input, globalObject, .utf8),
-        inline else => |enc| try toStringComptime(input, globalObject, enc),
+        .buffer, .utf8 => toStringComptime(input, globalObject, .utf8)?,
+        inline else => |enc| toStringComptime(input, globalObject, enc)?,
     };
 }
 
@@ -203,9 +203,9 @@ pub fn toBunStringFromOwnedSlice(input: []u8, encoding: Encoding): BunString {
     }
 }
 
-pub fn toStringComptime(input: []const u8, global: *JSGlobalObject, comptime encoding: Encoding): JSError!JSValue {
+pub fn toStringComptime(input: []const u8, global: *JSGlobalObject, comptime encoding: Encoding): JSValue ! JSError {
     let bun_string = toBunStringComptime(input, encoding);
-    return try bun_string.transferToJS(global);
+    return bun_string.transferToJS(global)?;
 }
 
 pub fn toBunString(input: []const u8, encoding: Encoding): BunString {
@@ -292,7 +292,7 @@ pub fn toBunStringComptime(input: []const u8, comptime encoding: Encoding): BunS
     }
 }
 
-pub fn writeU8(input: [*]const u8, len: usize, to_ptr: [*]u8, to_len: usize, comptime encoding: Encoding): !usize {
+pub fn writeU8(input: [*]const u8, len: usize, to_ptr: [*]u8, to_len: usize, comptime encoding: Encoding): usize! {
     if (len == 0 or to_len == 0)
         return 0;
 
@@ -370,15 +370,15 @@ pub fn byteLengthU8(input: [*]const u8, len: usize, comptime encoding: Encoding)
     }
 }
 
-pub fn encodeIntoFrom16(input: []const u16, to: []u8, comptime encoding: Encoding, comptime allow_partial_write: bool): !usize {
+pub fn encodeIntoFrom16(input: []const u16, to: []u8, comptime encoding: Encoding, comptime allow_partial_write: bool): usize! {
     return writeU16(input.ptr, input.len, to.ptr, to.len, encoding, allow_partial_write);
 }
 
-pub fn encodeIntoFrom8(input: []const u8, to: []u8, comptime encoding: Encoding): !usize {
+pub fn encodeIntoFrom8(input: []const u8, to: []u8, comptime encoding: Encoding): usize! {
     return writeU8(input.ptr, input.len, to.ptr, to.len, encoding);
 }
 
-pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, comptime encoding: Encoding, comptime allow_partial_write: bool): !usize {
+pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, comptime encoding: Encoding, comptime allow_partial_write: bool): usize! {
     if (len == 0)
         return 0;
 

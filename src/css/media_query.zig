@@ -774,10 +774,7 @@ pub fn alwaysMatches(self: MediaQuery) bool {
             return (((self.qualifier == null) and (self.media_type == .all)) and (self.condition == null));
     }
 
-pub fn parse(input: *css.Parser) Result(MediaQuery) {
-            const Fn = struct {
-
-pub fn tryParseFn(i: *css.Parser) Result(struct { ?Qualifier, ?MediaType }) {
+pub fn _tryParseQualifierAndMediaType(i: *css.Parser) Result(struct { OptQualifier, OptMediaType }) {
             const qualifier = (switch (i.tryParse(Qualifier.parse, .{})) {
 .result => |vv| vv,
 .err => null,
@@ -790,8 +787,9 @@ return .{ .err = e };
 });
             return .{ .result = .{ qualifier, media_type } };
     }
-};
-            const q_and_m = (switch (input.tryParse(Fn.tryParseFn, .{})) {
+
+pub fn parse(input: *css.Parser) Result(MediaQuery) {
+            const q_and_m = (switch (input.tryParse(_tryParseQualifierAndMediaType, .{})) {
 .result => |v| v,
 .err => .{ null, null },
 });
@@ -850,6 +848,14 @@ pub fn neverMatches(self: MediaQuery) bool {
             return (((self.qualifier == .not) and (self.media_type == .all)) and (self.condition == null));
     }
     const This = @This();
+    const OptQualifier = ?Qualifier;
+    const OptMediaType = ?MediaType;
+};
+
+pub const QueryConditionFlags = packed struct(u8) {
+    allow_or: bool = false,
+    allow_style: bool = false,
+    __unused: u6 = 0,
 };
 
 pub const MediaConditionOperation = struct {
@@ -877,13 +883,6 @@ const DashedIdentFns = css.css_values.ident.DashedIdentFns;
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Result = css.Result;
-pub const QueryConditionFlags = packed struct(u8) {
-    /// Whether to allow top-level "or" boolean logic.
-    allow_or: bool = false,
-    /// Whether to allow style container queries.
-    allow_style: bool = false,
-    __unused: u6 = 0,
-};
 pub const MediaFeature = QueryFeature(MediaFeatureId);
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;

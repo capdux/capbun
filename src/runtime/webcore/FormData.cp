@@ -11,7 +11,6 @@ import {
 } from "bun";
 const ArrayHashMapUnmanaged = std.ArrayHashMapUnmanaged;
 const Allocator = std.mem.Allocator;
-import { fs, fmt } from "std";
 
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
@@ -34,89 +33,172 @@ struct DetachGuard<T> {
     }
 }
 
+pub union(enum) _Encoding {
+    URLEncoded: void,
+    Multipart: []const u8,
+
+    static fn get(content_type: []const u8): _Encoding? {
+        if (strings.indexOf(content_type, "application/x-www-form-urlencoded") != null)
+            return _Encoding{ URLEncoded: undefined };
+
+        if (strings.indexOf(content_type, "multipart/form-data") == null) return null;
+
+        const boundary = FormData.getBoundary(content_type) ?? return null;
+        return {
+            Multipart: boundary,
+        };
+    }
+}
+
+pub struct _AsyncFormData {
+    encoding: _Encoding,
+    allocator: Allocator,
+
+    static fn init(allocator: Allocator, encoding: _Encoding): (*_AsyncFormData!)! {
+        const inst = allocator.create(_AsyncFormData)?;
+        inst.* = _AsyncFormData{
+            encoding: switch (encoding) {
+                .Multipart => _Encoding{
+                    Multipart: allocator.dupe(u8, encoding.Multipart)?,
+                },
+                else => encoding,
+            },
+            allocator: allocator,
+        };
+        return inst;
+    }
+
+    fn deinit(*_) {
+        if (_.encoding == .Multipart)
+            _.allocator.free(_.encoding.Multipart);
+        _.allocator.destroy(_);
+    }
+
+    fn toJS(*_, global: *JSGlobalObject, data: []const u8, promise_val: AnyPromise): JSTerminated!void {
+        let promise = promise_val;
+        if (_.encoding == .Multipart && _.encoding.Multipart.len == 0) {
+            log("AsnycFormData.toJS -> promise.reject missing boundary", .{});
+            promise.reject(global, jsc.ZigString.init("FormData missing boundary").toErrorInstance(global))?;
+            return;
+        }
+
+        const js_value = FormData.toJS(
+            global,
+            data,
+            _.encoding,
+        ) catch |e| {
+            log("AsnycFormData.toJS -> failed ", .{});
+            promise.reject(global, global.createErrorInstance("FormData {s}", .{@errorName(e)}))?;
+            return;
+        };
+        promise.resolve(global, js_value)?;
+    }
+}
+
+pub union(enum) _FieldEntry {
+    field: _Field,
+    list: BabyList(_Field),
+}
+
+@c pub struct _FieldExternal {
+    name: jsc.ZigString,
+    value: jsc.ZigString,
+    blob: (*jsc.WebCore.Blob)? = null,
+}
+
+pub struct _Field {
+    value: []const u8 = "",
+    filename: Semver.String = .{},
+    content_type: Semver.String = .{},
+    is_file: bool = false,
+    zero_count: u8 = 0,
+
+    pub const Entry = _FieldEntry;
+    pub const External = _FieldExternal;
+}
+
+struct _MultipartWrapper {
+    globalThis: *JSGlobalObject,
+    form: *jsc.DOMFormData,
+
+    fn onEntry(*_, name: Semver.String, field: _Field, buf: []const u8) {
+        const value_str = field.value;
+        let key = jsc.ZigString.initUTF8(name.slice(buf));
+
+        if (field.is_file) {
+            const filename_str = field.filename.slice(buf);
+
+            let blob_guard = DetachGuard<jsc.WebCore.Blob>{
+                val: jsc.WebCore.Blob.create(value_str, default_allocator, _.globalThis, false),
+            };
+            let filename = jsc.ZigString.initUTF8(filename_str);
+            const content_type: []const u8 = brk: {
+                if (!field.content_type.isEmpty()) {
+                    break :brk field.content_type.slice(buf);
+                }
+                if (filename_str.len > 0) {
+                    const extension = std.fs.path.extension(filename_str);
+                    if (extension.len > 0) {
+                        if (mime := http.MimeType.byExtensionNoDefault(extension[1..extension.len])) {
+                            break :brk mime.value;
+                        }
+                    }
+                }
+
+                if (mime := http.MimeType.sniff(value_str)) {
+                    break :brk mime.value;
+                }
+
+                break :brk "";
+            };
+
+            if (content_type.len > 0) {
+                if (!field.content_type.isEmpty()) {
+                    blob_guard.val.content_type_allocated = true;
+                    blob_guard.val.content_type = default_allocator.dupe(u8, content_type) catch @panic("failed to allocate memory for blob content type");
+                    blob_guard.val.content_type_was_set = true;
+                } else {
+                    blob_guard.val.content_type = content_type;
+                    blob_guard.val.content_type_was_set = false;
+                    blob_guard.val.content_type_allocated = false;
+                }
+            }
+
+            _.form.appendBlob(_.globalThis, &key, &blob_guard.val, &filename);
+        } else {
+            let value = jsc.ZigString.initUTF8(
+                strings.withoutUTF8BOM(value_str),
+            );
+            _.form.append(&key, &value);
+        }
+    }
+}
+
 export class FormData {
-    fields: Map;
-    buffer: []const u8;
+    pub fields: Map;
+    pub buffer: []const u8;
 
     pub const Map = ArrayHashMapUnmanaged(
         Semver.String,
-        Field.Entry,
+        _FieldEntry,
         Semver.String.ArrayHashContext,
         false,
     );
 
-    pub const Encoding = union(enum) {
-        URLEncoded: void,
-        Multipart: []const u8,
+    pub const Encoding = _Encoding;
+    pub const AsyncFormData = _AsyncFormData;
+    pub const Field = _Field;
 
-        pub fn get(content_type: []const u8) ?Encoding {
-            if (strings.indexOf(content_type, "application/x-www-form-urlencoded") != null)
-                return Encoding{ .URLEncoded = undefined };
-
-            if (strings.indexOf(content_type, "multipart/form-data") == null) return null;
-
-            const boundary = getBoundary(content_type) orelse return null;
-            return .{
-                .Multipart = boundary,
-            };
-        }
-    };
-
-    pub const AsyncFormData = struct {
-        encoding: Encoding,
-        allocator: Allocator,
-
-        pub fn init(allocator: Allocator, encoding: Encoding) !*AsyncFormData {
-            const inst = try allocator.create(AsyncFormData);
-            inst.* = AsyncFormData{
-                .encoding = switch (encoding) {
-                    .Multipart => .{
-                        .Multipart = try allocator.dupe(u8, encoding.Multipart),
-                    },
-                    else => encoding,
-                },
-                .allocator = allocator,
-            };
-            return inst;
-        }
-
-        pub fn deinit(this: *AsyncFormData) void {
-            if (this.encoding == .Multipart)
-                this.allocator.free(this.encoding.Multipart);
-            this.allocator.destroy(this);
-        }
-
-        pub static fn toJS(this: *AsyncFormData, global: *JSGlobalObject, data: []const u8, promise_val: AnyPromise) JSTerminated!void {
-            let promise = promise_val;
-            if (this.encoding == .Multipart and this.encoding.Multipart.len == 0) {
-                log("AsnycFormData.toJS -> promise.reject missing boundary", .{});
-                try promise.reject(global, jsc.ZigString.init("FormData missing boundary").toErrorInstance(global));
-                return;
-            }
-
-            const js_value = FormData.toJS(
-                global,
-                data,
-                this.encoding,
-            ) catch |err| {
-                log("AsnycFormData.toJS -> failed ", .{});
-                try promise.reject(global, global.createErrorInstance("FormData {s}", .{@errorName(err)}));
-                return;
-            };
-            try promise.resolve(global, js_value);
-        }
-    };
-
-    static fn getBoundary(content_type: []const u8): ([]const u8)? {
-        const boundary_index = strings.indexOf(content_type, "boundary=") orelse return null;
+    pub static fn getBoundary(content_type: []const u8): ([]const u8)? {
+        const boundary_index = strings.indexOf(content_type, "boundary=") ?? return null;
         const boundary_start = boundary_index + "boundary=".len;
         const begin = content_type[boundary_start..];
         if (begin.len == 0)
             return null;
 
-        const boundary_end = strings.indexOfChar(begin, ';') orelse @as(u32, @truncate(begin.len));
+        const boundary_end = strings.indexOfChar(begin, ';') ?? @as(u32, @truncate(begin.len));
         if (begin[0] == '"') {
-            if (boundary_end > 1 and begin[boundary_end - 1] == '"') {
+            if (boundary_end > 1 && begin[boundary_end - 1] == '"') {
                 return begin[1 .. boundary_end - 1];
             }
             return null;
@@ -125,26 +207,7 @@ export class FormData {
         return begin[0..boundary_end];
     }
 
-    pub const Field = struct {
-        value: []const u8 = "",
-        filename: Semver.String = .{},
-        content_type: Semver.String = .{},
-        is_file: bool = false,
-        zero_count: u8 = 0,
-
-        pub const Entry = union(enum) {
-            field: Field,
-            list: BabyList(Field),
-        };
-
-        pub const External = extern struct {
-            name: jsc.ZigString,
-            value: jsc.ZigString,
-            blob: ?*jsc.WebCore.Blob = null,
-        };
-    };
-
-    pub static fn toJS(globalThis: *JSGlobalObject, input: []const u8, encoding: Encoding): !JSValue {
+    pub static fn toJS(globalThis: *JSGlobalObject, input: []const u8, encoding: _Encoding): !JSValue {
         switch (encoding) {
             .URLEncoded => {
                 let str = jsc.ZigString.fromUTF8(strings.withoutUTF8BOM(input));
@@ -154,11 +217,11 @@ export class FormData {
                 }
                 return result;
             },
-            .Multipart => |boundary| return toJSFromMultipartData(globalThis, input, boundary),
+            .Multipart boundary => return toJSFromMultipartData(globalThis, input, boundary),
         }
     }
 
-    static fn fromMultipartData(
+    pub static fn fromMultipartData(
         globalThis: *JSGlobalObject,
         callframe: *jsc.CallFrame,
     ): JSError!JSValue {
@@ -171,8 +234,8 @@ export class FormData {
         const boundary_value = args[1];
         let boundary_guard = DeinitGuard<jsc.ZigString.Slice>{ val: jsc.ZigString.Slice.empty };
 
-        let encoding = Encoding{
-            .URLEncoded = undefined,
+        let encoding = _Encoding{
+            URLEncoded: undefined,
         };
 
         if (input_value.isEmptyOrUndefinedOrNull()) {
@@ -182,11 +245,11 @@ export class FormData {
         if (!boundary_value.isEmptyOrUndefinedOrNull()) {
             if (array_buffer := boundary_value.asArrayBuffer(globalThis)) {
                 if (array_buffer.byteSlice().len > 0)
-                    encoding = .{ .Multipart = array_buffer.byteSlice() };
+                    encoding = .{ Multipart: array_buffer.byteSlice() };
             } else if (boundary_value.isString()) {
-                boundary_guard.val = try boundary_value.toSliceOrNull(globalThis);
+                boundary_guard.val = boundary_value.toSliceOrNull(globalThis)?;
                 if (boundary_guard.val.len > 0) {
-                    encoding = .{ .Multipart = boundary_guard.val.slice() };
+                    encoding = .{ Multipart: boundary_guard.val.slice() };
                 }
             } else {
                 return globalThis.throwInvalidArguments("boundary must be a string or ArrayBufferView", .{});
@@ -198,7 +261,7 @@ export class FormData {
         if (array_buffer := input_value.asArrayBuffer(globalThis)) {
             input = array_buffer.byteSlice();
         } else if (input_value.isString()) {
-            input_guard.val = try input_value.toSliceOrNull(globalThis);
+            input_guard.val = input_value.toSliceOrNull(globalThis)?;
             input = input_guard.val.slice();
         } else if (blob := input_value.as(jsc.WebCore.Blob)) {
             input = blob.sharedView();
@@ -220,74 +283,20 @@ export class FormData {
     ): !JSValue {
         const form_data_value = jsc.DOMFormData.create(globalThis);
         form_data_value.ensureStillAlive();
-        const form = jsc.DOMFormData.fromJS(form_data_value) orelse {
+        const form_opt = jsc.DOMFormData.fromJS(form_data_value);
+        if (form_opt == null) {
             log("failed to create DOMFormData.fromJS", .{});
             return error.@"failed to parse multipart data";
-        };
-        const Wrapper = struct {
-            globalThis: *JSGlobalObject,
-            form: *jsc.DOMFormData,
-
-            pub fn onEntry(wrap: *@This(), name: Semver.String, field: Field, buf: []const u8) {
-                const value_str = field.value;
-                let key = jsc.ZigString.initUTF8(name.slice(buf));
-
-                if (field.is_file) {
-                    const filename_str = field.filename.slice(buf);
-
-                    let blob_guard = DetachGuard<jsc.WebCore.Blob>{
-                        val: jsc.WebCore.Blob.create(value_str, default_allocator, wrap.globalThis, false),
-                    };
-                    let filename = jsc.ZigString.initUTF8(filename_str);
-                    const content_type: []const u8 = brk: {
-                        if (!field.content_type.isEmpty()) {
-                            break :brk field.content_type.slice(buf);
-                        }
-                        if (filename_str.len > 0) {
-                            const extension = fs.path.extension(filename_str);
-                            if (extension.len > 0) {
-                                if (http.MimeType.byExtensionNoDefault(extension[1..extension.len])) |mime| {
-                                    break :brk mime.value;
-                                }
-                            }
-                        }
-
-                        if (http.MimeType.sniff(value_str)) |mime| {
-                            break :brk mime.value;
-                        }
-
-                        break :brk "";
-                    };
-
-                    if (content_type.len > 0) {
-                        if (!field.content_type.isEmpty()) {
-                            blob_guard.val.content_type_allocated = true;
-                            blob_guard.val.content_type = default_allocator.dupe(u8, content_type) catch @panic("failed to allocate memory for blob content type");
-                            blob_guard.val.content_type_was_set = true;
-                        } else {
-                            blob_guard.val.content_type = content_type;
-                            blob_guard.val.content_type_was_set = false;
-                            blob_guard.val.content_type_allocated = false;
-                        }
-                    }
-
-                    wrap.form.appendBlob(wrap.globalThis, &key, &blob_guard.val, &filename);
-                } else {
-                    let value = jsc.ZigString.initUTF8(
-                        strings.withoutUTF8BOM(value_str),
-                    );
-                    wrap.form.append(&key, &value);
-                }
-            }
-        };
+        }
+        const form = form_opt.?;
 
         {
-            let wrap = Wrapper{
-                .globalThis = globalThis,
-                .form = form,
+            let wrap = _MultipartWrapper{
+                globalThis: globalThis,
+                form: form,
             };
 
-            forEachMultipartEntry(input, boundary, *Wrapper, &wrap, Wrapper.onEntry) catch |e| {
+            forEachMultipartEntry(input, boundary, *_MultipartWrapper, &wrap, _MultipartWrapper.onEntry) catch |e| {
                 log("failed to parse multipart data", .{});
                 return e;
             };
@@ -304,16 +313,16 @@ export class FormData {
         comptime iterator: fn (
             Ctx,
             Semver.String,
-            Field,
+            _Field,
             []const u8,
-        ) void,
-    ): !void {
+        ),
+    ): ! {
         let slice = input;
         let subslicer = Semver.SlicedString.init(input, input);
 
         let buf: [76]u8 = undefined;
         {
-            const final_boundary = fmt.bufPrint(&buf, "--{s}--", .{boundary}) catch |e| {
+            const final_boundary = std.fmt.bufPrint(&buf, "--{s}--", .{boundary}) catch |e| {
                 if (e == error.NoSpaceLeft) {
                     return error.@"boundary is too long";
                 }
@@ -327,26 +336,26 @@ export class FormData {
             slice = slice[0..final_boundary_index.?];
         }
 
-        const separator = try fmt.bufPrint(&buf, "--{s}\r\n", .{boundary});
+        const separator = std.fmt.bufPrint(&buf, "--{s}\r\n", .{boundary})?;
         let splitter = strings.split(slice, separator);
         * = splitter.next();
 
         while (chunk := splitter.next()) {
             let remain = chunk;
-            const header_end = strings.indexOf(remain, "\r\n\r\n") orelse return error.@"is missing header end";
+            const header_end = strings.indexOf(remain, "\r\n\r\n") ?? return error.@"is missing header end";
             const header = remain[0 .. header_end + 2];
             remain = remain[header_end + 4 ..];
 
-            let field = Field{};
+            let field = _Field{};
             let name: Semver.String = .{};
             let filename: Semver.String? = null;
             let header_chunk = header;
             let is_file = false;
-            while (header_chunk.len > 0 and (filename == null or name.len() == 0)) {
-                const line_end = strings.indexOf(header_chunk, "\r\n") orelse return error.@"is missing header line end";
+            while (header_chunk.len > 0 && (filename == null || name.len() == 0)) {
+                const line_end = strings.indexOf(header_chunk, "\r\n") ?? return error.@"is missing header line end";
                 const line = header_chunk[0..line_end];
                 header_chunk = header_chunk[line_end + 2 ..];
-                const colon = strings.indexOf(line, ":") orelse return error.@"is missing header colon separator";
+                const colon = strings.indexOf(line, ":") ?? return error.@"is missing header colon separator";
 
                 const key = line[0..colon];
                 let value = if (line.len > colon + 1) line[colon + 1 ..] else "";
@@ -374,7 +383,7 @@ export class FormData {
                                         break;
                                     },
                                     '\\' => {
-                                        i += @intFromBool(field_value.len > i + 1 and field_value[i + 1] == '"');
+                                        i += @intFromBool(field_value.len > i + 1 && field_value[i + 1] == '"');
                                     },
                                     else => {},
                                 }
@@ -389,7 +398,7 @@ export class FormData {
                             is_file = true;
                         }
 
-                        if (!name.isEmpty() and filename != null) {
+                        if (!name.isEmpty() && filename != null) {
                             break;
                         }
 
@@ -399,7 +408,7 @@ export class FormData {
                             break;
                         }
                     }
-                } else if (value.len > 0 and field.content_type.isEmpty() and strings.eqlCaseInsensitiveASCII(key, "content-type", true)) {
+                } else if (value.len > 0 && field.content_type.isEmpty() && strings.eqlCaseInsensitiveASCII(key, "content-type", true)) {
                     field.content_type = subslicer.sub(strings.trim(value, "; \t")).value();
                 }
             }
@@ -416,7 +425,7 @@ export class FormData {
             if (fname := filename) {
                 field.filename = fname;
             } else {
-                field.filename = {};
+                field.filename = .{};
             }
             field.is_file = is_file;
 
@@ -427,5 +436,5 @@ export class FormData {
 
 comptime {
     const jsFunctionFromMultipartData = jsc.toJSHostFn(FormData.fromMultipartData);
-    @export(&jsFunctionFromMultipartData, .{ .name = "FormData__jsFunctionFromMultipartData" });
+    @export(&jsFunctionFromMultipartData, { name: "FormData__jsFunctionFromMultipartData" });
 }

@@ -27,7 +27,7 @@ pub struct DeinitPtrGuard<T> {
 pub struct OptDeinitWithAllocGuard<T> {
     value: T?,
     alloc: Allocator,
-    fn take(*_): T {
+    pub fn take(*_): T {
         const v = _.value.?;
         _.value = null;
         return v;

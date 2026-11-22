@@ -48,6 +48,43 @@ pub struct DeinitWithAllocGuard<T> {
 ///
 /// TODO: multiarraylist will probably be faster here, as it makes one allocation
 /// instead of two.
+struct _DeclarationBlockDebugFmt {
+    self: DeclarationBlock,
+
+    fn format(writer: *std.Io.Writer)! {
+        let _guard_arraylist = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
+        const w = &_guard_arraylist.val.writer;
+        let symbols = bun.ast.Symbol.Map{};
+        let _guard_printer = DeinitGuard<css.Printer>{ val: css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols) };
+        _.self.toCss(unsafe { &_guard_printer.val }) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
+        writer.writeAll(_guard_arraylist.val.written())?;
+    }
+}
+
+fn _minifyHandle(
+    d: *DeclarationBlock,
+    ctx: *css.PropertyHandlerContext,
+    hndlr: *DeclarationHandler,
+    comptime decl_field: []const u8,
+    comptime important: bool,
+) {
+    const items = @field(d, decl_field).items;
+    let idx: usize = 0;
+    while (idx < items.len) : (idx += 1) {
+        const prop = &items[idx];
+        ctx.is_important = important;
+
+        const handled = hndlr.handleProperty(prop, ctx);
+
+        if (!handled) {
+            bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));
+            // replacing with a property which does not require allocation
+            // to "delete"
+            prop.* = css.Property{ all: .@"revert-layer" };
+        }
+    }
+}
+
 pub struct DeclarationBlock {
     /// A list of `!important` declarations in the block.
     important_declarations: ArrayList(css.Property) = {},
@@ -55,22 +92,10 @@ pub struct DeclarationBlock {
     declarations: ArrayList(css.Property) = {},
 
     const This = @This();
-
-    const DebugFmt = struct {
-        self: DeclarationBlock,
-
-        static fn format(this: @This(), writer: *std.Io.Writer)! {
-            let _guard_arraylist = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(bun.default_allocator) };
-            const w = &_guard_arraylist.val.writer;
-            let symbols = bun.ast.Symbol.Map{};
-            let _guard_printer = DeinitGuard<css.Printer>{ val: css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols) };
-            this.self.toCss(unsafe { &_guard_printer.val }) catch |e| return try writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)});
-            writer.writeAll(_guard_arraylist.val.written())?;
-        }
-    };
+    const DebugFmt = _DeclarationBlockDebugFmt;
 
     fn debug(): DebugFmt {
-        return DebugFmt{ .self = _ };
+        return DebugFmt{ self: _ };
     }
 
     fn isEmpty(): bool {
@@ -169,34 +194,8 @@ pub struct DeclarationBlock {
         important_handler: *DeclarationHandler,
         context: *css.PropertyHandlerContext,
     ) {
-        const handle = struct {
-            inline fn handle(
-                d: *DeclarationBlock,
-                ctx: *css.PropertyHandlerContext,
-                hndlr: *DeclarationHandler,
-                comptime decl_field: []const u8,
-                comptime important: bool,
-            ) {
-                const items = @field(d, decl_field).items;
-                let idx: usize = 0;
-                while (idx < items.len) : (idx += 1) {
-                    const prop = &items[idx];
-                    ctx.is_important = important;
-
-                    const handled = hndlr.handleProperty(prop, ctx);
-
-                    if (!handled) {
-                        bun.handleOom(hndlr.decls.append(ctx.allocator, prop.*));
-                        // replacing with a property which does not require allocation
-                        // to "delete"
-                        prop.* = css.Property{ all: .@"revert-layer" };
-                    }
-                }
-            }
-        }.handle;
-
-        handle(_, context, important_handler, "important_declarations", true);
-        handle(_, context, handler, "declarations", false);
+        _minifyHandle(_, context, important_handler, "important_declarations", true);
+        _minifyHandle(_, context, handler, "declarations", false);
 
         handler.finalize(context);
         important_handler.finalize(context);
@@ -308,6 +307,14 @@ pub fn parse_declaration(
     return parse_declaration_impl(name, input, declarations, important_declarations, options, {});
 }
 
+struct ParseDeclClosure {
+    property_id: css.PropertyId,
+    options: *const css.ParserOptions,
+    fn parseFn(*_, input2: *css.Parser): Result(css.Property) {
+        return css.Property.parse(_.property_id, input2, _.options);
+    }
+}
+
 pub fn parse_declaration_impl(
     name: []const u8,
     input: *css.Parser,
@@ -321,19 +328,12 @@ pub fn parse_declaration_impl(
     if (property_id != .custom || property_id.custom != .custom) {
         delimiters.curly_bracket = true;
     }
-    const Closure = struct {
-        property_id: css.PropertyId,
-        options: *const css.ParserOptions,
-        pub fn parseFn(*_, input2: *css.Parser): Result(css.Property) {
-            return css.Property.parse(_.property_id, input2, _.options);
-        }
-    };
-    let closure = Closure{
+    let closure = ParseDeclClosure{
         property_id: property_id,
         options: options,
     };
     const source_location = input.currentSourceLocation();
-    let property = switch (input.parseUntilBefore(delimiters, css.Property, &closure, Closure.parseFn)) {
+    let property = switch (input.parseUntilBefore(delimiters, css.Property, &closure, ParseDeclClosure.parseFn)) {
         .err => |e| return { err: e },
         .result => |v| v,
     };

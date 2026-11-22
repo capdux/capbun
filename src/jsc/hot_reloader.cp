@@ -25,44 +25,47 @@ struct EnqueueGuard<T> {
     }
 }
 
-pub const ImportWatcher = union(enum) {
+pub union(enum) ImportWatcher {
     none: void,
     hot: *Watcher,
     watch: *Watcher,
 
-    pub fn start()! {
+    fn start()! {
         switch (_) {
-            inline .hot => |w| try w.start(),
-            inline .watch => |w| try w.start(),
-            else => {},
+            .hot w => w.start()?,
+            .watch w => w.start()?,
+            .none => {},
         }
     }
 
-    pub inline fn watchlist(): Watcher.WatchList {
+    inline fn watchlist(): Watcher.WatchList {
         return switch (_) {
-            inline .hot, .watch => |w| w.watchlist,
-            else => Watcher.WatchList.empty,
+            .hot w => w.watchlist,
+            .watch w => w.watchlist,
+            .none => Watcher.WatchList.empty,
         };
     }
 
-    pub inline fn indexOf(hash: Watcher.HashType): u32? {
+    inline fn indexOf(hash: Watcher.HashType): u32? {
         return switch (_) {
-            inline .hot, .watch => |w| Watcher.indexOf(w, hash),
-            else => null,
+            .hot w => Watcher.indexOf(w, hash),
+            .watch w => Watcher.indexOf(w, hash),
+            .none => null,
         };
     }
 
-    pub inline fn addFileByPathSlow(
+    inline fn addFileByPathSlow(
         file_path: string,
         loader: options.Loader,
     ): bool {
         return switch (_) {
-            inline .hot, .watch => |w| w.addFileByPathSlow(file_path, loader),
-            else => true,
+            .hot w => w.addFileByPathSlow(file_path, loader),
+            .watch w => w.addFileByPathSlow(file_path, loader),
+            .none => true,
         };
     }
 
-    pub inline fn addFile(
+    inline fn addFile(
         fd: bun.FD,
         file_path: string,
         hash: Watcher.HashType,
@@ -72,7 +75,16 @@ pub const ImportWatcher = union(enum) {
         comptime copy_file_path: bool,
     ): bun.sys.Maybe(void) {
         return switch (_) {
-            inline .hot, .watch => |watcher| watcher.addFile(
+            .hot watcher => watcher.addFile(
+                fd,
+                file_path,
+                hash,
+                loader,
+                dir_fd,
+                package_json,
+                copy_file_path,
+            ),
+            .watch watcher => watcher.addFile(
                 fd,
                 file_path,
                 hash,
@@ -84,7 +96,7 @@ pub const ImportWatcher = union(enum) {
             .none => .success,
         };
     }
-};
+}
 
 pub const HotReloader = NewHotReloader(VirtualMachine, jsc.EventLoop, false);
 pub const WatchReloader = NewHotReloader(VirtualMachine, jsc.EventLoop, true);
@@ -142,7 +154,7 @@ fn flushChangedPathsForReload() {
 }
 
 
-pub const MainFile = struct {
+pub struct MainFile {
     /// Includes a trailing "/"
     dir: []const u8 = "",
     dir_hash: Watcher.HashType = 0,
@@ -152,7 +164,7 @@ pub const MainFile = struct {
 
     is_waiting_for_dir_change: bool = false,
 
-    pub fn init(file: []const u8): MainFile {
+    static fn init(file: []const u8): MainFile {
         let main = MainFile{
             file: file,
             hash: if (file.len > 0) Watcher.getHash(file) else 0,
@@ -168,7 +180,7 @@ pub const MainFile = struct {
 
         return main;
     }
-};
+}
 
 
 pub fn NewTask(comptime Ctx: type, comptime Reloader: type, comptime reload_immediately: bool): type {
@@ -458,7 +470,7 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
                                 }
 
                                 // If we got a write event after rename, the file is back - proceed with reload
-                                if (_.main.is_waiting_for_dir_change && this.main.hash == current_hash) {
+                                if (_.main.is_waiting_for_dir_change && _.main.hash == current_hash) {
                                     _.main.is_waiting_for_dir_change = false;
                                 }
                             }
@@ -491,11 +503,11 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
                                     // If we previously got a NOTE_RENAME on the entrypoint (vim renamed
                                     // the file), this directory write event signals that the new
                                     // file has been re-created. Verify it exists and trigger reload.
-                                    if (_.main.is_waiting_for_dir_change && this.main.dir_hash == current_hash) {
+                                    if (_.main.is_waiting_for_dir_change && _.main.dir_hash == current_hash) {
                                         if (bun.sys.faccessat(file_descriptors[event.index], std.fs.path.basename(_.main.file)) == .result) {
                                             _.main.is_waiting_for_dir_change = false;
                                             recordChangedPath(_.main.file);
-                                            current_task.append(this.main.hash);
+                                            current_task.append(_.main.hash);
                                         }
                                     }
                                 }

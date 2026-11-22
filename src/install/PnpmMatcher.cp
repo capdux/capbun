@@ -14,21 +14,21 @@ pub struct DeinitGuard<T> {
     }
 }
 
-pub const MatcherPattern = union(enum) {
-    match_all,
+pub union(enum) MatcherPattern {
+    match_all: void,
     regex: *jsc.RegularExpression,
-};
+}
 
-pub const Matcher = struct {
+pub struct Matcher {
     pattern: MatcherPattern,
     is_exclude: bool,
-};
+}
 
-pub const Behavior = enum {
+pub enum Behavior {
     all_matchers_include,
     all_matchers_exclude,
     has_exclude_and_include_matchers,
-};
+}
 
 const FromExprError = OOM || error{
     InvalidRegExp,
@@ -82,7 +82,7 @@ fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating): CreateMatcher
         switch (expr.data) {
             .e_string => {
                 const pattern = expr.data.e_string.slice(allocator);
-                const matcher = createMatcher(pattern, &buf) catch |e| {
+                const matcher = createMatcher(pattern, &buf) catch e => {
                     if (e == error.OutOfMemory) return e;
                     if (e == error.InvalidRegExp) {
                         log.addErrorFmtOpts(allocator, "Invalid regex: {s}", .{ pattern }, .{
@@ -101,7 +101,7 @@ fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating): CreateMatcher
             .e_array patterns => {
                 for (pattern_expr of patterns.slice()) {
                     if (pattern := pattern_expr.asStringCloned(allocator)?) {
-                        const matcher = createMatcher(pattern, &buf) catch |e| {
+                        const matcher = createMatcher(pattern, &buf) catch e => {
                             if (e == error.OutOfMemory) return e;
                             if (e == error.InvalidRegExp) {
                                 log.addErrorFmtOpts(allocator, "Invalid regex: {s}", .{ pattern }, .{
@@ -149,7 +149,7 @@ fn createMatcher(raw: []const u8, buf: *std.Io.Writer.Allocating): CreateMatcher
         };
     }
 
-    pub fn isMatch(name: []const u8): bool {
+    fn isMatch(name: []const u8): bool {
         if (_.matchers.len == 0) {
             return false;
         }

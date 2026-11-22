@@ -62,81 +62,24 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
-pub const U64SliceGuard = struct {
-    slice: []u64,
-    allocator: std.mem.Allocator,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *U64SliceGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            _ = self.allocator.free(self.slice);
-    }
+pub const Fs = @import("../resolver/fs.zig");
+pub const url_mod = @import("../url/url.zig");
+pub const which_mod = @import("../which/which.zig");
+pub const bun = @import("bun");
+pub const DotEnvFileSuffix = enum {
+    development,
+    production,
+    @"test",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
-pub const ErrFreeEStringSliceGuard = struct {
-    slice: []bun.ast.E.String,
-    allocator: std.mem.Allocator,
-    armed: bool = true,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *ErrFreeEStringSliceGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            if (self.armed) {
-                _ = self.allocator.free(self.slice);
-            }
-    }
-};
-
-pub const ErrFreeU8SliceGuard = struct {
-    slice: []u8,
-    allocator: std.mem.Allocator,
-    armed: bool = true,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *ErrFreeU8SliceGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            if (self.armed) {
-                _ = self.allocator.free(self.slice);
-            }
-    }
-};
-
-pub const ManagedU8ListGuard = struct {
-    list: *std.array_list.Managed(u8),
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *ManagedU8ListGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            {
-                _ = self.list.deinit();
-            }
-    }
-};
-
-pub const FileCloseGuard = struct {
-    file: std.fs.File,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *FileCloseGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            _ = self.file.close();
-    }
-};
-
-const DotEnvFileSuffix = enum {
-        development,
-        production,
-        @"test",
-    };
 pub const Loader = struct {
-    map: *Map,
+    map: *EnvMap,
     allocator: std.mem.Allocator,
     @".env.local": ?logger.Source = null,
     @".env.development": ?logger.Source = null,
@@ -151,15 +94,15 @@ pub const Loader = struct {
     did_load_process: bool = false,
     reject_unauthorized: ?bool = null,
     aws_credentials: ?s3.S3Credentials = null,
-    did_load_ccache_path: bool = false,
-    node_path_to_use_set_once: []const u8 = "",
+    pub var did_load_ccache_path: bool = false;
+    pub var node_path_to_use_set_once: []const u8 = "";
     pub var has_no_clear_screen_cli_flag: ?bool = null;
 
-pub fn iterator(self: *const @This()) Map.HashTable.Iterator {
+pub fn iterator(self: Loader) EnvMap.HashTable.Iterator {
             return self.map.iterator();
     }
 
-pub fn has(self: *const @This(), input: []const u8) bool {
+pub fn has(self: Loader, input: []const u8) bool {
             const value = ((self.get(input)) orelse { return false; });
             if ((value.len == 0)) {
                 return false;
@@ -167,17 +110,17 @@ pub fn has(self: *const @This(), input: []const u8) bool {
             return ((((!strings.eqlComptime(value, "\"\"")) and (!strings.eqlComptime(value, "''"))) and (!strings.eqlComptime(value, "0"))) and (!strings.eqlComptime(value, "false")));
     }
 
-pub fn isProduction(self: *const @This()) bool {
+pub fn isProduction(self: Loader) bool {
             const env = ((self.get("BUN_ENV")) orelse (((self.get("NODE_ENV")) orelse { return false; })));
             return strings.eqlComptime(env, "production");
     }
 
-pub fn isTest(self: *const @This()) bool {
+pub fn isTest(self: Loader) bool {
             const env = ((self.get("BUN_ENV")) orelse (((self.get("NODE_ENV")) orelse { return false; })));
             return strings.eqlComptime(env, "test");
     }
 
-pub fn getNodePath(self: *@This(), fs: *Fs.FileSystem, buf: *bun.PathBuffer) ?[:0]const u8 {
+pub fn getNodePath(self: *Loader, fs: *Fs.FileSystem, buf: *bun.PathBuffer) ?[:0]const u8 {
             if (((self.get("NODE")) orelse (self.get("npm_node_execpath")))) |node| {
                 _ = &node;
                 if (((node.len > 0) and (node.len < bun.MAX_PATH_BYTES))) {
@@ -195,16 +138,16 @@ pub fn getNodePath(self: *@This(), fs: *Fs.FileSystem, buf: *bun.PathBuffer) ?[:
             return null;
     }
 
-pub fn isCI(self: *const @This()) bool {
+pub fn isCI(self: Loader) bool {
             return (((self.get("CI")) orelse (((self.get("TDDIUM")) orelse (((self.get("GITHUB_ACTIONS")) orelse (((self.get("JENKINS_URL")) orelse (self.get("bamboo.buildKey"))))))))) != null);
     }
 
-pub fn loadTracy(self: @This()) void {
-            const s = self;
-            _ = &s;
+pub fn loadTracy(self: Loader) void {
+            const _self = self;
+            _ = &_self;
     }
 
-pub fn getS3Credentials(self: *@This()) s3.S3Credentials {
+pub fn getS3Credentials(self: *Loader) s3.S3Credentials {
             if (self.aws_credentials) |credentials| {
                 _ = &credentials;
                 return credentials;
@@ -285,7 +228,7 @@ pub fn getS3Credentials(self: *@This()) s3.S3Credentials {
             return self.aws_credentials.?;
     }
 
-pub fn getTLSRejectUnauthorized(self: *@This()) bool {
+pub fn getTLSRejectUnauthorized(self: *Loader) bool {
             if (self.reject_unauthorized) |reject_unauthorized| {
                 _ = &reject_unauthorized;
                 return reject_unauthorized;
@@ -305,15 +248,15 @@ pub fn getTLSRejectUnauthorized(self: *@This()) bool {
             return true;
     }
 
-pub fn getHttpProxyFor(self: *@This(), url: URL) ?URL {
+pub fn getHttpProxyFor(self: *Loader, url: URL) ?URL {
             return self.getHttpProxy(url.isHTTP(), url.hostname, url.host);
     }
 
-pub fn hasHTTPProxy(self: *const @This()) bool {
+pub fn hasHTTPProxy(self: Loader) bool {
             return (((self.has("http_proxy") or self.has("HTTP_PROXY")) or self.has("https_proxy")) or self.has("HTTPS_PROXY"));
     }
 
-pub fn getHttpProxy(self: *@This(), is_http: bool, hostname: ?[]const u8, host: ?[]const u8) ?URL {
+pub fn getHttpProxy(self: *Loader, is_http: bool, hostname: ?[]const u8, host: ?[]const u8) ?URL {
             var http_proxy: ?URL = null;
             _ = &http_proxy;
             if (is_http) {
@@ -357,7 +300,7 @@ pub fn getHttpProxy(self: *@This(), is_http: bool, hostname: ?[]const u8, host: 
             return http_proxy;
     }
 
-pub fn isNoProxy(self: *const @This(), hostname: ?[]const u8, host: ?[]const u8) bool {
+pub fn isNoProxy(self: Loader, hostname: ?[]const u8, host: ?[]const u8) bool {
             const hn = ((hostname) orelse { return false; });
             const no_proxy_text: []const u8 = blk: {
             if (self.get("no_proxy")) |p| {
@@ -426,15 +369,15 @@ pub fn isNoProxy(self: *const @This(), hostname: ?[]const u8, host: ?[]const u8)
             return false;
     }
 
-pub fn loadCCachePath(self: *@This(), fs: *Fs.FileSystem) void {
-            if (self.did_load_ccache_path) {
+pub fn loadCCachePath(self: *Loader, fs: *Fs.FileSystem) void {
+            if (did_load_ccache_path) {
                 return;
             }
-            self.did_load_ccache_path = true;
-            _ = (blk_catch_0: { break :blk_catch_0 ((loadCCachePathImpl(self, fs)) catch |__ce_0| { _ = &__ce_0;  }); });
+            did_load_ccache_path = true;
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.loadCCachePathImpl(fs)) catch |__ce_0| { _ = &__ce_0;  }); });
     }
 
-pub fn loadCCachePathImpl(self: *@This(), fs: *Fs.FileSystem) !void {
+pub fn loadCCachePathImpl(self: *Loader, fs: *Fs.FileSystem) !void {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             const path_val = ((self.get("PATH")) orelse { return; });
@@ -453,26 +396,26 @@ pub fn loadCCachePathImpl(self: *@This(), fs: *Fs.FileSystem) !void {
             }
     }
 
-pub fn loadNodeJSConfig(self: *@This(), fs: *Fs.FileSystem, override_node: []const u8) !bool {
+pub fn loadNodeJSConfig(self: *Loader, fs: *Fs.FileSystem, override_node: []const u8) !bool {
             var buf: bun.PathBuffer = undefined;
             _ = &buf;
             var node_path_to_use = override_node;
             _ = &node_path_to_use;
             if ((node_path_to_use.len == 0)) {
-                if ((self.node_path_to_use_set_once.len > 0)) {
-                    node_path_to_use = self.node_path_to_use_set_once;
+                if ((node_path_to_use_set_once.len > 0)) {
+                    node_path_to_use = node_path_to_use_set_once;
                 } else {
                     const node = ((self.getNodePath(fs, (&buf))) orelse { return false; });
                     node_path_to_use = try fs.dirname_store.append(@TypeOf(node_path_to_use), bun.asByteSlice(node));
                 }
             }
-            self.node_path_to_use_set_once = node_path_to_use;
+            node_path_to_use_set_once = node_path_to_use;
             _ = try self.map.put("NODE", node_path_to_use);
             _ = try self.map.put("npm_node_execpath", node_path_to_use);
             return true;
     }
 
-pub fn getAs(self: *const @This(), comptime T: type, key: []const u8) ?T {
+pub fn getAs(self: Loader, comptime T: type, key: []const u8) ?T {
             const value = ((self.get(key)) orelse { return null; });
             if ((comptime T) == bool) {
 if (strings.eqlComptime(value, "")) {
@@ -496,11 +439,11 @@ _ = @compileError("Implement getAs for this type");
 }
     }
 
-pub fn hasSetNoClearTerminalOnReload(self: *const @This(), default_value: bool) bool {
+pub fn hasSetNoClearTerminalOnReload(self: Loader, default_value: bool) bool {
             return ((((@This().has_no_clear_screen_cli_flag) orelse (self.getAs(bool, "BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD")))) orelse (default_value));
     }
 
-pub fn get(self: *const @This(), key: []const u8) ?[]const u8 {
+pub fn get(self: *const Loader, key: []const u8) ?[]const u8 {
             var _key = key;
             _ = &_key;
             if (((_key.len > 0) and (_key[0] == 36))) {
@@ -512,14 +455,14 @@ pub fn get(self: *const @This(), key: []const u8) ?[]const u8 {
             return self.map.get(_key);
     }
 
-pub fn getAuto(self: *const @This(), key: []const u8) []const u8 {
+pub fn getAuto(self: *const Loader, key: []const u8) []const u8 {
             if (((key.len < 2) or (key[0] != 36))) {
                 return key;
             }
             return ((self.get(key[1..])) orelse (key));
     }
 
-pub fn copyForDefine(self: *@This(), comptime JSONStore: type, to_json: *JSONStore, comptime StringStore: type, to_string: *StringStore, framework_defaults: api.StringMap, behavior: api.DotEnvBehavior, prefix: []const u8, allocator: std.mem.Allocator) !void {
+pub fn copyForDefine(self: *Loader, comptime JSONStore: type, to_json: *JSONStore, comptime StringStore: type, to_string: *StringStore, framework_defaults: api.StringMap, behavior: api.DotEnvBehavior, prefix: []const u8, allocator: std.mem.Allocator) !void {
             var iter = self.map.iterator();
             _ = &iter;
             var key_count: usize = 0;
@@ -578,11 +521,11 @@ pub fn copyForDefine(self: *@This(), comptime JSONStore: type, to_json: *JSONSto
                     var _e_strings_guard = ErrFreeEStringSliceGuard{ .slice = e_strings, .allocator = allocator };
                     _ = &_e_strings_guard;
                     var ___e_strings_guard_moved = false; _ = &___e_strings_guard_moved;
-                    defer if (!___e_strings_guard_moved) { ___e_strings_guard_moved = true; const __T = @TypeOf(_e_strings_guard); if (@typeInfo(__T) == .optional) { if (_e_strings_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _e_strings_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _e_strings_guard; _drop_val.__cp_deinit(); } };
+                    errdefer if (!___e_strings_guard_moved) { ___e_strings_guard_moved = true; const __T = @TypeOf(_e_strings_guard); if (@typeInfo(__T) == .optional) { if (_e_strings_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _e_strings_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _e_strings_guard; _drop_val.__cp_errdeinit(); } };
                     var _key_buf_guard = ErrFreeU8SliceGuard{ .slice = key_buf, .allocator = allocator };
                     _ = &_key_buf_guard;
                     var ___key_buf_guard_moved = false; _ = &___key_buf_guard_moved;
-                    defer if (!___key_buf_guard_moved) { ___key_buf_guard_moved = true; const __T = @TypeOf(_key_buf_guard); if (@typeInfo(__T) == .optional) { if (_key_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _key_buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _key_buf_guard; _drop_val.__cp_deinit(); } };
+                    errdefer if (!___key_buf_guard_moved) { ___key_buf_guard_moved = true; const __T = @TypeOf(_key_buf_guard); if (@typeInfo(__T) == .optional) { if (_key_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _key_buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _key_buf_guard; _drop_val.__cp_errdeinit(); } };
                     if ((behavior == .prefix)) {
                         while (iter.next()) |entry| {
                             const value: []const u8 = (if (@typeInfo(@TypeOf(entry.value_ptr)) == .@"enum") @intFromEnum(entry.value_ptr) else entry.value_ptr.value);
@@ -590,7 +533,13 @@ pub fn copyForDefine(self: *@This(), comptime JSONStore: type, to_json: *JSONSto
                                 _ = ((key_writer.print("process.env.{s}", .{ entry.key_ptr.* })) catch unreachable);
                                 const key_str = key_writer.buffered();
                                 key_writer = std.Io.Writer.fixed(key_writer.unusedCapacitySlice());
-                                const str_data: []u8 = (if ((value.len > 0)) @constCast(value) else (&.{}));
+                                var str_data: []u8 = empty_u8[0..0];
+                                _ = &str_data;
+                                if ((value.len > 0)) {
+                                    {
+                                        str_data = @constCast(value);
+                                    }
+                                }
                                 e_strings[cp_cast_int(usize, 0)] = js_ast.E.String{ .data = str_data };
                                 const expr_data = js_ast.Expr.Data{ .e_string = (&e_strings[0]) };
                                 _ = try to_string.getOrPutValue(key_str, .init(.{ .can_be_removed_if_unused = true, .call_can_be_unwrapped_if_unused = .if_unused, .value = expr_data }));
@@ -600,7 +549,13 @@ pub fn copyForDefine(self: *@This(), comptime JSONStore: type, to_json: *JSONSto
                                 _ = bun.assert((hash != invalid_hash));
                                 if (std.mem.indexOfScalar(u64, string_map_hashes, hash)) |key_i| {
                                     _ = &key_i;
-                                    const str_data: []u8 = (if ((value.len > 0)) @constCast(value) else (&.{}));
+                                    var str_data: []u8 = empty_u8[0..0];
+                                    _ = &str_data;
+                                    if ((value.len > 0)) {
+                                        {
+                                            str_data = @constCast(value);
+                                        }
+                                    }
                                     e_strings[cp_cast_int(usize, 0)] = js_ast.E.String{ .data = str_data };
                                     const expr_data = js_ast.Expr.Data{ .e_string = (&e_strings[0]) };
                                     _ = try to_string.getOrPutValue(framework_defaults.keys[@as(usize, @intCast(key_i))], .init(.{ .can_be_removed_if_unused = true, .call_can_be_unwrapped_if_unused = .if_unused, .value = expr_data }));
@@ -614,15 +569,19 @@ pub fn copyForDefine(self: *@This(), comptime JSONStore: type, to_json: *JSONSto
                             _ = ((key_writer.print("process.env.{s}", .{ entry.key_ptr.* })) catch unreachable);
                             const key_str = key_writer.buffered();
                             key_writer = std.Io.Writer.fixed(key_writer.unusedCapacitySlice());
-                            const str_data: []u8 = (if ((value.len > 0)) @constCast(value) else (&.{}));
+                            var str_data: []u8 = empty_u8[0..0];
+                            _ = &str_data;
+                            if ((value.len > 0)) {
+                                {
+                                    str_data = @constCast(value);
+                                }
+                            }
                             e_strings[cp_cast_int(usize, 0)] = js_ast.E.String{ .data = str_data };
                             const expr_data = js_ast.Expr.Data{ .e_string = (&e_strings[0]) };
                             _ = try to_string.getOrPutValue(key_str, .init(.{ .can_be_removed_if_unused = true, .call_can_be_unwrapped_if_unused = .if_unused, .value = expr_data }));
                             e_strings = e_strings[1..];
                         }
                     }
-                    _e_strings_guard.armed = false;
-                    _key_buf_guard.armed = false;
                 }
             }
             for (framework_defaults.keys, 0..) |key, i| {
@@ -635,11 +594,11 @@ pub fn copyForDefine(self: *@This(), comptime JSONStore: type, to_json: *JSONSto
             }
     }
 
-pub fn init(map: *Map, allocator: std.mem.Allocator) Loader {
+pub fn init(map: *EnvMap, allocator: std.mem.Allocator) Loader {
             return Loader{ .map = map, .allocator = allocator, .custom_files_loaded = bun.StringArrayHashMap(logger.Source).init(allocator) };
     }
 
-pub fn loadProcess(self: *@This()) OOM!void {
+pub fn loadProcess(self: *Loader) !void {
             if (self.did_load_process) {
                 return;
             }
@@ -664,7 +623,7 @@ pub fn loadProcess(self: *@This()) OOM!void {
             self.did_load_process = true;
     }
 
-pub fn loadFromString(self: *@This(), str: []const u8, comptime overwrite: bool, comptime expand: bool) OOM!void {
+pub fn loadFromString(self: *Loader, str: []const u8, comptime overwrite: bool, comptime expand: bool) !void {
             const source = (&logger.Source.initPathString("test", str));
             var value_buffer = std.array_list.Managed(u8).init(self.allocator);
             _ = &value_buffer;
@@ -676,7 +635,7 @@ pub fn loadFromString(self: *@This(), str: []const u8, comptime overwrite: bool,
             _ = std.mem.doNotOptimizeAway((&source));
     }
 
-pub fn load(self: *@This(), dir: *Fs.FileSystem.DirEntry, env_files: []const []const u8, comptime suffix: DotEnvFileSuffix, skip_default_env: bool) !void {
+pub fn load(self: *Loader, dir: *Fs.FileSystem.DirEntry, env_files: []const []const u8, comptime suffix: DotEnvFileSuffix, skip_default_env: bool) !void {
             const start = std.time.nanoTimestamp();
             var stack_fallback = std.heap.stackFallback(4096, self.allocator);
             _ = &stack_fallback;
@@ -698,7 +657,7 @@ pub fn load(self: *@This(), dir: *Fs.FileSystem.DirEntry, env_files: []const []c
             }
     }
 
-pub fn loadExplicitFiles(self: *@This(), env_files: []const []const u8, value_buffer: *std.array_list.Managed(u8)) !void {
+pub fn loadExplicitFiles(self: *Loader, env_files: []const []const u8, value_buffer: *std.array_list.Managed(u8)) !void {
             var i: usize = env_files.len;
             _ = &i;
             while ((i > 0)) : (i = (i - 1)) {
@@ -716,7 +675,7 @@ pub fn loadExplicitFiles(self: *@This(), env_files: []const []const u8, value_bu
             }
     }
 
-pub fn loadDefaultFiles(self: *@This(), dir: *Fs.FileSystem.DirEntry, comptime suffix: DotEnvFileSuffix, value_buffer: *std.array_list.Managed(u8)) !void {
+pub fn loadDefaultFiles(self: *Loader, dir: *Fs.FileSystem.DirEntry, comptime suffix: DotEnvFileSuffix, value_buffer: *std.array_list.Managed(u8)) !void {
             const dir_handle: std.fs.Dir = std.fs.cwd();
             switch ((comptime suffix)) {
 .development => {
@@ -770,7 +729,7 @@ if (dir.hasComptimeQuery(".env.test")) {
             }
     }
 
-pub fn printLoaded(self: *@This(), start: i128) void {
+pub fn printLoaded(self: *Loader, start: i128) void {
             const count = ((((((((@as(u8, @intCast(@intFromBool((self.@".env.development.local" != null)))) + @as(u8, @intCast(@intFromBool((self.@".env.production.local" != null))))) + @as(u8, @intCast(@intFromBool((self.@".env.test.local" != null))))) + @as(u8, @intCast(@intFromBool((self.@".env.local" != null))))) + @as(u8, @intCast(@intFromBool((self.@".env.development" != null))))) + @as(u8, @intCast(@intFromBool((self.@".env.production" != null))))) + @as(u8, @intCast(@intFromBool((self.@".env.test" != null))))) + @as(u8, @intCast(@intFromBool((self.@".env" != null))))) + self.custom_files_loaded.count());
             if ((count == 0)) {
                 return;
@@ -808,30 +767,24 @@ pub fn printLoaded(self: *@This(), start: i128) void {
             _ = Output.flush();
     }
 
-pub fn loadEnvFile(self: *@This(), dir: std.fs.Dir, comptime base: []const u8, comptime override: bool, value_buffer: *std.array_list.Managed(u8)) !void {
+pub fn loadEnvFile(self: *Loader, dir: std.fs.Dir, comptime base: []const u8, comptime override: bool, value_buffer: *std.array_list.Managed(u8)) !void {
             if ((@field(self, base) != null)) {
                 return;
             }
-            var file = (blk_catch_3: { break :blk_catch_3 ((dir.openFile(base, .{ .mode = .read_only })) catch |err| { _ = &err; break :blk_catch_3 (switch (err) {
-error.IsDir, error.FileNotFound => {
-{
+            var file = (blk_catch_3: { break :blk_catch_3 ((dir.openFile(base, .{ .mode = .read_only })) catch |e| { _ = &e; if (((e == error.IsDir) or (e == error.FileNotFound))) {
                 @field(self, base) = logger.Source.initPathString(base, "");
                 return;
-            }
-},
-error.Unexpected, error.FileBusy, error.DeviceBusy, error.AccessDenied => {
-{
-                if ((!self.quiet)) {
-                    _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(err), base });
+            } else {
+                if (((((e == error.Unexpected) or (e == error.FileBusy)) or (e == error.DeviceBusy)) or (e == error.AccessDenied))) {
+                    if ((!self.quiet)) {
+                        _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), base });
+                    }
+                    @field(self, base) = logger.Source.initPathString(base, "");
+                    return;
+                } else {
+                    return e;
                 }
-                @field(self, base) = logger.Source.initPathString(base, "");
-                return;
-            }
-},
-else => {
-return err;
-},
-}); }); });
+            } }); });
             _ = &file;
             var _file_guard = FileCloseGuard{ .file = file };
             _ = &_file_guard;
@@ -858,29 +811,23 @@ return err;
             var _buf_guard = ErrFreeU8SliceGuard{ .slice = buf, .allocator = self.allocator };
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
-            defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-            const amount_read = (blk_catch_4: { break :blk_catch_4 ((file.readAll(buf[0..end])) catch |err| { _ = &err; break :blk_catch_4 (switch (err) {
-error.Unexpected, error.SystemResources, error.OperationAborted, error.BrokenPipe, error.AccessDenied, error.IsDir => {
-{
+            errdefer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _buf_guard; _drop_val.__cp_errdeinit(); } };
+            const amount_read = (blk_catch_4: { break :blk_catch_4 ((file.readAll(buf[0..end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
                 if ((!self.quiet)) {
-                    _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(err), base });
+                    _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), base });
                 }
                 @field(self, base) = logger.Source.initPathString(base, "");
                 return;
-            }
-},
-else => {
-return err;
-},
-}); }); });
+            } else {
+                return e;
+            } }); });
             buf[cp_cast_int(usize, end)] = 0;
             const source = (&logger.Source.initPathString(base, buf[0..amount_read]));
             _ = try Parser.parse(source, self.allocator, self.map, value_buffer, override, false, true);
             @field(self, base) = source.*;
-            _buf_guard.armed = false;
     }
 
-pub fn loadEnvFileDynamic(self: *@This(), file_path: []const u8, comptime override: bool, value_buffer: *std.array_list.Managed(u8)) !void {
+pub fn loadEnvFileDynamic(self: *Loader, file_path: []const u8, comptime override: bool, value_buffer: *std.array_list.Managed(u8)) !void {
             if (self.custom_files_loaded.contains(file_path)) {
                 return;
             }
@@ -912,34 +859,29 @@ pub fn loadEnvFileDynamic(self: *@This(), file_path: []const u8, comptime overri
             var _buf_guard = ErrFreeU8SliceGuard{ .slice = buf, .allocator = self.allocator };
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
-            defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-            const amount_read = (blk_catch_6: { break :blk_catch_6 ((file.readAll(buf[0..end])) catch |err| { _ = &err; break :blk_catch_6 (switch (err) {
-error.Unexpected, error.SystemResources, error.OperationAborted, error.BrokenPipe, error.AccessDenied, error.IsDir => {
-{
+            errdefer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _buf_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _buf_guard; _drop_val.__cp_errdeinit(); } };
+            const amount_read = (blk_catch_6: { break :blk_catch_6 ((file.readAll(buf[0..end])) catch |e| { _ = &e; if (((((((e == error.Unexpected) or (e == error.SystemResources)) or (e == error.OperationAborted)) or (e == error.BrokenPipe)) or (e == error.AccessDenied)) or (e == error.IsDir))) {
                 if ((!self.quiet)) {
-                    _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(err), file_path });
+                    _ = Output.prettyErrorln("<r><red>{s}<r> error loading {s} file", .{ @errorName(e), file_path });
                 }
                 _ = try self.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""));
                 return;
-            }
-},
-else => {
-return err;
-},
-}); }); });
+            } else {
+                return e;
+            } }); });
             buf[cp_cast_int(usize, end)] = 0;
             const source = (&logger.Source.initPathString(file_path, buf[0..amount_read]));
             _ = try Parser.parse(source, self.allocator, self.map, value_buffer, override, false, true);
             _ = try self.custom_files_loaded.put(file_path, source.*);
-            _buf_guard.armed = false;
     }
 };
-const Parser = struct {
+
+pub const Parser = struct {
     pos: usize = 0,
     src: []const u8,
     value_buffer: *std.array_list.Managed(u8),
 
-pub fn skipLine(self: *@This()) void {
+pub fn skipLine(self: *Parser) void {
             if (strings.indexOfAny(self.src[self.pos..], "\n\r")) |i| {
                 _ = &i;
                 self.pos = (self.pos + (i + 1));
@@ -948,7 +890,7 @@ pub fn skipLine(self: *@This()) void {
             }
     }
 
-pub fn skipWhitespaces(self: *@This()) void {
+pub fn skipWhitespaces(self: *Parser) void {
             var i = self.pos;
             _ = &i;
             while ((i < self.src.len)) : (i = (i + 1)) {
@@ -959,7 +901,7 @@ pub fn skipWhitespaces(self: *@This()) void {
             self.pos = i;
     }
 
-pub fn parseKey(self: *@This(), comptime check_export: bool) ?[]const u8 {
+pub fn parseKey(self: *Parser, comptime check_export: bool) ?[]const u8 {
             if (comptime check_export) {
                 _ = self.skipWhitespaces();
             }
@@ -1010,7 +952,7 @@ else => {
             return null;
     }
 
-pub fn parseQuoted(self: *@This(), comptime quote: u8) !?[]const u8 {
+pub fn parseQuoted(self: *Parser, comptime quote: u8) !?[]const u8 {
             if (comptime Environment.allow_assert) {
                 _ = bun.assert((self.src[@as(usize, @intCast(self.pos))] == quote));
             }
@@ -1080,7 +1022,7 @@ else => {
             return null;
     }
 
-pub fn parseValue(self: *@This(), comptime is_process: bool) OOM![]const u8 {
+pub fn parseValue(self: *Parser, comptime is_process: bool) ![]const u8 {
             const start = self.pos;
             _ = self.skipWhitespaces();
             var end = self.pos;
@@ -1114,7 +1056,7 @@ else => {
             return strings.trim(self.src[start..end], whitespace_chars);
     }
 
-pub fn expandValue(self: *@This(), map: *Map, value: []const u8) OOM!?[]const u8 {
+pub fn expandValue(self: *Parser, map: *EnvMap, value: []const u8) !?[]const u8 {
             if ((value.len < 2)) {
                 return null;
             }
@@ -1179,7 +1121,7 @@ _ = continue;
             return self.value_buffer.items;
     }
 
-pub fn _parse(self: *@This(), allocator: std.mem.Allocator, map: *Map, comptime override: bool, comptime is_process: bool, comptime expand: bool) OOM!void {
+pub fn _parse(self: *Parser, allocator: std.mem.Allocator, map: *EnvMap, comptime override: bool, comptime is_process: bool, comptime expand: bool) !void {
             var count = map.map.count();
             _ = &count;
             while ((self.pos < self.src.len)) {
@@ -1217,7 +1159,7 @@ pub fn _parse(self: *@This(), allocator: std.mem.Allocator, map: *Map, comptime 
             }
     }
 
-pub fn parse(source: *const logger.Source, allocator: std.mem.Allocator, map: *Map, value_buffer: *std.array_list.Managed(u8), comptime override: bool, comptime is_process: bool, comptime expand: bool) OOM!void {
+pub fn parse(source: *const logger.Source, allocator: std.mem.Allocator, map: *EnvMap, value_buffer: *std.array_list.Managed(u8), comptime override: bool, comptime is_process: bool, comptime expand: bool) !void {
             _ = value_buffer.clearRetainingCapacity();
             var parser = Parser{ .src = source.contents, .value_buffer = value_buffer };
             _ = &parser;
@@ -1225,215 +1167,251 @@ pub fn parse(source: *const logger.Source, allocator: std.mem.Allocator, map: *M
     }
     const whitespace_chars = "\t\x0B\x0C \xA0\n\r";
 };
-pub const Map = struct {
-        pub const HashTableValue = struct {
-            value: string,
-            conditional: bool,
-        };
-        // On Windows, environment variables are case-insensitive. So we use a case-insensitive hash map.
-        // An issue with this exact implementation is unicode characters can technically appear in these
-        // keys, and we use a simple toLowercase function that only applies to ascii, so this will make
-        // some strings collide.
-        pub const HashTable = (if (Environment.isWindows) bun.CaseInsensitiveASCIIStringArrayHashMap else bun.StringArrayHashMap)(HashTableValue);
 
-        const GetOrPutResult = HashTable.GetOrPutResult;
+pub const _MapHashTableValue = struct {
+    value: []const u8,
+    conditional: bool,
+};
 
-        map: HashTable,
+pub const _StdEnvMapWrapper = struct {
+    unsafe_map: std.process.EnvMap,
 
-        pub fn createNullDelimitedEnvMap(this: *Map, arena: std.mem.Allocator) OOM![:null]?[*:0]const u8 {
-            var env_map = &this.map;
+pub fn get(self: *const _StdEnvMapWrapper) *const std.process.EnvMap {
+            return (&self.unsafe_map);
+    }
 
+pub fn deinit(self: *_StdEnvMapWrapper) void {
+            _ = self.unsafe_map.hash_map.deinit();
+    }
+};
+
+pub const EnvMap = struct {
+    map: MapHashTable,
+
+pub fn createNullDelimitedEnvMap(self: *EnvMap, arena: std.mem.Allocator) !NullDelimitedEnvMap {
+            var env_map = (&self.map);
+            _ = &env_map;
             const envp_count = env_map.count();
-            const envp_buf = try arena.allocSentinel(?[*:0]const u8, envp_count, null);
+            var envp_buf = try arena.allocSentinel(OptCStrPtr, envp_count, null);
+            _ = &envp_buf;
             {
                 var it = env_map.iterator();
+                _ = &it;
                 var i: usize = 0;
-                while (it.next()) |pair| : (i += 1) {
-                    const env_buf = try arena.allocSentinel(u8, pair.key_ptr.len + pair.value_ptr.value.len + 1, 0);
-                    bun.copy(u8, env_buf, pair.key_ptr.*);
-                    env_buf[pair.key_ptr.len] = '=';
-                    bun.copy(u8, env_buf[pair.key_ptr.len + 1 ..], pair.value_ptr.value);
-                    envp_buf[i] = env_buf.ptr;
+                _ = &i;
+                while (it.next()) |pair| : (i = (i + 1)) {
+                    var env_buf = try arena.allocSentinel(u8, ((pair.key_ptr.len + (if (@typeInfo(@TypeOf(pair.value_ptr)) == .@"enum") @intFromEnum(pair.value_ptr) else pair.value_ptr.value).len) + 1), 0);
+                    _ = &env_buf;
+                    _ = bun.copy(u8, env_buf, pair.key_ptr.*);
+                    env_buf[cp_cast_int(usize, pair.key_ptr.len)] = 61;
+                    _ = bun.copy(u8, env_buf[(pair.key_ptr.len + 1)..], (if (@typeInfo(@TypeOf(pair.value_ptr)) == .@"enum") @intFromEnum(pair.value_ptr) else pair.value_ptr.value));
+                    envp_buf[cp_cast_int(usize, i)] = env_buf.ptr;
                 }
-                if (comptime Environment.allow_assert) bun.assert(i == envp_count);
+                if (comptime Environment.allow_assert) {
+                    _ = bun.assert((i == envp_count));
+                }
             }
             return envp_buf;
-        }
+    }
 
-        /// Returns a wrapper around the std.process.EnvMap that does not duplicate the memory of
-        /// the keys and values, but instead points into the memory of the bun env map.
-        ///
-        /// To prevent
-        pub fn stdEnvMap(this: *Map, allocator: std.mem.Allocator) OOM!StdEnvMapWrapper {
+pub fn stdEnvMap(self: *EnvMap, allocator: std.mem.Allocator) !StdEnvMapWrapper {
             var env_map = std.process.EnvMap.init(allocator);
-
-            var iter = this.map.iterator();
-            while (iter.next()) |entry| {
-                try env_map.hash_map.put(entry.key_ptr.*, entry.value_ptr.value);
-            }
-
-            return .{ .unsafe_map = env_map };
-        }
-
-        pub const StdEnvMapWrapper = struct {
-            unsafe_map: std.process.EnvMap,
-
-            pub fn get(this: *const StdEnvMapWrapper) *const std.process.EnvMap {
-                return &this.unsafe_map;
-            }
-
-            pub fn deinit(this: *StdEnvMapWrapper) void {
-                this.unsafe_map.hash_map.deinit();
-            }
-        };
-
-        /// Write the Windows environment block into a buffer
-        /// This can be passed to CreateProcessW's lpEnvironment parameter
-        pub fn writeWindowsEnvBlock(this: *Map, result: *[32767]u16) ![*]const u16 {
-            var it = this.map.iterator();
-            var i: usize = 0;
-            while (it.next()) |pair| {
-                i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len;
-                if (i + 7 >= result.len) return error.TooManyEnvironmentVariables;
-                result[i] = '=';
-                i += 1;
-                i += bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.value_ptr.*.value).len;
-                if (i + 5 >= result.len) return error.TooManyEnvironmentVariables;
-                result[i] = 0;
-                i += 1;
-            }
-            result[i] = 0;
-            i += 1;
-            result[i] = 0;
-            i += 1;
-            result[i] = 0;
-            i += 1;
-            result[i] = 0;
-            i += 1;
-
-            return result[0..].ptr;
-        }
-
-        pub fn iterator(this: *const Map) HashTable.Iterator {
-            return this.map.iterator();
-        }
-
-        pub inline fn init(allocator: std.mem.Allocator) Map {
-            return Map{ .map = HashTable.init(allocator) };
-        }
-
-        pub inline fn put(this: *Map, key: string, value: string) OOM!void {
-            if (Environment.isWindows and Environment.allow_assert) {
-                bun.assert(bun.strings.indexOfChar(key, 0) == null);
-            }
-            try this.map.put(key, .{
-                .value = value,
-                .conditional = false,
-            });
-        }
-
-        pub fn ensureUnusedCapacity(this: *Map, additional_count: usize) OOM!void {
-            return this.map.ensureUnusedCapacity(additional_count);
-        }
-
-        pub fn putAssumeCapacity(this: *Map, key: string, value: string) void {
-            if (Environment.isWindows and Environment.allow_assert) {
-                bun.assert(bun.strings.indexOfChar(key, 0) == null);
-            }
-            this.map.putAssumeCapacity(key, .{
-                .value = value,
-                .conditional = false,
-            });
-        }
-
-        pub inline fn putAllocKeyAndValue(this: *Map, allocator: std.mem.Allocator, key: string, value: string) OOM!void {
-            const gop = try this.map.getOrPut(key);
-            gop.value_ptr.* = .{
-                .value = try allocator.dupe(u8, value),
-                .conditional = false,
-            };
-            if (!gop.found_existing) {
-                gop.key_ptr.* = try allocator.dupe(u8, key);
-            }
-        }
-
-        pub inline fn putAllocKey(this: *Map, allocator: std.mem.Allocator, key: string, value: string) OOM!void {
-            const gop = try this.map.getOrPut(key);
-            gop.value_ptr.* = .{
-                .value = value,
-                .conditional = false,
-            };
-            if (!gop.found_existing) {
-                gop.key_ptr.* = try allocator.dupe(u8, key);
-            }
-        }
-
-        pub inline fn putAllocValue(this: *Map, allocator: std.mem.Allocator, key: string, value: string) OOM!void {
-            try this.map.put(key, .{
-                .value = try allocator.dupe(u8, value),
-                .conditional = false,
-            });
-        }
-
-        pub inline fn getOrPutWithoutValue(this: *Map, key: string) OOM!GetOrPutResult {
-            return this.map.getOrPut(key);
-        }
-
-        pub fn jsonStringify(self: *const @This(), writer: anytype) !void {
+            _ = &env_map;
             var iter = self.map.iterator();
+            _ = &iter;
+            while (iter.next()) |entry| {
+                _ = try env_map.hash_map.put(entry.key_ptr.*, (if (@typeInfo(@TypeOf(entry.value_ptr)) == .@"enum") @intFromEnum(entry.value_ptr) else entry.value_ptr.value));
+            }
+            return .{ .unsafe_map = env_map };
+    }
 
+pub fn writeWindowsEnvBlock(self: *EnvMap, result: *[32767]u16) ![*]const u16 {
+            var it = self.map.iterator();
+            _ = &it;
+            var i: usize = 0;
+            _ = &i;
+            while (it.next()) |pair| {
+                i = (i + bun.strings.convertUTF8toUTF16InBuffer(result[i..], pair.key_ptr.*).len);
+                if (((i + 7) >= result.len)) {
+                    return error.TooManyEnvironmentVariables;
+                }
+                result[cp_cast_int(usize, i)] = 61;
+                i = (i + 1);
+                i = (i + bun.strings.convertUTF8toUTF16InBuffer(result[i..], (if (@typeInfo(@TypeOf(pair.value_ptr.*)) == .@"enum") @intFromEnum(pair.value_ptr.*) else pair.value_ptr.*.value)).len);
+                if (((i + 5) >= result.len)) {
+                    return error.TooManyEnvironmentVariables;
+                }
+                result[cp_cast_int(usize, i)] = 0;
+                i = (i + 1);
+            }
+            result[cp_cast_int(usize, i)] = 0;
+            i = (i + 1);
+            result[cp_cast_int(usize, i)] = 0;
+            i = (i + 1);
+            result[cp_cast_int(usize, i)] = 0;
+            i = (i + 1);
+            result[cp_cast_int(usize, i)] = 0;
+            i = (i + 1);
+            return result[0..].ptr;
+    }
+
+pub fn iterator(self: EnvMap) HashTable.Iterator {
+            return self.map.iterator();
+    }
+
+pub fn init(allocator: std.mem.Allocator) EnvMap {
+            return EnvMap{ .map = HashTable.init(allocator) };
+    }
+
+pub inline fn put(self: *EnvMap, key: []const u8, value: []const u8) !void {
+            if ((Environment.isWindows and Environment.allow_assert)) {
+                _ = bun.assert((bun.strings.indexOfChar(key, 0) == null));
+            }
+            _ = try self.map.put(key, .{ .value = value, .conditional = false });
+    }
+
+pub fn ensureUnusedCapacity(self: *EnvMap, additional_count: usize) !void {
+            return self.map.ensureUnusedCapacity(additional_count);
+    }
+
+pub fn putAssumeCapacity(self: *EnvMap, key: []const u8, value: []const u8) void {
+            if ((Environment.isWindows and Environment.allow_assert)) {
+                _ = bun.assert((bun.strings.indexOfChar(key, 0) == null));
+            }
+            _ = self.map.putAssumeCapacity(key, .{ .value = value, .conditional = false });
+    }
+
+pub inline fn putAllocKeyAndValue(self: *EnvMap, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
+            const gop = try self.map.getOrPut(key);
+            gop.value_ptr.* = .{ .value = try allocator.dupe(u8, value), .conditional = false };
+            if ((!gop.found_existing)) {
+                gop.key_ptr.* = try allocator.dupe(u8, key);
+            }
+    }
+
+pub inline fn putAllocKey(self: *EnvMap, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
+            const gop = try self.map.getOrPut(key);
+            gop.value_ptr.* = .{ .value = value, .conditional = false };
+            if ((!gop.found_existing)) {
+                gop.key_ptr.* = try allocator.dupe(u8, key);
+            }
+    }
+
+pub inline fn putAllocValue(self: *EnvMap, allocator: std.mem.Allocator, key: []const u8, value: []const u8) !void {
+            _ = try self.map.put(key, .{ .value = try allocator.dupe(u8, value), .conditional = false });
+    }
+
+pub inline fn getOrPutWithoutValue(self: *EnvMap, key: []const u8) !GetOrPutResult {
+            return try self.map.getOrPut(key);
+    }
+
+pub fn jsonStringify(self: EnvMap, writer: anytype) !void {
+            var iter = self.map.iterator();
+            _ = &iter;
             _ = try writer.write("{");
             while (iter.next()) |entry| {
                 _ = try writer.write("\n    ");
-
-                try writer.write(entry.key_ptr.*);
-
+                _ = try writer.write(entry.key_ptr.*);
                 _ = try writer.write(": ");
-
-                try writer.write(entry.value_ptr.*);
-
-                if (iter.index <= self.map.count() - 1) {
+                _ = try writer.write(entry.value_ptr.*);
+                if ((iter.index <= (self.map.count() - 1))) {
                     _ = try writer.write(", ");
                 }
             }
+            _ = try writer.write("\n}");
+    }
 
-            try writer.write("\n}");
-        }
+pub inline fn get(self: *const EnvMap, key: []const u8) ?[]const u8 {
+            if (self.map.get(key)) |entry| {
+                _ = &entry;
+                return (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value);
+            }
+            return null;
+    }
 
-        pub inline fn get(
-            this: *const Map,
-            key: string,
-        ) ?string {
-            return if (this.map.get(key)) |entry| entry.value else null;
-        }
+pub inline fn putDefault(self: *EnvMap, key: []const u8, value: []const u8) !void {
+            _ = try self.map.getOrPutValue(key, .{ .value = value, .conditional = false });
+    }
 
-        pub inline fn putDefault(this: *Map, key: string, value: string) OOM!void {
-            _ = try this.map.getOrPutValue(key, .{
-                .value = value,
-                .conditional = false,
-            });
-        }
+pub inline fn getOrPut(self: *EnvMap, key: []const u8, value: []const u8) !void {
+            _ = try self.map.getOrPutValue(key, .{ .value = value, .conditional = false });
+    }
 
-        pub inline fn getOrPut(this: *Map, key: string, value: string) OOM!void {
-            _ = try this.map.getOrPutValue(key, .{
-                .value = value,
-                .conditional = false,
-            });
-        }
+pub fn remove(self: *EnvMap, key: []const u8) void {
+            _ = self.map.swapRemove(key);
+    }
 
-        pub fn remove(this: *Map, key: string) void {
-            _ = this.map.swapRemove(key);
-        }
+pub fn cloneWithAllocator(self: EnvMap, new_allocator: std.mem.Allocator) !EnvMap {
+            return .{ .map = try self.map.cloneWithAllocator(new_allocator) };
+    }
+    const HashTableValue = _MapHashTableValue;
+    pub const HashTable = MapHashTable;
+    const GetOrPutResult = MapHashTable.GetOrPutResult;
+    const StdEnvMapWrapper = _StdEnvMapWrapper;
+};
 
-        pub fn cloneWithAllocator(this: *const Map, new_allocator: std.mem.Allocator) OOM!Map {
-            return .{ .map = try this.map.cloneWithAllocator(new_allocator) };
-        }
-    };
-pub var instance: ?*Loader = null;
-const Fs = @import("../resolver/fs.zig");
-const URL = @import("../url/url.zig").URL;
-const which = @import("../which/which.zig").which;
-const bun = @import("bun");
+pub const U64SliceGuard = struct {
+    slice: []u64,
+    allocator: std.mem.Allocator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *U64SliceGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.allocator.free(self.slice);
+    }
+};
+
+pub const ErrFreeEStringSliceGuard = struct {
+    slice: []bun.ast.E.String,
+    allocator: std.mem.Allocator,
+    __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *ErrFreeEStringSliceGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = self.allocator.free(self.slice);
+    }
+};
+
+pub const ErrFreeU8SliceGuard = struct {
+    slice: []u8,
+    allocator: std.mem.Allocator,
+    __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *ErrFreeU8SliceGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = self.allocator.free(self.slice);
+    }
+};
+
+pub const ManagedU8ListGuard = struct {
+    list: *std.array_list.Managed(u8),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ManagedU8ListGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.list.deinit();
+            }
+    }
+};
+
+pub const FileCloseGuard = struct {
+    file: std.fs.File,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *FileCloseGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.file.close();
+    }
+};
+
+const URL = url_mod.URL;
+const which = which_mod.which;
 const Environment = bun.Environment;
 const OOM = bun.OOM;
 const Output = bun.Output;
@@ -1442,3 +1420,10 @@ const logger = bun.logger;
 const s3 = bun.S3;
 const strings = bun.strings;
 const api = bun.schema.api;
+var empty_u8: [0]u8 = undefined;
+const MapHashTable = (if (Environment.isWindows) bun.CaseInsensitiveASCIIStringArrayHashMap(_MapHashTableValue) else bun.StringArrayHashMap(_MapHashTableValue));
+pub const Map = EnvMap;
+const CStrPtr = [*:0]const u8;
+const OptCStrPtr = ?CStrPtr;
+const NullDelimitedEnvMap = [:null]OptCStrPtr;
+pub var instance: ?*Loader = null;

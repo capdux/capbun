@@ -1,10 +1,11 @@
 // For WASM builds
-pub const C = struct {};
-pub const WebCore = struct {};
-pub const Jest = struct {};
+pub struct C {}
+pub struct WebCore {}
+pub struct Jest {}
+pub struct _APITranspiler {}
 pub struct API {
-    pub const Transpiler = struct {};
+    pub const Transpiler = _APITranspiler;
 }
-pub const Node = struct {};
+pub struct Node {}
 
-pub const VirtualMachine = struct {};
+pub struct VirtualMachine {}

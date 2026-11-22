@@ -5,7 +5,29 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
-pub const OptionValueType = enum { boolean, string };
+pub const OptionValueType = enum {
+    boolean,
+    string,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TokenSubtype = enum {
+    option_terminator,
+    lone_short_option,
+    short_option_group,
+    short_option_and_value,
+    lone_long_option,
+    long_option_and_value,
+    positional,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const OptionDefinition = struct {
     long_name: String,
     short_name: String = String.empty,
@@ -13,22 +35,7 @@ pub const OptionDefinition = struct {
     multiple: bool = false,
     default_value: ?JSValue = null,
 };
-pub const TokenSubtype = enum {
-    /// '--'
-    option_terminator,
-    /// e.g. '-f'
-    lone_short_option,
-    /// e.g. '-fXzy'
-    short_option_group,
-    /// e.g. '-fFILE'
-    short_option_and_value,
-    /// e.g. '--foo'
-    lone_long_option,
-    /// e.g. '--foo=barconst'
-    long_option_and_value,
 
-    positional,
-};
 const String = bun.String;
 const JSValue = bun.jsc.JSValue;
 

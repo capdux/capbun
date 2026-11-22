@@ -136,6 +136,63 @@ pub fn jsonStringify(self: AssignTarget, writer: anytype) !void {
     }
 };
 
+pub const _FlagsJSXElement = enum {
+    is_key_after_spread,
+    has_any_dynamic,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const Bitset = std.enums.EnumSet(_FlagsJSXElement);
+};
+
+pub const _FlagsProperty = enum {
+    is_computed,
+    is_method,
+    is_static,
+    was_shorthand,
+    is_spread,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn init(fields: Fields) Set {
+            return Set.init(fields);
+    }
+    
+    pub const None = Set{  };
+    
+    pub const Fields = std.enums.EnumFieldStruct(_FlagsProperty, bool, false);
+    
+    pub const Set = std.enums.EnumSet(_FlagsProperty);
+};
+
+pub const _FlagsFunction = enum {
+    is_async,
+    is_generator,
+    has_rest_arg,
+    has_if_scope,
+    is_forward_declaration,
+    is_unique_formal_parameters,
+    is_export,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn init(fields: Fields) Set {
+            return Set.init(fields);
+    }
+    
+    pub const None = Set{  };
+    
+    pub const Fields = std.enums.EnumFieldStruct(_FlagsFunction, bool, false);
+    
+    pub const Set = std.enums.EnumSet(_FlagsFunction);
+};
+
 pub const OptionalChain = enum(u1) {
     start,
     continuation,
@@ -187,6 +244,34 @@ pub fn toModuleType(self: ExportsKind) bun.options.ModuleType {
     }
 };
 
+pub const _PartTag = enum {
+    none,
+    jsx_import,
+    runtime,
+    cjs_imports,
+    react_fast_refresh,
+    dirname_filename,
+    bun_test,
+    dead_due_to_inlining,
+    commonjs_named_export,
+    import_to_convert_from_require,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _ResultAlreadyBundled = enum {
+    bun,
+    bun_cjs,
+    bytecode,
+    bytecode_cjs,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const StrictModeKind = enum(u4) {
     sloppy_mode,
     explicit_strict_mode,
@@ -210,48 +295,9 @@ pub const LocRef = struct {
 };
 
 pub const Flags = struct {
-    pub const JSXElement = enum {
-            is_key_after_spread,
-            has_any_dynamic,
-            pub const Bitset = std.enums.EnumSet(JSXElement);
-        };
-    pub const Property = enum {
-            is_computed,
-            is_method,
-            is_static,
-            was_shorthand,
-            is_spread,
-    
-            pub inline fn init(fields: Fields) Set {
-                return Set.init(fields);
-            }
-    
-            pub const None = Set{};
-            pub const Fields = std.enums.EnumFieldStruct(Flags.Property, bool, false);
-            pub const Set = std.enums.EnumSet(Flags.Property);
-        };
-    pub const Function = enum {
-            is_async,
-            is_generator,
-            has_rest_arg,
-            has_if_scope,
-    
-            is_forward_declaration,
-    
-            /// This is true if the function is a method
-            is_unique_formal_parameters,
-    
-            /// Only applicable to function statements.
-            is_export,
-    
-            pub inline fn init(fields: Fields) Set {
-                return Set.init(fields);
-            }
-    
-            pub const None = Set{};
-            pub const Fields = std.enums.EnumFieldStruct(Function, bool, false);
-            pub const Set = std.enums.EnumSet(Function);
-        };
+    pub const JSXElement = _FlagsJSXElement;
+    pub const Property = _FlagsProperty;
+    pub const Function = _FlagsFunction;
 };
 
 pub const ClauseItem = struct {
@@ -344,6 +390,12 @@ pub const Finally = struct {
     stmts: StmtNodeList,
 };
 
+pub const Case = struct {
+    loc: logger.Loc,
+    value: ?ExprNodeIndex,
+    body: StmtNodeList,
+};
+
 pub const ArrayBinding = struct {
     binding: BindingNodeIndex,
     default_value: ?ExprNodeIndex = null,
@@ -358,6 +410,11 @@ pub const TlaCheck = struct {
 pub const Span = struct {
     text: []const u8 = "",
     range: logger.Range = .{},
+};
+
+pub const _InlinedEnumValueDecoded = union(enum) {
+    string: *E.String,
+    number: f64,
 };
 
 pub const InlinedEnumValue = struct {
@@ -394,10 +451,7 @@ pub fn decode(encoded: InlinedEnumValue) Decoded {
 }) };
             }
     }
-    pub const Decoded = union(enum) {
-        string: *E.String,
-        number: f64,
-    };
+    pub const Decoded = _InlinedEnumValueDecoded;
     const double_encode_offset = cp_shl(1, 49);
     const pure_nan_bits: u64 = 9221120237041090560;
     const pure_nan: f64 = @bitCast(pure_nan_bits);
@@ -544,20 +598,32 @@ pub fn jsonStringify(self: Part, writer: anytype) !void {
     }
     pub const ImportRecordIndices = BabyList(u32);
     pub const List = BabyList(Part);
-    pub const Tag = enum {
-            none,
-            jsx_import,
-            runtime,
-            cjs_imports,
-            react_fast_refresh,
-            dirname_filename,
-            bun_test,
-            dead_due_to_inlining,
-            commonjs_named_export,
-            import_to_convert_from_require,
-        };
+    pub const Tag = _PartTag;
     pub const SymbolUseMap = std.ArrayHashMapUnmanaged(Ref, Symbol.Use, RefHashCtx, false);
     pub const SymbolPropertyUseMap = std.ArrayHashMapUnmanaged(Ref, bun.StringHashMapUnmanaged(Symbol.Use), RefHashCtx, false);
+};
+
+pub const Result = union(enum) {
+    already_bundled: AlreadyBundled,
+    cached: void,
+    ast: Ast,
+    pub const AlreadyBundled = _ResultAlreadyBundled;
+};
+
+pub const StmtOrExpr = union(enum) {
+    stmt: Stmt,
+    expr: Expr,
+
+pub fn toExpr(self: StmtOrExpr) Expr {
+            return (switch (self) {
+.expr => |expr| expr,
+.stmt => |stmt| (switch (stmt.data) {
+.s_function => |s| Expr.init(E.Function, .{ .func = s.func }, stmt.loc),
+.s_class => |s| Expr.init(E.Class, s.class, stmt.loc),
+else => Output.panic("Unexpected statement type in default export: .{s}", .{ @tagName(stmt.data) }),
+}),
+});
+    }
 };
 
 pub const NamedImport = struct {
@@ -590,40 +656,9 @@ pub const BindingNodeList = []Binding;
 const string = []const u8;
 pub const namespace_export_part_index = 0;
 pub const ExprNodeList = BabyList(Expr);
-pub const Case = struct {
-    loc: logger.Loc,
-    value: ?ExprNodeIndex,
-    body: StmtNodeList,
-};
 pub const ExprList = std.array_list.Managed(Expr);
 pub const StmtList = std.array_list.Managed(Stmt);
 pub const BindingList = std.array_list.Managed(Binding);
-pub const Result = union(enum) {
-    already_bundled: AlreadyBundled,
-    cached: void,
-    ast: Ast,
-    pub const AlreadyBundled = enum {
-            bun,
-            bun_cjs,
-            bytecode,
-            bytecode_cjs,
-        };
-};
-pub const StmtOrExpr = union(enum) {
-    stmt: Stmt,
-    expr: Expr,
-
-pub fn toExpr(stmt_or_expr: StmtOrExpr) Expr {
-            return (switch (stmt_or_expr) {
-.expr => |expr| expr,
-.stmt => |stmt| (switch (stmt.data) {
-.s_function => |s| Expr.init(E.Function, .{ .func = s.func }, stmt.loc),
-.s_class => |s| Expr.init(E.Class, s.class, stmt.loc),
-else => Output.panic("Unexpected statement type in default export: .{s}", .{ @tagName(stmt.data) }),
-}),
-});
-    }
-};
 pub const ToJSError = error{
     @"Cannot convert argument type to JS",
     @"Cannot convert identifier to JS. Try a statically-known value",
@@ -672,7 +707,7 @@ pub fn init(allocator: std.mem.Allocator, count: usize) !@This() {
             return .{ .head = all };
     }
 
-pub fn done(self: *@This()) void {
+pub fn done(self: @This()) void {
             _ = bun.assert((self.head.len == 0));
     }
 

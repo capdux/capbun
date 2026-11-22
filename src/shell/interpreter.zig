@@ -62,6 +62,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Braces = @import("../shell_parser/braces.zig");
@@ -70,6 +78,40 @@ pub const EnvMap = @import("./EnvMap.zig");
 pub const ParsedShellScript = @import("./ParsedShellScript.zig");
 pub const builtin = @import("builtin");
 pub const bun = @import("bun");
+pub const OutputNeedsIOSafeGuard = enum(u0) {
+    output_needs_io,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CallstackGuard = enum(u0) {
+    __i_know_what_i_am_doing,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const StateKind = enum(u8) {
+    script,
+    stmt,
+    assign,
+    cmd,
+    binary,
+    pipeline,
+    expansion,
+    if_clause,
+    condexpr,
+    @"async",
+    subshell,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const CoroutineResult = enum {
     cont,
     yield,
@@ -82,6 +124,17 @@ pub const CoroutineResult = enum {
 pub const CleanupState = enum(u8) {
     needs_full_cleanup,
     runtime_cleaned,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _ShellExecEnvKind = enum {
+    normal,
+    cmd_subst,
+    subshell,
+    pipeline,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -383,6 +436,291 @@ pub const InterpreterFlags = packed struct(u8) {
     done: bool = false,
     quiet: bool = false,
     __unused: u6 = 0,
+};
+
+pub const _ShellExecEnvBufio = union(enum) {
+    owned: bun.ByteList,
+    borrowed: *bun.ByteList,
+
+pub fn memoryCost(self: _ShellExecEnvBufio) usize {
+            return (switch (self) {
+.owned => |owned| owned.memoryCost(),
+.borrowed => |borrowed| borrowed.memoryCost(),
+});
+    }
+};
+
+pub const _ShellExecEnv = struct {
+    kind: Kind = .normal,
+    _buffered_stdout: Bufio = .{ .owned = .{} },
+    _buffered_stderr: Bufio = .{ .owned = .{} },
+    shell_env: EnvMap,
+    cmd_local_env: EnvMap,
+    export_env: EnvMap,
+    __prev_cwd: std.array_list.Managed(u8),
+    __cwd: std.array_list.Managed(u8),
+    cwd_fd: bun.FD,
+    async_pids: SmolList(pid_t, 4) = SmolList(pid_t, 4).zeroes,
+    __alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void,
+
+pub fn allocator(self: *_ShellExecEnv) std.mem.Allocator {
+            if (comptime bun.Environment.enableAllocScopes) {
+                return self.__alloc_scope.allocator();
+            }
+            return bun.default_allocator;
+    }
+
+pub fn memoryCost(self: _ShellExecEnv) usize {
+            var size: usize = @sizeOf(_ShellExecEnv);
+            _ = &size;
+            size = (size + self.shell_env.memoryCost());
+            size = (size + self.cmd_local_env.memoryCost());
+            size = (size + self.export_env.memoryCost());
+            size = (size + self.__cwd.allocatedSlice().len);
+            size = (size + self.__prev_cwd.allocatedSlice().len);
+            size = (size + self._buffered_stderr.memoryCost());
+            size = (size + self._buffered_stdout.memoryCost());
+            size = (size + self.async_pids.memoryCost());
+            return size;
+    }
+
+pub fn buffered_stdout(self: *_ShellExecEnv) *bun.ByteList {
+            return (switch (self._buffered_stdout) {
+.owned => (&self._buffered_stdout.owned),
+.borrowed => self._buffered_stdout.borrowed,
+});
+    }
+
+pub fn buffered_stderr(self: *_ShellExecEnv) *bun.ByteList {
+            return (switch (self._buffered_stderr) {
+.owned => (&self._buffered_stderr.owned),
+.borrowed => self._buffered_stderr.borrowed,
+});
+    }
+
+pub inline fn cwdZ(self: *_ShellExecEnv) [:0]const u8 {
+            if ((self.__cwd.items.len == 0)) {
+                return "";
+            }
+            return self.__cwd.items[0..(self.__cwd.items.len -| 1) :0];
+    }
+
+pub inline fn prevCwdZ(self: *_ShellExecEnv) [:0]const u8 {
+            if ((self.__prev_cwd.items.len == 0)) {
+                return "";
+            }
+            return self.__prev_cwd.items[0..(self.__prev_cwd.items.len -| 1) :0];
+    }
+
+pub inline fn prevCwd(self: *_ShellExecEnv) []const u8 {
+            const prevcwdz = self.prevCwdZ();
+            return prevcwdz[0..prevcwdz.len];
+    }
+
+pub inline fn cwd(self: *_ShellExecEnv) []const u8 {
+            const cwdz = self.cwdZ();
+            return cwdz[0..cwdz.len];
+    }
+
+pub fn deinit(self: *_ShellExecEnv) void {
+            _ = self.deinitImpl(true, true);
+    }
+
+pub fn deinitImpl(self: *_ShellExecEnv, comptime destroy_this: bool, comptime free_buffered_io: bool) void {
+            _ = log("[ShellExecEnv] deinit {x}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}) });
+            if (comptime free_buffered_io) {
+                if ((self._buffered_stdout == .owned)) {
+                    _ = self._buffered_stdout.owned.clearAndFree(bun.default_allocator);
+                }
+                if ((self._buffered_stderr == .owned)) {
+                    _ = self._buffered_stderr.owned.clearAndFree(bun.default_allocator);
+                }
+            }
+            _ = self.shell_env.deinit();
+            _ = self.cmd_local_env.deinit();
+            _ = self.export_env.deinit();
+            _ = self.__cwd.deinit();
+            _ = self.__prev_cwd.deinit();
+            _ = closefd(self.cwd_fd);
+            if (comptime destroy_this) {
+                _ = self.allocator().destroy(self);
+            }
+    }
+
+pub fn dupeForSubshell(self: *_ShellExecEnv, alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void, alloc: Allocator, io: Interpreter.IO, kind: Kind) Maybe(*_ShellExecEnv) {
+            const duped = bun.handleOom(alloc.create(_ShellExecEnv));
+            const dupedfd = (switch (Syscall.dup(self.cwd_fd)) {
+.err => |e| {
+{
+                _ = alloc.destroy(duped);
+                return .{ .err = e };
+            }
+},
+.result => |fd| fd,
+});
+            const stdout: Bufio = (switch (io.stdout) {
+.fd => brk: {
+            if ((io.stdout.fd.captured != null)) {
+                break :brk Bufio{ .borrowed = io.stdout.fd.captured.? };
+            }
+            break :brk Bufio{ .owned = .{} };
+},
+.ignore => Bufio{ .owned = .{} },
+.pipe => (switch (kind) {
+.normal, .cmd_subst => Bufio{ .owned = .{} },
+.subshell, .pipeline => Bufio{ .borrowed = self.buffered_stdout() },
+}),
+});
+            const stderr: Bufio = (switch (io.stderr) {
+.fd => brk: {
+            if ((io.stderr.fd.captured != null)) {
+                break :brk Bufio{ .borrowed = io.stderr.fd.captured.? };
+            }
+            break :brk Bufio{ .owned = .{} };
+},
+.ignore => Bufio{ .owned = .{} },
+.pipe => (switch (kind) {
+.normal, .cmd_subst => Bufio{ .owned = .{} },
+.subshell, .pipeline => Bufio{ .borrowed = self.buffered_stderr() },
+}),
+});
+            duped.* = .{ .kind = kind, ._buffered_stdout = stdout, ._buffered_stderr = stderr, .shell_env = self.shell_env.clone(), .cmd_local_env = EnvMap.init(alloc), .export_env = self.export_env.clone(), .__prev_cwd = bun.handleOom(self.__prev_cwd.clone()), .__cwd = bun.handleOom(self.__cwd.clone()), .cwd_fd = dupedfd, .__alloc_scope = alloc_scope };
+            return .{ .result = duped };
+    }
+
+pub fn assignVar(self: *_ShellExecEnv, interp: *Interpreter, label: EnvStr, value: EnvStr, assign_ctx: AssignCtx) void {
+            _ = &interp;
+            switch (assign_ctx) {
+.cmd => {
+_ = self.cmd_local_env.insert(label, value);
+},
+.shell => {
+_ = self.shell_env.insert(label, value);
+},
+.exported => {
+_ = self.export_env.insert(label, value);
+},
+}
+    }
+
+pub fn changePrevCwd(self: *_ShellExecEnv, interp: *Interpreter) Maybe(void) {
+            return self.changeCwd(interp, self.prevCwdZ());
+    }
+
+pub fn changeCwd(self: *_ShellExecEnv, interp: *Interpreter, new_cwd_: anytype) Maybe(void) {
+            return self.changeCwdImpl(interp, new_cwd_, false);
+    }
+
+pub fn changeCwdImpl(self: *_ShellExecEnv, _: *Interpreter, new_cwd_: anytype, comptime in_init: bool) Maybe(void) {
+            if (comptime ((@TypeOf(new_cwd_) != [:0]const u8) and (@TypeOf(new_cwd_) != []const u8))) {
+                _ = @compileError(("Bad type for new_cwd " ++ @typeName(@TypeOf(new_cwd_))));
+            }
+            const is_sentinel = (@TypeOf(new_cwd_) == [:0]const u8);
+            const is_abs = ResolvePath.Platform.auto.isAbsolute(new_cwd_);
+            const required_len = (if (is_abs) new_cwd_.len else ((self.cwd().len + 1) + new_cwd_.len));
+            if ((required_len >= ResolvePath.join_buf.len)) {
+                return Maybe(void).initErr(Syscall.Error.fromCode(.NAMETOOLONG, .chdir));
+            }
+            const new_cwd: [:0]const u8 = brk: {
+            if (is_abs) {
+                if (is_sentinel) {
+                    _ = @memcpy(ResolvePath.join_buf[0..new_cwd_.len], new_cwd_[0..new_cwd_.len]);
+                    ResolvePath.join_buf[cp_cast_int(usize, new_cwd_.len)] = 0;
+                    break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
+                }
+                _ = std.mem.copyForwards(u8, (&ResolvePath.join_buf), new_cwd_);
+                ResolvePath.join_buf[cp_cast_int(usize, new_cwd_.len)] = 0;
+                break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
+            }
+            const existing_cwd = self.cwd();
+            const parts: [2][]const u8 = .{ existing_cwd, new_cwd_ };
+            const cwd_str = ResolvePath.joinZ((&parts), .auto);
+            if (bun.Environment.isWindows) {
+                const sep: i32 = 92;
+                if (((cwd_str.len > 1) and (cwd_str[@as(usize, @intCast((cwd_str.len - 1)))] == sep))) {
+                    ResolvePath.join_buf[cp_cast_int(usize, (cwd_str.len - 1))] = 0;
+                    break :brk ResolvePath.join_buf[0..(cwd_str.len - 1) :0];
+                }
+            }
+            if (((cwd_str.len > 1) and (cwd_str[@as(usize, @intCast((cwd_str.len - 1)))] == 47))) {
+                ResolvePath.join_buf[cp_cast_int(usize, (cwd_str.len - 1))] = 0;
+                break :brk ResolvePath.join_buf[0..(cwd_str.len - 1) :0];
+            }
+            break :brk cwd_str;
+};
+            const new_cwd_fd = (switch (ShellSyscall.openat(self.cwd_fd, new_cwd, (bun.O.DIRECTORY | bun.O.RDONLY), 0)) {
+.result => |fd| fd,
+.err => |e| {
+return Maybe(void).initErr(e);
+},
+});
+            _ = self.cwd_fd.closeAllowingBadFileDescriptor(null);
+            _ = self.__prev_cwd.clearRetainingCapacity();
+            _ = bun.handleOom(self.__prev_cwd.appendSlice(self.__cwd.items[0..]));
+            _ = self.__cwd.clearRetainingCapacity();
+            _ = bun.handleOom(self.__cwd.appendSlice(new_cwd[0..(new_cwd.len + 1)]));
+            if (comptime bun.Environment.isDebug) {
+                _ = assert((self.__cwd.items[@as(usize, @intCast((self.__cwd.items.len -| 1)))] == 0));
+                _ = assert((self.__prev_cwd.items[@as(usize, @intCast((self.__prev_cwd.items.len -| 1)))] == 0));
+            }
+            self.cwd_fd = new_cwd_fd;
+            if (comptime (!in_init)) {
+                _ = self.export_env.insert(EnvStr.initSlice("OLDPWD"), EnvStr.initSlice(self.prevCwd()));
+            }
+            _ = self.export_env.insert(EnvStr.initSlice("PWD"), EnvStr.initSlice(self.cwd()));
+            return .success;
+    }
+
+pub fn getHomedir(self: *_ShellExecEnv) EnvStr {
+            const env_var: ?EnvStr = brk: {
+            const static_str = (if (comptime bun.Environment.isWindows) EnvStr.initSlice("USERPROFILE") else EnvStr.initSlice("HOME"));
+            break :brk ((self.shell_env.get(static_str)) orelse (self.export_env.get(static_str)));
+};
+            return ((env_var) orelse (EnvStr.initSlice((if (comptime bun.Environment.isAndroid) "/data/local/tmp" else ""))));
+    }
+
+pub fn writeFailingErrorFmt(self: *_ShellExecEnv, ctx: anytype, enqueueCb: *const fn (@TypeOf(ctx)) void, comptime fmt: []const u8, args: anytype) Yield {
+            const io: *Interpreter.IO.OutKind = (&@field(ctx.io, "stderr"));
+            switch (io.*) {
+.fd => |x| {
+_ = enqueueCb(ctx);
+            return x.writer.enqueueFmt(ctx, x.captured, fmt, args);
+},
+.pipe => {
+const bufio: *bun.ByteList = self.buffered_stderr();
+            _ = bun.handleOom(bufio.appendFmt(bun.default_allocator, fmt, args));
+            return ctx.parent.childDone(ctx, 1);
+},
+.ignore => {
+const childptr = IOWriterChildPtr.init(ctx);
+            const count = std.fmt.count(fmt, args);
+            return .{ .on_io_writer_chunk = .{ .child = childptr.asAnyOpaque(), .e = null, .written = count } };
+},
+}
+    }
+    const pid_t = (if (bun.Environment.isPosix) std.posix.pid_t else uv.uv_pid_t);
+    const Bufio = _ShellExecEnvBufio;
+    const Kind = _ShellExecEnvKind;
+};
+
+pub const _ShellErrorCtx = union(enum) {
+    syscall: Syscall.Error,
+    other: Interpreter.ShellErrorKind,
+
+pub fn toJS(self: _ShellErrorCtx, globalThis: *JSGlobalObject) JSValue {
+            return (switch (self) {
+.syscall => |e| e.toJS(globalThis),
+.other => |e| bun.jsc.ZigString.fromBytes(@errorName(e)).toJS(globalThis),
+});
+    }
+};
+
+pub const _ExpansionOpts = struct {
+    for_spawn: bool = true,
+    single: bool = false,
 };
 
 pub const Interpreter = struct {
@@ -1116,296 +1454,14 @@ pub fn getVmArgsUtf8(self: *Interpreter, argv: []const *WTFStringImplStruct, idx
     pub const If = @import("./states/If.zig");
     pub const Cmd = @import("./states/Cmd.zig");
     pub const InterpreterChildPtr = StatePtrUnion(.{ Script });
-    pub const ShellExecEnv = struct {
-        kind: Kind = .normal,
-        _buffered_stdout: Bufio = .{ .owned = .{} },
-        _buffered_stderr: Bufio = .{ .owned = .{} },
-        shell_env: EnvMap,
-        cmd_local_env: EnvMap,
-        export_env: EnvMap,
-        __prev_cwd: std.array_list.Managed(u8),
-        __cwd: std.array_list.Managed(u8),
-        cwd_fd: bun.FD,
-        async_pids: SmolList(pid_t, 4) = SmolList(pid_t, 4).zeroes,
-        __alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void,
-    
-    pub fn allocator(self: *@This()) std.mem.Allocator {
-                if (comptime bun.Environment.enableAllocScopes) {
-                    return self.__alloc_scope.allocator();
-                }
-                return bun.default_allocator;
-        }
-    
-    pub fn memoryCost(self: @This()) usize {
-                var size: usize = @sizeOf(ShellExecEnv);
-                _ = &size;
-                size = (size + self.shell_env.memoryCost());
-                size = (size + self.cmd_local_env.memoryCost());
-                size = (size + self.export_env.memoryCost());
-                size = (size + self.__cwd.allocatedSlice().len);
-                size = (size + self.__prev_cwd.allocatedSlice().len);
-                size = (size + self._buffered_stderr.memoryCost());
-                size = (size + self._buffered_stdout.memoryCost());
-                size = (size + self.async_pids.memoryCost());
-                return size;
-        }
-    
-    pub fn buffered_stdout(self: *@This()) *bun.ByteList {
-                return (switch (self._buffered_stdout) {
-    .owned => (&self._buffered_stdout.owned),
-    .borrowed => self._buffered_stdout.borrowed,
-    });
-        }
-    
-    pub fn buffered_stderr(self: *@This()) *bun.ByteList {
-                return (switch (self._buffered_stderr) {
-    .owned => (&self._buffered_stderr.owned),
-    .borrowed => self._buffered_stderr.borrowed,
-    });
-        }
-    
-    pub inline fn cwdZ(self: *@This()) [:0]const u8 {
-                if ((self.__cwd.items.len == 0)) {
-                    return "";
-                }
-                return self.__cwd.items[0..(self.__cwd.items.len -| 1) :0];
-        }
-    
-    pub inline fn prevCwdZ(self: *@This()) [:0]const u8 {
-                if ((self.__prev_cwd.items.len == 0)) {
-                    return "";
-                }
-                return self.__prev_cwd.items[0..(self.__prev_cwd.items.len -| 1) :0];
-        }
-    
-    pub inline fn prevCwd(self: *@This()) []const u8 {
-                const prevcwdz = self.prevCwdZ();
-                return prevcwdz[0..prevcwdz.len];
-        }
-    
-    pub inline fn cwd(self: *@This()) []const u8 {
-                const cwdz = self.cwdZ();
-                return cwdz[0..cwdz.len];
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                _ = self.deinitImpl(true, true);
-        }
-    
-    pub fn deinitImpl(self: *@This(), comptime destroy_this: bool, comptime free_buffered_io: bool) void {
-                _ = log("[ShellExecEnv] deinit {x}", .{ (blk: {
-                break :blk @intFromPtr(self);
-    
-    }) });
-                if (comptime free_buffered_io) {
-                    if ((self._buffered_stdout == .owned)) {
-                        _ = self._buffered_stdout.owned.clearAndFree(bun.default_allocator);
-                    }
-                    if ((self._buffered_stderr == .owned)) {
-                        _ = self._buffered_stderr.owned.clearAndFree(bun.default_allocator);
-                    }
-                }
-                _ = self.shell_env.deinit();
-                _ = self.cmd_local_env.deinit();
-                _ = self.export_env.deinit();
-                _ = self.__cwd.deinit();
-                _ = self.__prev_cwd.deinit();
-                _ = closefd(self.cwd_fd);
-                if (comptime destroy_this) {
-                    _ = self.allocator().destroy(self);
-                }
-        }
-    
-    pub fn dupeForSubshell(self: *@This(), alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void, alloc: Allocator, io: IO, kind: Kind) Maybe(*ShellExecEnv) {
-                const duped = bun.handleOom(alloc.create(ShellExecEnv));
-                const dupedfd = (switch (Syscall.dup(self.cwd_fd)) {
-    .err => |e| {
-    {
-                    _ = alloc.destroy(duped);
-                    return .{ .err = e };
-                }
-    },
-    .result => |fd| fd,
-    });
-                const stdout: Bufio = (switch (io.stdout) {
-    .fd => brk: {
-                if ((io.stdout.fd.captured != null)) {
-                    break :brk Bufio{ .borrowed = io.stdout.fd.captured.? };
-                }
-                break :brk Bufio{ .owned = .{} };
-    },
-    .ignore => Bufio{ .owned = .{} },
-    .pipe => (switch (kind) {
-    .normal, .cmd_subst => Bufio{ .owned = .{} },
-    .subshell, .pipeline => Bufio{ .borrowed = self.buffered_stdout() },
-    }),
-    });
-                const stderr: Bufio = (switch (io.stderr) {
-    .fd => brk: {
-                if ((io.stderr.fd.captured != null)) {
-                    break :brk Bufio{ .borrowed = io.stderr.fd.captured.? };
-                }
-                break :brk Bufio{ .owned = .{} };
-    },
-    .ignore => Bufio{ .owned = .{} },
-    .pipe => (switch (kind) {
-    .normal, .cmd_subst => Bufio{ .owned = .{} },
-    .subshell, .pipeline => Bufio{ .borrowed = self.buffered_stderr() },
-    }),
-    });
-                duped.* = .{ .kind = kind, ._buffered_stdout = stdout, ._buffered_stderr = stderr, .shell_env = self.shell_env.clone(), .cmd_local_env = EnvMap.init(alloc), .export_env = self.export_env.clone(), .__prev_cwd = bun.handleOom(self.__prev_cwd.clone()), .__cwd = bun.handleOom(self.__cwd.clone()), .cwd_fd = dupedfd, .__alloc_scope = alloc_scope };
-                return .{ .result = duped };
-        }
-    
-    pub fn assignVar(self: *@This(), interp: *ThisInterpreter, label: EnvStr, value: EnvStr, assign_ctx: AssignCtx) void {
-                _ = &interp;
-                switch (assign_ctx) {
-    .cmd => {
-    _ = self.cmd_local_env.insert(label, value);
-    },
-    .shell => {
-    _ = self.shell_env.insert(label, value);
-    },
-    .exported => {
-    _ = self.export_env.insert(label, value);
-    },
-    }
-        }
-    
-    pub fn changePrevCwd(self: *@This(), interp: *ThisInterpreter) Maybe(void) {
-                return self.changeCwd(interp, self.prevCwdZ());
-        }
-    
-    pub fn changeCwd(self: *@This(), interp: *ThisInterpreter, new_cwd_: anytype) Maybe(void) {
-                return self.changeCwdImpl(interp, new_cwd_, false);
-        }
-    
-    pub fn changeCwdImpl(self: *@This(), _: *ThisInterpreter, new_cwd_: anytype, comptime in_init: bool) Maybe(void) {
-                if (comptime ((@TypeOf(new_cwd_) != [:0]const u8) and (@TypeOf(new_cwd_) != []const u8))) {
-                    _ = @compileError(("Bad type for new_cwd " ++ @typeName(@TypeOf(new_cwd_))));
-                }
-                const is_sentinel = (@TypeOf(new_cwd_) == [:0]const u8);
-                const is_abs = ResolvePath.Platform.auto.isAbsolute(new_cwd_);
-                const required_len = (if (is_abs) new_cwd_.len else ((self.cwd().len + 1) + new_cwd_.len));
-                if ((required_len >= ResolvePath.join_buf.len)) {
-                    return Maybe(void).initErr(Syscall.Error.fromCode(.NAMETOOLONG, .chdir));
-                }
-                const new_cwd: [:0]const u8 = brk: {
-                if (is_abs) {
-                    if (is_sentinel) {
-                        _ = @memcpy(ResolvePath.join_buf[0..new_cwd_.len], new_cwd_[0..new_cwd_.len]);
-                        ResolvePath.join_buf[cp_cast_int(usize, new_cwd_.len)] = 0;
-                        break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
-                    }
-                    _ = std.mem.copyForwards(u8, (&ResolvePath.join_buf), new_cwd_);
-                    ResolvePath.join_buf[cp_cast_int(usize, new_cwd_.len)] = 0;
-                    break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
-                }
-                const existing_cwd = self.cwd();
-                const parts: [2][]const u8 = .{ existing_cwd, new_cwd_ };
-                const cwd_str = ResolvePath.joinZ((&parts), .auto);
-                if (bun.Environment.isWindows) {
-                    const sep: i32 = 92;
-                    if (((cwd_str.len > 1) and (cwd_str[@as(usize, @intCast((cwd_str.len - 1)))] == sep))) {
-                        ResolvePath.join_buf[cp_cast_int(usize, (cwd_str.len - 1))] = 0;
-                        break :brk ResolvePath.join_buf[0..(cwd_str.len - 1) :0];
-                    }
-                }
-                if (((cwd_str.len > 1) and (cwd_str[@as(usize, @intCast((cwd_str.len - 1)))] == 47))) {
-                    ResolvePath.join_buf[cp_cast_int(usize, (cwd_str.len - 1))] = 0;
-                    break :brk ResolvePath.join_buf[0..(cwd_str.len - 1) :0];
-                }
-                break :brk cwd_str;
-    };
-                const new_cwd_fd = (switch (ShellSyscall.openat(self.cwd_fd, new_cwd, (bun.O.DIRECTORY | bun.O.RDONLY), 0)) {
-    .result => |fd| fd,
-    .err => |e| {
-    return Maybe(void).initErr(e);
-    },
-    });
-                _ = self.cwd_fd.closeAllowingBadFileDescriptor(null);
-                _ = self.__prev_cwd.clearRetainingCapacity();
-                _ = bun.handleOom(self.__prev_cwd.appendSlice(self.__cwd.items[0..]));
-                _ = self.__cwd.clearRetainingCapacity();
-                _ = bun.handleOom(self.__cwd.appendSlice(new_cwd[0..(new_cwd.len + 1)]));
-                if (comptime bun.Environment.isDebug) {
-                    _ = assert((self.__cwd.items[@as(usize, @intCast((self.__cwd.items.len -| 1)))] == 0));
-                    _ = assert((self.__prev_cwd.items[@as(usize, @intCast((self.__prev_cwd.items.len -| 1)))] == 0));
-                }
-                self.cwd_fd = new_cwd_fd;
-                if (comptime (!in_init)) {
-                    _ = self.export_env.insert(EnvStr.initSlice("OLDPWD"), EnvStr.initSlice(self.prevCwd()));
-                }
-                _ = self.export_env.insert(EnvStr.initSlice("PWD"), EnvStr.initSlice(self.cwd()));
-                return .success;
-        }
-    
-    pub fn getHomedir(self: *@This()) EnvStr {
-                const env_var: ?EnvStr = brk: {
-                const static_str = (if (comptime bun.Environment.isWindows) EnvStr.initSlice("USERPROFILE") else EnvStr.initSlice("HOME"));
-                break :brk ((self.shell_env.get(static_str)) orelse (self.export_env.get(static_str)));
-    };
-                return ((env_var) orelse (EnvStr.initSlice((if (comptime bun.Environment.isAndroid) "/data/local/tmp" else ""))));
-        }
-    
-    pub fn writeFailingErrorFmt(self: *@This(), ctx: anytype, enqueueCb: *const fn (@TypeOf(ctx)) void, comptime fmt: []const u8, args: anytype) Yield {
-                const io: *IO.OutKind = (&@field(ctx.io, "stderr"));
-                switch (io.*) {
-    .fd => |x| {
-    _ = enqueueCb(ctx);
-                return x.writer.enqueueFmt(ctx, x.captured, fmt, args);
-    },
-    .pipe => {
-    const bufio: *bun.ByteList = self.buffered_stderr();
-                _ = bun.handleOom(bufio.appendFmt(bun.default_allocator, fmt, args));
-                return ctx.parent.childDone(ctx, 1);
-    },
-    .ignore => {
-    const childptr = IOWriterChildPtr.init(ctx);
-                const count = std.fmt.count(fmt, args);
-                return .{ .on_io_writer_chunk = .{ .child = childptr.asAnyOpaque(), .e = null, .written = count } };
-    },
-    }
-        }
-        const pid_t = (if (bun.Environment.isPosix) std.posix.pid_t else uv.uv_pid_t);
-        const Bufio = union(enum) {
-            owned: bun.ByteList,
-            borrowed: *bun.ByteList,
-        
-        pub fn memoryCost(self: *const @This()) usize {
-                    return (switch (self.*) {
-        .owned => |*owned| owned.memoryCost(),
-        .borrowed => |borrowed| borrowed.memoryCost(),
-        });
-            }
-        };
-        const Kind = enum {
-                    normal,
-                    cmd_subst,
-                    subshell,
-                    pipeline,
-                };
-    };
+    pub const ShellExecEnv = _ShellExecEnv;
     const ThisInterpreter = @This();
     const ShellErrorKind = error{
             OutOfMemory,
             Syscall,
         };
-    const ShellErrorCtx = union(enum) {
-        syscall: Syscall.Error,
-        other: ShellErrorKind,
-    
-    pub fn toJS(self: @This(), globalThis: *JSGlobalObject) JSValue {
-                return (switch (self) {
-    .syscall => |e| e.toJS(globalThis),
-    .other => |e| bun.jsc.ZigString.fromBytes(@errorName(e)).toJS(globalThis),
-    });
-        }
-    };
-    const ExpansionOpts = struct {
-        for_spawn: bool = true,
-        single: bool = false,
-    };
+    const ShellErrorCtx = _ShellErrorCtx;
+    const ExpansionOpts = _ExpansionOpts;
     pub const Builtin = @import("./Builtin.zig");
     pub const AsyncDeinitReader = IOReader.AsyncDeinitReader;
     pub const IO = @import("./IO.zig");
@@ -1413,6 +1469,31 @@ pub fn getVmArgsUtf8(self: *Interpreter, argv: []const *WTFStringImplStruct, idx
     pub const IOReaderChildPtr = IOReader.ChildPtr;
     pub const IOWriter = @import("./IOWriter.zig");
     pub const AsyncDeinitWriter = IOWriter.AsyncDeinitWriter;
+};
+
+pub const _CmdEnvIterEntry = struct {
+    key: _CmdEnvIterKey,
+    value: _CmdEnvIterValue,
+};
+
+pub const _CmdEnvIterValue = struct {
+    val: [:0]const u8,
+
+pub fn format(self: _CmdEnvIterValue, writer: *std.Io.Writer) !void {
+            _ = try writer.writeAll(self.val);
+    }
+};
+
+pub const _CmdEnvIterKey = struct {
+    val: []const u8,
+
+pub fn format(self: _CmdEnvIterKey, writer: *std.Io.Writer) !void {
+            _ = try writer.writeAll(self.val);
+    }
+
+pub fn eqlComptime(self: _CmdEnvIterKey, comptime str: []const u8) bool {
+            return bun.strings.eqlComptime(self.val, str);
+    }
 };
 
 pub const CmdEnvIter = struct {
@@ -1432,28 +1513,9 @@ pub fn next(self: *CmdEnvIter) !?Entry {
             const entry = ((self.iter.next()) orelse { return null; });
             return .{ .key = .{ .val = entry.key_ptr.* }, .value = .{ .val = entry.value_ptr.* } };
     }
-    const Entry = struct {
-        key: Key,
-        value: Value,
-    };
-    const Value = struct {
-        val: [:0]const u8,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                _ = try writer.writeAll(self.val);
-        }
-    };
-    const Key = struct {
-        val: []const u8,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                _ = try writer.writeAll(self.val);
-        }
-    
-    pub fn eqlComptime(self: @This(), comptime str: []const u8) bool {
-                return bun.strings.eqlComptime(self.val, str);
-        }
-    };
+    const Entry = _CmdEnvIterEntry;
+    const Value = _CmdEnvIterValue;
+    const Key = _CmdEnvIterKey;
 };
 
 pub const ShellSyscall = struct {
@@ -1602,6 +1664,48 @@ pub fn dup(fd: bun.FD) Maybe(bun.FD) {
     pub const rmdirat = Syscall.rmdirat;
 };
 
+pub const OutputSrc = union(enum) {
+    arrlist: std.ArrayListUnmanaged(u8),
+    owned_buf: []const u8,
+    borrowed_buf: []const u8,
+
+pub fn slice(self: *OutputSrc) []const u8 {
+            return (switch (self.*) {
+.arrlist => self.arrlist.items[0..],
+.owned_buf => self.owned_buf,
+.borrowed_buf => self.borrowed_buf,
+});
+    }
+
+pub fn deinit(self: *OutputSrc) void {
+            switch (self.*) {
+.arrlist => {
+_ = self.arrlist.deinit(bun.default_allocator);
+},
+.owned_buf => {
+_ = bun.default_allocator.free(self.owned_buf);
+},
+.borrowed_buf => {
+
+},
+}
+    }
+};
+
+pub const ParseError = union(enum) {
+    illegal_option: []const u8,
+    unsupported: []const u8,
+    show_usage: void,
+};
+
+pub const ParseFlagResult = union(enum) {
+    continue_parsing: void,
+    done: void,
+    illegal_option: []const u8,
+    unsupported: []const u8,
+    show_usage: void,
+};
+
 pub const StringZ = [:0]const u8;
 const CStr = [*:0]const u8;
 const OptParser = ?bun.shell.Parser;
@@ -1620,59 +1724,11 @@ pub const stdin_no = 0;
 pub const stdout_no = 1;
 pub const stderr_no = 2;
 pub const log = bun.Output.scoped(.SHELL, .visible);
-pub const OutputNeedsIOSafeGuard = enum(u0) { output_needs_io };
-pub const CallstackGuard = enum(u0) { __i_know_what_i_am_doing };
 pub const ExitCode = u16;
-pub const StateKind = enum(u8) {
-    script,
-    stmt,
-    assign,
-    cmd,
-    binary,
-    pipeline,
-    expansion,
-    if_clause,
-    condexpr,
-    @"async",
-    subshell,
-};
 pub const EnvStr = @import("./EnvStr.zig").EnvStr;
 const empty_bun_strings: [0]bun.String = undefined;
 pub const AssignCtx = Interpreter.Assigns.AssignCtx;
 pub const IOWriterChildPtr = Interpreter.IOWriter.ChildPtr;
-pub const OutputSrc = union(enum) {
-    arrlist: std.ArrayListUnmanaged(u8),
-    owned_buf: []const u8,
-    borrowed_buf: []const u8,
-
-pub fn slice(self: *@This()) []const u8 {
-            return (switch (self.*) {
-.arrlist => self.arrlist.items[0..],
-.owned_buf => self.owned_buf,
-.borrowed_buf => self.borrowed_buf,
-});
-    }
-
-pub fn deinit(self: *@This()) void {
-            switch (self.*) {
-.arrlist => {
-_ = self.arrlist.deinit(bun.default_allocator);
-},
-.owned_buf => {
-_ = bun.default_allocator.free(self.owned_buf);
-},
-.borrowed_buf => {
-
-},
-}
-    }
-};
-pub const ParseError = union(enum) {
-    illegal_option: []const u8,
-    unsupported: []const u8,
-    show_usage,
-};
-pub const ParseFlagResult = union(enum) { continue_parsing, done, illegal_option: []const u8, unsupported: []const u8, show_usage };
 const WTFStringImplStruct = @import("../string/string.zig").WTFStringImplStruct;
 const ResolvePath = bun.path;
 const TaggedPointerUnion = bun.TaggedPointerUnion;

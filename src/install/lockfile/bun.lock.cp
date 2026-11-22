@@ -35,6 +35,34 @@ struct TreeDepsSortCtx {
     }
 }
 
+struct WorkspaceSorter {
+    string_buf: string,
+    res_buf: []const Resolution,
+
+    fn isLessThan(l: PackageID, r: PackageID): bool {
+        const l_res = _.res_buf[l];
+        const r_res = _.res_buf[r];
+        return l_res.value.workspace.order(&r_res.value.workspace, _.string_buf, _.string_buf) == .lt;
+    }
+}
+
+struct TreeSortCtx {
+    pub const Item = struct { []const DependencyID, string, usize };
+
+    static fn isLessThan(_ctx: TreeSortCtx, l: Item, r: Item): bool {
+        * = _ctx;
+        const l_rel_path = l[1];
+        const l_depth = l[2];
+        const r_rel_path = r[1];
+        const r_depth = r[2];
+        return switch (std.math.order(l_depth, r_depth)) {
+            .lt => true,
+            .gt => false,
+            .eq => strings.order(l_rel_path, r_rel_path) == .lt,
+        };
+    }
+}
+
 pub struct Stringifier {
     const indent_scalar = 2;
 
@@ -145,22 +173,11 @@ pub struct Stringifier {
                     workspace_sort_buf.append(allocator, pkg_id)?;
                 }
 
-                const Sorter = struct {
-                    string_buf: string,
-                    res_buf: []const Resolution,
-
-                    static fn isLessThan(this: @This(), l: PackageID, r: PackageID): bool {
-                        const l_res = this.res_buf[l];
-                        const r_res = this.res_buf[r];
-                        return l_res.value.workspace.order(&r_res.value.workspace, this.string_buf, this.string_buf) == .lt;
-                    }
-                };
-
                 std.sort.pdq(
                     PackageID,
                     workspace_sort_buf.items,
-                    Sorter{ .string_buf = buf, .res_buf = pkg_resolutions },
-                    Sorter.isLessThan,
+                    WorkspaceSorter{ string_buf: buf, res_buf: pkg_resolutions },
+                    WorkspaceSorter.isLessThan,
                 );
 
                 for (workspace_pkg_id of workspace_sort_buf.items) {
@@ -193,22 +210,6 @@ pub struct Stringifier {
             writer.writeByte('\n')?;
             decIndent(writer, indent)?;
             writer.writeAll("},\n")?;
-
-            const TreeSortCtx = struct {
-                pub const Item = struct { []const DependencyID, string, usize };
-
-                static fn isLessThan(_: @This(), l: Item, r: Item): bool {
-                    const l_rel_path = l[1];
-                    const l_depth = l[2];
-                    const r_rel_path = r[1];
-                    const r_depth = r[2];
-                    return switch (std.math.order(l_depth, r_depth)) {
-                        .lt => true,
-                        .gt => false,
-                        .eq => strings.order(l_rel_path, r_rel_path) == .lt,
-                    };
-                }
-            };
 
             let tree_sort_buf: std.ArrayListUnmanaged(TreeSortCtx.Item) = {};
             const _guard_tree_sort_buf = DeinitWithAllocGuard<std.ArrayListUnmanaged(TreeSortCtx.Item)>{ ptr: unsafe { &tree_sort_buf }, allocator: allocator };
@@ -984,10 +985,10 @@ pub struct Stringifier {
     }
 }
 
-const WorkspaceDepGroup = struct {
+struct WorkspaceDepGroup {
     name: []const u8,
     behavior: Dependency.Behavior,
-};
+}
 
 const workspace_dependency_groups = [
     WorkspaceDepGroup{ name: "dependencies", behavior: { prod: true } },
@@ -1031,13 +1032,13 @@ fn PkgMap(comptime T: type): type {
 
         pub const Entry = T;
 
-        pub fn init(allocator: std.mem.Allocator): @This() {
+        static fn init(allocator: std.mem.Allocator): @This() {
             return {
                 map: bun.StringHashMap(T).init(allocator),
             };
         }
 
-        pub fn deinit(*_) {
+        fn deinit(*_) {
             _.map.deinit();
         }
 
@@ -1046,23 +1047,23 @@ fn PkgMap(comptime T: type): type {
             Unresolvable,
         };
 
-        pub fn getOrPut(*_, name: string): bun.StringHashMap(T).GetOrPutResult!OOM {
+        fn getOrPut(*_, name: string): bun.StringHashMap(T).GetOrPutResult!OOM {
             return _.map.getOrPut(name);
         }
 
-        pub fn put(*_, name: string, value: T)! {
+        fn put(*_, name: string, value: T)! {
             return _.map.put(name, value);
         }
 
-        pub fn get(name: string): T? {
+        fn get(name: string): T? {
             return _.map.get(name);
         }
 
-        pub fn contains(path: string): bool {
+        fn contains(path: string): bool {
             return _.map.contains(path);
         }
 
-        pub fn findResolution(pkg_path: string, dep: *const Dependency, string_buf: string, path_buf: []u8): T!ResolveError {
+        fn findResolution(pkg_path: string, dep: *const Dependency, string_buf: string, path_buf: []u8): T!ResolveError {
             const dep_name = dep.name.slice(string_buf);
 
             @memcpy(path_buf[0..pkg_path.len], pkg_path);

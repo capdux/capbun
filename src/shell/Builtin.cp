@@ -18,6 +18,7 @@ import Seq from "./builtin/seq.zig";
 import Dirname from "./builtin/dirname.zig";
 import Basename from "./builtin/basename.zig";
 import Cp from "./builtin/cp.zig";
+import result_mod from "../bun_core/result.zig";
 
 const Allocator = std.mem.Allocator;
 const jsc = bun.jsc;
@@ -56,7 +57,7 @@ const IOWriter = Interpreter.IOWriter;
 const Syscall = bun.sys;
 const Maybe = bun.sys.Maybe;
 
-pub const Result = @import("../bun_core/result.zig").Result;
+pub const Result = result_mod.Result;
 
 pub type StringZ = [*:0]const u8;
 pub type OptStringZ = ([*:0]const u8)?;
@@ -84,7 +85,7 @@ pub enum Kind {
     basename,
     cp,
 
-    pub const DISABLED_ON_POSIX: []const Kind = &.{ .cat, .cp };
+    pub const DISABLED_ON_POSIX: [2]Kind = [ .cat, .cp ];
 
     static fn parentType(): type {
         * = _;
@@ -132,7 +133,7 @@ pub enum Kind {
     }
 }
 
-pub const Impl = union(Kind) {
+pub union(Kind) Impl {
     cat: Cat,
     touch: Touch,
     mkdir: Mkdir,
@@ -152,7 +153,7 @@ pub const Impl = union(Kind) {
     dirname: Dirname,
     basename: Basename,
     cp: Cp,
-};
+}
 
 pub struct ArrayBuf {
     buf: jsc.ArrayBuffer.Strong,
@@ -167,12 +168,12 @@ pub struct Blob {
     ref_count: RefCount,
     blob: bun.webcore.Blob,
 
-    pub fn dupeRef(*_): *Blob {
+    fn dupeRef(*_): *Blob {
         _.ref();
         return _;
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         _.blob.deinit();
         bun.destroy(_);
     }
@@ -190,7 +191,7 @@ pub union(enum) BuiltinIOOutput {
     blob: *Blob,
     ignore: void,
 
-    pub fn ref(*_): *BuiltinIOOutput {
+    fn ref(*_): *BuiltinIOOutput {
         switch (_.*) {
             .fd => {
                 _.fd.writer.ref();
@@ -201,7 +202,7 @@ pub union(enum) BuiltinIOOutput {
         return _;
     }
 
-    pub fn deref(*_) {
+    fn deref(*_) {
         switch (_.*) {
             .fd => {
                 _.fd.writer.deref();
@@ -217,14 +218,14 @@ pub union(enum) BuiltinIOOutput {
         }
     }
 
-    pub fn needsIO(*_): OutputNeedsIOSafeGuard? {
+    fn needsIO(*_): OutputNeedsIOSafeGuard? {
         return switch (_.*) {
             .fd => .output_needs_io,
             else => null,
         };
     }
 
-    pub fn enqueueFmtBltn(
+    fn enqueueFmtBltn(
         *_,
         ptr: auto,
         comptime kind: Interpreter.Builtin.Kind?,
@@ -235,11 +236,11 @@ pub union(enum) BuiltinIOOutput {
         return _.fd.writer.enqueueFmtBltn(ptr, _.fd.captured, kind, fmt_, args);
     }
 
-    pub fn enqueue(*_, ptr: auto, buf: []const u8, _: OutputNeedsIOSafeGuard): Yield {
+    fn enqueue(*_, ptr: auto, buf: []const u8, _: OutputNeedsIOSafeGuard): Yield {
         return _.fd.writer.enqueue(ptr, _.fd.captured, buf);
     }
 
-    pub fn enqueueFmt(*_, ptr: auto, comptime fmt: []const u8, args: auto, _: OutputNeedsIOSafeGuard): Yield {
+    fn enqueueFmt(*_, ptr: auto, comptime fmt: []const u8, args: auto, _: OutputNeedsIOSafeGuard): Yield {
         return _.fd.writer.enqueueFmt(ptr, _.fd.captured, fmt, args);
     }
 }
@@ -251,7 +252,7 @@ pub union(enum) BuiltinIOInput {
     blob: *Blob,
     ignore: void,
 
-    pub fn ref(*_): *BuiltinIOInput {
+    fn ref(*_): *BuiltinIOInput {
         switch (_.*) {
             .fd => {
                 _.fd.ref();
@@ -262,7 +263,7 @@ pub union(enum) BuiltinIOInput {
         return _;
     }
 
-    pub fn deref(*_) {
+    fn deref(*_) {
         switch (_.*) {
             .fd => {
                 _.fd.deref();
@@ -278,7 +279,7 @@ pub union(enum) BuiltinIOInput {
         }
     }
 
-    pub fn needsIO(*_): bool {
+    fn needsIO(*_): bool {
         return switch (_.*) {
             .fd => true,
             else => false,
@@ -286,10 +287,10 @@ pub union(enum) BuiltinIOInput {
     }
 }
 
-pub const BuiltinIO = struct {
+pub struct BuiltinIO {
     pub const Output = BuiltinIOOutput;
     pub const Input = BuiltinIOInput;
-};
+}
 
 
 pub const Tag = Kind;
@@ -315,7 +316,7 @@ pub const Tag = Kind;
 
 type CStr = ([*:0]const u8);
 
-pub fn argsSlice(*_): []const CStr {
+fn argsSlice(): []const CStr {
     const args_raw = _.args.items[1..];
     const args_len = std.mem.indexOfScalar(OptStringZ, args_raw, null) ?? @panic("bad");
     if (args_len == 0) return [];
@@ -325,7 +326,7 @@ pub fn argsSlice(*_): []const CStr {
     }
 }
 
-pub inline fn callImpl(*_, comptime Ret: type, comptime field: []const u8, args_: auto): Ret {
+inline fn callImpl(*_, comptime Ret: type, comptime field: []const u8, args_: auto): Ret {
     return switch (_.kind) {
         .cat => _.callImplWithType(Cat, Ret, "cat", field, args_),
         .touch => _.callImplWithType(Touch, Ret, "touch", field, args_),
@@ -366,7 +367,7 @@ fn callImplWithType(*_, comptime BuiltinImpl: type, comptime Ret: type, comptime
     return @call(.auto, @field(BuiltinImpl, field), args);
 }
 
-pub inline fn allocator(*_): Allocator {
+inline fn allocator(): Allocator {
     // FIXME: This should be `this.parentCmd().base.allocator()`
     return _.parentCmd().base.interpreter.allocator;
 }
@@ -499,7 +500,7 @@ static fn initRedirections(
                         void,
                         {},
                         struct {
-                            fn onForceSyncOrIsaTTY(_: void) void {}
+                            fn onForceSyncOrIsaTTY(_: void) {}
                         }.onForceSyncOrIsaTTY,
                         shell.interpret.isPollableFromMode,
                         ShellSyscall.openat,
@@ -665,26 +666,26 @@ static fn initRedirections(
     return null;
 }
 
-pub inline fn eventLoop(*_): jsc.EventLoopHandle {
+inline fn eventLoop(): jsc.EventLoopHandle {
     return _.parentCmd().base.eventLoop();
 }
 
-pub inline fn throw(*_, e: *const bun.shell.ShellErr) {
+inline fn throw(*_, e: *const bun.shell.ShellErr) {
     if (_.parentCmd().base.throw(e) == error.JSError) {}
 }
 
 /// The `Cmd` state node associated with this builtin
-pub inline fn parentCmd(*_): *const Cmd {
+inline fn parentCmd(): *const Cmd {
     const union_ptr: *const Cmd.Exec = @fieldParentPtr("bltn", _);
     return @fieldParentPtr("exec", union_ptr);
 }
 
-pub inline fn parentCmdMut(*_): *Cmd {
+inline fn parentCmdMut(*_): *Cmd {
     const union_ptr: *Cmd.Exec = @fieldParentPtr("bltn", _);
     return @fieldParentPtr("exec", union_ptr);
 }
 
-pub fn done(*_, exit_code: auto): Yield {
+fn done(*_, exit_code: auto): Yield {
     const code: ExitCode = if (@TypeOf(exit_code) == bun.sys.E)
         @intFromEnum(exit_code)
     else if (@TypeOf(exit_code) == u1 || @TypeOf(exit_code) == u8 || @TypeOf(exit_code) == u16 || @TypeOf(exit_code) == comptime_int)
@@ -715,11 +716,11 @@ pub fn done(*_, exit_code: auto): Yield {
     return cmd.parent.childDone(cmd, _.exit_code.?);
 }
 
-pub fn start(*_): Yield {
+fn start(*_): Yield {
     return _.callImpl(Yield, "start", {});
 }
 
-pub fn deinit(*_) {
+fn deinit(*_) {
     _.callImpl(void, "deinit", {});
 
     // No need to free it because it belongs to the parent cmd
@@ -734,7 +735,7 @@ pub fn deinit(*_) {
 }
 
 /// If the stdout/stderr is supposed to be captured then get the bytelist associated with that
-pub fn stdBufferedBytelist(*_, comptime io_kind: @Type(.enum_literal)): (*bun.ByteList)? {
+fn stdBufferedBytelist(*_, comptime io_kind: @Type(.enum_literal)): (*bun.ByteList)? {
     if (comptime io_kind != .stdout && io_kind != .stderr) {
         @compileError("Bad IO" ++ @tagName(io_kind));
     }
@@ -746,7 +747,7 @@ pub fn stdBufferedBytelist(*_, comptime io_kind: @Type(.enum_literal)): (*bun.By
     };
 }
 
-pub fn readStdinNoIO(*_): []const u8 {
+fn readStdinNoIO(): []const u8 {
     return switch (_.stdin) {
         .arraybuf => |buf| buf.buf.slice(),
         .buf => |buf| buf.items[0..],
@@ -756,7 +757,7 @@ pub fn readStdinNoIO(*_): []const u8 {
 }
 
 /// **WARNING** You should make sure that stdout/stderr does not need IO (e.g. `.needsIO(.stderr)` is false before caling `.writeNoIO(.stderr, buf)`)
-pub fn writeNoIO(*_, comptime io_kind: @Type(.enum_literal), buf: []const u8): Maybe(usize) {
+fn writeNoIO(*_, comptime io_kind: @Type(.enum_literal), buf: []const u8): Maybe(usize) {
     if (comptime io_kind != .stdout && io_kind != .stderr) {
         @compileError("Bad IO" ++ @tagName(io_kind));
     }
@@ -797,7 +798,7 @@ pub fn writeNoIO(*_, comptime io_kind: @Type(.enum_literal), buf: []const u8): M
 }
 
 /// Error messages formatted to match bash
-pub fn taskErrorToString(*_, comptime kind: Kind, e: auto): []const u8 {
+fn taskErrorToString(comptime kind: Kind, e: auto): []const u8 {
     if (@TypeOf(e) == Syscall.Error) {
         if (entry := e.getErrorCodeTagName()) {
             const sys_errno = entry[1];
@@ -824,7 +825,7 @@ pub fn taskErrorToString(*_, comptime kind: Kind, e: auto): []const u8 {
     }
 }
 
-pub fn fmtErrorArena(*_, comptime kind: Kind?, comptime fmt_: []const u8, args: auto): []u8 {
+fn fmtErrorArena(comptime kind: Kind?, comptime fmt_: []const u8, args: auto): []u8 {
     const cmd_str = comptime if (kind != null) @tagName(kind.?) ++ ": " else "";
     const fmt = cmd_str ++ fmt_;
     return bun.handleOom(std.fmt.allocPrint(_.@"arena".allocator(), fmt, args));

@@ -85,7 +85,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const grapheme = @import("./immutable/grapheme.zig");
 pub const escapeHTML_ = @import("./immutable/escapeHTML.zig");
@@ -94,6 +94,41 @@ pub const paths_ = @import("./immutable/paths.zig");
 pub const unicode = @import("./immutable/unicode.zig");
 pub const visible_ = @import("./immutable/visible.zig");
 pub const bun = @import("bun");
+pub const Encoding = enum {
+    ascii,
+    utf8,
+    latin1,
+    utf16,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const AsciiStatus = enum {
+    unknown,
+    all_ascii,
+    non_ascii,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn fromBool(is_all_ascii: ?bool) AsciiStatus {
+            return (if (((is_all_ascii) orelse { return .unknown; })) .all_ascii else .non_ascii);
+    }
+};
+
+pub const EncodingNonAscii = enum {
+    utf8,
+    utf16,
+    latin1,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const TextRange = struct {
     offset: usize,
     len: usize,
@@ -125,7 +160,7 @@ pub fn next(self: *SplitIterator) ?[]const u8 {
             return self.buffer[start..end];
     }
 
-pub fn rest(self: SplitIterator) []const u8 {
+pub fn rest(self: *const SplitIterator) []const u8 {
             const end = self.buffer.len;
             const start = ((self.index) orelse (end));
             return self.buffer[start..end];
@@ -150,9 +185,15 @@ pub fn slice(self: *const StringOrTinyString) []const u8 {
             if ((self.@"meta".is_tiny_string == 1)) {
                 return self.remainder_buf[0..self.@"meta".remainder_len];
             } else {
-                const ptr: [*]const u8 = @ptrFromInt(std.mem.readInt(usize, self.remainder_buf[0..@sizeOf(usize)], .little));
+                const ptr: [*]const u8 = (blk: {
+                break :blk @ptrFromInt(std.mem.readInt(usize, self.remainder_buf[0..@sizeOf(usize)], .little));
+
+});
                 const len = std.mem.readInt(usize, self.remainder_buf[@sizeOf(usize)..(@sizeOf(usize) * 2)], .little);
-                return ptr[0..len];
+                return (blk: {
+                break :blk ptr[0..len];
+
+});
             }
     }
 
@@ -191,7 +232,10 @@ _ = @setRuntimeSafety(false);
 else => {
 var tiny = StringOrTinyString{ .@"meta" = StringOrTinyStringMeta{ .is_tiny_string = 0, .remainder_len = 0 } };
             _ = &tiny;
-            _ = std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], @intFromPtr(stringy.ptr), .little);
+            _ = std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], (blk: {
+            break :blk @intFromPtr(stringy.ptr);
+
+}), .little);
             _ = std.mem.writeInt(usize, tiny.remainder_buf[@sizeOf(usize)..(@sizeOf(usize) * 2)], stringy.len, .little);
             return tiny;
 },
@@ -213,7 +257,10 @@ _ = @setRuntimeSafety(false);
 else => {
 var tiny = StringOrTinyString{ .@"meta" = StringOrTinyStringMeta{ .is_tiny_string = 0, .remainder_len = 0 } };
             _ = &tiny;
-            _ = std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], @intFromPtr(stringy.ptr), .little);
+            _ = std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], (blk: {
+            break :blk @intFromPtr(stringy.ptr);
+
+}), .little);
             _ = std.mem.writeInt(usize, tiny.remainder_buf[@sizeOf(usize)..(@sizeOf(usize) * 2)], stringy.len, .little);
             return tiny;
 },
@@ -250,6 +297,30 @@ pub const QuoteEscapeFormatFlags = struct {
 pub const SplitFirstResult = struct {
     first: u8,
     rest: []const u8,
+};
+
+pub const ANSIIterator = extern struct {
+    input: [*]const u8,
+    input_len: usize,
+    cursor: usize,
+    slice_ptr: ?[*]const u8,
+    slice_len: usize,
+
+pub fn init(input: []const u8) ANSIIterator {
+            return .{ .input = input.ptr, .input_len = input.len, .cursor = 0, .slice_ptr = null, .slice_len = 0 };
+    }
+
+pub fn next(self: *ANSIIterator) ?[]const u8 {
+            if (ANSIIterator.Bun__ANSI__next(self)) {
+                return (blk: {
+                break :blk ((self.slice_ptr) orelse { return null; })[0..self.slice_len];
+
+});
+            }
+            return null;
+    }
+
+pub extern "c" fn Bun__ANSI__next(it: *ANSIIterator) callconv(.c) bool;
 };
 
 pub const u3_fast = u8;
@@ -293,39 +364,16 @@ const hex_table: [256]u8 = brk: {
 };
 pub const strings = @This();
 pub const memmem = bun.sys.workaround_symbols.memmem;
-pub const Encoding = enum {
-    ascii,
-    utf8,
-    latin1,
-    utf16,
-};
-pub const AsciiStatus = enum {
-    unknown,
-    all_ascii,
-    non_ascii,
-
-    pub fn fromBool(is_all_ascii: ?bool) AsciiStatus {
-        return if (is_all_ascii orelse return .unknown)
-            .all_ascii
-        else
-            .non_ascii;
-    }
-};
-pub const EncodingNonAscii = enum {
-    utf8,
-    utf16,
-    latin1,
-};
 pub const OptionalUsize = std.@"meta".Int(.unsigned, (@bitSizeOf(usize) - 1));
 pub const includes = contains;
 pub const uuid_len = 36;
 const eqlComptimeCheckLenU8 = (if (bun.Environment.isDebug) eqlComptimeDebugRuntimeFallback else eqlComptimeCheckLenU8Impl);
-pub const max_16_ascii: @Vector(ascii_vector_size,u8) = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u8, @intFromEnum(127)) else cp_cast_int(u8, 127)));
-pub const min_16_ascii: @Vector(ascii_vector_size,u8) = @splat((if (@typeInfo(@TypeOf(32)) == .@"enum") cp_cast_int(u8, @intFromEnum(32)) else cp_cast_int(u8, 32)));
-pub const max_u16_ascii: @Vector(ascii_u16_vector_size,u16) = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u16, @intFromEnum(127)) else cp_cast_int(u16, 127)));
-pub const min_u16_ascii: @Vector(ascii_u16_vector_size,u16) = @splat((if (@typeInfo(@TypeOf(32)) == .@"enum") cp_cast_int(u16, @intFromEnum(32)) else cp_cast_int(u16, 32)));
+pub const max_16_ascii: @Vector(ascii_vector_size, u8) = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u8, @intFromEnum(127)) else cp_cast_int(u8, 127)));
+pub const min_16_ascii: @Vector(ascii_vector_size, u8) = @splat((if (@typeInfo(@TypeOf(32)) == .@"enum") cp_cast_int(u8, @intFromEnum(32)) else cp_cast_int(u8, 32)));
+pub const max_u16_ascii: @Vector(ascii_u16_vector_size, u16) = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u16, @intFromEnum(127)) else cp_cast_int(u16, 127)));
+pub const min_u16_ascii: @Vector(ascii_u16_vector_size, u16) = @splat((if (@typeInfo(@TypeOf(32)) == .@"enum") cp_cast_int(u16, @intFromEnum(32)) else cp_cast_int(u16, 32)));
 pub const AsciiU16Vector = @Vector(ascii_u16_vector_size, u16);
-pub const max_4_ascii: @Vector(4,u8) = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u8, @intFromEnum(127)) else cp_cast_int(u8, 127)));
+pub const max_4_ascii: @Vector(4, u8) = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u8, @intFromEnum(127)) else cp_cast_int(u8, 127)));
 pub const indexOfNewlineOrNonASCIIOrANSI = indexOfNewlineOrNonASCII;
 pub const whitespace_chars = " \t\n\r\x0B\x0C";
 pub const ExactSizeMatcher = @import("./immutable/exact_size_matcher.zig").ExactSizeMatcher;
@@ -452,33 +500,6 @@ pub const withoutTrailingSlashWindowsPath = paths_.withoutTrailingSlashWindowsPa
 pub const basename = paths_.basename;
 pub const log = bun.Output.scoped(.STR, .hidden);
 pub const CodePoint = i32;
-pub const ANSIIterator = extern struct {
-    input: [*]const u8,
-    input_len: usize,
-    cursor: usize,
-    slice_ptr: ?[*]const u8,
-    slice_len: usize,
-
-    pub fn init(input: []const u8) ANSIIterator {
-        return .{
-            .input = input.ptr,
-            .input_len = input.len,
-            .cursor = 0,
-            .slice_ptr = null,
-            .slice_len = 0,
-        };
-    }
-
-    /// Returns the next slice of non-ANSI text, or null when done.
-    pub fn next(self: *ANSIIterator) ?[]const u8 {
-        if (Bun__ANSI__next(self)) {
-            return (self.slice_ptr orelse return null)[0..self.slice_len];
-        }
-        return null;
-    }
-
-    extern fn Bun__ANSI__next(it: *ANSIIterator) bool;
-};
 const Environment = bun.Environment;
 const OOM = bun.OOM;
 const assert = bun.assert;
@@ -981,7 +1002,10 @@ pub fn lastIndexOfChar(self: []const u8, char: u8) ?usize {
                 return lastIndexOfCharT(u8, self, char);
             }
             const start = ((bun.c.memrchr(self.ptr, char, self.len)) orelse { return null; });
-            const i = (@intFromPtr(start) - @intFromPtr(self.ptr));
+            const i = (blk: {
+            break :blk (@intFromPtr(start) - @intFromPtr(self.ptr));
+
+});
             return i;
         }
         return lastIndexOfCharT(u8, self, char);
@@ -1010,7 +1034,10 @@ pub fn indexOf(client: []const u8, str: []const u8) ?usize {
             return indexOfCharUsize(client, str_ptr[0]);
         }
         const start = ((memmem(self_ptr, self_len, str_ptr, str_len)) orelse { return null; });
-        const i = (@intFromPtr(start) - @intFromPtr(self_ptr));
+        const i = (blk: {
+        break :blk (@intFromPtr(start) - @intFromPtr(self_ptr));
+
+});
         _ = bun.unsafeAssert((i < self_len));
         return (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))));
 }
@@ -1217,7 +1244,7 @@ pub fn countChar(client: []const u8, char: u8) usize {
         const splatted: AsciiVector = @splat(char);
         while ((remaining.len >= 16)) {
             const vec: AsciiVector = (remaining[0..ascii_vector_size]).*;
-            const cmp = @popCount(@as(@Vector(ascii_vector_size,u1), @bitCast((vec == splatted))));
+            const cmp = @popCount(@as(@Vector(ascii_vector_size, u1), @bitCast((vec == splatted))));
             total = (total + (if (comptime @typeInfo(@TypeOf(@reduce(.Add, cmp))) == .@"enum") cp_cast_int(usize, @intFromEnum(@reduce(.Add, cmp))) else cp_cast_int(usize, @reduce(.Add, cmp))));
             remaining = remaining[ascii_vector_size..];
         }
@@ -1622,7 +1649,10 @@ pub fn indexOfNeedsURLEncode(slice: []const u8) ?u32 {
                 if ((@reduce(.Max, cmp) > 0)) {
                     const bitmask = @as(AsciiVectorInt, @bitCast(cmp));
                     const first = @ctz(bitmask);
-                    return ((if (comptime @typeInfo(@TypeOf(first)) == .@"enum") cp_cast_int(u32, @intFromEnum(first)) else cp_cast_int(u32, first)) + @as(u32, @truncate((@intFromPtr(remaining.ptr) - @intFromPtr(slice.ptr)))));
+                    return ((if (comptime @typeInfo(@TypeOf(first)) == .@"enum") cp_cast_int(u32, @intFromEnum(first)) else cp_cast_int(u32, first)) + @as(u32, @truncate((blk: {
+                    break :blk (@intFromPtr(remaining.ptr) - @intFromPtr(slice.ptr));
+
+}))));
                 }
                 remaining = remaining[ascii_vector_size..];
             }
@@ -1632,7 +1662,10 @@ pub fn indexOfNeedsURLEncode(slice: []const u8) ?u32 {
         while ((char_idx < remaining.len)) : (char_idx = (char_idx + 1)) {
             const char = remaining[@as(usize, @intCast(char_idx))];
             if (((((((((((((char > 127) or (char < 32)) or (char == 92)) or (char == 37)) or (char == 34)) or (char == 35)) or (char == 63)) or (char == 91)) or (char == 93)) or (char == 94)) or (char == 124)) or (char == 126))) {
-                return @as(u32, @truncate((@intFromPtr((&remaining[@as(usize, @intCast(char_idx))])) - @intFromPtr(slice.ptr))));
+                return @as(u32, @truncate((blk: {
+                break :blk (@intFromPtr((&remaining[@as(usize, @intCast(char_idx))])) - @intFromPtr(slice.ptr));
+
+})));
             }
         }
         return null;
@@ -1702,7 +1735,10 @@ pub fn indexOfNotChar(slice: []const u8, char: u8) ?u32 {
         _ = &idx;
         while ((idx < remaining.len)) : (idx = (idx + 1)) {
             if ((remaining[@as(usize, @intCast(idx))] != char)) {
-                return @as(u32, @truncate((@intFromPtr((&remaining[@as(usize, @intCast(idx))])) - @intFromPtr(slice.ptr))));
+                return @as(u32, @truncate((blk: {
+                break :blk (@intFromPtr((&remaining[@as(usize, @intCast(idx))])) - @intFromPtr(slice.ptr));
+
+})));
             }
         }
         return null;
@@ -1777,11 +1813,11 @@ pub fn encodeBytesToHex(destination: []u8, source: []const u8) usize {
         if (comptime Environment.enableSIMD) {
             const remaining_end = ((remaining.ptr + remaining.len) - (remaining.len % 16));
             while ((remaining.ptr != remaining_end)) {
-                const input_chunk: @Vector(16,u8) = (remaining[0..16]).*;
-                const splat_16: @Vector(16,u8) = @splat((if (comptime @typeInfo(@TypeOf(16)) == .@"enum") cp_cast_int(u8, @intFromEnum(16)) else cp_cast_int(u8, 16)));
-                const splat_15: @Vector(16,u8) = @splat((if (comptime @typeInfo(@TypeOf(15)) == .@"enum") cp_cast_int(u8, @intFromEnum(15)) else cp_cast_int(u8, 15)));
-                const input_chunk_4: @Vector(16,u8) = (input_chunk / splat_16);
-                const input_chunk_15: @Vector(16,u8) = (input_chunk & splat_15);
+                const input_chunk: @Vector(16, u8) = (remaining[0..16]).*;
+                const splat_16: @Vector(16, u8) = @splat((if (comptime @typeInfo(@TypeOf(16)) == .@"enum") cp_cast_int(u8, @intFromEnum(16)) else cp_cast_int(u8, 16)));
+                const splat_15: @Vector(16, u8) = @splat((if (comptime @typeInfo(@TypeOf(15)) == .@"enum") cp_cast_int(u8, @intFromEnum(15)) else cp_cast_int(u8, 15)));
+                const input_chunk_4: @Vector(16, u8) = (input_chunk / splat_16);
+                const input_chunk_15: @Vector(16, u8) = (input_chunk & splat_15);
                 const lower_16: [16]u8 = .{ byte2hex(input_chunk_4[0]), byte2hex(input_chunk_4[1]), byte2hex(input_chunk_4[2]), byte2hex(input_chunk_4[3]), byte2hex(input_chunk_4[4]), byte2hex(input_chunk_4[5]), byte2hex(input_chunk_4[6]), byte2hex(input_chunk_4[7]), byte2hex(input_chunk_4[8]), byte2hex(input_chunk_4[9]), byte2hex(input_chunk_4[10]), byte2hex(input_chunk_4[11]), byte2hex(input_chunk_4[12]), byte2hex(input_chunk_4[13]), byte2hex(input_chunk_4[14]), byte2hex(input_chunk_4[15]) };
                 const upper_16: [16]u8 = .{ byte2hex(input_chunk_15[0]), byte2hex(input_chunk_15[1]), byte2hex(input_chunk_15[2]), byte2hex(input_chunk_15[3]), byte2hex(input_chunk_15[4]), byte2hex(input_chunk_15[5]), byte2hex(input_chunk_15[6]), byte2hex(input_chunk_15[7]), byte2hex(input_chunk_15[8]), byte2hex(input_chunk_15[9]), byte2hex(input_chunk_15[10]), byte2hex(input_chunk_15[11]), byte2hex(input_chunk_15[12]), byte2hex(input_chunk_15[13]), byte2hex(input_chunk_15[14]), byte2hex(input_chunk_15[15]) };
                 const output_chunk = std.simd.interlace(.{ lower_16, upper_16 });
@@ -1843,12 +1879,12 @@ pub fn trimSuffixComptime(buffer: []const u8, comptime suffix: anytype) []const 
         return (if (hasSuffixComptime(buffer, suffix)) buffer[0..(buffer.len - suffix.len)] else buffer);
 }
 
-pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range_count: usize) bun.BoundedArray(LineRange,line_range_count) {
+pub fn indexOfLineRanges(text: []const u8, target_line: u32, comptime line_range_count: usize) bun.BoundedArray(LineRange, line_range_count) {
         const remaining = text;
         if ((remaining.len == 0)) {
             return .{};
         }
-        var ranges: bun.BoundedArray(LineRange,line_range_count) = .{};
+        var ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
         _ = &ranges;
         var current_line: u32 = 0;
         _ = &current_line;
@@ -1925,7 +1961,7 @@ else => continue,
 
 };
             if (((ranges.len == line_range_count) and (current_line <= target_line))) {
-                var new_ranges: bun.BoundedArray(LineRange,line_range_count) = .{};
+                var new_ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
                 _ = &new_ranges;
                 _ = new_ranges.appendSliceAssumeCapacity(ranges.slice()[1..]);
                 ranges = new_ranges;
@@ -1937,7 +1973,7 @@ else => continue,
             current_line = (current_line + 1);
         }
         if (((ranges.len == line_range_count) and (current_line <= target_line))) {
-            var new_ranges: bun.BoundedArray(LineRange,line_range_count) = .{};
+            var new_ranges: bun.BoundedArray(LineRange, line_range_count) = .{};
             _ = &new_ranges;
             _ = new_ranges.appendSliceAssumeCapacity(ranges.slice()[1..]);
             ranges = new_ranges;
@@ -1945,13 +1981,12 @@ else => continue,
         return ranges;
 }
 
-pub fn getLinesInText(text: []const u8, line: u32, comptime line_range_count: usize) ?bun.BoundedArray(string,line_range_count) {
+pub fn getLinesInText(text: []const u8, line: u32, comptime line_range_count: usize) ?bun.BoundedArray(string, line_range_count) {
         const ranges = indexOfLineRanges(text, line, line_range_count);
         if ((ranges.len == 0)) {
             return null;
         }
         const LinesArray = bun.BoundedArray(string, line_range_count);
-        _ = &LinesArray;
         var results = LinesArray{  };
         _ = &results;
         results.len = ranges.len;
@@ -1981,7 +2016,10 @@ pub fn firstNonASCII16(slice: []const u16) ?u32 {
                         const cmp = (vec > max_u16_ascii);
                         const bitmask: u8 = @as(u8, @bitCast(cmp));
                         const index_of_first_nonascii_in_vector = @ctz(bitmask);
-                        const offset_of_vector_in_input = ((@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2);
+                        const offset_of_vector_in_input = (blk: {
+                        break :blk ((@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2);
+
+});
                         const out: u32 = @as(u32, @intCast((offset_of_vector_in_input + index_of_first_nonascii_in_vector)));
                         if (comptime Environment.isDebug) {
                             {
@@ -2002,11 +2040,17 @@ pub fn firstNonASCII16(slice: []const u16) ?u32 {
                     }
                     remaining.ptr = (remaining.ptr + ascii_u16_vector_size);
                 }
-                remaining.len = (remaining.len - ((@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2));
+                remaining.len = (remaining.len - (blk: {
+                break :blk ((@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2);
+
+}));
             }
             _ = bun.unsafeAssert((remaining.len < ascii_u16_vector_size));
         }
-        var i: usize = ((@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2);
+        var i: usize = (blk: {
+        break :blk ((@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2);
+
+});
         _ = &i;
         for (cp_iter_slice(remaining)) |char| {
             _ = &char;
@@ -2099,8 +2143,7 @@ pub fn toASCIIHexValue(character: u8) u8 {
 pub fn NewLengthSorter(comptime Type: type, comptime field: []const u8) type {
         return struct {
 
-pub fn lessThan(self: @This(), _: LengthSorter, lhs: Type, rhs: Type) bool {
-        _ = self;
+pub fn lessThan(_: LengthSorter, lhs: Type, rhs: Type) bool {
             return (@field(lhs, field).len < @field(rhs, field).len);
     }
     const LengthSorter = @This();
@@ -2165,7 +2208,10 @@ pub fn moveAllSlices(comptime Type: type, container: *Type, from_slice: []const 
 });
         inline for (fields_we_care_about) |name| {
             const slice = @field(container, name);
-            if ((((@intFromPtr(from_slice.ptr) + from_slice.len) >= (@intFromPtr(slice.ptr) + slice.len)) and (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr)))) {
+            if ((blk: {
+            break :blk (((@intFromPtr(from_slice.ptr) + from_slice.len) >= (@intFromPtr(slice.ptr) + slice.len)) and (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr)));
+
+})) {
                 @field(container, name) = moveSlice(slice, from_slice, to);
             }
         }
@@ -2174,10 +2220,16 @@ pub fn moveAllSlices(comptime Type: type, container: *Type, from_slice: []const 
 pub fn moveSlice(slice: []const u8, from_slice: []const u8, to: []const u8) []const u8 {
         if (comptime Environment.allow_assert) {
             _ = bun.unsafeAssert(((from_slice.len <= to.len) and (from_slice.len >= slice.len)));
-            _ = bun.unsafeAssert((((@intFromPtr(from_slice.ptr) + from_slice.len) >= (@intFromPtr(slice.ptr) + slice.len)) and (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr))));
+            _ = bun.unsafeAssert((blk: {
+            break :blk (((@intFromPtr(from_slice.ptr) + from_slice.len) >= (@intFromPtr(slice.ptr) + slice.len)) and (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr)));
+
+}));
             _ = bun.unsafeAssert(eqlLong(from_slice, to[0..from_slice.len], false));
         }
-        const ptr_offset = (@intFromPtr(slice.ptr) - @intFromPtr(from_slice.ptr));
+        const ptr_offset = (blk: {
+        break :blk (@intFromPtr(slice.ptr) - @intFromPtr(from_slice.ptr));
+
+});
         const result = to[ptr_offset..][0..slice.len];
         if (comptime Environment.allow_assert) {
             _ = assert(eqlLong(slice, result, false));

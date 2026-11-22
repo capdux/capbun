@@ -2,7 +2,14 @@ import bun from "bun";
 
 const Environment = bun.Environment;
 
-pub const PosixStat = extern struct {
+fn toU64(value: auto): u64 {
+    return switch (@typeInfo(@TypeOf(value)).int.signedness) {
+        .signed => @bitCast(@as(i64, value)),
+        .unsigned => value,
+    };
+}
+
+@c pub struct PosixStat {
     dev: u64,
     ino: u64,
     mode: u64,
@@ -23,14 +30,7 @@ pub const PosixStat = extern struct {
     /// Birth time (creation time) - may be zero if not supported
     birthtim: bun.timespec,
 
-    fn toU64(value: anytype) u64 {
-        return switch (@typeInfo(@TypeOf(value)).int.signedness) {
-            .signed => @bitCast(@as(i64, value)),
-            .unsigned => value,
-        };
-    }
-
-    pub fn init(stat_: *const bun.Stat) PosixStat {
+    static fn init(stat_: *const bun.Stat!): PosixStat {
         const atime_val = stat_.atime();
         const mtime_val = stat_.mtime();
         const ctime_val = stat_.ctime();
@@ -40,36 +40,36 @@ pub const PosixStat = extern struct {
             stat_.birthtime();
 
         return PosixStat{
-            .dev = toU64(stat_.dev),
-            .ino = toU64(stat_.ino),
-            .mode = toU64(stat_.mode),
-            .nlink = toU64(stat_.nlink),
-            .uid = toU64(stat_.uid),
-            .gid = toU64(stat_.gid),
-            .rdev = toU64(stat_.rdev),
-            .size = toU64(stat_.size),
-            .blksize = toU64(stat_.blksize),
-            .blocks = toU64(stat_.blocks),
-            .atim = .{ .sec = atime_val.sec, .nsec = atime_val.nsec },
-            .mtim = .{ .sec = mtime_val.sec, .nsec = mtime_val.nsec },
-            .ctim = .{ .sec = ctime_val.sec, .nsec = ctime_val.nsec },
-            .birthtim = .{ .sec = birthtime_val.sec, .nsec = birthtime_val.nsec },
+            dev: toU64(stat_.dev),
+            ino: toU64(stat_.ino),
+            mode: toU64(stat_.mode),
+            nlink: toU64(stat_.nlink),
+            uid: toU64(stat_.uid),
+            gid: toU64(stat_.gid),
+            rdev: toU64(stat_.rdev),
+            size: toU64(stat_.size),
+            blksize: toU64(stat_.blksize),
+            blocks: toU64(stat_.blocks),
+            atim: .{ sec: atime_val.sec, nsec: atime_val.nsec },
+            mtim: .{ sec: mtime_val.sec, nsec: mtime_val.nsec },
+            ctim: .{ sec: ctime_val.sec, nsec: ctime_val.nsec },
+            birthtim: .{ sec: birthtime_val.sec, nsec: birthtime_val.nsec },
         };
     }
 
-    pub fn atime(self: *const PosixStat) bun.timespec {
-        return self.atim;
+    fn atime(): bun.timespec {
+        return _.atim;
     }
 
-    pub fn mtime(self: *const PosixStat) bun.timespec {
-        return self.mtim;
+    fn mtime(): bun.timespec {
+        return _.mtim;
     }
 
-    pub fn ctime(self: *const PosixStat) bun.timespec {
-        return self.ctim;
+    fn ctime(): bun.timespec {
+        return _.ctim;
     }
 
-    pub fn birthtime(self: *const PosixStat) bun.timespec {
-        return self.birthtim;
+    fn birthtime(): bun.timespec {
+        return _.birthtim;
     }
-};
+}

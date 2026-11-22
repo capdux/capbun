@@ -579,105 +579,101 @@ pub struct FlexHandler {
     /// Whether any flex-related properties have been set
     has_any: bool = false,
 
+    fn maybeFlush(
+        *_,
+        d: *css.DeclarationList,
+        ctx: *css.PropertyHandlerContext,
+        comptime prop: []const u8,
+        val: auto,
+        vp: *const VendorPrefix,
+    ) {
+        // If two vendor prefixes for the same property have different
+        // values, we need to flush what we have immediately to preserve order.
+        if (*field := @field(_, prop)) {
+            if (!std.@"meta".eql(field[0], val.*) && !bun.bits.contains(css.VendorPrefix, field[1], vp.*)) {
+                _.flush(d, ctx);
+            }
+        }
+    }
+
+    fn propertyHelper(
+        *_,
+        ctx: *css.PropertyHandlerContext,
+        d: *css.DeclarationList,
+        comptime prop: []const u8,
+        val: auto,
+        vp: *const VendorPrefix,
+    ) {
+        _.maybeFlush(d, ctx, prop, val, vp);
+
+        // Otherwise, update the value and add the prefix
+        if (@field(_, prop) != null) {
+            const field = &@field(_, prop).?;
+            @field(field.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
+            bun.bits.insert(css.VendorPrefix, &field[1], vp.*);
+        } else {
+            @field(_, prop) = .{
+                css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator),
+                vp.*,
+            };
+            _.has_any = true;
+        }
+    }
+
     fn handleProperty(
         *_,
         property: *const Property,
         dest: *css.DeclarationList,
         context: *css.PropertyHandlerContext,
     ): bool {
-        const maybeFlush = struct {
-            fn maybeFlush(
-                handler: *FlexHandler,
-                d: *css.DeclarationList,
-                ctx: *css.PropertyHandlerContext,
-                comptime prop: []const u8,
-                val: auto,
-                vp: *const VendorPrefix,
-            ) {
-                // If two vendor prefixes for the same property have different
-                // values, we need to flush what we have immediately to preserve order.
-                if (*field := @field(handler, prop)) {
-                    if (!std.@"meta".eql(field[0], val.*) && !bun.bits.contains(css.VendorPrefix, field[1], vp.*)) {
-                        handler.flush(d, ctx);
-                    }
-                }
-            }
-        }.maybeFlush;
-
-        const propertyHelper = struct {
-            fn propertyHelper(
-                handler: *FlexHandler,
-                ctx: *css.PropertyHandlerContext,
-                d: *css.DeclarationList,
-                comptime prop: []const u8,
-                val: auto,
-                vp: *const VendorPrefix,
-            ) {
-                maybeFlush(handler, d, ctx, prop, val, vp);
-
-                // Otherwise, update the value and add the prefix
-                if (@field(handler, prop) != null) {
-                    const field = &@field(handler, prop).?;
-                    @field(field.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
-                    bun.bits.insert(css.VendorPrefix, &field[1], vp.*);
-                } else {
-                    @field(handler, prop) = .{
-                        css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator),
-                        vp.*,
-                    };
-                    handler.has_any = true;
-                }
-            }
-        }.propertyHelper;
-
         switch (property.*) {
             .@"flex-direction" => |*val| {
                 if (context.targets.browsers != null) {
                     _.box_direction = null;
                     _.box_orient = null;
                 }
-                propertyHelper(_, context, dest, "direction", &val[0], &val[1]);
+                _.propertyHelper(context, dest, "direction", &val[0], &val[1]);
             },
-            .@"box-orient" => |*val| propertyHelper(_, context, dest, "box_orient", &val[0], &val[1]),
-            .@"box-direction" => |*val| propertyHelper(_, context, dest, "box_direction", &val[0], &val[1]),
+            .@"box-orient" => |*val| _.propertyHelper(context, dest, "box_orient", &val[0], &val[1]),
+            .@"box-direction" => |*val| _.propertyHelper(context, dest, "box_direction", &val[0], &val[1]),
             .@"flex-wrap" => |*val| {
                 if (context.targets.browsers != null) {
                     _.box_lines = null;
                 }
-                propertyHelper(_, context, dest, "wrap", &val[0], &val[1]);
+                _.propertyHelper(context, dest, "wrap", &val[0], &val[1]);
             },
-            .@"box-lines" => |*val| propertyHelper(_, context, dest, "box_lines", &val[0], &val[1]),
+            .@"box-lines" => |*val| _.propertyHelper(context, dest, "box_lines", &val[0], &val[1]),
             .@"flex-flow" => |*val| {
                 if (context.targets.browsers != null) {
                     _.box_direction = null;
                     _.box_orient = null;
                 }
-                propertyHelper(_, context, dest, "direction", &val[0].direction, &val[1]);
-                propertyHelper(_, context, dest, "wrap", &val[0].wrap, &val[1]);
+                _.propertyHelper(context, dest, "direction", &val[0].direction, &val[1]);
+                _.propertyHelper(context, dest, "wrap", &val[0].wrap, &val[1]);
             },
             .@"flex-grow" => |*val| {
                 if (context.targets.browsers != null) {
                     _.box_flex = null;
                     _.flex_positive = null;
                 }
-                propertyHelper(_, context, dest, "grow", &val[0], &val[1]);
+                _.propertyHelper(context, dest, "grow", &val[0], &val[1]);
             },
-            .@"box-flex" => |*val| propertyHelper(_, context, dest, "box_flex", &val[0], &val[1]),
-            .@"flex-positive" => |*val| propertyHelper(_, context, dest, "flex_positive", &val[0], &val[1]),
+            .@"box-flex" => |*val| _.propertyHelper(context, dest, "box_flex", &val[0], &val[1]),
+            .@"flex-positive" => |*val| _.propertyHelper(context, dest, "flex_positive", &val[0], &val[1]),
             .@"flex-shrink" => |*val| {
                 if (context.targets.browsers != null) {
                     _.flex_negative = null;
                 }
-                propertyHelper(_, context, dest, "shrink", &val[0], &val[1]);
+                _.propertyHelper(context, dest, "shrink", &val[0], &val[1]);
             },
-            .@"flex-negative" => |*val| propertyHelper(_, context, dest, "flex_negative", &val[0], &val[1]),
+            .@"flex-negative" => |*val| _.propertyHelper(context, dest, "flex_negative", &val[0], &val[1]),
             .@"flex-basis" => |*val| {
                 if (context.targets.browsers != null) {
                     _.preferred_size = null;
                 }
-                propertyHelper(_, context, dest, "basis", &val[0], &val[1]);
+                _.propertyHelper(context, dest, "basis", &val[0], &val[1]);
             },
-            .@"flex-preferred-size" => |*val| propertyHelper(_, context, dest, "preferred_size", &val[0], &val[1]),
+            .@"flex-preferred-size" => |*val| _.propertyHelper(context, dest, "preferred_size", &val[0], &val[1]),
             .flex => |*val| {
                 if (context.targets.browsers != null) {
                     _.box_flex = null;
@@ -685,22 +681,22 @@ pub struct FlexHandler {
                     _.flex_negative = null;
                     _.preferred_size = null;
                 }
-                maybeFlush(_, dest, context, "grow", &val[0].grow, &val[1]);
-                maybeFlush(_, dest, context, "shrink", &val[0].shrink, &val[1]);
-                maybeFlush(_, dest, context, "basis", &val[0].basis, &val[1]);
-                propertyHelper(_, context, dest, "grow", &val[0].grow, &val[1]);
-                propertyHelper(_, context, dest, "shrink", &val[0].shrink, &val[1]);
-                propertyHelper(_, context, dest, "basis", &val[0].basis, &val[1]);
+                _.maybeFlush(dest, context, "grow", &val[0].grow, &val[1]);
+                _.maybeFlush(dest, context, "shrink", &val[0].shrink, &val[1]);
+                _.maybeFlush(dest, context, "basis", &val[0].basis, &val[1]);
+                _.propertyHelper(context, dest, "grow", &val[0].grow, &val[1]);
+                _.propertyHelper(context, dest, "shrink", &val[0].shrink, &val[1]);
+                _.propertyHelper(context, dest, "basis", &val[0].basis, &val[1]);
             },
             .order => |*val| {
                 if (context.targets.browsers != null) {
                     _.box_ordinal_group = null;
                     _.flex_order = null;
                 }
-                propertyHelper(_, context, dest, "order", &val[0], &val[1]);
+                _.propertyHelper(context, dest, "order", &val[0], &val[1]);
             },
-            .@"box-ordinal-group" => |*val| propertyHelper(_, context, dest, "box_ordinal_group", &val[0], &val[1]),
-            .@"flex-order" => |*val| propertyHelper(_, context, dest, "flex_order", &val[0], &val[1]),
+            .@"box-ordinal-group" => |*val| _.propertyHelper(context, dest, "box_ordinal_group", &val[0], &val[1]),
+            .@"flex-order" => |*val| _.propertyHelper(context, dest, "flex_order", &val[0], &val[1]),
             .unparsed => |*val| {
                 if (isFlexProperty(&val.property_id)) {
                     _.flush(dest, context);

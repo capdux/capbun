@@ -4950,8 +4950,8 @@ fn NewPrinter(
                     p.printExpr(s.value, .lowest, result_unused());
                     p.printSemicolonAfterStatement();
                 },
-                else => |tag| {
-                    Output.panic("Unexpected tag in printStmt: .{s}", .{@tagName(tag)});
+                else => {
+                    Output.panic("Unexpected tag in printStmt: .{s}", {@tagName(std.meta.activeTag(stmt.data))});
                 },
             }
         }

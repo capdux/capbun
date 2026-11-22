@@ -118,6 +118,38 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const PackageDependencyGroup = struct {
+    prop: []const u8,
+    field: []const u8,
+    behavior: Behavior,
+    pub const dependencies = PackageDependencyGroup{ .prop = "dependencies", .field = "dependencies", .behavior = .{ .prod = true } };
+    pub const dev = PackageDependencyGroup{ .prop = "devDependencies", .field = "dev_dependencies", .behavior = .{ .dev = true } };
+    pub const optional = PackageDependencyGroup{ .prop = "optionalDependencies", .field = "optional_dependencies", .behavior = .{ .optional = true } };
+    pub const peer = PackageDependencyGroup{ .prop = "peerDependencies", .field = "peer_dependencies", .behavior = .{ .peer = true } };
+    pub const workspaces = PackageDependencyGroup{ .prop = "workspaces", .field = "workspaces", .behavior = .{ .workspace = true } };
+};
+
+pub const DiffSummary = struct {
+    add: u32 = 0,
+    remove: u32 = 0,
+    update: u32 = 0,
+    overrides_changed: bool = false,
+    catalogs_changed: bool = false,
+    added_trusted_dependencies: std.ArrayHashMapUnmanaged(TruncatedPackageNameHash, bool, ArrayIdentityContext, false) = .{},
+    removed_trusted_dependencies: TrustedDependenciesSet = .{},
+    patched_dependencies_changed: bool = false,
+
+pub inline fn sum(self: *DiffSummary, that: DiffSummary) void {
+            self.add = (self.add + that.add);
+            self.remove = (self.remove + that.remove);
+            self.update = (self.update + that.update);
+    }
+
+pub inline fn hasDiffs(self: DiffSummary) bool {
+            return ((((((((self.add > 0) or (self.remove > 0)) or (self.update > 0)) or self.overrides_changed) or self.catalogs_changed) or (self.added_trusted_dependencies.count() > 0)) or (self.removed_trusted_dependencies.count() > 0)) or self.patched_dependencies_changed);
+    }
+};
+
 const string = []const u8;
 const ResolutionType = @import("../resolution.zig").ResolutionType;
 const Allocator = std.mem.Allocator;
@@ -162,6 +194,22 @@ const TrustedDependenciesSet = Lockfile.TrustedDependenciesSet;
 const assertNoUninitializedPadding = Lockfile.assertNoUninitializedPadding;
 const default_trusted_dependencies = Lockfile.default_trusted_dependencies;
 
+pub fn PackageAlphabetizer(comptime Res: type) type {
+        return struct {
+    names: []const String,
+    buf: []const u8,
+    resolutions: []const Res,
+
+pub fn isAlphabetical(self: @This(), lhs: PackageID, rhs: PackageID) bool {
+            return (switch (self.names[@as(usize, @intCast(lhs))].order((&self.names[@as(usize, @intCast(rhs))]), self.buf, self.buf)) {
+.eq => (self.resolutions[@as(usize, @intCast(lhs))].order((&self.resolutions[@as(usize, @intCast(rhs))]), self.buf, self.buf) == .lt),
+.lt => true,
+.gt => false,
+});
+    }
+};
+}
+
 pub fn Package(comptime SemverIntType: type) type {
         return struct {
     name: String = .{},
@@ -173,11 +221,11 @@ pub fn Package(comptime SemverIntType: type) type {
     bin: Bin = .{},
     scripts: Scripts = .{},
 
-pub inline fn isDisabled(self: *const @This(), cpu: Npm.Architecture, os: Npm.OperatingSystem) bool {
+pub inline fn isDisabled(self: @This(), cpu: Npm.Architecture, os: Npm.OperatingSystem) bool {
             return self.@"meta".isDisabled(cpu, os);
     }
 
-pub fn clone(self: *const @This(), pm: *PackageManager, old: *Lockfile, new_lockfile: *Lockfile, package_id_mapping: []PackageID, cloner: *Cloner) !PackageID {
+pub fn clone(self: @This(), pm: *PackageManager, old: *Lockfile, new_lockfile: *Lockfile, package_id_mapping: []PackageID, cloner: *Cloner) !PackageID {
             const old_string_buf = old.buffers.string_bytes.items;
             const old_extern_string_buf = old.buffers.extern_strings.items;
             var builder_ = new_lockfile.stringBuilder();
@@ -248,7 +296,6 @@ pub fn clone(self: *const @This(), pm: *PackageManager, old: *Lockfile, new_lock
 
 pub fn fromPackageJSON(lockfile: *Lockfile, pm: *PackageManager, package_json: *PackageJSON, comptime features: Features) !@This() {
             const Self = @This();
-            _ = &Self;
             var package = Self{  };
             _ = &package;
             var string_builder = lockfile.stringBuilder();
@@ -318,7 +365,6 @@ pub fn fromPackageJSON(lockfile: *Lockfile, pm: *PackageManager, package_json: *
 
 pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, log: *logger.Log, manifest: *const Npm.PackageManifest, version: Semver.Version, package_version_ptr: *const Npm.PackageVersion, comptime features: Features) !@This() {
             const Self = @This();
-            _ = &Self;
             var package = Self{  };
             _ = &package;
             const package_version = package_version_ptr.*;
@@ -1305,29 +1351,8 @@ else => .init(.uninitialized),
     pub const Scripts = @import("./Package/Scripts.zig").Scripts;
     pub const Meta = @import("./Package/Meta.zig").Meta;
     pub const WorkspaceMap = @import("./Package/WorkspaceMap.zig");
-    pub const DependencyGroup = struct {
-        prop: []const u8,
-        field: []const u8,
-        behavior: Behavior,
-        pub const dependencies = DependencyGroup{ .prop = "dependencies", .field = "dependencies", .behavior = .{ .prod = true } };
-        pub const dev = DependencyGroup{ .prop = "devDependencies", .field = "dev_dependencies", .behavior = .{ .dev = true } };
-        pub const optional = DependencyGroup{ .prop = "optionalDependencies", .field = "optional_dependencies", .behavior = .{ .optional = true } };
-        pub const peer = DependencyGroup{ .prop = "peerDependencies", .field = "peer_dependencies", .behavior = .{ .peer = true } };
-        pub const workspaces = DependencyGroup{ .prop = "workspaces", .field = "workspaces", .behavior = .{ .workspace = true } };
-    };
-    pub const Alphabetizer = struct {
-        names: []const String,
-        buf: []const u8,
-        resolutions: []const Resolution,
-    
-    pub fn isAlphabetical(ctx: Alphabetizer, lhs: PackageID, rhs: PackageID) bool {
-                return (switch (ctx.names[@as(usize, @intCast(lhs))].order((&ctx.names[@as(usize, @intCast(rhs))]), ctx.buf, ctx.buf)) {
-    .eq => (ctx.resolutions[@as(usize, @intCast(lhs))].order((&ctx.resolutions[@as(usize, @intCast(rhs))]), ctx.buf, ctx.buf) == .lt),
-    .lt => true,
-    .gt => false,
-    });
-        }
-    };
+    pub const DependencyGroup = PackageDependencyGroup;
+    pub const Alphabetizer = PackageAlphabetizer(Resolution);
     const debug = Output.scoped(.Lockfile, .hidden);
     pub const Diff = struct {
     
@@ -1649,26 +1674,7 @@ else => .init(.uninitialized),
                         unlink,
                         link,
                     };
-        pub const Summary = struct {
-            add: u32 = 0,
-            remove: u32 = 0,
-            update: u32 = 0,
-            overrides_changed: bool = false,
-            catalogs_changed: bool = false,
-            added_trusted_dependencies: std.ArrayHashMapUnmanaged(TruncatedPackageNameHash, bool, ArrayIdentityContext, false) = .{},
-            removed_trusted_dependencies: TrustedDependenciesSet = .{},
-            patched_dependencies_changed: bool = false,
-        
-        pub inline fn sum(self: *@This(), that: Summary) void {
-                    self.add = (self.add + that.add);
-                    self.remove = (self.remove + that.remove);
-                    self.update = (self.update + that.update);
-            }
-        
-        pub inline fn hasDiffs(self: @This()) bool {
-                    return ((((((((self.add > 0) or (self.remove > 0)) or (self.update > 0)) or self.overrides_changed) or self.catalogs_changed) or (self.added_trusted_dependencies.count() > 0)) or (self.removed_trusted_dependencies.count() > 0)) or self.patched_dependencies_changed);
-            }
-        };
+        pub const Summary = DiffSummary;
     };
     pub const List = bun.MultiArrayList(PackageType);
     pub const Serializer = struct {

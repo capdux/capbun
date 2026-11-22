@@ -130,6 +130,23 @@ const Buffer = bun.api.node.Buffer;
 const jsc = bun.jsc;
 const ZigString = jsc.ZigString;
 
+pub fn _AsyncJob(comptime T: type) type {
+        return struct {
+
+pub fn runTask(task: *jsc.WorkPoolTask) void {
+            const target: *T = @fieldParentPtr("task", task);
+            _ = run(target);
+    }
+
+pub fn run(stream: *T) void {
+            const globalThis: *jsc.JSGlobalObject = stream.globalThis;
+            const vm = globalThis.bunVMConcurrently();
+            _ = stream.stream.doWork();
+            _ = vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(stream)));
+    }
+};
+}
+
 pub fn crc32(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(2).ptr;
         var data: ZigString.Slice = data_blk: {
@@ -442,19 +459,6 @@ pub fn emitError(stream: *T, globalThis: *jsc.JSGlobalObject, this_value: jsc.JS
 pub fn finalize(stream: *T) void {
             _ = stream.deref();
     }
-    const AsyncJob = struct {
-    
-    pub fn runTask(task: *jsc.WorkPoolTask) void {
-                const target: *T = @fieldParentPtr("task", task);
-                _ = AsyncJob.run(target);
-        }
-    
-    pub fn run(stream: *T) void {
-                const globalThis: *jsc.JSGlobalObject = stream.globalThis;
-                const vm = globalThis.bunVMConcurrently();
-                _ = stream.stream.doWork();
-                _ = vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(stream)));
-        }
-    };
+    const AsyncJob = _AsyncJob(T);
 };
 }

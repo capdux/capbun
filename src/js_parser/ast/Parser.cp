@@ -1,4 +1,102 @@
+pub struct ParserOptions {
+    jsx: options.JSX.Pragma,
+    ts: bool = false,
+    keep_names: bool = true,
+    ignore_dce_annotations: bool = false,
+    preserve_unused_imports_ts: bool = false,
+    use_define_for_class_fields: bool = false,
+    suppress_warnings_about_weird_code: bool = true,
+    filepath_hash_for_hmr: u32 = 0,
+    features: RuntimeFeatures = {},
+
+    tree_shaking: bool = false,
+    bundle: bool = false,
+    code_splitting: bool = false,
+    package_version: string = "",
+
+    macro_context: *MacroContextType() = undefined,
+
+    warn_about_unbundled_modules: bool = true,
+
+    allow_unresolved: *const options.AllowUnresolved = &options.AllowUnresolved.default,
+
+    module_type: options.ModuleType = .unknown,
+    output_format: options.Format = .esm,
+
+    transform_only: bool = false,
+
+    /// Used for inlining the state of import.meta.main during visiting
+    import_meta_main_value: bool? = null,
+    lower_import_meta_main_for_node_js: bool = false,
+
+    /// When using react fast refresh or server components, the framework is
+    /// able to customize what import sources are used.
+    framework: (*bun.bake.Framework)? = null,
+
+    /// REPL mode: transforms code for interactive evaluation
+    /// - Wraps lone object literals `{...}` in parentheses
+    /// - Hoists variable declarations for REPL persistence
+    /// - Wraps last expression in { value: expr } for result capture
+    /// - Wraps code with await in async IIFE
+    repl_mode: bool = false,
+
+    fn hashForRuntimeTranspiler(hasher: *std.hash.Wyhash, did_use_jsx: bool) {
+        bun.assert(!_.bundle);
+
+        if (did_use_jsx) {
+            if (_.jsx.parse) {
+                _.jsx.hashForRuntimeTranspiler(hasher);
+                // this holds the values for the jsx optimizaiton flags, which have both been removed
+                // as the optimizations break newer versions of react, see https://github.com/oven-sh/bun/issues/11025
+                const jsx_optimizations: [2]bool = [ false, false ];
+                hasher.update(std.mem.asBytes(&jsx_optimizations));
+            } else {
+                hasher.update("NO_JSX");
+            }
+        }
+
+        if (_.ts) {
+            hasher.update("TS");
+        } else {
+            hasher.update("NO_TS");
+        }
+
+        if (_.ignore_dce_annotations) {
+            hasher.update("no_dce");
+        }
+
+        _.features.hashForRuntimeTranspiler(hasher);
+    }
+
+    // Used to determine if `joinWithComma` should be called in `visitStmts`. We do this
+    // to avoid changing line numbers too much to make source mapping more readable
+    fn runtimeMergeAdjacentExpressionStatements(): bool {
+        return _.bundle;
+    }
+
+    static fn init(jsx: options.JSX.Pragma, loader: options.Loader): ParserOptions {
+        let opts = ParserOptions{
+            ts: loader.isTypeScript(),
+            jsx: jsx,
+        };
+        opts.jsx.parse = loader.isJSX();
+        return opts;
+    }
+}
+
+struct StmtAndPart {
+    stmt: Stmt,
+    part_idx: usize,
+}
+
+@packed struct PragmaState {
+    seen_cjs: bool = false,
+    seen_bytecode: bool = false,
+}
+
 pub struct Parser {
+    pub const Options = ParserOptions;
+
     options: Options,
     lexer: js_lexer.Lexer,
     log: *logger.Log,
@@ -6,93 +104,7 @@ pub struct Parser {
     define: *Define,
     allocator: Allocator,
 
-    pub const Options = struct {
-        jsx: options.JSX.Pragma,
-        ts: bool = false,
-        keep_names: bool = true,
-        ignore_dce_annotations: bool = false,
-        preserve_unused_imports_ts: bool = false,
-        use_define_for_class_fields: bool = false,
-        suppress_warnings_about_weird_code: bool = true,
-        filepath_hash_for_hmr: u32 = 0,
-        features: RuntimeFeatures = {},
-
-        tree_shaking: bool = false,
-        bundle: bool = false,
-        code_splitting: bool = false,
-        package_version: string = "",
-
-        macro_context: *MacroContextType() = undefined,
-
-        warn_about_unbundled_modules: bool = true,
-
-        allow_unresolved: *const options.AllowUnresolved = &options.AllowUnresolved.default,
-
-        module_type: options.ModuleType = .unknown,
-        output_format: options.Format = .esm,
-
-        transform_only: bool = false,
-
-        /// Used for inlining the state of import.meta.main during visiting
-        import_meta_main_value: bool? = null,
-        lower_import_meta_main_for_node_js: bool = false,
-
-        /// When using react fast refresh or server components, the framework is
-        /// able to customize what import sources are used.
-        framework: (*bun.bake.Framework)? = null,
-
-        /// REPL mode: transforms code for interactive evaluation
-        /// - Wraps lone object literals `{...}` in parentheses
-        /// - Hoists variable declarations for REPL persistence
-        /// - Wraps last expression in { value: expr } for result capture
-        /// - Wraps code with await in async IIFE
-        repl_mode: bool = false,
-
-        fn hashForRuntimeTranspiler(hasher: *std.hash.Wyhash, did_use_jsx: bool) {
-            bun.assert(!_.bundle);
-
-            if (did_use_jsx) {
-                if (_.jsx.parse) {
-                    _.jsx.hashForRuntimeTranspiler(hasher);
-                    // this holds the values for the jsx optimizaiton flags, which have both been removed
-                    // as the optimizations break newer versions of react, see https://github.com/oven-sh/bun/issues/11025
-                    const jsx_optimizations: [2]bool = [ false, false ];
-                    hasher.update(std.mem.asBytes(&jsx_optimizations));
-                } else {
-                    hasher.update("NO_JSX");
-                }
-            }
-
-            if (_.ts) {
-                hasher.update("TS");
-            } else {
-                hasher.update("NO_TS");
-            }
-
-            if (_.ignore_dce_annotations) {
-                hasher.update("no_dce");
-            }
-
-            _.features.hashForRuntimeTranspiler(hasher);
-        }
-
-        // Used to determine if `joinWithComma` should be called in `visitStmts`. We do this
-        // to avoid changing line numbers too much to make source mapping more readable
-        fn runtimeMergeAdjacentExpressionStatements(): bool {
-            return _.bundle;
-        }
-
-        static fn init(jsx: options.JSX.Pragma, loader: options.Loader): Options {
-            let opts = Options{
-                ts: loader.isTypeScript(),
-                jsx: jsx,
-            };
-            opts.jsx.parse = loader.isJSX();
-            return opts;
-        }
-    };
-
-    fn scanImports(*_, scan_pass: *ScanPassResult): anyerror!void {
+    fn scanImports(*_, scan_pass: *ScanPassResult)! {
         if (_.options.ts && _.options.jsx.parse) {
             return _._scanImports(TSXImportScanner, scan_pass)?;
         } else if (_.options.ts) {
@@ -104,7 +116,7 @@ pub struct Parser {
         }
     }
 
-    fn _scanImports(*_, comptime ParserType: type, scan_pass: *ScanPassResult): anyerror!void {
+    fn _scanImports(*_, comptime ParserType: type, scan_pass: *ScanPassResult)! {
         let p: ParserType = undefined;
 
         ParserType.init(_.allocator, _.log, _.source, _.define, _.lexer, _.options, &p)?;
@@ -262,7 +274,7 @@ pub struct Parser {
         }
     }
 
-    fn analyze(*_, context: *!, callback: *const fn (*!, *TSXParser, []js_ast.Part) anyerror!void): anyerror!void {
+    fn analyze(*_, context: *!, callback: *const fn (*!, *TSXParser, []js_ast.Part) anyerror!void)! {
         let p: TSXParser = undefined;
         TSXParser.init(_.allocator, _.log, _.source, _.define, _.lexer, _.options, &p)?;
 
@@ -547,7 +559,7 @@ pub struct Parser {
             // When tree shaking is enabled, each top-level statement is potentially a separate part.
             for (stmt of stmts) {
                 switch (stmt.data) {
-                    .s_local => |local| {
+                    .s_local local => {
                         if (local.decls.len > 1) {
                             for (decl of local.decls.slice()) {
                                 let sliced = ListManaged(Stmt).initCapacity(p.allocator, 1)?;
@@ -587,7 +599,7 @@ pub struct Parser {
                         p.appendPart(parts_list, sliced.items)?;
                     },
 
-                    .s_class => |cls| {
+                    .s_class cls => {
                         // Move class export statements to the top of the file if we can
                         // This automatically resolves some cyclical import issues
                         // https://github.com/kysely-org/kysely/issues/412
@@ -603,7 +615,7 @@ pub struct Parser {
                             parts.items.len -= 1;
                         }
                     },
-                    .s_export_default => |value| {
+                    .s_export_default value => {
                         // We move export default statements when we can
                         // This automatically resolves some cyclical import issues in packages like luxon
                         // https://github.com/oven-sh/bun/issues/1961
@@ -799,7 +811,6 @@ pub struct Parser {
             //
             // When tree-shaking is enabled, each statement becomes its own part, so we need
             // to look across all parts to find the single meaningful statement.
-            const StmtAndPart = struct { stmt: Stmt, part_idx: usize };
             const stmt_and_part: StmtAndPart? = brk: {
                 let found: StmtAndPart? = null;
                 let part_idx: usize = 0;
@@ -1004,7 +1015,7 @@ pub struct Parser {
                         for (part of before.items) {
                             for (stmt of part.stmts) {
                                 switch (stmt.data) {
-                                    .s_export_star => |star| {
+                                    .s_export_star star => {
                                         if (star.alias != null) {
                                             break :brk null;
                                         }
@@ -1493,18 +1504,16 @@ pub struct Parser {
         return js_ast.Result{ ast: try p.toAST(&parts, exports_kind, wrap_mode, hashbang) };
     }
 
-    fn init(_options: Options, log: *logger.Log, source: *const logger.Source, define: *Define, allocator: Allocator): !Parser {
+    fn init(_options: Options, log: *logger.Log, source: *const logger.Source, define: *Define, allocator: Allocator): Parser! {
         return Parser{
             options: _options,
             allocator: allocator,
-            lexer: try js_lexer.Lexer.init(log, source, allocator),
+            lexer: js_lexer.Lexer.init(log, source, allocator)?,
             define: define,
             source: source,
             log: log,
         };
     }
-
-    const PragmaState = packed struct { seen_cjs: bool = false, seen_bytecode: bool = false };
 
     fn hasBunPragma(has_hashbang: bool): js_ast.Result.AlreadyBundled? {
         const BUN_PRAGMA = "// @bun";
@@ -1533,7 +1542,7 @@ pub struct Parser {
         if (!bun.strings.startsWith(contents[cursor..], BUN_PRAGMA)) return null;
         cursor += BUN_PRAGMA.len;
 
-        let state: PragmaState = {};
+        let state = PragmaState{};
 
         while (cursor < end) : (cursor += 1) {
             switch (contents[cursor]) {
@@ -1582,7 +1591,7 @@ fn runtimeImportIsLessThan(ctx: void, a: u8, b: u8): bool {
 }
 
 struct FakeWriter {
-    static fn writeAll(fw: FakeWriter, data: []const u8): anyerror!usize {
+    static fn writeAll(fw: FakeWriter, data: []const u8): usize! {
         * = fw;
         if (data.len == 0) return 0;
         Output.print("{s}", .{data});

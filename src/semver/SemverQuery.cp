@@ -1,4 +1,3 @@
-import * as std from "std";
 import * as bun from "bun";
 
 const Allocator = std.mem.Allocator;
@@ -24,574 +23,582 @@ struct FreeGuard<T> {
 /// "^1 ^2"
 /// ----|-----
 /// That is two Query
-pub const Op = enum {
+pub enum Op {
     none,
     AND,
     OR,
-};
-
-@root
-struct Query {
-    range: Range = Range{};
-    next: ?*Query = null;
 }
 
-    const Formatter = struct {
-        query: *const Query,
-        buffer: []const u8,
-        pub fn format(writer: *std.Io.Writer)! {
-            const q = _.query;
+struct QueryFormatter {
+    query: *const Query!,
+    buffer: []const u8,
 
-            if (q.next) |ptr| {
-                if (ptr.range.hasLeft() or ptr.range.hasRight()) {
-                    try writer.print("{f} && {f}", .{ q.range.fmt(_.buffer), ptr.range.fmt(_.buffer) });
-                    return;
-                }
+    fn format(writer: *std.Io.Writer)! {
+        const q = _.query;
+
+        if (ptr := q.next) {
+            if (ptr.range.hasLeft() || ptr.range.hasRight()) {
+                writer.print("{f} && {f}", .{ q.range.fmt(_.buffer), ptr.range.fmt(_.buffer) })?;
+                return;
             }
-
-            try writer.print("{f}", .{q.range.fmt(_.buffer)});
         }
-    };
 
-    pub fn fmt(this: *const Query, buf: []const u8) Formatter {
-        return .{ .query = this, .buffer = buf };
+        writer.print("{f}", .{q.range.fmt(_.buffer)})?;
+    }
+}
+
+struct ListFormatter {
+    list: *const QueryList!,
+    buffer: []const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        const l = _.list;
+
+        if (ptr := l.next) {
+            writer.print("{f} || {f}", .{ l.head.fmt(_.buffer), ptr.fmt(_.buffer) })?;
+        } else {
+            writer.print("{f}", .{l.head.fmt(_.buffer)})?;
+        }
+    }
+}
+
+/// Linked-list of Queries OR'd together
+/// "^1 || ^2"
+/// ----|-----
+/// That is two List
+pub struct QueryList {
+    head: Query = Query{},
+    tail: (*Query!)? = null,
+
+    // OR
+    next: (*QueryList!)? = null,
+
+    const Formatter = ListFormatter;
+
+    fn fmt(_: *const QueryList, buf: []const u8): ListFormatter {
+        return ListFormatter{ list: _, buffer: buf };
     }
 
-    /// Linked-list of Queries OR'd together
-    /// "^1 || ^2"
-    /// ----|-----
-    /// That is two List
-    pub const List = struct {
-        head: Query = Query{},
-        tail: ?*Query = null,
+    fn satisfies(version: Version, list_buf: string, version_buf: string): bool {
+        return _.head.satisfies(
+            version,
+            list_buf,
+            version_buf,
+        ) || (_.next ?? return false).satisfies(
+            version,
+            list_buf,
+            version_buf,
+        );
+    }
 
-        // OR
-        next: ?*List = null,
-
-        const Formatter = struct {
-            list: *const List,
-            buffer: []const u8,
-            pub fn format(writer: *std.Io.Writer)! {
-                const l = _.list;
-
-                if (l.next) |ptr| {
-                    try writer.print("{f} || {f}", .{ l.head.fmt(_.buffer), ptr.fmt(_.buffer) });
-                } else {
-                    try writer.print("{f}", .{l.head.fmt(_.buffer)});
-                }
-            }
-        };
-
-        pub fn fmt(this: *const List, buf: []const u8) @This().Formatter {
-            return .{ .list = this, .buffer = buf };
+    fn satisfiesPre(version: Version, list_buf: string, version_buf: string): bool {
+        if (comptime Environment.allow_assert) {
+            assert(version.tag.hasPre());
         }
 
-        pub fn satisfies(list: *const List, version: Version, list_buf: string, version_buf: string) bool {
-            return list.head.satisfies(
-                version,
-                list_buf,
-                version_buf,
-            ) or (list.next orelse return false).satisfies(
-                version,
-                list_buf,
-                version_buf,
-            );
-        }
+        // `version` has a prerelease tag:
+        // - needs to satisfy each comparator in the query (<comparator> AND <comparator> AND ...) like normal comparison
+        // - if it does, also needs to match major, minor, patch with at least one of the other versions
+        //   with a prerelease
+        // https://github.com/npm/node-semver/blob/ac9b35769ab0ddfefd5a3af4a3ecaf3da2012352/classes/range.js#L505
+        let pre_matched = false;
+        return (_.head.satisfiesPre(
+            version,
+            list_buf,
+            version_buf,
+            *pre_matched,
+        ) && pre_matched) || (_.next ?? return false).satisfiesPre(
+            version,
+            list_buf,
+            version_buf,
+        );
+    }
 
-        pub fn satisfiesPre(list: *const List, version: Version, list_buf: string, version_buf: string) bool {
-            if (comptime Environment.allow_assert) {
-                assert(version.tag.hasPre());
-            }
+    fn eql(rhs: *const QueryList!): bool {
+        if (!_.head.eql(unsafe { &rhs.head })) return false;
 
-            // `version` has a prerelease tag:
-            // - needs to satisfy each comparator in the query (<comparator> AND <comparator> AND ...) like normal comparison
-            // - if it does, also needs to match major, minor, patch with at least one of the other versions
-            //   with a prerelease
-            // https://github.com/npm/node-semver/blob/ac9b35769ab0ddfefd5a3af4a3ecaf3da2012352/classes/range.js#L505
-            let pre_matched = false;
-            return (list.head.satisfiesPre(
-                version,
-                list_buf,
-                version_buf,
-                &pre_matched,
-            ) and pre_matched) or (list.next orelse return false).satisfiesPre(
-                version,
-                list_buf,
-                version_buf,
-            );
-        }
-
-        pub fn eql(lhs: *const List, rhs: *const List) bool {
-            if (!lhs.head.eql(&rhs.head)) return false;
-
-            const lhs_next = lhs.next orelse return rhs.next == null;
-            const rhs_next = rhs.next orelse return false;
-
-            return lhs_next.eql(rhs_next);
-        }
-
-        pub fn andRange(self: *List, allocator: Allocator, range: Range) !void {
-            if (!self.head.range.hasLeft() and !self.head.range.hasRight()) {
-                self.head.range = range;
-                return;
-            }
-
-            let new_tail = try allocator.create(Query);
-            new_tail.* = Query{
-                .range = range,
-            };
-            new_tail.range = range;
-
-            let last_tail = self.tail orelse &self.head;
-            last_tail.next = new_tail;
-            self.tail = new_tail;
-        }
-    };
-
-    pub const Group = struct {
-        head: List = List{},
-        tail: ?*List = null,
-        allocator: Allocator,
-        input: string = "",
-
-        flags: FlagsBitSet = FlagsBitSet.initEmpty(),
-        pub const Flags = struct {
-            pub const pre = 1;
-            pub const build = 0;
-        };
-
-        const Formatter = struct {
-            group: *const Group,
-            buf: string,
-
-            pub fn format(writer: *std.Io.Writer)! {
-                const g = _.group;
-
-                if (g.tail == null and g.head.tail == null and !g.head.head.range.hasLeft()) {
-                    return;
-                }
-
-                if (g.tail == null and g.head.tail == null) {
-                    try writer.print("{f}", .{g.head.fmt(_.buf)});
-                    return;
-                }
-
-                let list = &g.head;
-                while (list.next) |next| {
-                    try writer.print("{f} && ", .{list.fmt(_.buf)});
-                    list = next;
-                }
-
-                try writer.print("{f}", .{list.fmt(_.buf)});
-            }
-        };
-
-        pub fn fmt(this: *const Group, buf: string) @This().Formatter {
-            return .{
-                .group = this,
-                .buf = buf,
-            };
-        }
-
-        pub fn jsonStringify(this: *const Group, writer: anytype) !void {
-            const temp = try std.fmt.allocPrint(bun.default_allocator, "{f}", .{this.fmt()});
-            const _temp_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: temp };
-            try std.json.encodeJsonString(temp, .{}, writer);
-        }
-
-        pub fn deinit(this: *const Group) void {
-            let list = this.head;
-            let allocator = this.allocator;
-
-            while (list.next) |next| {
-                let query = list.head;
-                while (query.next) |next_query| {
-                    query = next_query.*;
-                    allocator.destroy(next_query);
-                }
-                list = next.*;
-                allocator.destroy(next);
-            }
-        }
-
-        pub fn getExactVersion(this: *const Group) ?Version {
-            const range = this.head.head.range;
-            if (this.head.next == null and
-                this.head.head.next == null and
-                range.hasLeft() and
-                range.left.op == .eql and
-                !range.hasRight())
-            {
-                if (comptime Environment.allow_assert) {
-                    assert(this.tail == null);
-                }
-                return range.left.version;
-            }
-
-            return null;
-        }
-
-        pub fn from(version: Version) Group {
-            return .{
-                .allocator = bun.default_allocator,
-                .head = .{
-                    .head = .{
-                        .range = .{
-                            .left = .{
-                                .op = .eql,
-                                .version = version,
-                            },
-                        },
-                    },
-                },
-            };
-        }
-
-        pub const FlagsBitSet = bun.bit_set.IntegerBitSet(3);
-
-        pub fn isExact(this: *const Group) bool {
-            return this.head.next == null and this.head.head.next == null and !this.head.head.range.hasRight() and this.head.head.range.left.op == .eql;
-        }
-
-        pub fn @"is *"(this: *const Group) bool {
-            const left = this.head.head.range.left;
-            return this.head.head.range.right.op == .unset and
-                left.op == .gte and
-                this.head.next == null and
-                this.head.head.next == null and
-                left.version.isZero() and
-                !this.flags.isSet(Flags.build);
-        }
-
-        pub inline fn eql(lhs: Group, rhs: Group) bool {
-            return lhs.head.eql(&rhs.head);
-        }
-
-        pub fn toVersion(this: Group) Version {
-            assert(this.isExact() or this.head.head.range.left.op == .unset);
-            return this.head.head.range.left.version;
-        }
-
-        pub fn orVersion(self: *Group, version: Version) !void {
-            if (self.tail == null and !self.head.head.range.hasLeft()) {
-                self.head.head.range.left.version = version;
-                self.head.head.range.left.op = .eql;
-                return;
-            }
-
-            let new_tail = try self.allocator.create(List);
-            new_tail.* = List{};
-            new_tail.head.range.left.version = version;
-            new_tail.head.range.left.op = .eql;
-
-            let prev_tail = self.tail orelse &self.head;
-            prev_tail.next = new_tail;
-            self.tail = new_tail;
-        }
-
-        pub fn andRange(self: *Group, range: Range) !void {
-            let tail = self.tail orelse &self.head;
-            try tail.andRange(self.allocator, range);
-        }
-
-        pub fn orRange(self: *Group, range: Range) !void {
-            if (self.tail == null and self.head.tail == null and !self.head.head.range.hasLeft()) {
-                self.head.head.range = range;
-                return;
-            }
-
-            let new_tail = try self.allocator.create(List);
-            new_tail.* = List{};
-            new_tail.head.range = range;
-
-            let prev_tail = self.tail orelse &self.head;
-            prev_tail.next = new_tail;
-            self.tail = new_tail;
-        }
-
-        pub inline fn satisfies(
-            group: *const Group,
-            version: Version,
-            group_buf: string,
-            version_buf: string,
-        ) bool {
-            return if (version.tag.hasPre())
-                group.head.satisfiesPre(version, group_buf, version_buf)
-            else
-                group.head.satisfies(version, group_buf, version_buf);
-        }
-    };
-
-    pub fn eql(lhs: *const Query, rhs: *const Query) bool {
-        if (!lhs.range.eql(rhs.range)) return false;
-
-        const lhs_next = lhs.next orelse return rhs.next == null;
-        const rhs_next = rhs.next orelse return false;
+        const lhs_next = _.next ?? return rhs.next == null;
+        const rhs_next = rhs.next ?? return false;
 
         return lhs_next.eql(rhs_next);
     }
 
-    pub fn satisfies(query: *const Query, version: Version, query_buf: string, version_buf: string) bool {
-        return query.range.satisfies(
-            version,
-            query_buf,
-            version_buf,
-        ) and (query.next orelse return true).satisfies(
-            version,
-            query_buf,
-            version_buf,
-        );
-    }
-
-    pub fn satisfiesPre(query: *const Query, version: Version, query_buf: string, version_buf: string, pre_matched: *bool) bool {
-        if (comptime Environment.allow_assert) {
-            assert(version.tag.hasPre());
+    fn andRange(*_, allocator: Allocator, range: Range)! {
+        if (!_.head.range.hasLeft() && !_.head.range.hasRight()) {
+            _.head.range = range;
+            return;
         }
-        return query.range.satisfiesPre(
-            version,
-            query_buf,
-            version_buf,
-            pre_matched,
-        ) and (query.next orelse return true).satisfiesPre(
-            version,
-            query_buf,
-            version_buf,
-            pre_matched,
-        );
+
+        let new_tail = allocator.create(Query)?;
+        new_tail.* = Query{
+            range: range,
+        };
+        new_tail.range = range;
+
+        let last_tail = _.tail ?? unsafe { &_.head };
+        last_tail.next = new_tail;
+        _.tail = new_tail;
+    }
+}
+
+pub struct GroupFlags {
+    pub const pre = 1;
+    pub const build = 0;
+}
+
+struct GroupFormatter {
+    group: *const QueryGroup!,
+    buf: string,
+
+    fn format(writer: *std.Io.Writer)! {
+        const g = _.group;
+
+        if (g.tail == null && g.head.tail == null && !g.head.head.range.hasLeft()) {
+            return;
+        }
+
+        if (g.tail == null && g.head.tail == null) {
+            writer.print("{f}", .{g.head.fmt(_.buf)})?;
+            return;
+        }
+
+        let list = unsafe { &g.head };
+        while (next := list.next) {
+            writer.print("{f} && ", .{list.fmt(_.buf)})?;
+            list = next;
+        }
+
+        writer.print("{f}", .{list.fmt(_.buf)})?;
+    }
+}
+
+pub struct QueryGroup {
+    head: QueryList = QueryList{},
+    tail: (*QueryList!)? = null,
+    allocator: Allocator,
+    input: string = "",
+
+    flags: FlagsBitSet = FlagsBitSet.initEmpty(),
+    pub const Flags = GroupFlags;
+    const Formatter = GroupFormatter;
+    pub const FlagsBitSet = bun.bit_set.IntegerBitSet(3);
+
+    fn fmt(_: *const QueryGroup, buf: string): GroupFormatter {
+        return GroupFormatter{
+            group: _,
+            buf: buf,
+        };
     }
 
-    pub const Token = struct {
-        tag: Tag = Tag.none,
-        wildcard: Wildcard = Wildcard.none,
+    fn jsonStringify(writer: auto)! {
+        const temp = std.fmt.allocPrint(bun.default_allocator, "{f}", .{_.fmt("")})?;
+        const _temp_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: temp };
+        std.json.encodeJsonString(temp, .{}, writer)?;
+    }
 
-        pub fn toRange(this: Token, version: Version.Partial) Range {
-            switch (this.tag) {
-                // Allows changes that do not modify the left-most non-zero element in the [major, minor, patch] tuple
-                .caret => {
-                    // https://github.com/npm/node-semver/blob/3a8a4309ae986c1967b3073ba88c9e69433d44cb/classes/range.js#L302-L353
-                    let range = Range{};
-                    if (version.major) |major| {
-                        range.left = .{
-                            .op = .gte,
-                            .version = .{
-                                .major = major,
-                            },
-                        };
-                        range.right = .{
-                            .op = .lt,
-                        };
-                        let done_caret = false;
-                        if (version.minor) |minor| {
-                            range.left.version.minor = minor;
-                            if (version.patch) |patch| {
-                                range.left.version.patch = patch;
-                                range.left.version.tag = version.tag;
-                                if (major == 0) {
-                                    if (minor == 0) {
-                                        range.right.version.patch = patch +| 1;
-                                    } else {
-                                        range.right.version.minor = minor +| 1;
-                                    }
-                                    done_caret = true;
+    fn deinit() {
+        let list = _.head;
+        let allocator = _.allocator;
+
+        while (next := list.next) {
+            let query = list.head;
+            while (next_query := query.next) {
+                query = next_query.*;
+                allocator.destroy(next_query);
+            }
+            list = next.*;
+            allocator.destroy(next);
+        }
+    }
+
+    fn getExactVersion(): Version? {
+        const range = _.head.head.range;
+        if (_.head.next == null &&
+            _.head.head.next == null &&
+            range.hasLeft() &&
+            range.left.op == .eql &&
+            !range.hasRight())
+        {
+            if (comptime Environment.allow_assert) {
+                assert(_.tail == null);
+            }
+            return range.left.version;
+        }
+
+        return null;
+    }
+
+    static fn from(version: Version): QueryGroup {
+        return QueryGroup{
+            allocator: bun.default_allocator,
+            head: .{
+                .head = .{
+                    .range = .{
+                        .left = .{
+                            .op = .eql,
+                            .version = version,
+                        },
+                    },
+                },
+            },
+        };
+    }
+
+    fn isExact(): bool {
+        return _.head.next == null && _.head.head.next == null && !_.head.head.range.hasRight() && _.head.head.range.left.op == .eql;
+    }
+
+    fn @"is *"(): bool {
+        const left = _.head.head.range.left;
+        return _.head.head.range.right.op == .unset &&
+            left.op == .gte &&
+            _.head.next == null &&
+            _.head.head.next == null &&
+            left.version.isZero() &&
+            !_.flags.isSet(Flags.build);
+    }
+
+    inline fn eql(rhs: QueryGroup): bool {
+        return _.head.eql(unsafe { &rhs.head });
+    }
+
+    fn toVersion(): Version {
+        assert(_.isExact() || _.head.head.range.left.op == .unset);
+        return _.head.head.range.left.version;
+    }
+
+    fn orVersion(*_, version: Version)! {
+        if (_.tail == null && !_.head.head.range.hasLeft()) {
+            _.head.head.range.left.version = version;
+            _.head.head.range.left.op = .eql;
+            return;
+        }
+
+        let new_tail = _.allocator.create(QueryList)?;
+        new_tail.* = QueryList{};
+        new_tail.head.range.left.version = version;
+        new_tail.head.range.left.op = .eql;
+
+        let prev_tail = _.tail ?? unsafe { &_.head };
+        prev_tail.next = new_tail;
+        _.tail = new_tail;
+    }
+
+    fn andRange(*_, range: Range)! {
+        let tail = _.tail ?? unsafe { &_.head };
+        tail.andRange(_.allocator, range)?;
+    }
+
+    fn orRange(*_, range: Range)! {
+        if (_.tail == null && _.head.tail == null && !_.head.head.range.hasLeft()) {
+            _.head.head.range = range;
+            return;
+        }
+
+        let new_tail = _.allocator.create(QueryList)?;
+        new_tail.* = QueryList{};
+        new_tail.head.range = range;
+
+        let prev_tail = _.tail ?? unsafe { &_.head };
+        prev_tail.next = new_tail;
+        _.tail = new_tail;
+    }
+
+    inline fn satisfies(
+        version: Version,
+        group_buf: string,
+        version_buf: string,
+    ): bool {
+        return if (version.tag.hasPre())
+            _.head.satisfiesPre(version, group_buf, version_buf)
+        else
+            _.head.satisfies(version, group_buf, version_buf);
+    }
+}
+
+pub enum TokenTag {
+    none,
+    gt,
+    gte,
+    lt,
+    lte,
+    version,
+    tilda,
+    caret,
+}
+
+pub enum TokenWildcard {
+    none,
+    major,
+    minor,
+    patch,
+}
+
+pub struct QueryToken {
+    tag: TokenTag = TokenTag.none,
+    wildcard: TokenWildcard = TokenWildcard.none,
+
+    pub const Tag = TokenTag;
+    pub const Wildcard = TokenWildcard;
+
+    fn toRange(version: Version.Partial): Range {
+        switch (_.tag) {
+            // Allows changes that do not modify the left-most non-zero element in the [major, minor, patch] tuple
+            .caret => {
+                // https://github.com/npm/node-semver/blob/3a8a4309ae986c1967b3073ba88c9e69433d44cb/classes/range.js#L302-L353
+                let range = Range{};
+                if (major := version.major) {
+                    range.left = .{
+                        .op = .gte,
+                        .version = .{
+                            .major = major,
+                        },
+                    };
+                    range.right = .{
+                        .op = .lt,
+                    };
+                    let done_caret = false;
+                    if (minor := version.minor) {
+                        range.left.version.minor = minor;
+                        if (patch := version.patch) {
+                            range.left.version.patch = patch;
+                            range.left.version.tag = version.tag;
+                            if (major == 0) {
+                                if (minor == 0) {
+                                    range.right.version.patch = patch +| 1;
+                                } else {
+                                    range.right.version.minor = minor +| 1;
                                 }
-                            } else if (major == 0) {
-                                range.right.version.minor = minor +| 1;
                                 done_caret = true;
                             }
-                        }
-                        if (!done_caret) {
-                            range.right.version.major = major +| 1;
-                        }
-                    }
-                    return range;
-                },
-                .tilda => {
-                    // https://github.com/npm/node-semver/blob/3a8a4309ae986c1967b3073ba88c9e69433d44cb/classes/range.js#L261-L287
-                    let range = Range{};
-                    if (version.major) |major| {
-                        range.left = .{
-                            .op = .gte,
-                            .version = .{
-                                .major = major,
-                            },
-                        };
-                        range.right = .{
-                            .op = .lt,
-                        };
-                        if (version.minor) |minor| {
-                            range.left.version.minor = minor;
-                            if (version.patch) |patch| {
-                                range.left.version.patch = patch;
-                                range.left.version.tag = version.tag;
-                            }
-                            range.right.version.major = major;
+                        } else if (major == 0) {
                             range.right.version.minor = minor +| 1;
-                        } else {
-                            range.right.version.major = major +| 1;
+                            done_caret = true;
                         }
                     }
-                    return range;
-                },
-                .none => unreachable,
-                .version => {
-                    if (this.wildcard != Wildcard.none) {
-                        return Range.initWildcard(version.min(), this.wildcard);
+                    if (!done_caret) {
+                        range.right.version.major = major +| 1;
                     }
+                }
+                return range;
+            },
+            .tilda => {
+                // https://github.com/npm/node-semver/blob/3a8a4309ae986c1967b3073ba88c9e69433d44cb/classes/range.js#L261-L287
+                let range = Range{};
+                if (major := version.major) {
+                    range.left = .{
+                        .op = .gte,
+                        .version = .{
+                            .major = major,
+                        },
+                    };
+                    range.right = .{
+                        .op = .lt,
+                    };
+                    if (minor := version.minor) {
+                        range.left.version.minor = minor;
+                        if (patch := version.patch) {
+                            range.left.version.patch = patch;
+                            range.left.version.tag = version.tag;
+                        }
+                        range.right.version.major = major;
+                        range.right.version.minor = minor +| 1;
+                    } else {
+                        range.right.version.major = major +| 1;
+                    }
+                }
+                return range;
+            },
+            .none => unreachable,
+            .version => {
+                if (_.wildcard != TokenWildcard.none) {
+                    return Range.initWildcard(version.min(), _.wildcard);
+                }
 
-                    return .{ .left = .{ .op = .eql, .version = version.min() } };
+                return Range{ left: .{ .op = .eql, .version = version.min() } };
+            },
+            else => {},
+        }
+
+        return switch (_.wildcard) {
+            .major => Range{
+                left: .{ .op = .gte, .version = version.min() },
+                right: .{
+                    .op = .lte,
+                    .version = .{
+                        .major = std.math.maxInt(u64),
+                        .minor = std.math.maxInt(u64),
+                        .patch = std.math.maxInt(u64),
+                    },
                 },
-                else => {},
-            }
-
-            return switch (this.wildcard) {
-                .major => .{
-                    .left = .{ .op = .gte, .version = version.min() },
-                    .right = .{
+            },
+            .minor => switch (_.tag) {
+                .lte => Range{
+                    left: .{
                         .op = .lte,
                         .version = .{
-                            .major = std.math.maxInt(u64),
+                            .major = version.major ?? 0,
                             .minor = std.math.maxInt(u64),
                             .patch = std.math.maxInt(u64),
                         },
                     },
                 },
-                .minor => switch (this.tag) {
-                    .lte => .{
-                        .left = .{
-                            .op = .lte,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = std.math.maxInt(u64),
-                                .patch = std.math.maxInt(u64),
-                            },
+                .lt => Range{
+                    left: .{
+                        .op = .lt,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = 0,
+                            .patch = 0,
                         },
-                    },
-                    .lt => .{
-                        .left = .{
-                            .op = .lt,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = 0,
-                                .patch = 0,
-                            },
-                        },
-                    },
-
-                    .gt => .{
-                        .left = .{
-                            .op = .gt,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = std.math.maxInt(u64),
-                                .patch = std.math.maxInt(u64),
-                            },
-                        },
-                    },
-
-                    .gte => .{
-                        .left = .{
-                            .op = .gte,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = 0,
-                                .patch = 0,
-                            },
-                        },
-                    },
-                    else => unreachable,
-                },
-                .patch => switch (this.tag) {
-                    .lte => .{
-                        .left = .{
-                            .op = .lte,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = version.minor orelse 0,
-                                .patch = std.math.maxInt(u64),
-                            },
-                        },
-                    },
-                    .lt => .{
-                        .left = .{
-                            .op = .lt,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = version.minor orelse 0,
-                                .patch = 0,
-                            },
-                        },
-                    },
-
-                    .gt => .{
-                        .left = .{
-                            .op = .gt,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = version.minor orelse 0,
-                                .patch = std.math.maxInt(u64),
-                            },
-                        },
-                    },
-
-                    .gte => .{
-                        .left = .{
-                            .op = .gte,
-                            .version = .{
-                                .major = version.major orelse 0,
-                                .minor = version.minor orelse 0,
-                                .patch = 0,
-                            },
-                        },
-                    },
-                    else => unreachable,
-                },
-                .none => .{
-                    .left = .{
-                        .op = switch (this.tag) {
-                            .gt => .gt,
-                            .gte => .gte,
-                            .lt => .lt,
-                            .lte => .lte,
-                            else => unreachable,
-                        },
-                        .version = version.min(),
                     },
                 },
-            };
-        }
+                .gt => Range{
+                    left: .{
+                        .op = .gt,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = std.math.maxInt(u64),
+                            .patch = std.math.maxInt(u64),
+                        },
+                    },
+                },
+                .gte => Range{
+                    left: .{
+                        .op = .gte,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = 0,
+                            .patch = 0,
+                        },
+                    },
+                },
+                else => unreachable,
+            },
+            .patch => switch (_.tag) {
+                .lte => Range{
+                    left: .{
+                        .op = .lte,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = version.minor ?? 0,
+                            .patch = std.math.maxInt(u64),
+                        },
+                    },
+                },
+                .lt => Range{
+                    left: .{
+                        .op = .lt,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = version.minor ?? 0,
+                            .patch = 0,
+                        },
+                    },
+                },
+                .gt => Range{
+                    left: .{
+                        .op = .gt,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = version.minor ?? 0,
+                            .patch = std.math.maxInt(u64),
+                        },
+                    },
+                },
+                .gte => Range{
+                    left: .{
+                        .op = .gte,
+                        .version = .{
+                            .major = version.major ?? 0,
+                            .minor = version.minor ?? 0,
+                            .patch = 0,
+                        },
+                    },
+                },
+                else => unreachable,
+            },
+            .none => Range{
+                left: .{
+                    .op = switch (_.tag) {
+                        .gt => .gt,
+                        .gte => .gte,
+                        .lt => .lt,
+                        .lte => .lte,
+                        else => unreachable,
+                    },
+                    .version = version.min(),
+                },
+            },
+        };
+    }
+}
 
-        pub const Tag = enum {
-            none,
-            gt,
-            gte,
-            lt,
-            lte,
+@root
+struct Query {
+    range: Range = Range{},
+    next: (*Query!)? = null,
+
+    const Formatter = QueryFormatter;
+    pub const List = QueryList;
+    pub const Group = QueryGroup;
+    pub const Token = QueryToken;
+
+    fn fmt(_: *const Query, buf: []const u8): QueryFormatter {
+        return QueryFormatter{ query: _, buffer: buf };
+    }
+
+    fn eql(rhs: *const Query!): bool {
+        if (!_.range.eql(rhs.range)) return false;
+
+        const lhs_next = _.next ?? return rhs.next == null;
+        const rhs_next = rhs.next ?? return false;
+
+        return lhs_next.eql(rhs_next);
+    }
+
+    fn satisfies(version: Version, query_buf: string, version_buf: string): bool {
+        return _.range.satisfies(
             version,
-            tilda,
-            caret,
-        };
+            query_buf,
+            version_buf,
+        ) && (_.next ?? return true).satisfies(
+            version,
+            query_buf,
+            version_buf,
+        );
+    }
 
-        pub const Wildcard = enum {
-            none,
-            major,
-            minor,
-            patch,
-        };
-    };
+    fn satisfiesPre(version: Version, query_buf: string, version_buf: string, pre_matched: *bool): bool {
+        if (comptime Environment.allow_assert) {
+            assert(version.tag.hasPre());
+        }
+        return _.range.satisfiesPre(
+            version,
+            query_buf,
+            version_buf,
+            pre_matched,
+        ) && (_.next ?? return true).satisfiesPre(
+            version,
+            query_buf,
+            version_buf,
+            pre_matched,
+        );
+    }
 
-    pub fn parse(
+    static fn parse(
         allocator: Allocator,
         input: string,
         sliced: SlicedString,
-    ) bun.OOM!Group {
+    ): QueryGroup!bun.OOM {
         let i: usize = 0;
-        let list = Group{
-            .allocator = allocator,
-            .input = input,
+        let list = QueryGroup{
+            allocator: allocator,
+            input: input,
         };
 
-        let token = Token{};
-        let prev_token = Token{};
+        let token = QueryToken{};
+        let prev_token = QueryToken{};
 
         let count: u8 = 0;
         let skip_round = false;
@@ -602,7 +609,7 @@ struct Query {
 
             switch (input[i]) {
                 '>' => {
-                    if (input.len > i + 1 and input[i + 1] == '=') {
+                    if (input.len > i + 1 && input[i + 1] == '=') {
                         token.tag = .gte;
                         i += 1;
                     } else {
@@ -610,10 +617,10 @@ struct Query {
                     }
 
                     i += 1;
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                 },
                 '<' => {
-                    if (input.len > i + 1 and input[i + 1] == '=') {
+                    if (input.len > i + 1 && input[i + 1] == '=') {
                         token.tag = .lte;
                         i += 1;
                     } else {
@@ -621,57 +628,57 @@ struct Query {
                     }
 
                     i += 1;
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                 },
                 '=', 'v' => {
                     token.tag = .version;
                     is_or = true;
                     i += 1;
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                 },
                 '~' => {
                     token.tag = .tilda;
                     i += 1;
 
-                    if (i < input.len and input[i] == '>') i += 1;
+                    if (i < input.len && input[i] == '>') i += 1;
 
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                 },
                 '^' => {
                     token.tag = .caret;
                     i += 1;
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                 },
-                '0'...'9', 'X', 'x', '*' => {
+                '0'..='9', 'X', 'x', '*' => {
                     token.tag = .version;
                     is_or = true;
                 },
                 '|' => {
                     i += 1;
 
-                    while (i < input.len and input[i] == '|') { i += 1; }
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == '|') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                     is_or = true;
-                    token.tag = Token.Tag.none;
+                    token.tag = TokenTag.none;
                     skip_round = true;
                 },
                 '-' => {
                     i += 1;
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                 },
                 ' ' => {
                     i += 1;
-                    while (i < input.len and input[i] == ' ') { i += 1; }
+                    while (i < input.len && input[i] == ' ') { i += 1; }
                     skip_round = true;
                 },
                 else => {
                     i += 1;
-                    token.tag = Token.Tag.none;
+                    token.tag = TokenTag.none;
 
                     // skip tagged versions
                     // we are assuming this is the beginning of a tagged version like "boop"
                     // "1.0.0 || boop"
-                    while (i < input.len and input[i] != ' ' and input[i] != '|') { i += 1; }
+                    while (i < input.len && input[i] != ' ' && input[i] != '|') { i += 1; }
                     skip_round = true;
                 },
             }
@@ -679,32 +686,32 @@ struct Query {
             if (!skip_round) {
                 const parse_result = Version.parse(sliced.sub(input[i..]));
                 const version = parse_result.version.min();
-                if (version.tag.hasBuild()) list.flags.setValue(Group.Flags.build, true);
-                if (version.tag.hasPre()) list.flags.setValue(Group.Flags.pre, true);
+                if (version.tag.hasBuild()) list.flags.setValue(GroupFlags.build, true);
+                if (version.tag.hasPre()) list.flags.setValue(GroupFlags.pre, true);
 
                 token.wildcard = parse_result.wildcard;
 
                 i += parse_result.len;
                 const rollback = i;
 
-                const maybe_hyphenate = i < input.len and (input[i] == ' ' or input[i] == '-');
+                const maybe_hyphenate = i < input.len && (input[i] == ' ' || input[i] == '-');
 
                 // TODO: can we do this without rolling back?
-                const hyphenate: bool = maybe_hyphenate and possibly_hyphenate: {
+                const hyphenate: bool = maybe_hyphenate && possibly_hyphenate: {
                     i += strings.lengthOfLeadingWhitespaceASCII(input[i..]);
-                    if (!(i < input.len and input[i] == '-')) break :possibly_hyphenate false;
+                    if (!(i < input.len && input[i] == '-')) break :possibly_hyphenate false;
                     i += 1;
                     i += strings.lengthOfLeadingWhitespaceASCII(input[i..]);
                     if (i == input.len) break :possibly_hyphenate false;
-                    if (input[i] == 'v' or input[i] == '=') {
+                    if (input[i] == 'v' || input[i] == '=') {
                         i += 1;
                     }
                     if (i == input.len) break :possibly_hyphenate false;
                     i += strings.lengthOfLeadingWhitespaceASCII(input[i..]);
                     if (i == input.len) break :possibly_hyphenate false;
 
-                    if (!(i < input.len and switch (input[i]) {
-                        '0'...'9', 'X', 'x', '*' => true,
+                    if (!(i < input.len && switch (input[i]) {
+                        '0'..='9', 'X', 'x', '*' => true,
                         else => false,
                     })) break :possibly_hyphenate false;
 
@@ -717,14 +724,14 @@ struct Query {
                 if (hyphenate) {
                     const second_parsed = Version.parse(sliced.sub(input[i..]));
                     let second_version = second_parsed.version.min();
-                    if (second_version.tag.hasBuild()) list.flags.setValue(Group.Flags.build, true);
-                    if (second_version.tag.hasPre()) list.flags.setValue(Group.Flags.pre, true);
+                    if (second_version.tag.hasBuild()) list.flags.setValue(GroupFlags.build, true);
+                    if (second_version.tag.hasPre()) list.flags.setValue(GroupFlags.pre, true);
                     const range: Range = brk: {
                         switch (second_parsed.wildcard) {
                             .major => {
                                 // "1.0.0 - x" --> ">=1.0.0"
                                 break :brk Range{
-                                    .left = .{ .op = .gte, .version = version },
+                                    left: .{ .op = .gte, .version = version },
                                 };
                             },
                             .minor => {
@@ -734,8 +741,8 @@ struct Query {
                                 second_version.patch = 0;
 
                                 break :brk Range{
-                                    .left = .{ .op = .gte, .version = version },
-                                    .right = .{ .op = .lt, .version = second_version },
+                                    left: .{ .op = .gte, .version = version },
+                                    right: .{ .op = .lt, .version = second_version },
                                 };
                             },
                             .patch => {
@@ -744,14 +751,14 @@ struct Query {
                                 second_version.patch = 0;
 
                                 break :brk Range{
-                                    .left = .{ .op = .gte, .version = version },
-                                    .right = .{ .op = .lt, .version = second_version },
+                                    left: .{ .op = .gte, .version = version },
+                                    right: .{ .op = .lt, .version = second_version },
                                 };
                             },
                             .none => {
                                 break :brk Range{
-                                    .left = .{ .op = .gte, .version = version },
-                                    .right = .{ .op = .lte, .version = second_version },
+                                    left: .{ .op = .gte, .version = version },
+                                    right: .{ .op = .lte, .version = second_version },
                                 };
                             },
                         }
@@ -764,7 +771,7 @@ struct Query {
                     }
 
                     i += second_parsed.len + 1;
-                } else if (count == 0 and token.tag == .version) {
+                } else if (count == 0 && token.tag == .version) {
                     switch (parse_result.wildcard) {
                         .none => {
                             list.orVersion(version)?;
@@ -799,3 +806,4 @@ struct Query {
 
         return list;
     }
+}

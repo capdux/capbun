@@ -416,20 +416,26 @@ fn cloneString(str_opt: ([*:0]const u8)?): ([*:0]const u8)? {
     return bun.handleOom(bun.default_allocator.dupeZ(u8, std.mem.span(str_opt orelse return null)));
 }
 
-pub const GlobalRegistry = struct {
-    const MapContext = struct {
-        pub fn hash(_: @This(), key: *SSLConfig): u32 {
-            return @truncate(key.contentHash());
-        }
-        pub fn eql(_: @This(), a: *SSLConfig, b: *SSLConfig, _: usize): bool {
-            return a.isSame(b);
-        }
-    };
+struct _GlobalRegistryMapContext {
+    pub fn hash(key: *SSLConfig): u32 {
+        const _ctx = _;
+        * = _ctx;
+        return @truncate(key.contentHash());
+    }
+    pub fn eql(a: *SSLConfig, b: *SSLConfig, _: usize): bool {
+        const _ctx = _;
+        * = _ctx;
+        return a.isSame(b);
+    }
+}
+
+pub struct GlobalRegistry {
+    const MapContext = _GlobalRegistryMapContext;
 
     static let mutex: bun.Mutex = .{};
     static let configs: std.ArrayHashMapUnmanaged(*SSLConfig, SSLConfig.WeakPtr, MapContext, true) = .empty;
 
-    pub fn intern(config: SSLConfig): SSLConfig.SharedPtr {
+    pub static fn intern(config: SSLConfig): SSLConfig.SharedPtr {
         let new_shared = SSLConfig.SharedPtr.new(config);
         const new_ptr = new_shared.get();
 
@@ -443,7 +449,7 @@ pub const GlobalRegistry = struct {
 
         const gop = bun.handleOom(configs.getOrPutContext(bun.default_allocator, new_ptr, .{}));
         if (gop.found_existing) {
-            if (gop.value_ptr.upgrade()) |existing_shared| {
+            if (existing_shared := gop.value_ptr.upgrade()) {
                 dispose_new = new_shared;
                 _dispose_new_guard.ptr = unsafe { &dispose_new.? };
                 return existing_shared;
@@ -456,7 +462,7 @@ pub const GlobalRegistry = struct {
         return new_shared;
     }
 
-    fn remove(config: *SSLConfig) {
+    static fn remove(config: *SSLConfig) {
         mutex.lock();
         const _mutex_guard = MutexUnlockGuard{ mutex: unsafe { &mutex } };
         if (configs.count() == 0) return;
@@ -466,7 +472,7 @@ pub const GlobalRegistry = struct {
         configs.swapRemoveAt(idx);
         weak.deinit();
     }
-};
+}
 
 fn readFromBlob(
     global: *jsc.JSGlobalObject,
@@ -513,7 +519,7 @@ fn handleFileForField(
     comptime field: []const u8,
     file: *const jsc.generated.SSLConfigFile,
 ): bun.JSError!([][*:0]const u8)? {
-    return handleFile(global, file) catch |e| {
+    return handleFile(global, file) catch e => {
         if (e == error.JSError) return error.JSError;
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.JSTerminated) return error.JSTerminated;

@@ -69,9 +69,69 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const StartTag = enum {
+    empty,
+    err,
+    chunk_size,
+    ArrayBufferSink,
+    FileSink,
+    HTTPSResponseSink,
+    HTTPResponseSink,
+    H3ResponseSink,
+    NetworkSink,
+    ready,
+    owned_and_done,
+    done,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const WasStrong = enum {
+    Strong,
+    Weak,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ResultTag = enum {
+    pending,
+    err,
+    done,
+    owned,
+    owned_and_done,
+    temporary_and_done,
+    temporary,
+    into_array,
+    into_array_and_done,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const PendingState = enum {
+    none,
+    pending,
+    used,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ArrayBufferSinkOptions = struct {
+    chunk_size: Blob.SizeType,
+    as_uint8array: bool,
+    stream: bool,
+};
+
 pub const Start = union(enum) {
     empty: void,
     err: sys.Error,
@@ -94,8 +154,8 @@ return JSValue.js_undefined;
 .chunk_size => |chunk| {
 return JSValue.jsNumber(@as(Blob.SizeType, @intCast(chunk)));
 },
-.err => |err| {
-return globalThis.throwValue(try err.toJS(globalThis));
+.err => |e| {
+return globalThis.throwValue(try e.toJS(globalThis));
 },
 .owned_and_done => |list| {
 var ab = ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
@@ -224,10 +284,10 @@ pub const ResultStreamError = union(enum) {
     JSValue: JSValue,
     WeakJSValue: JSValue,
 
-pub fn toJSWeak(self: *const ResultStreamError, globalObject: *JSGlobalObject) struct { JSValue, WasStrong } {
-            switch (self.*) {
-.Error => |err| {
-return .{ (blk_catch_0: { break :blk_catch_0 ((err.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return .{ JSValue.zero, WasStrong.Weak }; }); }), WasStrong.Weak };
+pub fn toJSWeak(self: ResultStreamError, globalObject: *JSGlobalObject) struct { JSValue, WasStrong } {
+            switch (self) {
+.Error => |e| {
+return .{ (blk_catch_0: { break :blk_catch_0 ((e.toJS(globalObject)) catch |__ce_0| { _ = &__ce_0; return .{ JSValue.zero, WasStrong.Weak }; }); }), WasStrong.Weak };
 },
 .JSValue => {
 return .{ self.JSValue, WasStrong.Strong };
@@ -252,6 +312,24 @@ pub const ResultIntoArray = struct {
 pub const WritablePendingHandler = struct {
     ctx: ?*anyopaque = null,
     handler: ?WritableHandlerFn = null,
+};
+
+pub const WritablePromiseInfo = struct {
+    strong: JSPromise.Strong,
+    global: *JSGlobalObject,
+};
+
+pub const WritablePendingFuture = union(enum) {
+    none: void,
+    promise: WritablePromiseInfo,
+    handler: WritablePendingHandler,
+
+pub fn deinit(self: *WritablePendingFuture) void {
+            if ((self.* == .promise)) {
+                _ = self.promise.strong.deinit();
+                self.* = .none;
+            }
+    }
 };
 
 pub const WritablePending = struct {
@@ -331,8 +409,8 @@ pub fn fulfillPromise(result: ResultWritable, promise: *JSPromise, globalThis: *
             _ = promise.toJS().unprotect();
             }
             switch (result) {
-.err => |err| {
-_ = (blk_catch_1: { break :blk_catch_1 ((promise.rejectWithAsyncStack(globalThis, err.toJS(globalThis))) catch |__ce_1| { _ = &__ce_1;  }); });
+.err => |e| {
+_ = (blk_catch_1: { break :blk_catch_1 ((promise.rejectWithAsyncStack(globalThis, e.toJS(globalThis))) catch |__ce_1| { _ = &__ce_1;  }); });
 },
 .done => {
 _ = (blk_catch_2: { break :blk_catch_2 ((promise.resolve(globalThis, JSValue.false)) catch |__ce_2| { _ = &__ce_2;  }); });
@@ -380,6 +458,16 @@ return pending.promise(globalThis).toJS();
 pub const ResultPendingHandler = struct {
     ctx: ?*anyopaque = null,
     handler: ?ResultHandlerFn = null,
+};
+
+pub const ResultPromiseInfo = struct {
+    promise: *JSPromise,
+    globalThis: *JSGlobalObject,
+};
+
+pub const ResultPendingFuture = union(enum) {
+    promise: ResultPromiseInfo,
+    handler: ResultPendingHandler,
 };
 
 pub const ResultPending = struct {
@@ -473,7 +561,10 @@ pub fn slice16(self: *const Result) []const u16 {
             break :blk @ptrCast(@alignCast(bytes.ptr));
 
 });
-            return ptr16[0..(bytes.len / 2)];
+            return (blk: {
+            break :blk ptr16[0..(bytes.len / 2)];
+
+});
     }
 
 pub fn slice(self: *const Result) []const u8 {
@@ -496,8 +587,8 @@ return "";
 }
     }
 
-pub fn isDone(self: *const Result) bool {
-            switch (self.*) {
+pub fn isDone(self: Result) bool {
+            switch (self) {
 .owned_and_done, .temporary_and_done, .into_array_and_done, .done, .err => {
 return true;
 },
@@ -523,8 +614,8 @@ pub fn fulfillPromise(self: *Result, promise: *JSPromise, globalThis: *JSGlobalO
             _ = loop.exit();
             }
             switch (result.*) {
-.err => |*err| {
-const err_pair = err.toJSWeak(globalThis);
+.err => |*e| {
+const err_pair = e.toJSWeak(globalThis);
             var js_err = @field(err_pair, "0");
             _ = &js_err;
             const was_strong = @field(err_pair, "1");
@@ -550,14 +641,17 @@ var value = (blk_catch_8: { break :blk_catch_8 ((result.toJS(globalThis)) catch 
 }
     }
 
-pub fn toJS(self: *const Result, globalThis: *JSGlobalObject) JSError!JSValue {
+pub fn toJS(self: Result, globalThis: *JSGlobalObject) JSError!JSValue {
             if (VirtualMachine.get().isShuttingDown()) {
-                var that = self.*;
-                _ = &that;
-                _ = that.deinit();
+                var mut_that: *Result = (blk: {
+                break :blk @constCast((&self));
+
+});
+                _ = &mut_that;
+                _ = mut_that.deinit();
                 return JSValue.zero;
             }
-            switch (self.*) {
+            switch (self) {
 .owned => |list| {
 return ArrayBuffer.fromBytes(list.slice(), .Uint8Array).toJS(globalThis);
 },
@@ -598,8 +692,8 @@ var p = pending.promise(globalThis).toJS();
             _ = p.protect();
             return p;
 },
-.err => |err| {
-const err_pair = err.toJSWeak(globalThis);
+.err => |e| {
+const err_pair = e.toJSWeak(globalThis);
             var js_err = @field(err_pair, "0");
             _ = &js_err;
             const was_strong = @field(err_pair, "1");
@@ -621,6 +715,49 @@ return JSValue.false;
     pub const Pending = ResultPending;
 };
 
+pub fn SignalVTableFunctions(comptime Wrapped: type) type {
+    return struct {
+
+pub fn onClose(ptr: *anyopaque, e: ?sys.Error) void {
+                if (comptime (!@hasDecl(Wrapped, "onClose"))) {
+                    _ = Wrapped.close(bun.cast(*Wrapped, ptr), e);
+                } else {
+                    _ = Wrapped.onClose(bun.cast(*Wrapped, ptr), e);
+                }
+        }
+
+pub fn onReady(ptr: *anyopaque, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void {
+                if (comptime (!@hasDecl(Wrapped, "onReady"))) {
+                    _ = Wrapped.ready(bun.cast(*Wrapped, ptr), amount, offset);
+                } else {
+                    _ = Wrapped.onReady(bun.cast(*Wrapped, ptr), amount, offset);
+                }
+        }
+
+pub fn onStart(ptr: *anyopaque) void {
+                if (comptime (!@hasDecl(Wrapped, "onStart"))) {
+                    _ = Wrapped.start(bun.cast(*Wrapped, ptr));
+                } else {
+                    _ = Wrapped.onStart(bun.cast(*Wrapped, ptr));
+                }
+        }
+    };
+}
+
+pub const SignalVTable = struct {
+    close: OnCloseFn,
+    ready: OnReadyFn,
+    start: OnStartFn,
+
+pub fn wrap(comptime Wrapped: type) SignalVTable {
+            const T = Wrapped;
+            return SignalVTable{ .close = SignalVTableFunctions(T).onClose, .ready = SignalVTableFunctions(T).onReady, .start = SignalVTableFunctions(T).onStart };
+    }
+    pub const OnCloseFn = *const fn(*anyopaque, ?sys.Error) void;
+    pub const OnReadyFn = *const fn(*anyopaque, ?Blob.SizeType, ?Blob.SizeType) void;
+    pub const OnStartFn = *const fn(*anyopaque) void;
+};
+
 pub const Signal = struct {
     ptr: ?*anyopaque = null,
     vtable: ?*const SignalVTable = null,
@@ -637,15 +774,15 @@ pub fn clear(self: *Signal) void {
             self.ptr = null;
     }
 
-pub fn isDead(self: *const Signal) bool {
+pub fn isDead(self: Signal) bool {
             return (self.ptr == null);
     }
 
-pub fn close(self: *Signal, err: ?sys.Error) void {
+pub fn close(self: *Signal, e: ?sys.Error) void {
             if (self.isDead()) {
                 return;
             }
-            _ = self.vtable.?.close(self.ptr.?, err);
+            _ = self.vtable.?.close(self.ptr.?, e);
     }
 
 pub fn ready(self: *Signal, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void {
@@ -758,7 +895,7 @@ pub fn detachWritable(self: *NetworkSink) void {
             }
     }
 
-pub fn flush(self: *NetworkSink) sys.Maybe(void) {
+pub fn flush(self: *const NetworkSink) sys.Maybe(void) {
         _ = self;
             return .success;
     }
@@ -836,7 +973,7 @@ pub fn writeUTF16(self: *NetworkSink, data: Result) Result.Writable {
             return .{ .owned = @as(Blob.SizeType, @intCast(bytes.len)) };
     }
 
-pub fn end(self: *NetworkSink, err: ?sys.Error) sys.Maybe(void) {
+pub fn end(self: *NetworkSink, e: ?sys.Error) sys.Maybe(void) {
             if (self.ended) {
                 return .success;
             }
@@ -845,7 +982,7 @@ pub fn end(self: *NetworkSink, err: ?sys.Error) sys.Maybe(void) {
                 _ = &task;
                 _ = bun.handleOom(task.writeBytes("", true));
             }
-            _ = self.signal.close(err);
+            _ = self.signal.close(e);
             return .success;
     }
 
@@ -1010,108 +1147,10 @@ const Response = webcore.Response;
 const Sink = webcore.Sink;
 const Blob = webcore.Blob;
 const AnyBlob = Blob.Any;
-pub const ArrayBufferSinkOptions = struct {
-    chunk_size: Blob.SizeType,
-    as_uint8array: bool,
-    stream: bool,
-};
-pub const StartTag = enum {
-    empty,
-    err,
-    chunk_size,
-    ArrayBufferSink,
-    FileSink,
-    HTTPSResponseSink,
-    HTTPResponseSink,
-    H3ResponseSink,
-    NetworkSink,
-    ready,
-    owned_and_done,
-    done,
-};
-pub const WasStrong = enum { Strong, Weak };
-pub const ResultTag = enum {
-    pending,
-    err,
-    done,
-    owned,
-    owned_and_done,
-    temporary_and_done,
-    temporary,
-    into_array,
-    into_array_and_done,
-};
-pub const PendingState = enum {
-    none,
-    pending,
-    used,
-};
-pub const WritablePromiseInfo = struct {
-    strong: JSPromise.Strong,
-    global: *JSGlobalObject,
-};
-pub const WritablePendingFuture = union(enum) {
-    none: void,
-    promise: WritablePromiseInfo,
-    handler: WritablePendingHandler,
-
-pub fn deinit(self: *@This()) void {
-            if ((self.* == .promise)) {
-                _ = self.promise.strong.deinit();
-                self.* = .none;
-            }
-    }
-};
-pub const ResultPromiseInfo = struct {
-    promise: *JSPromise,
-    globalThis: *JSGlobalObject,
-};
-pub const ResultPendingFuture = union(enum) {
-    promise: ResultPromiseInfo,
-    handler: ResultPendingHandler,
-};
 pub const StreamError = ResultStreamError;
 pub const Writable = ResultWritable;
 pub const IntoArray = ResultIntoArray;
 pub const Pending = ResultPending;
-pub const SignalVTable = struct {
-    close: OnCloseFn,
-    ready: OnReadyFn,
-    start: OnStartFn,
-
-pub fn wrap(comptime Wrapped: type) SignalVTable {
-            const Functions = struct {
-
-pub fn onClose(ptr: *anyopaque, err: ?sys.Error) void {
-            if (comptime (!@hasDecl(Wrapped, "onClose"))) {
-                _ = Wrapped.close(bun.cast(*Wrapped, ptr), err);
-            } else {
-                _ = Wrapped.onClose(bun.cast(*Wrapped, ptr), err);
-            }
-    }
-
-pub fn onReady(ptr: *anyopaque, amount: ?Blob.SizeType, offset: ?Blob.SizeType) void {
-            if (comptime (!@hasDecl(Wrapped, "onReady"))) {
-                _ = Wrapped.ready(bun.cast(*Wrapped, ptr), amount, offset);
-            } else {
-                _ = Wrapped.onReady(bun.cast(*Wrapped, ptr), amount, offset);
-            }
-    }
-
-pub fn onStart(ptr: *anyopaque) void {
-            if (comptime (!@hasDecl(Wrapped, "onStart"))) {
-                _ = Wrapped.start(bun.cast(*Wrapped, ptr));
-            } else {
-                _ = Wrapped.onStart(bun.cast(*Wrapped, ptr));
-            }
-    }
-};
-            return SignalVTable{ .close = Functions.onClose, .ready = Functions.onReady, .start = Functions.onStart };
-    }
-    pub const OnCloseFn = *const fn (*anyopaque, ?sys.Error) void;
-    pub const OnReadyFn = *const fn (*anyopaque, ?Blob.SizeType, ?Blob.SizeType) void;
-    pub const OnStartFn = *const fn (*anyopaque) void;
-};
 pub const HTTPSResponseSink = HTTPServerWritable(true, false);
 pub const HTTPResponseSink = HTTPServerWritable(false, false);
 pub const H3ResponseSink = HTTPServerWritable(true, true);
@@ -1143,7 +1182,7 @@ pub fn connect(self: *@This(), signal: Signal) void {
             self.signal = signal;
     }
 
-pub fn memoryCost(self: *@This()) usize {
+pub fn memoryCost(self: @This()) usize {
             return self.buffer.cap;
     }
 
@@ -1170,11 +1209,11 @@ pub fn handleFirstWriteIfNecessary(self: *@This()) void {
             }
     }
 
-pub fn hasBackpressure(self: *const @This()) bool {
+pub fn hasBackpressure(self: @This()) bool {
             return self.has_backpressure;
     }
 
-pub fn hasBackpressureAndIsTryEnd(self: *const @This()) bool {
+pub fn hasBackpressureAndIsTryEnd(self: @This()) bool {
             return (self.has_backpressure and (self.end_len > 0));
     }
 
@@ -1218,7 +1257,7 @@ pub fn send(self: *@This(), buf: []const u8) bool {
             return self.sendWithoutAutoFlusher(buf);
     }
 
-pub fn readableSlice(self: *@This()) []const u8 {
+pub fn readableSlice(self: *const @This()) []const u8 {
             return self.buffer.ptr[self.offset..self.buffer.len];
     }
 
@@ -1460,13 +1499,13 @@ pub fn markDone(self: *@This()) void {
             _ = self.unregisterAutoFlusher();
     }
 
-pub fn end(self: *@This(), err: ?sys.Error) bun.sys.Maybe(void) {
-            _ = log("end({?f})", .{ err });
+pub fn end(self: *@This(), e: ?sys.Error) bun.sys.Maybe(void) {
+            _ = log("end({?f})", .{ e });
             if (self.requested_end) {
                 return .success;
             }
             if (((self.done or (self.res == null)) or self.res.?.hasResponded())) {
-                _ = self.signal.close(err);
+                _ = self.signal.close(e);
                 _ = self.markDone();
                 _ = self.finalize();
                 return .success;
@@ -1475,7 +1514,7 @@ pub fn end(self: *@This(), err: ?sys.Error) bun.sys.Maybe(void) {
             const readable = self.readableSlice();
             self.end_len = readable.len;
             if ((readable.len == 0)) {
-                _ = self.signal.close(err);
+                _ = self.signal.close(e);
                 _ = self.markDone();
                 _ = self.finalize();
                 return .success;

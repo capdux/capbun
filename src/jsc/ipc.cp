@@ -65,10 +65,10 @@ pub enum IncomingBuffer {
         };
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         switch (_.*) {
-            .advanced => |*b| b.deinit(bun.default_allocator),
-            .json => |*b| b.deinit(),
+            .advanced => _.advanced.deinit(bun.default_allocator),
+            .json => _.json.deinit(),
         }
     }
 }
@@ -109,7 +109,7 @@ pub struct DecodeIPCMessageResult {
     message: DecodedIPCMessage,
 }
 
-pub const IPCDecodeError = error{
+pub err IPCDecodeError {
     /// There werent enough bytes, recall this function again when new data is available.
     NotEnoughBytes,
     /// Format could not be recognized. Report an error and close the socket.
@@ -117,7 +117,7 @@ pub const IPCDecodeError = error{
     JSError,
     JSTerminated,
     OutOfMemory,
-};
+}
 
 pub err IPCSerializationError {
     /// Value could not be serialized.
@@ -168,23 +168,28 @@ pub struct advanced {
                     message: DecodedIPCMessage{ version: message_len },
                 };
             },
-            .SerializedMessage, .SerializedInternalMessage => |tag| {
-                // `header_length + message_len` would be evaluated as u32; a peer-controlled
-                // `message_len >= 0xFFFFFFFB` wraps the sum to a small value and defeats the
-                // bounds check. Compare against the remaining bytes instead — `data.len >=
-                // header_length` is already established above, so the subtraction cannot
-                // underflow.
+            .SerializedMessage => {
                 if (data.len - header_length < message_len) {
                     log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
                     return IPCDecodeError.NotEnoughBytes;
                 }
-
                 const message = data[header_length..][0..message_len];
                 const deserialized = (JSValue.deserialize(message, global))?;
-
                 return DecodeIPCMessageResult{
                     bytes_consumed: header_length + message_len,
-                    message: if (tag == .SerializedInternalMessage) DecodedIPCMessage{ internal: deserialized } else DecodedIPCMessage{ data: deserialized },
+                    message: DecodedIPCMessage{ data: deserialized },
+                };
+            },
+            .SerializedInternalMessage => {
+                if (data.len - header_length < message_len) {
+                    log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
+                    return IPCDecodeError.NotEnoughBytes;
+                }
+                const message = data[header_length..][0..message_len];
+                const deserialized = (JSValue.deserialize(message, global))?;
+                return DecodeIPCMessageResult{
+                    bytes_consumed: header_length + message_len,
+                    message: DecodedIPCMessage{ internal: deserialized },
                 };
             },
             _ => {
@@ -418,7 +423,7 @@ pub enum CallbackList {
     }
 
     /// protects the callback
-    pub fn push(*_, callback: jsc.JSValue, global: *jsc.JSGlobalObject): bun.JSError!void {
+    fn push(*_, callback: jsc.JSValue, global: *jsc.JSGlobalObject): bun.JSError!void {
         switch (_.*) {
             .ack_nack => unreachable,
             .none => {
@@ -434,7 +439,7 @@ pub enum CallbackList {
                 prev.unprotect(); // owned by the array now
                 _.* = CallbackList{ callback_array: arr };
             },
-            .callback_array => |arr| {
+            .callback_array arr => {
                 (arr.push(global, callback))?;
             },
         }
@@ -516,16 +521,16 @@ pub union(enum) IPCSendQueueOwner {
 
 pub const IPCSocketType = if (Environment.isWindows) *uv.Pipe else Socket;
 
-pub const IPCSocketUnion = union(enum) {
+pub union(enum) IPCSocketUnion {
     uninitialized: void,
     open: IPCSocketType,
     closed: void,
-};
+}
 
-pub const CloseSocketReason = enum { normal, failure };
-pub const CloseSocketFrom = enum { user, deinit };
-pub const AckNack = enum { ack, nack };
-pub const ContinueSendReason = enum { new_message_appended, on_writable };
+pub enum CloseSocketReason { normal, failure }
+pub enum CloseSocketFrom { user, deinit }
+pub enum AckNack { ack, nack }
+pub enum ContinueSendReason { new_message_appended, on_writable }
 
 pub struct WindowsState {
     is_server: bool = false,
@@ -613,7 +618,7 @@ pub const SendQueueOwner = IPCSendQueueOwner;
     fn closeSocket(*_, reason: CloseSocketReason, origin: CloseSocketFrom) {
         log("SendQueue#closeSocket {s}", .{ @tagName(origin) });
         switch (_.socket) {
-            .open => |s| {
+            .open s => {
                 if (comptime Environment.isWindows) {
                     const pipe: *uv.Pipe = s;
                     const stream: *uv.uv_stream_t = pipe.asStream();
@@ -706,12 +711,11 @@ pub const SendQueueOwner = IPCSendQueueOwner;
         if (_.close_event_sent) return;
         _.close_event_sent = true;
         switch (_.owner) {
-            inline else => |owner| {
-                if (comptime @hasDecl(@TypeOf(owner.*), "handleIPCClose")) {
-                    owner.*.handleIPCClose();
-                } else {
-                    owner.*.onAfterIPCClosed();
-                }
+            .subprocess owner => {
+                owner.*.onAfterIPCClosed();
+            },
+            .virtual_machine owner => {
+                owner.*.handleIPCClose();
             },
         }
     }
@@ -940,7 +944,7 @@ pub const SendQueueOwner = IPCSendQueueOwner;
 
     fn getSocket(*_): IPCSocketType? {
         return switch (_.socket) {
-            .open => |s| s,
+            .open s => s,
             else => null,
         };
     }
@@ -1012,9 +1016,10 @@ pub const SendQueueOwner = IPCSendQueueOwner;
         }
     }
 
-    pub static fn getOwnerGlobalThis(owner: IPCSendQueueOwner): *jsc.JSGlobalObject {
+    static fn getOwnerGlobalThis(owner: IPCSendQueueOwner): *jsc.JSGlobalObject {
         return switch (owner) {
-            inline else => |o| o.globalThis,
+            .subprocess o => o.globalThis,
+            .virtual_machine o => o.globalThis,
         };
     }
 
@@ -1156,12 +1161,12 @@ pub fn doSend(ipc: (*SendQueue)?, globalObject: *jsc.JSGlobalObject, callFrame: 
             if (listener := bun.jsc.API.Listener.fromJS(handle)) {
                 log("got listener", .{});
                 switch (listener.listener) {
-                    .uws => |socket_uws| {
+                    .uws socket_uws => {
                         // may need to handle ssl case
                         const fd = socket_uws.getSocket().getFd();
                         zig_handle = Handle.init(fd, handle);
                     },
-                    .namedPipe => |namedPipe| {
+                    .namedPipe namedPipe => {
                         * = namedPipe;
                     },
                     .none => {},
@@ -1197,9 +1202,9 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
         let formatter = jsc.ConsoleObject.Formatter{ globalThis: globalThis };
         const _g_fmt = DeinitGuard<jsc.ConsoleObject.Formatter>{ ptr: unsafe { &formatter } };
         switch (message) {
-            .version => |version| log("received ipc message: version: {}", .{ version }),
-            .data => |jsvalue| log("received ipc message: {f}", .{ jsvalue.toFmt(&formatter) }),
-            .internal => |jsvalue| log("received ipc message: internal: {f}", .{ jsvalue.toFmt(&formatter) }),
+            .version version => log("received ipc message: version: {}", .{ version }),
+            .data jsvalue => log("received ipc message: {f}", .{ jsvalue.toFmt(&formatter) }),
+            .internal jsvalue => log("received ipc message: internal: {f}", .{ jsvalue.toFmt(&formatter) }),
         }
     }
 
@@ -1238,7 +1243,7 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
 
     if (icmd := internal_command) {
         switch (icmd) {
-            .handle => |msg_data| {
+            .handle msg_data => {
                 // Handle NODE_HANDLE message
                 const ack = send_queue.incoming_fd != null;
 
@@ -1259,7 +1264,7 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
                 const fd: bun.FD = bun.take(&send_queue.incoming_fd).?;
 
                 const target: bun.jsc.JSValue = switch (send_queue.owner) {
-                    .subprocess => |subprocess| subprocess.this_value.tryGet() ?? .zero,
+                    .subprocess subprocess => subprocess.this_value.tryGet() ?? .zero,
                     .virtual_machine => bun.jsc.JSValue.null,
                 };
 
@@ -1289,7 +1294,10 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
         }
     } else {
         switch (send_queue.owner) {
-            inline else => |owner| {
+            .subprocess owner => {
+                owner.handleIPCMessage(message, .js_undefined);
+            },
+            .virtual_machine owner => {
                 owner.handleIPCMessage(message, .js_undefined);
             },
         }
@@ -1307,7 +1315,8 @@ fn onData2(send_queue: *SendQueue, all_data: []const u8) {
     // Decode the message with just the temporary buffer, and if that
     // fails (not enough bytes) then we allocate to .ipc_buffer
     switch (send_queue.incoming) {
-        .json => |*json_buf| {
+        .json => {
+            const json_buf = &send_queue.incoming.json;
             // JSON mode: append to buffer (scans only new data for newline),
             // then process complete messages using next().
             json_buf.append(data);
@@ -1332,7 +1341,8 @@ fn onData2(send_queue: *SendQueue, all_data: []const u8) {
                 json_buf.consume(result.bytes_consumed);
             }
         },
-        .advanced => |*adv_buf| {
+        .advanced => {
+            const adv_buf = &send_queue.incoming.advanced;
             // Advanced mode: uses length-prefix, no newline scanning needed.
             // Try to decode directly first, only buffer if needed.
             if (adv_buf.len == 0) {
@@ -1505,7 +1515,8 @@ pub struct IPCPosixSocketHandler {
 pub struct IPCWindowsNamedPipeHandler {
     pub static fn onReadAlloc(send_queue: *SendQueue, suggested_size: usize): []u8 {
         switch (send_queue.incoming) {
-            .json => |*json_buf| {
+            .json => {
+                const json_buf = &send_queue.incoming.json;
                 let available = json_buf.unusedCapacitySlice();
                 if (available.len < suggested_size) {
                     json_buf.ensureUnusedCapacity(suggested_size);
@@ -1514,7 +1525,8 @@ pub struct IPCWindowsNamedPipeHandler {
                 log("NewNamedPipeIPCHandler#onReadAlloc {d}", .{ suggested_size });
                 return available.ptr[0..suggested_size];
             },
-            .advanced => |*adv_buf| {
+            .advanced => {
+                const adv_buf = &send_queue.incoming.advanced;
                 let available = adv_buf.unusedCapacitySlice();
                 if (available.len < suggested_size) {
                     bun.handleOom(adv_buf.ensureUnusedCapacity(bun.default_allocator, suggested_size));
@@ -1539,7 +1551,8 @@ pub struct IPCWindowsNamedPipeHandler {
         defer loop.exit();
 
         switch (send_queue.incoming) {
-            .json => |*json_buf| {
+            .json => {
+                const json_buf = &send_queue.incoming.json;
                 // For JSON mode on Windows, use notifyWritten to update length and scan for newlines
                 bun.assert(json_buf.data.len + buffer.len <= json_buf.data.cap);
                 bun.assert(bun.isSliceInBuffer(buffer, json_buf.data.allocatedSlice()));
@@ -1567,7 +1580,8 @@ pub struct IPCWindowsNamedPipeHandler {
                     json_buf.consume(result.bytes_consumed);
                 }
             },
-            .advanced => |*adv_buf| {
+            .advanced => {
+                const adv_buf = &send_queue.incoming.advanced;
                 adv_buf.len = adv_buf.len +| @as(u32, @intCast(buffer.len));
                 let slice = adv_buf.slice();
 

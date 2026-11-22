@@ -126,7 +126,7 @@ export struct DebugOptions {
     output_file: []const u8 = "",
 }
 
-pub const MacroOptions = union(enum) { unspecified: void, disable: void, map: MacroMap };
+pub union(enum) MacroOptions { unspecified: void, disable: void, map: MacroMap }
 
 /// Re-declared from `resolver/package_json.zig` (plain hashmap aliases) so this
 /// file does not depend on `resolver/`.
@@ -137,6 +137,17 @@ export enum HotReload {
     none,
     hot,
     watch,
+}
+
+pub struct ShardOptions_ {
+    index: u32,
+    count: u32,
+}
+
+pub struct TestReporters_ {
+    dots: bool = false,
+    only_failures: bool = false,
+    junit: bool = false,
 }
 
 export struct TestOptions {
@@ -186,52 +197,52 @@ export struct TestOptions {
     reporters: TestReporters = .{};
     reporter_outfile: string? = null;
 
-    pub const ShardOptions = struct {
-        index: u32,
-        count: u32,
-    };
+    const ShardOptions = ShardOptions_;
+    const TestReporters = TestReporters_;
 
-    pub const TestReporters = struct {
-        dots: bool = false,
-        only_failures: bool = false,
-        junit: bool = false,
-    };
-
-    pub inline fn testFilterRegex(): OptRegularExpression {
+    inline fn testFilterRegex(): OptRegularExpression {
         unsafe {
-            return @ptrCast(@alignCast(this.test_filter_regex));
+            return @ptrCast(@alignCast(_.test_filter_regex));
         }
     }
 }
 
-pub const Debugger = union(enum) {
+pub struct DebuggerEnable {
+    path_or_port: []const u8 = "",
+    wait_for_connection: bool = false,
+    set_breakpoint_on_first_line: bool = false,
+}
+
+pub union(enum) Debugger {
     unspecified: void,
-    enable: struct {
-        path_or_port: []const u8 = "",
-        wait_for_connection: bool = false,
-        set_breakpoint_on_first_line: bool = false,
-    },
-};
+    enable: DebuggerEnable,
+}
+
+pub struct EvalOptions_ {
+    script: []const u8 = "",
+    eval_and_print: bool = false,
+}
+
+pub struct CpuProfOptions_ {
+    enabled: bool = false,
+    name: []const u8 = "",
+    dir: []const u8 = "",
+    interval: u32 = 1000,
+    md_format: bool = false,
+    json_format: bool = false,
+}
+
+pub struct HeapProfOptions_ {
+    enabled: bool = false,
+    text_format: bool = false,
+    name: []const u8 = "",
+    dir: []const u8 = "",
+}
 
 export struct RuntimeOptions {
-    pub const EvalOptions = struct {
-        script: []const u8 = "",
-        eval_and_print: bool = false,
-    };
-    pub const CpuProfOptions = struct {
-        enabled: bool = false,
-        name: []const u8 = "",
-        dir: []const u8 = "",
-        interval: u32 = 1000,
-        md_format: bool = false,
-        json_format: bool = false,
-    };
-    pub const HeapProfOptions = struct {
-        enabled: bool = false,
-        text_format: bool = false,
-        name: []const u8 = "",
-        dir: []const u8 = "",
-    };
+    const EvalOptions = EvalOptions_;
+    const CpuProfOptions = CpuProfOptions_;
+    const HeapProfOptions = HeapProfOptions_;
 
     smol: bool = false;
     debugger: Debugger = Debugger.unspecified;

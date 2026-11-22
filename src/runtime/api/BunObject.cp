@@ -1698,13 +1698,15 @@ pub struct EnvironmentVariables {
     compressor.deinit();
 }
 
-pub struct JSZlib {
-    pub const Library = enum {
-        zlib,
-        libdeflate,
+pub enum JSZlibLibrary {
+    zlib,
+    libdeflate,
 
-        pub const map = bun.ComptimeEnumMap(Library);
-    };
+    pub const map = bun.ComptimeEnumMap(JSZlibLibrary);
+}
+
+pub struct JSZlib {
+    pub const Library = JSZlibLibrary;
 
     // This has to be `inline` due to the callframe.
     inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZlibOptionsTuple {
@@ -1989,7 +1991,113 @@ pub struct JSZlib {
     }
 }
 
+pub struct JSZstdJob {
+    buffer: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty,
+    is_compress: bool = true,
+    level: i32 = 3,
+    task: jsc.WorkPoolTask = { callback: &runTask },
+    promise: jsc.JSPromise.Strong = {},
+    vm: *jsc.VirtualMachine,
+    output: []u8 = [],
+    error_message: ([]const u8)? = null,
+    any_task: jsc.AnyTask.AnyTask = undefined,
+    poll: Async.KeepAlive = {},
+
+    pub const new = bun.TrivialNew(@This());
+
+    static fn runTask(task: *jsc.WorkPoolTask) {
+        const job: *JSZstdJob = @fieldParentPtr("task", task);
+        const _enqueue_g = ZstdTaskEnqueueGuard{ job: job };
+
+        const input = job.buffer.slice();
+        const allocator = bun.default_allocator;
+
+        if (job.is_compress) {
+            // Compression path
+            // Calculate max compressed size
+            const max_size = bun.zstd.compressBound(input.len);
+            job.output = allocator.alloc(u8, max_size) catch {
+                job.error_message = "Out of memory";
+                return;
+            };
+
+            // Perform compression
+            job.output = switch (bun.zstd.compress(job.output, input, job.level)) {
+                .success => |size| blk: {
+                    // Resize to actual compressed size
+                    if (size < job.output.len) {
+                        break :blk allocator.realloc(job.output, size) catch {
+                            job.error_message = "Out of memory";
+                            return;
+                        };
+                    }
+                    break :blk job.output;
+                },
+                .err => |e| {
+                    allocator.free(job.output);
+                    job.output = [];
+                    job.error_message = e;
+                    return;
+                },
+            };
+        } else {
+            // Decompression path
+            job.output = bun.zstd.decompressAlloc(allocator, input) catch {
+                job.error_message = "Decompression failed";
+                return;
+            };
+        }
+    }
+
+    fn runFromJS(*_): bun.JSTerminated!void {
+        const _self_g = DeinitGuard<*JSZstdJob>{ val: _ };
+
+        if (_.vm.isShuttingDown()) {
+            return;
+        }
+
+        const globalThis = _.vm.global;
+        const promise = _.promise.swap();
+
+        if (err_msg := _.error_message) {
+            promise.rejectWithAsyncStack(globalThis, globalThis.ERR(.ZSTD, "{s}", .{ err_msg }).toJS())?;
+            return;
+        }
+
+        const output_slice = _.output;
+        const buffer_value = jsc.JSValue.createBuffer(globalThis, output_slice);
+        _.output = [];
+        promise.resolve(globalThis, buffer_value)?;
+    }
+
+    fn deinit(*_) {
+        _.poll.unref(_.vm);
+        _.buffer.deinitAndUnprotect();
+        _.promise.deinit();
+        bun.default_allocator.free(_.output);
+        bun.destroy(_);
+    }
+
+    static fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, buffer: jsc.Node.StringOrBuffer, is_compress: bool, level: i32): *JSZstdJob {
+        let job = JSZstdJob.new({
+            buffer: buffer,
+            is_compress: is_compress,
+            level: level,
+            vm: vm,
+            any_task: undefined,
+        });
+
+        job.promise = jsc.JSPromise.Strong.init(globalThis);
+        job.any_task = jsc.AnyTask.AnyTask.New(@This(), &runFromJS).init(job);
+        job.poll.ref(vm);
+        jsc.WorkPool.schedule(&job.task);
+
+        return job;
+    }
+}
+
 pub struct JSZstd {
+    pub const ZstdJob = JSZstdJob;
     @export @c static fn deallocator(_: *!?, ctx: *!?) {
         bun.allocators.freeWithoutSize(ctx);
     }
@@ -2095,112 +2203,7 @@ pub struct JSZstd {
         return jsc.JSValue.createBuffer(globalThis, output);
     }
 
-    // --- Async versions ---
-
-    pub const ZstdJob = struct {
-        buffer: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty,
-        is_compress: bool = true,
-        level: i32 = 3,
-        task: jsc.WorkPoolTask = { callback: &runTask },
-        promise: jsc.JSPromise.Strong = {},
-        vm: *jsc.VirtualMachine,
-        output: []u8 = [],
-        error_message: ([]const u8)? = null,
-        any_task: jsc.AnyTask.AnyTask = undefined,
-        poll: Async.KeepAlive = {},
-
-        pub const new = bun.TrivialNew(@This());
-
-        static fn runTask(task: *jsc.WorkPoolTask) {
-            const job: *ZstdJob = @fieldParentPtr("task", task);
-            const _enqueue_g = ZstdTaskEnqueueGuard{ job: job };
-
-            const input = job.buffer.slice();
-            const allocator = bun.default_allocator;
-
-            if (job.is_compress) {
-                // Compression path
-                // Calculate max compressed size
-                const max_size = bun.zstd.compressBound(input.len);
-                job.output = allocator.alloc(u8, max_size) catch {
-                    job.error_message = "Out of memory";
-                    return;
-                };
-
-                // Perform compression
-                job.output = switch (bun.zstd.compress(job.output, input, job.level)) {
-                    .success => |size| blk: {
-                        // Resize to actual compressed size
-                        if (size < job.output.len) {
-                            break :blk allocator.realloc(job.output, size) catch {
-                                job.error_message = "Out of memory";
-                                return;
-                            };
-                        }
-                        break :blk job.output;
-                    },
-                    .err => |e| {
-                        allocator.free(job.output);
-                        job.output = [];
-                        job.error_message = e;
-                        return;
-                    },
-                };
-            } else {
-                // Decompression path
-                job.output = bun.zstd.decompressAlloc(allocator, input) catch {
-                    job.error_message = "Decompression failed";
-                    return;
-                };
-            }
-        }
-
-        fn runFromJS(*_): bun.JSTerminated!void {
-            const _self_g = DeinitGuard<*ZstdJob>{ val: _ };
-
-            if (_.vm.isShuttingDown()) {
-                return;
-            }
-
-            const globalThis = _.vm.global;
-            const promise = _.promise.swap();
-
-            if (err_msg := _.error_message) {
-                promise.rejectWithAsyncStack(globalThis, globalThis.ERR(.ZSTD, "{s}", .{ err_msg }).toJS())?;
-                return;
-            }
-
-            const output_slice = _.output;
-            const buffer_value = jsc.JSValue.createBuffer(globalThis, output_slice);
-            _.output = [];
-            promise.resolve(globalThis, buffer_value)?;
-        }
-
-        fn deinit(*_) {
-            _.poll.unref(_.vm);
-            _.buffer.deinitAndUnprotect();
-            _.promise.deinit();
-            bun.default_allocator.free(_.output);
-            bun.destroy(_);
-        }
-
-        static fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, buffer: jsc.Node.StringOrBuffer, is_compress: bool, level: i32): *ZstdJob {
-            let job = ZstdJob.new({
-                buffer: buffer,
-                is_compress: is_compress,
-                level: level,
-                vm: vm,
-                any_task: undefined,
-            });
-
-            job.promise = jsc.JSPromise.Strong.init(globalThis);
-            job.any_task = jsc.AnyTask.AnyTask.New(@This(), &runFromJS).init(job);
-            job.poll.ref(vm);
-            jsc.WorkPool.schedule(&job.task);
-
-            return job;
-        }
-    };
+    // --- Async versions --- (ZstdJob hoisted to JSZstdJob)
 
     static fn compress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         const opts = (getOptionsAsync(globalThis, callframe))?;

@@ -1349,47 +1349,153 @@ pub struct DefaultAtRule {
     }
 }
 
+pub struct _DefaultAtRuleParser_CustomAtRuleParser {
+    pub const Prelude = void;
+    pub const AtRule = DefaultAtRule;
+
+    static fn parsePrelude(_: *DefaultAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
+        return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
+
+    static fn parseBlock(_: *DefaultAtRuleParser, _: Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(AtRule) {
+        return { err: input.newError(BasicParseErrorKind.at_rule_body_invalid) };
+    }
+
+    static fn ruleWithoutBlock(_: *DefaultAtRuleParser, _: Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(AtRule, void) {
+        return { err: undefined };
+    }
+
+    static fn onImportRule(_: *DefaultAtRuleParser, _: *ImportRule, _: u32, _: u32) {}
+
+    static fn onLayerRule(_: *DefaultAtRuleParser, _: *const bun.css.SmallList(LayerName, 1)) {}
+
+    static fn enclosingLayerLength(_: *DefaultAtRuleParser): u32 {
+        return 0;
+    }
+
+    static fn setEnclosingLayer(_: *DefaultAtRuleParser, _: LayerName) {}
+
+    static fn pushToEnclosingLayer(_: *DefaultAtRuleParser, _: LayerName) {}
+
+    static fn resetEnclosingLayer(_: *DefaultAtRuleParser, _: u32) {}
+
+    static fn bumpAnonLayerCount(_: *DefaultAtRuleParser, _: i32) {}
+};
+
 pub struct DefaultAtRuleParser {
     const This = @This();
-
-    pub const CustomAtRuleParser = struct {
-        pub const Prelude = void;
-        pub const AtRule = DefaultAtRule;
-
-        static fn parsePrelude(_: *This, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
-            return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
-
-        static fn parseBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(CustomAtRuleParser.AtRule) {
-            return { err: input.newError(BasicParseErrorKind.at_rule_body_invalid) };
-        }
-
-        static fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
-            return { err: undefined };
-        }
-
-        static fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) {}
-
-        static fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName, 1)) {}
-
-        static fn enclosingLayerLength(_: *This): u32 {
-            return 0;
-        }
-
-        static fn setEnclosingLayer(_: *This, _: LayerName) void {}
-
-        static fn pushToEnclosingLayer(_: *This, _: LayerName) void {}
-
-        static fn resetEnclosingLayer(_: *This, _: u32) void {}
-
-        static fn bumpAnonLayerCount(_: *This, _: i32) void {}
-    };
+    pub const CustomAtRuleParser = _DefaultAtRuleParser_CustomAtRuleParser;
 }
 
 /// We may want to enable this later
 pub const ENABLE_TAILWIND_PARSING = false;
 
 pub const BundlerAtRule = if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule;
+pub struct _BundlerAtRuleParser_CustomAtRuleParser {
+    pub const Prelude = if (ENABLE_TAILWIND_PARSING) union(enum) {
+        tailwind: TailwindAtRule,
+    } else void;
+    pub const AtRule = if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule;
+
+    static fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
+        if (comptime ENABLE_TAILWIND_PARSING) {
+            const PreludeNames = enum {
+                tailwind,
+            };
+            const Map = comptime bun.ComptimeEnumMap(PreludeNames);
+            if (prelude := Map.getASCIIICaseInsensitive(name)) return switch (prelude) {
+                .tailwind => {
+                    const loc_ = input.currentSourceLocation();
+                    const loc = css_rules.Location{
+                        source_index: b.options.source_index,
+                        line: loc_.line,
+                        column: loc_.column,
+                    };
+                    const style_name = switch (css_rules.tailwind.TailwindStyleName.parse(input)) {
+                        .result => |v| v,
+                        .err => return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) },
+                    };
+                    return { result: {
+                        tailwind: {
+                            style_name: style_name,
+                            loc: loc,
+                        },
+                    } };
+                },
+            };
+        }
+        return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
+
+    static fn parseBlock(_: *BundlerAtRuleParser, _: Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(AtRule) {
+        return { err: input.newError(BasicParseErrorKind.at_rule_body_invalid) };
+    }
+
+    static fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(AtRule, void) {
+        if (comptime ENABLE_TAILWIND_PARSING) {
+            return switch (prelude) {
+                .tailwind v => return { result: v },
+            };
+        }
+        return { err: undefined };
+    }
+
+    static fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) {
+        const import_record_index = b.import_records.len;
+        import_rule.import_record_idx = import_record_index;
+        b.import_records.append(b.allocator, ImportRecord{
+            path: bun.fs.Path.init(import_rule.url),
+            kind: if (import_rule.supports != null) .at_conditional else .at,
+            range: bun.logger.Range{
+                loc: bun.logger.Loc{ .start = @intCast(start_position) },
+                len: @intCast(end_position - start_position),
+            },
+        }) catch |e| bun.handleOom(e);
+    }
+
+    static fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) {
+        if (b.anon_layer_count > 0) return;
+
+        bun.handleOom(b.layer_names.ensureUnusedCapacity(b.allocator, layers.len()));
+
+        for (*layer of layers.slice()) {
+            if (b.enclosing_layer.v.len() > 0) {
+                let cloned: LayerName = .{ .v = .{} };
+                cloned.v.ensureTotalCapacity(b.allocator, b.enclosing_layer.v.len() + layer.v.len());
+                cloned.v.appendSliceAssumeCapacity(b.enclosing_layer.v.slice());
+                cloned.v.appendSliceAssumeCapacity(layer.v.slice());
+                bun.handleOom(b.layer_names.append(b.allocator, cloned));
+            } else {
+                bun.handleOom(b.layer_names.append(b.allocator, layer.deepClone(b.allocator)));
+            }
+        }
+    }
+
+    static fn enclosingLayerLength(b: *BundlerAtRuleParser): u32 {
+        return b.enclosing_layer.v.len();
+    }
+
+    static fn setEnclosingLayer(b: *BundlerAtRuleParser, layer: LayerName) {
+        b.enclosing_layer = layer;
+    }
+
+    static fn pushToEnclosingLayer(b: *BundlerAtRuleParser, name: LayerName) {
+        b.enclosing_layer.v.appendSlice(b.allocator, name.v.slice());
+    }
+
+    static fn resetEnclosingLayer(b: *BundlerAtRuleParser, len: u32) {
+        b.enclosing_layer.v.setLen(len);
+    }
+
+    static fn bumpAnonLayerCount(b: *BundlerAtRuleParser, amount: i32) {
+        if (amount > 0) {
+            b.anon_layer_count += u32(amount);
+        } else {
+            b.anon_layer_count -= u32(@abs(amount));
+        }
+    }
+};
+
 pub struct BundlerAtRuleParser {
     const This = @This();
     allocator: Allocator,
@@ -1411,110 +1517,7 @@ pub struct BundlerAtRuleParser {
     anon_layer_count: u32 = 0,
     enclosing_layer: LayerName = {},
 
-    pub const CustomAtRuleParser = struct {
-        pub const Prelude = if (ENABLE_TAILWIND_PARSING) union(enum) {
-            tailwind: TailwindAtRule,
-        } else void;
-        pub const AtRule = if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule;
-
-        static fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions): Result(Prelude) {
-            if (comptime ENABLE_TAILWIND_PARSING) {
-                const PreludeNames = enum {
-                    tailwind,
-                };
-                const Map = comptime bun.ComptimeEnumMap(PreludeNames);
-                if (Map.getASCIIICaseInsensitive(name)) |prelude| return switch (prelude) {
-                    .tailwind => {
-                        const loc_ = input.currentSourceLocation();
-                        const loc = css_rules.Location{
-                            source_index: b.options.source_index,
-                            line: loc_.line,
-                            column: loc_.column,
-                        };
-                        const style_name = switch (css_rules.tailwind.TailwindStyleName.parse(input)) {
-                            .result => |v| v,
-                            .err => return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) },
-                        };
-                        return { result: {
-                            tailwind: {
-                                style_name: style_name,
-                                loc: loc,
-                            },
-                        } };
-                    },
-                };
-            }
-            return { err: input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
-
-        static fn parseBlock(_: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool): Result(CustomAtRuleParser.AtRule) {
-            return { err: input.newError(BasicParseErrorKind.at_rule_body_invalid) };
-        }
-
-        static fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool): Maybe(CustomAtRuleParser.AtRule, void) {
-            if (comptime ENABLE_TAILWIND_PARSING) {
-                return switch (prelude) {
-                    .tailwind => |v| return { result: v },
-                };
-            }
-            return { err: undefined };
-        }
-
-        static fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) {
-            const import_record_index = b.import_records.len;
-            import_rule.import_record_idx = import_record_index;
-            b.import_records.append(b.allocator, ImportRecord{
-                path: bun.fs.Path.init(import_rule.url),
-                kind: if (import_rule.supports != null) .at_conditional else .at,
-                range: bun.logger.Range{
-                    loc: bun.logger.Loc{ .start = @intCast(start_position) },
-                    len: @intCast(end_position - start_position),
-                },
-            }) catch |e| bun.handleOom(e);
-        }
-
-        static fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) {
-            if (b.anon_layer_count > 0) return;
-
-            bun.handleOom(b.layer_names.ensureUnusedCapacity(b.allocator, layers.len()));
-
-            for (layers.slice()) |*layer| {
-                if (b.enclosing_layer.v.len() > 0) {
-                    let cloned: LayerName = .{ .v = .{} };
-                    cloned.v.ensureTotalCapacity(b.allocator, b.enclosing_layer.v.len() + layer.v.len());
-                    cloned.v.appendSliceAssumeCapacity(b.enclosing_layer.v.slice());
-                    cloned.v.appendSliceAssumeCapacity(layer.v.slice());
-                    bun.handleOom(b.layer_names.append(b.allocator, cloned));
-                } else {
-                    bun.handleOom(b.layer_names.append(b.allocator, layer.deepClone(b.allocator)));
-                }
-            }
-        }
-
-        static fn enclosingLayerLength(b: *This): u32 {
-            return b.enclosing_layer.v.len();
-        }
-
-        static fn setEnclosingLayer(b: *This, layer: LayerName) {
-            b.enclosing_layer = layer;
-        }
-
-        static fn pushToEnclosingLayer(b: *This, name: LayerName) {
-            b.enclosing_layer.v.appendSlice(b.allocator, name.v.slice());
-        }
-
-        static fn resetEnclosingLayer(b: *This, len: u32) {
-            b.enclosing_layer.v.setLen(len);
-        }
-
-        static fn bumpAnonLayerCount(b: *This, amount: i32) {
-            if (amount > 0) {
-                b.anon_layer_count += u32(amount);
-            } else {
-                b.anon_layer_count -= u32(@abs(amount));
-            }
-        }
-    };
+    pub const CustomAtRuleParser = _BundlerAtRuleParser_CustomAtRuleParser;
 }
 
 /// Same as `ValidAtRuleParser` but modified to provide parser options
@@ -3020,43 +3023,47 @@ pub struct ParserExtra {
 pub const CustomIdentList = css_values.ident.CustomIdentList;
 pub const Specifier = css_properties.css_modules.Specifier;
 
+@packed(u6) pub struct _CssRefTag {
+    class: bool = false,
+    id: bool = false,
+    animation: bool = false,
+    keyframes: bool = false,
+    container: bool = false,
+    counter_style: bool = false,
+
+    pub const ID = _CssRefTag{ .id = true };
+    pub const CLASS = _CssRefTag{ .class = true };
+
+    fn canBeComposed(): bool {
+        return _.class;
+    }
+};
+
 /// Reference to a symbol in a stylesheet.
-pub const CssRef = packed struct(u32) {
+@packed(u32) pub struct CssRef {
     inner_index: u26 = 0,
 
-    tag: Tag,
+    tag: _CssRefTag,
 
-    pub const Tag = packed struct(u6) {
-        class: bool = false,
-        id: bool = false,
-        animation: bool = false,
-        keyframes: bool = false,
-        container: bool = false,
-        counter_style: bool = false,
+    pub const Tag = _CssRefTag;
 
-        pub const ID = Tag{ .id = true };
-        pub const CLASS = Tag{ .class = true };
-
-        pub fn canBeComposed(self: @This()): bool {
-            return self.class;
-        }
-    };
-
-    pub fn canBeComposed(self: @This()): bool {
-        return self.tag.canBeComposed();
+    fn canBeComposed(): bool {
+        return _.tag.canBeComposed();
     }
 
-    pub fn sourceIndex(_: @This(), source_index: u32): u32 {
+    fn sourceIndex(source_index: u32): u32 {
+        const self_val = _;
+        * = self_val;
         return source_index;
     }
 
-    pub fn innerIndex(self: @This()): u32 {
-        return self.inner_index;
+    fn innerIndex(): u32 {
+        return _.inner_index;
     }
 
-    pub fn toRealRef(self: @This(), source_index: u32): bun.bundle_v2.Ref {
+    fn toRealRef(source_index: u32): bun.bundle_v2.Ref {
         return .{
-            .inner_index = self.inner_index,
+            .inner_index = _.inner_index,
             .source_index = @intCast(source_index),
             .tag = .symbol,
         };
@@ -3868,7 +3875,7 @@ pub struct ParserOptions {
 }
 
 /// Parser feature flags to enable.
-pub const ParserFlags = packed struct(u8) {
+@packed(u8) pub struct ParserFlags {
     /// Whether the enable the [CSS nesting](https://www.w3.org/TR/css-nesting-1/) draft syntax.
     nesting: bool = false,
     /// Whether to enable the [custom media](https://drafts.csswg.org/mediaqueries-5/#custom-mq) draft syntax.
@@ -5374,7 +5381,9 @@ struct Tokenizer {
                 '\\' => {
                     if (_.hasNewlineAt(1)) break;
                     _.advance(1);
-                    _.consumeEscapeAndWrite(&value_bytes);
+                    let esc_buf: [4]u8 = undefined;
+                    const esc_len = _.encodeEscape(&esc_buf);
+                    value_bytes.append(_.allocator, esc_buf[0..esc_len]);
                 },
                 0 => {
                     _.advance(1);
@@ -5471,7 +5480,11 @@ struct Tokenizer {
                         switch (_.nextByteUnchecked()) {
                             // Escaped newline
                             '\n', FORM_FEED_BYTE, '\r' => _.consumeNewline(),
-                            else => _.consumeEscapeAndWrite(&string_bytes),
+                            else => {
+                                let esc_buf: [4]u8 = undefined;
+                                const esc_len = _.encodeEscape(&esc_buf);
+                                string_bytes.append(_.allocator, esc_buf[0..esc_len]);
+                            },
                         }
                     }
                     // else: escaped EOF, do nothing.
@@ -5572,7 +5585,7 @@ struct Tokenizer {
             switch (_.nextByteUnchecked()) {
                 ' ', '\t', '\n', '\r', FORM_FEED_BYTE => {
                     let value: CopyOnWriteStr = .{ .borrowed = _.sliceFrom(start_pos) };
-                    return _.consumeUrlEnd(start_pos, &value);
+                    return _.consumeUrlEnd(start_pos, value);
                 },
                 ')' => {
                     const value = _.sliceFrom(start_pos);
@@ -5618,7 +5631,7 @@ struct Tokenizer {
                     // string_bytes is well-formed UTF-8, see other comments.
                     // const string = string_bytes.toSlice();
                     // return this.consumeUrlEnd(start_pos, &string);
-                    return _.consumeUrlEnd(start_pos, &string_bytes);
+                    return _.consumeUrlEnd(start_pos, string_bytes);
                 },
                 ')' => {
                     _.advance(1);
@@ -5642,7 +5655,9 @@ struct Tokenizer {
                     if (_.hasNewlineAt(0)) return _.consumeBadUrl(start_pos);
 
                     // This pushes one well-formed code point to string_bytes
-                    _.consumeEscapeAndWrite(&string_bytes);
+                    let esc_buf: [4]u8 = undefined;
+                    const esc_len = _.encodeEscape(&esc_buf);
+                    string_bytes.append(_.allocator, esc_buf[0..esc_len]);
                 },
                 0 => {
                     _.advance(1);
@@ -5674,7 +5689,7 @@ struct Tokenizer {
         return { unquoted_url: string_bytes.toSlice() };
     }
 
-    fn consumeUrlEnd(*_, start_pos: usize, str: *CopyOnWriteStr): Token {
+    fn consumeUrlEnd(*_, start_pos: usize, str: CopyOnWriteStr): Token {
         while (!_.isEof()) {
             // todo_stuff.match_byte
             switch (_.nextByteUnchecked()) {
@@ -5717,11 +5732,9 @@ struct Tokenizer {
         return { bad_url: _.sliceFrom(start_pos) };
     }
 
-    fn consumeEscapeAndWrite(*_, bytes: *CopyOnWriteStr) {
+    fn encodeEscape(*_, buf: *[4]u8): usize {
         const val = _.consumeEscape();
-        let utf8bytes: [4]u8 = undefined;
-        const len = std.unicode.utf8Encode(@truncate(val), utf8bytes[0..]) catch @panic("Invalid");
-        bytes.append(_.allocator, utf8bytes[0..len]);
+        return std.unicode.utf8Encode(@truncate(val), buf[0..]) catch @panic("Invalid");
     }
 
     fn consumeEscape(*_): u32 {
@@ -6581,36 +6594,68 @@ struct Dimension {
     }
 }
 
-const CopyOnWriteStr = union(enum) {
+union(enum) CopyOnWriteStr {
     borrowed: []const u8,
     owned: std.array_list.Managed(u8),
 
-    pub fn append(this: *@This(), allocator: Allocator, slice: []const u8) {
-        switch (this.*) {
+    fn append(*_, allocator: Allocator, slice: []const u8) {
+        switch (_.*) {
             .borrowed => {
-                let list = bun.handleOom(std.array_list.Managed(u8).initCapacity(allocator, this.borrowed.len + slice.len));
-                list.appendSliceAssumeCapacity(this.borrowed);
+                let list = bun.handleOom(std.array_list.Managed(u8).initCapacity(allocator, _.borrowed.len + slice.len));
+                list.appendSliceAssumeCapacity(_.borrowed);
                 list.appendSliceAssumeCapacity(slice);
-                this.* = .{ .owned = list };
+                _.* = .{ .owned = list };
             },
             .owned => {
-                bun.handleOom(this.owned.appendSlice(slice));
+                bun.handleOom(_.owned.appendSlice(slice));
             },
         }
     }
 
-    pub fn appendByte(self: *@This(), allocator: Allocator, b: u8) {
+    fn appendByte(*_, allocator: Allocator, b: u8) {
         const buf: [1]u8 = [b];
-        self.append(allocator, &buf);
+        _.append(allocator, &buf);
     }
 
-    pub fn toSlice(this: *@This()): []const u8 {
-        return switch (this.*) {
-            .borrowed => this.borrowed,
-            .owned => this.owned.items[0..],
+    fn toSlice(): []const u8 {
+        return switch (_) {
+            .borrowed => _.borrowed,
+            .owned => _.owned.items[0..],
         };
     }
 };
+
+pub union(enum) _ColorAngleOrNumber {
+    /// `<number>`.
+    number: struct {
+        /// The numeric value parsed, as a float.
+        value: f32,
+    },
+    /// `<angle>`
+    angle: struct {
+        /// The value as a number of degrees.
+        degrees: f32,
+    },
+}
+
+fn _colorHueToRgb(m1: f32, m2: f32, _h3: f32): f32 {
+    let h3 = _h3;
+    if (h3 < 0.0) {
+        h3 += 3.0;
+    }
+    if (h3 > 3.0) {
+        h3 -= 3.0;
+    }
+    if (h3 * 2.0 < 1.0) {
+        return m1 + (m2 - m1) * h3 * 2.0;
+    } else if (h3 * 2.0 < 3.0) {
+        return m2;
+    } else if (h3 < 2.0) {
+        return m1 + (m2 - m1) * (2.0 - h3) * 2.0;
+    } else {
+        return m1;
+    }
+}
 
 pub struct color {
     /// The opaque alpha value of 1.0.
@@ -6621,20 +6666,9 @@ pub struct color {
     };
 
     /// Either an angle or a number.
-    pub const AngleOrNumber = union(enum) {
-        /// `<number>`.
-        number: struct {
-            /// The numeric value parsed, as a float.
-            value: f32,
-        },
-        /// `<angle>`
-        angle: struct {
-            /// The value as a number of degrees.
-            degrees: f32,
-        },
-    };
+    pub const AngleOrNumber = _ColorAngleOrNumber;
 
-    const RGB = struct { u8, u8, u8 };
+    pub const RGB = struct { u8, u8, u8 };
     pub const named_colors = bun.ComptimeStringMap(RGB, .{
         .{ "aliceblue", .{ 240, 248, 255 } },
         .{ "antiquewhite", .{ 250, 235, 215 } },
@@ -6844,35 +6878,15 @@ pub struct color {
     /// except with h pre-multiplied by 3, to avoid some rounding errors.
     static fn hslToRgb(hue: f32, saturation: f32, lightness: f32): [f32, f32, f32] {
         bun.debugAssert(saturation >= 0.0 && saturation <= 1.0);
-        const Helpers = struct {
-            static fn hueToRgb(m1: f32, m2: f32, _h3: f32): f32 {
-                let h3 = _h3;
-                if (h3 < 0.0) {
-                    h3 += 3.0;
-                }
-                if (h3 > 3.0) {
-                    h3 -= 3.0;
-                }
-                if (h3 * 2.0 < 1.0) {
-                    return m1 + (m2 - m1) * h3 * 2.0;
-                } else if (h3 * 2.0 < 3.0) {
-                    return m2;
-                } else if (h3 < 2.0) {
-                    return m1 + (m2 - m1) * (2.0 - h3) * 2.0;
-                } else {
-                    return m1;
-                }
-            }
-        };
         const m2 = if (lightness <= 0.5)
             lightness * (saturation + 1.0)
         else
             lightness + saturation - lightness * saturation;
         const m1 = lightness * 2.0 - m2;
         const hue_times_3 = hue * 3.0;
-        const red = Helpers.hueToRgb(m1, m2, hue_times_3 + 1.0);
-        const green = Helpers.hueToRgb(m1, m2, hue_times_3);
-        const blue = Helpers.hueToRgb(m1, m2, hue_times_3 - 1.0);
+        const red = _colorHueToRgb(m1, m2, hue_times_3 + 1.0);
+        const green = _colorHueToRgb(m1, m2, hue_times_3);
+        const blue = _colorHueToRgb(m1, m2, hue_times_3 - 1.0);
         return .{ red, green, blue };
     }
 }

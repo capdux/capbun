@@ -71,7 +71,15 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const constants = @import("./node_fs_constant.zig");
 pub const fs = @import("../../resolver/fs.zig");
@@ -90,6 +98,45 @@ pub const ResolvedLinkType = enum {
     file,
     dir,
     junction,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Flavor = enum {
+    sync,
+    @"async",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _ArgumentsSymlinkLinkType = enum {
+    unspecified,
+    file,
+    dir,
+    junction,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _ReturnReaddirTag = enum {
+    with_file_types,
+    buffers,
+    files,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _NodeFSStringType = enum {
+    default,
+    null_terminated,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -538,6 +585,34 @@ pub fn __cp_deinit(self: *StdDirPtrGuard) void {
     }
 };
 
+pub const _AsyncAsyncMkdirp = struct {
+    completion_ctx: *anyopaque,
+    completion: *const fn (*anyopaque, bun.sys.Maybe(void)) void,
+    path: []u8,
+    task: jsc.WorkPoolTask = .{ .callback = (&workPoolCallback) },
+
+pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
+            var t: *_AsyncAsyncMkdirp = @fieldParentPtr("task", task);
+            _ = &t;
+            var node_fs = NodeFS{  };
+            _ = &node_fs;
+            const result = node_fs.mkdirRecursive(Arguments.Mkdir{ .path = PathLike{ .string = PathString.init(t.path) }, .recursive = true });
+            switch (result) {
+.err => |e| {
+_ = t.completion(t.completion_ctx, .{ .err = e.withPath(bun.handleOom(bun.default_allocator.dupe(u8, e.path))) });
+},
+.result => {
+_ = t.completion(t.completion_ctx, .success);
+},
+}
+    }
+
+pub fn schedule(self: *_AsyncAsyncMkdirp) void {
+            _ = jsc.WorkPool.schedule((&self.task));
+    }
+    pub const new = bun.TrivialNew(@This());
+};
+
 pub const Async = struct {
 
 pub fn NewUVFSRequest(comptime ReturnType: type, comptime ArgumentType: type, comptime FunctionEnum: NodeFSFunctionEnum) type {
@@ -933,33 +1008,81 @@ pub fn deinit(self: *@This()) void {
     pub const statfs = NewUVFSRequest(Return.StatFS, Arguments.StatFS, .statfs);
     pub const cp = AsyncCpTask;
     pub const readdir_recursive = AsyncReaddirRecursiveTask;
-    pub const AsyncMkdirp = struct {
-        completion_ctx: *anyopaque,
-        completion: *const fn (*anyopaque, bun.sys.Maybe(void)) void,
-        path: []u8,
-        task: jsc.WorkPoolTask = .{ .callback = (&workPoolCallback) },
-    
-    pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
-                var t: *AsyncMkdirp = @fieldParentPtr("task", task);
-                _ = &t;
-                var node_fs = NodeFS{  };
-                _ = &node_fs;
-                const result = node_fs.mkdirRecursive(Arguments.Mkdir{ .path = PathLike{ .string = PathString.init(t.path) }, .recursive = true });
-                switch (result) {
-    .err => |e| {
-    _ = t.completion(t.completion_ctx, .{ .err = e.withPath(bun.handleOom(bun.default_allocator.dupe(u8, e.path))) });
-    },
-    .result => {
-    _ = t.completion(t.completion_ctx, .success);
-    },
+    pub const AsyncMkdirp = _AsyncAsyncMkdirp;
+};
+
+pub const _AsyncReaddirResultListEntryValue = union(Return.Readdir.Tag) {
+    with_file_types: std.array_list.Managed(bun.jsc.Node.Dirent),
+    buffers: std.array_list.Managed(Buffer),
+    files: std.array_list.Managed(bun.String),
+
+pub fn deinit(self: *_AsyncReaddirResultListEntryValue) void {
+            switch (self.*) {
+.with_file_types => |*res| {
+for (res.items) |item| {
+                _ = &item;
+                _ = item.deref();
+            }
+            _ = res.clearAndFree();
+},
+.buffers => |*res| {
+for (res.items) |item| {
+                _ = &item;
+                _ = bun.default_allocator.free(item.buffer.byteSlice());
+            }
+            _ = res.clearAndFree();
+},
+.files => |*res| {
+for (res.items) |item| {
+                _ = &item;
+                _ = item.deref();
+            }
+            _ = res.clearAndFree();
+},
+}
     }
-        }
-    
-    pub fn schedule(self: *@This()) void {
-                _ = jsc.WorkPool.schedule((&self.task));
-        }
-        pub const new = bun.TrivialNew(@This());
-    };
+};
+
+pub const _AsyncReaddirResultListEntry = struct {
+    next: ?*_AsyncReaddirResultListEntry = null,
+    value: Value,
+    pub const Value = _AsyncReaddirResultListEntryValue;
+    pub const Queue = bun.UnboundedQueue(_AsyncReaddirResultListEntry, .next);
+};
+
+pub const _AsyncReaddirSubtask = struct {
+    readdir_task: *AsyncReaddirRecursiveTask,
+    basename: bun.PathString = bun.PathString.empty,
+    task: jsc.WorkPoolTask = .{ .callback = call },
+
+pub fn destroyOpaque(ptr: *anyopaque) void {
+            var t: *_AsyncReaddirSubtask = (blk: {
+            break :blk @ptrCast(@alignCast(ptr));
+
+});
+            _ = &t;
+            _ = bun.default_allocator.free(t.basename.sliceAssumeZ());
+            _ = bun.destroy(t);
+    }
+
+pub fn call(task: *jsc.WorkPoolTask) void {
+            var t: *_AsyncReaddirSubtask = (blk: {
+            break :blk @alignCast(@fieldParentPtr("task", task));
+
+});
+            _ = &t;
+            var _subtask_guard = OpaqueCallbackGuard{ .ctx = (blk: {
+            break :blk @ptrCast(t);
+
+}), .callback = (&_AsyncReaddirSubtask.destroyOpaque) };
+            _ = &_subtask_guard;
+            var ___subtask_guard_moved = false; _ = &___subtask_guard_moved;
+            defer if (!___subtask_guard_moved) { ___subtask_guard_moved = true; const __T = @TypeOf(_subtask_guard); if (@typeInfo(__T) == .optional) { if (_subtask_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _subtask_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _subtask_guard; _drop_val.__cp_deinit(); } };
+            var buf: bun.PathBuffer = undefined;
+            _ = &buf;
+            _ = t.readdir_task.performWork(t.basename.sliceAssumeZ(), (&buf), false);
+    }
+    pub const new = bun.TrivialNew(@This());
 };
 
 pub const AsyncReaddirRecursiveTask = struct {
@@ -1228,1910 +1351,1930 @@ pub fn deinit(self: *AsyncReaddirRecursiveTask) void {
             _ = bun.destroy(self);
     }
     pub const new = bun.TrivialNew(@This());
-    pub const ResultListEntry = struct {
-        next: ?*ResultListEntry = null,
-        value: Value,
-        pub const Value = union(Return.Readdir.Tag) {
-            with_file_types: std.array_list.Managed(bun.jsc.Node.Dirent),
-            buffers: std.array_list.Managed(Buffer),
-            files: std.array_list.Managed(bun.String),
-        
-        pub fn deinit(self: *@This()) void {
-                    switch (self.*) {
-        .with_file_types => |*res| {
-        for (res.items) |item| {
-                        _ = &item;
-                        _ = item.deref();
-                    }
-                    _ = res.clearAndFree();
-        },
-        .buffers => |*res| {
-        for (res.items) |item| {
-                        _ = &item;
-                        _ = bun.default_allocator.free(item.buffer.byteSlice());
-                    }
-                    _ = res.clearAndFree();
-        },
-        .files => |*res| {
-        for (res.items) |item| {
-                        _ = &item;
-                        _ = item.deref();
-                    }
-                    _ = res.clearAndFree();
-        },
-        }
-            }
-        };
-        pub const Queue = bun.UnboundedQueue(ResultListEntry, .next);
-    };
-    pub const Subtask = struct {
-        readdir_task: *AsyncReaddirRecursiveTask,
-        basename: bun.PathString = bun.PathString.empty,
-        task: jsc.WorkPoolTask = .{ .callback = call },
-    
-    pub fn destroyOpaque(ptr: *anyopaque) void {
-                var t: *Subtask = (blk: {
-                break :blk @ptrCast(@alignCast(ptr));
-    
-    });
-                _ = &t;
-                _ = bun.default_allocator.free(t.basename.sliceAssumeZ());
-                _ = bun.destroy(t);
-        }
-    
-    pub fn call(task: *jsc.WorkPoolTask) void {
-                var t: *Subtask = (blk: {
-                break :blk @alignCast(@fieldParentPtr("task", task));
-    
-    });
-                _ = &t;
-                var _subtask_guard = OpaqueCallbackGuard{ .ctx = (blk: {
-                break :blk @ptrCast(t);
-    
-    }), .callback = (&Subtask.destroyOpaque) };
-                _ = &_subtask_guard;
-                var ___subtask_guard_moved = false; _ = &___subtask_guard_moved;
-                defer if (!___subtask_guard_moved) { ___subtask_guard_moved = true; const __T = @TypeOf(_subtask_guard); if (@typeInfo(__T) == .optional) { if (_subtask_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _subtask_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _subtask_guard; _drop_val.__cp_deinit(); } };
-                var buf: bun.PathBuffer = undefined;
-                _ = &buf;
-                _ = t.readdir_task.performWork(t.basename.sliceAssumeZ(), (&buf), false);
-        }
-        pub const new = bun.TrivialNew(@This());
-    };
+    pub const ResultListEntry = _AsyncReaddirResultListEntry;
+    pub const Subtask = _AsyncReaddirSubtask;
 };
 
-pub const Arguments = struct {
+pub const _ArgumentsRename = struct {
+    old_path: PathLike,
+    new_path: PathLike,
 
-pub fn wrapTo(comptime T: type, in_val: i64) T {
-            _ = (comptime bun.assert((@typeInfo(T).int.signedness == .unsigned)));
-            return @as(T, @intCast(@mod(in_val, std.math.maxInt(T))));
+pub fn deinit(self: _ArgumentsRename) void {
+            _ = self.old_path.deinit();
+            _ = self.new_path.deinit();
     }
 
-pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: Encoding) bun.JSError!Encoding {
-            if (try object.fastGet(globalObject, .encoding)) |value| {
-                _ = &value;
-                return Encoding.assert(value, globalObject, default);
+pub fn deinitAndUnprotect(self: _ArgumentsRename) void {
+            _ = self.old_path.deinitAndUnprotect();
+            _ = self.new_path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsRename) void {
+            _ = self.old_path.toThreadSafe();
+            _ = self.new_path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsRename {
+            const old_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArgumentTypeValue("oldPath", "string or an instance of Buffer or URL", ((arguments.next()) orelse (.js_undefined)));
+});
+            var _old_path_guard = PathLikeGuard{ .path = old_path };
+            _ = &_old_path_guard;
+            var ___old_path_guard_moved = false; _ = &___old_path_guard_moved;
+            defer if (!___old_path_guard_moved) { ___old_path_guard_moved = true; const __T = @TypeOf(_old_path_guard); if (@typeInfo(__T) == .optional) { if (_old_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _old_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _old_path_guard; _drop_val.__cp_deinit(); } };
+            const new_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArgumentTypeValue("newPath", "string or an instance of Buffer or URL", ((arguments.next()) orelse (.js_undefined)));
+});
+            var _new_path_guard = PathLikeGuard{ .path = new_path };
+            _ = &_new_path_guard;
+            var ___new_path_guard_moved = false; _ = &___new_path_guard_moved;
+            defer if (!___new_path_guard_moved) { ___new_path_guard_moved = true; const __T = @TypeOf(_new_path_guard); if (@typeInfo(__T) == .optional) { if (_new_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _new_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _new_path_guard; _drop_val.__cp_deinit(); } };
+            _old_path_guard.armed = false;
+            _new_path_guard.armed = false;
+            return _ArgumentsRename{ .old_path = old_path, .new_path = new_path };
+    }
+};
+
+pub const _ArgumentsTruncate = struct {
+    path: PathOrFileDescriptor,
+    len: u63 = 0,
+    flags: i32 = 0,
+
+pub fn deinit(self: _ArgumentsTruncate) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsTruncate) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsTruncate) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsTruncate {
+            const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var len: u63 = 0;
+            _ = &len;
+            if (arguments.next()) |len_value| {
+                _ = &len_value;
+                len = @max(0, try jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null));
             }
-            return default;
+            return .{ .path = path, .len = len };
     }
-    pub const Rename = struct {
-        old_path: PathLike,
-        new_path: PathLike,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.old_path.deinit();
-                _ = self.new_path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.old_path.deinitAndUnprotect();
-                _ = self.new_path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.old_path.toThreadSafe();
-                _ = self.new_path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Rename {
-                const old_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArgumentTypeValue("oldPath", "string or an instance of Buffer or URL", ((arguments.next()) orelse (.js_undefined)));
-    });
-                var _old_path_guard = PathLikeGuard{ .path = old_path };
-                _ = &_old_path_guard;
-                var ___old_path_guard_moved = false; _ = &___old_path_guard_moved;
-                defer if (!___old_path_guard_moved) { ___old_path_guard_moved = true; const __T = @TypeOf(_old_path_guard); if (@typeInfo(__T) == .optional) { if (_old_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _old_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _old_path_guard; _drop_val.__cp_deinit(); } };
-                const new_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArgumentTypeValue("newPath", "string or an instance of Buffer or URL", ((arguments.next()) orelse (.js_undefined)));
-    });
-                var _new_path_guard = PathLikeGuard{ .path = new_path };
-                _ = &_new_path_guard;
-                var ___new_path_guard_moved = false; _ = &___new_path_guard_moved;
-                defer if (!___new_path_guard_moved) { ___new_path_guard_moved = true; const __T = @TypeOf(_new_path_guard); if (@typeInfo(__T) == .optional) { if (_new_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _new_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _new_path_guard; _drop_val.__cp_deinit(); } };
-                _old_path_guard.armed = false;
-                _new_path_guard.armed = false;
-                return Rename{ .old_path = old_path, .new_path = new_path };
-        }
-    };
-    pub const Truncate = struct {
-        path: PathOrFileDescriptor,
-        len: u63 = 0,
-        flags: i32 = 0,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Truncate {
-                const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var len: u63 = 0;
-                _ = &len;
-                if (arguments.next()) |len_value| {
-                    _ = &len_value;
-                    len = @max(0, try jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null));
-                }
-                return .{ .path = path, .len = len };
-        }
-    };
-    pub const Writev = struct {
-        fd: FD,
-        buffers: jsc.Node.VectorArrayBuffer,
-        position: ?u52 = 0,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn deinitAndUnprotect(self: *const @This()) void {
-                _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).unprotect();
-                _ = self.buffers.buffers.deinit();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).protect();
-                const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, self.buffers.buffers.items));
-                _ = self.buffers.buffers.deinit();
-                self.buffers.buffers.items = clone;
-                self.buffers.buffers.capacity = clone.len;
-                self.buffers.buffers.allocator = bun.default_allocator;
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Writev {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const buffers = try jsc.Node.VectorArrayBuffer.fromJS(ctx, ((arguments.protectEatNext()) orelse {
-                return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", .{});
-    }), arguments.@"arena".allocator());
-                var position: ?u52 = null;
-                _ = &position;
-                if (arguments.nextEat()) |pos_value| {
-                    _ = &pos_value;
-                    if ((!pos_value.isUndefinedOrNull())) {
-                        if (pos_value.isNumber()) {
-                            position = pos_value.to(u52);
-                        } else {
-                            return ctx.throwInvalidArguments("position must be a number", .{});
-                        }
-                    }
-                }
-                return Writev{ .fd = fd, .buffers = buffers, .position = position };
-        }
-    };
-    pub const Readv = struct {
-        fd: FD,
-        buffers: jsc.Node.VectorArrayBuffer,
-        position: ?u52 = 0,
-    
-    pub fn deinit(_: *const @This()) void {
-        }
-    
-    pub fn deinitAndUnprotect(self: *const @This()) void {
-                _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).unprotect();
-                _ = self.buffers.buffers.deinit();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).protect();
-                const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, self.buffers.buffers.items));
-                _ = self.buffers.buffers.deinit();
-                self.buffers.buffers.items = clone;
-                self.buffers.buffers.capacity = clone.len;
-                self.buffers.buffers.allocator = bun.default_allocator;
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Readv {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const buffers = try jsc.Node.VectorArrayBuffer.fromJS(ctx, ((arguments.protectEatNext()) orelse {
-                return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", .{});
-    }), arguments.@"arena".allocator());
-                var position: ?u52 = null;
-                _ = &position;
-                if (arguments.nextEat()) |pos_value| {
-                    _ = &pos_value;
-                    if ((!pos_value.isUndefinedOrNull())) {
-                        if (pos_value.isNumber()) {
-                            position = pos_value.to(u52);
-                        } else {
-                            return ctx.throwInvalidArguments("position must be a number", .{});
-                        }
-                    }
-                }
-                return Readv{ .fd = fd, .buffers = buffers, .position = position };
-        }
-    };
-    pub const FTruncate = struct {
-        fd: FD,
-        len: ?jsc.WebCore.Blob.SizeType = null,
-    
-    pub fn deinit(_: @This()) void {
-        }
-    
-    pub fn deinitAndUnprotect(_: *@This()) void {
-        }
-    
-    pub fn toThreadSafe(_: *const @This()) void {
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!FTruncate {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(try jsc.Node.validators.validateInteger(ctx, ((arguments.next()) orelse (jsc.JSValue.jsNumber(0))), "len", std.math.minInt(i52), std.math.maxInt(jsc.WebCore.Blob.SizeType)), 0)));
-                return FTruncate{ .fd = fd, .len = len };
-        }
-    };
-    pub const Chown = struct {
-        path: PathLike,
-        uid: uid_t = 0,
-        gid: gid_t = 0,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Chown {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                const uid: uid_t = brk: {
-                var uid_value: jsc.JSValue = undefined;
-                _ = &uid_value;
-                if (arguments.next()) |v| {
-                    _ = &v;
-                    uid_value = v;
-                } else {
-                    return ctx.throwInvalidArguments("uid is required", .{});
-                }
-                _ = arguments.eat();
-                break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
-    };
-                const gid: gid_t = brk: {
-                var gid_value: jsc.JSValue = undefined;
-                _ = &gid_value;
-                if (arguments.next()) |v| {
-                    _ = &v;
-                    gid_value = v;
-                } else {
-                    return ctx.throwInvalidArguments("gid is required", .{});
-                }
-                _ = arguments.eat();
-                break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
-    };
-                _path_guard.armed = false;
-                return Chown{ .path = path, .uid = uid, .gid = gid };
-        }
-    };
-    pub const Fchown = struct {
-        fd: FD,
-        uid: uid_t,
-        gid: gid_t,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(_: *const @This()) void {
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Fchown {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const uid: uid_t = brk: {
-                var uid_value: jsc.JSValue = undefined;
-                _ = &uid_value;
-                if (arguments.next()) |v| {
-                    _ = &v;
-                    uid_value = v;
-                } else {
-                    return ctx.throwInvalidArguments("uid is required", .{});
-                }
-                _ = arguments.eat();
-                break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
-    };
-                const gid: gid_t = brk: {
-                var gid_value: jsc.JSValue = undefined;
-                _ = &gid_value;
-                if (arguments.next()) |v| {
-                    _ = &v;
-                    gid_value = v;
-                } else {
-                    return ctx.throwInvalidArguments("gid is required", .{});
-                }
-                _ = arguments.eat();
-                break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
-    };
-                return Fchown{ .fd = fd, .uid = uid, .gid = gid };
-        }
-    };
-    pub const LChown = Chown;
-    pub const Lutimes = struct {
-        path: PathLike,
-        atime: TimeLike,
-        mtime: TimeLike,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Lutimes {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                const atime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
-                return ctx.throwInvalidArguments("atime is required", .{});
-    }))) orelse {
-                return ctx.throwInvalidArguments("atime must be a number or a Date", .{});
-    });
-                _ = arguments.eat();
-                const mtime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
-                return ctx.throwInvalidArguments("mtime is required", .{});
-    }))) orelse {
-                return ctx.throwInvalidArguments("mtime must be a number or a Date", .{});
-    });
-                _ = arguments.eat();
-                _path_guard.armed = false;
-                return .{ .path = path, .atime = atime, .mtime = mtime };
-        }
-    };
-    pub const Chmod = struct {
-        path: PathLike,
-        mode: Mode = 1911,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Chmod {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var mode_arg: jsc.JSValue = ((arguments.next()) orelse (.js_undefined));
-                _ = &mode_arg;
-                var mode: Mode = ((try jsc.Node.modeFromJS(ctx, mode_arg)) orelse {
-                return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", .{}, "number", mode_arg);
-    });
-                _ = &mode;
-                _ = arguments.eat();
-                _path_guard.armed = false;
-                return Chmod{ .path = path, .mode = mode };
-        }
-    };
-    pub const FChmod = struct {
-        fd: FD,
-        mode: Mode = 1911,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(_: *const @This()) void {
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!FChmod {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                var mode_arg: jsc.JSValue = ((arguments.next()) orelse (.js_undefined));
-                _ = &mode_arg;
-                var mode: Mode = ((try jsc.Node.modeFromJS(ctx, mode_arg)) orelse {
-                return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", .{}, "number", mode_arg);
-    });
-                _ = &mode;
-                _ = arguments.eat();
-                return FChmod{ .fd = fd, .mode = mode };
-        }
-    };
-    pub const LCHmod = Chmod;
-    pub const StatFS = struct {
-        path: PathLike,
-        big_int: bool = false,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Arguments.StatFS {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                const big_int = brk: {
-                if (arguments.next()) |next_val| {
-                    _ = &next_val;
-                    if (next_val.isObject()) {
-                        if (next_val.isCallable()) {
-                            break :brk false;
-                        }
-                        _ = arguments.eat();
-                        if (try next_val.getBooleanStrict(ctx, "bigint")) |big_int| {
-                            _ = &big_int;
-                            break :brk big_int;
-                        }
-                    }
-                }
-                break :brk false;
-    };
-                _path_guard.armed = false;
-                return .{ .path = path, .big_int = big_int };
-        }
-    };
-    pub const Stat = struct {
-        path: PathLike,
-        big_int: bool = false,
-        throw_if_no_entry: bool = true,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Stat {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var throw_if_no_entry = true;
-                _ = &throw_if_no_entry;
-                const big_int = brk: {
-                if (arguments.next()) |next_val| {
-                    _ = &next_val;
-                    if (next_val.isObject()) {
-                        if (next_val.isCallable()) {
-                            break :brk false;
-                        }
-                        _ = arguments.eat();
-                        if (try next_val.getBooleanStrict(ctx, "throwIfNoEntry")) |throw_if_no_entry_val| {
-                            _ = &throw_if_no_entry_val;
-                            throw_if_no_entry = throw_if_no_entry_val;
-                        }
-                        if (try next_val.getBooleanStrict(ctx, "bigint")) |big_int| {
-                            _ = &big_int;
-                            break :brk big_int;
-                        }
-                    }
-                }
-                break :brk false;
-    };
-                _path_guard.armed = false;
-                return Stat{ .path = path, .big_int = big_int, .throw_if_no_entry = throw_if_no_entry };
-        }
-    };
-    pub const Fstat = struct {
-        fd: FD,
-        big_int: bool = false,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(_: *@This()) void {
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Fstat {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const big_int = brk: {
-                if (arguments.next()) |next_val| {
-                    _ = &next_val;
-                    if (next_val.isObject()) {
-                        if (next_val.isCallable()) {
-                            break :brk false;
-                        }
-                        _ = arguments.eat();
-                        if (try next_val.getBooleanStrict(ctx, "bigint")) |big_int| {
-                            _ = &big_int;
-                            break :brk big_int;
-                        }
-                    }
-                }
-                break :brk false;
-    };
-                return Fstat{ .fd = fd, .big_int = big_int };
-        }
-    };
-    pub const Lstat = Stat;
-    pub const Link = struct {
-        old_path: PathLike,
-        new_path: PathLike,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.old_path.deinit();
-                _ = self.new_path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.old_path.deinitAndUnprotect();
-                _ = self.new_path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.old_path.toThreadSafe();
-                _ = self.new_path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Link {
-                const old_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("oldPath must be a string or TypedArray", .{});
-    });
-                var _old_path_guard = PathLikeGuard{ .path = old_path };
-                _ = &_old_path_guard;
-                var ___old_path_guard_moved = false; _ = &___old_path_guard_moved;
-                defer if (!___old_path_guard_moved) { ___old_path_guard_moved = true; const __T = @TypeOf(_old_path_guard); if (@typeInfo(__T) == .optional) { if (_old_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _old_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _old_path_guard; _drop_val.__cp_deinit(); } };
-                const new_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("newPath must be a string or TypedArray", .{});
-    });
-                var _new_path_guard = PathLikeGuard{ .path = new_path };
-                _ = &_new_path_guard;
-                var ___new_path_guard_moved = false; _ = &___new_path_guard_moved;
-                defer if (!___new_path_guard_moved) { ___new_path_guard_moved = true; const __T = @TypeOf(_new_path_guard); if (@typeInfo(__T) == .optional) { if (_new_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _new_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _new_path_guard; _drop_val.__cp_deinit(); } };
-                _old_path_guard.armed = false;
-                _new_path_guard.armed = false;
-                return Link{ .old_path = old_path, .new_path = new_path };
-        }
-    };
-    pub const Symlink = struct {
-        target_path: PathLike,
-        new_path: PathLike,
-        link_type: if (Environment.isWindows) LinkType else void,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.target_path.deinit();
-                _ = self.new_path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.target_path.deinitAndUnprotect();
-                _ = self.new_path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.target_path.toThreadSafe();
-                _ = self.new_path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Symlink {
-                const old_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("target must be a string or TypedArray", .{});
-    });
-                var _old_path_guard = PathLikeGuard{ .path = old_path };
-                _ = &_old_path_guard;
-                var ___old_path_guard_moved = false; _ = &___old_path_guard_moved;
-                defer if (!___old_path_guard_moved) { ___old_path_guard_moved = true; const __T = @TypeOf(_old_path_guard); if (@typeInfo(__T) == .optional) { if (_old_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _old_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _old_path_guard; _drop_val.__cp_deinit(); } };
-                const new_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _new_path_guard = PathLikeGuard{ .path = new_path };
-                _ = &_new_path_guard;
-                var ___new_path_guard_moved = false; _ = &___new_path_guard_moved;
-                defer if (!___new_path_guard_moved) { ___new_path_guard_moved = true; const __T = @TypeOf(_new_path_guard); if (@typeInfo(__T) == .optional) { if (_new_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _new_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _new_path_guard; _drop_val.__cp_deinit(); } };
-                const link_type: LinkType = link_type: {
-                if (arguments.next()) |next_val| {
-                    _ = &next_val;
-                    if (next_val.isUndefinedOrNull()) {
-                        break :link_type .unspecified;
-                    }
-                    if (next_val.isString()) {
-                        _ = arguments.eat();
-                        var str = try next_val.toBunString(ctx);
-                        _ = &str;
-                        var _str_guard = BunStringGuard{ .str = str };
-                        _ = &_str_guard;
-                        var ___str_guard_moved = false; _ = &___str_guard_moved;
-                        defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
-                        if (str.eqlComptime("dir")) {
-                            break :link_type .dir;
-                        }
-                        if (str.eqlComptime("file")) {
-                            break :link_type .file;
-                        }
-                        if (str.eqlComptime("junction")) {
-                            break :link_type .junction;
-                        }
-                        return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\". Received \"{f}\"", .{ .str = str }).throw();
-                    }
-                    return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\".", .{}).throw();
-                }
-                break :link_type .unspecified;
-    };
-                const empty_link_type: void = undefined;
-                _old_path_guard.armed = false;
-                _new_path_guard.armed = false;
-                return Symlink{ .target_path = old_path, .new_path = new_path, .link_type = (if (comptime Environment.isWindows) link_type else empty_link_type) };
-        }
-        const LinkType = enum {
-                    unspecified,
-                    file,
-                    dir,
-                    junction,
-                };
-    };
-    pub const Readlink = struct {
-        path: PathLike,
-        encoding: Encoding = Encoding.utf8,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Readlink {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var encoding = Encoding.utf8;
-                _ = &encoding;
-                if (arguments.next()) |val| {
-                    _ = &val;
-                    _ = arguments.eat();
-                    switch (val.jsType()) {
-    .String, .StringObject, .DerivedStringObject => {
-    encoding = try Encoding.assert(val, ctx, encoding);
-    },
-    else => {
-    if (val.isObject()) {
-                        encoding = try getEncoding(val, ctx, encoding);
-                    }
-    },
+};
+
+pub const _ArgumentsWritev = struct {
+    fd: FD,
+    buffers: jsc.Node.VectorArrayBuffer,
+    position: ?u52 = 0,
+
+pub fn deinit(_: *const @This()) void {
     }
-                }
-                _path_guard.armed = false;
-                return Readlink{ .path = path, .encoding = encoding };
-        }
-    };
-    pub const Realpath = struct {
-        path: PathLike,
-        encoding: Encoding = .utf8,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Realpath {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var encoding = Encoding.utf8;
-                _ = &encoding;
-                if (arguments.next()) |val| {
-                    _ = &val;
-                    _ = arguments.eat();
-                    switch (val.jsType()) {
-    .String, .StringObject, .DerivedStringObject => {
-    encoding = try Encoding.assert(val, ctx, encoding);
-    },
-    else => {
-    if (val.isObject()) {
-                        encoding = try getEncoding(val, ctx, encoding);
-                    }
-    },
+
+pub fn deinitAndUnprotect(self: _ArgumentsWritev) void {
+            _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).unprotect();
+            _ = self.buffers.buffers.deinit();
     }
-                }
-                _path_guard.armed = false;
-                return Realpath{ .path = path, .encoding = encoding };
-        }
-    };
-    pub const Unlink = struct {
-        path: PathLike,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Unlink {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                _path_guard.armed = false;
-                return Unlink{ .path = path };
-        }
-    };
-    pub const Rm = RmDir;
-    pub const RmDir = struct {
-        path: PathLike,
-        force: bool = false,
-        max_retries: u32 = 0,
-        recursive: bool = false,
-        retry_delay: c_uint = 100,
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!RmDir {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var recursive = false;
-                _ = &recursive;
-                var force = false;
-                _ = &force;
-                var max_retries: u32 = 0;
-                _ = &max_retries;
-                var retry_delay: c_uint = 100;
-                _ = &retry_delay;
-                if (arguments.next()) |val| {
-                    _ = &val;
-                    _ = arguments.eat();
-                    if (val.isObject()) {
-                        if (try val.get(ctx, "recursive")) |boolean| {
-                            _ = &boolean;
-                            if (boolean.isBoolean()) {
-                                recursive = boolean.toBoolean();
-                            } else {
-                                return ctx.throwInvalidArguments("The \"options.recursive\" property must be of type boolean.", .{});
-                            }
-                        }
-                        if (try val.get(ctx, "force")) |boolean| {
-                            _ = &boolean;
-                            if (boolean.isBoolean()) {
-                                force = boolean.toBoolean();
-                            } else {
-                                return ctx.throwInvalidArguments("The \"options.force\" property must be of type boolean.", .{});
-                            }
-                        }
-                        if (try val.get(ctx, "retryDelay")) |delay| {
-                            _ = &delay;
-                            retry_delay = @as(c_uint, @intCast(try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))));
-                        }
-                        if (try val.get(ctx, "maxRetries")) |retries| {
-                            _ = &retries;
-                            max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
-                        }
+
+pub fn toThreadSafe(self: *_ArgumentsWritev) void {
+            _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).protect();
+            const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, self.buffers.buffers.items));
+            _ = self.buffers.buffers.deinit();
+            self.buffers.buffers.items = clone;
+            self.buffers.buffers.capacity = clone.len;
+            self.buffers.buffers.allocator = bun.default_allocator;
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsWritev {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const buffers = try jsc.Node.VectorArrayBuffer.fromJS(ctx, ((arguments.protectEatNext()) orelse {
+            return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", .{});
+}), arguments.@"arena".allocator());
+            var position: ?u52 = null;
+            _ = &position;
+            if (arguments.nextEat()) |pos_value| {
+                _ = &pos_value;
+                if ((!pos_value.isUndefinedOrNull())) {
+                    if (pos_value.isNumber()) {
+                        position = pos_value.to(u52);
                     } else {
-                        if ((!val.isUndefined())) {
-                            return ctx.throwInvalidArguments("The \"options\" argument must be of type object.", .{});
-                        }
+                        return ctx.throwInvalidArguments("position must be a number", .{});
                     }
                 }
-                _path_guard.armed = false;
-                return .{ .path = path, .recursive = recursive, .force = force, .max_retries = max_retries, .retry_delay = retry_delay };
-        }
-    };
-    pub const Mkdir = struct {
-        path: PathLike,
-        recursive: bool = false,
-        mode: Mode = DefaultMode,
-        always_return_none: bool = false,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Mkdir {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var recursive = false;
-                _ = &recursive;
-                var mode: Mode = 511;
-                _ = &mode;
-                if (arguments.next()) |val| {
-                    _ = &val;
+            }
+            return _ArgumentsWritev{ .fd = fd, .buffers = buffers, .position = position };
+    }
+};
+
+pub const _ArgumentsReadv = struct {
+    fd: FD,
+    buffers: jsc.Node.VectorArrayBuffer,
+    position: ?u52 = 0,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsReadv) void {
+            _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).unprotect();
+            _ = self.buffers.buffers.deinit();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsReadv) void {
+            _ = (if (@typeInfo(@TypeOf(self.buffers)) == .@"enum") @intFromEnum(self.buffers) else self.buffers.value).protect();
+            const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, self.buffers.buffers.items));
+            _ = self.buffers.buffers.deinit();
+            self.buffers.buffers.items = clone;
+            self.buffers.buffers.capacity = clone.len;
+            self.buffers.buffers.allocator = bun.default_allocator;
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsReadv {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const buffers = try jsc.Node.VectorArrayBuffer.fromJS(ctx, ((arguments.protectEatNext()) orelse {
+            return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", .{});
+}), arguments.@"arena".allocator());
+            var position: ?u52 = null;
+            _ = &position;
+            if (arguments.nextEat()) |pos_value| {
+                _ = &pos_value;
+                if ((!pos_value.isUndefinedOrNull())) {
+                    if (pos_value.isNumber()) {
+                        position = pos_value.to(u52);
+                    } else {
+                        return ctx.throwInvalidArguments("position must be a number", .{});
+                    }
+                }
+            }
+            return _ArgumentsReadv{ .fd = fd, .buffers = buffers, .position = position };
+    }
+};
+
+pub const _ArgumentsFTruncate = struct {
+    fd: FD,
+    len: ?jsc.WebCore.Blob.SizeType = null,
+
+pub fn deinit(_: @This()) void {
+    }
+
+pub fn deinitAndUnprotect(_: *@This()) void {
+    }
+
+pub fn toThreadSafe(_: *const @This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFTruncate {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(try jsc.Node.validators.validateInteger(ctx, ((arguments.next()) orelse (jsc.JSValue.jsNumber(0))), "len", std.math.minInt(i52), std.math.maxInt(jsc.WebCore.Blob.SizeType)), 0)));
+            return _ArgumentsFTruncate{ .fd = fd, .len = len };
+    }
+};
+
+pub const _ArgumentsChown = struct {
+    path: PathLike,
+    uid: uid_t = 0,
+    gid: gid_t = 0,
+
+pub fn deinit(self: _ArgumentsChown) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsChown) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsChown) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsChown {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            const uid: uid_t = brk: {
+            var uid_value: jsc.JSValue = undefined;
+            _ = &uid_value;
+            if (arguments.next()) |v| {
+                _ = &v;
+                uid_value = v;
+            } else {
+                return ctx.throwInvalidArguments("uid is required", .{});
+            }
+            _ = arguments.eat();
+            break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
+};
+            const gid: gid_t = brk: {
+            var gid_value: jsc.JSValue = undefined;
+            _ = &gid_value;
+            if (arguments.next()) |v| {
+                _ = &v;
+                gid_value = v;
+            } else {
+                return ctx.throwInvalidArguments("gid is required", .{});
+            }
+            _ = arguments.eat();
+            break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
+};
+            _path_guard.armed = false;
+            return _ArgumentsChown{ .path = path, .uid = uid, .gid = gid };
+    }
+};
+
+pub const _ArgumentsFchown = struct {
+    fd: FD,
+    uid: uid_t,
+    gid: gid_t,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: *const @This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFchown {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const uid: uid_t = brk: {
+            var uid_value: jsc.JSValue = undefined;
+            _ = &uid_value;
+            if (arguments.next()) |v| {
+                _ = &v;
+                uid_value = v;
+            } else {
+                return ctx.throwInvalidArguments("uid is required", .{});
+            }
+            _ = arguments.eat();
+            break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
+};
+            const gid: gid_t = brk: {
+            var gid_value: jsc.JSValue = undefined;
+            _ = &gid_value;
+            if (arguments.next()) |v| {
+                _ = &v;
+                gid_value = v;
+            } else {
+                return ctx.throwInvalidArguments("gid is required", .{});
+            }
+            _ = arguments.eat();
+            break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
+};
+            return _ArgumentsFchown{ .fd = fd, .uid = uid, .gid = gid };
+    }
+};
+
+pub const _ArgumentsLutimes = struct {
+    path: PathLike,
+    atime: TimeLike,
+    mtime: TimeLike,
+
+pub fn deinit(self: _ArgumentsLutimes) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsLutimes) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsLutimes) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsLutimes {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            const atime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
+            return ctx.throwInvalidArguments("atime is required", .{});
+}))) orelse {
+            return ctx.throwInvalidArguments("atime must be a number or a Date", .{});
+});
+            _ = arguments.eat();
+            const mtime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
+            return ctx.throwInvalidArguments("mtime is required", .{});
+}))) orelse {
+            return ctx.throwInvalidArguments("mtime must be a number or a Date", .{});
+});
+            _ = arguments.eat();
+            _path_guard.armed = false;
+            return .{ .path = path, .atime = atime, .mtime = mtime };
+    }
+};
+
+pub const _ArgumentsChmod = struct {
+    path: PathLike,
+    mode: Mode = 1911,
+
+pub fn deinit(self: _ArgumentsChmod) void {
+            _ = self.path.deinit();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsChmod) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsChmod) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsChmod {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var mode_arg: jsc.JSValue = ((arguments.next()) orelse (.js_undefined));
+            _ = &mode_arg;
+            var mode: Mode = undefined;
+            _ = &mode;
+            if (try jsc.Node.modeFromJS(ctx, mode_arg)) |m| {
+                _ = &m;
+                mode = m;
+            } else {
+                return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", .{}, "number", mode_arg);
+            }
+            _ = arguments.eat();
+            _path_guard.armed = false;
+            return _ArgumentsChmod{ .path = path, .mode = mode };
+    }
+};
+
+pub const _ArgumentsFChmod = struct {
+    fd: FD,
+    mode: Mode = 1911,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: *const @This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFChmod {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            var mode_arg: jsc.JSValue = ((arguments.next()) orelse (.js_undefined));
+            _ = &mode_arg;
+            var mode: Mode = undefined;
+            _ = &mode;
+            if (try jsc.Node.modeFromJS(ctx, mode_arg)) |m| {
+                _ = &m;
+                mode = m;
+            } else {
+                return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", .{}, "number", mode_arg);
+            }
+            _ = arguments.eat();
+            return _ArgumentsFChmod{ .fd = fd, .mode = mode };
+    }
+};
+
+pub const _ArgumentsStatFS = struct {
+    path: PathLike,
+    big_int: bool = false,
+
+pub fn deinit(self: _ArgumentsStatFS) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsStatFS) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsStatFS) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Arguments.StatFS {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            const big_int = brk: {
+            if (arguments.next()) |next_val| {
+                _ = &next_val;
+                if (next_val.isObject()) {
+                    if (next_val.isCallable()) {
+                        break :brk false;
+                    }
                     _ = arguments.eat();
-                    if (val.isObject()) {
-                        if (try val.getBooleanStrict(ctx, "recursive")) |boolean| {
-                            _ = &boolean;
-                            recursive = boolean;
-                        }
-                        if (try val.get(ctx, "mode")) |mode_| {
-                            _ = &mode_;
-                            if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
-                                _ = &m;
-                                mode = m;
-                            }
+                    if (try next_val.getBooleanStrict(ctx, "bigint")) |big_int| {
+                        _ = &big_int;
+                        break :brk big_int;
+                    }
+                }
+            }
+            break :brk false;
+};
+            _path_guard.armed = false;
+            return .{ .path = path, .big_int = big_int };
+    }
+};
+
+pub const _ArgumentsStat = struct {
+    path: PathLike,
+    big_int: bool = false,
+    throw_if_no_entry: bool = true,
+
+pub fn deinit(self: _ArgumentsStat) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsStat) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsStat) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsStat {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var throw_if_no_entry = true;
+            _ = &throw_if_no_entry;
+            const big_int = brk: {
+            if (arguments.next()) |next_val| {
+                _ = &next_val;
+                if (next_val.isObject()) {
+                    if (next_val.isCallable()) {
+                        break :brk false;
+                    }
+                    _ = arguments.eat();
+                    if (try next_val.getBooleanStrict(ctx, "throwIfNoEntry")) |throw_if_no_entry_val| {
+                        _ = &throw_if_no_entry_val;
+                        throw_if_no_entry = throw_if_no_entry_val;
+                    }
+                    if (try next_val.getBooleanStrict(ctx, "bigint")) |big_int| {
+                        _ = &big_int;
+                        break :brk big_int;
+                    }
+                }
+            }
+            break :brk false;
+};
+            _path_guard.armed = false;
+            return _ArgumentsStat{ .path = path, .big_int = big_int, .throw_if_no_entry = throw_if_no_entry };
+    }
+};
+
+pub const _ArgumentsFstat = struct {
+    fd: FD,
+    big_int: bool = false,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: *@This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFstat {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const big_int = brk: {
+            if (arguments.next()) |next_val| {
+                _ = &next_val;
+                if (next_val.isObject()) {
+                    if (next_val.isCallable()) {
+                        break :brk false;
+                    }
+                    _ = arguments.eat();
+                    if (try next_val.getBooleanStrict(ctx, "bigint")) |big_int| {
+                        _ = &big_int;
+                        break :brk big_int;
+                    }
+                }
+            }
+            break :brk false;
+};
+            return _ArgumentsFstat{ .fd = fd, .big_int = big_int };
+    }
+};
+
+pub const _ArgumentsLink = struct {
+    old_path: PathLike,
+    new_path: PathLike,
+
+pub fn deinit(self: _ArgumentsLink) void {
+            _ = self.old_path.deinit();
+            _ = self.new_path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsLink) void {
+            _ = self.old_path.deinitAndUnprotect();
+            _ = self.new_path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsLink) void {
+            _ = self.old_path.toThreadSafe();
+            _ = self.new_path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsLink {
+            const old_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("oldPath must be a string or TypedArray", .{});
+});
+            var _old_path_guard = PathLikeGuard{ .path = old_path };
+            _ = &_old_path_guard;
+            var ___old_path_guard_moved = false; _ = &___old_path_guard_moved;
+            defer if (!___old_path_guard_moved) { ___old_path_guard_moved = true; const __T = @TypeOf(_old_path_guard); if (@typeInfo(__T) == .optional) { if (_old_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _old_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _old_path_guard; _drop_val.__cp_deinit(); } };
+            const new_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("newPath must be a string or TypedArray", .{});
+});
+            var _new_path_guard = PathLikeGuard{ .path = new_path };
+            _ = &_new_path_guard;
+            var ___new_path_guard_moved = false; _ = &___new_path_guard_moved;
+            defer if (!___new_path_guard_moved) { ___new_path_guard_moved = true; const __T = @TypeOf(_new_path_guard); if (@typeInfo(__T) == .optional) { if (_new_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _new_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _new_path_guard; _drop_val.__cp_deinit(); } };
+            _old_path_guard.armed = false;
+            _new_path_guard.armed = false;
+            return _ArgumentsLink{ .old_path = old_path, .new_path = new_path };
+    }
+};
+
+pub const _ArgumentsSymlink = struct {
+    target_path: PathLike,
+    new_path: PathLike,
+    link_type: if (Environment.isWindows) LinkType else void,
+
+pub fn deinit(self: _ArgumentsSymlink) void {
+            _ = self.target_path.deinit();
+            _ = self.new_path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsSymlink) void {
+            _ = self.target_path.deinitAndUnprotect();
+            _ = self.new_path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsSymlink) void {
+            _ = self.target_path.toThreadSafe();
+            _ = self.new_path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsSymlink {
+            const old_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("target must be a string or TypedArray", .{});
+});
+            var _old_path_guard = PathLikeGuard{ .path = old_path };
+            _ = &_old_path_guard;
+            var ___old_path_guard_moved = false; _ = &___old_path_guard_moved;
+            defer if (!___old_path_guard_moved) { ___old_path_guard_moved = true; const __T = @TypeOf(_old_path_guard); if (@typeInfo(__T) == .optional) { if (_old_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _old_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _old_path_guard; _drop_val.__cp_deinit(); } };
+            const new_path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _new_path_guard = PathLikeGuard{ .path = new_path };
+            _ = &_new_path_guard;
+            var ___new_path_guard_moved = false; _ = &___new_path_guard_moved;
+            defer if (!___new_path_guard_moved) { ___new_path_guard_moved = true; const __T = @TypeOf(_new_path_guard); if (@typeInfo(__T) == .optional) { if (_new_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _new_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _new_path_guard; _drop_val.__cp_deinit(); } };
+            const link_type: LinkType = link_type: {
+            if (arguments.next()) |next_val| {
+                _ = &next_val;
+                if (next_val.isUndefinedOrNull()) {
+                    break :link_type .unspecified;
+                }
+                if (next_val.isString()) {
+                    _ = arguments.eat();
+                    var str = try next_val.toBunString(ctx);
+                    _ = &str;
+                    var _str_guard = BunStringGuard{ .str = str };
+                    _ = &_str_guard;
+                    var ___str_guard_moved = false; _ = &___str_guard_moved;
+                    defer if (!___str_guard_moved) { ___str_guard_moved = true; const __T = @TypeOf(_str_guard); if (@typeInfo(__T) == .optional) { if (_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _str_guard; _drop_val.__cp_deinit(); } };
+                    if (str.eqlComptime("dir")) {
+                        break :link_type .dir;
+                    }
+                    if (str.eqlComptime("file")) {
+                        break :link_type .file;
+                    }
+                    if (str.eqlComptime("junction")) {
+                        break :link_type .junction;
+                    }
+                    return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\". Received \"{f}\"", .{ .str = str }).throw();
+                }
+                return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\".", .{}).throw();
+            }
+            break :link_type .unspecified;
+};
+            const empty_link_type: void = undefined;
+            _old_path_guard.armed = false;
+            _new_path_guard.armed = false;
+            return _ArgumentsSymlink{ .target_path = old_path, .new_path = new_path, .link_type = (if (comptime Environment.isWindows) link_type else empty_link_type) };
+    }
+    const LinkType = _ArgumentsSymlinkLinkType;
+};
+
+pub const _ArgumentsReadlink = struct {
+    path: PathLike,
+    encoding: Encoding = Encoding.utf8,
+
+pub fn deinit(self: _ArgumentsReadlink) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsReadlink) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsReadlink) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsReadlink {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var encoding = Encoding.utf8;
+            _ = &encoding;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                switch (val.jsType()) {
+.String, .StringObject, .DerivedStringObject => {
+encoding = try Encoding.assert(val, ctx, encoding);
+},
+else => {
+if (val.isObject()) {
+                    encoding = try getEncoding(val, ctx, encoding);
+                }
+},
+}
+            }
+            _path_guard.armed = false;
+            return _ArgumentsReadlink{ .path = path, .encoding = encoding };
+    }
+};
+
+pub const _ArgumentsRealpath = struct {
+    path: PathLike,
+    encoding: Encoding = .utf8,
+
+pub fn deinit(self: _ArgumentsRealpath) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsRealpath) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsRealpath) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsRealpath {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var encoding = Encoding.utf8;
+            _ = &encoding;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                switch (val.jsType()) {
+.String, .StringObject, .DerivedStringObject => {
+encoding = try Encoding.assert(val, ctx, encoding);
+},
+else => {
+if (val.isObject()) {
+                    encoding = try getEncoding(val, ctx, encoding);
+                }
+},
+}
+            }
+            _path_guard.armed = false;
+            return _ArgumentsRealpath{ .path = path, .encoding = encoding };
+    }
+};
+
+pub const _ArgumentsUnlink = struct {
+    path: PathLike,
+
+pub fn deinit(self: _ArgumentsUnlink) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsUnlink) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsUnlink) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsUnlink {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            _path_guard.armed = false;
+            return _ArgumentsUnlink{ .path = path };
+    }
+};
+
+pub const _ArgumentsRmDir = struct {
+    path: PathLike,
+    force: bool = false,
+    max_retries: u32 = 0,
+    recursive: bool = false,
+    retry_delay: c_uint = 100,
+
+pub fn deinitAndUnprotect(self: *_ArgumentsRmDir) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsRmDir) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn deinit(self: _ArgumentsRmDir) void {
+            _ = self.path.deinit();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsRmDir {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var recursive = false;
+            _ = &recursive;
+            var force = false;
+            _ = &force;
+            var max_retries: u32 = 0;
+            _ = &max_retries;
+            var retry_delay: c_uint = 100;
+            _ = &retry_delay;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                if (val.isObject()) {
+                    if (try val.get(ctx, "recursive")) |boolean| {
+                        _ = &boolean;
+                        if (boolean.isBoolean()) {
+                            recursive = boolean.toBoolean();
+                        } else {
+                            return ctx.throwInvalidArguments("The \"options.recursive\" property must be of type boolean.", .{});
                         }
                     }
-                    if ((val.isNumber() or val.isString())) {
-                        if (try jsc.Node.modeFromJS(ctx, val)) |m| {
+                    if (try val.get(ctx, "force")) |boolean| {
+                        _ = &boolean;
+                        if (boolean.isBoolean()) {
+                            force = boolean.toBoolean();
+                        } else {
+                            return ctx.throwInvalidArguments("The \"options.force\" property must be of type boolean.", .{});
+                        }
+                    }
+                    if (try val.get(ctx, "retryDelay")) |delay| {
+                        _ = &delay;
+                        retry_delay = @as(c_uint, @intCast(try jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))));
+                    }
+                    if (try val.get(ctx, "maxRetries")) |retries| {
+                        _ = &retries;
+                        max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
+                    }
+                } else {
+                    if ((!val.isUndefined())) {
+                        return ctx.throwInvalidArguments("The \"options\" argument must be of type object.", .{});
+                    }
+                }
+            }
+            _path_guard.armed = false;
+            return .{ .path = path, .recursive = recursive, .force = force, .max_retries = max_retries, .retry_delay = retry_delay };
+    }
+};
+
+pub const _ArgumentsMkdir = struct {
+    path: PathLike,
+    recursive: bool = false,
+    mode: Mode = DefaultMode,
+    always_return_none: bool = false,
+
+pub fn deinit(self: _ArgumentsMkdir) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsMkdir) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsMkdir) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsMkdir {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var recursive = false;
+            _ = &recursive;
+            var mode: Mode = (if (comptime @typeInfo(Mode) == .@"enum") @as(Mode, @enumFromInt(511)) else @as(Mode, 511));
+            _ = &mode;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                if (val.isObject()) {
+                    if (try val.getBooleanStrict(ctx, "recursive")) |boolean| {
+                        _ = &boolean;
+                        recursive = boolean;
+                    }
+                    if (try val.get(ctx, "mode")) |mode_| {
+                        _ = &mode_;
+                        if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
                             _ = &m;
                             mode = m;
                         }
                     }
                 }
-                _path_guard.armed = false;
-                return Mkdir{ .path = path, .recursive = recursive, .mode = mode };
-        }
-        pub const DefaultMode = 511;
-    };
-    const MkdirTemp = struct {
-        prefix: PathLike = .{ .buffer = .{ .buffer = jsc.ArrayBuffer.empty } },
-        encoding: Encoding = .utf8,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.prefix.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.prefix.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.prefix.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!MkdirTemp {
-                const prefix = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArgumentTypeValue("prefix", "string, Buffer, or URL", ((arguments.next()) orelse (.js_undefined)));
-    });
-                var _prefix_guard = PathLikeGuard{ .path = prefix };
-                _ = &_prefix_guard;
-                var ___prefix_guard_moved = false; _ = &___prefix_guard_moved;
-                defer if (!___prefix_guard_moved) { ___prefix_guard_moved = true; const __T = @TypeOf(_prefix_guard); if (@typeInfo(__T) == .optional) { if (_prefix_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _prefix_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _prefix_guard; _drop_val.__cp_deinit(); } };
-                var encoding = Encoding.utf8;
-                _ = &encoding;
-                if (arguments.next()) |val| {
-                    _ = &val;
-                    _ = arguments.eat();
-                    switch (val.jsType()) {
-    .String, .StringObject, .DerivedStringObject => {
-    encoding = try Encoding.assert(val, ctx, encoding);
-    },
-    else => {
-    if (val.isObject()) {
-                        encoding = try getEncoding(val, ctx, encoding);
+                if ((val.isNumber() or val.isString())) {
+                    if (try jsc.Node.modeFromJS(ctx, val)) |m| {
+                        _ = &m;
+                        mode = m;
                     }
-    },
-    }
                 }
-                _prefix_guard.armed = false;
-                return .{ .prefix = prefix, .encoding = encoding };
-        }
-    };
-    pub const Readdir = struct {
-        path: PathLike,
-        encoding: Encoding = .utf8,
-        with_file_types: bool = false,
-        recursive: bool = false,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn tag(self: @This()) Return.Readdir.Tag {
-                return (switch (self.encoding) {
-    .buffer => .buffers,
-    else => (if (self.with_file_types) .with_file_types else .files),
-    });
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Readdir {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var encoding: Encoding = .utf8;
-                _ = &encoding;
-                var with_file_types = false;
-                _ = &with_file_types;
-                var recursive = false;
-                _ = &recursive;
-                if (arguments.next()) |val| {
-                    _ = &val;
-                    _ = arguments.eat();
-                    switch (val.jsType()) {
-    .String, .StringObject, .DerivedStringObject => {
-    encoding = try Encoding.assert(val, ctx, encoding);
-    },
-    else => {
-    if (val.isObject()) {
-                        encoding = try getEncoding(val, ctx, encoding);
-                        if (try val.getBooleanStrict(ctx, "recursive")) |recursive_| {
-                            _ = &recursive_;
-                            recursive = recursive_;
-                        }
-                        if (try val.getBooleanStrict(ctx, "withFileTypes")) |with_file_types_| {
-                            _ = &with_file_types_;
-                            with_file_types = with_file_types_;
+            }
+            _path_guard.armed = false;
+            return _ArgumentsMkdir{ .path = path, .recursive = recursive, .mode = mode };
+    }
+    pub const DefaultMode = 511;
+};
+
+pub const _ArgumentsMkdirTemp = struct {
+    prefix: PathLike = .{ .buffer = .{ .buffer = jsc.ArrayBuffer.empty } },
+    encoding: Encoding = .utf8,
+
+pub fn deinit(self: _ArgumentsMkdirTemp) void {
+            _ = self.prefix.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsMkdirTemp) void {
+            _ = self.prefix.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsMkdirTemp) void {
+            _ = self.prefix.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsMkdirTemp {
+            const prefix = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArgumentTypeValue("prefix", "string, Buffer, or URL", ((arguments.next()) orelse (.js_undefined)));
+});
+            var _prefix_guard = PathLikeGuard{ .path = prefix };
+            _ = &_prefix_guard;
+            var ___prefix_guard_moved = false; _ = &___prefix_guard_moved;
+            defer if (!___prefix_guard_moved) { ___prefix_guard_moved = true; const __T = @TypeOf(_prefix_guard); if (@typeInfo(__T) == .optional) { if (_prefix_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _prefix_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _prefix_guard; _drop_val.__cp_deinit(); } };
+            var encoding = Encoding.utf8;
+            _ = &encoding;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                switch (val.jsType()) {
+.String, .StringObject, .DerivedStringObject => {
+encoding = try Encoding.assert(val, ctx, encoding);
+},
+else => {
+if (val.isObject()) {
+                    encoding = try getEncoding(val, ctx, encoding);
+                }
+},
+}
+            }
+            _prefix_guard.armed = false;
+            return .{ .prefix = prefix, .encoding = encoding };
+    }
+};
+
+pub const _ArgumentsReaddir = struct {
+    path: PathLike,
+    encoding: Encoding = .utf8,
+    with_file_types: bool = false,
+    recursive: bool = false,
+
+pub fn deinit(self: _ArgumentsReaddir) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsReaddir) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsReaddir) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn tag(self: _ArgumentsReaddir) Return.Readdir.Tag {
+            return (switch (self.encoding) {
+.buffer => .buffers,
+else => (if (self.with_file_types) .with_file_types else .files),
+});
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsReaddir {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var encoding: Encoding = .utf8;
+            _ = &encoding;
+            var with_file_types = false;
+            _ = &with_file_types;
+            var recursive = false;
+            _ = &recursive;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                switch (val.jsType()) {
+.String, .StringObject, .DerivedStringObject => {
+encoding = try Encoding.assert(val, ctx, encoding);
+},
+else => {
+if (val.isObject()) {
+                    encoding = try getEncoding(val, ctx, encoding);
+                    if (try val.getBooleanStrict(ctx, "recursive")) |recursive_| {
+                        _ = &recursive_;
+                        recursive = recursive_;
+                    }
+                    if (try val.getBooleanStrict(ctx, "withFileTypes")) |with_file_types_| {
+                        _ = &with_file_types_;
+                        with_file_types = with_file_types_;
+                    }
+                }
+},
+}
+            }
+            _path_guard.armed = false;
+            return .{ .path = path, .encoding = encoding, .with_file_types = with_file_types, .recursive = recursive };
+    }
+};
+
+pub const _ArgumentsClose = struct {
+    fd: FD,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: _ArgumentsClose) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsClose {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            return _ArgumentsClose{ .fd = fd };
+    }
+};
+
+pub const _ArgumentsOpen = struct {
+    path: PathLike,
+    flags: FileSystemFlags = .r,
+    mode: Mode = default_permission,
+
+pub fn deinit(self: _ArgumentsOpen) void {
+            _ = self.path.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsOpen) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsOpen) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsOpen {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var flags = FileSystemFlags.r;
+            _ = &flags;
+            var mode: Mode = default_permission;
+            _ = &mode;
+            if (arguments.next()) |val| {
+                _ = &val;
+                _ = arguments.eat();
+                if (val.isObject()) {
+                    if (try val.getTruthy(ctx, "flags")) |flags_| {
+                        _ = &flags_;
+                        if (try FileSystemFlags.fromJS(ctx, flags_)) |f| {
+                            _ = &f;
+                            flags = f;
                         }
                     }
-    },
-    }
-                }
-                _path_guard.armed = false;
-                return .{ .path = path, .encoding = encoding, .with_file_types = with_file_types, .recursive = recursive };
-        }
-    };
-    pub const Close = struct {
-        fd: FD,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(_: Close) void {
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Close {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                return Close{ .fd = fd };
-        }
-    };
-    pub const Open = struct {
-        path: PathLike,
-        flags: FileSystemFlags = .r,
-        mode: Mode = default_permission,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Open {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var flags = FileSystemFlags.r;
-                _ = &flags;
-                var mode: Mode = default_permission;
-                _ = &mode;
-                if (arguments.next()) |val| {
-                    _ = &val;
-                    _ = arguments.eat();
-                    if (val.isObject()) {
-                        if (try val.getTruthy(ctx, "flags")) |flags_| {
-                            _ = &flags_;
-                            if (try FileSystemFlags.fromJS(ctx, flags_)) |f| {
+                    if (try val.getTruthy(ctx, "mode")) |mode_| {
+                        _ = &mode_;
+                        if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
+                            _ = &m;
+                            mode = m;
+                        }
+                    }
+                } else {
+                    if ((val != .zero)) {
+                        if ((!val.isUndefinedOrNull())) {
+                            if (try FileSystemFlags.fromJS(ctx, val)) |f| {
                                 _ = &f;
                                 flags = f;
                             }
                         }
-                        if (try val.getTruthy(ctx, "mode")) |mode_| {
+                        if (arguments.nextEat()) |next| {
+                            _ = &next;
+                            if (try jsc.Node.modeFromJS(ctx, next)) |m| {
+                                _ = &m;
+                                mode = m;
+                            }
+                        }
+                    }
+                }
+            }
+            _path_guard.armed = false;
+            return _ArgumentsOpen{ .path = path, .flags = flags, .mode = mode };
+    }
+};
+
+pub const _ArgumentsFutimes = struct {
+    fd: FD,
+    atime: TimeLike,
+    mtime: TimeLike,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: *const @This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFutimes {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const atime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
+            return ctx.throwInvalidArguments("atime is required", .{});
+}))) orelse {
+            return ctx.throwInvalidArguments("atime must be a number or a Date", .{});
+});
+            _ = arguments.eat();
+            const mtime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
+            return ctx.throwInvalidArguments("mtime is required", .{});
+}))) orelse {
+            return ctx.throwInvalidArguments("mtime must be a number or a Date", .{});
+});
+            _ = arguments.eat();
+            return _ArgumentsFutimes{ .fd = fd, .atime = atime, .mtime = mtime };
+    }
+};
+
+pub const _ArgumentsWrite = struct {
+    fd: FD,
+    buffer: StringOrBuffer,
+    offset: u64 = 0,
+    length: u64 = std.math.maxInt(u64),
+    position: ?ReadPosition = null,
+    encoding: Encoding = Encoding.buffer,
+
+pub fn deinit(self: _ArgumentsWrite) void {
+            _ = self.buffer.deinit();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsWrite) void {
+            _ = self.buffer.deinitAndUnprotect();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsWrite) void {
+            _ = self.buffer.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsWrite {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            const buffer_value = arguments.next();
+            const buffer = ((try StringOrBuffer.fromJS(ctx, bun.default_allocator, ((buffer_value) orelse {
+            return ctx.throwInvalidArguments("data is required", .{});
+}))) orelse {
+            return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
+});
+            if ((buffer_value.?.isString() and (!buffer_value.?.isStringLiteral()))) {
+                return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
+            }
+            var args = _ArgumentsWrite{ .fd = fd, .buffer = buffer, .encoding = (switch (buffer) {
+.buffer => Encoding.buffer,
+inline else => Encoding.utf8,
+}) };
+            _ = &args;
+            var _args_guard = WriteArgsGuard{ .args = (blk: {
+            break :blk (&args);
+
+}) };
+            _ = &_args_guard;
+            var ___args_guard_moved = false; _ = &___args_guard_moved;
+            defer if (!___args_guard_moved) { ___args_guard_moved = true; const __T = @TypeOf(_args_guard); if (@typeInfo(__T) == .optional) { if (_args_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_guard; _drop_val.__cp_deinit(); } };
+            _ = arguments.eat();
+            if (arguments.next()) |first_arg| {
+                _ = &first_arg;
+                _ = parse: {
+                var current = first_arg;
+                _ = &current;
+                break :parse (switch (buffer) {
+else => {
+{
+                    if (current.isNumber()) {
+                        args.position = current.to(i52);
+                        _ = arguments.eat();
+                        if (arguments.next()) |next_cur| {
+                            _ = &next_cur;
+                            current = next_cur;
+                        } else {
+                            break :parse;
+                        }
+                    }
+                    if (current.isString()) {
+                        args.encoding = try Encoding.assert(current, ctx, args.encoding);
+                        _ = arguments.eat();
+                    }
+                }
+},
+.buffer => {
+{
+                    if ((current.isUndefinedOrNull() or current.isFunction())) {
+                        break :parse;
+                    }
+                    args.offset = @as(u64, @intCast(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)));
+                    _ = arguments.eat();
+                    if (arguments.next()) |next_cur| {
+                        _ = &next_cur;
+                        current = next_cur;
+                    } else {
+                        break :parse;
+                    }
+                    if ((!(current.isNumber() or current.isBigInt()))) {
+                        break :parse;
+                    }
+                    const length = current.to(i64);
+                    const buf_len = args.buffer.buffer.slice().len;
+                    const max_offset = @min(buf_len, std.math.maxInt(i64));
+                    if ((args.offset > max_offset)) {
+                        return ctx.throwRangeError(@as(f64, @floatFromInt(args.offset)), .{ .field_name = "offset", .max = (if (comptime @typeInfo(@TypeOf(max_offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_offset)) else cp_cast_int(i32, max_offset)) });
+                    }
+                    const max_len = @min((buf_len - args.offset), std.math.maxInt(i32));
+                    if (((length > max_len) or (length < 0))) {
+                        return ctx.throwRangeError(@as(f64, @floatFromInt(length)), .{ .field_name = "length", .min = 0, .max = (if (comptime @typeInfo(@TypeOf(max_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_len)) else cp_cast_int(i32, max_len)) });
+                    }
+                    args.length = @intCast(length);
+                    _ = arguments.eat();
+                    if (arguments.next()) |next_cur| {
+                        _ = &next_cur;
+                        current = next_cur;
+                    } else {
+                        break :parse;
+                    }
+                    if ((!(current.isNumber() or current.isBigInt()))) {
+                        break :parse;
+                    }
+                    const position = current.to(i52);
+                    if ((position >= 0)) {
+                        args.position = position;
+                    }
+                    _ = arguments.eat();
+                }
+},
+});
+
+};
+            }
+            _args_guard.armed = false;
+            return args;
+    }
+};
+
+pub const _ArgumentsRead = struct {
+    fd: FD,
+    buffer: Buffer,
+    offset: u64,
+    length: u64,
+    position: ?ReadPosition = null,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(self: _ArgumentsRead) void {
+            _ = (if (@typeInfo(@TypeOf(self.buffer.buffer)) == .@"enum") @intFromEnum(self.buffer.buffer) else self.buffer.buffer.value).protect();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsRead) void {
+            _ = (if (@typeInfo(@TypeOf(self.buffer.buffer)) == .@"enum") @intFromEnum(self.buffer.buffer) else self.buffer.buffer.value).unprotect();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsRead {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            var buffer_value: jsc.JSValue = undefined;
+            _ = &buffer_value;
+            if (arguments.nextEat()) |v| {
+                _ = &v;
+                buffer_value = v;
+            } else {
+                return ctx.throwInvalidArguments("buffer is required", .{});
+            }
+            var buffer: jsc.MarkedArrayBuffer = undefined;
+            _ = &buffer;
+            if (Buffer.fromJS(ctx, buffer_value)) |b| {
+                _ = &b;
+                buffer = b;
+            } else {
+                return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value);
+            }
+            const offset_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
+            const offset: u64 = (if (offset_value.isUndefinedOrNull()) 0 else @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER)));
+            var length_float: f64 = 0;
+            _ = &length_float;
+            if (arguments.nextEat()) |arg| {
+                _ = &arg;
+                length_float = try arg.toNumber(ctx);
+            }
+            if ((length_float == 0)) {
+                return .{ .fd = fd, .buffer = buffer, .length = 0, .offset = 0 };
+            }
+            const buf_len = buffer.slice().len;
+            if ((buf_len == 0)) {
+                return ctx.ERR(.INVALID_ARG_VALUE, "The argument 'buffer' is empty and cannot be written.", .{}).throw();
+            }
+            if ((@mod(length_float, 1) != 0)) {
+                return ctx.throwRangeError(length_float, .{ .field_name = "length", .msg = "an integer" });
+            }
+            const length_int: i64 = @intFromFloat(length_float);
+            if ((length_int > buf_len)) {
+                return ctx.throwRangeError(length_float, .{ .field_name = "length", .max = (if (comptime @typeInfo(@TypeOf(@min(buf_len, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(buf_len, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(buf_len, std.math.maxInt(i64)))) });
+            }
+            if ((((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) +| length_int) > buf_len)) {
+                return ctx.throwRangeError(length_float, .{ .field_name = "length", .max = (if (comptime @typeInfo(@TypeOf((buf_len -| offset))) == .@"enum") cp_cast_int(i32, @intFromEnum((buf_len -| offset))) else cp_cast_int(i32, (buf_len -| offset))) });
+            }
+            if ((length_int < 0)) {
+                return ctx.throwRangeError(length_float, .{ .field_name = "length", .min = 0 });
+            }
+            const length: u64 = @intCast(length_int);
+            const position_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
+            var position_int: i64 = -1;
+            _ = &position_int;
+            if (position_value.isUndefinedOrNull()) {
+                position_int = -1;
+            } else {
+                if (position_value.isNumber()) {
+                    position_int = try jsc.Node.validators.validateInteger(ctx, position_value, "position", -1, jsc.MAX_SAFE_INTEGER);
+                } else {
+                    if (jsc.JSBigInt.fromJS(position_value)) |position| {
+                        _ = &position;
+                        const max_position = (std.math.maxInt(i64) - length_int);
+                        if (((position.order(i64, -1) == .lt) or (position.order(i64, max_position) == .gt))) {
+                            const position_str = try position.toString(ctx);
+                            var _pos_str_guard = BunStringGuard{ .str = position_str };
+                            _ = &_pos_str_guard;
+                            var ___pos_str_guard_moved = false; _ = &___pos_str_guard_moved;
+                            defer if (!___pos_str_guard_moved) { ___pos_str_guard_moved = true; const __T = @TypeOf(_pos_str_guard); if (@typeInfo(__T) == .optional) { if (_pos_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pos_str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pos_str_guard; _drop_val.__cp_deinit(); } };
+                            return ctx.throwRangeError(position_str, .{ .field_name = "position", .min = -1, .max = (if (comptime @typeInfo(@TypeOf(max_position)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_position)) else cp_cast_int(i32, max_position)) });
+                        }
+                        position_int = position.toInt64();
+                    } else {
+                        return ctx.throwInvalidArgumentTypeValue("position", "number or bigint", position_value);
+                    }
+                }
+            }
+            const position: ?ReadPosition = (if ((position_int >= 0)) position_int else null);
+            return .{ .fd = fd, .buffer = buffer, .offset = offset, .length = length, .position = position };
+    }
+};
+
+pub const _ArgumentsReadFile = struct {
+    path: PathOrFileDescriptor,
+    encoding: Encoding = Encoding.utf8,
+    offset: jsc.WebCore.Blob.SizeType = 0,
+    max_size: ?jsc.WebCore.Blob.SizeType = null,
+    limit_size_for_javascript: bool = false,
+    flag: FileSystemFlags = FileSystemFlags.r,
+    signal: ?*AbortSignal = null,
+
+pub fn deinit(self: _ArgumentsReadFile) void {
+            _ = self.path.deinit();
+            if (self.signal) |signal| {
+                _ = &signal;
+                _ = signal.pendingActivityUnref();
+                _ = signal.unref();
+            }
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsReadFile) void {
+            _ = self.path.deinitAndUnprotect();
+            if (self.signal) |signal| {
+                _ = &signal;
+                _ = signal.pendingActivityUnref();
+                _ = signal.unref();
+            }
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsReadFile) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsReadFile {
+            const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or a file descriptor", .{});
+});
+            var _path_guard = PathOrFDGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var encoding = Encoding.buffer;
+            _ = &encoding;
+            var flag = FileSystemFlags.r;
+            _ = &flag;
+            var _signal_guard = AbortSignalGuard{  };
+            _ = &_signal_guard;
+            var ___signal_guard_moved = false; _ = &___signal_guard_moved;
+            defer if (!___signal_guard_moved) { ___signal_guard_moved = true; const __T = @TypeOf(_signal_guard); if (@typeInfo(__T) == .optional) { if (_signal_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _signal_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _signal_guard; _drop_val.__cp_deinit(); } };
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                if (arg.isString()) {
+                    encoding = try Encoding.assert(arg, ctx, encoding);
+                } else {
+                    if (arg.isObject()) {
+                        encoding = try getEncoding(arg, ctx, encoding);
+                        if (try arg.getTruthy(ctx, "flag")) |flag_| {
+                            _ = &flag_;
+                            if (try FileSystemFlags.fromJS(ctx, flag_)) |f| {
+                                _ = &f;
+                                flag = f;
+                            } else {
+                                return ctx.throwInvalidArguments("Invalid flag", .{});
+                            }
+                        }
+                        if (try arg.getTruthy(ctx, "signal")) |value| {
+                            _ = &value;
+                            if (AbortSignal.fromJS(value)) |signal| {
+                                _ = &signal;
+                                _signal_guard.signal = signal.ref();
+                                _ = signal.pendingActivityRef();
+                            } else {
+                                return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
+                            }
+                        }
+                    }
+                }
+            }
+            _path_guard.armed = false;
+            _signal_guard.armed = false;
+            return .{ .path = path, .encoding = encoding, .flag = flag, .limit_size_for_javascript = true, .signal = _signal_guard.signal };
+    }
+
+pub fn aborted(self: _ArgumentsReadFile) bool {
+            if (self.signal) |signal| {
+                _ = &signal;
+                return signal.aborted();
+            }
+            return false;
+    }
+};
+
+pub const _ArgumentsWriteFile = struct {
+    encoding: Encoding = Encoding.utf8,
+    flag: FileSystemFlags = FileSystemFlags.w,
+    mode: Mode = 438,
+    file: PathOrFileDescriptor,
+    flush: bool = false,
+    data: StringOrBuffer,
+    dirfd: FD,
+    signal: ?*AbortSignal = null,
+
+pub fn deinit(self: _ArgumentsWriteFile) void {
+            _ = self.file.deinit();
+            _ = self.data.deinit();
+            if (self.signal) |signal| {
+                _ = &signal;
+                _ = signal.pendingActivityUnref();
+                _ = signal.unref();
+            }
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsWriteFile) void {
+            _ = self.file.toThreadSafe();
+            _ = self.data.toThreadSafe();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsWriteFile) void {
+            _ = self.file.deinitAndUnprotect();
+            _ = self.data.deinitAndUnprotect();
+            if (self.signal) |signal| {
+                _ = &signal;
+                _ = signal.pendingActivityUnref();
+                _ = signal.unref();
+            }
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsWriteFile {
+            const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or a file descriptor", .{});
+});
+            var _path_guard = PathOrFDGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            const data_value = ((arguments.nextEat()) orelse {
+            return ctx.throwInvalidArguments("data is required", .{});
+});
+            var encoding = Encoding.buffer;
+            _ = &encoding;
+            var flag = FileSystemFlags.w;
+            _ = &flag;
+            var mode: Mode = default_permission;
+            _ = &mode;
+            var _signal_guard = AbortSignalGuard{  };
+            _ = &_signal_guard;
+            var ___signal_guard_moved = false; _ = &___signal_guard_moved;
+            defer if (!___signal_guard_moved) { ___signal_guard_moved = true; const __T = @TypeOf(_signal_guard); if (@typeInfo(__T) == .optional) { if (_signal_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _signal_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _signal_guard; _drop_val.__cp_deinit(); } };
+            var flush: bool = false;
+            _ = &flush;
+            if (data_value.isString()) {
+                encoding = Encoding.utf8;
+            }
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                if (arg.isString()) {
+                    encoding = try Encoding.assert(arg, ctx, encoding);
+                } else {
+                    if (arg.isObject()) {
+                        encoding = try getEncoding(arg, ctx, encoding);
+                        if (try arg.getTruthy(ctx, "flag")) |flag_| {
+                            _ = &flag_;
+                            if (try FileSystemFlags.fromJS(ctx, flag_)) |f| {
+                                _ = &f;
+                                flag = f;
+                            } else {
+                                return ctx.throwInvalidArguments("Invalid flag", .{});
+                            }
+                        }
+                        if (try arg.getTruthy(ctx, "mode")) |mode_| {
                             _ = &mode_;
                             if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
                                 _ = &m;
                                 mode = m;
                             }
                         }
-                    } else {
-                        if ((val != .zero)) {
-                            if ((!val.isUndefinedOrNull())) {
-                                if (try FileSystemFlags.fromJS(ctx, val)) |f| {
-                                    _ = &f;
-                                    flags = f;
-                                }
-                            }
-                            if (arguments.nextEat()) |next| {
-                                _ = &next;
-                                if (try jsc.Node.modeFromJS(ctx, next)) |m| {
-                                    _ = &m;
-                                    mode = m;
-                                }
-                            }
-                        }
-                    }
-                }
-                _path_guard.armed = false;
-                return Open{ .path = path, .flags = flags, .mode = mode };
-        }
-    };
-    pub const Utimes = Lutimes;
-    pub const Futimes = struct {
-        fd: FD,
-        atime: TimeLike,
-        mtime: TimeLike,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Futimes {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const atime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
-                return ctx.throwInvalidArguments("atime is required", .{});
-    }))) orelse {
-                return ctx.throwInvalidArguments("atime must be a number or a Date", .{});
-    });
-                _ = arguments.eat();
-                const mtime = ((try jsc.Node.timeLikeFromJS(ctx, ((arguments.next()) orelse {
-                return ctx.throwInvalidArguments("mtime is required", .{});
-    }))) orelse {
-                return ctx.throwInvalidArguments("mtime must be a number or a Date", .{});
-    });
-                _ = arguments.eat();
-                return Futimes{ .fd = fd, .atime = atime, .mtime = mtime };
-        }
-    };
-    pub const Write = struct {
-        fd: FD,
-        buffer: StringOrBuffer,
-        offset: u64 = 0,
-        length: u64 = std.math.maxInt(u64),
-        position: ?ReadPosition = null,
-        encoding: Encoding = Encoding.buffer,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = self.buffer.deinit();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.buffer.deinitAndUnprotect();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.buffer.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Write {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                const buffer_value = arguments.next();
-                const buffer = ((try StringOrBuffer.fromJS(ctx, bun.default_allocator, ((buffer_value) orelse {
-                return ctx.throwInvalidArguments("data is required", .{});
-    }))) orelse {
-                return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
-    });
-                if ((buffer_value.?.isString() and (!buffer_value.?.isStringLiteral()))) {
-                    return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
-                }
-                var args = Write{ .fd = fd, .buffer = buffer, .encoding = (switch (buffer) {
-    .buffer => Encoding.buffer,
-    inline else => Encoding.utf8,
-    }) };
-                _ = &args;
-                var _args_guard = WriteArgsGuard{ .args = (blk: {
-                break :blk (&args);
-    
-    }) };
-                _ = &_args_guard;
-                var ___args_guard_moved = false; _ = &___args_guard_moved;
-                defer if (!___args_guard_moved) { ___args_guard_moved = true; const __T = @TypeOf(_args_guard); if (@typeInfo(__T) == .optional) { if (_args_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_guard; _drop_val.__cp_deinit(); } };
-                _ = arguments.eat();
-                if (arguments.next()) |first_arg| {
-                    _ = &first_arg;
-                    _ = parse: {
-                    var current = first_arg;
-                    _ = &current;
-                    break :parse (switch (buffer) {
-    else => {
-    {
-                        if (current.isNumber()) {
-                            args.position = current.to(i52);
-                            _ = arguments.eat();
-                            if (arguments.next()) |next_cur| {
-                                _ = &next_cur;
-                                current = next_cur;
+                        if (try arg.getTruthy(ctx, "signal")) |value| {
+                            _ = &value;
+                            if (AbortSignal.fromJS(value)) |signal| {
+                                _ = &signal;
+                                _signal_guard.signal = signal.ref();
+                                _ = signal.pendingActivityRef();
                             } else {
-                                break :parse;
+                                return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
                             }
                         }
-                        if (current.isString()) {
-                            args.encoding = try Encoding.assert(current, ctx, args.encoding);
-                            _ = arguments.eat();
+                        if (try arg.getOptional(ctx, "flush", jsc.JSValue)) |flush_| {
+                            _ = &flush_;
+                            if ((flush_.isBoolean() or flush_.isUndefinedOrNull())) {
+                                flush = (flush_ == .true);
+                            } else {
+                                return ctx.throwInvalidArgumentTypeValue("flush", "boolean", flush_);
+                            }
                         }
                     }
-    },
-    .buffer => {
-    {
-                        if ((current.isUndefinedOrNull() or current.isFunction())) {
-                            break :parse;
-                        }
-                        args.offset = @as(u64, @intCast(try jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)));
-                        _ = arguments.eat();
-                        if (arguments.next()) |next_cur| {
-                            _ = &next_cur;
-                            current = next_cur;
-                        } else {
-                            break :parse;
-                        }
-                        if ((!(current.isNumber() or current.isBigInt()))) {
-                            break :parse;
-                        }
-                        const length = current.to(i64);
-                        const buf_len = args.buffer.buffer.slice().len;
-                        const max_offset = @min(buf_len, std.math.maxInt(i64));
-                        if ((args.offset > max_offset)) {
-                            return ctx.throwRangeError(@as(f64, @floatFromInt(args.offset)), .{ .field_name = "offset", .max = (if (comptime @typeInfo(@TypeOf(max_offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_offset)) else cp_cast_int(i32, max_offset)) });
-                        }
-                        const max_len = @min((buf_len - args.offset), std.math.maxInt(i32));
-                        if (((length > max_len) or (length < 0))) {
-                            return ctx.throwRangeError(@as(f64, @floatFromInt(length)), .{ .field_name = "length", .min = 0, .max = (if (comptime @typeInfo(@TypeOf(max_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_len)) else cp_cast_int(i32, max_len)) });
-                        }
-                        args.length = @intCast(length);
-                        _ = arguments.eat();
-                        if (arguments.next()) |next_cur| {
-                            _ = &next_cur;
-                            current = next_cur;
-                        } else {
-                            break :parse;
-                        }
-                        if ((!(current.isNumber() or current.isBigInt()))) {
-                            break :parse;
-                        }
-                        const position = current.to(i52);
-                        if ((position >= 0)) {
-                            args.position = position;
-                        }
-                        _ = arguments.eat();
-                    }
-    },
-    });
-    
-    };
                 }
-                _args_guard.armed = false;
-                return args;
-        }
-    };
-    pub const Read = struct {
-        fd: FD,
-        buffer: Buffer,
-        offset: u64,
-        length: u64,
-        position: ?ReadPosition = null,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(self: @This()) void {
-                _ = (if (@typeInfo(@TypeOf(self.buffer.buffer)) == .@"enum") @intFromEnum(self.buffer.buffer) else self.buffer.buffer.value).protect();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = (if (@typeInfo(@TypeOf(self.buffer.buffer)) == .@"enum") @intFromEnum(self.buffer.buffer) else self.buffer.buffer.value).unprotect();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Read {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                var buffer_value: jsc.JSValue = undefined;
-                _ = &buffer_value;
-                if (arguments.nextEat()) |v| {
-                    _ = &v;
-                    buffer_value = v;
+            }
+            const allow_string_object = false;
+            const is_async = false;
+            const data = ((try StringOrBuffer.fromJSWithEncodingMaybeAsync(ctx, bun.default_allocator, data_value, encoding, is_async, allow_string_object)) orelse {
+            return ctx.ERR(.INVALID_ARG_TYPE, "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView", .{}).throw();
+});
+            _path_guard.armed = false;
+            _signal_guard.armed = false;
+            return .{ .file = path, .encoding = encoding, .flag = flag, .mode = mode, .data = data, .dirfd = bun.FD.cwd(), .signal = _signal_guard.signal, .flush = flush };
+    }
+
+pub fn aborted(self: _ArgumentsWriteFile) bool {
+            if (self.signal) |signal| {
+                _ = &signal;
+                return signal.aborted();
+            }
+            return false;
+    }
+};
+
+pub const _ArgumentsOpenDir = struct {
+    path: PathLike,
+    encoding: Encoding = Encoding.utf8,
+    buffer_size: c_int = 32,
+
+pub fn deinit(self: _ArgumentsOpenDir) void {
+            _ = self.path.deinit();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsOpenDir {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var encoding = Encoding.buffer;
+            _ = &encoding;
+            var buffer_size: c_int = 32;
+            _ = &buffer_size;
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                if (arg.isString()) {
+                    encoding = (blk_catch_3: { break :blk_catch_3 ((Encoding.assert(arg, ctx, encoding)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 encoding; }); });
                 } else {
-                    return ctx.throwInvalidArguments("buffer is required", .{});
-                }
-                var buffer: jsc.MarkedArrayBuffer = undefined;
-                _ = &buffer;
-                if (Buffer.fromJS(ctx, buffer_value)) |b| {
-                    _ = &b;
-                    buffer = b;
-                } else {
-                    return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value);
-                }
-                const offset_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
-                const offset: u64 = (if (offset_value.isUndefinedOrNull()) 0 else @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER)));
-                var length_float: f64 = 0;
-                _ = &length_float;
-                if (arguments.nextEat()) |arg| {
-                    _ = &arg;
-                    length_float = try arg.toNumber(ctx);
-                }
-                if ((length_float == 0)) {
-                    return .{ .fd = fd, .buffer = buffer, .length = 0, .offset = 0 };
-                }
-                const buf_len = buffer.slice().len;
-                if ((buf_len == 0)) {
-                    return ctx.ERR(.INVALID_ARG_VALUE, "The argument 'buffer' is empty and cannot be written.", .{}).throw();
-                }
-                if ((@mod(length_float, 1) != 0)) {
-                    return ctx.throwRangeError(length_float, .{ .field_name = "length", .msg = "an integer" });
-                }
-                const length_int: i64 = @intFromFloat(length_float);
-                if ((length_int > buf_len)) {
-                    return ctx.throwRangeError(length_float, .{ .field_name = "length", .max = (if (comptime @typeInfo(@TypeOf(@min(buf_len, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(buf_len, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(buf_len, std.math.maxInt(i64)))) });
-                }
-                if ((((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) +| length_int) > buf_len)) {
-                    return ctx.throwRangeError(length_float, .{ .field_name = "length", .max = (if (comptime @typeInfo(@TypeOf((buf_len -| offset))) == .@"enum") cp_cast_int(i32, @intFromEnum((buf_len -| offset))) else cp_cast_int(i32, (buf_len -| offset))) });
-                }
-                if ((length_int < 0)) {
-                    return ctx.throwRangeError(length_float, .{ .field_name = "length", .min = 0 });
-                }
-                const length: u64 = @intCast(length_int);
-                const position_value: jsc.JSValue = ((arguments.nextEat()) orelse (.@"null"));
-                var position_int: i64 = -1;
-                _ = &position_int;
-                if (position_value.isUndefinedOrNull()) {
-                    position_int = -1;
-                } else {
-                    if (position_value.isNumber()) {
-                        position_int = try jsc.Node.validators.validateInteger(ctx, position_value, "position", -1, jsc.MAX_SAFE_INTEGER);
-                    } else {
-                        if (jsc.JSBigInt.fromJS(position_value)) |position| {
-                            _ = &position;
-                            const max_position = (std.math.maxInt(i64) - length_int);
-                            if (((position.order(i64, -1) == .lt) or (position.order(i64, max_position) == .gt))) {
-                                const position_str = try position.toString(ctx);
-                                var _pos_str_guard = BunStringGuard{ .str = position_str };
-                                _ = &_pos_str_guard;
-                                var ___pos_str_guard_moved = false; _ = &___pos_str_guard_moved;
-                                defer if (!___pos_str_guard_moved) { ___pos_str_guard_moved = true; const __T = @TypeOf(_pos_str_guard); if (@typeInfo(__T) == .optional) { if (_pos_str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pos_str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pos_str_guard; _drop_val.__cp_deinit(); } };
-                                return ctx.throwRangeError(position_str, .{ .field_name = "position", .min = -1, .max = (if (comptime @typeInfo(@TypeOf(max_position)) == .@"enum") cp_cast_int(i32, @intFromEnum(max_position)) else cp_cast_int(i32, max_position)) });
-                            }
-                            position_int = position.toInt64();
-                        } else {
-                            return ctx.throwInvalidArgumentTypeValue("position", "number or bigint", position_value);
+                    if (arg.isObject()) {
+                        if (getEncoding(arg, ctx)) |encoding_| {
+                            _ = &encoding_;
+                            encoding = encoding_;
                         }
-                    }
-                }
-                const position: ?ReadPosition = (if ((position_int >= 0)) position_int else null);
-                return .{ .fd = fd, .buffer = buffer, .offset = offset, .length = length, .position = position };
-        }
-    };
-    pub const ReadFile = struct {
-        path: PathOrFileDescriptor,
-        encoding: Encoding = Encoding.utf8,
-        offset: jsc.WebCore.Blob.SizeType = 0,
-        max_size: ?jsc.WebCore.Blob.SizeType = null,
-        limit_size_for_javascript: bool = false,
-        flag: FileSystemFlags = FileSystemFlags.r,
-        signal: ?*AbortSignal = null,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-                if (self.signal) |signal| {
-                    _ = &signal;
-                    _ = signal.pendingActivityUnref();
-                    _ = signal.unref();
-                }
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.path.deinitAndUnprotect();
-                if (self.signal) |signal| {
-                    _ = &signal;
-                    _ = signal.pendingActivityUnref();
-                    _ = signal.unref();
-                }
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!ReadFile {
-                const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or a file descriptor", .{});
-    });
-                var _path_guard = PathOrFDGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var encoding = Encoding.buffer;
-                _ = &encoding;
-                var flag = FileSystemFlags.r;
-                _ = &flag;
-                var _signal_guard = AbortSignalGuard{  };
-                _ = &_signal_guard;
-                var ___signal_guard_moved = false; _ = &___signal_guard_moved;
-                defer if (!___signal_guard_moved) { ___signal_guard_moved = true; const __T = @TypeOf(_signal_guard); if (@typeInfo(__T) == .optional) { if (_signal_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _signal_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _signal_guard; _drop_val.__cp_deinit(); } };
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    if (arg.isString()) {
-                        encoding = try Encoding.assert(arg, ctx, encoding);
-                    } else {
-                        if (arg.isObject()) {
-                            encoding = try getEncoding(arg, ctx, encoding);
-                            if (try arg.getTruthy(ctx, "flag")) |flag_| {
-                                _ = &flag_;
-                                if (try FileSystemFlags.fromJS(ctx, flag_)) |f| {
-                                    _ = &f;
-                                    flag = f;
-                                } else {
-                                    return ctx.throwInvalidArguments("Invalid flag", .{});
-                                }
-                            }
-                            if (try arg.getTruthy(ctx, "signal")) |value| {
-                                _ = &value;
-                                if (AbortSignal.fromJS(value)) |signal| {
-                                    _ = &signal;
-                                    _signal_guard.signal = signal.ref();
-                                    _ = signal.pendingActivityRef();
-                                } else {
-                                    return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
-                                }
+                        if (try arg.get(ctx, "bufferSize")) |buffer_size_| {
+                            _ = &buffer_size_;
+                            buffer_size = buffer_size_.toInt32();
+                            if ((buffer_size < 0)) {
+                                return ctx.throwInvalidArguments("bufferSize must be > 0", .{});
                             }
                         }
                     }
                 }
-                _path_guard.armed = false;
-                _signal_guard.armed = false;
-                return .{ .path = path, .encoding = encoding, .flag = flag, .limit_size_for_javascript = true, .signal = _signal_guard.signal };
-        }
-    
-    pub fn aborted(self: @This()) bool {
-                if (self.signal) |signal| {
-                    _ = &signal;
-                    return signal.aborted();
-                }
-                return false;
-        }
-    };
-    pub const WriteFile = struct {
-        encoding: Encoding = Encoding.utf8,
-        flag: FileSystemFlags = FileSystemFlags.w,
-        mode: Mode = 438,
-        file: PathOrFileDescriptor,
-        flush: bool = false,
-        data: StringOrBuffer,
-        dirfd: FD,
-        signal: ?*AbortSignal = null,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.file.deinit();
-                _ = self.data.deinit();
-                if (self.signal) |signal| {
-                    _ = &signal;
-                    _ = signal.pendingActivityUnref();
-                    _ = signal.unref();
-                }
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.file.toThreadSafe();
-                _ = self.data.toThreadSafe();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.file.deinitAndUnprotect();
-                _ = self.data.deinitAndUnprotect();
-                if (self.signal) |signal| {
-                    _ = &signal;
-                    _ = signal.pendingActivityUnref();
-                    _ = signal.unref();
-                }
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!WriteFile {
-                const path = ((try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or a file descriptor", .{});
-    });
-                var _path_guard = PathOrFDGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                const data_value = ((arguments.nextEat()) orelse {
-                return ctx.throwInvalidArguments("data is required", .{});
-    });
-                var encoding = Encoding.buffer;
-                _ = &encoding;
-                var flag = FileSystemFlags.w;
-                _ = &flag;
-                var mode: Mode = default_permission;
-                _ = &mode;
-                var _signal_guard = AbortSignalGuard{  };
-                _ = &_signal_guard;
-                var ___signal_guard_moved = false; _ = &___signal_guard_moved;
-                defer if (!___signal_guard_moved) { ___signal_guard_moved = true; const __T = @TypeOf(_signal_guard); if (@typeInfo(__T) == .optional) { if (_signal_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _signal_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _signal_guard; _drop_val.__cp_deinit(); } };
-                var flush: bool = false;
-                _ = &flush;
-                if (data_value.isString()) {
-                    encoding = Encoding.utf8;
-                }
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    if (arg.isString()) {
-                        encoding = try Encoding.assert(arg, ctx, encoding);
-                    } else {
-                        if (arg.isObject()) {
-                            encoding = try getEncoding(arg, ctx, encoding);
-                            if (try arg.getTruthy(ctx, "flag")) |flag_| {
-                                _ = &flag_;
-                                if (try FileSystemFlags.fromJS(ctx, flag_)) |f| {
-                                    _ = &f;
-                                    flag = f;
-                                } else {
-                                    return ctx.throwInvalidArguments("Invalid flag", .{});
-                                }
-                            }
-                            if (try arg.getTruthy(ctx, "mode")) |mode_| {
-                                _ = &mode_;
-                                if (try jsc.Node.modeFromJS(ctx, mode_)) |m| {
-                                    _ = &m;
-                                    mode = m;
-                                }
-                            }
-                            if (try arg.getTruthy(ctx, "signal")) |value| {
-                                _ = &value;
-                                if (AbortSignal.fromJS(value)) |signal| {
-                                    _ = &signal;
-                                    _signal_guard.signal = signal.ref();
-                                    _ = signal.pendingActivityRef();
-                                } else {
-                                    return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
-                                }
-                            }
-                            if (try arg.getOptional(ctx, "flush", jsc.JSValue)) |flush_| {
-                                _ = &flush_;
-                                if ((flush_.isBoolean() or flush_.isUndefinedOrNull())) {
-                                    flush = (flush_ == .true);
-                                } else {
-                                    return ctx.throwInvalidArgumentTypeValue("flush", "boolean", flush_);
-                                }
-                            }
-                        }
-                    }
-                }
-                const allow_string_object = false;
-                const is_async = false;
-                const data = ((try StringOrBuffer.fromJSWithEncodingMaybeAsync(ctx, bun.default_allocator, data_value, encoding, is_async, allow_string_object)) orelse {
-                return ctx.ERR(.INVALID_ARG_TYPE, "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView", .{}).throw();
-    });
-                _path_guard.armed = false;
-                _signal_guard.armed = false;
-                return .{ .file = path, .encoding = encoding, .flag = flag, .mode = mode, .data = data, .dirfd = bun.FD.cwd(), .signal = _signal_guard.signal, .flush = flush };
-        }
-    
-    pub fn aborted(self: @This()) bool {
-                if (self.signal) |signal| {
-                    _ = &signal;
-                    return signal.aborted();
-                }
-                return false;
-        }
-    };
-    pub const AppendFile = WriteFile;
-    pub const OpenDir = struct {
-        path: PathLike,
-        encoding: Encoding = Encoding.utf8,
-        buffer_size: c_int = 32,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!OpenDir {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var encoding = Encoding.buffer;
-                _ = &encoding;
-                var buffer_size: c_int = 32;
-                _ = &buffer_size;
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    if (arg.isString()) {
-                        encoding = (blk_catch_0: { break :blk_catch_0 ((Encoding.assert(arg, ctx, encoding)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 encoding; }); });
-                    } else {
-                        if (arg.isObject()) {
-                            if (getEncoding(arg, ctx)) |encoding_| {
-                                _ = &encoding_;
-                                encoding = encoding_;
-                            }
-                            if (try arg.get(ctx, "bufferSize")) |buffer_size_| {
-                                _ = &buffer_size_;
-                                buffer_size = buffer_size_.toInt32();
-                                if ((buffer_size < 0)) {
-                                    return ctx.throwInvalidArguments("bufferSize must be > 0", .{});
-                                }
-                            }
-                        }
-                    }
-                }
-                _path_guard.armed = false;
-                return OpenDir{ .path = path, .encoding = encoding, .buffer_size = buffer_size };
-        }
-    };
-    pub const Exists = struct {
-        path: ?PathLike,
-    
-    pub fn deinit(self: @This()) void {
-                if (self.path) |path| {
-                    _ = &path;
-                    _ = path.deinit();
-                }
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                if (self.path) |*path| {
-                    _ = &path;
-                    _ = (path.*).toThreadSafe();
-                }
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                if (self.path) |*path| {
-                    _ = &path;
-                    _ = (path.*).deinitAndUnprotect();
-                }
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Exists {
-                return Exists{ .path = try PathLike.fromJS(ctx, arguments) };
-        }
-    };
-    pub const Access = struct {
-        path: PathLike,
-        mode: FileSystemFlags = FileSystemFlags.r,
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.path.deinit();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.path.toThreadSafe();
-        }
-    
-    pub fn deinitAndUnprotect(self: *@This()) void {
-                _ = self.path.deinitAndUnprotect();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Access {
-                const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
-    });
-                var _path_guard = PathLikeGuard{ .path = path };
-                _ = &_path_guard;
-                var ___path_guard_moved = false; _ = &___path_guard_moved;
-                defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
-                var mode = FileSystemFlags.r;
-                _ = &mode;
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    mode = try FileSystemFlags.fromJSNumberOnly(ctx, arg, .access);
-                }
-                _path_guard.armed = false;
-                return Access{ .path = path, .mode = mode };
-        }
-    };
-    pub const FdataSync = struct {
-        fd: FD,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!FdataSync {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                return FdataSync{ .fd = fd };
-        }
-    };
-    pub const CopyFile = struct {
-        src: PathLike,
-        dest: PathLike,
-        mode: constants.Copyfile,
-    
-    pub fn deinit(self: @This()) void {
+            }
+            _path_guard.armed = false;
+            return _ArgumentsOpenDir{ .path = path, .encoding = encoding, .buffer_size = buffer_size };
+    }
+};
+
+pub const _ArgumentsExists = struct {
+    path: ?PathLike,
+
+pub fn deinit(self: _ArgumentsExists) void {
+            if (self.path) |path| {
+                _ = &path;
+                _ = path.deinit();
+            }
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsExists) void {
+            if (self.path) |*path| {
+                _ = &path;
+                _ = (path.*).toThreadSafe();
+            }
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsExists) void {
+            if (self.path) |*path| {
+                _ = &path;
+                _ = (path.*).deinitAndUnprotect();
+            }
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsExists {
+            return _ArgumentsExists{ .path = try PathLike.fromJS(ctx, arguments) };
+    }
+};
+
+pub const _ArgumentsAccess = struct {
+    path: PathLike,
+    mode: FileSystemFlags = FileSystemFlags.r,
+
+pub fn deinit(self: _ArgumentsAccess) void {
+            _ = self.path.deinit();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsAccess) void {
+            _ = self.path.toThreadSafe();
+    }
+
+pub fn deinitAndUnprotect(self: *_ArgumentsAccess) void {
+            _ = self.path.deinitAndUnprotect();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsAccess {
+            const path = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", .{});
+});
+            var _path_guard = PathLikeGuard{ .path = path };
+            _ = &_path_guard;
+            var ___path_guard_moved = false; _ = &___path_guard_moved;
+            defer if (!___path_guard_moved) { ___path_guard_moved = true; const __T = @TypeOf(_path_guard); if (@typeInfo(__T) == .optional) { if (_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _path_guard; _drop_val.__cp_deinit(); } };
+            var mode = FileSystemFlags.r;
+            _ = &mode;
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                mode = try FileSystemFlags.fromJSNumberOnly(ctx, arg, .access);
+            }
+            _path_guard.armed = false;
+            return _ArgumentsAccess{ .path = path, .mode = mode };
+    }
+};
+
+pub const _ArgumentsFdataSync = struct {
+    fd: FD,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: *const @This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFdataSync {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            return _ArgumentsFdataSync{ .fd = fd };
+    }
+};
+
+pub const _ArgumentsCopyFile = struct {
+    src: PathLike,
+    dest: PathLike,
+    mode: constants.Copyfile,
+
+pub fn deinit(self: _ArgumentsCopyFile) void {
+            _ = self.src.deinit();
+            _ = self.dest.deinit();
+    }
+
+pub fn toThreadSafe(self: *_ArgumentsCopyFile) void {
+            _ = self.src.toThreadSafe();
+            _ = self.dest.toThreadSafe();
+    }
+
+pub fn deinitAndUnprotect(self: _ArgumentsCopyFile) void {
+            _ = self.src.deinitAndUnprotect();
+            _ = self.dest.deinitAndUnprotect();
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsCopyFile {
+            const src = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("src must be a string or TypedArray", .{});
+});
+            var _src_guard = PathLikeGuard{ .path = src };
+            _ = &_src_guard;
+            var ___src_guard_moved = false; _ = &___src_guard_moved;
+            defer if (!___src_guard_moved) { ___src_guard_moved = true; const __T = @TypeOf(_src_guard); if (@typeInfo(__T) == .optional) { if (_src_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_guard; _drop_val.__cp_deinit(); } };
+            const dest = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("dest must be a string or TypedArray", .{});
+});
+            var _dest_guard = PathLikeGuard{ .path = dest };
+            _ = &_dest_guard;
+            var ___dest_guard_moved = false; _ = &___dest_guard_moved;
+            defer if (!___dest_guard_moved) { ___dest_guard_moved = true; const __T = @TypeOf(_dest_guard); if (@typeInfo(__T) == .optional) { if (_dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dest_guard; _drop_val.__cp_deinit(); } };
+            var mode: constants.Copyfile = @enumFromInt(0);
+            _ = &mode;
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                mode = @enumFromInt(@intFromEnum(try FileSystemFlags.fromJSNumberOnly(ctx, arg, .copy_file)));
+            }
+            _src_guard.armed = false;
+            _dest_guard.armed = false;
+            return _ArgumentsCopyFile{ .src = src, .dest = dest, .mode = mode };
+    }
+};
+
+pub const _ArgumentsCpFlags = struct {
+    mode: constants.Copyfile,
+    recursive: bool,
+    errorOnExist: bool,
+    force: bool,
+    deinit_paths: bool = true,
+};
+
+pub const _ArgumentsCp = struct {
+    src: PathLike,
+    dest: PathLike,
+    flags: Flags,
+
+pub fn deinit(self: _ArgumentsCp) void {
+            if (self.flags.deinit_paths) {
                 _ = self.src.deinit();
                 _ = self.dest.deinit();
-        }
-    
-    pub fn toThreadSafe(self: *@This()) void {
-                _ = self.src.toThreadSafe();
-                _ = self.dest.toThreadSafe();
-        }
-    
-    pub fn deinitAndUnprotect(self: @This()) void {
-                _ = self.src.deinitAndUnprotect();
-                _ = self.dest.deinitAndUnprotect();
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!CopyFile {
-                const src = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("src must be a string or TypedArray", .{});
-    });
-                var _src_guard = PathLikeGuard{ .path = src };
-                _ = &_src_guard;
-                var ___src_guard_moved = false; _ = &___src_guard_moved;
-                defer if (!___src_guard_moved) { ___src_guard_moved = true; const __T = @TypeOf(_src_guard); if (@typeInfo(__T) == .optional) { if (_src_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_guard; _drop_val.__cp_deinit(); } };
-                const dest = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("dest must be a string or TypedArray", .{});
-    });
-                var _dest_guard = PathLikeGuard{ .path = dest };
-                _ = &_dest_guard;
-                var ___dest_guard_moved = false; _ = &___dest_guard_moved;
-                defer if (!___dest_guard_moved) { ___dest_guard_moved = true; const __T = @TypeOf(_dest_guard); if (@typeInfo(__T) == .optional) { if (_dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dest_guard; _drop_val.__cp_deinit(); } };
-                var mode: constants.Copyfile = @enumFromInt(0);
-                _ = &mode;
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    mode = @enumFromInt(@intFromEnum(try FileSystemFlags.fromJSNumberOnly(ctx, arg, .copy_file)));
+            }
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsCp {
+            const src = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("src must be a string or TypedArray", .{});
+});
+            var _src_guard = PathLikeGuard{ .path = src };
+            _ = &_src_guard;
+            var ___src_guard_moved = false; _ = &___src_guard_moved;
+            defer if (!___src_guard_moved) { ___src_guard_moved = true; const __T = @TypeOf(_src_guard); if (@typeInfo(__T) == .optional) { if (_src_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_guard; _drop_val.__cp_deinit(); } };
+            const dest = ((try PathLike.fromJS(ctx, arguments)) orelse {
+            return ctx.throwInvalidArguments("dest must be a string or TypedArray", .{});
+});
+            var _dest_guard = PathLikeGuard{ .path = dest };
+            _ = &_dest_guard;
+            var ___dest_guard_moved = false; _ = &___dest_guard_moved;
+            defer if (!___dest_guard_moved) { ___dest_guard_moved = true; const __T = @TypeOf(_dest_guard); if (@typeInfo(__T) == .optional) { if (_dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dest_guard; _drop_val.__cp_deinit(); } };
+            var recursive: bool = false;
+            _ = &recursive;
+            var errorOnExist: bool = false;
+            _ = &errorOnExist;
+            var force: bool = true;
+            _ = &force;
+            var mode: i32 = 0;
+            _ = &mode;
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                recursive = arg.toBoolean();
+            }
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                errorOnExist = arg.toBoolean();
+            }
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                force = arg.toBoolean();
+            }
+            if (arguments.next()) |arg| {
+                _ = &arg;
+                _ = arguments.eat();
+                if (arg.isNumber()) {
+                    mode = try arg.coerce(i32, ctx);
                 }
-                _src_guard.armed = false;
-                _dest_guard.armed = false;
-                return CopyFile{ .src = src, .dest = dest, .mode = mode };
-        }
-    };
-    pub const Cp = struct {
-        src: PathLike,
-        dest: PathLike,
-        flags: Flags,
-    
-    pub fn deinit(self: @This()) void {
-                if (self.flags.deinit_paths) {
-                    _ = self.src.deinit();
-                    _ = self.dest.deinit();
-                }
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Cp {
-                const src = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("src must be a string or TypedArray", .{});
-    });
-                var _src_guard = PathLikeGuard{ .path = src };
-                _ = &_src_guard;
-                var ___src_guard_moved = false; _ = &___src_guard_moved;
-                defer if (!___src_guard_moved) { ___src_guard_moved = true; const __T = @TypeOf(_src_guard); if (@typeInfo(__T) == .optional) { if (_src_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _src_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _src_guard; _drop_val.__cp_deinit(); } };
-                const dest = ((try PathLike.fromJS(ctx, arguments)) orelse {
-                return ctx.throwInvalidArguments("dest must be a string or TypedArray", .{});
-    });
-                var _dest_guard = PathLikeGuard{ .path = dest };
-                _ = &_dest_guard;
-                var ___dest_guard_moved = false; _ = &___dest_guard_moved;
-                defer if (!___dest_guard_moved) { ___dest_guard_moved = true; const __T = @TypeOf(_dest_guard); if (@typeInfo(__T) == .optional) { if (_dest_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _dest_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _dest_guard; _drop_val.__cp_deinit(); } };
-                var recursive: bool = false;
-                _ = &recursive;
-                var errorOnExist: bool = false;
-                _ = &errorOnExist;
-                var force: bool = true;
-                _ = &force;
-                var mode: i32 = 0;
-                _ = &mode;
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    recursive = arg.toBoolean();
-                }
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    errorOnExist = arg.toBoolean();
-                }
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    force = arg.toBoolean();
-                }
-                if (arguments.next()) |arg| {
-                    _ = &arg;
-                    _ = arguments.eat();
-                    if (arg.isNumber()) {
-                        mode = try arg.coerce(i32, ctx);
-                    }
-                }
-                _src_guard.armed = false;
-                _dest_guard.armed = false;
-                return Cp{ .src = src, .dest = dest, .flags = .{ .mode = @enumFromInt(mode), .recursive = recursive, .errorOnExist = errorOnExist, .force = force } };
-        }
-        const Flags = struct {
-            mode: constants.Copyfile,
-            recursive: bool,
-            errorOnExist: bool,
-            force: bool,
-            deinit_paths: bool = true,
-        };
-    };
-    pub const WriteEv = struct {
-        fd: FD,
-        buffers: []const ArrayBuffer,
-        position: ReadPosition,
-    };
-    pub const ReadEv = struct {
-        fd: FD,
-        buffers: []ArrayBuffer,
-        position: ReadPosition,
-    };
+            }
+            _src_guard.armed = false;
+            _dest_guard.armed = false;
+            return _ArgumentsCp{ .src = src, .dest = dest, .flags = .{ .mode = @enumFromInt(mode), .recursive = recursive, .errorOnExist = errorOnExist, .force = force } };
+    }
+    const Flags = _ArgumentsCpFlags;
+};
+
+pub const _ArgumentsWriteEv = struct {
+    fd: FD,
+    buffers: []const ArrayBuffer,
+    position: ReadPosition,
+};
+
+pub const _ArgumentsReadEv = struct {
+    fd: FD,
+    buffers: []ArrayBuffer,
+    position: ReadPosition,
+};
+
+pub const _ArgumentsFsync = struct {
+    fd: FD,
+
+pub fn deinit(_: *const @This()) void {
+    }
+
+pub fn toThreadSafe(_: *const @This()) void {
+    }
+
+pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!_ArgumentsFsync {
+            const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
+            const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
+            return throwInvalidFdError(ctx, fd_value);
+});
+            return _ArgumentsFsync{ .fd = fd };
+    }
+};
+
+pub const Arguments = struct {
+    pub const Rename = _ArgumentsRename;
+    pub const Truncate = _ArgumentsTruncate;
+    pub const Writev = _ArgumentsWritev;
+    pub const Readv = _ArgumentsReadv;
+    pub const FTruncate = _ArgumentsFTruncate;
+    pub const Chown = _ArgumentsChown;
+    pub const Fchown = _ArgumentsFchown;
+    pub const LChown = Chown;
+    pub const Lutimes = _ArgumentsLutimes;
+    pub const Chmod = _ArgumentsChmod;
+    pub const FChmod = _ArgumentsFChmod;
+    pub const LCHmod = Chmod;
+    pub const StatFS = _ArgumentsStatFS;
+    pub const Stat = _ArgumentsStat;
+    pub const Fstat = _ArgumentsFstat;
+    pub const Lstat = Stat;
+    pub const Link = _ArgumentsLink;
+    pub const Symlink = _ArgumentsSymlink;
+    pub const Readlink = _ArgumentsReadlink;
+    pub const Realpath = _ArgumentsRealpath;
+    pub const Unlink = _ArgumentsUnlink;
+    pub const Rm = RmDir;
+    pub const RmDir = _ArgumentsRmDir;
+    pub const Mkdir = _ArgumentsMkdir;
+    const MkdirTemp = _ArgumentsMkdirTemp;
+    pub const Readdir = _ArgumentsReaddir;
+    pub const Close = _ArgumentsClose;
+    pub const Open = _ArgumentsOpen;
+    pub const Utimes = Lutimes;
+    pub const Futimes = _ArgumentsFutimes;
+    pub const Write = _ArgumentsWrite;
+    pub const Read = _ArgumentsRead;
+    pub const ReadFile = _ArgumentsReadFile;
+    pub const WriteFile = _ArgumentsWriteFile;
+    pub const AppendFile = WriteFile;
+    pub const OpenDir = _ArgumentsOpenDir;
+    pub const Exists = _ArgumentsExists;
+    pub const Access = _ArgumentsAccess;
+    pub const FdataSync = _ArgumentsFdataSync;
+    pub const CopyFile = _ArgumentsCopyFile;
+    pub const Cp = _ArgumentsCp;
+    pub const WriteEv = _ArgumentsWriteEv;
+    pub const ReadEv = _ArgumentsReadEv;
     pub const UnwatchFile = void;
     pub const Watch = Watcher.Arguments;
     pub const WatchFile = StatWatcher.Arguments;
-    pub const Fsync = struct {
-        fd: FD,
-    
-    pub fn deinit(self: *const @This()) void {
-                _ = &self;
-        }
-    
-    pub fn toThreadSafe(_: *const @This()) void {
-        }
-    
-    pub fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice) bun.JSError!Fsync {
-                const fd_value: jsc.JSValue = ((arguments.nextEat()) orelse (.js_undefined));
-                const fd = ((try bun.FD.fromJSValidated(fd_value, ctx)) orelse {
-                return throwInvalidFdError(ctx, fd_value);
-    });
-                return Fsync{ .fd = fd };
-        }
-    };
+    pub const Fsync = _ArgumentsFsync;
+};
+
+pub const StatOrNotFound = union(enum) {
+    stats: bun.jsc.Node.Stats,
+    not_found: void,
+
+pub fn toJS(self: *StatOrNotFound, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+            return (switch (self.*) {
+.stats => self.stats.toJS(globalObject),
+.not_found => .js_undefined,
+});
+    }
+
+pub fn toJSNewlyCreated(self: StatOrNotFound, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            return (switch (self) {
+.stats => self.stats.toJSNewlyCreated(globalObject),
+.not_found => .js_undefined,
+});
+    }
+};
+
+pub const StringOrUndefined = union(enum) {
+    string: bun.String,
+    none: void,
+
+pub fn toJS(self: *StringOrUndefined, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            return (switch (self.*) {
+.string => try self.string.transferToJS(globalObject),
+.none => .js_undefined,
+});
+    }
 };
 
 pub const Null = struct {
@@ -3140,6 +3283,102 @@ pub fn toJS(self: Null, _: *jsc.JSGlobalObject) jsc.JSValue {
         _ = self;
             return .@"null";
     }
+};
+
+pub const _ReturnRead = struct {
+    bytes_read: u52,
+
+pub fn toJS(self: *_ReturnRead, _: *jsc.JSGlobalObject) jsc.JSValue {
+            return jsc.JSValue.jsNumberFromUint64(self.bytes_read);
+    }
+};
+
+pub const _ReturnReadPromise = struct {
+    bytes_read: u52,
+    buffer_val: jsc.JSValue = jsc.JSValue.zero,
+
+pub fn toJS(self: _ReturnReadPromise, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            var _buf_guard = JSValueUnprotectGuard{ .val = self.buffer_val };
+            _ = &_buf_guard;
+            var ___buf_guard_moved = false; _ = &___buf_guard_moved;
+            defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
+            return jsc.JSValue.createObject2(ctx, (&fields.bytesRead), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(u52) == .@"enum") @as(u52, @enumFromInt((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) else @as(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read)))))), self.buffer_val);
+    }
+    const fields = .{ .bytesRead = jsc.ZigString.init("bytesRead"), .buffer = jsc.ZigString.init("buffer") };
+};
+
+pub const _ReturnWritePromise = struct {
+    bytes_written: u52,
+    buffer: StringOrBuffer,
+    buffer_val: jsc.JSValue = jsc.JSValue.zero,
+
+pub fn toJS(self: _ReturnWritePromise, globalObject: *jsc.JSGlobalObject) bun.JSError!bun.jsc.JSValue {
+            var _buf_guard = JSValueUnprotectGuard{ .val = self.buffer_val };
+            _ = &_buf_guard;
+            var ___buf_guard_moved = false; _ = &___buf_guard_moved;
+            defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
+            return jsc.JSValue.createObject2(globalObject, (&fields.bytesWritten), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(u52) == .@"enum") @as(u52, @enumFromInt((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) else @as(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written)))))), (if ((self.buffer == .buffer)) self.buffer_val else self.buffer.toJS(globalObject)));
+    }
+    const fields = .{ .bytesWritten = jsc.ZigString.init("bytesWritten"), .buffer = jsc.ZigString.init("buffer") };
+};
+
+pub const _ReturnWrite = struct {
+    bytes_written: u52,
+
+pub fn toJS(self: *_ReturnWrite, _: *jsc.JSGlobalObject) jsc.JSValue {
+            return jsc.JSValue.jsNumberFromUint64(self.bytes_written);
+    }
+    const fields = .{ .bytesWritten = jsc.ZigString.init("bytesWritten") };
+};
+
+pub const _ReturnReaddir = union(Tag) {
+    with_file_types: []bun.jsc.Node.Dirent,
+    buffers: []Buffer,
+    files: []const bun.String,
+
+pub fn toJS(self: _ReturnReaddir, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            switch (self) {
+.with_file_types => {
+var _slice_guard = DefaultAllocDirentSliceGuard{ .slice = self.with_file_types };
+            _ = &_slice_guard;
+            var ___slice_guard_moved = false; _ = &___slice_guard_moved;
+            defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
+            var array = try jsc.JSValue.createEmptyArray(globalObject, self.with_file_types.len);
+            _ = &array;
+            var previous_jsstring: ?*jsc.JSString = null;
+            _ = &previous_jsstring;
+            var idx: u32 = 0;
+            _ = &idx;
+            for (cp_mut_slice(&self.with_file_types)) |*item| {
+                _ = &item;
+                const res = try (item.*).toJSNewlyCreated(globalObject, (&previous_jsstring));
+                _ = try array.putIndex(globalObject, idx, res);
+                idx = (idx + 1);
+            }
+            return array;
+},
+.buffers => {
+var _slice_guard = DefaultAllocBufferSliceGuard{ .slice = self.buffers };
+            _ = &_slice_guard;
+            var ___slice_guard_moved = false; _ = &___slice_guard_moved;
+            defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
+            const BufferSlice = @TypeOf(self.buffers);
+            return jsc.JSValue.fromAny(globalObject, BufferSlice, self.buffers);
+},
+.files => {
+const StringSlice = @TypeOf(self.files);
+            return jsc.JSValue.fromAny(globalObject, StringSlice, self.files);
+},
+}
+    }
+    pub const Tag = _ReturnReaddirTag;
+};
+
+pub const _ReturnReadFileWithOptions = union(enum) {
+    string: []const u8,
+    transcoded_string: bun.String,
+    buffer: Buffer,
+    null_terminated: [:0]const u8,
 };
 
 pub const Return = struct {
@@ -3168,101 +3407,13 @@ pub const Return = struct {
     pub const WriteFile = void;
     pub const Readv = Read;
     pub const StatFS = bun.jsc.Node.StatFS;
-    pub const Read = struct {
-        bytes_read: u52,
-    
-    pub fn toJS(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
-                return jsc.JSValue.jsNumberFromUint64(self.bytes_read);
-        }
-    };
-    pub const ReadPromise = struct {
-        bytes_read: u52,
-        buffer_val: jsc.JSValue = jsc.JSValue.zero,
-    
-    pub fn toJS(self: @This(), ctx: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-                var _buf_guard = JSValueUnprotectGuard{ .val = self.buffer_val };
-                _ = &_buf_guard;
-                var ___buf_guard_moved = false; _ = &___buf_guard_moved;
-                defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-                return jsc.JSValue.createObject2(ctx, (&fields.bytesRead), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(u52) == .@"enum") @as(u52, @enumFromInt((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) else @as(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read)))))), self.buffer_val);
-        }
-        const fields = .{ .bytesRead = jsc.ZigString.init("bytesRead"), .buffer = jsc.ZigString.init("buffer") };
-    };
-    pub const WritePromise = struct {
-        bytes_written: u52,
-        buffer: StringOrBuffer,
-        buffer_val: jsc.JSValue = jsc.JSValue.zero,
-    
-    pub fn toJS(self: @This(), globalObject: *jsc.JSGlobalObject) bun.JSError!bun.jsc.JSValue {
-                var _buf_guard = JSValueUnprotectGuard{ .val = self.buffer_val };
-                _ = &_buf_guard;
-                var ___buf_guard_moved = false; _ = &___buf_guard_moved;
-                defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-                return jsc.JSValue.createObject2(globalObject, (&fields.bytesWritten), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(u52) == .@"enum") @as(u52, @enumFromInt((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) else @as(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written)))))), (if ((self.buffer == .buffer)) self.buffer_val else self.buffer.toJS(globalObject)));
-        }
-        const fields = .{ .bytesWritten = jsc.ZigString.init("bytesWritten"), .buffer = jsc.ZigString.init("buffer") };
-    };
-    pub const Write = struct {
-        bytes_written: u52,
-    
-    pub fn toJS(self: *@This(), _: *jsc.JSGlobalObject) jsc.JSValue {
-                return jsc.JSValue.jsNumberFromUint64(self.bytes_written);
-        }
-        const fields = .{ .bytesWritten = jsc.ZigString.init("bytesWritten") };
-    };
-    pub const Readdir = union(Tag) {
-        with_file_types: []bun.jsc.Node.Dirent,
-        buffers: []Buffer,
-        files: []const bun.String,
-    
-    pub fn toJS(self: @This(), globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-                switch (self) {
-    .with_file_types => {
-    var _slice_guard = DefaultAllocDirentSliceGuard{ .slice = self.with_file_types };
-                _ = &_slice_guard;
-                var ___slice_guard_moved = false; _ = &___slice_guard_moved;
-                defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
-                var array = try jsc.JSValue.createEmptyArray(globalObject, self.with_file_types.len);
-                _ = &array;
-                var previous_jsstring: ?*jsc.JSString = null;
-                _ = &previous_jsstring;
-                var idx: u32 = 0;
-                _ = &idx;
-                for (cp_mut_slice(&self.with_file_types)) |*item| {
-                    _ = &item;
-                    const res = try (item.*).toJSNewlyCreated(globalObject, (&previous_jsstring));
-                    _ = try array.putIndex(globalObject, idx, res);
-                    idx = (idx + 1);
-                }
-                return array;
-    },
-    .buffers => {
-    var _slice_guard = DefaultAllocBufferSliceGuard{ .slice = self.buffers };
-                _ = &_slice_guard;
-                var ___slice_guard_moved = false; _ = &___slice_guard_moved;
-                defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
-                const BufferSlice = @TypeOf(self.buffers);
-                return jsc.JSValue.fromAny(globalObject, BufferSlice, self.buffers);
-    },
-    .files => {
-    const StringSlice = @TypeOf(self.files);
-                return jsc.JSValue.fromAny(globalObject, StringSlice, self.files);
-    },
-    }
-        }
-        pub const Tag = enum {
-                    with_file_types,
-                    buffers,
-                    files,
-                };
-    };
+    pub const Read = _ReturnRead;
+    pub const ReadPromise = _ReturnReadPromise;
+    pub const WritePromise = _ReturnWritePromise;
+    pub const Write = _ReturnWrite;
+    pub const Readdir = _ReturnReaddir;
     pub const ReadFile = StringOrBuffer;
-    pub const ReadFileWithOptions = union(enum) {
-        string: []const u8,
-        transcoded_string: bun.String,
-        buffer: Buffer,
-        null_terminated: [:0]const u8,
-    };
+    pub const ReadFileWithOptions = _ReturnReadFileWithOptions;
     pub const Readlink = StringOrBuffer;
     pub const Realpath = StringOrBuffer;
     pub const RealpathNative = Realpath;
@@ -3366,7 +3517,7 @@ pub noinline fn copyFileUsingReadWriteLoop(src: [:0]const u8, dest: [:0]const u8
             _ = maybe_allocate_large_temp_buf: {
             if ((stat_size > (stack_buf.len * 16))) {
                 const clamped_size: usize = @min(stat_size, ((8 * 1024) * 1024));
-                const buf_ = (blk_catch_3: { break :blk_catch_3 ((bun.default_allocator.alloc(u8, clamped_size)) catch |__ce_3| { _ = &__ce_3; break :maybe_allocate_large_temp_buf; }); });
+                const buf_ = (blk_catch_4: { break :blk_catch_4 ((bun.default_allocator.alloc(u8, clamped_size)) catch |__ce_4| { _ = &__ce_4; break :maybe_allocate_large_temp_buf; }); });
                 buf = buf_;
                 _buf_guard.slice = buf_;
             }
@@ -4397,7 +4548,7 @@ pub fn readdirWithEntries(args: Arguments.Readdir, fd: bun.FD, basename: [:0]con
 .result => |st| bun.sys.kindFromMode(@intCast(st.mode)),
 .err => current.kind,
 }) else current.kind);
-                        _ = (blk_catch_4: { break :blk_catch_4 ((entries.append(.{ .name = jsc.WebCore.encoding.toBunString(utf8_name, args.encoding), .path = dirent_path, .kind = kind })) catch |e| { _ = &e; break :blk_catch_4 bun.handleOom(e); }); });
+                        _ = (blk_catch_5: { break :blk_catch_5 ((entries.append(.{ .name = jsc.WebCore.encoding.toBunString(utf8_name, args.encoding), .path = dirent_path, .kind = kind })) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
                     } else {
                         if ((ExpectedType == Buffer)) {
                             _ = bun.handleOom(entries.append(bun.handleOom(Buffer.fromString(utf8_name, bun.default_allocator))));
@@ -4413,7 +4564,7 @@ pub fn readdirWithEntries(args: Arguments.Readdir, fd: bun.FD, basename: [:0]con
                     const utf16_name = (if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).slice();
                     if ((ExpectedType == jsc.Node.Dirent)) {
                         _ = dirent_path.ref();
-                        _ = (blk_catch_5: { break :blk_catch_5 ((entries.append(.{ .name = bun.String.cloneUTF16(utf16_name), .path = dirent_path, .kind = current.kind })) catch |e| { _ = &e; break :blk_catch_5 bun.handleOom(e); }); });
+                        _ = (blk_catch_6: { break :blk_catch_6 ((entries.append(.{ .name = bun.String.cloneUTF16(utf16_name), .path = dirent_path, .kind = current.kind })) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
                     } else {
                         if ((ExpectedType == bun.String)) {
                             switch (args.encoding) {
@@ -4554,7 +4705,7 @@ else => {
                         dirent_path_prev = bun.String.cloneUTF8(path_u8);
                     }
                     _ = dirent_path_prev.ref();
-                    _ = (blk_catch_6: { break :blk_catch_6 ((entries.append(.{ .name = bun.String.cloneUTF8(utf8_name), .path = dirent_path_prev, .kind = effective_kind })) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+                    _ = (blk_catch_7: { break :blk_catch_7 ((entries.append(.{ .name = bun.String.cloneUTF8(utf8_name), .path = dirent_path_prev, .kind = effective_kind })) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
                 } else {
                     if ((ExpectedType == Buffer)) {
                         _ = bun.handleOom(entries.append(bun.handleOom(Buffer.fromString(name_to_copy, bun.default_allocator))));
@@ -4661,7 +4812,7 @@ return .{ .err = e.withPath(args.path.slice()) };
                         if (((((if (@typeInfo(@TypeOf(current)) == .@"enum" or @typeInfo(@TypeOf(current)) == .@"union") @tagName(current) else current.name).len + 1) + name_to_copy.len) > bun.MAX_PATH_BYTES)) {
                             break :enqueue;
                         }
-                        _ = (blk_catch_9: { break :blk_catch_9 ((stack.writeItem((blk_catch_8: { break :blk_catch_8 ((basename_allocator.dupeZ(u8, name_to_copy)) catch |__ce_8| { _ = &__ce_8; break :enqueue; }); }))) catch |__ce_9| { _ = &__ce_9; break :enqueue; }); });
+                        _ = (blk_catch_10: { break :blk_catch_10 ((stack.writeItem((blk_catch_9: { break :blk_catch_9 ((basename_allocator.dupeZ(u8, name_to_copy)) catch |__ce_9| { _ = &__ce_9; break :enqueue; }); }))) catch |__ce_10| { _ = &__ce_10; break :enqueue; }); });
                     }
 },
 .unknown => {
@@ -4675,7 +4826,7 @@ return .{ .err = e.withPath(args.path.slice()) };
 const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                         effective_kind = real_kind;
                         if (((real_kind == .directory) or (real_kind == .sym_link))) {
-                            _ = (blk_catch_11: { break :blk_catch_11 ((stack.writeItem((blk_catch_10: { break :blk_catch_10 ((basename_allocator.dupeZ(u8, name_to_copy)) catch |__ce_10| { _ = &__ce_10; break :enqueue; }); }))) catch |__ce_11| { _ = &__ce_11; break :enqueue; }); });
+                            _ = (blk_catch_12: { break :blk_catch_12 ((stack.writeItem((blk_catch_11: { break :blk_catch_11 ((basename_allocator.dupeZ(u8, name_to_copy)) catch |__ce_11| { _ = &__ce_11; break :enqueue; }); }))) catch |__ce_12| { _ = &__ce_12; break :enqueue; }); });
                         }
 },
 .err => {
@@ -4699,7 +4850,7 @@ else => {
                             dirent_path_prev = jsc.WebCore.encoding.toBunString(strings.withoutNTPrefix(std.@"meta".Child(@TypeOf(path_u8)), path_u8), args.encoding);
                         }
                         _ = dirent_path_prev.ref();
-                        _ = (blk_catch_12: { break :blk_catch_12 ((entries.append(.{ .name = jsc.WebCore.encoding.toBunString(utf8_name, args.encoding), .path = dirent_path_prev, .kind = effective_kind })) catch |e| { _ = &e; break :blk_catch_12 bun.handleOom(e); }); });
+                        _ = (blk_catch_13: { break :blk_catch_13 ((entries.append(.{ .name = jsc.WebCore.encoding.toBunString(utf8_name, args.encoding), .path = dirent_path_prev, .kind = effective_kind })) catch |e| { _ = &e; break :blk_catch_13 bun.handleOom(e); }); });
                     } else {
                         if ((ExpectedType == Buffer)) {
                             _ = bun.handleOom(entries.append(bun.handleOom(Buffer.fromString(strings.withoutNTPrefix(std.@"meta".Child(@TypeOf(name_to_copy)), name_to_copy), bun.default_allocator))));
@@ -4849,7 +5000,7 @@ return .{ .err = e.withPath(args.path.path.slice()) };
 },
 .fd => |fd| fd,
 });
-            const fd = (blk_catch_13: { break :blk_catch_13 ((fd_maybe_windows.makeLibUVOwned()) catch |__ce_13| { _ = &__ce_13; if ((args.path == .path)) {
+            const fd = (blk_catch_14: { break :blk_catch_14 ((fd_maybe_windows.makeLibUVOwned()) catch |__ce_14| { _ = &__ce_14; if ((args.path == .path)) {
                 _ = fd_maybe_windows.close();
             }
             return .{ .e = .{ .errno = @intFromEnum(posix.E.MFILE), .syscall = .open } }; }); });
@@ -4906,19 +5057,19 @@ if ((amt == 0)) {
 if (comptime ((flavor == .sync) and (string_type == .default))) {
                     if (self.vm) |vm| {
                         _ = &vm;
-                        const array_buffer = (blk_catch_14: { break :blk_catch_14 ((jsc.ArrayBuffer.createBuffer(vm.global, temporary_read_buffer)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 .zero; }); });
+                        const array_buffer = (blk_catch_15: { break :blk_catch_15 ((jsc.ArrayBuffer.createBuffer(vm.global, temporary_read_buffer)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 .zero; }); });
                         _ = array_buffer.ensureStillAlive();
                         const ab = ((array_buffer.asArrayBuffer(vm.global)) orelse { return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; });
                         return .{ .result = .{ .buffer = jsc.MarkedArrayBuffer{ .buffer = ab } } };
                     }
                 }
-                return .{ .result = .{ .buffer = Buffer.fromBytes((blk_catch_15: { break :blk_catch_15 ((bun.default_allocator.dupe(u8, temporary_read_buffer)) catch |__ce_15| { _ = &__ce_15; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }), bun.default_allocator, .Uint8Array) } };
+                return .{ .result = .{ .buffer = Buffer.fromBytes((blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.dupe(u8, temporary_read_buffer)) catch |__ce_16| { _ = &__ce_16; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }), bun.default_allocator, .Uint8Array) } };
 },
 else => {
 if (comptime (string_type == .default)) {
                     return .{ .result = .{ .transcoded_string = jsc.WebCore.encoding.toBunString(temporary_read_buffer, args.encoding) } };
                 } else {
-                    return .{ .result = .{ .null_terminated = (blk_catch_16: { break :blk_catch_16 ((bun.default_allocator.dupeZ(u8, temporary_read_buffer)) catch |__ce_16| { _ = &__ce_16; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }) } };
+                    return .{ .result = .{ .null_terminated = (blk_catch_17: { break :blk_catch_17 ((bun.default_allocator.dupeZ(u8, temporary_read_buffer)) catch |__ce_17| { _ = &__ce_17; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); }) } };
                 }
 },
 }
@@ -4952,9 +5103,9 @@ return .{ .err = e };
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
             defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_17: { break :blk_catch_17 ((buf.ensureTotalCapacityPrecise(@min((@max(temporary_read_buffer_before_stat_call.len, size) + 16), max_size, (((1024 * 1024) * 1024) * 8)))) catch |__ce_17| { _ = &__ce_17; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
+            _ = (blk_catch_18: { break :blk_catch_18 ((buf.ensureTotalCapacityPrecise(@min((@max(temporary_read_buffer_before_stat_call.len, size) + 16), max_size, (((1024 * 1024) * 1024) * 8)))) catch |__ce_18| { _ = &__ce_18; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
             if ((temporary_read_buffer_before_stat_call.len > 0)) {
-                _ = (blk_catch_18: { break :blk_catch_18 ((buf.appendSlice(temporary_read_buffer_before_stat_call)) catch |__ce_18| { _ = &__ce_18; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
+                _ = (blk_catch_19: { break :blk_catch_19 ((buf.appendSlice(temporary_read_buffer_before_stat_call)) catch |__ce_19| { _ = &__ce_19; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
             }
             _ = buf.expandToCapacity();
             while ((total < size)) {
@@ -4975,7 +5126,7 @@ total = (total + amt);
                 }
                 if ((((total > size) and (amt != 0)) and (!has_max_size))) {
                     buf.items.len = total;
-                    _ = (blk_catch_19: { break :blk_catch_19 ((buf.ensureUnusedCapacity(8192)) catch |__ce_19| { _ = &__ce_19; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
+                    _ = (blk_catch_20: { break :blk_catch_20 ((buf.ensureUnusedCapacity(8192)) catch |__ce_20| { _ = &__ce_20; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
                     continue;
                 }
                 if ((amt == 0)) {
@@ -5004,7 +5155,7 @@ total = (total + amt);
                     }
                     if ((((total > size) and (amt != 0)) and (!has_max_size))) {
                         buf.items.len = total;
-                        _ = (blk_catch_20: { break :blk_catch_20 ((buf.ensureUnusedCapacity(8192)) catch |__ce_20| { _ = &__ce_20; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
+                        _ = (blk_catch_21: { break :blk_catch_21 ((buf.ensureUnusedCapacity(8192)) catch |__ce_21| { _ = &__ce_21; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
                         continue;
                     }
                     if ((amt == 0)) {
@@ -5038,7 +5189,7 @@ else => brk: {
                 _buf_guard.armed = false;
                 break :brk .{ .result = .{ .string = buf.items } };
             } else {
-                const owned = (blk_catch_21: { break :blk_catch_21 ((buf.toOwnedSliceSentinel(0)) catch |__ce_21| { _ = &__ce_21; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
+                const owned = (blk_catch_22: { break :blk_catch_22 ((buf.toOwnedSliceSentinel(0)) catch |__ce_22| { _ = &__ce_22; return .{ .err = Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) }; }); });
                 _buf_guard.armed = false;
                 break :brk .{ .result = .{ .null_terminated = owned } };
             }
@@ -5080,7 +5231,7 @@ return .{ .err = e.withPath(args.file.path.slice()) };
 });
 
 });
-                break :preallocate (blk_catch_22: { break :blk_catch_22 ((bun.sys.preallocate_file(fd.cast(), (if (comptime @typeInfo(std.posix.off_t) == .@"enum") @as(std.posix.off_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) else @as(std.posix.off_t, (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))), (if (comptime @typeInfo(std.posix.off_t) == .@"enum") @as(std.posix.off_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(buf.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buf.len)) else cp_cast_int(i32, buf.len)))) else @as(std.posix.off_t, (if (comptime @typeInfo(@TypeOf(buf.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buf.len)) else cp_cast_int(i32, buf.len)))))) catch |__ce_22| { _ = &__ce_22;  }); });
+                break :preallocate (blk_catch_23: { break :blk_catch_23 ((bun.sys.preallocate_file(fd.cast(), (if (comptime @typeInfo(std.posix.off_t) == .@"enum") @as(std.posix.off_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))) else @as(std.posix.off_t, (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(i32, @intFromEnum(offset)) else cp_cast_int(i32, offset)))), (if (comptime @typeInfo(std.posix.off_t) == .@"enum") @as(std.posix.off_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(buf.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buf.len)) else cp_cast_int(i32, buf.len)))) else @as(std.posix.off_t, (if (comptime @typeInfo(@TypeOf(buf.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buf.len)) else cp_cast_int(i32, buf.len)))))) catch |__ce_23| { _ = &__ce_23;  }); });
 
 };
             }
@@ -5248,7 +5399,7 @@ pub fn rename(self: *NodeFS, args: Arguments.Rename, _: Flavor) Maybe(Return.Ren
 
 pub fn rmdir(self: *NodeFS, args: Arguments.RmDir, _: Flavor) Maybe(Return.Rmdir) {
             if (args.recursive) {
-                _ = (blk_catch_26: { break :blk_catch_26 ((zigDeleteTree(std.fs.cwd(), args.path.slice(), .directory)) catch |e| { _ = &e; var errno: bun.sys.E = (switch ((if (comptime @typeInfo(anyerror) == .@"enum") @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
+                _ = (blk_catch_27: { break :blk_catch_27 ((zigDeleteTree(std.fs.cwd(), args.path.slice(), .directory)) catch |e| { _ = &e; var errno: bun.sys.E = (switch ((if (comptime @typeInfo(anyerror) == .@"enum") @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.AccessDenied => .PERM,
 error.FileTooBig => .FBIG,
 error.SymLinkLoop => .LOOP,
@@ -5286,7 +5437,7 @@ else => .FAULT,
 
 pub fn rm(self: *NodeFS, args: Arguments.Rm, _: Flavor) Maybe(Return.Rm) {
             if (args.recursive) {
-                _ = (blk_catch_27: { break :blk_catch_27 ((zigDeleteTree(std.fs.cwd(), args.path.slice(), .file)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+                _ = (blk_catch_28: { break :blk_catch_28 ((zigDeleteTree(std.fs.cwd(), args.path.slice(), .file)) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 const errno: E = (switch ((if (comptime @typeInfo(anyerror) == .@"enum") @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.AccessDenied => .ACCES,
 error.FileTooBig => .FBIG,
@@ -5316,25 +5467,25 @@ else => .FAULT,
                 return .success;
             }
             const dest = args.path.sliceZ((&self.sync_error_buf));
-            _ = (blk_catch_28: { break :blk_catch_28 ((std.posix.unlinkZ(dest)) catch |err1| { _ = &err1; _ = bun.handleErrorReturnTrace(err1, @errorReturnTrace());
+            _ = (blk_catch_29: { break :blk_catch_29 ((std.posix.unlinkZ(dest)) catch |err1| { _ = &err1; _ = bun.handleErrorReturnTrace(err1, @errorReturnTrace());
             if ((args.recursive and (((err1 == error.IsDir) or (err1 == error.NotDir)) or (err1 == error.AccessDenied)))) {
-                _ = (blk_catch_29: { break :blk_catch_29 ((std.posix.rmdirZ(dest)) catch |err2| { _ = &err2; _ = bun.handleErrorReturnTrace(err2, @errorReturnTrace());
-                const code: E = (__sw_blk_3: { const __disc_3 = err2; _ = &__disc_3; if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .AccessDenied)) {  break :__sw_blk_3 cp_val(.ACCES); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .SymLinkLoop)) {  break :__sw_blk_3 cp_val(.LOOP); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .NameTooLong)) {  break :__sw_blk_3 cp_val(.NAMETOOLONG); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .SystemResources)) {  break :__sw_blk_3 cp_val(.NOMEM); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .ReadOnlyFileSystem)) {  break :__sw_blk_3 cp_val(.ROFS); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .FileBusy)) {  break :__sw_blk_3 cp_val(.BUSY); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .FileNotFound)) {  break :__sw_blk_3 cp_val(brk: {
+                _ = (blk_catch_30: { break :blk_catch_30 ((std.posix.rmdirZ(dest)) catch |err2| { _ = &err2; _ = bun.handleErrorReturnTrace(err2, @errorReturnTrace());
+                const code: E = (__sw_blk_7: { const __disc_7 = err2; _ = &__disc_7; if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .AccessDenied)) {  break :__sw_blk_7 cp_val(.ACCES); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .SymLinkLoop)) {  break :__sw_blk_7 cp_val(.LOOP); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .NameTooLong)) {  break :__sw_blk_7 cp_val(.NAMETOOLONG); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .SystemResources)) {  break :__sw_blk_7 cp_val(.NOMEM); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .ReadOnlyFileSystem)) {  break :__sw_blk_7 cp_val(.ROFS); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .FileBusy)) {  break :__sw_blk_7 cp_val(.BUSY); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .FileNotFound)) {  break :__sw_blk_7 cp_val(brk: {
                 if (args.force) {
                     return .success;
                 }
                 break :brk .NOENT;
-}); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidUtf8)) {  break :__sw_blk_3 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .InvalidWtf8)) {  break :__sw_blk_3 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_3) and !cp_is_null_val(__disc_3))) { const __err_v_3 = cp_unwrap_err_val(__disc_3); _ = &__err_v_3; if (cp_match_tag(__err_v_3, .BadPathName)) {  break :__sw_blk_3 cp_val(.INVAL); } } {  break :__sw_blk_3 cp_val(.FAULT); }  unreachable; });
+}); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .InvalidUtf8)) {  break :__sw_blk_7 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .InvalidWtf8)) {  break :__sw_blk_7 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_7) and !cp_is_null_val(__disc_7))) { const __err_v_7 = cp_unwrap_err_val(__disc_7); _ = &__err_v_7; if (cp_match_tag(__err_v_7, .BadPathName)) {  break :__sw_blk_7 cp_val(.INVAL); } } {  break :__sw_blk_7 cp_val(.FAULT); }  unreachable; });
                 return .{ .err = bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()) }; }); });
                 return .success;
             }
             {
-                const code: E = (__sw_blk_4: { const __disc_4 = err1; _ = &__disc_4; if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .AccessDenied)) {  break :__sw_blk_4 cp_val(.ACCES); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .SymLinkLoop)) {  break :__sw_blk_4 cp_val(.LOOP); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .NameTooLong)) {  break :__sw_blk_4 cp_val(.NAMETOOLONG); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .SystemResources)) {  break :__sw_blk_4 cp_val(.NOMEM); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .ReadOnlyFileSystem)) {  break :__sw_blk_4 cp_val(.ROFS); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .FileBusy)) {  break :__sw_blk_4 cp_val(.BUSY); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .InvalidUtf8)) {  break :__sw_blk_4 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .InvalidWtf8)) {  break :__sw_blk_4 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .BadPathName)) {  break :__sw_blk_4 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_4) and !cp_is_null_val(__disc_4))) { const __err_v_4 = cp_unwrap_err_val(__disc_4); _ = &__err_v_4; if (cp_match_tag(__err_v_4, .FileNotFound)) {  break :__sw_blk_4 cp_val(brk: {
+                const code: E = (__sw_blk_8: { const __disc_8 = err1; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .AccessDenied)) {  break :__sw_blk_8 cp_val(.ACCES); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .SymLinkLoop)) {  break :__sw_blk_8 cp_val(.LOOP); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .NameTooLong)) {  break :__sw_blk_8 cp_val(.NAMETOOLONG); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .SystemResources)) {  break :__sw_blk_8 cp_val(.NOMEM); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .ReadOnlyFileSystem)) {  break :__sw_blk_8 cp_val(.ROFS); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileBusy)) {  break :__sw_blk_8 cp_val(.BUSY); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .InvalidUtf8)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .InvalidWtf8)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .BadPathName)) {  break :__sw_blk_8 cp_val(.INVAL); } } if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .FileNotFound)) {  break :__sw_blk_8 cp_val(brk: {
                 if (args.force) {
                     return .success;
                 }
                 break :brk .NOENT;
-}); } } {  break :__sw_blk_4 cp_val(.FAULT); }  unreachable; });
+}); } } {  break :__sw_blk_8 cp_val(.FAULT); }  unreachable; });
                 return .{ .err = bun.sys.Error.fromCode(code, .rm).withPath(args.path.slice()) };
             } }); });
             return .success;
@@ -5342,7 +5493,6 @@ else => .FAULT,
 
 pub fn statfs(self: *NodeFS, args: Arguments.StatFS, _: Flavor) Maybe(Return.StatFS) {
             const Res = Maybe(Return.StatFS);
-            _ = &Res;
             return (switch (Syscall.statfs(args.path.sliceZ((&self.sync_error_buf)))) {
 .result => |*result| Res{ .result = Return.StatFS.init(result, args.big_int) },
 .err => |e| Res{ .err = e },
@@ -5389,7 +5539,7 @@ pub fn symlink(self: *NodeFS, args: Arguments.Symlink, _: Flavor) Maybe(Return.S
                 const new_path = args.new_path.slice();
                 const resolved_link_type: ResolvedLinkType = (switch (args.link_type) {
 .unspecified => auto_detect: {
-                const src = bun.path.joinAbsStringBuf((blk_catch_30: { break :blk_catch_30 ((bun.getcwd((&to_buf))) catch |__ce_30| { _ = &__ce_30; @panic("failed to resolve current working directory"); }); }), (&self.sync_error_buf), (&.{ ((bun.Dirname.dirname(u8, new_path)) orelse (new_path)), target_path }), .windows);
+                const src = bun.path.joinAbsStringBuf((blk_catch_31: { break :blk_catch_31 ((bun.getcwd((&to_buf))) catch |__ce_31| { _ = &__ce_31; @panic("failed to resolve current working directory"); }); }), (&self.sync_error_buf), (&.{ ((bun.Dirname.dirname(u8, new_path)) orelse (new_path)), target_path }), .windows);
                 break :auto_detect (switch (bun.sys.directoryExistsAt(bun.invalid_fd, src)) {
 .err => .file,
 .result => |is_dir| (if (is_dir) .dir else .file),
@@ -5401,7 +5551,7 @@ pub fn symlink(self: *NodeFS, args: Arguments.Symlink, _: Flavor) Maybe(Return.S
 });
                 const processed_target: [:0]u8 = target: {
                 if ((resolved_link_type == .junction)) {
-                    const target = bun.path.joinAbsStringBuf((blk_catch_31: { break :blk_catch_31 ((bun.getcwd((&to_buf))) catch |__ce_31| { _ = &__ce_31; @panic("failed to resolve current working directory"); }); }), self.sync_error_buf[4..], (&.{ ((bun.Dirname.dirname(u8, new_path)) orelse (new_path)), target_path }), .windows);
+                    const target = bun.path.joinAbsStringBuf((blk_catch_32: { break :blk_catch_32 ((bun.getcwd((&to_buf))) catch |__ce_32| { _ = &__ce_32; @panic("failed to resolve current working directory"); }); }), self.sync_error_buf[4..], (&.{ ((bun.Dirname.dirname(u8, new_path)) orelse (new_path)), target_path }), .windows);
                     (self.sync_error_buf[0..4]).* = bun.windows.long_path_prefix_u8;
                     self.sync_error_buf[cp_cast_int(usize, (4 + target.len))] = 0;
                     break :target self.sync_error_buf[0..(4 + target.len) :0];
@@ -5469,7 +5619,7 @@ pub fn unlink(self: *NodeFS, args: Arguments.Unlink, _: Flavor) Maybe(Return.Unl
 pub fn watchFile(self: *NodeFS, args: Arguments.WatchFile, comptime flavor: Flavor) Maybe(Return.WatchFile) {
         _ = self;
             _ = bun.assert((flavor == .sync));
-            const watcher = (blk_catch_32: { break :blk_catch_32 ((args.createStatWatcher()) catch |e| { _ = &e; const buf = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "Failed to watch file {f}", .{ bun.fmt.QuotedFormatter{ .text = args.path.slice() } }));
+            const watcher = (blk_catch_33: { break :blk_catch_33 ((args.createStatWatcher()) catch |e| { _ = &e; const buf = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "Failed to watch file {f}", .{ bun.fmt.QuotedFormatter{ .text = args.path.slice() } }));
             var _buf_guard = DefaultAllocSliceU8Guard{ .slice = buf };
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
@@ -5478,10 +5628,8 @@ pub fn watchFile(self: *NodeFS, args: Arguments.WatchFile, comptime flavor: Flav
             if ((args.global_this.throwValue(sys_err.toErrorInstance(args.global_this)) == error.JSError)) {
             }
             const WatchRes = Maybe(Return.Watch);
-            _ = &WatchRes;
             return WatchRes{ .result = .js_undefined }; }); });
             const WatchRes = Maybe(Return.Watch);
-            _ = &WatchRes;
             return WatchRes{ .result = watcher };
     }
 
@@ -5756,7 +5904,7 @@ pub fn _cpSymlink(self: *NodeFS, src: [:0]const u8, dest: [:0]const u8) Maybe(Re
             var resolved_buf: bun.PathBuffer = undefined;
             _ = &resolved_buf;
             const src_dir = bun.path.dirname(src, .posix);
-            const cwd = (blk_catch_33: { break :blk_catch_33 ((bun.getcwd((&cwd_buf))) catch |__ce_33| { _ = &__ce_33; return Syscall.symlink(link_target, dest); }); });
+            const cwd = (blk_catch_34: { break :blk_catch_34 ((bun.getcwd((&cwd_buf))) catch |__ce_34| { _ = &__ce_34; return Syscall.symlink(link_target, dest); }); });
             const resolved_opt = bun.path.joinAbsStringBufChecked(cwd, resolved_buf[0..(resolved_buf.len - 1)], (&.{ src_dir, link_target }), .posix);
             if ((resolved_opt == null)) {
                 _ = @memcpy(self.sync_error_buf[0..src.len], src);
@@ -5871,7 +6019,7 @@ break :dest_fd result;
                 }
                 const first_try = ((ret.errnoSysP(c.copyfile(src, dest, null, mode_), .copyfile, src)) orelse { return ret.success; });
                 if (((first_try == .err) and (first_try.err.errno == @intFromEnum(Syscall.E.NOENT)))) {
-                    _ = (blk_catch_34: { break :blk_catch_34 ((bun.makePath(std.fs.cwd(), bun.path.dirname(dest, .auto))) catch |__ce_34| { _ = &__ce_34;  }); });
+                    _ = (blk_catch_35: { break :blk_catch_35 ((bun.makePath(std.fs.cwd(), bun.path.dirname(dest, .auto))) catch |__ce_35| { _ = &__ce_35;  }); });
                     return ((ret.errnoSysP(c.copyfile(src, dest, null, mode_), .copyfile, src)) orelse (ret.success));
                 }
                 return first_try;
@@ -6147,7 +6295,7 @@ else => |result| result,
 errpath = dest;
 },
 .PATH_NOT_FOUND => {
-_ = (blk_catch_35: { break :blk_catch_35 ((bun.makePathW(std.fs.cwd(), bun.path.dirnameW(dest))) catch |__ce_35| { _ = &__ce_35;  }); });
+_ = (blk_catch_36: { break :blk_catch_36 ((bun.makePathW(std.fs.cwd(), bun.path.dirnameW(dest))) catch |__ce_36| { _ = &__ce_36;  }); });
                         const second_try = windows.CopyFileW(src, dest, @intFromBool(mode.shouldntOverwrite()));
                         if ((second_try > 0)) {
                             return ret.success;
@@ -6204,10 +6352,7 @@ pub fn _cpAsyncDirectory(self: *NodeFS, args: Arguments.Cp.Flags, task: *AsyncCp
             return AsyncCpTask._cpAsyncDirectory(self, args, task, src_buf, src_dir_len, dest_buf, dest_dir_len);
     }
     pub const ReturnType = Return;
-    pub const StringType = enum {
-            default,
-            null_terminated,
-        };
+    pub const StringType = _NodeFSStringType;
     pub const realpathNative = realpath;
 };
 
@@ -6226,45 +6371,15 @@ pub fn closeAll(items: []ZigDeleteTreeStackItem) void {
 
 const OptCStr = ?[*:0]u8;
 const ReaddirZStr = [:0]const u8;
-const ReaddirSyncStack = bun.LinearFifo(ReaddirZStr,.Dynamic);
+const ReaddirSyncStack = bun.LinearFifo(ReaddirZStr, .Dynamic);
 const UnalignedStatFS = *align(1) bun.StatFS;
 const ShellCpTaskPtr = *bun.shell.Interpreter.Builtin.Cp.ShellCpTask;
 pub const Binding = @import("./node_fs_binding.zig").Binding;
 pub const Watcher = @import("./node_fs_watcher.zig").FSWatcher;
 pub const StatWatcher = @import("./node_fs_stat_watcher.zig").StatWatcher;
 pub const default_permission = (if (Environment.isPosix) (((((Syscall.S.IRUSR | Syscall.S.IWUSR) | Syscall.S.IRGRP) | Syscall.S.IWGRP) | Syscall.S.IROTH) | Syscall.S.IWOTH) else 0);
-pub const Flavor = enum { sync, async };
 pub const AsyncCpTask = NewAsyncCpTask(false);
 pub const ShellAsyncCpTask = NewAsyncCpTask(true);
-pub const StatOrNotFound = union(enum) {
-    stats: bun.jsc.Node.Stats,
-    not_found: void,
-
-pub fn toJS(self: *@This(), globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-            return (switch (self.*) {
-.stats => self.stats.toJS(globalObject),
-.not_found => .js_undefined,
-});
-    }
-
-pub fn toJSNewlyCreated(self: @This(), globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return (switch (self) {
-.stats => self.stats.toJSNewlyCreated(globalObject),
-.not_found => .js_undefined,
-});
-    }
-};
-pub const StringOrUndefined = union(enum) {
-    string: bun.String,
-    none: void,
-
-pub fn toJS(self: *@This(), globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return (switch (self.*) {
-.string => try self.string.transferToJS(globalObject),
-.none => .js_undefined,
-});
-    }
-};
 const Syscall = (if (Environment.isWindows) bun.sys.sys_uv else bun.sys);
 pub const ReuseStatType = (if (Environment.isWindows) windows.DWORD else std.posix.Stat);
 const ReadPosition = i64;
@@ -6675,6 +6790,19 @@ _ = this_.subtask_count.fetchAdd(1, .monotonic);
 };
 }
 
+pub fn wrapTo(comptime T: type, in_val: i64) T {
+        _ = (comptime bun.assert((@typeInfo(T).int.signedness == .unsigned)));
+        return @as(T, @intCast(@mod(in_val, std.math.maxInt(T))));
+}
+
+pub fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: Encoding) bun.JSError!Encoding {
+        if (try object.fastGet(globalObject, .encoding)) |value| {
+            _ = &value;
+            return Encoding.assert(value, globalObject, default);
+        }
+        return default;
+}
+
 pub fn throwInvalidFdError(global: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError {
         if (value.isNumber()) {
             return global.ERR(.OUT_OF_RANGE, "The value of \"fd\" is out of range. It must be an integer. Received {f}", .{ bun.fmt.double(value.asNumber()) }).throw();
@@ -6711,8 +6839,8 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                 handle_entry: while (true) {
                     if (treat_as_dir) {
                         if ((stack.unusedCapacitySlice().len >= 1)) {
-                            var iterable_dir = (blk_catch_36: { break :blk_catch_36 ((top.iter.dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_36 (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .NotDir)) {  treat_as_dir = false;
-                            break :__sw_blk_6 cp_val(continue :handle_entry); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if ((cp_match_tag(__err_v_6, .FileNotFound) or cp_match_tag(__err_v_6, .AccessDenied) or cp_match_tag(__err_v_6, .PermissionDenied) or cp_match_tag(__err_v_6, .ProcessNotFound) or cp_match_tag(__err_v_6, .SymLinkLoop) or cp_match_tag(__err_v_6, .ProcessFdQuotaExceeded) or cp_match_tag(__err_v_6, .NameTooLong) or cp_match_tag(__err_v_6, .SystemFdQuotaExceeded) or cp_match_tag(__err_v_6, .NoDevice) or cp_match_tag(__err_v_6, .SystemResources) or cp_match_tag(__err_v_6, .Unexpected) or cp_match_tag(__err_v_6, .InvalidUtf8) or cp_match_tag(__err_v_6, .InvalidWtf8) or cp_match_tag(__err_v_6, .BadPathName) or cp_match_tag(__err_v_6, .NetworkNotFound) or cp_match_tag(__err_v_6, .DeviceBusy))) {  return e; } }  unreachable; }); }); });
+                            var iterable_dir = (blk_catch_37: { break :blk_catch_37 ((top.iter.dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_37 (__sw_blk_10: { const __disc_10 = e; _ = &__disc_10; if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if (cp_match_tag(__err_v_10, .NotDir)) {  treat_as_dir = false;
+                            break :__sw_blk_10 cp_val(continue :handle_entry); } } if ((!cp_has_ok_val(__disc_10) and !cp_is_null_val(__disc_10))) { const __err_v_10 = cp_unwrap_err_val(__disc_10); _ = &__err_v_10; if ((cp_match_tag(__err_v_10, .FileNotFound) or cp_match_tag(__err_v_10, .AccessDenied) or cp_match_tag(__err_v_10, .PermissionDenied) or cp_match_tag(__err_v_10, .ProcessNotFound) or cp_match_tag(__err_v_10, .SymLinkLoop) or cp_match_tag(__err_v_10, .ProcessFdQuotaExceeded) or cp_match_tag(__err_v_10, .NameTooLong) or cp_match_tag(__err_v_10, .SystemFdQuotaExceeded) or cp_match_tag(__err_v_10, .NoDevice) or cp_match_tag(__err_v_10, .SystemResources) or cp_match_tag(__err_v_10, .Unexpected) or cp_match_tag(__err_v_10, .InvalidUtf8) or cp_match_tag(__err_v_10, .InvalidWtf8) or cp_match_tag(__err_v_10, .BadPathName) or cp_match_tag(__err_v_10, .NetworkNotFound) or cp_match_tag(__err_v_10, .DeviceBusy))) {  return e; } }  unreachable; }); }); });
                             _ = &iterable_dir;
                             _ = stack.appendAssumeCapacity(.{ .name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .parent_dir = top.iter.dir, .iter = iterable_dir.iterateAssumeFirstIteration() });
                             continue :process_stack;
@@ -6721,7 +6849,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                             break :handle_entry;
                         }
                     } else {
-                        _ = (blk_catch_37: { break :blk_catch_37 ((top.iter.dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.IsDir)) {
+                        _ = (blk_catch_38: { break :blk_catch_38 ((top.iter.dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.IsDir)) {
                             treat_as_dir = true;
                             continue :handle_entry;
                         }
@@ -6736,7 +6864,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
             stack.items.len = (stack.items.len - 1);
             var need_to_retry: bool = false;
             _ = &need_to_retry;
-            _ = (blk_catch_38: { break :blk_catch_38 ((parent_dir.deleteDir(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+            _ = (blk_catch_39: { break :blk_catch_39 ((parent_dir.deleteDir(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
             } else {
                 if ((e == error.DirNotEmpty)) {
                     need_to_retry = true;
@@ -6750,7 +6878,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                 _ = &treat_as_dir;
                 handle_entry: while (true) {
                     if (treat_as_dir) {
-                        break :iterable_dir (blk_catch_39: { break :blk_catch_39 ((parent_dir.openDir(name, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
+                        break :iterable_dir (blk_catch_40: { break :blk_catch_40 ((parent_dir.openDir(name, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
                             treat_as_dir = false;
                             continue :handle_entry;
                         } else {
@@ -6760,7 +6888,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                         }
                         return e; }); });
                     } else {
-                        _ = (blk_catch_40: { break :blk_catch_40 ((parent_dir.deleteFile(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                        _ = (blk_catch_41: { break :blk_catch_41 ((parent_dir.deleteFile(name)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                             continue :process_stack;
                         }
                         if ((e == error.NotDir)) {
@@ -6792,13 +6920,13 @@ pub fn zigDeleteTreeOpenInitialSubpath(client: std.fs.Dir, sub_path: []const u8,
         _ = &treat_as_dir;
         handle_entry: while (true) {
             if (treat_as_dir) {
-                break :iterable_dir (blk_catch_41: { break :blk_catch_41 ((client.openDir(sub_path, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_41 (switch (e) {
+                break :iterable_dir (blk_catch_42: { break :blk_catch_42 ((client.openDir(sub_path, .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; break :blk_catch_42 (switch (e) {
 error.NotDir, error.FileNotFound, error.AccessDenied, error.PermissionDenied, error.ProcessNotFound, error.SymLinkLoop, error.ProcessFdQuotaExceeded, error.NameTooLong, error.SystemFdQuotaExceeded, error.NoDevice, error.SystemResources, error.Unexpected, error.InvalidUtf8, error.InvalidWtf8, error.BadPathName, error.DeviceBusy, error.NetworkNotFound => {
 return e;
 },
 }); }); });
             } else {
-                _ = (blk_catch_42: { break :blk_catch_42 ((client.deleteFile(sub_path)) catch |e| { _ = &e; if ((e == error.IsDir)) {
+                _ = (blk_catch_43: { break :blk_catch_43 ((client.deleteFile(sub_path)) catch |e| { _ = &e; if ((e == error.IsDir)) {
                     treat_as_dir = true;
                     continue :handle_entry;
                 }
@@ -6838,7 +6966,7 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                     _ = &treat_as_dir;
                     handle_entry: while (true) {
                         if (treat_as_dir) {
-                            const new_dir = (blk_catch_43: { break :blk_catch_43 ((dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
+                            const new_dir = (blk_catch_44: { break :blk_catch_44 ((dir.openDir((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .{ .no_follow = true, .iterate = true })) catch |e| { _ = &e; if ((e == error.NotDir)) {
                                 treat_as_dir = false;
                                 continue :handle_entry;
                             } else {
@@ -6858,7 +6986,7 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                             dir_name = result;
                             continue :scan_dir;
                         } else {
-                            _ = (blk_catch_44: { break :blk_catch_44 ((dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                            _ = (blk_catch_45: { break :blk_catch_45 ((dir.deleteFile((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                                 continue :dir_it;
                             }
                             if ((e == error.NotDir)) {
@@ -6881,13 +7009,13 @@ pub fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []con
                 _dir_guard.armed = false;
                 if (_parent_guard.dir) |d| {
                     _ = &d;
-                    _ = (blk_catch_45: { break :blk_catch_45 ((d.deleteDir(dir_name)) catch |e| { _ = &e; if (((e == error.FileNotFound) or (e == error.DirNotEmpty))) {
+                    _ = (blk_catch_46: { break :blk_catch_46 ((d.deleteDir(dir_name)) catch |e| { _ = &e; if (((e == error.FileNotFound) or (e == error.DirNotEmpty))) {
                         continue :start_over;
                     }
                     return e; }); });
                     continue :start_over;
                 } else {
-                    _ = (blk_catch_46: { break :blk_catch_46 ((client.deleteDir(sub_path)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                    _ = (blk_catch_47: { break :blk_catch_47 ((client.deleteDir(sub_path)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                         return;
                     }
                     if ((e == error.DirNotEmpty)) {

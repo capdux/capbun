@@ -103,7 +103,7 @@ struct JsonWriterGuard {
     }
 }
 
-pub const SecurityAdvisoryLevel = enum { fatal, warn };
+pub enum SecurityAdvisoryLevel { fatal, warn }
 
 pub struct SecurityAdvisory {
     level: SecurityAdvisoryLevel,
@@ -201,11 +201,11 @@ pub fn doPartialInstallOfSecurityScanner(
     }
 }
 
-pub const ScanAttemptResult = union(enum) {
+pub union(enum) ScanAttemptResult {
     success: SecurityScanResults,
     needs_install: PackageID,
     @"error": anyerror,
-};
+}
 
 struct ScannerFinder {
     manager: *PackageManager,
@@ -283,10 +283,10 @@ pub fn performSecurityScanAfterResolution(manager: *PackageManager, command_ctx:
             switch (retry_result) {
                 .success scan_results => return scan_results,
                 .needs_install => return error.SecurityScannerRetryFailed,
-                .@"error" => |e| return e,
+                .@"error" e => return e,
             }
         },
-        .@"error" => |e| return e,
+        .@"error" e => return e,
     }
 }
 
@@ -305,10 +305,10 @@ pub fn performSecurityScanForAll(manager: *PackageManager, command_ctx: bun.cli.
             switch (retry_result) {
                 .success scan_results => return scan_results,
                 .needs_install => return error.SecurityScannerRetryFailed,
-                .@"error" => |e| return e,
+                .@"error" e => return e,
             }
         },
-        .@"error" => |e| return e,
+        .@"error" e => return e,
     }
 }
 
@@ -438,18 +438,20 @@ pub fn promptForWarnings(): bool {
     return true;
 }
 
+struct PackageCollectorQueueItem {
+    pkg_id: PackageID,
+    dep_id: DependencyID,
+    pkg_path: std.ArrayList(PackageID),
+    dep_path: std.ArrayList(DependencyID),
+}
+
 struct PackageCollector {
     manager: *PackageManager,
     dedupe: std.AutoArrayHashMap(PackageID, void),
-    queue: bun.LinearFifo(QueueItem, .Dynamic),
+    queue: bun.LinearFifo(PackageCollectorQueueItem, .Dynamic),
     package_paths: std.AutoArrayHashMap(PackageID, PackagePath),
 
-    const QueueItem = struct {
-        pkg_id: PackageID,
-        dep_id: DependencyID,
-        pkg_path: std.ArrayList(PackageID),
-        dep_path: std.ArrayList(DependencyID),
-    };
+    const QueueItem = PackageCollectorQueueItem;
 
     static fn init(manager: *PackageManager): PackageCollector {
         return {
@@ -460,7 +462,7 @@ struct PackageCollector {
         };
     }
 
-    fn deinit(*_) {
+    ~init() {
         _.dedupe.deinit();
         _.queue.deinit();
 
@@ -744,7 +746,6 @@ fn attemptSecurityScanWithRetry(manager: *PackageManager, security_scanner: []co
     const suppress_error_output = manager.options.log_level != .verbose;
 
     let collector = PackageCollector.init(manager);
-    const _guard_collector = DeinitGuard<PackageCollector>{ ptr: &collector };
 
     if (scan_all) {
         collector.collectAllPackages()?;
@@ -1090,7 +1091,7 @@ pub struct SecurityScanSubprocess {
         let temp_log = logger.Log.init(_.manager.allocator);
         const _guard_temp_log = DeinitGuard<logger.Log>{ ptr: &temp_log };
 
-        const json_expr = bun.json.parseUTF8(&json_source, &temp_log, _.manager.allocator) catch |e| {
+        const json_expr = bun.json.parseUTF8(&json_source, &temp_log, _.manager.allocator) catch e => {
             Output.errGeneric("Security scanner sent invalid JSON: {s}", .{ @errorName(e)});
             if (_.ipc_data.items.len < 1000) {
                 Output.errGeneric("Response: {s}", .{ _.ipc_data.items});

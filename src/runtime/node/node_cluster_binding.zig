@@ -60,6 +60,16 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const SendHelperImpl = struct {
+
+pub fn @"impl"(globalThis_: *jsc.JSGlobalObject, callframe_: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            const arguments_ = callframe_.arguments_old(1).slice();
+            const ex = arguments_[0];
+            _ = Process__emitErrorEvent(globalThis_, ((ex.toError()) orelse (ex)));
+            return jsc.JSValue.js_undefined;
+    }
+};
+
 pub const InternalMsgHolder = struct {
     seq: i32 = 0,
     callbacks: std.AutoArrayHashMapUnmanaged(i32, jsc.Strong.Optional) = .{},
@@ -67,7 +77,7 @@ pub const InternalMsgHolder = struct {
     cb: jsc.Strong.Optional = .empty,
     messages: std.ArrayListUnmanaged(jsc.Strong.Optional) = .{},
 
-pub fn isReady(self: *InternalMsgHolder) bool {
+pub fn isReady(self: InternalMsgHolder) bool {
             return (self.worker.has() and self.cb.has());
     }
 
@@ -189,20 +199,11 @@ pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFram
             _ = log("child: {f}", .{ message.toFmt((&fmt_guard.val)) });
         }
         const ipc_instance = (vm.getIPCInstance()).?;
-        const S = struct {
-
-pub fn @"impl"(globalThis_: *jsc.JSGlobalObject, callframe_: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            const arguments_ = callframe_.arguments_old(1).slice();
-            const ex = arguments_[0];
-            _ = Process__emitErrorEvent(globalThis_, ((ex.toError()) orelse (ex)));
-            return jsc.JSValue.js_undefined;
-    }
-};
         const good = ipc_instance.data.serializeAndSend(globalThis, message, .internal, .@"null", null);
         if ((good == .failure)) {
             const ex = globalThis.createTypeErrorInstance("sendInternal() failed", .{});
             _ = ex.put(globalThis, ZigString.static("syscall"), try bun.String.static("write").toJS(globalThis));
-            const fnvalue = jsc.JSFunction.create(globalThis, "", S.@"impl", 1, .{});
+            const fnvalue = jsc.JSFunction.create(globalThis, "", SendHelperImpl.@"impl", 1, .{});
             _ = try fnvalue.callNextTick(globalThis, .{ ex });
             return jsc.JSValue.@"false";
         }

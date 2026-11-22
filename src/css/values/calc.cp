@@ -35,7 +35,7 @@ pub fn needsDeepclone(comptime V: type): bool {
     @compileError("Can't tell if " ++ @typeName(V) ++ " needs deepclone, please add it to the switch statement.");
 }
 
-const Tag_ = enum(u8) {
+enum Tag_: u8 {
     /// A literal value.
     value = 1,
     /// A literal number.
@@ -46,7 +46,7 @@ const Tag_ = enum(u8) {
     product = 8,
     /// A math function, such as `calc()`, `min()`, or `max()`.
     function = 16,
-};
+}
 
 enum CalcUnit {
     abs,

@@ -217,6 +217,281 @@ pub struct CacheMetadata {
     }
 }
 
+pub enum _ModuleType: u8 {
+    none = 0,
+    esm = 1,
+    cjs = 2,
+}
+
+pub enum _Encoding: u8 {
+    none = 0,
+    utf8 = 1,
+    utf16 = 2,
+    latin1 = 3,
+    _,
+}
+
+pub union(enum) _OutputCode {
+    utf8: []const u8,
+    string: bun.String,
+
+    fn deinit(*_, allocator: std.mem.Allocator) {
+        switch (_.*) {
+            .utf8 => {
+                allocator.free(_.utf8);
+            },
+            .string => _.string.deref(),
+        }
+    }
+
+    fn byteSlice(): []const u8 {
+        switch (_) {
+            .utf8 => return _.utf8,
+            .string => return _.string.byteSlice(),
+        }
+    }
+}
+
+pub struct _Entry {
+    metadata: CacheMetadata,
+    output_code: _OutputCode = .{ utf8: "" },
+    sourcemap: []const u8 = "",
+    esm_record: []const u8 = "",
+
+    pub const OutputCode = _OutputCode;
+
+    fn deinit(*_, sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) {
+        _.output_code.deinit(output_code_allocator);
+        if (_.sourcemap.len > 0) {
+            sourcemap_allocator.free(_.sourcemap);
+        }
+        if (_.esm_record.len > 0) {
+            esm_record_allocator.free(_.esm_record);
+        }
+    }
+
+    static fn save(
+        destination_dir: bun.FD,
+        destination_path: bun.PathString,
+        input_byte_length: u64,
+        input_hash: u64,
+        features_hash: u64,
+        sourcemap: []const u8,
+        esm_record: []const u8,
+        output_code: _OutputCode,
+        exports_kind: bun.ast.ExportsKind,
+    )! {
+        const _trace = TraceGuard{ trace: bun.perf.trace("RuntimeTranspilerCache.save") }
+
+        // atomically write to a tmpfile and then move it to the final destination
+        let tmpname_buf: bun.PathBuffer = undefined;
+        const tmpfilename = bun.fs.FileSystem.tmpname(std.fs.path.extension(destination_path.slice()), &tmpname_buf, input_hash)?;
+
+        const output_bytes = output_code.byteSlice();
+
+        // First we open the tmpfile, to avoid any other work in the event of failure.
+        let guard = TmpfileGuard{
+            tmpfile: bun.Tmpfile.create(destination_dir, tmpfilename).unwrap()?,
+            dir: destination_dir,
+            name: tmpfilename,
+        }
+        {
+            const metadata_buf_size = CacheMetadata.size * 2;
+            let metadata_buf: [metadata_buf_size]u8 = @splat(0);
+            const metadata_bytes = brk: {
+                let metadata = CacheMetadata{
+                    input_byte_length: input_byte_length,
+                    input_hash: input_hash,
+                    features_hash: features_hash,
+                    module_type: switch (exports_kind) {
+                        .cjs => _ModuleType.cjs,
+                        else => _ModuleType.esm,
+                    },
+                    output_encoding: switch (output_code) {
+                        .utf8 => _Encoding.utf8,
+                        .string => |str| switch (str.encoding()) {
+                            .utf8 => _Encoding.utf8,
+                            .utf16 => _Encoding.utf16,
+                            .latin1 => _Encoding.latin1,
+                        },
+                    },
+                    sourcemap_byte_length: sourcemap.len,
+                    output_byte_offset: CacheMetadata.size,
+                    output_byte_length: output_bytes.len,
+                    sourcemap_byte_offset: CacheMetadata.size + output_bytes.len,
+                    esm_record_byte_offset: CacheMetadata.size + output_bytes.len + sourcemap.len,
+                    esm_record_byte_length: esm_record.len,
+                }
+
+                metadata.output_hash = RuntimeTranspilerCache.hash(output_bytes);
+                metadata.sourcemap_hash = RuntimeTranspilerCache.hash(sourcemap);
+                if (esm_record.len > 0) {
+                    metadata.esm_record_hash = RuntimeTranspilerCache.hash(esm_record);
+                }
+
+                let metadata_stream = std.io.fixedBufferStream(&metadata_buf);
+
+                metadata.encode(metadata_stream.writer())?;
+
+                if (comptime bun.Environment.isDebug) {
+                    let metadata_stream2 = std.io.fixedBufferStream(metadata_buf[0..CacheMetadata.size]);
+                    let metadata2 = CacheMetadata{}
+                    metadata2.decode(metadata_stream2.reader()) catch |e| bun.Output.panic("CacheMetadata did not roundtrip encode -> decode  successfully: {s}", .{ @errorName(e)});
+                    bun.assert(std.@"meta".eql(metadata, metadata2));
+                }
+
+                break :brk metadata_buf[0..metadata_stream.pos];
+            }
+
+            let vecs_buf: [4]bun.PlatformIOVecConst = undefined;
+            let vecs_i: usize = 0;
+            vecs_buf[vecs_i] = bun.platformIOVecConstCreate(metadata_bytes);
+            vecs_i += 1;
+            if (output_bytes.len > 0) {
+                vecs_buf[vecs_i] = bun.platformIOVecConstCreate(output_bytes);
+                vecs_i += 1;
+            }
+            if (sourcemap.len > 0) {
+                vecs_buf[vecs_i] = bun.platformIOVecConstCreate(sourcemap);
+                vecs_i += 1;
+            }
+            if (esm_record.len > 0) {
+                vecs_buf[vecs_i] = bun.platformIOVecConstCreate(esm_record);
+                vecs_i += 1;
+            }
+            const vecs: []const bun.PlatformIOVecConst = vecs_buf[0..vecs_i];
+
+            let position: isize = 0;
+            const end_position = CacheMetadata.size + output_bytes.len + sourcemap.len + esm_record.len;
+
+            if (bun.Environment.allow_assert) {
+                let total: usize = 0;
+                let vi: usize = 0;
+                while (vi < vecs.len) : (vi += 1) {
+                    const v = vecs[vi];
+                    bun.assert(v.len > 0);
+                    total += v.len;
+                }
+                bun.assert(end_position == total);
+            }
+            bun.assert(end_position == @as(i64, i32(sourcemap.len + output_bytes.len + CacheMetadata.size + esm_record.len)));
+
+            bun.sys.preallocate_file(guard.tmpfile.fd.cast(), 0, i32(end_position)) catch {}
+            while (position < end_position) {
+                const written = bun.sys.pwritev(guard.tmpfile.fd, vecs, position).unwrap()?;
+                if (written <= 0) {
+                    return error.WriteFailed;
+                }
+
+                position += i32(written);
+            }
+        }
+
+        unsafe {
+            guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())))?;
+        }
+        guard.finished = true;
+    }
+
+    fn load(
+        *_,
+        file: std.fs.File,
+        sourcemap_allocator: std.mem.Allocator,
+        output_code_allocator: std.mem.Allocator,
+        esm_record_allocator: std.mem.Allocator,
+    )! {
+        const stat_size = file.getEndPos()?;
+        if (stat_size < CacheMetadata.size + _.metadata.output_byte_length + _.metadata.sourcemap_byte_length) {
+            return error.MissingData;
+        }
+
+        bun.assert(_.output_code == .utf8 && _.output_code.utf8.len == 0); // this should be the default value
+
+        let output_guard = OutputCodeGuard{ code: &_.output_code, allocator: output_code_allocator, armed: false }
+
+        _.output_code = if (_.metadata.output_byte_length == 0)
+            .{ string: bun.String.empty }
+        else switch (_.metadata.output_encoding) {
+            .utf8 => brk: {
+                let utf8 = OwnedSlice{ slice: output_code_allocator.alloc(u8, _.metadata.output_byte_length)?, allocator: output_code_allocator }
+                const read_bytes = file.preadAll(utf8.slice, _.metadata.output_byte_offset)?;
+                if (read_bytes != _.metadata.output_byte_length) {
+                    return error.MissingData;
+                }
+                break :brk .{ utf8: utf8.take() }
+            },
+            .latin1 => brk: {
+                const res = bun.String.createUninitialized(.latin1, _.metadata.output_byte_length);
+                let latin1 = BunStringGuard{ str: res[0] }
+                const bytes = res[1];
+                const read_bytes = file.preadAll(bytes, _.metadata.output_byte_offset)?;
+
+                if (_.metadata.output_hash != 0) {
+                    if (RuntimeTranspilerCache.hash(latin1.str.latin1()) != _.metadata.output_hash) {
+                        return error.InvalidHash;
+                    }
+                }
+
+                if (read_bytes != _.metadata.output_byte_length) {
+                    return error.MissingData;
+                }
+
+                break :brk .{ string: latin1.take() }
+            },
+            .utf16 => brk: {
+                const res = bun.String.createUninitialized(.utf16, _.metadata.output_byte_length / 2);
+                let str = BunStringGuard{ str: res[0] }
+                const chars = res[1];
+
+                const read_bytes = file.preadAll(std.mem.sliceAsBytes(chars), _.metadata.output_byte_offset)?;
+                if (read_bytes != _.metadata.output_byte_length) {
+                    return error.MissingData;
+                }
+
+                if (_.metadata.output_hash != 0) {
+                    if (RuntimeTranspilerCache.hash(std.mem.sliceAsBytes(str.str.utf16())) != _.metadata.output_hash) {
+                        return error.InvalidHash;
+                    }
+                }
+
+                break :brk .{ string: str.take() }
+            },
+
+            else => @panic("Unexpected output encoding"),
+        }
+
+        output_guard.armed = true;
+
+        if (_.metadata.sourcemap_byte_length > 0) {
+            let sourcemap = OwnedSlice{ slice: sourcemap_allocator.alloc(u8, _.metadata.sourcemap_byte_length)?, allocator: sourcemap_allocator }
+            const read_bytes = file.preadAll(sourcemap.slice, _.metadata.sourcemap_byte_offset)?;
+            if (read_bytes != _.metadata.sourcemap_byte_length) {
+                return error.MissingData;
+            }
+
+            _.sourcemap = sourcemap.take();
+        }
+
+        if (_.metadata.esm_record_byte_length > 0) {
+            let esm_record = OwnedSlice{ slice: esm_record_allocator.alloc(u8, _.metadata.esm_record_byte_length)?, allocator: esm_record_allocator }
+            const read_bytes = file.preadAll(esm_record.slice, _.metadata.esm_record_byte_offset)?;
+            if (read_bytes != _.metadata.esm_record_byte_length) {
+                return error.MissingData;
+            }
+
+            if (_.metadata.esm_record_hash != 0) {
+                if (RuntimeTranspilerCache.hash(esm_record.slice) != _.metadata.esm_record_hash) {
+                    return error.InvalidHash;
+                }
+            }
+
+            _.esm_record = esm_record.take();
+        }
+
+        output_guard.armed = false;
+    }
+}
+
 pub struct RuntimeTranspilerCache {
     input_hash: u64? = null,
     input_byte_length: u64? = null,
@@ -232,282 +507,14 @@ pub struct RuntimeTranspilerCache {
     const seed = 42;
     pub const Metadata = CacheMetadata;
 
-    pub const Entry = struct {
-        metadata: Metadata,
-        output_code: OutputCode = .{ utf8: "" },
-        sourcemap: []const u8 = "",
-        esm_record: []const u8 = "",
-
-        pub const OutputCode = union(enum) {
-            utf8: []const u8,
-            string: bun.String,
-
-            fn deinit(*_, allocator: std.mem.Allocator) {
-                switch (_.*) {
-                    .utf8 => {
-                        allocator.free(_.utf8);
-                    },
-                    .string => _.string.deref(),
-                }
-            }
-
-            fn byteSlice(): []const u8 {
-                switch (_) {
-                    .utf8 => return _.utf8,
-                    .string => return _.string.byteSlice(),
-                }
-            }
-        };
-
-        fn deinit(*_, sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) {
-            _.output_code.deinit(output_code_allocator);
-            if (_.sourcemap.len > 0) {
-                sourcemap_allocator.free(_.sourcemap);
-            }
-            if (_.esm_record.len > 0) {
-                esm_record_allocator.free(_.esm_record);
-            }
-        }
-
-        static fn save(
-            destination_dir: bun.FD,
-            destination_path: bun.PathString,
-            input_byte_length: u64,
-            input_hash: u64,
-            features_hash: u64,
-            sourcemap: []const u8,
-            esm_record: []const u8,
-            output_code: OutputCode,
-            exports_kind: bun.ast.ExportsKind,
-        )! {
-            const _trace = TraceGuard{ trace: bun.perf.trace("RuntimeTranspilerCache.save") };
-
-            // atomically write to a tmpfile and then move it to the final destination
-            let tmpname_buf: bun.PathBuffer = undefined;
-            const tmpfilename = bun.fs.FileSystem.tmpname(std.fs.path.extension(destination_path.slice()), &tmpname_buf, input_hash)?;
-
-            const output_bytes = output_code.byteSlice();
-
-            // First we open the tmpfile, to avoid any other work in the event of failure.
-            let guard = TmpfileGuard{
-                tmpfile: bun.Tmpfile.create(destination_dir, tmpfilename).unwrap()?,
-                dir: destination_dir,
-                name: tmpfilename,
-            };
-            {
-                const metadata_buf_size = Metadata.size * 2;
-                let metadata_buf: [metadata_buf_size]u8 = @splat(0);
-                const metadata_bytes = brk: {
-                    let metadata = Metadata{
-                        input_byte_length: input_byte_length,
-                        input_hash: input_hash,
-                        features_hash: features_hash,
-                        module_type: switch (exports_kind) {
-                            .cjs => ModuleType.cjs,
-                            else => ModuleType.esm,
-                        },
-                        output_encoding: switch (output_code) {
-                            .utf8 => Encoding.utf8,
-                            .string => |str| switch (str.encoding()) {
-                                .utf8 => Encoding.utf8,
-                                .utf16 => Encoding.utf16,
-                                .latin1 => Encoding.latin1,
-                            },
-                        },
-                        sourcemap_byte_length: sourcemap.len,
-                        output_byte_offset: Metadata.size,
-                        output_byte_length: output_bytes.len,
-                        sourcemap_byte_offset: Metadata.size + output_bytes.len,
-                        esm_record_byte_offset: Metadata.size + output_bytes.len + sourcemap.len,
-                        esm_record_byte_length: esm_record.len,
-                    };
-
-                    metadata.output_hash = hash(output_bytes);
-                    metadata.sourcemap_hash = hash(sourcemap);
-                    if (esm_record.len > 0) {
-                        metadata.esm_record_hash = hash(esm_record);
-                    }
-
-                    let metadata_stream = std.io.fixedBufferStream(&metadata_buf);
-
-                    metadata.encode(metadata_stream.writer())?;
-
-                    if (comptime bun.Environment.isDebug) {
-                        let metadata_stream2 = std.io.fixedBufferStream(metadata_buf[0..Metadata.size]);
-                        let metadata2 = Metadata{};
-                        metadata2.decode(metadata_stream2.reader()) catch |e| bun.Output.panic("Metadata did not roundtrip encode -> decode  successfully: {s}", .{ @errorName(e)});
-                        bun.assert(std.@"meta".eql(metadata, metadata2));
-                    }
-
-                    break :brk metadata_buf[0..metadata_stream.pos];
-                };
-
-                let vecs_buf: [4]bun.PlatformIOVecConst = undefined;
-                let vecs_i: usize = 0;
-                vecs_buf[vecs_i] = bun.platformIOVecConstCreate(metadata_bytes);
-                vecs_i += 1;
-                if (output_bytes.len > 0) {
-                    vecs_buf[vecs_i] = bun.platformIOVecConstCreate(output_bytes);
-                    vecs_i += 1;
-                }
-                if (sourcemap.len > 0) {
-                    vecs_buf[vecs_i] = bun.platformIOVecConstCreate(sourcemap);
-                    vecs_i += 1;
-                }
-                if (esm_record.len > 0) {
-                    vecs_buf[vecs_i] = bun.platformIOVecConstCreate(esm_record);
-                    vecs_i += 1;
-                }
-                const vecs: []const bun.PlatformIOVecConst = vecs_buf[0..vecs_i];
-
-                let position: isize = 0;
-                const end_position = Metadata.size + output_bytes.len + sourcemap.len + esm_record.len;
-
-                if (bun.Environment.allow_assert) {
-                    let total: usize = 0;
-                    let vi: usize = 0;
-                    while (vi < vecs.len) : (vi += 1) {
-                        const v = vecs[vi];
-                        bun.assert(v.len > 0);
-                        total += v.len;
-                    }
-                    bun.assert(end_position == total);
-                }
-                bun.assert(end_position == @as(i64, i32(sourcemap.len + output_bytes.len + Metadata.size + esm_record.len)));
-
-                bun.sys.preallocate_file(guard.tmpfile.fd.cast(), 0, i32(end_position)) catch {};
-                while (position < end_position) {
-                    const written = bun.sys.pwritev(guard.tmpfile.fd, vecs, position).unwrap()?;
-                    if (written <= 0) {
-                        return error.WriteFailed;
-                    }
-
-                    position += i32(written);
-                }
-            }
-
-            unsafe {
-                guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())))?;
-            }
-            guard.finished = true;
-        }
-
-        fn load(
-            *_,
-            file: std.fs.File,
-            sourcemap_allocator: std.mem.Allocator,
-            output_code_allocator: std.mem.Allocator,
-            esm_record_allocator: std.mem.Allocator,
-        )! {
-            const stat_size = file.getEndPos()?;
-            if (stat_size < Metadata.size + _.metadata.output_byte_length + _.metadata.sourcemap_byte_length) {
-                return error.MissingData;
-            }
-
-            bun.assert(_.output_code == .utf8 && _.output_code.utf8.len == 0); // this should be the default value
-
-            let output_guard = OutputCodeGuard{ code: &_.output_code, allocator: output_code_allocator, armed: false };
-
-            _.output_code = if (_.metadata.output_byte_length == 0)
-                .{ string: bun.String.empty }
-            else switch (_.metadata.output_encoding) {
-                .utf8 => brk: {
-                    let utf8 = OwnedSlice{ slice: output_code_allocator.alloc(u8, _.metadata.output_byte_length)?, allocator: output_code_allocator };
-                    const read_bytes = file.preadAll(utf8.slice, _.metadata.output_byte_offset)?;
-                    if (read_bytes != _.metadata.output_byte_length) {
-                        return error.MissingData;
-                    }
-                    break :brk .{ utf8: utf8.take() };
-                },
-                .latin1 => brk: {
-                    const res = bun.String.createUninitialized(.latin1, _.metadata.output_byte_length);
-                    let latin1 = BunStringGuard{ str: res[0] };
-                    const bytes = res[1];
-                    const read_bytes = file.preadAll(bytes, _.metadata.output_byte_offset)?;
-
-                    if (_.metadata.output_hash != 0) {
-                        if (hash(latin1.str.latin1()) != _.metadata.output_hash) {
-                            return error.InvalidHash;
-                        }
-                    }
-
-                    if (read_bytes != _.metadata.output_byte_length) {
-                        return error.MissingData;
-                    }
-
-                    break :brk .{ string: latin1.take() };
-                },
-                .utf16 => brk: {
-                    const res = bun.String.createUninitialized(.utf16, _.metadata.output_byte_length / 2);
-                    let str = BunStringGuard{ str: res[0] };
-                    const chars = res[1];
-
-                    const read_bytes = file.preadAll(std.mem.sliceAsBytes(chars), _.metadata.output_byte_offset)?;
-                    if (read_bytes != _.metadata.output_byte_length) {
-                        return error.MissingData;
-                    }
-
-                    if (_.metadata.output_hash != 0) {
-                        if (hash(std.mem.sliceAsBytes(str.str.utf16())) != _.metadata.output_hash) {
-                            return error.InvalidHash;
-                        }
-                    }
-
-                    break :brk .{ string: str.take() };
-                },
-
-                else => @panic("Unexpected output encoding"),
-            };
-
-            output_guard.armed = true;
-
-            if (_.metadata.sourcemap_byte_length > 0) {
-                let sourcemap = OwnedSlice{ slice: sourcemap_allocator.alloc(u8, _.metadata.sourcemap_byte_length)?, allocator: sourcemap_allocator };
-                const read_bytes = file.preadAll(sourcemap.slice, _.metadata.sourcemap_byte_offset)?;
-                if (read_bytes != _.metadata.sourcemap_byte_length) {
-                    return error.MissingData;
-                }
-
-                _.sourcemap = sourcemap.take();
-            }
-
-            if (_.metadata.esm_record_byte_length > 0) {
-                let esm_record = OwnedSlice{ slice: esm_record_allocator.alloc(u8, _.metadata.esm_record_byte_length)?, allocator: esm_record_allocator };
-                const read_bytes = file.preadAll(esm_record.slice, _.metadata.esm_record_byte_offset)?;
-                if (read_bytes != _.metadata.esm_record_byte_length) {
-                    return error.MissingData;
-                }
-
-                if (_.metadata.esm_record_hash != 0) {
-                    if (hash(esm_record.slice) != _.metadata.esm_record_hash) {
-                        return error.InvalidHash;
-                    }
-                }
-
-                _.esm_record = esm_record.take();
-            }
-
-            output_guard.armed = false;
-        }
-    };
+    pub const Entry = _Entry;
+    pub const ModuleType = _ModuleType;
+    pub const Encoding = _Encoding;
 
     static fn hash(bytes: []const u8): u64 {
         return std.hash.Wyhash.hash(seed, bytes);
     }
 
-    pub const ModuleType = enum(u8) {
-        none = 0,
-        esm = 1,
-        cjs = 2,
-    };
-
-    pub const Encoding = enum(u8) {
-        none = 0,
-        utf8 = 1,
-        utf16 = 2,
-        latin1 = 3,
-        _,
-    };
 
     static fn writeCacheFilename(
         buf: []u8,

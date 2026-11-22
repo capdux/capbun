@@ -60,6 +60,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 const default_allocator = @import("bun").default_allocator;
@@ -75,17 +83,22 @@ const api = @import("bun").api;
 const webcore = @import("bun").webcore;
 const JSError = @import("bun").JSError;
 const jsc = @import("bun").jsc;
-const meta = @import("std").meta;
-const mem = @import("std").mem;
-const fmt = @import("std").fmt;
 pub const ArrayBufferSinkMod = @import("./ArrayBufferSink.zig");
 pub const bun = @import("bun");
+pub const _SinkStatus = enum {
+    ready,
+    closed,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const UTF8Fallback = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
-pub fn writeLatin1(self: *const UTF8Fallback, comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: anytype) streams.Result.Writable {
-        _ = self;
+pub fn writeLatin1(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: anytype) streams.Result.Writable {
             const str = input.slice();
             if (strings.isAllASCII(str)) {
                 return writeFn(ctx, input);
@@ -114,9 +127,8 @@ pub fn writeLatin1(self: *const UTF8Fallback, comptime Ctx: type, ctx: *Ctx, inp
             }
     }
 
-pub fn writeUTF16(self: *const UTF8Fallback, comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: anytype) streams.Result.Writable {
-        _ = self;
-            const str: []const u16 = mem.bytesAsSlice(u16, input.slice());
+pub fn writeUTF16(comptime Ctx: type, ctx: *Ctx, input: streams.Result, comptime writeFn: anytype) streams.Result.Writable {
+            const str: []const u16 = std.mem.bytesAsSlice(u16, input.slice());
             if ((stack_size >= (str.len * 2))) {
                 var buf: [stack_size]u8 = undefined;
                 _ = &buf;
@@ -153,30 +165,54 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const _SinkData = union(enum) {
+    utf16: streams.Result,
+    latin1: streams.Result,
+    bytes: streams.Result,
+};
+
+pub const _SinkVTable = struct {
+    connect: ConnectFn,
+    write: WriteUTF8Fn,
+    writeLatin1: WriteLatin1Fn,
+    writeUTF16: WriteUTF16Fn,
+    end: EndFn,
+
+pub fn wrap(comptime Wrapped: type) _SinkVTable {
+            const Functions = _WrapFunctions(Wrapped);
+            return _SinkVTable{ .write = Functions.onWrite, .writeLatin1 = Functions.onWriteLatin1, .writeUTF16 = Functions.onWriteUTF16, .end = Functions.onEnd, .connect = Functions.onConnect };
+    }
+    pub const WriteUTF16Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+    pub const WriteUTF8Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+    pub const WriteLatin1Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
+    pub const EndFn = *const fn (*anyopaque, MaybeSyscallErr) sys.Maybe(void);
+    pub const ConnectFn = *const fn (*anyopaque, streams.Signal) sys.Maybe(void);
+};
+
 pub const Sink = @This();
 
 ptr: *anyopaque,
-vtable: VTable,
-status: Status = Status.closed,
+vtable: _SinkVTable,
+status: _SinkStatus = _SinkStatus.closed,
 used: bool = false,
 
 pub fn initWithType(comptime Type: type, handler: *Type) Sink {
         return .{ .ptr = (blk: {
         break :blk @as(*anyopaque, @alignCast(@ptrCast(handler)));
 
-}), .vtable = VTable.wrap(Type), .status = .ready, .used = false };
+}), .vtable = _SinkVTable.wrap(Type), .status = .ready, .used = false };
 }
 
 pub fn init(handler: anytype) Sink {
-        return initWithType(meta.Child(@TypeOf(handler)), handler);
+        return initWithType(std.meta.Child(@TypeOf(handler)), handler);
 }
 
-pub fn end(self: *Sink, err: ?Syscall.Error) sys.Maybe(void) {
+pub fn end(self: *Sink, e: ?Syscall.Error) sys.Maybe(void) {
         if ((self.status == .closed)) {
             return .success;
         }
         self.status = .closed;
-        return self.vtable.end(self.ptr, err);
+        return self.vtable.end(self.ptr, e);
 }
 
 pub fn writeLatin1(self: *Sink, data: streams.Result) streams.Result.Writable {
@@ -184,7 +220,7 @@ pub fn writeLatin1(self: *Sink, data: streams.Result) streams.Result.Writable {
             return .done;
         }
         const res = self.vtable.writeLatin1(self.ptr, data);
-        self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
+        self.status = (if ((res.isDone() or (self.status == .closed))) _SinkStatus.closed else _SinkStatus.ready);
         self.used = true;
         return res;
 }
@@ -194,7 +230,7 @@ pub fn writeBytes(self: *Sink, data: streams.Result) streams.Result.Writable {
             return .done;
         }
         const res = self.vtable.write(self.ptr, data);
-        self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
+        self.status = (if ((res.isDone() or (self.status == .closed))) _SinkStatus.closed else _SinkStatus.ready);
         self.used = true;
         return res;
 }
@@ -204,12 +240,12 @@ pub fn writeUTF16(self: *Sink, data: streams.Result) streams.Result.Writable {
             return .done;
         }
         const res = self.vtable.writeUTF16(self.ptr, data);
-        self.status = (if ((res.isDone() or (self.status == .closed))) Status.closed else Status.ready);
+        self.status = (if ((res.isDone() or (self.status == .closed))) _SinkStatus.closed else _SinkStatus.ready);
         self.used = true;
         return res;
 }
 
-pub fn write(self: *Sink, data: Data) streams.Result.Writable {
+pub fn write(self: *Sink, data: _SinkData) streams.Result.Writable {
         switch (data) {
 .utf16 => |str| {
 return self.writeUTF16(str);
@@ -223,24 +259,23 @@ return self.writeBytes(bytes);
 }
 }
 pub const pending = Sink{ .ptr = @ptrFromInt(2863311530), .vtable = undefined };
-pub const Status = enum {
-        ready,
-        closed,
-    };
-pub const Data = union(enum) {
-    utf16: streams.Result,
-    latin1: streams.Result,
-    bytes: streams.Result,
-};
-pub const VTable = struct {
-    connect: ConnectFn,
-    write: WriteUTF8Fn,
-    writeLatin1: WriteLatin1Fn,
-    writeUTF16: WriteUTF16Fn,
-    end: EndFn,
+pub const Status = _SinkStatus;
+pub const Data = _SinkData;
+pub const VTable = _SinkVTable;
+const MaybeSyscallErr = ?Syscall.Error;
+pub const ArrayBufferSink = ArrayBufferSinkMod;
+const Syscall = sys;
+const Subprocess = api.Subprocess;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const Blob = webcore.Blob;
+const streams = webcore.streams;
+const stack_size = 1024;
+const Detached = opaque {};
+pub const DestructorPtr = bun.TaggedPointerUnion(.{ Detached, Subprocess });
 
-pub fn wrap(comptime Wrapped: type) VTable {
-            const Functions = struct {
+pub fn _WrapFunctions(comptime Wrapped: type) type {
+        return struct {
 
 pub fn onWrite(ctx: *anyopaque, data: streams.Result) streams.Result.Writable {
             return Wrapped.write(cast(*Wrapped, ctx), data);
@@ -258,29 +293,11 @@ pub fn onWriteUTF16(ctx: *anyopaque, data: streams.Result) streams.Result.Writab
             return Wrapped.writeUTF16(cast(*Wrapped, ctx), data);
     }
 
-pub fn onEnd(ctx: *anyopaque, err: ?Syscall.Error) sys.Maybe(void) {
-            return Wrapped.end(cast(*Wrapped, ctx), err);
+pub fn onEnd(ctx: *anyopaque, e: ?Syscall.Error) sys.Maybe(void) {
+            return Wrapped.end(cast(*Wrapped, ctx), e);
     }
 };
-            return VTable{ .write = Functions.onWrite, .writeLatin1 = Functions.onWriteLatin1, .writeUTF16 = Functions.onWriteUTF16, .end = Functions.onEnd, .connect = Functions.onConnect };
-    }
-    pub const WriteUTF16Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
-    pub const WriteUTF8Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
-    pub const WriteLatin1Fn = *const fn (*anyopaque, streams.Result) streams.Result.Writable;
-    pub const EndFn = *const fn (*anyopaque, MaybeSyscallErr) sys.Maybe(void);
-    pub const ConnectFn = *const fn (*anyopaque, streams.Signal) sys.Maybe(void);
-};
-const MaybeSyscallErr = ?Syscall.Error;
-pub const ArrayBufferSink = ArrayBufferSinkMod;
-const Syscall = sys;
-const Subprocess = api.Subprocess;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const Blob = webcore.Blob;
-const streams = webcore.streams;
-const stack_size = 1024;
-const Detached = opaque {};
-pub const DestructorPtr = bun.TaggedPointerUnion(.{ Detached, Subprocess });
+}
 
 pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8) type {
         return struct {
@@ -327,23 +344,21 @@ pub fn detachPtr(globalThis: *JSGlobalObject, ptr: JSValue) JSError!void {
 pub fn construct(globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
             if (comptime (!@hasDecl(SinkType, "construct"))) {
-                const Static = struct {
-    pub const message = fmt.comptimePrint("{s} is not constructable", .{ (if (@typeInfo(@TypeOf(SinkType)) == .@"enum" or @typeInfo(@TypeOf(SinkType)) == .@"union") @tagName(SinkType) else SinkType.name) });
-};
-                var err = jsc.SystemError{ .message = bun.String.static(Static.message), .code = bun.String.static(@tagName(.ERR_ILLEGAL_CONSTRUCTOR)) };
-                _ = &err;
-                return globalThis.throwValue(err.toErrorInstance(globalThis));
+                const message = std.fmt.comptimePrint("{s} is not constructable", .{ (if (@typeInfo(@TypeOf(SinkType)) == .@"enum" or @typeInfo(@TypeOf(SinkType)) == .@"union") @tagName(SinkType) else SinkType.name) });
+                var e = jsc.SystemError{ .message = bun.String.static(message), .code = bun.String.static(@tagName(.ERR_ILLEGAL_CONSTRUCTOR)) };
+                _ = &e;
+                return globalThis.throwValue(e.toErrorInstance(globalThis));
             }
-            var this = new(SinkType, undefined);
-            _ = &this;
-            _ = this.construct(default_allocator);
-            return createObject(globalThis, @ptrCast(this), 0);
+            var inst = new(SinkType, undefined);
+            _ = &inst;
+            _ = inst.construct(default_allocator);
+            return createObject(globalThis, @ptrCast(inst), 0);
     }
 
 pub fn finalize(ptr: *anyopaque) callconv(.c) void {
-            var this = cast(*ThisSink, ptr);
-            _ = &this;
-            _ = this.sink.finalize();
+            var inst = cast(*ThisSink, ptr);
+            _ = &inst;
+            _ = inst.sink.finalize();
     }
 
 pub fn detach(self: *@This(), globalThis: *JSGlobalObject) void {
@@ -385,11 +400,11 @@ pub fn unprotect(self: *@This()) void {
 
 pub fn write(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = try getThis(globalThis, callframe);
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return globalThis.throwValue(e);
                 }
             }
             const args_list = callframe.arguments_old(4);
@@ -412,7 +427,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSV
                 if ((slice.len == 0)) {
                     return JSValue.jsNumber(0);
                 }
-                var res = this.sink.writeBytes(.{ .temporary = ByteList.fromBorrowedSliceDangerous(slice) });
+                var res = inst.sink.writeBytes(.{ .temporary = ByteList.fromBorrowedSliceDangerous(slice) });
                 _ = &res;
                 return res.toJS(globalThis);
             }
@@ -429,29 +444,29 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSV
             var __str_guard_moved = false; _ = &__str_guard_moved;
             defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
             if (view.is16Bit()) {
-                var res = this.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(mem.sliceAsBytes(view.utf16SliceAligned())) });
+                var res = inst.sink.writeUTF16(.{ .temporary = ByteList.fromBorrowedSliceDangerous(std.mem.sliceAsBytes(view.utf16SliceAligned())) });
                 _ = &res;
                 return res.toJS(globalThis);
             }
-            var res = this.sink.writeLatin1(.{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) });
+            var res = inst.sink.writeLatin1(.{ .temporary = ByteList.fromBorrowedSliceDangerous(view.slice()) });
             _ = &res;
             return res.toJS(globalThis);
     }
 
 pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = try getThis(globalThis, callframe);
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return globalThis.throwValue(e);
                 }
             }
             const args_list = callframe.arguments_old(4);
             const args = args_list.ptr[0..args_list.len];
             if (((args.len == 0) or (!args[0].isString()))) {
-                const err = globalThis.toTypeError((if ((args.len == 0)) .MISSING_ARGS else .INVALID_ARG_TYPE), "writeUTF8() expects a string", .{});
-                return globalThis.throwValue(err);
+                const e = globalThis.toTypeError((if ((args.len == 0)) .MISSING_ARGS else .INVALID_ARG_TYPE), "writeUTF8() expects a string", .{});
+                return globalThis.throwValue(e);
             }
             const arg = args[0];
             const str = arg.toString(globalThis);
@@ -467,80 +482,80 @@ pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError
             var __str_guard_moved = false; _ = &__str_guard_moved;
             defer if (!__str_guard_moved) { __str_guard_moved = true; const __T = @TypeOf(str_guard); if (@typeInfo(__T) == .optional) { if (str_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str_guard; _drop_val.__cp_deinit(); } };
             if (str_guard.val.is16Bit()) {
-                return this.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
+                return inst.sink.writeUTF16(.{ .temporary = view.utf16SliceAligned() }).toJS(globalThis);
             }
-            return this.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
+            return inst.sink.writeLatin1(.{ .temporary = view.slice() }).toJS(globalThis);
     }
 
 pub fn close(globalThis: *JSGlobalObject, sink_ptr: ?*anyopaque) callconv(.c) JSValue {
             _ = jsc.markBinding(@src());
-            const this: *ThisSink = cast(*ThisSink, ((sink_ptr) orelse { return .js_undefined; }));
+            const inst: *ThisSink = cast(*ThisSink, ((sink_ptr) orelse { return .js_undefined; }));
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return (blk_catch_2: { break :blk_catch_2 ((globalThis.vm().throwError(globalThis, err)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); });
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return (blk_catch_2: { break :blk_catch_2 ((globalThis.vm().throwError(globalThis, e)) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 .zero; }); });
                 }
             }
-            return (blk_catch_3: { break :blk_catch_3 ((this.sink.end(null).toJS(globalThis)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 .zero; }); });
+            return (blk_catch_3: { break :blk_catch_3 ((inst.sink.end(null).toJS(globalThis)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 .zero; }); });
     }
 
 pub fn flush(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = try getThis(globalThis, callframe);
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return globalThis.throwValue(e);
                 }
             }
             defer {
             {
-                if (((comptime @hasField(SinkType, "done")) and this.sink.done)) {
-                    _ = this.unprotect();
+                if (((comptime @hasField(SinkType, "done")) and inst.sink.done)) {
+                    _ = inst.unprotect();
                 }
             }
             }
             if (comptime @hasDecl(SinkType, "flushFromJS")) {
                 const wait = (((callframe.argumentsCount() > 0) and callframe.argument(0).isBoolean()) and callframe.argument(0).asBoolean());
-                const maybe_value: sys.Maybe(JSValue) = this.sink.flushFromJS(globalThis, wait);
+                const maybe_value: sys.Maybe(JSValue) = inst.sink.flushFromJS(globalThis, wait);
                 return (switch (maybe_value) {
 .result => |value| value,
-.err => |err| {
-return globalThis.throwValue(try err.toJS(globalThis));
+.err => |e| {
+return globalThis.throwValue(try e.toJS(globalThis));
 },
 });
             }
-            return this.sink.flush().toJS(globalThis);
+            return inst.sink.flush().toJS(globalThis);
     }
 
 pub fn start(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = try getThis(globalThis, callframe);
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return globalThis.throwValue(e);
                 }
             }
             if (comptime @hasField(streams.Start, abi_name)) {
-                return this.sink.start((if ((callframe.argumentsCount() > 0)) try streams.Start.fromJSWithTag(globalThis, callframe.argument(0), (comptime @field(streams.StartTag, abi_name))) else .empty)).toJS(globalThis);
+                return inst.sink.start((if ((callframe.argumentsCount() > 0)) try streams.Start.fromJSWithTag(globalThis, callframe.argument(0), (comptime @field(streams.StartTag, abi_name))) else .empty)).toJS(globalThis);
             }
-            return this.sink.start((if ((callframe.argumentsCount() > 0)) try streams.Start.fromJS(globalThis, callframe.argument(0)) else .empty)).toJS(globalThis);
+            return inst.sink.start((if ((callframe.argumentsCount() > 0)) try streams.Start.fromJS(globalThis, callframe.argument(0)) else .empty)).toJS(globalThis);
     }
 
 pub fn end(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
             _ = jsc.markBinding(@src());
-            const this = try getThis(globalThis, callframe);
+            const inst = try getThis(globalThis, callframe);
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return globalThis.throwValue(e);
                 }
             }
-            const result = this.sink.endFromJS(globalThis).toJS(globalThis);
+            const result = inst.sink.endFromJS(globalThis).toJS(globalThis);
             if (comptime @hasDecl(SinkType, "protectJSWrapper")) {
-                if ((this.sink.pending.state == .pending)) {
-                    _ = this.sink.protectJSWrapper(globalThis, callframe.this());
+                if ((inst.sink.pending.state == .pending)) {
+                    _ = inst.sink.protectJSWrapper(globalThis, callframe.this());
                 }
             }
             return result;
@@ -548,31 +563,31 @@ pub fn end(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSVal
 
 pub fn endWithSink(ptr: *anyopaque, globalThis: *JSGlobalObject) callconv(jsc.conv) JSValue {
             _ = jsc.markBinding(@src());
-            var this = cast(*ThisSink, ptr);
-            _ = &this;
+            var inst = cast(*ThisSink, ptr);
+            _ = &inst;
             if (comptime @hasDecl(SinkType, "getPendingError")) {
-                if (this.sink.getPendingError()) |err| {
-                    _ = &err;
-                    return globalThis.throwValue(err);
+                if (inst.sink.getPendingError()) |e| {
+                    _ = &e;
+                    return globalThis.throwValue(e);
                 }
             }
-            return (blk_catch_4: { break :blk_catch_4 ((this.sink.endFromJS(globalThis).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 .zero; }); });
+            return (blk_catch_4: { break :blk_catch_4 ((inst.sink.endFromJS(globalThis).toJS(globalThis)) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 .zero; }); });
     }
 
 pub fn updateRef(ptr: *anyopaque, value: bool) callconv(.c) void {
             _ = jsc.markBinding(@src());
-            var this = cast(*ThisSink, ptr);
-            _ = &this;
+            var inst = cast(*ThisSink, ptr);
+            _ = &inst;
             if (comptime @hasDecl(SinkType, "updateRef")) {
-                _ = this.sink.updateRef(value);
+                _ = inst.sink.updateRef(value);
             }
     }
 
 pub fn jsGetInternalFd(ptr: *anyopaque) callconv(.c) JSValue {
-            var this = cast(*ThisSink, ptr);
-            _ = &this;
+            var inst = cast(*ThisSink, ptr);
+            _ = &inst;
             if (comptime @hasDecl(SinkType, "getFd")) {
-                return JSValue.jsNumber(this.sink.getFd());
+                return JSValue.jsNumber(inst.sink.getFd());
             }
             return JSValue.null;
     }

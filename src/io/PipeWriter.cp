@@ -21,12 +21,12 @@ pub struct DerefGuard<T> {
     }
 }
 
-pub const WriteResult = union(enum) {
+pub union(enum) WriteResult {
     done: usize,
     wrote: usize,
     pending: usize,
     err: bun.sys.Error,
-};
+}
 
 export enum WriteStatus {
     end_of_file,
@@ -1071,125 +1071,125 @@ pub fn WindowsBufferedWriter(@comptime Parent: type, @comptime function_table: a
     };
 }
 
-pub const StreamBuffer = struct {
+pub struct StreamBuffer {
     list: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(bun.default_allocator),
     cursor: usize = 0,
 
-    pub fn reset(this: *StreamBuffer) void {
-        this.cursor = 0;
-        this.maybeShrink();
-        this.list.clearRetainingCapacity();
+    fn reset(*_) {
+        _.cursor = 0;
+        _.maybeShrink();
+        _.list.clearRetainingCapacity();
     }
 
-    pub fn maybeShrink(this: *StreamBuffer) void {
-        if (this.list.capacity > std.heap.pageSize()) {
-            this.list.expandToCapacity();
-            this.list.shrinkAndFree(std.heap.pageSize());
+    fn maybeShrink(*_) {
+        if (_.list.capacity > std.heap.pageSize()) {
+            _.list.expandToCapacity();
+            _.list.shrinkAndFree(std.heap.pageSize());
         }
     }
 
-    pub fn memoryCost(this: *const StreamBuffer) usize {
-        return this.list.capacity;
+    fn memoryCost(): usize {
+        return _.list.capacity;
     }
 
-    pub fn size(this: *const StreamBuffer) usize {
-        return this.list.items.len - this.cursor;
+    fn size(): usize {
+        return _.list.items.len - _.cursor;
     }
 
-    pub fn isEmpty(this: *const StreamBuffer) bool {
-        return this.size() == 0;
+    fn isEmpty(): bool {
+        return _.size() == 0;
     }
 
-    pub fn isNotEmpty(this: *const StreamBuffer) bool {
-        return this.size() > 0;
+    fn isNotEmpty(): bool {
+        return _.size() > 0;
     }
 
-    pub fn write(this: *StreamBuffer, buffer: []const u8) OOM!void {
-        * = try this.list.appendSlice(buffer);
+    fn write(*_, buffer: []const u8) ! {
+        * = _.list.appendSlice(buffer)?;
     }
 
-    pub fn wrote(this: *StreamBuffer, amount: usize) void {
-        this.cursor += amount;
+    fn wrote(*_, amount: usize) {
+        _.cursor += amount;
     }
 
-    pub fn writeAssumeCapacity(this: *StreamBuffer, buffer: []const u8) void {
-        this.list.appendSliceAssumeCapacity(buffer);
+    fn writeAssumeCapacity(*_, buffer: []const u8) {
+        _.list.appendSliceAssumeCapacity(buffer);
     }
 
-    pub fn ensureUnusedCapacity(this: *StreamBuffer, capacity: usize) OOM!void {
-        return this.list.ensureUnusedCapacity(capacity);
+    fn ensureUnusedCapacity(*_, capacity: usize)! {
+        return _.list.ensureUnusedCapacity(capacity);
     }
 
-    pub fn writeTypeAsBytes(this: *StreamBuffer, comptime T: type, data: *const T) OOM!void {
-        * = try this.write(std.mem.asBytes(data));
+    fn writeTypeAsBytes(*_, comptime T: type, data: *const T)! {
+        * = _.write(std.mem.asBytes(data))?;
     }
 
-    pub fn writeTypeAsBytesAssumeCapacity(this: *StreamBuffer, comptime T: type, data: T) void {
-        let byte_list = bun.ByteList.moveFromList(&this.list);
-        defer this.list = byte_list.moveToListManaged(this.list.allocator);
+    fn writeTypeAsBytesAssumeCapacity(*_, comptime T: type, data: T) {
+        let byte_list = bun.ByteList.moveFromList(&_.list);
+        defer _.list = byte_list.moveToListManaged(_.list.allocator);
         byte_list.writeTypeAsBytesAssumeCapacity(T, data);
     }
 
-    pub fn writeOrFallback(this: *StreamBuffer, buffer: anytype, comptime writeFn: anytype) OOM![]const u8 {
-        if (comptime @TypeOf(writeFn) == @TypeOf(&writeLatin1) and writeFn == &writeLatin1) {
+    fn writeOrFallback(*_, buffer: auto, comptime writeFn: auto): []const u8 ! OOM {
+        if (comptime @TypeOf(writeFn) == @TypeOf(&writeLatin1) && writeFn == &writeLatin1) {
             if (bun.strings.isAllASCII(buffer)) {
                 return buffer;
             }
 
             {
-                let byte_list = bun.ByteList.moveFromList(&this.list);
-                defer this.list = byte_list.moveToListManaged(this.list.allocator);
-                * = try byte_list.writeLatin1(this.list.allocator, buffer);
+                let byte_list = bun.ByteList.moveFromList(&_.list);
+                defer _.list = byte_list.moveToListManaged(_.list.allocator);
+                * = byte_list.writeLatin1(_.list.allocator, buffer)?;
             }
 
-            return this.list.items[this.cursor..];
-        } else if (comptime @TypeOf(writeFn) == @TypeOf(&writeUTF16) and writeFn == &writeUTF16) {
+            return _.list.items[_.cursor..];
+        } else if (comptime @TypeOf(writeFn) == @TypeOf(&writeUTF16) && writeFn == &writeUTF16) {
             {
-                let byte_list = bun.ByteList.moveFromList(&this.list);
-                defer this.list = byte_list.moveToListManaged(this.list.allocator);
+                let byte_list = bun.ByteList.moveFromList(&_.list);
+                defer _.list = byte_list.moveToListManaged(_.list.allocator);
 
-                * = try byte_list.writeUTF16(this.list.allocator, buffer);
+                * = byte_list.writeUTF16(_.list.allocator, buffer)?;
             }
 
-            return this.list.items[this.cursor..];
-        } else if (comptime @TypeOf(writeFn) == @TypeOf(&write) and writeFn == &write) {
+            return _.list.items[_.cursor..];
+        } else if (comptime @TypeOf(writeFn) == @TypeOf(&write) && writeFn == &write) {
             return buffer;
         } else {
             @compileError("Unsupported writeFn " ++ @typeName(@TypeOf(writeFn)));
         }
     }
 
-    pub fn writeLatin1(this: *StreamBuffer, buffer: []const u8, comptime check_ascii: bool) OOM!void {
+    fn writeLatin1(*_, buffer: []const u8, comptime check_ascii: bool)! {
         if (comptime check_ascii) {
             if (bun.strings.isAllASCII(buffer)) {
-                return this.write(buffer);
+                return _.write(buffer);
             }
         }
 
-        let byte_list = bun.ByteList.moveFromList(&this.list);
-        defer this.list = byte_list.moveToListManaged(this.list.allocator);
+        let byte_list = bun.ByteList.moveFromList(&_.list);
+        defer _.list = byte_list.moveToListManaged(_.list.allocator);
 
-        * = try byte_list.writeLatin1(this.list.allocator, buffer);
+        * = byte_list.writeLatin1(_.list.allocator, buffer)?;
     }
 
-    pub fn writeUTF16(this: *StreamBuffer, buffer: []const u16) OOM!void {
-        let byte_list = bun.ByteList.moveFromList(&this.list);
-        defer this.list = byte_list.moveToListManaged(this.list.allocator);
+    fn writeUTF16(*_, buffer: []const u16)! {
+        let byte_list = bun.ByteList.moveFromList(&_.list);
+        defer _.list = byte_list.moveToListManaged(_.list.allocator);
 
-        * = try byte_list.writeUTF16(this.list.allocator, buffer);
+        * = byte_list.writeUTF16(_.list.allocator, buffer)?;
     }
 
-    pub fn slice(this: *const StreamBuffer) []const u8 {
-        return this.list.items[this.cursor..];
+    fn slice(): []const u8 {
+        return _.list.items[_.cursor..];
     }
 
-    pub fn deinit(this: *StreamBuffer) void {
-        this.cursor = 0;
-        if (this.list.capacity > 0) {
-            this.list.clearAndFree();
+    fn deinit(*_) {
+        _.cursor = 0;
+        if (_.list.capacity > 0) {
+            _.list.clearAndFree();
         }
     }
-};
+}
 
 pub fn WindowsStreamingWriter(@comptime Parent: type, @comptime function_table: anytype): type {
     return struct {

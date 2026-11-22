@@ -35,25 +35,25 @@ const WEBP_MUX_OK: c_int = 1;
 /// `struct WebPData` — borrowed-bytes view used by both mux and demux.
 /// Memory is `WebPMalloc`-owned when libwebp writes to it (e.g.
 /// `WebPMuxAssemble` output) and caller-owned when libwebp reads it.
-const WebPData = extern struct {
-    bytes: ?[*]const u8 = null,
+@c struct WebPData {
+    bytes: ([*]const u8)? = null,
     size: usize = 0,
-};
+}
 
 /// `struct WebPChunkIterator` — cursor into a VP8X chunk list. Only `chunk`
 /// is read; `pad`/`private_` are libwebp-internal bookkeeping that
 /// `WebPDemuxReleaseChunkIterator` walks. `chunk.bytes` is a borrowed view
 /// INTO the original input buffer — dupe it out before `WebPDemuxDelete`.
-const WebPChunkIterator = extern struct {
+@c struct WebPChunkIterator {
     chunk_num: c_int,
     num_chunks: c_int,
     chunk: WebPData,
     pad: [6]u32,
     private_: *!?,
-};
+}
 
-const WebPDemuxer = opaque {};
-const WebPMux = opaque {};
+@opaque struct WebPDemuxer {}
+@opaque struct WebPMux {}
 
 // `WebPDemux()` and `WebPMuxNew()` are `static inline` in the headers and
 // just forward to these version-checked entry points with the ABI constant.
@@ -70,7 +70,7 @@ extern fn WebPMuxSetChunk(mux: *WebPMux, fourcc: [*]const u8, chunk_data: *const
 extern fn WebPMuxAssemble(mux: *WebPMux, assembled_data: *WebPData): c_int ;
 
 struct WebPFreeGuard { ptr: *!? = null, ~init() { if (p := _.ptr) WebPFree(p); } }
-struct DefaultFreeGuard { slice: ([]u8)? = null, ~init() { if (s := _.slice) bun.default_allocator.free(s); } }
+struct DefaultFreeGuard { slice: []u8, ~errinit() { bun.default_allocator.free(_.slice); } }
 struct WebPDemuxGuard { ptr: (*WebPDemuxer)? = null, ~init() { if (p := _.ptr) WebPDemuxDelete(p); } }
 struct WebPMuxGuard { ptr: (*WebPMux)? = null, ~init() { if (p := _.ptr) WebPMuxDelete(p); } }
 struct ChunkIterGuard {
@@ -103,7 +103,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     if (cw != w || ch != h) return error.DecodeFailed;
     const len: usize = @as(usize, w) * h * 4;
     const out = bun.default_allocator.dupe(u8, unsafe { ptr[0..len] })?;
-    let out_guard = DefaultFreeGuard{ slice: out };
+    const out_guard = DefaultFreeGuard{ slice: out };
 
     // Extract the ICCP chunk (if any) from the RIFF container. A plain
     // VP8/VP8L WebP with no VP8X wrapper has no ICCP — `WebPDemux` still
@@ -129,16 +129,15 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
         iter_guard.active = true;
         if (iter_guard.iter.chunk.size == 0) break :icc_blk null;
         if (p := iter_guard.iter.chunk.bytes) {
-            break :icc_blk (bun.default_allocator.dupe(u8, unsafe { p[0..iter_guard.iter.chunk.size] }) catch |e| return e);
+            break :icc_blk bun.default_allocator.dupe(u8, unsafe { p[0..iter_guard.iter.chunk.size] })?;
         }
         break :icc_blk null;
     };
-    out_guard.slice = null;
     return { rgba: out, width: w, height: h, icc_profile: icc };
 }
 
 pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc_profile: ([]const u8)?): codecs.Error!codecs.Encoded {
-    let out: [*]u8? = null;
+    let out: OptU8MultiPtr = null;
     const stride: c_int = @intCast(w * 4);
     const len = if (lossless)
         WebPEncodeLosslessRGBA(rgba.ptr, @intCast(w), @intCast(h), stride, &out)

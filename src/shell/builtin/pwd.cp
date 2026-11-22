@@ -8,26 +8,26 @@ const jsc = bun.jsc;
 const shell = bun.shell;
 const Yield = shell.Yield;
 
-const OutputKind = enum {
+enum OutputKind {
     stdout,
     stderr,
-};
+}
 
-const WaitingIo = struct {
+struct WaitingIo {
     kind: OutputKind,
-};
+}
 
-const State = union(enum) {
-    idle,
+union(enum) State {
+    idle: void,
     waiting_io: WaitingIo,
-    @"err",
-    done,
-};
+    @"err": void,
+    done: void,
+}
 
 @root struct Pwd {
     state: State = .idle,
 
-    pub fn start(*_): Yield {
+    fn start(*_): Yield {
         const args = _.bltn().argsSlice();
         if (args.len > 0) {
             const msg = "pwd: too many arguments\n";
@@ -53,7 +53,7 @@ const State = union(enum) {
         return _.bltn().done(0);
     }
 
-    pub fn next(*_): Yield {
+    fn next(*_): Yield {
         while (!(_.state == .@"err" || _.state == .done)) {
             switch (_.state) {
                 .waiting_io => return .suspended,
@@ -69,7 +69,7 @@ const State = union(enum) {
         }
     }
 
-    pub fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
+    fn onIOWriterChunk(*_, _: usize, e: jsc.SystemError?): Yield {
         if (comptime bun.Environment.allow_assert) {
             assert(_.state == .waiting_io);
         }
@@ -88,12 +88,12 @@ const State = union(enum) {
         return _.next();
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         * = _.state;
     }
 
-    pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("pwd", _));
+    inline fn bltn(*_): *Builtin {
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("pwd", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

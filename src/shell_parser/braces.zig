@@ -67,6 +67,14 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const string_pkg = @import("../string/string.zig");
@@ -96,52 +104,66 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const log = bun.Output.scoped(.BRACES, .visible);
-const ExpansionVariant = packed struct(u32) {
+pub const ExpansionVariant = packed struct(u32) {
     start: u16 = 0,
-    end: u16 = 0, // must be >= start
+    end: u16 = 0,
 };
-const Token = union(enum) {
-    open: ExpansionVariants,
-    comma,
+
+pub const _TokenExpansionVariants = struct {
+    idx: u16 = 0,
+    end: u16 = 0,
+};
+
+pub const Token = union(enum) {
+    open: _TokenExpansionVariants,
+    comma: void,
     text: SmolStr,
-    close,
-    eof,
-    const Tag = @typeInfo(Token).@"union".tag_type.?;
+    close: void,
+    eof: void,
 
-    const ExpansionVariants = struct {
-        idx: u16 = 0,
-        end: u16 = 0,
-    };
-
-    pub fn toText(self: *Token) SmolStr {
-        return switch (self.*) {
-            .open => SmolStr.fromChar('{'),
-            .comma => SmolStr.fromChar(','),
-            .text => |txt| txt,
-            .close => SmolStr.fromChar('}'),
-            .eof => SmolStr.empty(),
-        };
+pub fn toText(self: Token) SmolStr {
+            return (switch (self) {
+.open => SmolStr.fromChar(123),
+.comma => SmolStr.fromChar(44),
+.text => |txt| txt,
+.close => SmolStr.fromChar(125),
+.eof => SmolStr.empty(),
+});
     }
+    const Tag = @typeInfo(Token).@"union".tag_type.?;
+    const ExpansionVariants = _TokenExpansionVariants;
 };
+
+pub const _AST_Atom = union(enum) {
+    text: SmolStr,
+    expansion: _AST_Expansion,
+};
+
+pub const _AST_Atoms = union(enum) {
+    single: _AST_Atom,
+    many: []_AST_Atom,
+};
+
+pub const _AST_Group = struct {
+    bubble_up: ?*_AST_Group = null,
+    bubble_up_next: ?u16 = null,
+    atoms: _AST_Atoms,
+};
+
+pub const _AST_Expansion = struct {
+    variants: []_AST_Group,
+};
+
 pub const AST = struct {
-    pub const Atom = union(enum) {
-        text: SmolStr,
-        expansion: Expansion,
-    };
-    pub const Group = struct {
-        bubble_up: ?*Group = null,
-        bubble_up_next: ?u16 = null,
-        atoms: union(enum) { single: Atom, many: []Atom },
-    };
-    pub const Expansion = struct {
-        variants: []AST.Group,
-    };
+    pub const Atom = _AST_Atom;
+    pub const Group = _AST_Group;
+    pub const Expansion = _AST_Expansion;
 };
-const MAX_NESTED_BRACES = 10;
-const ParserErrorMsg = struct {
+
+pub const ParserErrorMsg = struct {
     msg: []const u8,
 };
+
 pub const Parser = struct {
     current: usize = 0,
     tokens: []const Token,
@@ -152,7 +174,7 @@ pub fn init(tokens: []const Token, alloc: Allocator) Parser {
             return .{ .tokens = tokens, .alloc = alloc, .errors = std.array_list.Managed(ParserErrorMsg).init(alloc) };
     }
 
-pub fn parse(self: *@This()) !AST.Group {
+pub fn parse(self: *Parser) !AST.Group {
             var group_alloc_ = std.heap.stackFallback(@sizeOf(AST.Atom), self.alloc);
             _ = &group_alloc_;
             const group_alloc = group_alloc_.get();
@@ -173,7 +195,7 @@ pub fn parse(self: *@This()) !AST.Group {
             }
     }
 
-pub fn parseAtom(self: *@This()) ParserError!?AST.Atom {
+pub fn parseAtom(self: *Parser) ParserError!?AST.Atom {
             switch (self.advance()) {
 .open => {
 const expansion_ptr = try self.parseExpansion();
@@ -191,7 +213,7 @@ return error.UnexpectedToken;
 }
     }
 
-pub fn parseExpansion(self: *@This()) !AST.Expansion {
+pub fn parseExpansion(self: *Parser) !AST.Expansion {
             var variants = std.array_list.Managed(AST.Group).init(self.alloc);
             _ = &variants;
             const close_eof: [2]Token.Tag = .{ .close, .eof };
@@ -233,23 +255,23 @@ pub fn parseExpansion(self: *@This()) !AST.Expansion {
             return .{ .variants = variants.items[0..] };
     }
 
-pub fn has_eq_sign(self: *@This(), str: []const u8) ?u32 {
+pub fn has_eq_sign(self: *Parser, str: []const u8) ?u32 {
         _ = self;
             return shell.hasEqSign(str);
     }
 
-pub fn advance(self: *@This()) Token {
+pub fn advance(self: *Parser) Token {
             if ((!self.is_at_end())) {
                 self.current = (self.current + 1);
             }
             return (if ((self.current > 0)) self.prev() else self.peek());
     }
 
-pub fn is_at_end(self: *@This()) bool {
+pub fn is_at_end(self: Parser) bool {
             return (self.peek() == .eof);
     }
 
-pub fn expect(self: *@This(), toktag: Token.Tag) Token {
+pub fn expect(self: *Parser, toktag: Token.Tag) Token {
             _ = assert((toktag == (if (comptime @typeInfo(Token.Tag) == .@"enum") @as(Token.Tag, @enumFromInt(self.peek())) else @as(Token.Tag, self.peek()))));
             if (self.check(toktag)) {
                 return self.advance();
@@ -257,7 +279,7 @@ pub fn expect(self: *@This(), toktag: Token.Tag) Token {
             _ = unreachable;
     }
 
-pub fn matchTok(self: *@This(), toktag: Token.Tag) bool {
+pub fn matchTok(self: *Parser, toktag: Token.Tag) bool {
             if ((std.meta.activeTag(self.peek()) == toktag)) {
                 _ = self.advance();
                 return true;
@@ -265,10 +287,9 @@ pub fn matchTok(self: *@This(), toktag: Token.Tag) bool {
             return false;
     }
 
-pub fn match_any2(self: *@This(), comptime toktags: []const Token.Tag) ?Token {
+pub fn match_any2(self: *Parser, comptime toktags: []const Token.Tag) ?Token {
             const peeked = self.peek();
             inline for (toktags) |tag| {
-                _ = &tag;
                 if ((peeked == tag)) {
                     _ = self.advance();
                     return peeked;
@@ -277,10 +298,9 @@ pub fn match_any2(self: *@This(), comptime toktags: []const Token.Tag) ?Token {
             return null;
     }
 
-pub fn match_any(self: *@This(), comptime toktags: []const Token.Tag) bool {
+pub fn match_any(self: *Parser, comptime toktags: []const Token.Tag) bool {
             const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
-                _ = &tag;
                 if ((peeked == tag)) {
                     _ = self.advance();
                     return true;
@@ -289,30 +309,49 @@ pub fn match_any(self: *@This(), comptime toktags: []const Token.Tag) bool {
             return false;
     }
 
-pub fn check(self: *@This(), toktag: Token.Tag) bool {
+pub fn check(self: Parser, toktag: Token.Tag) bool {
             return (std.meta.activeTag(self.peek()) == toktag);
     }
 
-pub fn peek(self: *@This()) Token {
+pub fn peek(self: Parser) Token {
             return self.tokens[@as(usize, @intCast(self.current))];
     }
 
-pub fn peek_n(self: *@This(), n: u32) Token {
+pub fn peek_n(self: Parser, n: u32) Token {
             if (((self.current + n) >= self.tokens.len)) {
                 return self.tokens[@as(usize, @intCast((self.tokens.len - 1)))];
             }
             return self.tokens[@as(usize, @intCast((self.current + n)))];
     }
 
-pub fn prev(self: *@This()) Token {
+pub fn prev(self: Parser) Token {
             return self.tokens[@as(usize, @intCast((self.current - 1)))];
     }
 
-pub fn add_error(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+pub fn add_error(self: *Parser, comptime fmt: []const u8, args: anytype) !void {
             const error_msg = try std.fmt.allocPrint(self.alloc, fmt, args);
             _ = try self.errors.append(.{ .msg = error_msg });
     }
 };
+
+pub const _BraceState = struct {
+    tok_idx: u16,
+    variants: u16,
+    prev_tok_end: u16,
+};
+
+pub const _StackEntry = struct {
+    segment_product: u32 = 1,
+    accumulator: u32 = 0,
+};
+
+pub const _LexerOutput = struct {
+    tokens: ArrayList(Token),
+    contains_nested: bool,
+};
+
+const log = bun.Output.scoped(.BRACES, .visible);
+const MAX_NESTED_BRACES = 10;
 pub const Lexer = NewLexer(.ascii);
 const SmolStr = string_pkg.SmolStr;
 const Encoding = shell.StringEncoding;
@@ -349,13 +388,7 @@ else => {
 }
 
 pub fn buildExpansionTable(tokens: []Token, table: *std.array_list.Managed(ExpansionVariant)) !void {
-        const BraceState = struct {
-    tok_idx: u16,
-    variants: u16,
-    prev_tok_end: u16,
-};
-        const BraceStack = bun.SmallList(BraceState, MAX_NESTED_BRACES);
-        _ = &BraceStack;
+        const BraceStack = bun.SmallList(_BraceState, MAX_NESTED_BRACES);
         var brace_stack = DeinitWithAllocGuard(BraceStack){ .val = BraceStack{  }, .alloc = bun.default_allocator };
         _ = &brace_stack;
         var __brace_stack_moved = false; _ = &__brace_stack_moved;
@@ -483,7 +516,10 @@ const length = out[@as(usize, @intCast(out_key))].items.len;
             var j: usize = 0;
             _ = &j;
             while ((j < expansion.variants.len)) : (j = (j + 1)) {
-                var group = (&expansion.variants[@as(usize, @intCast(j))]);
+                var group = (blk: {
+                break :blk (&expansion.variants[@as(usize, @intCast(j))]);
+
+});
                 _ = &group;
                 group.bubble_up = root;
                 group.bubble_up_next = 1;
@@ -521,7 +557,10 @@ const length = out[@as(usize, @intCast(out_key))].items.len;
             var j: usize = 0;
             _ = &j;
             while ((j < expansion.variants.len)) : (j = (j + 1)) {
-                var group = (&expansion.variants[@as(usize, @intCast(j))]);
+                var group = (blk: {
+                break :blk (&expansion.variants[@as(usize, @intCast(j))]);
+
+});
                 _ = &group;
                 group.bubble_up = root;
                 group.bubble_up_next = (i + 1);
@@ -556,16 +595,14 @@ pub fn expand(allocator: Allocator, tokens: []Token, out: []std.array_list.Manag
         _ = &parser;
         var root_node = try parser.parse();
         _ = &root_node;
-        _ = try expandNested((&root_node), out, 0, (&out_key_counter), 0);
+        _ = try expandNested((blk: {
+        break :blk (&root_node);
+
+}), out, 0, (&out_key_counter), 0);
 }
 
 pub fn calculateExpandedAmount(tokens: []const Token) u32 {
-        const StackEntry = struct {
-    segment_product: u32 = 1,
-    accumulator: u32 = 0,
-};
-        const NestedBraceStack = bun.SmallList(StackEntry, MAX_NESTED_BRACES);
-        _ = &NestedBraceStack;
+        const NestedBraceStack = bun.SmallList(_StackEntry, MAX_NESTED_BRACES);
         var nested_brace_stack = DeinitWithAllocGuard(NestedBraceStack){ .val = NestedBraceStack{  }, .alloc = bun.default_allocator };
         _ = &nested_brace_stack;
         var __nested_brace_stack_moved = false; _ = &__nested_brace_stack_moved;
@@ -624,7 +661,6 @@ pub fn tokenize(alloc: Allocator, src: []const u8) BraceLexerError!Output {
 
 pub fn tokenize_impl(self: *@This()) BraceLexerError!bool {
             const BraceStack = bun.SmallList(u32, MAX_NESTED_BRACES);
-            _ = &BraceStack;
             var brace_stack = DeinitWithAllocGuard(BraceStack){ .val = BraceStack{  }, .alloc = bun.default_allocator };
             _ = &brace_stack;
             var __brace_stack_moved = false; _ = &__brace_stack_moved;
@@ -790,10 +826,7 @@ pub fn eat(self: *@This()) ?Chars.InputChar {
 pub fn read_char(self: *@This()) ?Chars.InputChar {
             return self.chars.read_char();
     }
-    pub const Output = struct {
-        tokens: ArrayList(Token),
-        contains_nested: bool,
-    };
+    pub const Output = _LexerOutput;
     const Self = @This();
 };
 }

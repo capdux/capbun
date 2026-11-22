@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,7 +59,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const Direction = enum {
@@ -88,10 +88,35 @@ pub const TextTransform = struct {
     other: TextTransformOther,
 };
 
+pub const TextTransformOther = packed struct(u8) {
+    full_width: bool = false,
+    full_size_kana: bool = false,
+};
+
+pub const Spacing = union(enum) {
+    normal: void,
+    length: Length,
+};
+
 pub const TextIndent = struct {
     value: LengthPercentage,
     hanging: bool,
     each_line: bool,
+};
+
+pub const TextDecorationLine = packed struct(u8) {
+    underline: bool = false,
+    overline: bool = false,
+    line_through: bool = false,
+    blink: bool = false,
+    spelling_error: bool = false,
+    grammar_error: bool = false,
+};
+
+pub const TextDecorationThickness = union(enum) {
+    auto: void,
+    from_font: void,
+    length_percentage: LengthPercentage,
 };
 
 pub const TextEmphasisPosition = struct {
@@ -114,7 +139,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
             _ = &lengths;
             while (true) {
                 if ((lengths == null)) {
-                    const value = input.tryParse(struct {
+                    const value = input.tryParse((struct {
 
 pub fn parseFn(i: *css.Parser) css.Result(Lengths) {
             const horizontal = (switch (Length.parse(i)) {
@@ -133,7 +158,7 @@ return .{ .err = e };
             const spread = ((i.tryParse(Length.parse, .{}).asValue()) orelse (Length.zero()));
             return .{ .result = .{ horizontal, vertical, blur, spread } };
     }
-}.parseFn, .{});
+}).parseFn, .{});
                     if (value.asValue()) |v| {
                         _ = &v;
                         lengths = v;
@@ -186,18 +211,18 @@ pub fn deepClone(val: *const @This(), allocator: std.mem.Allocator) @This() {
     }
 };
 
+pub const TextSizeAdjust = union(enum) {
+    auto: void,
+    none: void,
+    percentage: Percentage,
+};
+
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const LengthPercentage = css.css_values.length.LengthPercentage;
 const CssColor = css.css_values.color.CssColor;
 const Length = css.css_values.length.LengthValue;
 const Percentage = css.css_values.percentage.Percentage;
-pub const TextTransformOther = packed struct(u8) {
-    /// Puts all typographic character units in full-width form.
-    full_width: bool = false,
-    /// Converts all small Kana characters to the equivalent full-size Kana.
-    full_size_kana: bool = false,
-};
 const TextTransformCase = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const WhiteSpace = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const WordBreak = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
@@ -207,49 +232,13 @@ pub const OverflowWrap = css.DefineEnumProperty(@compileError(css.todo_stuff.dep
 pub const TextAlign = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextAlignLast = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextJustify = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
-pub const Spacing = union(enum) {
-    /// No additional spacing is applied.
-    normal,
-    /// Additional spacing between each word or letter.
-    length: Length,
-};
-pub const TextDecorationLine = packed struct(u8) {
-    /// Each line of text is underlined.
-    underline: bool = false,
-    /// Each line of text has a line over it.
-    overline: bool = false,
-    /// Each line of text has a line through the middle.
-    line_through: bool = false,
-    /// The text blinks.
-    blink: bool = false,
-    /// The text is decorated as a spelling error.
-    spelling_error: bool = false,
-    /// The text is decorated as a grammar error.
-    grammar_error: bool = false,
-};
 pub const TextDecorationStyle = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
-pub const TextDecorationThickness = union(enum) {
-    /// The UA chooses an appropriate thickness for text decoration lines.
-    auto,
-    /// Use the thickness defined in the current font.
-    from_font,
-    /// An explicit length.
-    length_percentage: LengthPercentage,
-};
 pub const TextDecoration = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextDecorationSkipInk = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextEmphasisStyle = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextEmphasis = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextEmphasisPositionVertical = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const TextEmphasisPositionHorizontal = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
-pub const TextSizeAdjust = union(enum) {
-    /// Use the default size adjustment when displaying on a small device.
-    auto,
-    /// No size adjustment when displaying on a small device.
-    none,
-    /// When displaying on a small device, the font size is multiplied by this percentage.
-    percentage: Percentage,
-};
 pub const UnicodeBidi = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 pub const BoxDecorationBreak = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 const Allocator = std.mem.Allocator;

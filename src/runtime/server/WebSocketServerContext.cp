@@ -5,11 +5,11 @@ const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
 const ZigString = jsc.ZigString;
 
-pub const HandlerFlags = packed struct(u8) {
+@packed(u8) pub struct HandlerFlags {
     ssl: bool = false,
     publish_to_self: bool = false,
     _: u6 = 0,
-};
+}
 
 pub @value class Handler {
     onOpen: jsc.JSValue = .zero;
@@ -28,10 +28,10 @@ pub @value class Handler {
 
     flags: HandlerFlags = .{};
 
-    pub fn runErrorCallback(_: *const Handler, vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) {
+    pub fn runErrorCallback(vm: *jsc.VirtualMachine, globalObject: *jsc.JSGlobalObject, error_value: jsc.JSValue) {
         const onError = _.onError;
         if (!onError.isEmptyOrUndefinedOrNull()) {
-            * = onError.call(globalObject, .js_undefined, &.{error_value}) catch |e|
+            * = onError.call(globalObject, .js_undefined, &.{error_value}) catch e =>
                 _.globalObject.reportActiveExceptionAsUnhandled(e);
             return;
         }
@@ -72,7 +72,7 @@ pub @value class Handler {
         return globalObject.throwInvalidArguments("WebSocketServerContext expects a message handler", .{});
     }
 
-    pub fn protect(_: Handler) {
+    pub fn protect() {
         _.onOpen.protect();
         _.onMessage.protect();
         _.onClose.protect();
@@ -82,7 +82,7 @@ pub @value class Handler {
         _.onPong.protect();
     }
 
-    pub fn unprotect(_: Handler) {
+    pub fn unprotect() {
         if (_.vm.isShuttingDown()) {
             return;
         }
@@ -110,7 +110,7 @@ export @root struct WebSocketServerContext {
     resetIdleTimeoutOnSend: bool = true,
     closeOnBackpressureLimit: bool = false,
 
-    pub fn toBehavior(_: WebSocketServerContext): uws.WebSocketBehavior {
+    pub fn toBehavior(): uws.WebSocketBehavior {
         return .{
             .maxPayloadLength = _.maxPayloadLength,
             .idleTimeout = _.idleTimeout,
@@ -123,10 +123,10 @@ export @root struct WebSocketServerContext {
         };
     }
 
-    pub fn protect(_: WebSocketServerContext) {
+    pub fn protect() {
         _.handler.protect();
     }
-    pub fn unprotect(_: WebSocketServerContext) {
+    pub fn unprotect() {
         _.handler.unprotect();
     }
 

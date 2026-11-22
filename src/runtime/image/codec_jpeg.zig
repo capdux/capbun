@@ -51,10 +51,56 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const codecs = @import("./codecs.zig");
-const OptU8ManyPtr = ?[*]u8;
+const ScalingFactor = extern struct {
+    num: c_int,
+    denom: c_int,
+};
+
+const CropRegion = extern struct {
+    x: c_int,
+    y: c_int,
+    w: c_int,
+    h: c_int,
+};
+
+pub const TjHandleGuard = struct {
+    h: tjhandle,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *TjHandleGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = tj3Destroy(self.h);
+    }
+};
+
+pub const TjFreeGuard = struct {
+    ptr: OptU8ManyPtr,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *TjFreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.ptr) |p| {
+                _ = &p;
+                _ = tj3Free(p);
+            }
+    }
+};
+
+pub const SliceFreeGuard = struct {
+    slice: []u8,
+    __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *SliceFreeGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = bun.default_allocator.free(self.slice);
+    }
+};
+
 const tjhandle = ?*void;
-const ScalingFactor = extern struct { num: c_int, denom: c_int };
-const CropRegion = extern struct { x: c_int, y: c_int, w: c_int, h: c_int };
+const OptU8ManyPtr = ?[*]u8;
 const TJPARAM_QUALITY = 3;
 const TJPARAM_SUBSAMP = 4;
 pub const TJPARAM_JPEGWIDTH = 5;
@@ -64,42 +110,6 @@ const TJPARAM_MAXPIXELS = 24;
 const TJPARAM_SAVEMARKERS = 25;
 const TJPF_RGBA = 7;
 const TJSAMP_420 = 2;
-const TjHandleGuard = struct {
-    h: tjhandle,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *@This()) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            _ = tj3Destroy(self.h);
-    }
-};
-const TjFreeGuard = struct {
-    ptr: OptU8ManyPtr,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *@This()) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            if (self.ptr) |p| {
-                _ = &p;
-                _ = tj3Free(p);
-            }
-    }
-};
-const SliceFreeGuard = struct {
-    slice: ?[]u8,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *@This()) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            if (self.slice) |s| {
-                _ = &s;
-                _ = bun.default_allocator.free(s);
-            }
-    }
-};
 
 pub extern "c" fn tj3Init(init_type: c_int) callconv(.c) tjhandle;
 
@@ -138,7 +148,10 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         if ((h_opt == null)) {
             return error.OutOfMemory;
         }
-        const h_guard = TjHandleGuard{ .h = h_opt.? };
+        var h_guard = TjHandleGuard{ .h = h_opt.? };
+        _ = &h_guard;
+        var __h_guard_moved = false; _ = &__h_guard_moved;
+        defer if (!__h_guard_moved) { __h_guard_moved = true; const __T = @TypeOf(h_guard); if (@typeInfo(__T) == .optional) { if (h_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { h_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = h_guard; _drop_val.__cp_deinit(); } };
         const h = h_guard.h;
         _ = tj3Set(h, TJPARAM_SAVEMARKERS, 2);
         if ((tj3DecompressHeader(h, bytes.ptr, bytes.len) != 0)) {
@@ -192,6 +205,8 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         const out = try bun.default_allocator.alloc(u8, (((if (comptime @typeInfo(@TypeOf(w)) == .@"enum") cp_cast_int(usize, @intFromEnum(w)) else cp_cast_int(usize, w)) * ht) * 4));
         var out_guard = SliceFreeGuard{ .slice = out };
         _ = &out_guard;
+        var __out_guard_moved = false; _ = &__out_guard_moved;
+        errdefer if (!__out_guard_moved) { __out_guard_moved = true; const __T = @TypeOf(out_guard); if (@typeInfo(__T) == .optional) { if (out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { out_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = out_guard; _drop_val.__cp_errdeinit(); } };
         if ((tj3Decompress8(h, bytes.ptr, bytes.len, out.ptr, @intCast((w * 4)), TJPF_RGBA) != 0)) {
             return error.DecodeFailed;
         }
@@ -206,17 +221,19 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: codecs.DecodeHint) codec
         if (((tj3GetICCProfile(h, (&icc_ptr), (&icc_size)) != 0) or (icc_size == 0))) {
             break :icc_blk null;
         }
-        const icc_guard = TjFreeGuard{ .ptr = icc_ptr };
+        var icc_guard = TjFreeGuard{ .ptr = icc_ptr };
+        _ = &icc_guard;
+        var __icc_guard_moved = false; _ = &__icc_guard_moved;
+        defer if (!__icc_guard_moved) { __icc_guard_moved = true; const __T = @TypeOf(icc_guard); if (@typeInfo(__T) == .optional) { if (icc_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { icc_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = icc_guard; _drop_val.__cp_deinit(); } };
         if (icc_guard.ptr) |p| {
             _ = &p;
-            break :icc_blk (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, (blk: {
+            break :icc_blk try bun.default_allocator.dupe(u8, (blk: {
             break :blk p[0..icc_size];
 
-}))) catch |e| { _ = &e; return e; }); });
+}));
         }
         break :icc_blk null;
 };
-        out_guard.slice = null;
         return .{ .rgba = out, .width = w, .height = ht, .icc_profile = icc };
 }
 
@@ -225,7 +242,10 @@ pub fn encode(rgba: []const u8, w: u32, ht: u32, quality: u8, progressive: bool,
         if ((h_opt == null)) {
             return error.OutOfMemory;
         }
-        const h_guard = TjHandleGuard{ .h = h_opt.? };
+        var h_guard = TjHandleGuard{ .h = h_opt.? };
+        _ = &h_guard;
+        var __h_guard_moved = false; _ = &__h_guard_moved;
+        defer if (!__h_guard_moved) { __h_guard_moved = true; const __T = @TypeOf(h_guard); if (@typeInfo(__T) == .optional) { if (h_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { h_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = h_guard; _drop_val.__cp_deinit(); } };
         const h = h_guard.h;
         _ = tj3Set(h, TJPARAM_QUALITY, @intCast(@min(@max(quality, 1), 100)));
         _ = tj3Set(h, TJPARAM_SUBSAMP, TJSAMP_420);

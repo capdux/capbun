@@ -43,7 +43,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -84,7 +84,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const RunMode = enum(c_uint) {
@@ -105,7 +105,7 @@ pub const ReturnCode = enum(c_int) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn format(self: *ReturnCode, writer: *std.Io.Writer) !void {
+pub fn format(self: ReturnCode, writer: *std.Io.Writer) !void {
             if (self.errEnum()) |e| {
                 _ = &e;
                 _ = try writer.writeAll(@tagName(e));
@@ -234,7 +234,7 @@ pub fn init(i: i64) ReturnCodeI64 {
             return @enumFromInt(i);
     }
 
-pub fn format(self: *ReturnCodeI64, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+pub fn format(self: ReturnCodeI64, writer: *std.Io.Writer) std.Io.Writer.Error!void {
             if (self.errEnum()) |e| {
                 _ = &e;
                 _ = try writer.writeAll(@tagName(e));
@@ -592,7 +592,10 @@ pub const struct_uv_async_s = extern struct {
 
 pub fn init(self: *struct_uv_async_s, loop: *Loop, callback: uv_async_cb) void {
             _ = @memset(std.mem.asBytes(self), 0);
-            if ((uv_async_init(loop, @ptrCast(self), callback) != 0)) {
+            if (((blk: {
+            break :blk uv_async_init(loop, @ptrCast(self), callback);
+
+}) != 0)) {
                 _ = @panic("internal error: uv_async_init failed");
             }
     }
@@ -770,11 +773,17 @@ pub const uv_buf_t = extern struct {
 
 pub fn init(input: []const u8) uv_buf_t {
             _ = bun.assert((input.len <= (if (comptime @typeInfo(@TypeOf(std.math.maxInt(ULONG))) == .@"enum") cp_cast_int(usize, @intFromEnum(std.math.maxInt(ULONG))) else cp_cast_int(usize, std.math.maxInt(ULONG)))));
-            return .{ .len = @truncate(input.len), .base = @constCast(input.ptr) };
+            return .{ .len = @truncate(input.len), .base = (blk: {
+            break :blk @constCast(input.ptr);
+
+}) };
     }
 
 pub fn slice(self: *const uv_buf_t) []u8 {
-            return self.base[0..self.len];
+            return (blk: {
+            break :blk self.base[0..self.len];
+
+});
     }
 };
 
@@ -1133,11 +1142,15 @@ pub fn stop(self: *Timer) void {
     }
 
 pub fn unref(self: *Timer) void {
-            _ = uv_unref(@ptrCast(@alignCast(self)));
+            {
+                _ = uv_unref(@ptrCast(@alignCast(self)));
+            }
     }
 
 pub fn ref(self: *Timer) void {
-            _ = uv_ref(@ptrCast(@alignCast(self)));
+            {
+                _ = uv_ref(@ptrCast(@alignCast(self)));
+            }
     }
 };
 
@@ -1172,17 +1185,22 @@ pub const struct_uv_write_s = extern struct {
     event_handle: HANDLE,
     wait_handle: HANDLE,
 
-pub fn write(req: *@This(), stream: *uv_stream_t, input: *uv_buf_t, context: anytype, comptime onWrite: anytype) Maybe(void) {
+pub fn write(self: *struct_uv_write_s, stream: *uv_stream_t, input: *uv_buf_t, context: anytype, comptime onWrite: anytype) Maybe(void) {
             if ((comptime onWrite)) |callback| {
                 _ = &callback;
                 const Wrapper = struct {
 
 pub fn uvWriteCb(handler: *uv_write_t, status: ReturnCode) callconv(.c) void {
-            _ = callback(@ptrCast(@alignCast(handler.data)), status);
+            {
+                _ = callback(@ptrCast(@alignCast(handler.data)), status);
+            }
     }
 };
-                req.data = context;
-                const rc = uv_write(req, stream, @ptrCast(input), 1, (&Wrapper.uvWriteCb));
+                self.data = context;
+                const rc = (blk: {
+                break :blk uv_write(self, stream, @ptrCast(input), 1, (&Wrapper.uvWriteCb));
+
+});
                 _ = bun.sys.syslog("uv_write({d}) = {d}", .{ input.len, rc.int() });
                 if (rc.toError(.write)) |e| {
                     _ = &e;
@@ -1190,7 +1208,10 @@ pub fn uvWriteCb(handler: *uv_write_t, status: ReturnCode) callconv(.c) void {
                 }
                 return .success;
             }
-            const rc = uv_write(req, stream, @ptrCast(input), 1, null);
+            const rc = (blk: {
+            break :blk uv_write(self, stream, @ptrCast(input), 1, null);
+
+});
             if (rc.toError(.write)) |e| {
                 _ = &e;
                 return .{ .err = e };
@@ -1276,14 +1297,22 @@ pub fn bind(self: *Pipe, named_pipe: []const u8, flags: i32) Maybe(void) {
     }
 
 pub fn connect(self: *Pipe, req: *uv_connect_t, name: []const u8, context: anytype, comptime onConnect: *const fn (@TypeOf(context), ReturnCode) void) Maybe(void) {
-            self.data = @ptrCast(context);
+            self.data = (blk: {
+            break :blk @ptrCast(context);
+
+});
             const Wrapper = struct {
 
 pub fn uvConnectCb(handle: *uv_connect_t, status: ReturnCode) callconv(.c) void {
-            _ = onConnect(@ptrCast(@alignCast(handle.data)), status);
+            {
+                _ = onConnect(@ptrCast(@alignCast(handle.data)), status);
+            }
     }
 };
-            if (uv_pipe_connect2(req, self, @ptrCast(name.ptr), name.len, UV_PIPE_NO_TRUNCATE, (&Wrapper.uvConnectCb)).toError(.connect2)) |e| {
+            if ((blk: {
+            break :blk uv_pipe_connect2(req, self, @ptrCast(name.ptr), name.len, UV_PIPE_NO_TRUNCATE, (&Wrapper.uvConnectCb));
+
+}).toError(.connect2)) |e| {
                 _ = &e;
                 return .{ .err = e };
             }
@@ -1295,7 +1324,10 @@ pub fn setPendingInstancesCount(self: *Pipe, count: i32) void {
     }
 
 pub fn asStream(self: *Pipe) *uv_stream_t {
-            return @ptrCast(self);
+            return (blk: {
+            break :blk @ptrCast(self);
+
+});
     }
 
 pub fn closeAndDestroy(self: *Pipe) void {
@@ -1536,11 +1568,17 @@ pub fn spawn(handle: *uv_process_t, loop: *uv_loop_t, options: *const uv_process
     }
 
 pub fn kill(self: *Process, signum: c_int) ReturnCode {
-            return uv_process_kill(@ptrCast(@alignCast(self)), signum);
+            return (blk: {
+            break :blk uv_process_kill(@ptrCast(@alignCast(self)), signum);
+
+});
     }
 
-pub fn getPid(self: *const Process) c_int {
-            return uv_process_get_pid(@ptrCast(@alignCast(self)));
+pub fn getPid(self: Process) c_int {
+            return (blk: {
+            break :blk uv_process_get_pid(@ptrCast(@alignCast(self)));
+
+});
     }
     const handle_impl = HandleMixin(@This());
     pub const getData = handle_impl.getData;
@@ -1861,7 +1899,10 @@ pub fn deinit(self: *fs_t) void {
 
 pub fn assertInitialized(self: fs_t) void {
             if (bun.Environment.allow_assert) {
-                if ((@intFromPtr(self.loop) == -6148914691236560896)) {
+                if (((blk: {
+                break :blk @intFromPtr(self.loop);
+
+}) == -6148914691236560896)) {
                     _ = @panic("uv_fs_t was not initialized");
                 }
             }
@@ -1869,7 +1910,10 @@ pub fn assertInitialized(self: fs_t) void {
 
 pub fn assertCleanedUp(self: fs_t) void {
             if (bun.Environment.allow_assert) {
-                if ((@intFromPtr(self.loop) == -6148914691236560896)) {
+                if (((blk: {
+                break :blk @intFromPtr(self.loop);
+
+}) == -6148914691236560896)) {
                     return;
                 }
                 if (((self.flags & UV_FS_CLEANEDUP) != 0)) {
@@ -1881,7 +1925,10 @@ pub fn assertCleanedUp(self: fs_t) void {
 
 pub fn ptrAs(self: *fs_t, comptime T: type) T {
             _ = self.assertInitialized();
-            return @ptrCast(self.ptr);
+            return (blk: {
+            break :blk @ptrCast(self.ptr);
+
+});
     }
     const req_impl = ReqMixin(@This());
     pub const setData = req_impl.setData;
@@ -2802,11 +2849,11 @@ pub inline fn UV__ERR(x: anytype) @TypeOf(-x) {
 pub fn HandleMixin(comptime Type: type) type {
         return struct {
 
-pub fn getData(self: @This(), comptime DataType: type) ?*DataType {
+pub fn getData(self: *const @This(), comptime DataType: type) ?*DataType {
             return @ptrCast(@alignCast(uv_handle_get_data(@ptrCast(self))));
     }
 
-pub fn getLoop(self: @This()) *Loop {
+pub fn getLoop(self: *const @This()) *Loop {
             return uv_handle_get_loop(@ptrCast(self));
     }
 
@@ -2867,11 +2914,11 @@ pub fn fd(self: @This()) bun.FD {
 pub fn ReqMixin(comptime Type: type) type {
         return struct {
 
-pub fn getData(self: @This(), comptime DataType: type) ?*DataType {
+pub fn getData(self: *const @This(), comptime DataType: type) ?*DataType {
             return @ptrCast(uv_req_get_data(@ptrCast(self)));
     }
 
-pub fn loop(self: @This()) *Loop {
+pub fn loop(self: *const @This()) *Loop {
             return uv_handle_get_loop(@ptrCast(self));
     }
 
@@ -3541,18 +3588,29 @@ pub fn StreamMixin(comptime Type: type) type {
         return struct {
 
 pub fn getWriteQueueSize(self: *@This()) usize {
-            return uv_stream_get_write_queue_size(@ptrCast(self));
+            return (blk: {
+            break :blk uv_stream_get_write_queue_size(@ptrCast(self));
+
+});
     }
 
 pub fn listen(self: *@This(), backlog: i32, context: anytype, comptime onConnect: *const fn (@TypeOf(context), ReturnCode) void) Maybe(void) {
-            self.data = @ptrCast(context);
+            self.data = (blk: {
+            break :blk @ptrCast(context);
+
+});
             const Wrapper = struct {
 
 pub fn uvConnectCb(handle: *uv_stream_t, status: ReturnCode) callconv(.c) void {
-            _ = onConnect(@ptrCast(@alignCast(handle.data)), status);
+            {
+                _ = onConnect(@ptrCast(@alignCast(handle.data)), status);
+            }
     }
 };
-            if (uv_listen(@ptrCast(self), backlog, (&Wrapper.uvConnectCb)).toError(.listen)) |e| {
+            if ((blk: {
+            break :blk uv_listen(@ptrCast(self), backlog, (&Wrapper.uvConnectCb));
+
+}).toError(.listen)) |e| {
                 _ = &e;
                 return .{ .err = e };
             }
@@ -3560,7 +3618,10 @@ pub fn uvConnectCb(handle: *uv_stream_t, status: ReturnCode) callconv(.c) void {
     }
 
 pub fn accept(self: *@This(), client: *Type) Maybe(void) {
-            if (uv_accept(@ptrCast(self), @ptrCast(client)).toError(.accept)) |e| {
+            if ((blk: {
+            break :blk uv_accept(@ptrCast(self), @ptrCast(client));
+
+}).toError(.accept)) |e| {
                 _ = &e;
                 return .{ .err = e };
             }
@@ -3569,16 +3630,25 @@ pub fn accept(self: *@This(), client: *Type) Maybe(void) {
 
 pub fn readStart(self: *@This(), context: anytype, comptime alloc_cb: *const fn (@TypeOf(context), usize) []u8, comptime error_cb: *const fn (@TypeOf(context), bun.sys.E) void, comptime read_cb: *const fn (@TypeOf(context), []const u8) void) Maybe(void) {
             const Context = @TypeOf(context);
-            self.data = @ptrCast(context);
+            self.data = (blk: {
+            break :blk @ptrCast(context);
+
+});
             const Wrapper = struct {
 
 pub fn uvAllocb(req: *uv_stream_t, suggested_size: usize, buffer: *uv_buf_t) callconv(.c) void {
-            const context_data: Context = @ptrCast(@alignCast(req.data));
+            const context_data: Context = (blk: {
+            break :blk @ptrCast(@alignCast(req.data));
+
+});
             buffer.* = uv_buf_t.init(alloc_cb(context_data, suggested_size));
     }
 
 pub fn uvReadcb(req: *uv_stream_t, nreads: isize, buffer: *uv_buf_t) callconv(.c) void {
-            const context_data: Context = @ptrCast(@alignCast(req.data));
+            const context_data: Context = (blk: {
+            break :blk @ptrCast(@alignCast(req.data));
+
+});
             if ((nreads == 0)) {
                 return;
             }
@@ -3586,11 +3656,17 @@ pub fn uvReadcb(req: *uv_stream_t, nreads: isize, buffer: *uv_buf_t) callconv(.c
                 _ = req.readStop();
                 _ = error_cb(context_data, ((ReturnCodeI64.init(nreads).errEnum()) orelse (bun.sys.E.CANCELED)));
             } else {
-                _ = read_cb(context_data, buffer.base[0..(if (comptime @typeInfo(@TypeOf(nreads)) == .@"enum") cp_cast_int(i32, @intFromEnum(nreads)) else cp_cast_int(i32, nreads))]);
+                _ = read_cb(context_data, (blk: {
+                break :blk buffer.base[0..(if (comptime @typeInfo(@TypeOf(nreads)) == .@"enum") cp_cast_int(i32, @intFromEnum(nreads)) else cp_cast_int(i32, nreads))];
+
+}));
             }
     }
 };
-            if (uv_read_start(@ptrCast(self), @ptrCast((&Wrapper.uvAllocb)), @ptrCast((&Wrapper.uvReadcb))).toError(.listen)) |e| {
+            if ((blk: {
+            break :blk uv_read_start(@ptrCast(self), @ptrCast((&Wrapper.uvAllocb)), @ptrCast((&Wrapper.uvReadcb)));
+
+}).toError(.listen)) |e| {
                 _ = &e;
                 return .{ .err = e };
             }
@@ -3598,7 +3674,10 @@ pub fn uvReadcb(req: *uv_stream_t, nreads: isize, buffer: *uv_buf_t) callconv(.c
     }
 
 pub fn readStop(self: *@This()) void {
-            _ = uv_read_stop(@ptrCast(self));
+            _ = (blk: {
+            break :blk uv_read_stop(@ptrCast(self));
+
+});
     }
 
 pub fn write(self: *@This(), input: *uv_buf_t, context: anytype, comptime onWrite: anytype) Maybe(void) {
@@ -3608,7 +3687,10 @@ pub fn write(self: *@This(), input: *uv_buf_t, context: anytype, comptime onWrit
                 const Wrapper = struct {
 
 pub fn uvWriteCb(req: *uv_write_t, status: ReturnCode) callconv(.c) void {
-            const context_data: Context = @ptrCast(@alignCast(req.data));
+            const context_data: Context = (blk: {
+            break :blk @ptrCast(@alignCast(req.data));
+
+});
             _ = bun.sys.syslog("uv_write({d}) = {d}", .{ req.write_buffer.len, status.int() });
             _ = bun.destroy(req);
             _ = callback(context_data, status);
@@ -3617,7 +3699,10 @@ pub fn uvWriteCb(req: *uv_write_t, status: ReturnCode) callconv(.c) void {
                 var uv_data = bun.new(uv_write_t, std.mem.zeroes(uv_write_t));
                 _ = &uv_data;
                 uv_data.data = context;
-                if (uv_write(uv_data, @ptrCast(self), @ptrCast(input), 1, (&Wrapper.uvWriteCb)).toError(.write)) |e| {
+                if ((blk: {
+                break :blk uv_write(uv_data, @ptrCast(self), @ptrCast(input), 1, (&Wrapper.uvWriteCb));
+
+}).toError(.write)) |e| {
                     _ = &e;
                     return .{ .err = e };
                 }
@@ -3625,7 +3710,10 @@ pub fn uvWriteCb(req: *uv_write_t, status: ReturnCode) callconv(.c) void {
             }
             var req: uv_write_t = std.mem.zeroes(uv_write_t);
             _ = &req;
-            if (uv_write((&req), self, @ptrCast(input), 1, null).toError(.write)) |e| {
+            if ((blk: {
+            break :blk uv_write((&req), self, @ptrCast(input), 1, null);
+
+}).toError(.write)) |e| {
                 _ = &e;
                 return .{ .err = e };
             }
@@ -3633,7 +3721,10 @@ pub fn uvWriteCb(req: *uv_write_t, status: ReturnCode) callconv(.c) void {
     }
 
 pub fn tryWrite(self: *@This(), input: []const u8) Maybe(usize) {
-            const rc = uv_try_write(@ptrCast(self), @ptrCast((&uv_buf_t.init(input))), 1);
+            const rc = (blk: {
+            break :blk uv_try_write(@ptrCast(self), @ptrCast((&uv_buf_t.init(input))), 1);
+
+});
             if (rc.toError(.try_write)) |e| {
                 _ = &e;
                 return .{ .err = e };
@@ -3642,7 +3733,10 @@ pub fn tryWrite(self: *@This(), input: []const u8) Maybe(usize) {
     }
 
 pub fn tryWrite2(self: *@This(), input: []const u8, send_handle: *uv_stream_t) ReturnCode {
-            const rc = uv_try_write2(@ptrCast(self), @ptrCast((&uv_buf_t.init(input))), 1, send_handle);
+            const rc = (blk: {
+            break :blk uv_try_write2(@ptrCast(self), @ptrCast((&uv_buf_t.init(input))), 1, send_handle);
+
+});
             if (rc.toError(.try_write2)) |e| {
                 _ = &e;
                 return .{ .err = e };
@@ -3651,11 +3745,17 @@ pub fn tryWrite2(self: *@This(), input: []const u8, send_handle: *uv_stream_t) R
     }
 
 pub fn isReadable(self: *@This()) bool {
-            return (uv_is_readable(@ptrCast(self)) != 0);
+            return ((blk: {
+            break :blk uv_is_readable(@ptrCast(self));
+
+}) != 0);
     }
 
 pub fn isWritable(self: *@This()) bool {
-            return (uv_is_writable(@ptrCast(self)) != 0);
+            return ((blk: {
+            break :blk uv_is_writable(@ptrCast(self));
+
+}) != 0);
     }
 };
 }
@@ -3675,7 +3775,10 @@ _ = @compileError("StreamWriterMixin only works with Pipe, uv_tcp_t, uv_tty_t");
 }
 
 }
-            return @ptrCast((&@field(self, @tagName(@tagName(pipe_field_name)))));
+            return (blk: {
+            break :blk @ptrCast((&@field(self, @tagName(@tagName(pipe_field_name)))));
+
+});
     }
 
 pub fn uv_on_write_cb(req: *uv_write_t, status: ReturnCode) callconv(.c) void {

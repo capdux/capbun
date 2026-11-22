@@ -1,6 +1,5 @@
 // Route types and pattern matcher in CP
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 
 const Environment = bun.Environment;
 const FD = bun.FD;
@@ -20,93 +19,100 @@ pub const banned_dirs = &["node_modules"];
 
 @packed(u32)
 pub struct TinyPtr {
-    offset: u16 = 0,
-    len: u16 = 0,
+    offset: u16 = 0;
+    len: u16 = 0;
 
-    pub inline fn str(slice: string): string {
-        if (this.len > 0) {
-            return slice[this.offset .. this.offset + this.len];
+    inline fn str(slice: string): string {
+        if (_.len > 0) {
+            return slice[_.offset .. _.offset + _.len];
         }
         return "";
     }
 
-    pub inline fn toStringPointer(): api.StringPointer {
-        return api.StringPointer{ .offset = this.offset, .length = this.len };
+    inline fn toStringPointer(): api.StringPointer {
+        return api.StringPointer{ .offset = _.offset, .length = _.len };
     }
 
-    pub inline fn eql(a: TinyPtr, b: TinyPtr): bool {
+    inline fn eql(a: TinyPtr, b: TinyPtr): bool {
         return @as(u32, @bitCast(a)) == @as(u32, @bitCast(b));
     }
 
-    pub fn from(parent: string, child: string): TinyPtr {
+    static fn from(parent: string, child: string): TinyPtr {
         if (child.len == 0 || parent.len == 0) return TinyPtr{};
 
-        const right = @intFromPtr(child.ptr) + child.len;
-        const end = @intFromPtr(parent.ptr) + parent.len;
-        if (comptime Environment.isDebug) {
-            bun.assert(end < right);
-        }
+        unsafe {
+            const right = @intFromPtr(child.ptr) + child.len;
+            const end = @intFromPtr(parent.ptr) + parent.len;
+            if (comptime Environment.isDebug) {
+                bun.assert(end < right);
+            }
 
-        const length = @max(end, right) - right;
-        const offset = @max(@intFromPtr(child.ptr), @intFromPtr(parent.ptr)) - @intFromPtr(parent.ptr);
-        return TinyPtr{ .offset = @as(u16, @truncate(offset)), .len = @as(u16, @truncate(length)) };
+            const length = @max(end, right) - right;
+            const offset = @max(@intFromPtr(child.ptr), @intFromPtr(parent.ptr)) - @intFromPtr(parent.ptr);
+            return TinyPtr{ .offset = @as(u16, @truncate(offset)), .len = @as(u16, @truncate(length)) };
+        }
     }
 }
 
 pub struct WindowsAbsPath {
-    path: string,
+    path: string;
 
-    pub fn slice(): string {
+    fn slice(): string {
         return _.path;
     }
 
-    pub fn isEmpty(): bool {
+    fn isEmpty(): bool {
         return _.path.len == 0;
     }
 }
 
 pub type AbsPathType = @if (Environment.isWindows) WindowsAbsPath else PathString;
 
+pub enum _PatternTag: u4 {
+    @"static" = 0,
+    dynamic = 1,
+    catch_all = 2,
+    optional_catch_all = 3,
+}
+
+pub union(_PatternTag) _PatternValue {
+    @"static": HashedString,
+    dynamic: TinyPtr,
+    catch_all: TinyPtr,
+    optional_catch_all: TinyPtr,
+
+    fn eql(a: _PatternValue, b: _PatternValue): bool {
+        return @as(_PatternTag, a) == @as(_PatternTag, b) && switch (a) {
+            .static => HashedString.eql(a.static, b.static),
+            .dynamic => a.dynamic.eql(b.dynamic),
+            .catch_all => a.catch_all.eql(b.catch_all),
+            .optional_catch_all => a.optional_catch_all.eql(b.optional_catch_all),
+        };
+    }
+}
+
+pub struct _PatternValidationResult {
+    param_count: u16 = 0;
+    kind: _PatternTag = _PatternTag.@"static";
+}
+
+pub err _PatternParseError {
+    CatchAllMustBeAtTheEnd,
+    InvalidCatchAllRoute,
+    InvalidOptionalCatchAllRoute,
+    InvalidRoutePattern,
+    MissingParamName,
+    PatternMissingClosingBracket,
+}
+
 pub struct Pattern {
-    value: Value,
-    len: u16 = 0,
+    value: _PatternValue;
+    len: u16 = 0;
 
-    pub const Tag = enum(u4) {
-        static = 0,
-        dynamic = 1,
-        catch_all = 2,
-        optional_catch_all = 3,
-    };
-
-    pub const Value = union(Tag) {
-        static: HashedString,
-        dynamic: TinyPtr,
-        catch_all: TinyPtr,
-        optional_catch_all: TinyPtr,
-
-        pub fn eql(a: Value, b: Value) bool {
-            return @as(Tag, a) == @as(Tag, b) and switch (a) {
-                .static => HashedString.eql(a.static, b.static),
-                .dynamic => a.dynamic.eql(b.dynamic),
-                .catch_all => a.catch_all.eql(b.catch_all),
-                .optional_catch_all => a.optional_catch_all.eql(b.optional_catch_all),
-            };
-        }
-    };
-
-    pub const ValidationResult = struct {
-        param_count: u16 = 0,
-        kind: Tag = Tag.static,
-    };
-
-    pub const PatternParseError = error{
-        CatchAllMustBeAtTheEnd,
-        InvalidCatchAllRoute,
-        InvalidOptionalCatchAllRoute,
-        InvalidRoutePattern,
-        MissingParamName,
-        PatternMissingClosingBracket,
-    };
+    const Tag = _PatternTag;
+    const Value = _PatternValue;
+    const ValidationResult = _PatternValidationResult;
+    const PatternParseError = _PatternParseError;
 
     pub static fn match(
         path: string,
@@ -219,7 +225,7 @@ pub struct Pattern {
         let count: u16 = 0;
         let offset: u16 = 0;
         bun.assert(input.len > 0);
-        let kind: u4 = @intFromEnum(Tag.static);
+        let kind: u4 = @intFromEnum(Tag.@"static");
         const end = (input.len - 1) as u32;
         while (offset < end) {
             const pattern: Pattern = Pattern.initUnhashed(input, offset) catch |e| {
@@ -277,7 +283,7 @@ pub struct Pattern {
             };
             offset = pattern.len;
             kind = @max(@intFromEnum(@as(Pattern.Tag, pattern.value)), kind);
-            if (@intFromEnum(@as(Pattern.Tag, pattern.value)) > @intFromEnum(Pattern.Tag.static)) {
+            if (@intFromEnum(@as(Pattern.Tag, pattern.value)) > @intFromEnum(Pattern.Tag.@"static")) {
                 count += 1;
             }
         }
@@ -294,7 +300,7 @@ pub struct Pattern {
     }
 
     pub fn isEnd(input: string): bool {
-        return @as(usize, this.len) >= input.len - 1;
+        return @as(usize, _.len) >= input.len - 1;
     }
 
     pub static fn initUnhashed(input: string, offset_: RoutePathInt): Pattern!PatternParseError {
@@ -317,7 +323,7 @@ pub struct Pattern {
         }
 
         let i: RoutePathInt = offset;
-        let tag = Tag.static;
+        let tag = Tag.@"static";
         const end = @as(RoutePathInt, @intCast(input.len - 1));
 
         if (offset == end) {

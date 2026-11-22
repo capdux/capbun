@@ -220,7 +220,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const default_allocator = @import("bun").default_allocator;
@@ -244,6 +244,63 @@ const jsc = @import("bun").jsc;
 const Method = @import("../../../http_types/Method.zig").Method;
 const URL = @import("../../../url/url.zig").URL;
 pub const X509 = @import("../../api/bun/x509.zig");
+pub const ProgressHolder = struct {
+    held: jsc.Strong.Optional,
+    promise: jsc.Strong.Optional,
+    globalObject: *jsc.JSGlobalObject,
+    task: jsc.AnyTask,
+
+pub fn resolve(self: *ProgressHolder) JSTerminated!void {
+            var _guard_holder = HolderGuard(ProgressHolder){ .holder = self };
+            _ = &_guard_holder;
+            var ___guard_holder_moved = false; _ = &___guard_holder_moved;
+            defer if (!___guard_holder_moved) { ___guard_holder_moved = true; const __T = @TypeOf(_guard_holder); if (@typeInfo(__T) == .optional) { if (_guard_holder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_holder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_holder; _drop_val.__cp_deinit(); } };
+            var prom = (self.promise.swap().asAnyPromise()).?;
+            _ = &prom;
+            const res = self.held.swap();
+            _ = res.ensureStillAlive();
+            _ = try prom.resolve(self.globalObject, res);
+    }
+
+pub fn reject(self: *ProgressHolder) JSTerminated!void {
+            var _guard_holder = HolderGuard(ProgressHolder){ .holder = self };
+            _ = &_guard_holder;
+            var ___guard_holder_moved = false; _ = &___guard_holder_moved;
+            defer if (!___guard_holder_moved) { ___guard_holder_moved = true; const __T = @TypeOf(_guard_holder); if (@typeInfo(__T) == .optional) { if (_guard_holder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_holder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_holder; _drop_val.__cp_deinit(); } };
+            var prom = (self.promise.swap().asAnyPromise()).?;
+            _ = &prom;
+            const res = self.held.swap();
+            _ = res.ensureStillAlive();
+            _ = try prom.rejectWithAsyncStack(self.globalObject, res);
+    }
+};
+
+pub const FetchTaskletOptions = struct {
+    method: Method,
+    headers: Headers,
+    body: FetchHTTPRequestBody,
+    disable_timeout: bool,
+    disable_keepalive: bool,
+    disable_decompression: bool,
+    reject_unauthorized: bool,
+    url: ZigURL,
+    verbose: http.HTTPVerboseLevel = .none,
+    redirect_type: FetchRedirect = FetchRedirect.follow,
+    proxy: ?ZigURL = null,
+    proxy_headers: ?Headers = null,
+    url_proxy_buffer: []const u8 = "",
+    signal: ?*jsc.WebCore.AbortSignal = null,
+    globalThis: ?*JSGlobalObject,
+    hostname: ?[]u8 = null,
+    check_server_identity: jsc.Strong.Optional = .empty,
+    unix_socket_path: ZigString.Slice,
+    ssl_config: ?SSLConfig.SharedPtr = null,
+    upgraded_connection: bool = false,
+    force_http2: bool = false,
+    force_http3: bool = false,
+    force_http1: bool = false,
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -903,41 +960,11 @@ pub fn onProgressUpdate(self: *FetchTasklet) !void {
             break :brk value.JSValue;
 });
             _ = promise_value.ensureStillAlive();
-            const Holder = struct {
-    held: jsc.Strong.Optional,
-    promise: jsc.Strong.Optional,
-    globalObject: *jsc.JSGlobalObject,
-    task: jsc.AnyTask,
-
-pub fn resolve(holder: *@This()) JSTerminated!void {
-            var _guard_holder = HolderGuard(@This()){ .holder = holder };
-            _ = &_guard_holder;
-            var ___guard_holder_moved = false; _ = &___guard_holder_moved;
-            defer if (!___guard_holder_moved) { ___guard_holder_moved = true; const __T = @TypeOf(_guard_holder); if (@typeInfo(__T) == .optional) { if (_guard_holder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_holder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_holder; _drop_val.__cp_deinit(); } };
-            var prom = (holder.promise.swap().asAnyPromise()).?;
-            _ = &prom;
-            const res = holder.held.swap();
-            _ = res.ensureStillAlive();
-            _ = try prom.resolve(holder.globalObject, res);
-    }
-
-pub fn reject(holder: *@This()) JSTerminated!void {
-            var _guard_holder = HolderGuard(@This()){ .holder = holder };
-            _ = &_guard_holder;
-            var ___guard_holder_moved = false; _ = &___guard_holder_moved;
-            defer if (!___guard_holder_moved) { ___guard_holder_moved = true; const __T = @TypeOf(_guard_holder); if (@typeInfo(__T) == .optional) { if (_guard_holder) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_holder.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_holder; _drop_val.__cp_deinit(); } };
-            var prom = (holder.promise.swap().asAnyPromise()).?;
-            _ = &prom;
-            const res = holder.held.swap();
-            _ = res.ensureStillAlive();
-            _ = try prom.rejectWithAsyncStack(holder.globalObject, res);
-    }
-};
-            var holder = handleOom(default_allocator.create(Holder));
+            var holder = handleOom(default_allocator.create(ProgressHolder));
             _ = &holder;
             holder.* = .{ .held = result, .promise = self.promise.strong, .globalObject = globalThis, .task = undefined };
             self.promise.strong = .empty;
-            holder.task = (if (success) jsc.AnyTask.New(Holder, Holder.resolve).init(holder) else jsc.AnyTask.New(Holder, Holder.reject).init(holder));
+            holder.task = (if (success) jsc.AnyTask.New(ProgressHolder, ProgressHolder.resolve).init(holder) else jsc.AnyTask.New(ProgressHolder, ProgressHolder.reject).init(holder));
             _ = vm.enqueueTask(jsc.Task.init((&holder.task)));
     }
 
@@ -1498,31 +1525,7 @@ pub fn callback(task: *FetchTasklet, async_http: *http.AsyncHTTP, result: http.H
     }
     pub const ResumableSink = jsc.WebCore.ResumableFetchSink;
     pub const HTTPRequestBody = FetchHTTPRequestBody;
-    pub const FetchOptions = struct {
-        method: Method,
-        headers: Headers,
-        body: HTTPRequestBody,
-        disable_timeout: bool,
-        disable_keepalive: bool,
-        disable_decompression: bool,
-        reject_unauthorized: bool,
-        url: ZigURL,
-        verbose: http.HTTPVerboseLevel = .none,
-        redirect_type: FetchRedirect = FetchRedirect.follow,
-        proxy: ?ZigURL = null,
-        proxy_headers: ?Headers = null,
-        url_proxy_buffer: []const u8 = "",
-        signal: ?*jsc.WebCore.AbortSignal = null,
-        globalThis: ?*JSGlobalObject,
-        hostname: ?[]u8 = null,
-        check_server_identity: jsc.Strong.Optional = .empty,
-        unix_socket_path: ZigString.Slice,
-        ssl_config: ?SSLConfig.SharedPtr = null,
-        upgraded_connection: bool = false,
-        force_http2: bool = false,
-        force_http3: bool = false,
-        force_http1: bool = false,
-    };
+    pub const FetchOptions = FetchTaskletOptions;
 };
 
 const BoringSSL = bun.BoringSSL;
@@ -1550,6 +1553,7 @@ const ResumableSinkBackpressure = jsc.WebCore.ResumableSinkBackpressure;
 const Blob = jsc.WebCore.Blob;
 const AnyBlob = jsc.WebCore.Blob.Any;
 const log = Output.scoped(.FetchTasklet, .visible);
+var empty_u8: [0]u8 = undefined;
 
 pub export fn Bun__FetchResponse_finalize(tasklet: *FetchTasklet) callconv(.c) void {
         _ = FetchTasklet.bunFetchResponseFinalize(tasklet);

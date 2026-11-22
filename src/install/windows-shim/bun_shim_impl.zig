@@ -62,89 +62,17 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const builtin = @import("builtin");
 pub const BinLinkingShim = @import("./BinLinkingShim.zig");
-pub const EmptyError = error{
-};
-
-pub const ShebangMetadataPacked = packed struct(u64) {
-    bin_path_len_bytes: u32,
-    args_len_bytes: u32,
-};
-
-const dbg = (builtin.mode == .Debug);
-const is_standalone = (@import("root") == @This());
-const bun = (if ((!is_standalone)) @import("bun") else @compileError("cannot use 'bun' in standalone build of bun_shim_impl"));
-const bunDebugMessage = bun.Output.scoped(.bun_shim_impl, .hidden);
-const callmod_inline = (if (is_standalone) std.builtin.CallModifier.always_inline else bun.callmod_inline);
-const nt = struct {
-    const Status = w.NTSTATUS;
-
-    /// undocumented
-    const RtlExitUserProcess = w.ntdll.RtlExitUserProcess;
-
-    /// https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntclose
-    const NtClose = w.ntdll.NtClose;
-
-    /// https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile
-    const NtCreateFile = w.ntdll.NtCreateFile;
-
-    /// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntreadfile
-    extern "ntdll" fn NtReadFile(
-        FileHandle: w.HANDLE, // [in]
-        Event: ?w.HANDLE, // [in, optional]
-        ApcRoutine: ?*void, // [in, optional]
-        ApcContext: ?w.PVOID, // [in, optional]
-        IoStatusBlock: *w.IO_STATUS_BLOCK, // [out]
-        Buffer: w.PVOID, // [out]
-        Length: w.ULONG, // [in]
-        ByteOffset: ?*w.LARGE_INTEGER, // [in, optional]
-        Key: ?*w.ULONG, // [in, optional]
-    ) callconv(.winapi) Status;
-
-    /// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntwritefile
-    extern "ntdll" fn NtWriteFile(
-        FileHandle: w.HANDLE, // [in]
-        Event: ?w.HANDLE, // [in, optional]
-        ApcRoutine: ?*void, // [in, optional]
-        ApcContext: ?w.PVOID, // [in, optional]
-        IoStatusBlock: *w.IO_STATUS_BLOCK, // [out]
-        Buffer: [*]const u8, // [in]
-        Length: w.ULONG, // [in]
-        ByteOffset: ?*w.LARGE_INTEGER, // [in, optional]
-        Key: ?*w.ULONG, // [in, optional]
-    ) callconv(.winapi) Status;
-};
-const k32 = struct {
-    const CreateProcessW = w.kernel32.CreateProcessW;
-    /// https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror
-    const GetLastError = w.kernel32.GetLastError;
-    /// https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
-    const WaitForSingleObject = w.kernel32.WaitForSingleObject;
-    /// https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getexitcodeprocess
-    const GetExitCodeProcess = w.kernel32.GetExitCodeProcess;
-    /// https://learn.microsoft.com/en-us/windows/console/getconsolemode
-    const GetConsoleMode = w.kernel32.GetConsoleMode;
-    /// https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-sethandleinformation
-    const SetHandleInformation = w.kernel32.SetHandleInformation;
-    /// https://learn.microsoft.com/en-us/windows/console/setconsolemode
-    extern "kernel32" fn SetConsoleMode(
-        hConsoleHandle: w.HANDLE, // [in]
-        dwMode: w.DWORD, // [in]
-    ) callconv(.winapi) w.BOOL;
-};
-const FILE_GENERIC_READ = ((((w.STANDARD_RIGHTS_READ | w.FILE_READ_DATA) | w.FILE_READ_ATTRIBUTES) | w.FILE_READ_EA) | w.SYNCHRONIZE);
-const FailReason = enum {
+pub const FailReason = enum {
     NoDirname,
     CouldNotOpenShim,
     CouldNotReadShim,
     InvalidShimDataSize,
     ShimNotFound,
     CreateProcessFailed,
-    /// When encountering this outside of standalone mode, you should fallback
-    /// to running the '.exe' file, not printing this error.
     InvalidShimValidation,
     InvalidShimBounds,
     CouldNotDirectLaunch,
@@ -152,105 +80,118 @@ const FailReason = enum {
     InterpreterNotFound,
     InterpreterNotFoundBun,
     ElevationRequired,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-    pub fn getFormatTemplate(reason: FailReason) []const u8 {
-        return switch (reason) {
-            .NoDirname => "could not find node_modules path",
-
-            .ShimNotFound => "could not find bin metadata file",
-            .CouldNotOpenShim => "could not open bin metadata file",
-            .CouldNotReadShim => "could not read bin metadata",
-            .InvalidShimDataSize => "bin metadata is corrupt (size)",
-            .InvalidShimValidation => "bin metadata is corrupt (validate)",
-            .InvalidShimBounds => "bin metadata is corrupt (bounds)",
-            // The difference between these two is that one is with a shebang (#!/usr/bin/env node) &&
-            // the other is without. This is a helpful distinction because it can detect if something
-            // like node || bun is not in %path%, vs the actual executable was not installed in node_modules.
-            .InterpreterNotFound => "interpreter executable \"{s}\" not found in %PATH%",
-            .InterpreterNotFoundBun => "bun is not installed in %PATH%",
-            .BinNotFound => "bin executable does not exist on disk",
-            .ElevationRequired => "process requires elevation",
-            .CreateProcessFailed => "could not create process",
-
-            .CouldNotDirectLaunch => if (!is_standalone)
-                "bin metadata is corrupt (invalid utf16)"
-            else
-                // unreachable is ok because Direct Launch is not supported in standalone mode
-                unreachable,
-        };
+pub fn getFormatTemplate(self: FailReason) []const u8 {
+            return (switch (self) {
+.NoDirname => "could not find node_modules path",
+.ShimNotFound => "could not find bin metadata file",
+.CouldNotOpenShim => "could not open bin metadata file",
+.CouldNotReadShim => "could not read bin metadata",
+.InvalidShimDataSize => "bin metadata is corrupt (size)",
+.InvalidShimValidation => "bin metadata is corrupt (validate)",
+.InvalidShimBounds => "bin metadata is corrupt (bounds)",
+.InterpreterNotFound => "interpreter executable \"{s}\" not found in %PATH%",
+.InterpreterNotFoundBun => "bun is not installed in %PATH%",
+.BinNotFound => "bin executable does not exist on disk",
+.ElevationRequired => "process requires elevation",
+.CreateProcessFailed => "could not create process",
+.CouldNotDirectLaunch => (if ((!is_standalone)) "bin metadata is corrupt (invalid utf16)" else unreachable),
+});
     }
 
-    pub fn format(reason: FailReason, writer: anytype) !void {
-        if (!is_standalone and bun.Environment.allow_assert and reason == .InvalidShimValidation) {
-            @panic("Internal Assertion: When encountering FailReason.InvalidShimValidation, you must not print the error, but rather fallback to running the .exe file");
-        }
-
-        try writer.writeAll("error: ");
-        switch (reason) {
-            inline else => |r| {
-                if (is_standalone and r == .CouldNotDirectLaunch)
-                    // unreachable is ok because Direct Launch is not supported in standalone mode
-                    unreachable;
-
-                const template = comptime getFormatTemplate(r) ++ "\n\n";
-
-                if (comptime std.mem.indexOf(u8, template, "{s}") != null) {
-                    try writer.print(template, .{failure_reason_argument.?});
-                    if (dbg) {
-                        failure_reason_argument = null;
-                    }
-                } else {
-                    try writer.writeAll(template);
+pub fn format(self: FailReason, writer: anytype) !void {
+            if ((((!is_standalone) and bun.Environment.allow_assert) and (self == .InvalidShimValidation))) {
+                _ = @panic("Internal Assertion: When encountering FailReason.InvalidShimValidation, you must not print the error, but rather fallback to running the .exe file");
+            }
+            _ = try writer.writeAll("error: ");
+            if ((self == .InterpreterNotFound)) {
+                _ = try writer.print("interpreter executable \"{s}\" not found in %PATH%\n\n", .{ failure_reason_argument.? });
+                if (dbg) {
+                    failure_reason_argument = null;
                 }
-
-                const rest = switch (r) {
-                    .InterpreterNotFoundBun =>
-                        "Please run the following command, or double check %PATH% is right.\n\n    powershell -c \"irm bun.sh/install.ps1|iex\"\n\n",
-                    else =>
-                        "Bun failed to remap this bin to its proper location within node_modules.\nThis is an indication of a corrupted node_modules directory.\n\nPlease run 'bun install --force' in the project root and try\nit again. If this message persists, please open an issue:\nhttps://github.com/oven-sh/bun/issues\n\n",
-                };
-                try writer.writeAll(rest);
-            },
-        }
+            } else {
+                _ = try writer.writeAll(self.getFormatTemplate());
+                _ = try writer.writeAll("\n\n");
+            }
+            const rest = (switch (self) {
+.InterpreterNotFoundBun => "Please run the following command, or double check %PATH% is right.\n\n    powershell -c \"irm bun.sh/install.ps1|iex\"\n\n",
+else => "Bun failed to remap this bin to its proper location within node_modules.\nThis is an indication of a corrupted node_modules directory.\n\nPlease run 'bun install --force' in the project root and try\nit again. If this message persists, please open an issue:\nhttps://github.com/oven-sh/bun/issues\n\n",
+});
+            _ = try writer.writeAll(rest);
     }
 
-    pub inline fn write(reason: FailReason, writer: anytype) !void {
-        return reason.format(writer);
+pub inline fn write(self: FailReason, writer: anytype) !void {
+            return self.format(writer);
     }
 };
-const NtWriter = std.Io.GenericWriter(w.HANDLE, EmptyError, writeToHandle);
-var failure_reason_data: [512]u8 = undefined;
-var failure_reason_argument: ?[]const u8 = null;
-const nt_object_prefix: [4]u16 = .{ 92, 63, 63, 92 };
-const buf2_u16_len = (32767 + 1);
+
+pub const EmptyError = error{
+};
+
 pub const LauncherMode = enum {
     launch,
     read_without_launch,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-    /// Return type of `launcher`
-    pub fn RetType(comptime mode: LauncherMode) type {
-        return switch (mode) {
-            // See `tryStartupFromBunJS` for why this is `void` outside of standalone.
-            .launch => if (is_standalone) noreturn else void,
-            .read_without_launch => ReadWithoutLaunchResult,
-        };
+pub fn RetType(comptime mode: LauncherMode) type {
+            return (switch (mode) {
+.launch => (if (is_standalone) Noreturn else void),
+.read_without_launch => ReadWithoutLaunchResult,
+});
     }
 
-    pub fn FailRetType(comptime mode: LauncherMode) type {
-        return switch (mode) {
-            .launch => noreturn,
-            .read_without_launch => ReadWithoutLaunchResult,
-        };
+pub fn FailRetType(comptime mode: LauncherMode) type {
+            return (switch (mode) {
+.launch => Noreturn,
+.read_without_launch => ReadWithoutLaunchResult,
+});
     }
 
-    pub noinline fn fail(comptime mode: LauncherMode, comptime reason: FailReason) mode.FailRetType() {
-        @branchHint(.cold);
-        return switch (mode) {
-            .launch => failAndExitWithReason(reason),
-            .read_without_launch => ReadWithoutLaunchResult{ .err = reason },
-        };
+pub noinline fn fail(comptime mode: LauncherMode, comptime reason: FailReason) mode.FailRetType() {
+            @branchHint(.cold);
+            return (switch (mode) {
+.launch => failAndExitWithReason(reason),
+.read_without_launch => ReadWithoutLaunchResult{ .err = reason },
+});
     }
 };
+
+pub const ShebangMetadataPacked = packed struct(u64) {
+    bin_path_len_bytes: u32,
+    args_len_bytes: u32,
+};
+
+pub const nt = struct {
+    const Status = w.NTSTATUS;
+    const RtlExitUserProcess = w.ntdll.RtlExitUserProcess;
+    const NtClose = w.ntdll.NtClose;
+    const NtCreateFile = w.ntdll.NtCreateFile;
+    const NtReadFileFn = *const fn (w.HANDLE, ?w.HANDLE, ?*void, ?w.PVOID, *w.IO_STATUS_BLOCK, w.PVOID, w.ULONG, ?*w.LARGE_INTEGER, ?*w.ULONG) Status;
+    const NtWriteFileFn = *const fn (w.HANDLE, ?w.HANDLE, ?*void, ?w.PVOID, *w.IO_STATUS_BLOCK, [*]const u8, w.ULONG, ?*w.LARGE_INTEGER, ?*w.ULONG) Status;
+    const NtReadFile = @extern(NtReadFileFn, .{ .name = "NtReadFile", .library_name = "ntdll" });
+    const NtWriteFile = @extern(NtWriteFileFn, .{ .name = "NtWriteFile", .library_name = "ntdll" });
+};
+
+pub const k32 = struct {
+    const CreateProcessW = w.kernel32.CreateProcessW;
+    const GetLastError = w.kernel32.GetLastError;
+    const WaitForSingleObject = w.kernel32.WaitForSingleObject;
+    const GetExitCodeProcess = w.kernel32.GetExitCodeProcess;
+    const GetConsoleMode = w.kernel32.GetConsoleMode;
+    const SetHandleInformation = w.kernel32.SetHandleInformation;
+    const SetConsoleMode = @extern(*const fn(
+            hConsoleHandle: w.HANDLE, // [in]
+            dwMode: w.DWORD, // [in]
+        ) callconv(.winapi) w.BOOL, .{ .name = "SetConsoleMode", .library_name = "kernel32" });
+};
+
 pub const FromBunRunContext = struct {
     base_path: []u16,
     arguments: []u16,
@@ -261,18 +202,33 @@ pub const FromBunRunContext = struct {
     environment: ?[*]const u16,
     const CommandContext = bun.cli.Command.Context;
 };
+
 pub const FromBunShellContext = struct {
     base_path: []u16,
     arguments: []u16,
     handle: w.HANDLE,
     force_use_bun: bool,
     buf: *Buf,
-    pub const Buf = [buf2_u16_len]u16;
+    const Buf = [buf2_u16_len]u16;
 };
+
 pub const ReadWithoutLaunchResult = union {
     err: FailReason,
     command_line: []const u16,
 };
+
+const Noreturn = noreturn;
+const dbg = (builtin.mode == .Debug);
+const is_standalone = (@import("root") == @This());
+const bun = (if ((!is_standalone)) @import("bun") else @compileError("cannot use 'bun' in standalone build of bun_shim_impl"));
+const bunDebugMessage = bun.Output.scoped(.bun_shim_impl, .hidden);
+const callmod_inline = (if (is_standalone) std.builtin.CallModifier.always_inline else bun.callmod_inline);
+const FILE_GENERIC_READ = ((((w.STANDARD_RIGHTS_READ | w.FILE_READ_DATA) | w.FILE_READ_ATTRIBUTES) | w.FILE_READ_EA) | w.SYNCHRONIZE);
+const NtWriter = std.Io.GenericWriter(w.HANDLE, EmptyError, writeToHandle);
+var failure_reason_data: [512]u8 = undefined;
+var failure_reason_argument: ?[]const u8 = null;
+const nt_object_prefix: [4]u16 = .{ 92, 63, 63, 92 };
+const buf2_u16_len = (32767 + 1);
 const Flags = BinLinkingShim.Flags;
 const assert = std.debug.assert;
 const w = std.os.windows;
@@ -289,7 +245,9 @@ pub fn debug(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn unicodeStringToU16(str: w.UNICODE_STRING) []u16 {
-        return str.Buffer.?[0..(str.Length / 2)];
+        {
+            return str.Buffer.?[0..(str.Length / 2)];
+        }
 }
 
 pub fn writeToHandle(handle: w.HANDLE, data: []const u8) EmptyError!usize {
@@ -680,14 +638,18 @@ pub fn tryStartupFromBunJS(context: FromBunRunContext) void {
         _ = assert((!std.mem.startsWith(u16, context.base_path, (&nt_object_prefix))));
         _ = (comptime assert((!is_standalone)));
         _ = (comptime assert(bun.FeatureFlags.windows_bunx_fast_path));
-        _ = launcher(.launch, context);
+        {
+            _ = launcher(.launch, context);
+        }
 }
 
 pub fn readWithoutLaunch(context: FromBunShellContext) ReadWithoutLaunchResult {
         _ = assert((!std.mem.startsWith(u16, context.base_path, (&nt_object_prefix))));
         _ = (comptime assert((!is_standalone)));
         _ = (comptime assert(bun.FeatureFlags.windows_bunx_fast_path));
-        return launcher(.read_without_launch, context);
+        {
+            return launcher(.read_without_launch, context);
+        }
 }
 
 pub inline fn main() noreturn {
@@ -695,5 +657,7 @@ pub inline fn main() noreturn {
         _ = (comptime assert(builtin.single_threaded));
         _ = (comptime assert((!builtin.link_libc)));
         _ = (comptime assert((!builtin.link_libcpp)));
-        _ = launcher(.launch, .{});
+        {
+            _ = launcher(.launch, .{});
+        }
 }

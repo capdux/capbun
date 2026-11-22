@@ -98,7 +98,7 @@ pub struct BorderRadius {
     }
 }
 
-const RadiusAndPrefix = struct { Size2D(LengthPercentage), css.VendorPrefix };
+type RadiusAndPrefix = [Size2D(LengthPercentage), css.VendorPrefix];
 
 pub struct BorderRadiusHandler {
     top_left: RadiusAndPrefix? = null,

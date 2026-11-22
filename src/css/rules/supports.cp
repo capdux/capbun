@@ -51,27 +51,27 @@ pub struct AllocDeinitGuard<T> {
     }
 }
 
-const SeenDeclContext = struct {
-    pub fn hash(s: SeenDeclKey): u32 {
+struct SeenDeclContext {
+    fn hash(s: SeenDeclKey): u32 {
         const _ctx = _;
         * = _ctx;
         return std.array_hash_map.hashString(s[1]) +% @intFromEnum(s[0]);
     }
-    pub fn eql(a: SeenDeclKey, b: SeenDeclKey, b_idx: usize): bool {
+    fn eql(a: SeenDeclKey, b: SeenDeclKey, b_idx: usize): bool {
         const _ctx = _;
         * = _ctx;
         * = b_idx;
         return seenDeclKeyEql(a, b);
     }
 
-    pub inline fn seenDeclKeyEql(a: SeenDeclKey, that: SeenDeclKey): bool {
+    inline fn seenDeclKeyEql(a: SeenDeclKey, that: SeenDeclKey): bool {
         return @intFromEnum(a[0]) == @intFromEnum(that[0]) && bun.strings.eql(a[1], that[1]);
     }
-};
+}
 
 type OptI32 = i32?;
 
-const SupportsParseClosure = struct {
+struct SupportsParseClosure {
     expected_type: *OptI32,
     static fn tryParseFn(i: *css.Parser, closure_self: *@This()): Result(SupportsCondition) {
         const location = i.currentSourceLocation();
@@ -96,13 +96,25 @@ const SupportsParseClosure = struct {
 
         return SupportsCondition.parseInParens(i);
     }
-};
+}
 
-const SupportsNestedBlockParser = struct {
+struct SupportsNestedBlockParser {
     static fn parseFn(_: void, i: *css.Parser): Result(void) {
         return i.expectNoErrorToken();
     }
-};
+}
+
+struct SupportsSelectorFn {
+    static fn tryParseFn(i: *css.Parser): Result(SupportsCondition) {
+        const vv: void = undefined;
+        return i.parseNestedBlock(SupportsCondition, vv, SupportsSelectorFn.parseNestedBlockFn);
+    }
+    static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(SupportsCondition) {
+        const p = i.position();
+        if (e := i.expectNoErrorToken().asErr()) return { err: e };
+        return { result: SupportsCondition{ .selector = i.sliceFrom(p) } };
+    }
+}
 
 pub union(enum) SupportsCondition {
     /// A `not` expression.
@@ -288,18 +300,7 @@ pub union(enum) SupportsCondition {
         switch (tok.*) {
             .function => |f| {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("selector", f)) {
-                    const Fn = struct {
-                        static fn tryParseFn(i: *css.Parser): Result(SupportsCondition) {
-                            const vv: void = undefined;
-                            return i.parseNestedBlock(SupportsCondition, vv, @This().parseNestedBlockFn);
-                        }
-                        static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(SupportsCondition) {
-                            const p = i.position();
-                            if (e := i.expectNoErrorToken().asErr()) return { err: e };
-                            return { result: SupportsCondition{ .selector = i.sliceFrom(p) } };
-                        }
-                    };
-                    const res = input.tryParse(Fn.tryParseFn, {});
+                    const res = input.tryParse(SupportsSelectorFn.tryParseFn, {});
                     if (res.isOk()) return res;
                 }
             },

@@ -78,59 +78,7 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-pub const ZigStackFrame = extern struct {
-    function_name: String,
-    source_url: String,
-    position: ZigStackFramePosition,
-    code_type: ZigStackFrameCode,
-    is_async: bool,
-    remapped: bool = false,
-    jsc_stack_frame_index: i32 = -1,
-
-pub fn deinit(self: *ZigStackFrame) void {
-            _ = self.function_name.deref();
-            _ = self.source_url.deref();
-    }
-
-pub fn toAPI(self: ZigStackFrame, root_path: []const u8, origin: ?*const ZigURL, allocator: std.mem.Allocator) !api.StackFrame {
-            var frame: api.StackFrame = (comptime std.mem.zeroes(api.StackFrame));
-            _ = &frame;
-            if ((!self.function_name.isEmpty())) {
-                var slicer = self.function_name.toUTF8(allocator);
-                _ = &slicer;
-                const cloned = try slicer.cloneIfBorrowed(allocator);
-                frame.function_name = cloned.slice();
-            }
-            if ((!self.source_url.isEmpty())) {
-                frame.file = try std.fmt.allocPrint(allocator, "{f}", .{ self.sourceURLFormatter(root_path, origin, true, false) });
-            }
-            frame.position = self.position;
-            frame.scope = @as(api.StackFrameScope, @enumFromInt(@intFromEnum(self.code_type)));
-            return frame;
-    }
-
-pub fn nameFormatter(self: ZigStackFrame, comptime enable_color: bool) NameFormatterImpl {
-            return NameFormatterImpl{ .function_name = self.function_name, .code_type = self.code_type, .enable_color = enable_color, .is_async = self.is_async };
-    }
-
-pub fn sourceURLFormatter(self: ZigStackFrame, root_path: []const u8, origin: ?*const ZigURL, exclude_line_column: bool, comptime enable_color: bool) SourceURLFormatterImpl {
-            return SourceURLFormatterImpl{ .source_url = self.source_url, .exclude_line_column = exclude_line_column, .origin = origin, .root_path = root_path, .position = self.position, .enable_color = enable_color, .remapped = self.remapped };
-    }
-    pub const SourceURLFormatter = SourceURLFormatterImpl;
-    pub const NameFormatter = NameFormatterImpl;
-    pub const Zero: ZigStackFrame = .{ .function_name = .empty, .code_type = .None, .source_url = .empty, .position = .invalid, .is_async = false, .jsc_stack_frame_index = -1 };
-};
-
-const string = []const u8;
-const Output = bun.Output;
-const String = bun.String;
-const strings = bun.strings;
-const api = bun.schema.api;
-const jsc = bun.jsc;
-const ZigStackFrameCode = jsc.ZigStackFrameCode;
-const ZigStackFramePosition = jsc.ZigStackFramePosition;
-const ZigURL = url.URL;
-const SourceURLFormatterImpl = struct {
+pub const SourceURLFormatterImpl = struct {
     source_url: bun.String,
     position: ZigStackFramePosition,
     enable_color: bool,
@@ -139,7 +87,7 @@ const SourceURLFormatterImpl = struct {
     remapped: bool = false,
     root_path: []const u8 = "",
 
-pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+pub fn format(self: SourceURLFormatterImpl, writer: *std.Io.Writer) !void {
             if (self.enable_color) {
                 _ = try writer.writeAll(Output.prettyFmt("<r><cyan>", true));
             }
@@ -219,13 +167,14 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             }
     }
 };
-const NameFormatterImpl = struct {
+
+pub const NameFormatterImpl = struct {
     function_name: String,
     code_type: ZigStackFrameCode,
     enable_color: bool,
     is_async: bool,
 
-pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+pub fn format(self: NameFormatterImpl, writer: *std.Io.Writer) !void {
             const name = self.function_name;
             switch (self.code_type) {
 .Eval => {
@@ -293,3 +242,56 @@ if ((!name.isEmpty())) {
 }
     }
 };
+
+pub const ZigStackFrame = extern struct {
+    function_name: String,
+    source_url: String,
+    position: ZigStackFramePosition,
+    code_type: ZigStackFrameCode,
+    is_async: bool,
+    remapped: bool = false,
+    jsc_stack_frame_index: i32 = -1,
+
+pub fn deinit(self: *ZigStackFrame) void {
+            _ = self.function_name.deref();
+            _ = self.source_url.deref();
+    }
+
+pub fn toAPI(self: ZigStackFrame, root_path: []const u8, origin: ?*const ZigURL, allocator: std.mem.Allocator) !api.StackFrame {
+            var frame: api.StackFrame = (comptime std.mem.zeroes(api.StackFrame));
+            _ = &frame;
+            if ((!self.function_name.isEmpty())) {
+                var slicer = self.function_name.toUTF8(allocator);
+                _ = &slicer;
+                const cloned = try slicer.cloneIfBorrowed(allocator);
+                frame.function_name = cloned.slice();
+            }
+            if ((!self.source_url.isEmpty())) {
+                frame.file = try std.fmt.allocPrint(allocator, "{f}", .{ self.sourceURLFormatter(root_path, origin, true, false) });
+            }
+            frame.position = self.position;
+            frame.scope = @as(api.StackFrameScope, @enumFromInt(@intFromEnum(self.code_type)));
+            return frame;
+    }
+
+pub fn nameFormatter(self: ZigStackFrame, comptime enable_color: bool) NameFormatterImpl {
+            return NameFormatterImpl{ .function_name = self.function_name, .code_type = self.code_type, .enable_color = enable_color, .is_async = self.is_async };
+    }
+
+pub fn sourceURLFormatter(self: ZigStackFrame, root_path: []const u8, origin: ?*const ZigURL, exclude_line_column: bool, comptime enable_color: bool) SourceURLFormatterImpl {
+            return SourceURLFormatterImpl{ .source_url = self.source_url, .exclude_line_column = exclude_line_column, .origin = origin, .root_path = root_path, .position = self.position, .enable_color = enable_color, .remapped = self.remapped };
+    }
+    pub const SourceURLFormatter = SourceURLFormatterImpl;
+    pub const NameFormatter = NameFormatterImpl;
+    pub const Zero: ZigStackFrame = .{ .function_name = .empty, .code_type = .None, .source_url = .empty, .position = .invalid, .is_async = false, .jsc_stack_frame_index = -1 };
+};
+
+const string = []const u8;
+const Output = bun.Output;
+const String = bun.String;
+const strings = bun.strings;
+const api = bun.schema.api;
+const jsc = bun.jsc;
+const ZigStackFrameCode = jsc.ZigStackFrameCode;
+const ZigStackFramePosition = jsc.ZigStackFramePosition;
+const ZigURL = url.URL;

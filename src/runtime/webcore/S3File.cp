@@ -20,7 +20,7 @@ struct DeinitGuard<T> {
 
 struct ErrDeinitGuard<T> {
     ptr: (*T!)?;
-    ~init() { if (p := _.ptr) unsafe { p.deinit(); } }
+    ~errinit() { if (p := _.ptr) unsafe { p.deinit(); } }
     fn disarm(*_) { _.ptr = null; }
 }
 
@@ -207,7 +207,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
 
             return S3BlobStatTask.size(globalThis, &blob);
         },
-        .blob => |*blob| {
+        .blob *blob => {
             return Blob.getSize(blob, globalThis);
         },
     }
@@ -236,7 +236,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
 
             return S3BlobStatTask.exists(globalThis, &blob);
         },
-        .blob => |*blob| {
+        .blob *blob => {
             return Blob.getExists(blob, globalThis, callframe);
         },
     }
@@ -496,21 +496,21 @@ export class S3BlobStatTask {
     }
 
     pub fn deinit(*_) {
-        this.store.deref();
-        this.promise.deinit();
-        destroy(this);
+        _.store.deref();
+        _.promise.deinit();
+        destroy(_);
     }
 }
 
 pub fn getPresignUrlFrom(*_: *Blob, globalThis: *JSGlobalObject, extra_options: JSValue?): JSError!JSValue {
-    if (!this.isS3()) {
+    if (!_.isS3()) {
         return globalThis.ERR(.INVALID_THIS, "presign is only possible for s3:// files", .{}).throw();
     }
 
     let method: Method = .GET;
     let expires: usize = 86400;
 
-    const s3 = &this.store.?.data.s3;
+    const s3 = &_.store.?.data.s3;
     let credentialsWithOptions: S3.S3CredentialsWithOptions = .{
         .credentials = s3.getCredentials().*,
         .request_payer = s3.request_payer,
@@ -554,7 +554,7 @@ pub fn getPresignUrlFrom(*_: *Blob, globalThis: *JSGlobalObject, extra_options: 
 }
 
 pub fn getBucketName(_: *const Blob): ([]const u8)? {
-    const store = this.store orelse return null;
+    const store = _.store ?? return null;
     if (store.data != .s3) return null;
     const credentials = store.data.s3.getCredentials();
     let full_path = store.data.s3.path();
@@ -576,7 +576,7 @@ pub fn getBucketName(_: *const Blob): ([]const u8)? {
 }
 
 @c fn getBucket(*_: *Blob, globalThis: *JSGlobalObject): JSValue {
-    if (name := getBucketName(this)) {
+    if (name := getBucketName(_)) {
         return bun.String.createUTF8ForJS(globalThis, name) catch .zero;
     }
     return .js_undefined;
@@ -584,11 +584,11 @@ pub fn getBucketName(_: *const Blob): ([]const u8)? {
 
 pub fn getPresignUrl(*_: *Blob, globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
     const args = callframe.arguments_old(1);
-    return getPresignUrlFrom(this, globalThis, if (args.len > 0) unsafe { args.ptr[0] } else null);
+    return getPresignUrlFrom(_, globalThis, if (args.len > 0) unsafe { args.ptr[0] } else null);
 }
 
 @c fn getStat(*_: *Blob, globalThis: *JSGlobalObject, _: *CallFrame): JSValue {
-    return S3BlobStatTask.stat(globalThis, this) catch .zero;
+    return S3BlobStatTask.stat(globalThis, _) catch .zero;
 }
 
 pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
@@ -614,7 +614,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
 
             return S3BlobStatTask.stat(globalThis, &blob);
         },
-        .blob => |*blob| {
+        .blob *blob => {
             return S3BlobStatTask.stat(globalThis, blob);
         },
     }
@@ -674,10 +674,10 @@ comptime {
     @export(&getStat, .{ name: "JSS3File__stat" });
 }
 
-pub const exports = struct {
+pub struct exports {
     pub const JSS3File__presign = jsc.toJSHostFnWithContext(Blob, getPresignUrl);
     pub const JSS3File__stat = jsc.toJSHostFnWithContext(Blob, getStat);
-};
+}
 
 @c extern fn BUN__createJSS3File(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
 @c extern fn BUN__createJSS3FileUnsafely(globalObject: *JSGlobalObject, blob: *Blob): JSValue;

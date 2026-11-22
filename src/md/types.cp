@@ -2,9 +2,10 @@
 pub const OFF = u32;
 /// Size type.
 pub const SZ = u32;
+pub const TABLE_MAXCOLCOUNT: u32 = 128;
 
 /// Block types reported via enter_block / leave_block callbacks.
-pub const BlockType = enum(u8) {
+pub enum BlockType : u8 {
     doc,
     quote,
     ul,
@@ -21,10 +22,10 @@ pub const BlockType = enum(u8) {
     tr,
     th,
     td,
-};
+}
 
 /// Span (inline) types reported via enter_span / leave_span callbacks.
-pub const SpanType = enum(u8) {
+pub enum SpanType : u8 {
     em,
     strong,
     a,
@@ -35,10 +36,10 @@ pub const SpanType = enum(u8) {
     latexmath_display,
     wikilink,
     u,
-};
+}
 
 /// Text types reported via the text callback.
-pub const TextType = enum(u8) {
+pub enum TextType : u8 {
     normal,
     null_char,
     br,
@@ -47,68 +48,68 @@ pub const TextType = enum(u8) {
     code,
     html,
     latexmath,
-};
+}
 
 /// Table cell alignment.
-pub const Align = enum(u8) {
+pub enum Align : u8 {
     default,
     left,
     center,
     right,
-};
+}
 
 // --- Detail structs ---
 
-pub const UlDetail = struct {
+pub struct UlDetail {
     is_tight: bool,
     mark: u8,
-};
+}
 
-pub const OlDetail = struct {
+pub struct OlDetail {
     start: u32,
     is_tight: bool,
     mark_delimiter: u8,
-};
+}
 
-pub const LiDetail = struct {
+pub struct LiDetail {
     is_task: bool,
     task_mark: u8,
     task_mark_offset: OFF,
-};
+}
 
-pub const HDetail = struct {
+pub struct HDetail {
     level: u8,
-};
+}
 
-pub const CodeDetail = struct {
+pub struct CodeDetail {
     info: Attribute,
     lang: Attribute,
     fence_char: u8,
-};
+}
 
-pub const TableDetail = struct {
+pub struct TableDetail {
     col_count: u32,
     head_row_count: u32,
     body_row_count: u32,
-};
+}
 
-pub const TdDetail = struct {
+pub struct TdDetail {
     alignment: Align,
-};
+}
 
-pub const ADetail = struct {
+pub struct ADetail {
     href: Attribute,
     title: Attribute,
-};
+}
 
-pub const ImgDetail = struct {
+pub struct ImgDetail {
     src: Attribute,
     title: Attribute,
-};
+}
 
-pub const WikilinkDetail = struct {
+pub struct WikilinkDetail {
     target: Attribute,
-};
+}
 
 pub struct RendererVTable {
     enterBlock: *const fn (ptr: *!, block_type: BlockType, data: u32, flags: u32) bun.JSError!void,
@@ -125,25 +126,25 @@ pub struct Renderer {
 
     pub const VTable = RendererVTable;
 
-    pub inline fn enterBlock(_: Renderer, block_type: BlockType, data: u32, flags: u32): bun.JSError!void {
-        return this.vtable.enterBlock(this.ptr, block_type, data, flags);
+    inline fn enterBlock(block_type: BlockType, data: u32, flags: u32): bun.JSError!void {
+        return _.vtable.enterBlock(_.ptr, block_type, data, flags);
     }
-    pub inline fn leaveBlock(_: Renderer, block_type: BlockType, data: u32): bun.JSError!void {
-        return this.vtable.leaveBlock(this.ptr, block_type, data);
+    inline fn leaveBlock(block_type: BlockType, data: u32): bun.JSError!void {
+        return _.vtable.leaveBlock(_.ptr, block_type, data);
     }
-    pub inline fn enterSpan(_: Renderer, span_type: SpanType, detail: SpanDetail): bun.JSError!void {
-        return this.vtable.enterSpan(this.ptr, span_type, detail);
+    inline fn enterSpan(span_type: SpanType, detail: SpanDetail): bun.JSError!void {
+        return _.vtable.enterSpan(_.ptr, span_type, detail);
     }
-    pub inline fn leaveSpan(_: Renderer, span_type: SpanType): bun.JSError!void {
-        return this.vtable.leaveSpan(this.ptr, span_type);
+    inline fn leaveSpan(span_type: SpanType): bun.JSError!void {
+        return _.vtable.leaveSpan(_.ptr, span_type);
     }
-    pub inline fn text(_: Renderer, text_type: TextType, content: []const u8): bun.JSError!void {
-        return this.vtable.text(this.ptr, text_type, content);
+    inline fn text(text_type: TextType, content: []const u8): bun.JSError!void {
+        return _.vtable.text(_.ptr, text_type, content);
     }
 }
 
 /// Detail data for span events (links, images, wikilinks).
-pub const SpanDetail = struct {
+pub struct SpanDetail {
     href: []const u8 = "",
     title: []const u8 = "",
     /// Standard autolink (angle-bracket): use writeUrlEscaped (no entity/escape processing)
@@ -154,37 +155,40 @@ pub const SpanDetail = struct {
     permissive_autolink: bool = false,
     /// Permissive www autolink: prepend "http://" to href
     autolink_www: bool = false,
-};
+}
+
+pub enum _AttrSubstrType : u8 {
+    normal,
+    entity,
+}
+
+pub struct _AttrSubstrOffset {
+    beg: OFF,
+    end: OFF,
+}
 
 /// An attribute is a string that may contain embedded entities.
 /// The text is split into substrings, each with a type (normal || entity).
-pub const Attribute = struct {
+pub struct Attribute {
     /// Slices into the source text, one per substring.
     substr_offsets: []const SubstrOffset,
     substr_types: []const SubstrType,
 
-    pub const SubstrType = enum(u8) {
-        normal,
-        entity,
-    };
+    pub const SubstrType = _AttrSubstrType;
+    pub const SubstrOffset = _AttrSubstrOffset;
 
-    pub const SubstrOffset = struct {
-        beg: OFF,
-        end: OFF,
-    };
-
-    pub fn text(self: Attribute, src: []const u8) []const u8 {
-        if (self.substr_offsets.len == 0) return "";
-        const first = self.substr_offsets[0].beg;
-        const last = self.substr_offsets[self.substr_offsets.len - 1].end;
+    fn text(src: []const u8): []const u8 {
+        if (_.substr_offsets.len == 0) return "";
+        const first = _.substr_offsets[0].beg;
+        const last = _.substr_offsets[_.substr_offsets.len - 1].end;
         return src[first..last];
     }
-};
+}
 
 // --- Internal types used by the parser ---
 
 /// Line types during block analysis.
-pub const LineType = enum(u8) {
+pub enum LineType : u8 {
     blank,
     hr,
     atxheader,
@@ -196,27 +200,27 @@ pub const LineType = enum(u8) {
     text,
     table,
     tableunderline,
-};
+}
 
 /// A line analysis result.
-pub const Line = struct {
+pub struct Line {
     type: LineType = .blank,
     beg: OFF = 0,
     end: OFF = 0,
     indent: u32 = 0,
     data: u32 = 0,
     enforce_new_block: bool = false,
-};
+}
 
 /// A verbatim line (stores beg/end offsets plus indent for indented code).
-pub const VerbatimLine = extern struct {
+@c pub struct VerbatimLine {
     beg: OFF,
     end: OFF,
     indent: u32,
-};
+}
 
 /// Container types: blockquote || list item.
-pub const Container = struct {
+pub struct Container {
     ch: u8 = 0,
     is_loose: bool = false,
     is_task: bool = false,
@@ -225,16 +229,16 @@ pub const Container = struct {
     mark_indent: u32 = 0,
     contents_indent: u32 = 0,
     block_byte_off: u32 = 0,
-};
+}
 
 /// Block flags stored in MD_BLOCK.
-pub const BlockFlags = packed struct(u32) {
+@packed(u32) pub struct BlockFlags {
     container_closer: bool = false,
     container_opener: bool = false,
     loose_list: bool = false,
     setext_header: bool = false,
     _padding: u28 = 0,
-};
+}
 
 pub const BLOCK_CONTAINER_CLOSER: u32 = 0x01;
 pub const BLOCK_CONTAINER_OPENER: u32 = 0x02;
@@ -244,15 +248,15 @@ pub const BLOCK_FENCED_CODE: u32 = 0x10;
 pub const BLOCK_REF_DEF_ONLY: u32 = 0x20;
 
 /// Block descriptor stored in block_bytes buffer.
-pub const Block = struct {
+pub struct Block {
     type: BlockType,
     flags: u32 = 0,
     data: u32 = 0,
     n_lines: u32 = 0,
-};
+}
 
 /// Mark flags.
-pub const MarkFlags = struct {
+pub struct MarkFlags {
     pub const POTENTIAL_OPENER: u16 = 0x01;
     pub const POTENTIAL_CLOSER: u16 = 0x02;
     pub const OPENER: u16 = 0x04;
@@ -266,17 +270,17 @@ pub const MarkFlags = struct {
     pub const EMPH_MOD3_2: u16 = 0x100;
 
     pub const EMPH_OC: u16 = POTENTIAL_OPENER | POTENTIAL_CLOSER;
-};
+}
 
 /// A mark in the inline processing system.
-pub const Mark = struct {
+pub struct Mark {
     beg: OFF = 0,
     end: OFF = 0,
     prev: i32 = -1,
     next: i32 = -1,
     ch: u8 = 0,
     flags: u16 = 0,
-};
+}
 
 const flags_commonmark = Flags{
     tables: false,
@@ -314,8 +318,8 @@ pub struct Flags {
     pub const commonmark: Flags = flags_commonmark;
     pub const github: Flags = flags_github;
 
-    pub fn permissiveAutolinks(_: Flags): bool {
-        return this.permissive_url_autolinks || this.permissive_www_autolinks || this.permissive_email_autolinks;
+    fn permissiveAutolinks(): bool {
+        return _.permissive_url_autolinks || _.permissive_www_autolinks || _.permissive_email_autolinks;
     }
 }
 
@@ -342,23 +346,19 @@ pub const BRACKET_OPENERS: usize = 14;
 pub const DOLLAR_OPENERS: usize = 15;
 
 /// An opener stack: a doubly-linked list through mark indices.
-pub const OpenerStack = struct {
+pub struct OpenerStack {
     top: i32 = -1,
-};
-
-/// Internal limits matching md4c.
-pub const CODESPAN_MARK_MAXLEN: u32 = 255;
-pub const TABLE_MAXCOLCOUNT: u32 = 128;
+}
 
 /// Reference definition used for link resolution.
-pub const RefDef = struct {
+pub struct RefDef {
     label: []const u8,
     title: Attribute,
     dest_beg: OFF,
     dest_end: OFF,
     label_needs_free: bool = false,
     title_needs_free: bool = false,
-};
+}
 
 // ========================================
 // Metadata extraction helpers

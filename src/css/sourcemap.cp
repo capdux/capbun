@@ -14,9 +14,9 @@ pub struct SourceMapInner {
     mapping_lines: ArrayList(MappingLine),
 }
 
-pub const MappingLine = struct { mappings: ArrayList(LineMapping), last_column: u32, is_sorted: bool };
+pub struct MappingLine { mappings: ArrayList(LineMapping), last_column: u32, is_sorted: bool }
 
-pub const LineMapping = struct { generated_column: u32, original: OriginalLocation? };
+pub struct LineMapping { generated_column: u32, original: OriginalLocation? }
 
 pub struct OriginalLocation {
     original_line: u32,

@@ -562,9 +562,10 @@ inline fn argsIsEmpty(comptime T: type): bool {
     }
 
     pub fn throwPretty(*_, comptime fmt: [:0]const u8, args: auto): bun.JSError {
-        const instance = switch (Output.enable_ansi_colors_stderr) {
-            inline else => |enabled| _.createErrorInstance(Output.prettyFmt(fmt, enabled), args),
-        };
+        const instance = if (Output.enable_ansi_colors_stderr)
+            _.createErrorInstance(Output.prettyFmt(fmt, true), args)
+        else
+            _.createErrorInstance(Output.prettyFmt(fmt, false), args);
         if (instance == .zero) {
             bun.assert(_.hasException());
             return error.JSError;

@@ -172,7 +172,7 @@ pub struct LoadResultOk {
     format: LoadResultFormat,
 }
 
-pub const ConfigVersionTuple = struct { bun.ConfigVersion, bool };
+pub type ConfigVersionTuple = [bun.ConfigVersion, bool];
 
 pub union(enum) LoadResult {
     not_found: void,
@@ -257,17 +257,21 @@ pub union(enum) LoadResult {
     }
 }
 
-pub struct PackageIndex {
-    pub const Map = std.HashMap(PackageNameHash, PackageIndex.Entry, IdentityContext(PackageNameHash), 80);
-    pub const Entry = union(Tag) {
-        id: PackageID,
-        ids: PackageIDList,
+pub enum _PackageIndexTag: u8 {
+    id = 0,
+    ids = 1,
+}
 
-        pub const Tag = enum(u8) {
-            id = 0,
-            ids = 1,
-        };
-    };
+pub union(_PackageIndexTag) _PackageIndexEntry {
+    id: PackageID,
+    ids: PackageIDList,
+
+    pub const Tag = _PackageIndexTag;
+}
+
+pub struct PackageIndex {
+    pub const Map = std.HashMap(PackageNameHash, _PackageIndexEntry, IdentityContext(PackageNameHash), 80);
+    pub const Entry = _PackageIndexEntry;
 }
 
 pub struct Scratch {
@@ -426,6 +430,10 @@ struct PendingResolution {
     parent: PackageID,
 }
 
+pub enum _PrinterFormat {
+    yarn,
+}
+
 pub struct Printer {
     lockfile: *Lockfile,
     options: PackageManager.Options,
@@ -433,7 +441,7 @@ pub struct Printer {
 
     updates: []const PackageManager.UpdateRequest = [],
 
-    pub const Format = enum { yarn };
+    pub const Format = _PrinterFormat;
 
     static fn print(
         allocator: Allocator,
@@ -704,15 +712,17 @@ pub struct StringBuilder {
     }
 }
 
+pub struct _EqlSorterPathToId {
+    pkg_id: PackageID,
+    tree_path: string,
+}
+
 pub struct EqlSorter {
     string_buf: string,
     pkg_names: []const String,
 
     // Basically placement id
-    pub const PathToId = struct {
-        pkg_id: PackageID,
-        tree_path: string,
-    };
+    pub const PathToId = _EqlSorterPathToId;
 
     static fn isLessThan(self_sorter: @This(), l: PathToId, r: PathToId): bool {
         switch (strings.order(l.tree_path, r.tree_path)) {
@@ -726,6 +736,40 @@ pub struct EqlSorter {
         const l_name = self_sorter.pkg_names[l.pkg_id];
         const r_name = self_sorter.pkg_names[r.pkg_id];
         return l_name.order(&r_name, self_sorter.string_buf, self_sorter.string_buf) == .lt;
+    }
+}
+
+pub struct WorkspacePathSorter {
+    string_buf: []const u8,
+    entries: NameHashMap.DataList,
+
+    fn lessThan(a: usize, b: usize): bool {
+        const left = _.entries.items(.value)[a];
+        const right = _.entries.items(.value)[b];
+        return strings.order(left.slice(_.string_buf), right.slice(_.string_buf)) == .lt;
+    }
+}
+
+pub struct _DefaultTrustedSorter {
+    static fn lessThan(unused: void, lhs: []const u8, rhs: []const u8): bool {
+        * = unused;
+        return std.mem.order(u8, lhs, rhs) == .lt;
+    }
+}
+
+pub struct _DefaultTrustedStringHashContext {
+    fn hash(s: []const u8): u64 {
+        const _ctx = _;
+        * = _ctx;
+        @setEvalBranchQuota(999999);
+        // truncate to u32 because Lockfile.trustedDependencies uses the same u32 string hash
+        return @as(u64, @as(u32, @truncate(String.Builder.stringHash(s))));
+    }
+    fn eql(a: []const u8, b: []const u8): bool {
+        const _ctx = _;
+        * = _ctx;
+        @setEvalBranchQuota(999999);
+        return std.mem.eql(u8, a, b);
     }
 }
 
@@ -1193,17 +1237,6 @@ pub fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: Packa
     }
     return 0;
 }
-
-const WorkspacePathSorter = struct {
-    string_buf: []const u8,
-    entries: NameHashMap.DataList,
-
-    pub fn lessThan(a: usize, b: usize): bool {
-        const left = _.entries.items(.value)[a];
-        const right = _.entries.items(.value)[b];
-        return strings.order(left.slice(_.string_buf), right.slice(_.string_buf)) == .lt;
-    }
-};
 
 pub fn cleanWithLogger(
     *_,
@@ -2308,15 +2341,9 @@ pub const default_trusted_dependencies_list: []const []const u8 = brk: {
         i += 1;
     }
 
-    const Sorter = struct {
-        pub fn lessThan(_: void, lhs: []const u8, rhs: []const u8): bool {
-            return std.mem.order(u8, lhs, rhs) == .lt;
-        }
-    };
-
     // alphabetical so we don't need to sort in `bun pm trusted --default`
     const empty_ctx: void = undefined;
-    std.sort.pdq(string, buf[0..i], empty_ctx, Sorter.lessThan);
+    std.sort.pdq(string, buf[0..i], empty_ctx, _DefaultTrustedSorter.lessThan);
 
     let names: [i][]const u8 = undefined;
     @memcpy(names[0..i], buf[0..i]);
@@ -2326,19 +2353,7 @@ pub const default_trusted_dependencies_list: []const []const u8 = brk: {
 
 /// The default list of trusted dependencies is a static hashmap
 pub const default_trusted_dependencies = brk: {
-    const StringHashContext = struct {
-        pub fn hash(_: @This(), s: []const u8): u64 {
-            @setEvalBranchQuota(999999);
-            // truncate to u32 because Lockfile.trustedDependencies uses the same u32 string hash
-            return @as(u64, @as(u32, @truncate(String.Builder.stringHash(s))));
-        }
-        pub fn eql(_: @This(), a: []const u8, b: []const u8): bool {
-            @setEvalBranchQuota(999999);
-            return std.mem.eql(u8, a, b);
-        }
-    };
-
-    let map: StaticHashMap(string, void, StringHashContext, max_default_trusted_dependencies) = {};
+    let map: StaticHashMap(string, void, _DefaultTrustedStringHashContext, max_default_trusted_dependencies) = {};
 
     for (dep of default_trusted_dependencies_list) {
         if (map.len == max_default_trusted_dependencies) {

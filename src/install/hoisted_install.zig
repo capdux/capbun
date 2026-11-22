@@ -92,6 +92,29 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const HoistedClosure = struct {
+    installer: *PackageInstaller,
+    err_val: ?anyerror = null,
+    manager: *PackageManager,
+
+pub fn isDone(self: *HoistedClosure) bool {
+            const pm = self.manager;
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.manager.runTasks(*PackageInstaller, self.installer, .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, pm.options.log_level)) catch |e| { _ = &e; self.err_val = e;
+            break :blk_catch_0 {}; }); });
+            if ((self.err_val != null)) {
+                return true;
+            }
+            _ = self.manager.reportSlowLifecycleScripts();
+            if ((PackageManager.verbose_install and (self.manager.pendingTaskCount() > 0))) {
+                const pending_task_count = self.manager.pendingTaskCount();
+                if (((pending_task_count > 0) and PackageManager.hasEnoughTimePassedBetweenWaitingMessages())) {
+                    _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ .pending_task_count = pending_task_count });
+                }
+            }
+            return ((self.manager.pendingTaskCount() == 0) and self.manager.hasNoMorePendingLifecycleScripts());
+    }
+};
+
 const Environment = bun.Environment;
 const Global = bun.Global;
 const Output = bun.Output;
@@ -170,8 +193,8 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
                 _ = Global.crash();
             }
         }
-        break :brk (blk_catch_0: { break :blk_catch_0 ((bun.openDir(cwd.stdDir(), "node_modules")) catch |e| { _ = &e; _ = Output.err(e, "could not open the <b>\"node_modules\"<r> directory", .{});
-        break :blk_catch_0 Global.crash(); }); });
+        break :brk (blk_catch_1: { break :blk_catch_1 ((bun.openDir(cwd.stdDir(), "node_modules")) catch |e| { _ = &e; _ = Output.err(e, "could not open the <b>\"node_modules\"<r> directory", .{});
+        break :blk_catch_1 Global.crash(); }); });
 };
         var skip_delete = new_node_modules;
         _ = &skip_delete;
@@ -287,31 +310,9 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
                 _ = self.reportSlowLifecycleScripts();
             }
             while (((self.pendingTaskCount() > 0) and installer_guard.val.options.do.install_packages)) {
-                const Closure = struct {
-    installer: *PackageInstaller,
-    err_val: ?anyerror = null,
-    manager: *PackageManager,
-
-pub fn isDone(closure: *@This()) bool {
-            const pm = closure.manager;
-            _ = (blk_catch_0: { break :blk_catch_0 ((closure.manager.runTasks(*PackageInstaller, closure.installer, .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, pm.options.log_level)) catch |e| { _ = &e; closure.err_val = e;
-            break :blk_catch_0 {}; }); });
-            if ((closure.err_val != null)) {
-                return true;
-            }
-            _ = closure.manager.reportSlowLifecycleScripts();
-            if ((PackageManager.verbose_install and (closure.manager.pendingTaskCount() > 0))) {
-                const pending_task_count = closure.manager.pendingTaskCount();
-                if (((pending_task_count > 0) and PackageManager.hasEnoughTimePassedBetweenWaitingMessages())) {
-                    _ = Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", .{ .pending_task_count = pending_task_count });
-                }
-            }
-            return ((closure.manager.pendingTaskCount() == 0) and closure.manager.hasNoMorePendingLifecycleScripts());
-    }
-};
-                var closure = Closure{ .installer = (&installer_guard.val), .manager = self };
+                var closure = HoistedClosure{ .installer = (&installer_guard.val), .manager = self };
                 _ = &closure;
-                _ = self.sleepUntil((&closure), (&Closure.isDone));
+                _ = self.sleepUntil((&closure), (&HoistedClosure.isDone));
                 if (closure.err_val) |e| {
                     _ = &e;
                     return e;

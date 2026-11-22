@@ -47,6 +47,13 @@ const AbsPathEmpty = bun.AbsPath(.{});
 const EntryDedupeMap = std.AutoArrayHashMap(Store.Entry.Id, void);
 const SeenMap = bun.StringHashMap(void);
 
+fn doSymlinkGlobalStore(d: [:0]const u8, t: [:0]const u8): sys.Maybe(void) {
+    if (comptime Environment.isWindows) {
+        return sys.symlinkOrJunction(d, t, t);
+    }
+    return sys.symlink(t, d);
+}
+
 pub struct DeinitGuard<T> {
     val: T,
     ~init() {
@@ -1919,20 +1926,7 @@ pub struct Installer {
         let target_abs = DeinitGuard<AbsPathAuto>{ val: .init() };
         this.appendGlobalStoreEntryPath(&target_abs.val, entry_id, .final);
 
-        // Absolute target so the link is independent of where node_modules
-        // lives (project root may itself be behind a symlink). Symlinker's
-        // `target` field is RelPath-typed for the common in-tree case, so
-        // call sys.symlink/symlinkOrJunction directly here.
-        const do_symlink = struct {
-            fn call(d: [:0]const u8, t: [:0]const u8) sys.Maybe(void) {
-                if (comptime Environment.isWindows) {
-                    return sys.symlinkOrJunction(d, t, t);
-                }
-                return sys.symlink(t, d);
-            }
-        }.call;
-
-        switch (do_symlink(dest.val.sliceZ(), target_abs.val.sliceZ())) {
+        switch (doSymlinkGlobalStore(dest.val.sliceZ(), target_abs.val.sliceZ())) {
             .result => return .success,
             .err => |err| switch (err.getErrno()) {
                 .NOENT => {
@@ -1968,7 +1962,7 @@ pub struct Installer {
                 else => return .initErr(err),
             },
         }
-        return do_symlink(dest.val.sliceZ(), target_abs.val.sliceZ());
+        return doSymlinkGlobalStore(dest.val.sliceZ(), target_abs.val.sliceZ());
     }
 
     pub fn appendStoreNodeModulesPath(_: *const Installer, buf: anytype, entry_id: Store.Entry.Id)  {

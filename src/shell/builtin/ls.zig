@@ -62,16 +62,44 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const interpreter = @import("../interpreter.zig");
 pub const bun = @import("bun");
+pub const ShellLsResultKind = enum {
+    file,
+    dir,
+    idk,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ParseFlagResult = union(enum) {
+    continue_parsing: void,
+    done: void,
+    illegal_option: []const u8,
+};
+
+pub const OptsParseError = union(enum) {
+    illegal_option: []const u8,
+    show_usage: void,
+};
+
 pub const ExecState = struct {
     err: ?Syscall.Error = null,
     task_count: std.atomic.Value(usize),
     tasks_done: usize = 0,
     output_waiting: usize = 0,
     output_done: usize = 0,
+};
+
+pub const State = union(enum) {
+    idle: void,
+    exec: ExecState,
+    waiting_write_err: void,
+    done: void,
 };
 
 pub const Opts = struct {
@@ -178,9 +206,9 @@ pub fn enqueue(self: *ShellLsTask, path: [:0]const u8) void {
             _ = subtask.schedule();
     }
 
-pub fn join(self: *ShellLsTask, alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool) [:0]const u8 {
-            const self_ptr = self;
-            _ = &self_ptr;
+pub fn join(self: *const ShellLsTask, alloc: Allocator, subdir_parts: []const []const u8, is_absolute: bool) [:0]const u8 {
+            const _self = self;
+            _ = &_self;
             if ((!is_absolute)) {
                 return bun.handleOom(std.fs.path.joinZ(alloc, subdir_parts));
             }
@@ -257,7 +285,7 @@ self.err = self.errorWithPath(e, self.path);
             return;
     }
 
-pub fn shouldSkipEntry(self: *ShellLsTask, name: [:0]const u8) bool {
+pub fn shouldSkipEntry(self: ShellLsTask, name: [:0]const u8) bool {
             if (self.opts.show_all) {
                 return false;
             }
@@ -387,9 +415,12 @@ pub fn addDotEntriesIfNeeded(self: *ShellLsTask, dir_fd: bun.FD) void {
             _ = self.addEntry("..", dir_fd);
     }
 
-pub fn errorWithPath(self: *ShellLsTask, err: Syscall.Error, path: [:0]const u8) Syscall.Error {
-            _ = debug("Ls(0x{x}).errorWithPath({s})", .{ @intFromPtr(self), path });
-            return err.withPath(bun.handleOom(self.ls.alloc_scope.allocator().dupeZ(u8, path[0..path.len])));
+pub fn errorWithPath(self: ShellLsTask, err_val: Syscall.Error, path: [:0]const u8) Syscall.Error {
+            _ = debug("Ls(0x{x}).errorWithPath({s})", .{ (blk: {
+            break :blk @intFromPtr((&self));
+
+}), path });
+            return err_val.withPath(bun.handleOom(self.ls.alloc_scope.allocator().dupeZ(u8, path[0..path.len])));
     }
 
 pub fn workPoolCallback(task: *jsc.WorkPoolTask) void {
@@ -434,6 +465,61 @@ pub fn deinit(self: *ShellLsTask) void {
             }
             _ = self.output.deinit();
             _ = self.ls.alloc_scope.allocator().destroy(self);
+    }
+};
+
+pub const ShellLsOutputTaskVTable = struct {
+
+pub fn writeErr(parent: *Ls, childptr: anytype, errbuf: []const u8) ?Yield {
+            _ = log("ShellLsOutputTaskVTable.writeErr(0x{x}, {s})", .{ (blk: {
+            break :blk @intFromPtr(parent);
+
+}), errbuf });
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stderr.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+            }
+            _ = parent.bltn().writeNoIO(.stderr, errbuf);
+            return null;
+    }
+
+pub fn onWriteErr(parent: *Ls) void {
+            _ = log("ShellLsOutputTaskVTable.onWriteErr(0x{x})", .{ (blk: {
+            break :blk @intFromPtr(parent);
+
+}) });
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
+    }
+
+pub fn writeOut(parent: *Ls, childptr: anytype, output: *OutputSrc) ?Yield {
+            _ = log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s})", .{ (blk: {
+            break :blk @intFromPtr(parent);
+
+}), output.slice() });
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return parent.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
+            }
+            _ = log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s}) no IO", .{ (blk: {
+            break :blk @intFromPtr(parent);
+
+}), output.slice() });
+            _ = parent.bltn().writeNoIO(.stdout, output.slice());
+            return null;
+    }
+
+pub fn onWriteOut(parent: *Ls) void {
+            _ = log("ShellLsOutputTaskVTable.onWriteOut(0x{x})", .{ (blk: {
+            break :blk @intFromPtr(parent);
+
+}) });
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
+    }
+
+pub fn onDone(parent: *Ls) Yield {
+            return parent.next();
     }
 };
 
@@ -499,7 +585,10 @@ const paths_opt = (switch (self.parseOpts()) {
             }
 },
 .exec => {
-_ = log("Ls(0x{x}, state=exec) Check: tasks_done={d} task_count={d} output_done={d} output_waiting={d}", .{ @intFromPtr(self), self.state.exec.tasks_done, self.state.exec.task_count.load(.monotonic), self.state.exec.output_done, self.state.exec.output_waiting });
+_ = log("Ls(0x{x}, state=exec) Check: tasks_done={d} task_count={d} output_done={d} output_waiting={d}", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.state.exec.tasks_done, self.state.exec.task_count.load(.monotonic), self.state.exec.output_done, self.state.exec.output_waiting });
             if (((self.state.exec.tasks_done >= self.state.exec.task_count.load(.monotonic)) and (self.state.exec.output_done >= self.state.exec.output_waiting))) {
                 const exit_code: ExitCode = (if ((self.state.exec.err != null)) (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
                 if (self.state.exec.err) |*e| {
@@ -573,11 +662,11 @@ pub fn onShellLsTaskDone(self: *Ls, task: *ShellLsTask) void {
         _ = y_ok.run();
 }
 
-pub fn parseOpts(self: *Ls) Result(FilepathArgs,Opts.ParseError) {
+pub fn parseOpts(self: *Ls) Result(FilepathArgs, Opts.ParseError) {
         return self.parseFlags();
 }
 
-pub fn parseFlags(self: *Ls) Result(FilepathArgs,Opts.ParseError) {
+pub fn parseFlags(self: *Ls) Result(FilepathArgs, Opts.ParseError) {
         const args = self.bltn().argsSlice();
         var idx: usize = 0;
         _ = &idx;
@@ -742,7 +831,10 @@ return .{ .illegal_option = flag[1..2] };
 }
 
 pub inline fn bltn(self: *Ls) *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("ls", self));
+        const impl_: *Builtin.Impl = (blk: {
+        break :blk @alignCast(@fieldParentPtr("ls", self));
+
+});
         return @fieldParentPtr("impl", impl_);
 }
 const CStr = [*:0]const u8;
@@ -763,63 +855,4 @@ const ExitCode = shell.ExitCode;
 const Yield = shell.Yield;
 const log = bun.Output.scoped(.ls, .hidden);
 const debug = log;
-pub const ShellLsResultKind = enum {
-    file,
-    dir,
-    idk,
-};
-pub const ParseFlagResult = union(enum) {
-    continue_parsing,
-    done,
-    illegal_option: []const u8,
-};
-pub const OptsParseError = union(enum) {
-    illegal_option: []const u8,
-    show_usage,
-};
-pub const State = union(enum) {
-    idle,
-    exec: ExecState,
-    waiting_write_err,
-    done,
-};
-const ShellLsOutputTaskVTable = struct {
-
-pub fn writeErr(self: *Ls, childptr: anytype, errbuf: []const u8) ?Yield {
-            _ = log("ShellLsOutputTaskVTable.writeErr(0x{x}, {s})", .{ @intFromPtr(self), errbuf });
-            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
-            if (self.bltn().stderr.needsIO()) |safeguard| {
-                _ = &safeguard;
-                return self.bltn().stderr.enqueue(childptr, errbuf, safeguard);
-            }
-            _ = self.bltn().writeNoIO(.stderr, errbuf);
-            return null;
-    }
-
-pub fn onWriteErr(self: *Ls) void {
-            _ = log("ShellLsOutputTaskVTable.onWriteErr(0x{x})", .{ @intFromPtr(self) });
-            self.state.exec.output_done = (self.state.exec.output_done + 1);
-    }
-
-pub fn writeOut(self: *Ls, childptr: anytype, output: *OutputSrc) ?Yield {
-            _ = log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s})", .{ @intFromPtr(self), output.slice() });
-            self.state.exec.output_waiting = (self.state.exec.output_waiting + 1);
-            if (self.bltn().stdout.needsIO()) |safeguard| {
-                _ = &safeguard;
-                return self.bltn().stdout.enqueue(childptr, output.slice(), safeguard);
-            }
-            _ = log("ShellLsOutputTaskVTable.writeOut(0x{x}, {s}) no IO", .{ @intFromPtr(self), output.slice() });
-            _ = self.bltn().writeNoIO(.stdout, output.slice());
-            return null;
-    }
-
-pub fn onWriteOut(self: *Ls) void {
-            _ = log("ShellLsOutputTaskVTable.onWriteOut(0x{x})", .{ @intFromPtr(self) });
-            self.state.exec.output_done = (self.state.exec.output_done + 1);
-    }
-
-pub fn onDone(self: *Ls) Yield {
-            return self.next();
-    }
-};
 pub const ShellLsOutputTask = OutputTask(Ls, .{ .writeErr = ShellLsOutputTaskVTable.writeErr, .onWriteErr = ShellLsOutputTaskVTable.onWriteErr, .writeOut = ShellLsOutputTaskVTable.writeOut, .onWriteOut = ShellLsOutputTaskVTable.onWriteOut, .onDone = ShellLsOutputTaskVTable.onDone });

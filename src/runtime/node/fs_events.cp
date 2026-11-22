@@ -25,7 +25,7 @@ pub const FSEventStreamCallback = (*const fn (FSEventStreamRef, *!?, usize, *!?,
 pub const CFRunLoopPerformFn = (*const fn (*!?) callconv(.c) void);
 
 // we only care about info and perform
-pub const CFRunLoopSourceContext = extern struct {
+@c pub struct CFRunLoopSourceContext {
     version: CFIndex = 0,
     info: *!,
     retain: *!? = null,
@@ -36,13 +36,13 @@ pub const CFRunLoopSourceContext = extern struct {
     schedule: *!? = null,
     cancel: *!? = null,
     perform: CFRunLoopPerformFn,
-};
+}
 
-pub const FSEventStreamContext = extern struct {
+@c pub struct FSEventStreamContext {
     version: CFIndex = 0,
     info: *!? = null,
     pad: [3]*!? = .{ null, null, null },
-};
+}
 
 pub const kCFStringEncodingUTF8: CFStringEncoding = @as(CFStringEncoding, 0x8000100);
 pub const noErr: OSStatus = @as(OSStatus, 0);

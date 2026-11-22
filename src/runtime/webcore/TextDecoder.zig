@@ -376,7 +376,6 @@ var encoding_name = EncodingLabel.getLabel(self.encoding);
         _ = &codec_guard;
         var __codec_guard_moved = false; _ = &__codec_guard_moved;
         defer if (!__codec_guard_moved) { __codec_guard_moved = true; const __T = @TypeOf(codec_guard); if (@typeInfo(__T) == .optional) { if (codec_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { codec_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = codec_guard; _drop_val.__cp_deinit(); } };
-        _ = (&codec_guard);
         if ((!self.ignore_bom)) {
             _ = codec.stripBOM();
         }
@@ -453,6 +452,7 @@ pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 pub const @"new" = TrivialNew(TextDecoder);
 const OutputList = ArrayListUnmanaged(u16);
+pub const DecodeUTF16Result = struct { OutputList, bool };
 const ArrayListUnmanaged = std.ArrayListUnmanaged;
 const ArrayBuffer = jsc.ArrayBuffer;
 const JSGlobalObject = jsc.JSGlobalObject;
@@ -462,4 +462,3 @@ const ZigString = jsc.ZigString;
 const EncodingLabel = jsc.WebCore.EncodingLabel;
 const Vector16 = meta.Vector(16, u16);
 const max_16_ascii: Vector16 = @splat((if (@typeInfo(@TypeOf(127)) == .@"enum") cp_cast_int(u16, @intFromEnum(127)) else cp_cast_int(u16, 127)));
-pub const DecodeUTF16Result = struct { OutputList, bool };

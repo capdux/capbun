@@ -91,6 +91,13 @@ pub const ExecState = struct {
     err: ?jsc.SystemError = null,
 };
 
+pub const State = union(enum) {
+    idle: void,
+    exec: ExecState,
+    waiting_write_err: void,
+    done: void,
+};
+
 pub const Opts = struct {
     mode: ?u32 = null,
     parents: bool = false,
@@ -134,6 +141,164 @@ return .{ .illegal_option = smallflags[(1 + i)..] };
 },
 }
             return null;
+    }
+};
+
+pub const MkdirVerboseVTable = struct {
+    inner: *ShellMkdirTask,
+    active: bool,
+
+pub fn onCreateDir(vtable: *MkdirVerboseVTable, dirpath: bun.OSPathSliceZ) void {
+            if ((!vtable.active)) {
+                return;
+            }
+            if (bun.Environment.isWindows) {
+                var buf: bun.PathBuffer = undefined;
+                _ = &buf;
+                const str = bun.strings.fromWPath((&buf), dirpath[0..dirpath.len]);
+                _ = bun.handleOom(vtable.inner.created_directories.appendSlice(str));
+                _ = bun.handleOom(vtable.inner.created_directories.append(10));
+            } else {
+                _ = bun.handleOom(vtable.inner.created_directories.appendSlice(dirpath));
+                _ = bun.handleOom(vtable.inner.created_directories.append(10));
+            }
+            return;
+    }
+};
+
+pub const ShellMkdirTask = struct {
+    mkdir: *Mkdir,
+    opts: Opts,
+    filepath: [:0]const u8,
+    cwd_path: [:0]const u8,
+    created_directories: ArrayList(u8),
+    err: ?jsc.SystemError = null,
+    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    event_loop: jsc.EventLoopHandle,
+    concurrent_task: jsc.EventLoopTask,
+
+pub fn deinit(self: *ShellMkdirTask) void {
+            _ = self.created_directories.deinit();
+            _ = bun.default_allocator.destroy(self);
+    }
+
+pub fn takeOutput(self: *ShellMkdirTask) ArrayList(u8) {
+            const out = self.created_directories;
+            self.created_directories = ArrayList(u8).init(bun.default_allocator);
+            return out;
+    }
+
+pub fn format(self: *ShellMkdirTask, writer: anytype) !void {
+            _ = try writer.print("ShellMkdirTask(0x{x}, filepath={s})", .{ (blk: {
+            break :blk @intFromPtr(self);
+
+}), self.filepath });
+    }
+
+pub fn create(mkdir: *Mkdir, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellMkdirTask {
+            var task = bun.handleOom(bun.default_allocator.create(ShellMkdirTask));
+            _ = &task;
+            const evtloop = mkdir.bltn().parentCmd().base.eventLoop();
+            task.* = ShellMkdirTask{ .mkdir = mkdir, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .created_directories = ArrayList(u8).init(bun.default_allocator), .event_loop = evtloop, .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop) };
+            return task;
+    }
+
+pub fn schedule(self: *ShellMkdirTask) void {
+            _ = debug("{f} schedule", .{ self });
+            _ = WorkPool.schedule((&self.task));
+    }
+
+pub fn runFromMainThread(self: *ShellMkdirTask) void {
+            _ = debug("{f} runFromJS", .{ self });
+            _ = self.mkdir.onShellMkdirTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *ShellMkdirTask, _: *void) void {
+            _ = self.runFromMainThread();
+    }
+
+pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
+            var task_self: *ShellMkdirTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            _ = debug("{f} runFromThreadPool", .{ task_self });
+            var filepath: [:0]const u8 = task_self.filepath;
+            _ = &filepath;
+            if ((!ResolvePath.Platform.auto.isAbsolute(task_self.filepath))) {
+                const parts: [2][]const u8 = .{ task_self.cwd_path[0..], task_self.filepath[0..] };
+                filepath = ResolvePath.joinZ((&parts), .auto);
+            }
+            var node_fs = jsc.Node.fs.NodeFS{  };
+            _ = &node_fs;
+            if (task_self.opts.parents) {
+                const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = true, .always_return_none = true };
+                var vtable = MkdirVerboseVTable{ .inner = task_self, .active = task_self.opts.verbose };
+                _ = &vtable;
+                switch (node_fs.mkdirRecursiveImpl(args, *MkdirVerboseVTable, (&vtable))) {
+.result => {
+
+},
+.err => |e| {
+task_self.err = e.withPath(filepath).toShellSystemError();
+                _ = std.mem.doNotOptimizeAway((&node_fs));
+},
+}
+            } else {
+                const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = false, .always_return_none = true };
+                switch (node_fs.mkdirNonRecursive(args)) {
+.result => {
+if (task_self.opts.verbose) {
+                    _ = bun.handleOom(task_self.created_directories.appendSlice(filepath[0..filepath.len]));
+                    _ = bun.handleOom(task_self.created_directories.append(10));
+                }
+},
+.err => |e| {
+task_self.err = e.withPath(filepath).toShellSystemError();
+                _ = std.mem.doNotOptimizeAway((&node_fs));
+},
+}
+            }
+            if ((task_self.event_loop == .js)) {
+                _ = task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
+            } else {
+                _ = task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
+            }
+    }
+};
+
+pub const ShellMkdirOutputTaskVTable = struct {
+
+pub fn writeErr(parent: *Mkdir, childptr: anytype, errbuf: []const u8) ?Yield {
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stderr.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+            }
+            _ = parent.bltn().writeNoIO(.stderr, errbuf);
+            return null;
+    }
+
+pub fn onWriteErr(parent: *Mkdir) void {
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
+    }
+
+pub fn writeOut(parent: *Mkdir, childptr: anytype, output: *OutputSrc) ?Yield {
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                const slice = output.slice();
+                _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
+                return parent.bltn().stdout.enqueue(childptr, slice, safeguard);
+            }
+            _ = parent.bltn().writeNoIO(.stdout, output.slice());
+            return null;
+    }
+
+pub fn onWriteOut(parent: *Mkdir) void {
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
+    }
+
+pub fn onDone(parent: *Mkdir) Yield {
+            return parent.next();
     }
 };
 
@@ -214,7 +379,7 @@ var exec = (&self.state.exec);
             return .suspended;
         }
         exec.started = true;
-        exec.tasks_count = exec.args.len;
+        exec.tasks_count = bun.len(exec.args);
         for (cp_iter_slice(exec.args)) |dir_to_mk_| {
             _ = &dir_to_mk_;
             const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
@@ -293,162 +458,4 @@ const ExitCode = shell.ExitCode;
 const Yield = bun.shell.Yield;
 const debug = bun.Output.scoped(.ShellMkdir, .hidden);
 const log = debug;
-pub const State = union(enum) {
-    idle,
-    exec: ExecState,
-    waiting_write_err,
-    done,
-};
-pub const MkdirVerboseVTable = struct {
-    inner: *ShellMkdirTask,
-    active: bool,
-
-pub fn onCreateDir(vtable: *MkdirVerboseVTable, dirpath: bun.OSPathSliceZ) void {
-            if ((!vtable.active)) {
-                return;
-            }
-            if (bun.Environment.isWindows) {
-                var buf: bun.PathBuffer = undefined;
-                _ = &buf;
-                const str = bun.strings.fromWPath((&buf), dirpath[0..dirpath.len]);
-                _ = bun.handleOom(vtable.inner.created_directories.appendSlice(str));
-                _ = bun.handleOom(vtable.inner.created_directories.append(10));
-            } else {
-                _ = bun.handleOom(vtable.inner.created_directories.appendSlice(dirpath));
-                _ = bun.handleOom(vtable.inner.created_directories.append(10));
-            }
-            return;
-    }
-};
-pub const ShellMkdirTask = struct {
-    mkdir: *Mkdir,
-    opts: Opts,
-    filepath: [:0]const u8,
-    cwd_path: [:0]const u8,
-    created_directories: ArrayList(u8),
-    err: ?jsc.SystemError = null,
-    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
-    event_loop: jsc.EventLoopHandle,
-    concurrent_task: jsc.EventLoopTask,
-
-pub fn deinit(self: *@This()) void {
-            _ = self.created_directories.deinit();
-            _ = bun.default_allocator.destroy(self);
-    }
-
-pub fn takeOutput(self: *@This()) ArrayList(u8) {
-            const out = self.created_directories;
-            self.created_directories = ArrayList(u8).init(bun.default_allocator);
-            return out;
-    }
-
-pub fn format(self: *const @This(), writer: anytype) !void {
-            _ = try writer.print("ShellMkdirTask(0x{x}, filepath={s})", .{ @intFromPtr(self), self.filepath });
-    }
-
-pub fn create(mkdir: *Mkdir, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellMkdirTask {
-            var task = bun.handleOom(bun.default_allocator.create(ShellMkdirTask));
-            _ = &task;
-            const evtloop = mkdir.bltn().parentCmd().base.eventLoop();
-            task.* = ShellMkdirTask{ .mkdir = mkdir, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .created_directories = ArrayList(u8).init(bun.default_allocator), .event_loop = evtloop, .concurrent_task = jsc.EventLoopTask.fromEventLoop(evtloop) };
-            return task;
-    }
-
-pub fn schedule(self: *@This()) void {
-            _ = debug("{f} schedule", .{ self });
-            _ = WorkPool.schedule((&self.task));
-    }
-
-pub fn runFromMainThread(self: *@This()) void {
-            _ = debug("{f} runFromJS", .{ self });
-            _ = self.mkdir.onShellMkdirTaskDone(self);
-    }
-
-pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
-            _ = self.runFromMainThread();
-    }
-
-pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-            var task_self: *ShellMkdirTask = @fieldParentPtr("task", task);
-            _ = &task_self;
-            _ = debug("{f} runFromThreadPool", .{ task_self });
-            var filepath: [:0]const u8 = task_self.filepath;
-            _ = &filepath;
-            if ((!ResolvePath.Platform.auto.isAbsolute(task_self.filepath))) {
-                const parts: [2][]const u8 = .{ task_self.cwd_path[0..], task_self.filepath[0..] };
-                filepath = ResolvePath.joinZ((&parts), .auto);
-            }
-            var node_fs = jsc.Node.fs.NodeFS{  };
-            _ = &node_fs;
-            if (task_self.opts.parents) {
-                const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = true, .always_return_none = true };
-                var vtable = MkdirVerboseVTable{ .inner = task_self, .active = task_self.opts.verbose };
-                _ = &vtable;
-                switch (node_fs.mkdirRecursiveImpl(args, *MkdirVerboseVTable, (&vtable))) {
-.result => {
-
-},
-.err => |e| {
-task_self.err = e.withPath(filepath).toShellSystemError();
-                _ = std.mem.doNotOptimizeAway((&node_fs));
-},
-}
-            } else {
-                const args = jsc.Node.fs.Arguments.Mkdir{ .path = jsc.Node.PathLike{ .string = bun.PathString.init(filepath) }, .recursive = false, .always_return_none = true };
-                switch (node_fs.mkdirNonRecursive(args)) {
-.result => {
-if (task_self.opts.verbose) {
-                    _ = bun.handleOom(task_self.created_directories.appendSlice(filepath[0..filepath.len]));
-                    _ = bun.handleOom(task_self.created_directories.append(10));
-                }
-},
-.err => |e| {
-task_self.err = e.withPath(filepath).toShellSystemError();
-                _ = std.mem.doNotOptimizeAway((&node_fs));
-},
-}
-            }
-            if ((task_self.event_loop == .js)) {
-                _ = task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
-            } else {
-                _ = task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
-            }
-    }
-};
-const ShellMkdirOutputTaskVTable = struct {
-
-pub fn writeErr(parent: *Mkdir, childptr: anytype, errbuf: []const u8) ?Yield {
-            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
-            if (parent.bltn().stderr.needsIO()) |safeguard| {
-                _ = &safeguard;
-                return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
-            }
-            _ = parent.bltn().writeNoIO(.stderr, errbuf);
-            return null;
-    }
-
-pub fn onWriteErr(parent: *Mkdir) void {
-            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
-    }
-
-pub fn writeOut(parent: *Mkdir, childptr: anytype, output: *OutputSrc) ?Yield {
-            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
-            if (parent.bltn().stdout.needsIO()) |safeguard| {
-                _ = &safeguard;
-                const slice = output.slice();
-                _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
-                return parent.bltn().stdout.enqueue(childptr, slice, safeguard);
-            }
-            _ = parent.bltn().writeNoIO(.stdout, output.slice());
-            return null;
-    }
-
-pub fn onWriteOut(parent: *Mkdir) void {
-            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
-    }
-
-pub fn onDone(parent: *Mkdir) Yield {
-            return parent.next();
-    }
-};
 pub const ShellMkdirOutputTask = OutputTask(Mkdir, .{ .writeErr = ShellMkdirOutputTaskVTable.writeErr, .onWriteErr = ShellMkdirOutputTaskVTable.onWriteErr, .writeOut = ShellMkdirOutputTaskVTable.writeOut, .onWriteOut = ShellMkdirOutputTaskVTable.onWriteOut, .onDone = ShellMkdirOutputTaskVTable.onDone });

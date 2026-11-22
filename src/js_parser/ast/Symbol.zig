@@ -116,30 +116,34 @@ pub fn jsonStringify(self: Kind, writer: anytype) !void {
             return try writer.write(@tagName(self));
     }
 
-pub fn isPrivate(kind: Kind) bool {
+pub inline fn isPrivate(kind: Kind) bool {
             return ((@intFromEnum(kind) >= @intFromEnum(Kind.private_field)) and (@intFromEnum(kind) <= @intFromEnum(Kind.private_static_get_set_pair)));
     }
 
-pub fn isHoisted(kind: Kind) bool {
+pub inline fn isHoisted(kind: Kind) bool {
             return (switch (kind) {
 .hoisted, .hoisted_function => true,
 else => false,
 });
     }
 
-pub fn isHoistedOrFunction(kind: Kind) bool {
+pub inline fn isHoistedOrFunction(kind: Kind) bool {
             return (switch (kind) {
 .hoisted, .hoisted_function, .generator_or_async_function => true,
 else => false,
 });
     }
 
-pub fn isFunction(kind: Kind) bool {
+pub inline fn isFunction(kind: Kind) bool {
             return (switch (kind) {
 .hoisted_function, .generator_or_async_function => true,
 else => false,
 });
     }
+};
+
+pub const Use = struct {
+    count_estimate: u32 = 0,
 };
 
 pub fn EndGuard(comptime T: type) type {
@@ -211,35 +215,21 @@ pub fn mergeContentsWith(self: *Symbol, old: *Symbol) void {
 pub inline fn isHoisted(self: Symbol) bool {
         return Symbol.isKindHoisted(self.kind);
 }
-const string = []const u8;
-const BabyList = bun.BabyList;
-const Output = bun.Output;
-const js_ast = bun.ast;
-const DeclaredSymbol = js_ast.DeclaredSymbol;
-const G = js_ast.G;
-const ImportItemStatus = js_ast.ImportItemStatus;
-const Ref = js_ast.Ref;
-const invalid_chunk_index = std.math.maxInt(u32);
-pub const invalid_nested_scope_slot = std.math.maxInt(u32);
-pub const Use = struct {
-    count_estimate: u32 = 0,
-};
-pub const List = BabyList(Symbol);
-pub const NestedList = BabyList(List);
 pub const AssignChunkIndexIterator = struct {
     map: *Map,
     chunk_index: u32,
 
-pub fn next(self: @This(), target: Ref) void {
+pub fn next(self: AssignChunkIndexIterator, target: Ref) void {
             var sym = (self.map.get(target)).?;
             _ = &sym;
             sym.chunk_index = self.chunk_index;
     }
 };
+
 pub const Map = struct {
     symbols_for_source: NestedList = NestedList{  },
 
-pub fn dump(self: @This()) void {
+pub fn dump(self: Map) void {
             defer {
             _ = Output.flush();
             }
@@ -259,13 +249,13 @@ pub fn dump(self: @This()) void {
             }
     }
 
-pub fn assignChunkIndex(self: *@This(), decls_: DeclaredSymbol.List, chunk_index: u32) void {
+pub fn assignChunkIndex(self: *Map, decls_: DeclaredSymbol.List, chunk_index: u32) void {
             var decls = decls_;
             _ = &decls;
             _ = DeclaredSymbol.forEachTopLevelSymbol((&decls), AssignChunkIndexIterator{ .map = self, .chunk_index = chunk_index }, AssignChunkIndexIterator.next);
     }
 
-pub fn merge(self: *@This(), old: Ref, new_ref: Ref) Ref {
+pub fn merge(self: *Map, old: Ref, new_ref: Ref) Ref {
             if (old.eql(new_ref)) {
                 return new_ref;
             }
@@ -288,14 +278,14 @@ pub fn merge(self: *@This(), old: Ref, new_ref: Ref) Ref {
             return new_ref;
     }
 
-pub fn get(self: *const @This(), target: Ref) ?*Symbol {
+pub fn get(self: *const Map, target: Ref) ?*Symbol {
             if ((Ref.isSourceIndexNull(target.sourceIndex()) or target.isSourceContentsSlice())) {
                 return null;
             }
             return self.symbols_for_source.at(target.sourceIndex()).mut(target.innerIndex());
     }
 
-pub fn getConst(self: *@This(), target: Ref) ?*const Symbol {
+pub fn getConst(self: *const Map, target: Ref) ?*const Symbol {
             if ((Ref.isSourceIndexNull(target.sourceIndex()) or target.isSourceContentsSlice())) {
                 return null;
             }
@@ -374,6 +364,19 @@ pub fn follow(symbols: *const Map, target: Ref) Ref {
             return target;
     }
 };
+
+const string = []const u8;
+const BabyList = bun.BabyList;
+const Output = bun.Output;
+const js_ast = bun.ast;
+const DeclaredSymbol = js_ast.DeclaredSymbol;
+const G = js_ast.G;
+const ImportItemStatus = js_ast.ImportItemStatus;
+const Ref = js_ast.Ref;
+const invalid_chunk_index = std.math.maxInt(u32);
+pub const invalid_nested_scope_slot = std.math.maxInt(u32);
+pub const List = BabyList(Symbol);
+pub const NestedList = BabyList(List);
 pub const isKindFunction = Kind.isFunction;
 pub const isKindHoisted = Kind.isHoisted;
 pub const isKindHoistedOrFunction = Kind.isHoistedOrFunction;

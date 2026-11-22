@@ -9,37 +9,37 @@
 ///
 /// Reference: https://spec.json5.org/
 
-pub const TokenData = union(enum) {
-    eof,
+pub union(enum) TokenData {
+    eof: void,
     // Structural
-    left_brace,
-    right_brace,
-    left_bracket,
-    right_bracket,
-    colon,
-    comma,
+    left_brace: void,
+    right_brace: void,
+    left_bracket: void,
+    right_bracket: void,
+    colon: void,
+    comma: void,
     // Values
     string: []u8,
     number: f64,
     boolean: bool,
-    null,
+    @"null": void,
     // Identifiers (for unquoted keys that aren't keywords)
     identifier: []u8,
 
-    pub fn canStartValue(data: TokenData) bool {
-        return switch (data) {
+    fn canStartValue(): bool {
+        return switch (_) {
             .string, .number, .boolean, .identifier, .@"null", .left_brace, .left_bracket => true,
             .eof, .right_brace, .right_bracket, .colon, .comma => false,
         };
     }
-};
+}
 
-pub const JSON5Token = struct {
+pub struct JSON5Token {
     loc: logger.Loc,
     data: TokenData,
 
-    pub const Data = TokenData;
-};
+    type Data = TokenData;
+}
 
 err ParseError {
     OutOfMemory,
@@ -66,37 +66,61 @@ err ParseError {
     StackOverflow,
 }
 
-pub const JSON5Error = union(enum) {
-    oom,
-    stack_overflow,
-    unexpected_character: struct { pos: usize },
-    unexpected_token: struct { pos: usize },
-    unexpected_eof: struct { pos: usize },
-    unterminated_string: struct { pos: usize },
-    unterminated_comment: struct { pos: usize },
-    unterminated_object: struct { pos: usize },
-    unterminated_array: struct { pos: usize },
-    unterminated_escape: struct { pos: usize },
-    invalid_number: struct { pos: usize },
-    leading_zeros: struct { pos: usize },
-    invalid_hex_number: struct { pos: usize },
-    invalid_hex_escape: struct { pos: usize },
-    invalid_unicode_escape: struct { pos: usize },
-    octal_escape: struct { pos: usize },
-    expected_colon: struct { pos: usize },
-    expected_comma: struct { pos: usize },
-    expected_closing_brace: struct { pos: usize },
-    expected_closing_bracket: struct { pos: usize },
-    invalid_identifier: struct { pos: usize },
-    trailing_data: struct { pos: usize },
+pub struct JSON5ErrorPos {
+    pos: usize,
+}
 
-    pub fn addToLog(this: *const JSON5Error, source: *const logger.Source, log: *logger.Log) !void {
-        const loc: logger.Loc = switch (this.*) {
+pub union(enum) JSON5Error {
+    oom: void,
+    stack_overflow: void,
+    unexpected_character: JSON5ErrorPos,
+    unexpected_token: JSON5ErrorPos,
+    unexpected_eof: JSON5ErrorPos,
+    unterminated_string: JSON5ErrorPos,
+    unterminated_comment: JSON5ErrorPos,
+    unterminated_object: JSON5ErrorPos,
+    unterminated_array: JSON5ErrorPos,
+    unterminated_escape: JSON5ErrorPos,
+    invalid_number: JSON5ErrorPos,
+    leading_zeros: JSON5ErrorPos,
+    invalid_hex_number: JSON5ErrorPos,
+    invalid_hex_escape: JSON5ErrorPos,
+    invalid_unicode_escape: JSON5ErrorPos,
+    octal_escape: JSON5ErrorPos,
+    expected_colon: JSON5ErrorPos,
+    expected_comma: JSON5ErrorPos,
+    expected_closing_brace: JSON5ErrorPos,
+    expected_closing_bracket: JSON5ErrorPos,
+    invalid_identifier: JSON5ErrorPos,
+    trailing_data: JSON5ErrorPos,
+
+    fn addToLog(_: *const JSON5Error, source: *const logger.Source, log: *logger.Log)! {
+        const pos: usize = switch (_.*) {
             .oom => return error.OutOfMemory,
             .stack_overflow => return error.StackOverflow,
-            inline else => |e| .{ .start = @intCast(e.pos) },
+            .unexpected_character e => e.pos,
+            .unexpected_token e => e.pos,
+            .unexpected_eof e => e.pos,
+            .unterminated_string e => e.pos,
+            .unterminated_comment e => e.pos,
+            .unterminated_object e => e.pos,
+            .unterminated_array e => e.pos,
+            .unterminated_escape e => e.pos,
+            .invalid_number e => e.pos,
+            .leading_zeros e => e.pos,
+            .invalid_hex_number e => e.pos,
+            .invalid_hex_escape e => e.pos,
+            .invalid_unicode_escape e => e.pos,
+            .octal_escape e => e.pos,
+            .expected_colon e => e.pos,
+            .expected_comma e => e.pos,
+            .expected_closing_brace e => e.pos,
+            .expected_closing_bracket e => e.pos,
+            .invalid_identifier e => e.pos,
+            .trailing_data e => e.pos,
         };
-        const msg: []const u8 = switch (this.*) {
+        const loc = logger.Loc{ start: @intCast(pos) };
+        const msg: []const u8 = switch (_.*) {
             .oom, .stack_overflow => unreachable,
             .unexpected_character => "Unexpected character",
             .unexpected_token => "Unexpected token",
@@ -119,28 +143,28 @@ pub const JSON5Error = union(enum) {
             .invalid_identifier => "Invalid identifier start character",
             .trailing_data => "Unexpected token after JSON5 value",
         };
-        try log.addError(source, loc, msg);
+        log.addError(source, loc, msg)?;
     }
-};
+}
 
 err ExternalError { OutOfMemory, SyntaxError, StackOverflow }
 
-const Codepoint = struct {
+struct Codepoint {
     cp: i32,
     len: u3,
-};
+}
 
-@value class JSON5Parser {
-    source: []const u8;
-    pos: usize;
-    allocator: std.mem.Allocator;
-    stack_check: bun.StackCheck;
-    token: JSON5Token;
+pub struct JSON5Parser {
+    source: []const u8,
+    pos: usize,
+    allocator: std.mem.Allocator,
+    stack_check: bun.StackCheck,
+    token: JSON5Token,
 
-    pub const Token = JSON5Token;
-    pub const Error = JSON5Error;
+    type Token = JSON5Token;
+    type Error = JSON5Error;
 
-    pub static fn toError(e: ParseError, parser: *const JSON5Parser): JSON5Error {
+    static fn toError(e: ParseError, parser: *const JSON5Parser): JSON5Error {
         const token_pos = parser.token.loc.toUsize();
         const scan_pos = parser.pos;
         if (e == error.OutOfMemory) return JSON5Error.oom;
@@ -173,17 +197,17 @@ const Codepoint = struct {
         unreachable;
     }
 
-    pub static fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): ExternalError!Expr {
+    static fn parse(source: *const logger.Source, log: *logger.Log, allocator: std.mem.Allocator): ExternalError!Expr {
         let parser = JSON5Parser{
-            .source = source.contents,
-            .pos = 0,
-            .allocator = allocator,
-            .stack_check = .init(),
-            .token = .{ .loc = .{}, .data = .eof },
+            source: source.contents,
+            pos: 0,
+            allocator: allocator,
+            stack_check: .init(),
+            token: { loc: .{}, data: .eof },
         };
-        const result = parser.parseRoot() catch |e| {
+        const result = parser.parseRoot() catch e => {
             const parse_err = toError(e, &parser);
-            try parse_err.addToLog(source, log);
+            parse_err.addToLog(source, log)?;
             return error.SyntaxError;
         };
         return result;
@@ -193,130 +217,144 @@ const Codepoint = struct {
 
     /// Returns the byte at the current position, or 0 if at EOF.
     /// All source access in scan() goes through this to avoid bounds checks.
-    fn peek(this): u8 {
-        if (this.pos < this.source.len) return this.source[this.pos];
+    fn peek(): u8 {
+        if (_.pos < _.source.len) return _.source[_.pos];
         return 0;
     }
 
-    fn scan(*this): ParseError!void {
+    fn scan(*_): ParseError!void {
         while (true) {
-            switch (this.peek()) {
+            const c = _.peek();
+            switch (c) {
                 0 => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.token.data = .eof;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.token.data = .eof;
                     return;
                 },
                 // Whitespace — skip without setting loc
                 '\t', '\n', '\r', ' ', 0x0B, 0x0C => {
-                    this.pos += 1;
+                    _.pos += 1;
                     continue;
                 },
                 // Structural
                 '{' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .left_brace;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = .left_brace;
                     return;
                 },
                 '}' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .right_brace;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = .right_brace;
                     return;
                 },
                 '[' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .left_bracket;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = .left_bracket;
                     return;
                 },
                 ']' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .right_bracket;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = .right_bracket;
                     return;
                 },
                 ':' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .colon;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = .colon;
                     return;
                 },
                 ',' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .comma;
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = .comma;
                     return;
                 },
                 '+' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .{ .number = try this.scanSignedValue(false) };
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = TokenData{ number: _.scanSignedValue(false)? };
                     return;
                 },
                 '-' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.pos += 1;
-                    this.token.data = .{ .number = try this.scanSignedValue(true) };
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.pos += 1;
+                    _.token.data = TokenData{ number: _.scanSignedValue(true)? };
                     return;
                 },
                 // Strings
                 '"', '\'' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.token.data = .{ .string = try this.scanString() };
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.token.data = TokenData{ string: _.scanString()? };
                     return;
                 },
                 // Numbers
-                '0'...'9', '.' => {
-                    this.token.loc = .{ .start = @intCast(this.pos) };
-                    this.token.data = .{ .number = try this.scanNumber() };
+                '0'..='9', '.' => {
+                    _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                    _.token.data = TokenData{ number: _.scanNumber()? };
                     return;
                 },
                 // Comments — skip without setting loc
                 '/' => {
-                    const n = if (this.pos + 1 < this.source.len) this.source[this.pos + 1] else 0;
+                    const n = if (_.pos + 1 < _.source.len) _.source[_.pos + 1] else 0;
                     if (n == '/') {
-                        this.pos += 2;
-                        this.skipToEndOfLine();
+                        _.pos += 2;
+                        _.skipToEndOfLine();
                         continue;
                     } else if (n == '*') {
-                        this.pos += 2;
-                        try this.skipBlockComment();
+                        _.pos += 2;
+                        _.skipBlockComment()?;
                         continue;
                     }
                     return error.UnexpectedCharacter;
                 },
-                else => |c| {
+                else => {
                     if (c == 't') {
-                        this.token.loc = .{ .start = @intCast(this.pos) };
-                        this.token.data = if (this.scanKeyword("true")) .{ .boolean = true } else .{ .identifier = try this.scanIdentifier() };
+                        _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                        if (_.scanKeyword("true")) {
+                            _.token.data = TokenData{ boolean: true };
+                        } else {
+                            _.token.data = TokenData{ identifier: _.scanIdentifier()? };
+                        }
                         return;
                     } else if (c == 'f') {
-                        this.token.loc = .{ .start = @intCast(this.pos) };
-                        this.token.data = if (this.scanKeyword("false")) .{ .boolean = false } else .{ .identifier = try this.scanIdentifier() };
+                        _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                        if (_.scanKeyword("false")) {
+                            _.token.data = TokenData{ boolean: false };
+                        } else {
+                            _.token.data = TokenData{ identifier: _.scanIdentifier()? };
+                        }
                         return;
                     } else if (c == 'n') {
-                        this.token.loc = .{ .start = @intCast(this.pos) };
-                        this.token.data = if (this.scanKeyword("null")) TokenData.null else .{ .identifier = try this.scanIdentifier() };
+                        _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                        if (_.scanKeyword("null")) {
+                            _.token.data = TokenData.@"null";
+                        } else {
+                            _.token.data = TokenData{ identifier: _.scanIdentifier()? };
+                        }
                         return;
-                    } else if ((c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or c == '_' or c == '$' or c == '\\') {
-                        this.token.loc = .{ .start = @intCast(this.pos) };
-                        this.token.data = .{ .identifier = try this.scanIdentifier() };
+                    } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$' || c == '\\') {
+                        _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                        _.token.data = TokenData{ identifier: _.scanIdentifier()? };
                         return;
                     } else if (c >= 0x80) {
                         // Multi-byte: check whitespace first, then identifier
-                        const mb = this.multiByteWhitespace();
+                        const mb = _.multiByteWhitespace();
                         if (mb > 0) {
-                            this.pos += mb;
+                            _.pos += mb;
                             continue;
                         }
-                        this.token.loc = .{ .start = @intCast(this.pos) };
-                        const cp = this.readCodepoint() orelse {
-                            return error.UnexpectedCharacter;
-                        };
-                        if (identifier.isIdentifierStart(cp.cp)) {
-                            this.token.data = .{ .identifier = try this.scanIdentifier() };
-                            return;
+                        _.token.loc = logger.Loc{ start: @intCast(_.pos) };
+                        if (cp := _.readCodepoint()) {
+                            if (identifier.isIdentifierStart(cp.cp)) {
+                                _.token.data = TokenData{ identifier: _.scanIdentifier()? };
+                                return;
+                            } else {
+                                return error.UnexpectedCharacter;
+                            }
                         } else {
                             return error.UnexpectedCharacter;
                         }
@@ -328,33 +366,33 @@ const Codepoint = struct {
         }
     }
 
-    fn scanKeyword(*this, comptime keyword: []const u8): bool {
-        if (this.pos + keyword.len > this.source.len) return false;
-        if (!std.mem.eql(u8, this.source[this.pos..][0..keyword.len], keyword)) return false;
+    fn scanKeyword(*_, comptime keyword: []const u8): bool {
+        if (_.pos + keyword.len > _.source.len) return false;
+        if (!std.mem.eql(u8, _.source[_.pos..][0..keyword.len], keyword)) return false;
         // Check word boundary
-        if (this.pos + keyword.len < this.source.len) {
-            const next = this.source[this.pos + keyword.len];
-            if (isIdentContinueASCII(next) or next == '\\' or next >= 0x80) return false;
+        if (_.pos + keyword.len < _.source.len) {
+            const next = _.source[_.pos + keyword.len];
+            if (isIdentContinueASCII(next) || next == '\\' || next >= 0x80) return false;
         }
-        this.pos += keyword.len;
+        _.pos += keyword.len;
         return true;
     }
 
-    fn scanSignedValue(*this, is_negative: bool): ParseError!f64 {
-        switch (this.peek()) {
-            '0'...'9', '.' => {
-                const n = try this.scanNumber();
+    fn scanSignedValue(*_, is_negative: bool): ParseError!f64 {
+        switch (_.peek()) {
+            '0'..='9', '.' => {
+                const n = _.scanNumber()?;
                 return if (is_negative) -n else n;
             },
             'I' => {
-                if (this.scanKeyword("Infinity")) {
+                if (_.scanKeyword("Infinity")) {
                     const inf_val = std.math.inf(f64);
                     return if (is_negative) -inf_val else inf_val;
                 }
                 return error.UnexpectedCharacter;
             },
             'N' => {
-                if (this.scanKeyword("NaN")) {
+                if (_.scanKeyword("NaN")) {
                     const nan = std.math.nan(f64);
                     return if (is_negative) -nan else nan;
                 }
@@ -367,48 +405,48 @@ const Codepoint = struct {
 
     // ── Parser ──
 
-    fn parseRoot(*this): ParseError!Expr {
-        try this.scan();
-        const result = try this.parseValue();
-        if (this.token.data != .eof) {
+    fn parseRoot(*_): ParseError!Expr {
+        _.scan()?;
+        const result = _.parseValue()?;
+        if (_.token.data != .eof) {
             return error.TrailingData;
         }
         return result;
     }
 
-    fn parseValue(*this): ParseError!Expr {
-        if (!this.stack_check.isSafeToRecurse()) {
+    fn parseValue(*_): ParseError!Expr {
+        if (!_.stack_check.isSafeToRecurse()) {
             return error.StackOverflow;
         }
 
-        const loc = this.token.loc;
+        const loc = _.token.loc;
 
-        switch (this.token.data) {
-            .left_brace => return this.parseObject(),
-            .left_bracket => return this.parseArray(),
-            .string => |s| {
-                try this.scan();
+        switch (_.token.data) {
+            .left_brace => return _.parseObject(),
+            .left_bracket => return _.parseArray(),
+            .string s => {
+                _.scan()?;
                 return Expr.init(E.String, E.String.init(s), loc);
             },
-            .number => |n| {
-                try this.scan();
-                return Expr.init(E.Number, .{ .value = n }, loc);
+            .number n => {
+                _.scan()?;
+                return Expr.init(E.Number, { value: n }, loc);
             },
-            .boolean => |b| {
-                try this.scan();
-                return Expr.init(E.Boolean, .{ .value = b }, loc);
+            .boolean b => {
+                _.scan()?;
+                return Expr.init(E.Boolean, { value: b }, loc);
             },
             .@"null" => {
-                try this.scan();
+                _.scan()?;
                 return Expr.init(E.Null, .{}, loc);
             },
-            .identifier => |s| {
+            .identifier s => {
                 if (std.mem.eql(u8, s, "NaN")) {
-                    try this.scan();
-                    return Expr.init(E.Number, .{ .value = std.math.nan(f64) }, loc);
+                    _.scan()?;
+                    return Expr.init(E.Number, { value: std.math.nan(f64) }, loc);
                 } else if (std.mem.eql(u8, s, "Infinity")) {
-                    try this.scan();
-                    return Expr.init(E.Number, .{ .value = std.math.inf(f64) }, loc);
+                    _.scan()?;
+                    return Expr.init(E.Number, { value: std.math.inf(f64) }, loc);
                 }
                 return error.UnexpectedToken;
             },
@@ -417,59 +455,59 @@ const Codepoint = struct {
         }
     }
 
-    fn parseObject(*this): ParseError!Expr {
-        const loc = this.token.loc;
-        try this.scan(); // advance past '{'
+    fn parseObject(*_): ParseError!Expr {
+        const loc = _.token.loc;
+        _.scan()?; // advance past '{'
 
-        let properties = std.array_list.Managed(G.Property).init(this.allocator);
+        let properties = std.array_list.Managed(G.Property).init(_.allocator);
 
-        while (this.token.data != .right_brace) {
-            const key = try this.parseObjectKey();
+        while (_.token.data != .right_brace) {
+            const key = _.parseObjectKey()?;
 
-            if (this.token.data != .colon) {
+            if (_.token.data != .colon) {
                 return error.ExpectedColon;
             }
-            try this.scan(); // advance past ':'
+            _.scan()?; // advance past ':'
 
-            const value = try this.parseValue();
+            const value = _.parseValue()?;
 
-            try properties.append(.{
-                .key = key,
-                .value = value,
-            });
+            properties.append({
+                key: key,
+                value: value,
+            })?;
 
-            switch (this.token.data) {
-                .comma => try this.scan(),
+            switch (_.token.data) {
+                .comma => _.scan()?,
                 .right_brace => {},
                 .eof => return error.UnterminatedObject,
-                else => return if (this.token.data.canStartValue()) error.ExpectedComma else error.ExpectedClosingBrace,
+                else => return if (_.token.data.canStartValue()) error.ExpectedComma else error.ExpectedClosingBrace,
             }
         }
 
-        try this.scan(); // advance past '}'
+        _.scan()?; // advance past '}'
         return Expr.init(E.Object, E.Object{
             properties: bun.BabyList(G.Property).moveFromList(&properties),
         }, loc);
     }
 
-    fn parseObjectKey(*this): ParseError!Expr {
-        const loc = this.token.loc;
-        switch (this.token.data) {
-            .string => |s| {
-                try this.scan();
+    fn parseObjectKey(*_): ParseError!Expr {
+        const loc = _.token.loc;
+        switch (_.token.data) {
+            .string s => {
+                _.scan()?;
                 return Expr.init(E.String, E.String.init(s), loc);
             },
-            .identifier => |s| {
-                try this.scan();
+            .identifier s => {
+                _.scan()?;
                 return Expr.init(E.String, E.String.init(s), loc);
             },
             .number => return error.InvalidIdentifier,
-            .boolean => |b| {
-                try this.scan();
-                return Expr.init(E.Boolean, .{ .value = b }, loc);
+            .boolean b => {
+                _.scan()?;
+                return Expr.init(E.Boolean, { value: b }, loc);
             },
             .@"null" => {
-                try this.scan();
+                _.scan()?;
                 return Expr.init(E.Null, .{}, loc);
             },
             .eof => return error.UnexpectedEof,
@@ -477,25 +515,25 @@ const Codepoint = struct {
         }
     }
 
-    fn parseArray(*this): ParseError!Expr {
-        const loc = this.token.loc;
-        try this.scan(); // advance past '['
+    fn parseArray(*_): ParseError!Expr {
+        const loc = _.token.loc;
+        _.scan()?; // advance past '['
 
-        let items = std.array_list.Managed(Expr).init(this.allocator);
+        let items = std.array_list.Managed(Expr).init(_.allocator);
 
-        while (this.token.data != .right_bracket) {
-            const value = try this.parseValue();
-            try items.append(value);
+        while (_.token.data != .right_bracket) {
+            const value = _.parseValue()?;
+            items.append(value)?;
 
-            switch (this.token.data) {
-                .comma => try this.scan(),
+            switch (_.token.data) {
+                .comma => _.scan()?,
                 .right_bracket => {},
                 .eof => return error.UnterminatedArray,
-                else => return if (this.token.data.canStartValue()) error.ExpectedComma else error.ExpectedClosingBracket,
+                else => return if (_.token.data.canStartValue()) error.ExpectedComma else error.ExpectedClosingBracket,
             }
         }
 
-        try this.scan(); // advance past ']'
+        _.scan()?; // advance past ']'
         return Expr.init(E.Array, E.Array{
             items: bun.BabyList(Expr).moveFromList(&items),
         }, loc);
@@ -503,171 +541,167 @@ const Codepoint = struct {
 
     // ── Scan Helpers ──
 
-    fn scanString(*this): ParseError![]u8 {
-        const quote = this.source[this.pos];
-        this.pos += 1; // skip opening quote
+    fn scanString(*_): ParseError![]u8 {
+        const quote = _.source[_.pos];
+        _.pos += 1; // skip opening quote
 
-        let buf = std.array_list.Managed(u8).init(this.allocator);
+        let buf = std.array_list.Managed(u8).init(_.allocator);
 
-        while (this.pos < this.source.len) {
-            const c = this.source[this.pos];
+        while (_.pos < _.source.len) {
+            const c = _.source[_.pos];
 
             if (c == quote) {
-                this.pos += 1;
-                return try buf.toOwnedSlice();
+                _.pos += 1;
+                return buf.toOwnedSlice()?;
             }
 
             if (c == '\\') {
-                this.pos += 1;
-                try this.parseEscapeSequence(&buf);
+                _.pos += 1;
+                _.parseEscapeSequence(&buf)?;
                 continue;
             }
 
             // Line terminators are not allowed unescaped in strings
-            if (c == '\n' or c == '\r') {
+            if (c == '\n' || c == '\r') {
                 return error.UnterminatedString;
             }
 
             // Check for U+2028/U+2029 (allowed unescaped in JSON5 strings)
-            if (c == 0xE2 and this.pos + 2 < this.source.len and
-                this.source[this.pos + 1] == 0x80 and
-                (this.source[this.pos + 2] == 0xA8 or this.source[this.pos + 2] == 0xA9))
+            if (c == 0xE2 && _.pos + 2 < _.source.len &&
+                _.source[_.pos + 1] == 0x80 &&
+                (_.source[_.pos + 2] == 0xA8 || _.source[_.pos + 2] == 0xA9))
             {
-                try buf.appendSlice(this.source[this.pos..][0..3]);
-                this.pos += 3;
+                buf.appendSlice(_.source[_.pos..][0..3])?;
+                _.pos += 3;
                 continue;
             }
 
             // Regular character - handle multi-byte UTF-8
             const cp_len = strings.wtf8ByteSequenceLength(c);
-            if (this.pos + cp_len > this.source.len) {
-                try buf.append(c);
-                this.pos += 1;
+            if (_.pos + cp_len > _.source.len) {
+                buf.append(c)?;
+                _.pos += 1;
             } else {
-                try buf.appendSlice(this.source[this.pos..][0..cp_len]);
-                this.pos += cp_len;
+                buf.appendSlice(_.source[_.pos..][0..cp_len])?;
+                _.pos += cp_len;
             }
         }
 
         return error.UnterminatedString;
     }
 
-    fn parseEscapeSequence(*this, buf: *std.array_list.Managed(u8)): ParseError!void {
-        if (this.pos >= this.source.len) {
+    fn parseEscapeSequence(*_, buf: *std.array_list.Managed(u8)): ParseError!void {
+        if (_.pos >= _.source.len) {
             return error.UnterminatedEscape;
         }
 
-        const c = this.source[this.pos];
-        this.pos += 1;
+        const c = _.source[_.pos];
+        _.pos += 1;
 
         switch (c) {
-            '\'' => try buf.append('\''),
-            '"' => try buf.append('"'),
-            '\\' => try buf.append('\\'),
-            'b' => try buf.append(0x08),
-            'f' => try buf.append(0x0C),
-            'n' => try buf.append('\n'),
-            'r' => try buf.append('\r'),
-            't' => try buf.append('\t'),
-            'v' => try buf.append(0x0B),
+            '\'' => buf.append('\'')?,
+            '"' => buf.append('"')?,
+            '\\' => buf.append('\\')?,
+            'b' => buf.append(0x08)?,
+            'f' => buf.append(0x0C)?,
+            'n' => buf.append('\n')?,
+            'r' => buf.append('\r')?,
+            't' => buf.append('\t')?,
+            'v' => buf.append(0x0B)?,
             '0' => {
                 // \0 null escape - must NOT be followed by a digit
-                if (this.pos < this.source.len) {
-                    const next = this.source[this.pos];
-                    if (next >= '0' and next <= '9') {
+                if (_.pos < _.source.len) {
+                    const next = _.source[_.pos];
+                    if (next >= '0' && next <= '9') {
                         return error.OctalEscape;
                     }
                 }
-                try buf.append(0);
+                buf.append(0)?;
             },
             'x' => {
                 // \xHH hex escape
-                const hi = this.readHexDigit() orelse {
-                    return error.InvalidHexEscape;
-                };
-                const lo = this.readHexDigit() orelse {
-                    return error.InvalidHexEscape;
-                };
+                const hi = _.readHexDigit() ?? return error.InvalidHexEscape;
+                const lo = _.readHexDigit() ?? return error.InvalidHexEscape;
                 const value = (@as(u8, hi) << 4) | @as(u8, lo);
-                try appendCodepointToUtf8(buf, @intCast(value));
+                appendCodepointToUtf8(buf, @intCast(value))?;
             },
             'u' => {
                 // \uHHHH unicode escape
-                const cp = try this.readHex4();
+                const cp = _.readHex4()?;
                 // Check for surrogate pair
-                if (cp >= 0xD800 and cp <= 0xDBFF) {
+                if (cp >= 0xD800 && cp <= 0xDBFF) {
                     // High surrogate - expect \uDCxx low surrogate
-                    if (this.pos + 1 < this.source.len and
-                        this.source[this.pos] == '\\' and
-                        this.source[this.pos + 1] == 'u')
+                    if (_.pos + 1 < _.source.len &&
+                        _.source[_.pos] == '\\' &&
+                        _.source[_.pos + 1] == 'u')
                     {
-                        this.pos += 2;
-                        const low = try this.readHex4();
-                        if (low >= 0xDC00 and low <= 0xDFFF) {
+                        _.pos += 2;
+                        const low = _.readHex4()?;
+                        if (low >= 0xDC00 && low <= 0xDFFF) {
                             const full_cp: i32 = 0x10000 + (cp - 0xD800) * 0x400 + (low - 0xDC00);
-                            try appendCodepointToUtf8(buf, full_cp);
+                            appendCodepointToUtf8(buf, full_cp)?;
                         } else {
                             // Invalid low surrogate - just encode both independently
-                            try appendCodepointToUtf8(buf, cp);
-                            try appendCodepointToUtf8(buf, low);
+                            appendCodepointToUtf8(buf, cp)?;
+                            appendCodepointToUtf8(buf, low)?;
                         }
                     } else {
-                        try appendCodepointToUtf8(buf, cp);
+                        appendCodepointToUtf8(buf, cp)?;
                     }
                 } else {
-                    try appendCodepointToUtf8(buf, cp);
+                    appendCodepointToUtf8(buf, cp)?;
                 }
             },
             '\r' => {
                 // Line continuation: \CR or \CRLF
-                if (this.pos < this.source.len and this.source[this.pos] == '\n') {
-                    this.pos += 1;
+                if (_.pos < _.source.len && _.source[_.pos] == '\n') {
+                    _.pos += 1;
                 }
             },
             '\n' => {
                 // Line continuation: \LF
             },
-            '1'...'9' => {
+            '1'..='9' => {
                 return error.OctalEscape;
             },
             0xE2 => {
                 // Check for U+2028/U+2029 line continuation
-                if (this.pos + 1 < this.source.len and
-                    this.source[this.pos] == 0x80 and
-                    (this.source[this.pos + 1] == 0xA8 or this.source[this.pos + 1] == 0xA9))
+                if (_.pos + 1 < _.source.len &&
+                    _.source[_.pos] == 0x80 &&
+                    (_.source[_.pos + 1] == 0xA8 || _.source[_.pos + 1] == 0xA9))
                 {
                     // Line continuation with U+2028 or U+2029
-                    this.pos += 2;
+                    _.pos += 2;
                 } else {
                     // Identity escape for the byte 0xE2
-                    try buf.append(0xE2);
+                    buf.append(0xE2)?;
                 }
             },
             else => {
                 // Identity escape
-                try buf.append(c);
+                buf.append(c)?;
             },
         }
     }
 
-    fn scanNumber(*this): ParseError!f64 {
-        const start = this.pos;
+    fn scanNumber(*_): ParseError!f64 {
+        const start = _.pos;
 
         // Leading zero: check for hex prefix or invalid leading zeros
-        if (this.peek() == '0' and this.pos + 1 < this.source.len) {
-            switch (this.source[this.pos + 1]) {
-                'x', 'X' => return this.scanHexNumber(),
-                '0'...'9' => return error.LeadingZeros,
+        if (_.peek() == '0' && _.pos + 1 < _.source.len) {
+            switch (_.source[_.pos + 1]) {
+                'x', 'X' => return _.scanHexNumber(),
+                '0'..='9' => return error.LeadingZeros,
                 else => {},
             }
         }
 
         // Integer part
         let has_digits = false;
-        while (this.pos < this.source.len) {
-            switch (this.source[this.pos]) {
-                '0'...'9' => {
-                    this.pos += 1;
+        while (_.pos < _.source.len) {
+            switch (_.source[_.pos]) {
+                '0'..='9' => {
+                    _.pos += 1;
                     has_digits = true;
                 },
                 else => break,
@@ -675,19 +709,19 @@ const Codepoint = struct {
         }
 
         // Fractional part
-        if (this.peek() == '.') {
-            this.pos += 1;
+        if (_.peek() == '.') {
+            _.pos += 1;
             let has_frac_digits = false;
-            while (this.pos < this.source.len) {
-                switch (this.source[this.pos]) {
-                    '0'...'9' => {
-                        this.pos += 1;
+            while (_.pos < _.source.len) {
+                switch (_.source[_.pos]) {
+                    '0'..='9' => {
+                        _.pos += 1;
                         has_frac_digits = true;
                     },
                     else => break,
                 }
             }
-            if (!has_digits and !has_frac_digits) {
+            if (!has_digits && !has_frac_digits) {
                 return error.InvalidNumber;
             }
             has_digits = true;
@@ -698,20 +732,20 @@ const Codepoint = struct {
         }
 
         // Exponent part
-        switch (this.peek()) {
+        switch (_.peek()) {
             'e', 'E' => {
-                this.pos += 1;
-                switch (this.peek()) {
-                    '+', '-' => this.pos += 1,
+                _.pos += 1;
+                switch (_.peek()) {
+                    '+', '-' => _.pos += 1,
                     else => {},
                 }
-                switch (this.peek()) {
-                    '0'...'9' => this.pos += 1,
+                switch (_.peek()) {
+                    '0'..='9' => _.pos += 1,
                     else => return error.InvalidNumber,
                 }
-                while (this.pos < this.source.len) {
-                    switch (this.source[this.pos]) {
-                        '0'...'9' => this.pos += 1,
+                while (_.pos < _.source.len) {
+                    switch (_.source[_.pos]) {
+                        '0'..='9' => _.pos += 1,
                         else => break,
                     }
                 }
@@ -719,215 +753,213 @@ const Codepoint = struct {
             else => {},
         }
 
-        const num_str = this.source[start..this.pos];
+        const num_str = _.source[start.._.pos];
         return std.fmt.parseFloat(f64, num_str) catch {
             return error.InvalidNumber;
         };
     }
 
-    fn scanHexNumber(*this): ParseError!f64 {
-        this.pos += 2; // skip '0x' or '0X'
-        const hex_start = this.pos;
+    fn scanHexNumber(*_): ParseError!f64 {
+        _.pos += 2; // skip '0x' or '0X'
+        const hex_start = _.pos;
 
-        while (this.pos < this.source.len) {
-            switch (this.source[this.pos]) {
-                '0'...'9', 'a'...'f', 'A'...'F' => this.pos += 1,
+        while (_.pos < _.source.len) {
+            switch (_.source[_.pos]) {
+                '0'..='9', 'a'..='f', 'A'..='F' => _.pos += 1,
                 else => break,
             }
         }
 
-        if (this.pos == hex_start) {
+        if (_.pos == hex_start) {
             return error.InvalidHexNumber;
         }
 
-        const hex_str = this.source[hex_start..this.pos];
+        const hex_str = _.source[hex_start.._.pos];
         const value = std.fmt.parseInt(u64, hex_str, 16) catch {
             return error.InvalidHexNumber;
         };
         return @floatFromInt(value);
     }
 
-    fn scanIdentifier(*this): ParseError![]u8 {
-        let buf = std.array_list.Managed(u8).init(this.allocator);
+    fn scanIdentifier(*_): ParseError![]u8 {
+        let buf = std.array_list.Managed(u8).init(_.allocator);
 
         // First character must be IdentifierStart
-        const start_cp = this.readCodepoint() orelse {
-            return error.InvalidIdentifier;
-        };
+        const start_cp = _.readCodepoint() ?? return error.InvalidIdentifier;
 
         if (start_cp.cp == '\\') {
             // Unicode escape in identifier
-            const escaped_cp = try this.parseIdentifierUnicodeEscape();
+            const escaped_cp = _.parseIdentifierUnicodeEscape()?;
             if (!identifier.isIdentifierStart(escaped_cp)) {
                 return error.InvalidIdentifier;
             }
-            try appendCodepointToUtf8(&buf, @intCast(escaped_cp));
+            appendCodepointToUtf8(&buf, @intCast(escaped_cp))?;
         } else if (identifier.isIdentifierStart(start_cp.cp)) {
-            this.pos += start_cp.len;
-            try appendCodepointToUtf8(&buf, @intCast(start_cp.cp));
+            _.pos += start_cp.len;
+            appendCodepointToUtf8(&buf, @intCast(start_cp.cp))?;
         } else {
             return error.InvalidIdentifier;
         }
 
         // Continue characters
-        while (this.pos < this.source.len) {
-            const cont_cp = this.readCodepoint() orelse break;
+        while (_.pos < _.source.len) {
+            const cont_cp = _.readCodepoint() ?? break;
 
             if (cont_cp.cp == '\\') {
-                const escaped_cp = try this.parseIdentifierUnicodeEscape();
+                const escaped_cp = _.parseIdentifierUnicodeEscape()?;
                 if (!identifier.isIdentifierPart(escaped_cp)) {
                     break;
                 }
-                try appendCodepointToUtf8(&buf, @intCast(escaped_cp));
+                appendCodepointToUtf8(&buf, @intCast(escaped_cp))?;
             } else if (identifier.isIdentifierPart(cont_cp.cp)) {
-                this.pos += cont_cp.len;
-                try appendCodepointToUtf8(&buf, @intCast(cont_cp.cp));
+                _.pos += cont_cp.len;
+                appendCodepointToUtf8(&buf, @intCast(cont_cp.cp))?;
             } else {
                 break;
             }
         }
 
-        return try buf.toOwnedSlice();
+        return buf.toOwnedSlice()?;
     }
 
-    fn parseIdentifierUnicodeEscape(*this): ParseError!i32 {
+    fn parseIdentifierUnicodeEscape(*_): ParseError!i32 {
         // We already consumed the '\', now expect 'u' + 4 hex digits
-        this.pos += 1; // skip '\'
-        if (this.pos >= this.source.len or this.source[this.pos] != 'u') {
+        _.pos += 1; // skip '\'
+        if (_.pos >= _.source.len || _.source[_.pos] != 'u') {
             return error.InvalidUnicodeEscape;
         }
-        this.pos += 1;
-        return this.readHex4();
+        _.pos += 1;
+        return _.readHex4();
     }
 
     // ── Comment Helpers ──
 
-    fn skipToEndOfLine(*this) {
-        while (this.pos < this.source.len) {
-            const cc = this.source[this.pos];
-            if (cc == '\n' or cc == '\r') break;
+    fn skipToEndOfLine(*_) {
+        while (_.pos < _.source.len) {
+            const cc = _.source[_.pos];
+            if (cc == '\n' || cc == '\r') break;
             // Check for U+2028/U+2029 line terminators
-            if (cc == 0xE2 and this.pos + 2 < this.source.len and
-                this.source[this.pos + 1] == 0x80 and
-                (this.source[this.pos + 2] == 0xA8 or this.source[this.pos + 2] == 0xA9))
+            if (cc == 0xE2 && _.pos + 2 < _.source.len &&
+                _.source[_.pos + 1] == 0x80 &&
+                (_.source[_.pos + 2] == 0xA8 || _.source[_.pos + 2] == 0xA9))
             {
                 break;
             }
-            this.pos += 1;
+            _.pos += 1;
         }
     }
 
-    fn skipBlockComment(*this): ParseError!void {
-        while (this.pos < this.source.len) {
-            if (this.source[this.pos] == '*' and this.pos + 1 < this.source.len and this.source[this.pos + 1] == '/') {
-                this.pos += 2;
+    fn skipBlockComment(*_): ParseError!void {
+        while (_.pos < _.source.len) {
+            if (_.source[_.pos] == '*' && _.pos + 1 < _.source.len && _.source[_.pos + 1] == '/') {
+                _.pos += 2;
                 return;
             }
-            this.pos += 1;
+            _.pos += 1;
         }
         return error.UnterminatedComment;
     }
 
     /// Check if the current position has a multi-byte whitespace character.
     /// Returns the number of bytes consumed, or 0 if not whitespace.
-    fn multiByteWhitespace(this): u3 {
-        if (this.pos + 1 >= this.source.len) return 0;
-        const b0 = this.source[this.pos];
-        const b1 = this.source[this.pos + 1];
+    fn multiByteWhitespace(): u3 {
+        if (_.pos + 1 >= _.source.len) return 0;
+        const b0 = _.source[_.pos];
+        const b1 = _.source[_.pos + 1];
 
         // U+00A0 NBSP: C2 A0
-        if (b0 == 0xC2 and b1 == 0xA0) return 2;
+        if (b0 == 0xC2 && b1 == 0xA0) return 2;
 
-        if (this.pos + 2 >= this.source.len) return 0;
-        const b2 = this.source[this.pos + 2];
+        if (_.pos + 2 >= _.source.len) return 0;
+        const b2 = _.source[_.pos + 2];
 
         // U+FEFF BOM: EF BB BF
-        if (b0 == 0xEF and b1 == 0xBB and b2 == 0xBF) return 3;
+        if (b0 == 0xEF && b1 == 0xBB && b2 == 0xBF) return 3;
 
         // U+2028 LS: E2 80 A8
         // U+2029 PS: E2 80 A9
-        if (b0 == 0xE2 and b1 == 0x80 and (b2 == 0xA8 or b2 == 0xA9)) return 3;
+        if (b0 == 0xE2 && b1 == 0x80 && (b2 == 0xA8 || b2 == 0xA9)) return 3;
 
         // U+1680: E1 9A 80
-        if (b0 == 0xE1 and b1 == 0x9A and b2 == 0x80) return 3;
+        if (b0 == 0xE1 && b1 == 0x9A && b2 == 0x80) return 3;
 
         // U+2000-U+200A: E2 80 80-8A
-        if (b0 == 0xE2 and b1 == 0x80 and b2 >= 0x80 and b2 <= 0x8A) return 3;
+        if (b0 == 0xE2 && b1 == 0x80 && b2 >= 0x80 && b2 <= 0x8A) return 3;
 
         // U+202F: E2 80 AF
-        if (b0 == 0xE2 and b1 == 0x80 and b2 == 0xAF) return 3;
+        if (b0 == 0xE2 && b1 == 0x80 && b2 == 0xAF) return 3;
 
         // U+205F: E2 81 9F
-        if (b0 == 0xE2 and b1 == 0x81 and b2 == 0x9F) return 3;
+        if (b0 == 0xE2 && b1 == 0x81 && b2 == 0x9F) return 3;
 
         // U+3000: E3 80 80
-        if (b0 == 0xE3 and b1 == 0x80 and b2 == 0x80) return 3;
+        if (b0 == 0xE3 && b1 == 0x80 && b2 == 0x80) return 3;
 
         return 0;
     }
 
     // ── Helper Functions ──
 
-    fn readHexDigit(*this): ?u4 {
-        if (this.pos >= this.source.len) return null;
-        const c = this.source[this.pos];
+    fn readHexDigit(*_): u4? {
+        if (_.pos >= _.source.len) return null;
+        const c = _.source[_.pos];
         const result: u4 = switch (c) {
-            '0'...'9' => @intCast(c - '0'),
-            'a'...'f' => @intCast(c - 'a' + 10),
-            'A'...'F' => @intCast(c - 'A' + 10),
+            '0'..='9' => @intCast(c - '0'),
+            'a'..='f' => @intCast(c - 'a' + 10),
+            'A'..='F' => @intCast(c - 'A' + 10),
             else => return null,
         };
-        this.pos += 1;
+        _.pos += 1;
         return result;
     }
 
-    fn readHex4(*this): ParseError!i32 {
+    fn readHex4(*_): ParseError!i32 {
         let value: i32 = 0;
-        inline for (0..4) |_| {
-            const digit = this.readHexDigit() orelse {
-                return error.InvalidUnicodeEscape;
-            };
+        let i: usize = 0;
+        while (i < 4) : (i += 1) {
+            const digit = _.readHexDigit() ?? return error.InvalidUnicodeEscape;
             value = (value << 4) | @as(i32, digit);
         }
         return value;
     }
 
-    fn readCodepoint(this): ?Codepoint {
-        if (this.pos >= this.source.len) return null;
-        const first = this.source[this.pos];
+    fn readCodepoint(): Codepoint? {
+        if (_.pos >= _.source.len) return null;
+        const first = _.source[_.pos];
         if (first < 0x80) {
-            return .{ .cp = @intCast(first), .len = 1 };
+            return { cp: @intCast(first), len: 1 };
         }
         const seq_len = strings.wtf8ByteSequenceLength(first);
-        if (this.pos + seq_len > this.source.len) {
-            return .{ .cp = @intCast(first), .len = 1 };
+        if (_.pos + seq_len > _.source.len) {
+            return { cp: @intCast(first), len: 1 };
         }
-        const decoded = strings.decodeWTF8RuneT(this.source[this.pos..].ptr[0..4], seq_len, i32, -1);
-        if (decoded < 0) return .{ .cp = @intCast(first), .len = 1 };
-        return .{ .cp = decoded, .len = @intCast(seq_len) };
+        unsafe {
+            const decoded = strings.decodeWTF8RuneT(_.source[_.pos..].ptr[0..4], seq_len, i32, -1);
+            if (decoded < 0) return { cp: @intCast(first), len: 1 };
+            return { cp: decoded, len: @intCast(seq_len) };
+        }
     }
 }
 
 fn appendCodepointToUtf8(buf: *std.array_list.Managed(u8), cp: i32): ParseError!void {
-    if (cp < 0 or cp > 0x10FFFF) {
+    if (cp < 0 || cp > 0x10FFFF) {
         return error.InvalidUnicodeEscape;
     }
     let encoded: [4]u8 = undefined;
     const len = strings.encodeWTF8Rune(&encoded, cp);
-    try buf.appendSlice(encoded[0..len]);
+    buf.appendSlice(encoded[0..len])?;
 }
 
 fn isIdentContinueASCII(c: u8): bool {
     return switch (c) {
-        'a'...'z', 'A'...'Z', '0'...'9', '_', '$' => true,
+        'a'..='z', 'A'..='Z', '0'..='9', '_', '$' => true,
         else => false,
     };
 }
 
-const identifier = @import("../js_parser/lexer/identifier.zig");
-const std = @import("std");
+import * as identifier from "../js_parser/lexer/identifier.zig";
 
-const bun = @import("bun");
+import bun from "bun";
 const OOM = bun.OOM;
 const logger = bun.logger;
 const strings = bun.strings;

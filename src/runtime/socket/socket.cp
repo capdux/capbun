@@ -1630,41 +1630,43 @@ pub fn NewSocket(comptime ssl: bool): type {
 pub const TCPSocket = NewSocket(false);
 pub const TLSSocket = NewSocket(true);
 
-const NativeCallbacks = union(enum) {
+union(enum) NativeCallbacks {
     h2: *H2FrameParser,
-    none,
+    none: void,
 
-    pub fn onData(this: NativeCallbacks, data: []const u8): bool {
-        switch (this) {
-            .h2 => |h2| {
+    fn onData(data: []const u8): bool {
+        switch (_) {
+            .h2 h2 => {
                 h2.onNativeRead(data) catch return false;
                 return true;
             },
             .none => return false,
         }
     }
-    pub fn onWritable(this: NativeCallbacks): bool {
-        switch (this) {
-            .h2 => |h2| {
+    fn onWritable(): bool {
+        switch (_) {
+            .h2 h2 => {
                 h2.onNativeWritable();
                 return true;
             },
             .none => return false,
         }
     }
-};
+}
 
 const log = Output.scoped(.Socket, .visible);
 
-const WriteResult = union(enum) {
-    fail: void,
-    success: struct {
-        wrote: i32 = 0,
-        total: usize = 0,
-    },
-};
+struct WriteResultSuccess {
+    wrote: i32 = 0,
+    total: usize = 0,
+}
 
-const Flags = packed struct(u16) {
+union(enum) WriteResult {
+    fail: void,
+    success: WriteResultSuccess,
+}
+
+@packed(u16) struct Flags {
     is_active: bool = false,
     finalizing: bool = false,
     authorized: bool = false,
@@ -1676,16 +1678,21 @@ const Flags = packed struct(u16) {
     allow_half_open: bool = false,
     bypass_tls: bool = false,
     _: u6 = 0,
-};
+}
 
 pub enum SocketMode {
     client,
     server,
     duplex_server,
 
-    pub fn isServer(_: SocketMode): bool {
-        return this == .server or this == .duplex_server;
+    fn isServer(): bool {
+        return _ == .server || _ == .duplex_server;
     }
+}
+
+pub enum DuplexUpgradeEventState(u8) {
+    StartTLS,
+    Close,
 }
 
 pub class DuplexUpgradeContext {
@@ -1693,161 +1700,158 @@ pub class DuplexUpgradeContext {
     tls: (*TLSSocket)?,
     vm: *jsc.VirtualMachine,
     task: jsc.AnyTask,
-    task_event: EventState = .StartTLS,
+    task_event: DuplexUpgradeEventState = .StartTLS,
     ssl_config: jsc.API.ServerConfig.SSLConfig?,
     owned_ctx: (*BoringSSL.SSL_CTX)? = null,
     is_open: bool = false,
     mode: SocketMode = .client,
 
-    pub const EventState = enum(u8) {
-        StartTLS,
-        Close,
-    };
+    pub const EventState = DuplexUpgradeEventState;
 
     pub const new = bun.TrivialNew(DuplexUpgradeContext);
 
-    fn onOpen(*_: *DuplexUpgradeContext) {
-        this.is_open = true;
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
+    fn onOpen(*_) {
+        _.is_open = true;
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
-        if (tls := this.tls) {
+        if (tls := _.tls) {
             tls.onOpen(socket);
         }
     }
 
-    fn onData(*_: *DuplexUpgradeContext, decoded_data: []const u8) {
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
+    fn onData(*_, decoded_data: []const u8) {
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
-        if (tls := this.tls) {
+        if (tls := _.tls) {
             tls.onData(socket, decoded_data);
         }
     }
 
-    fn onHandshake(*_: *DuplexUpgradeContext, success: bool, ssl_error: uws.us_bun_verify_error_t) {
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
+    fn onHandshake(*_, success: bool, ssl_error: uws.us_bun_verify_error_t) {
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
-        if (tls := this.tls) {
+        if (tls := _.tls) {
             tls.onHandshake(socket, @intFromBool(success), ssl_error) catch {};
         }
     }
 
-    fn onEnd(*_: *DuplexUpgradeContext) {
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
-        if (tls := this.tls) {
+    fn onEnd(*_) {
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
+        if (tls := _.tls) {
             tls.onEnd(socket);
         }
     }
 
-    fn onWritable(*_: *DuplexUpgradeContext) {
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
+    fn onWritable(*_) {
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
-        if (tls := this.tls) {
+        if (tls := _.tls) {
             tls.onWritable(socket);
         }
     }
 
-    fn onError(*_: *DuplexUpgradeContext, err_value: jsc.JSValue) {
-        if (this.is_open) {
-            if (tls := this.tls) {
+    fn onError(*_, err_value: jsc.JSValue) {
+        if (_.is_open) {
+            if (tls := _.tls) {
                 tls.handleError(err_value);
             }
         } else {
-            if (tls := this.tls) {
-                this.tls = null;
+            if (tls := _.tls) {
+                _.tls = null;
                 tls.handleConnectError(@intFromEnum(bun.sys.SystemErrno.ECONNREFUSED)) catch {};
             }
         }
     }
 
-    fn onTimeout(*_: *DuplexUpgradeContext) {
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
+    fn onTimeout(*_) {
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
-        if (tls := this.tls) {
+        if (tls := _.tls) {
             tls.onTimeout(socket);
         }
     }
 
-    fn onClose(*_: *DuplexUpgradeContext) {
-        const socket = TLSSocket.Socket.fromDuplex(&this.upgrade);
+    fn onClose(*_) {
+        const socket = TLSSocket.Socket.fromDuplex(&_.upgrade);
 
-        if (tls := this.tls) {
-            this.tls = null;
+        if (tls := _.tls) {
+            _.tls = null;
             tls.onClose(socket, 0, null) catch {};
         }
 
-        this.deinitInNextTick();
+        _.deinitInNextTick();
     }
 
-    fn startUpgradeTLS(*_: *DuplexUpgradeContext, is_client: bool): anyerror!void {
-        if (ctx := this.owned_ctx) {
-            this.owned_ctx = null;
-            return this.upgrade.startTLSWithCTX(ctx, is_client);
+    fn startUpgradeTLS(*_, is_client: bool): ! {
+        if (ctx := _.owned_ctx) {
+            _.owned_ctx = null;
+            return _.upgrade.startTLSWithCTX(ctx, is_client);
         }
-        if (config := this.ssl_config) {
-            return this.upgrade.startTLS(config, is_client);
+        if (config := _.ssl_config) {
+            return _.upgrade.startTLS(config, is_client);
         }
     }
 
-    fn runEvent(*_: *DuplexUpgradeContext) {
-        switch (this.task_event) {
+    fn runEvent(*_) {
+        switch (_.task_event) {
             .StartTLS => {
-                if (this.tls == null) {
-                    this.release();
+                if (_.tls == null) {
+                    _.release();
                     return;
                 }
-                log("DuplexUpgradeContext.startTLS mode={s}", .{@tagName(this.mode)});
-                const is_client = this.mode == .client;
-                this.startUpgradeTLS(is_client) catch |e| {
+                log("DuplexUpgradeContext.startTLS mode={s}", .{@tagName(_.mode)});
+                const is_client = _.mode == .client;
+                _.startUpgradeTLS(is_client) catch e => {
                     if (e == error.OutOfMemory) {
                         bun.outOfMemory();
                     } else {
                         const errno = @intFromEnum(bun.sys.SystemErrno.ECONNREFUSED);
-                        if (tls := this.tls) {
-                            this.tls = null;
+                        if (tls := _.tls) {
+                            _.tls = null;
                             tls.handleConnectError(errno) catch {};
                         }
-                        this.release();
+                        _.release();
                         return;
                     }
                 };
-                if (*cfg := this.ssl_config) {
+                if (*cfg := _.ssl_config) {
                     cfg.deinit();
-                    this.ssl_config = null;
+                    _.ssl_config = null;
                 }
             },
-            .Close => this.release(),
+            .Close => _.release(),
         }
     }
 
-    fn deinitInNextTick(*_: *DuplexUpgradeContext) {
-        this.task_event = .Close;
-        this.vm.enqueueTask(jsc.Task.init(&this.task));
+    fn deinitInNextTick(*_) {
+        _.task_event = .Close;
+        _.vm.enqueueTask(jsc.Task.init(&_.task));
     }
 
-    fn startTLS(*_: *DuplexUpgradeContext) {
-        this.task_event = .StartTLS;
-        this.vm.enqueueTask(jsc.Task.init(&this.task));
+    fn startTLS(*_) {
+        _.task_event = .StartTLS;
+        _.vm.enqueueTask(jsc.Task.init(&_.task));
     }
 
-    pub fn release(*_: *DuplexUpgradeContext) {
-        if (tls := this.tls) {
-            this.tls = null;
+    pub fn release(*_) {
+        if (tls := _.tls) {
+            _.tls = null;
             tls.deref();
         }
-        if (*cfg := this.ssl_config) {
+        if (*cfg := _.ssl_config) {
             cfg.deinit();
-            this.ssl_config = null;
+            _.ssl_config = null;
         }
-        if (ctx := this.owned_ctx) {
-            this.owned_ctx = null;
+        if (ctx := _.owned_ctx) {
+            _.owned_ctx = null;
             BoringSSL.SSL_CTX_free(ctx);
         }
-        this.upgrade.deinit();
-        bun.destroy(this);
+        _.upgrade.deinit();
+        bun.destroy(_);
     }
 
-    pub fn deinit(*_: *DuplexUpgradeContext) {
-        this.release();
+    pub fn deinit(*_) {
+        _.release();
     }
 }
 

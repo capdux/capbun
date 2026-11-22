@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -44,9 +45,43 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const JSPromiseStatus = enum(u32) {
+    pending = 0,
+    fulfilled = 1,
+    rejected = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const JSPromiseUnwrapMode = enum {
+    mark_handled,
+    leave_unhandled,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn ExitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -73,46 +108,34 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const JSError = bun.JSError;
-const String = bun.String;
-const jsc = bun.jsc;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const VM = jsc.VM;
-const WrapCallback = *const fn(*anyopaque, *JSGlobalObject) callconv(.c) JSValue;
-pub const JSPromiseStatus = enum(u32) {
-    pending = 0, // Making this as 0, so that, we can change the status from Pending to others without masking.
-    fulfilled = 1,
-    rejected = 2,
-};
-pub const JSPromiseUnwrapMode = enum { mark_handled, leave_unhandled };
 pub const JSPromiseUnwrapped = union(enum) {
-    pending,
+    pending: void,
     fulfilled: JSValue,
     rejected: JSValue,
 };
+
 pub const JSPromiseStrong = struct {
     strong: jsc.Strong.Optional = .empty,
 
-pub fn rejectWithoutSwap(self: *@This(), globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) void {
+pub fn rejectWithoutSwap(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) void {
             _ = (((self.strong.get()) orelse { return; }).asPromise()).?.reject(globalThis, (blk_catch_0: { break :blk_catch_0 ((val) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 @as(jsc.JSValue, (globalThis.tryTakeException()).?); }); }));
     }
 
-pub fn resolveWithoutSwap(self: *@This(), globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) void {
+pub fn resolveWithoutSwap(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) void {
             _ = (((self.strong.get()) orelse { return; }).asPromise()).?.resolve(globalThis, val);
     }
 
-pub fn reject(self: *@This(), globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) bun.JSTerminated!void {
+pub fn reject(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) bun.JSTerminated!void {
             _ = try self.swap().reject(globalThis, (blk_catch_1: { break :blk_catch_1 ((val) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 @as(jsc.JSValue, (globalThis.tryTakeException()).?); }); }));
     }
 
-pub fn rejectWithAsyncStack(self: *@This(), globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) bun.JSTerminated!void {
+pub fn rejectWithAsyncStack(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) bun.JSTerminated!void {
             const e = (blk_catch_2: { break :blk_catch_2 ((val) catch |__ce_2| { _ = &__ce_2; return self.reject(globalThis, val); }); });
             _ = e.attachAsyncStackFromPromise(globalThis, self.get());
             _ = try self.swap().reject(globalThis, e);
     }
 
-pub fn rejectTask(self: *@This(), globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) bun.JSTerminated!void {
+pub fn rejectTask(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) bun.JSTerminated!void {
             const loop = jsc.VirtualMachine.get().eventLoop();
             _ = loop.enter();
             var loop_guard = ExitGuard(@TypeOf(loop.*)){ .ptr = loop };
@@ -122,11 +145,11 @@ pub fn rejectTask(self: *@This(), globalThis: *jsc.JSGlobalObject, val: jsc.JSVa
             _ = try self.reject(globalThis, val);
     }
 
-pub fn resolve(self: *@This(), globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) bun.JSTerminated!void {
+pub fn resolve(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) bun.JSTerminated!void {
             _ = try self.swap().resolve(globalThis, val);
     }
 
-pub fn resolveTask(self: *@This(), globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) bun.JSTerminated!void {
+pub fn resolveTask(self: *JSPromiseStrong, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) bun.JSTerminated!void {
             const loop = jsc.VirtualMachine.get().eventLoop();
             _ = loop.enter();
             var loop_guard = ExitGuard(@TypeOf(loop.*)){ .ptr = loop };
@@ -140,204 +163,185 @@ pub fn init(globalThis: *jsc.JSGlobalObject) JSPromiseStrong {
             return JSPromiseStrong{ .strong = .create(jsc.JSPromise.create(globalThis).toJS(), globalThis) };
     }
 
-pub fn get(self: *const @This()) *jsc.JSPromise {
+pub fn get(self: *const JSPromiseStrong) *jsc.JSPromise {
             return ((self.strong.get()).?.asPromise()).?;
     }
 
-pub fn value(self: @This()) JSValue {
+pub fn value(self: JSPromiseStrong) JSValue {
             return (self.strong.get()).?;
     }
 
-pub fn valueOrEmpty(self: @This()) JSValue {
+pub fn valueOrEmpty(self: JSPromiseStrong) JSValue {
             return ((self.strong.get()) orelse (.zero));
     }
 
-pub fn hasValue(self: @This()) bool {
+pub fn hasValue(self: JSPromiseStrong) bool {
             return self.strong.has();
     }
 
-pub fn swap(self: *@This()) *jsc.JSPromise {
+pub fn swap(self: *JSPromiseStrong) *jsc.JSPromise {
             const prom = (self.strong.swap().asPromise()).?;
             _ = self.strong.deinit();
             return prom;
     }
 
-pub fn take(self: *@This()) JSPromiseStrong {
+pub fn take(self: *JSPromiseStrong) JSPromiseStrong {
             const ret = self.*;
             self.* = .empty;
             return ret;
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *JSPromiseStrong) void {
             _ = self.strong.deinit();
     }
     pub const empty: JSPromiseStrong = .{ .strong = .empty };
     pub const rejectOnNextTick = @compileError("Either use an event loop task, or you're draining microtasks when you shouldn't be.");
 };
+
 pub const JSPromise = opaque {
+
+pub inline fn toJS(self: *JSPromise) JSValue {
+            return JSValue.fromCell(self);
+    }
+
+pub fn wrap(globalObject: *JSGlobalObject, comptime Function: anytype, args: std.@"meta".ArgsTuple(wrapFnType(Function))) bun.JSTerminated!JSValue {
+            return wrapImpl(globalObject, Function, args);
+    }
+
+pub fn wrapValue(globalObject: *JSGlobalObject, value: JSValue) JSValue {
+            if ((value == .zero)) {
+                return resolvedPromiseValue(globalObject, .js_undefined);
+            } else {
+                if (value.isEmptyOrUndefinedOrNull()) {
+                    return resolvedPromiseValue(globalObject, value);
+                } else {
+                    if ((!value.isCell())) {
+                        return resolvedPromiseValue(globalObject, value);
+                    }
+                }
+            }
+            if ((value.jsType() == .JSPromise)) {
+                return value;
+            }
+            if (value.isAnyError()) {
+                return dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, value);
+            }
+            return resolvedPromiseValue(globalObject, value);
+    }
+
+pub fn status(self: *JSPromise) Status {
+            return @enumFromInt(bun.cpp.JSC__JSPromise__status(self));
+    }
+
+pub fn result(self: *JSPromise, vm: *VM) JSValue {
+            return bun.cpp.JSC__JSPromise__result(self, vm);
+    }
+
+pub fn isHandled(self: *JSPromise) bool {
+            return bun.cpp.JSC__JSPromise__isHandled(self);
+    }
+
+pub fn setHandled(self: *JSPromise) void {
+            _ = bun.cpp.JSC__JSPromise__setHandled(self);
+    }
+
+pub fn resolvedPromise(globalThis: *JSGlobalObject, value: JSValue) *JSPromise {
+            return JSC__JSPromise__resolvedPromise(globalThis, value);
+    }
+
+pub fn resolvedPromiseValue(globalThis: *JSGlobalObject, value: JSValue) JSValue {
+            return JSC__JSPromise__resolvedPromiseValue(globalThis, value);
+    }
+
+pub fn rejectedPromise(globalThis: *JSGlobalObject, value: JSValue) *JSPromise {
+            return JSC__JSPromise__rejectedPromise(globalThis, value);
+    }
+
+pub fn dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis: *JSGlobalObject, value: JSValue) JSValue {
+            return JSC__JSPromise__rejectedPromiseValue(globalThis, value);
+    }
+
+pub fn resolve(self: *JSPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
+            if (comptime bun.Environment.isDebug) {
+                const loop = jsc.VirtualMachine.get().eventLoop();
+                loop.debug.js_call_count_outside_tick_queue = (loop.debug.js_call_count_outside_tick_queue + (if (comptime @typeInfo(@TypeOf(@intFromBool((!loop.debug.is_inside_tick_queue)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((!loop.debug.is_inside_tick_queue)))) else cp_cast_int(usize, @intFromBool((!loop.debug.is_inside_tick_queue)))));
+                if ((loop.debug.track_last_fn_name and (!loop.debug.is_inside_tick_queue))) {
+                    loop.debug.last_fn_name = String.static("resolve");
+                }
+            }
+            _ = (blk_catch_3: { break :blk_catch_3 ((bun.cpp.JSC__JSPromise__resolve(self, globalThis, value)) catch |__ce_3| { _ = &__ce_3; return error.JSTerminated; }); });
+    }
+
+pub fn reject(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSValue) bun.JSTerminated!void {
+            if (comptime bun.Environment.isDebug) {
+                const loop = jsc.VirtualMachine.get().eventLoop();
+                loop.debug.js_call_count_outside_tick_queue = (loop.debug.js_call_count_outside_tick_queue + (if (comptime @typeInfo(@TypeOf(@intFromBool((!loop.debug.is_inside_tick_queue)))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool((!loop.debug.is_inside_tick_queue)))) else cp_cast_int(usize, @intFromBool((!loop.debug.is_inside_tick_queue)))));
+                if ((loop.debug.track_last_fn_name and (!loop.debug.is_inside_tick_queue))) {
+                    loop.debug.last_fn_name = String.static("reject");
+                }
+            }
+            const e = (blk_catch_4: { break :blk_catch_4 ((value) catch |err_val| { _ = &err_val; break :blk_catch_4 @as(JSValue, blk: {
+            if ((err_val == error.OutOfMemory)) {
+                break :blk globalThis.createOutOfMemoryError();
+            }
+            if ((err_val == error.JSTerminated)) {
+                return;
+            }
+            const exception = ((globalThis.tryTakeException()) orelse {
+            _ = @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
+});
+            break :blk ((exception.toError()) orelse (exception));
+}); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((bun.cpp.JSC__JSPromise__reject(self, globalThis, e)) catch |__ce_5| { _ = &__ce_5; return error.JSTerminated; }); });
+    }
+
+pub fn rejectAsHandled(self: *JSPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
+            _ = (blk_catch_6: { break :blk_catch_6 ((bun.cpp.JSC__JSPromise__rejectAsHandled(self, globalThis, value)) catch |__ce_6| { _ = &__ce_6; return error.JSTerminated; }); });
+    }
+
+pub fn rejectWithAsyncStack(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSValue) bun.JSTerminated!void {
+            const e = (blk_catch_7: { break :blk_catch_7 ((value) catch |__ce_7| { _ = &__ce_7; return self.reject(globalThis, value); }); });
+            _ = e.attachAsyncStackFromPromise(globalThis, self);
+            return self.reject(globalThis, e);
+    }
+
+pub fn create(globalThis: *JSGlobalObject) *JSPromise {
+            return JSC__JSPromise__create(globalThis);
+    }
+
+pub fn asValue(self: *JSPromise, global: *JSGlobalObject) JSValue {
+            _ = &global;
+            return self.toJS();
+    }
+
+pub fn unwrap(self: *JSPromise, vm: *VM, mode: UnwrapMode) Unwrapped {
+            return (switch (self.status()) {
+.pending => .pending,
+.fulfilled => Unwrapped{ .fulfilled = self.result(vm) },
+.rejected => {
+{
+                if ((mode == .mark_handled)) {
+                    _ = self.setHandled();
+                }
+                return Unwrapped{ .rejected = self.result(vm) };
+            }
+},
+});
+    }
     pub const Status = JSPromiseStatus;
     pub const Weak = JSPromiseWeak;
     pub const Strong = JSPromiseStrong;
-
-    pub inline fn toJS(self: *JSPromise) JSValue {
-        return JSValue.fromCell(self);
-    }
-
-    pub fn wrap(
-        globalObject: *JSGlobalObject,
-        comptime Function: anytype,
-        args: std.@"meta".ArgsTuple(wrapFnType(Function)),
-    ) bun.JSTerminated!JSValue {
-        return wrapImpl(globalObject, Function, args);
-    }
-
-    pub fn wrapValue(globalObject: *JSGlobalObject, value: JSValue) JSValue {
-        if (value == .zero) {
-            return resolvedPromiseValue(globalObject, .js_undefined);
-        } else if (value.isEmptyOrUndefinedOrNull()) {
-            return resolvedPromiseValue(globalObject, value);
-        } else if (!value.isCell()) {
-            return resolvedPromiseValue(globalObject, value);
-        }
-
-        if (value.jsType() == .JSPromise) {
-            return value;
-        }
-
-        if (value.isAnyError()) {
-            return dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, value);
-        }
-
-        return resolvedPromiseValue(globalObject, value);
-    }
-
-    pub fn status(self: *const JSPromise) Status {
-        return @enumFromInt(bun.cpp.JSC__JSPromise__status(self));
-    }
-
-    pub fn result(self: *JSPromise, vm: *VM) JSValue {
-        return bun.cpp.JSC__JSPromise__result(self, vm);
-    }
-
-    pub fn isHandled(self: *const JSPromise) bool {
-        return bun.cpp.JSC__JSPromise__isHandled(self);
-    }
-
-    pub fn setHandled(self: *JSPromise) void {
-        bun.cpp.JSC__JSPromise__setHandled(self);
-    }
-
-    /// Create a new resolved promise resolving to a given value.
-    ///
-    /// Note: If you want the result as a JSValue, use `JSPromise.resolvedPromiseValue` instead.
-    pub fn resolvedPromise(globalThis: *JSGlobalObject, value: JSValue) *JSPromise {
-        return JSC__JSPromise__resolvedPromise(globalThis, value);
-    }
-
-    /// Create a new promise with an already fulfilled value
-    /// This is the faster function for doing that.
-    pub fn resolvedPromiseValue(globalThis: *JSGlobalObject, value: JSValue) JSValue {
-        return JSC__JSPromise__resolvedPromiseValue(globalThis, value);
-    }
-
-    /// Create a new rejected promise rejecting to a given value.
-    ///
-    /// Note: If you want the result as a JSValue, use `JSPromise.rejectedPromiseValue` instead.
-    pub fn rejectedPromise(globalThis: *JSGlobalObject, value: JSValue) *JSPromise {
-        return JSC__JSPromise__rejectedPromise(globalThis, value);
-    }
-
-    /// **DEPRECATED** use `JSPromise.rejectedPromise` instead
-    ///
-    /// Create a new rejected promise without notifying the VM. Unhandled
-    /// rejections created this way will not trigger unhandled rejection handling.
-    pub fn dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis: *JSGlobalObject, value: JSValue) JSValue {
-        return JSC__JSPromise__rejectedPromiseValue(globalThis, value);
-    }
-
-    /// Fulfill an existing promise with the value
-    /// The value can be another Promise
-    /// If you want to create a new Promise that is already resolved, see JSPromise.resolvedPromiseValue
-    pub fn resolve(self: *JSPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
-        if (comptime bun.Environment.isDebug) {
-            const loop = jsc.VirtualMachine.get().eventLoop();
-            loop.debug.js_call_count_outside_tick_queue += @as(usize, @intFromBool(!loop.debug.is_inside_tick_queue));
-            if (loop.debug.track_last_fn_name and !loop.debug.is_inside_tick_queue) {
-                loop.debug.last_fn_name = String.static("resolve");
-            }
-        }
-
-        bun.cpp.JSC__JSPromise__resolve(self, globalThis, value) catch return error.JSTerminated;
-    }
-
-    pub fn reject(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSValue) bun.JSTerminated!void {
-        if (comptime bun.Environment.isDebug) {
-            const loop = jsc.VirtualMachine.get().eventLoop();
-            loop.debug.js_call_count_outside_tick_queue += @as(usize, @intFromBool(!loop.debug.is_inside_tick_queue));
-            if (loop.debug.track_last_fn_name and !loop.debug.is_inside_tick_queue) {
-                loop.debug.last_fn_name = String.static("reject");
-            }
-        }
-
-        const e = value catch |err_val| switch (err_val) {
-            // We can't use globalThis.takeException() because it throws out of
-            // memory error when we instead need to take the exception.
-            error.OutOfMemory => globalThis.createOutOfMemoryError(),
-
-            error.JSTerminated => return,
-            else => blk: {
-                const exception = globalThis.tryTakeException() orelse {
-                    @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
-                };
-                break :blk exception.toError() orelse exception;
-            },
-        };
-
-        bun.cpp.JSC__JSPromise__reject(self, globalThis, e) catch return error.JSTerminated;
-    }
-
-    pub fn rejectAsHandled(self: *JSPromise, globalThis: *JSGlobalObject, value: JSValue) bun.JSTerminated!void {
-        bun.cpp.JSC__JSPromise__rejectAsHandled(self, globalThis, value) catch return error.JSTerminated;
-    }
-
-    /// Like `reject` but first attaches async stack frames from this promise's
-    /// await chain to the error. Use when rejecting from native code at the top
-    /// of the event loop (threadpool callback) where the error would otherwise
-    /// have an empty stack trace.
-    pub fn rejectWithAsyncStack(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSValue) bun.JSTerminated!void {
-        const e = value catch return self.reject(globalThis, value);
-        e.attachAsyncStackFromPromise(globalThis, self);
-        return self.reject(globalThis, e);
-    }
-
-    /// Create a new pending promise.
-    ///
-    /// Note: You should use `JSPromise.resolvedPromise` or
-    ///       `JSPromise.rejectedPromise` if you want to create a promise that
-    ///       is already resolved or rejected.
-    pub fn create(globalThis: *JSGlobalObject) *JSPromise {
-        return JSC__JSPromise__create(globalThis);
-    }
-
-    /// **DEPRECATED** use `JSPromise.toJS` instead
-    pub fn asValue(self: *JSPromise, _: *JSGlobalObject) JSValue {
-        return self.toJS();
-    }
-
     pub const Unwrapped = JSPromiseUnwrapped;
     pub const UnwrapMode = JSPromiseUnwrapMode;
-
-    pub fn unwrap(promise: *JSPromise, vm: *VM, mode: UnwrapMode) Unwrapped {
-        return switch (promise.status()) {
-            .pending => .pending,
-            .fulfilled => .{ .fulfilled = promise.result(vm) },
-            .rejected => {
-                if (mode == .mark_handled) promise.setHandled();
-                return .{ .rejected = promise.result(vm) };
-            },
-        };
-    }
 };
+
+const JSError = bun.JSError;
+const String = bun.String;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const VM = jsc.VM;
+const WrapCallback = *const fn(*anyopaque, *JSGlobalObject) callconv(.c) JSValue;
 
 extern "c" fn JSC__JSPromise__create(arg0: *JSGlobalObject) callconv(.c) *JSPromise;
 

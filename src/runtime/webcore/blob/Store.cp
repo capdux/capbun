@@ -61,6 +61,75 @@ pub struct DeinitPtrGuard<T> {
     }
 }
 
+pub struct StoreS3UnlinkWrapper {
+    promise: JSPromise.Strong,
+    store: *Store,
+    global: *JSGlobalObject,
+
+    fn resolve(result: S3DeleteResult, opaque_self: *!?): ! {
+        let wrap: *StoreS3UnlinkWrapper = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
+        const wrap_guard = DeinitPtrGuard<StoreS3UnlinkWrapper>{ ptr: wrap };
+        const globalObject = wrap.global;
+        switch (result) {
+            .success => {
+                wrap.promise.resolve(globalObject, .true)?;
+            },
+            .not_found, .failure e => {
+                wrap.promise.reject(globalObject, e.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()))?;
+            },
+        }
+    }
+
+    fn deinit(*_) {
+        _.store.deref();
+        _.promise.deinit();
+        destroy(_);
+    }
+}
+
+pub struct StoreS3ListObjectsWrapper {
+    promise: JSPromise.Strong,
+    store: *Store,
+    resolvedlistOptions: S3ListObjectsOptions,
+    global: *JSGlobalObject,
+
+    fn resolve(result: S3ListObjectsResult, opaque_self: *!?): ! {
+        let wrap: *StoreS3ListObjectsWrapper = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
+        const wrap_guard = DeinitPtrGuard<StoreS3ListObjectsWrapper>{ ptr: wrap };
+        const globalObject = wrap.global;
+        switch (result) {
+            .success list_result => {
+                let list_result_mut = list_result;
+                const list_result_guard = DeinitGuard<@TypeOf(list_result_mut)>{ val: list_result_mut };
+                const list_result_js = list_result_mut.toJS(globalObject) catch return wrap.promise.reject(globalObject, error.JSError);
+                wrap.promise.resolve(globalObject, list_result_js)?;
+            },
+            inline .not_found, .failure e => {
+                wrap.promise.reject(globalObject, e.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()))?;
+            },
+        }
+    }
+
+    fn deinit(*_) {
+        _.store.deref();
+        _.promise.deinit();
+        _.resolvedlistOptions.deinit();
+        destroy(_);
+    }
+}
+
+pub union(enum) StoreData {
+    bytes: StoreBytes,
+    file: StoreFile,
+    s3: StoreS3,
+}
+
+pub enum StoreSerializeTag: u8 {
+    file = 0,
+    bytes = 1,
+    empty = 2,
+}
+
 pub struct StoreFile {
     pathlike: Node.PathOrFileDescriptor;
     mime_type: MimeType = .other;
@@ -70,13 +139,13 @@ pub struct StoreFile {
     max_size: SizeType = Blob.max_size;
     last_modified: jsc.JSTimeType = jsc.init_timestamp;
 
-    pub fn unlink(_: *const StoreFile, globalThis: *JSGlobalObject): JSError!JSValue {
-        return switch (this.pathlike) {
-            .path => |path_like| Node.fs.Async.unlink.create(globalThis, undefined, .{
+    fn unlink(globalThis: *JSGlobalObject): JSValue ! JSError {
+        return switch (_.pathlike) {
+            .path path_like => Node.fs.Async.unlink.create(globalThis, undefined, .{
                 .path = .{
                     .encoded_slice = switch (path_like) {
-                        .encoded_slice => |slice| try slice.toOwned(default_allocator),
-                        else => try ZigString.fromUTF8(path_like.slice()).toSliceClone(default_allocator),
+                        .encoded_slice slice => slice.toOwned(default_allocator)?,
+                        else => ZigString.fromUTF8(path_like.slice()).toSliceClone(default_allocator)?,
                     },
                 },
             }, globalThis.bunVM()),
@@ -84,17 +153,17 @@ pub struct StoreFile {
         };
     }
 
-    pub fn isSeekable(_: *const StoreFile): bool? {
-        if (seekable := this.seekable) {
+    fn isSeekable(): bool? {
+        if (seekable := _.seekable) {
             return seekable;
         }
-        if (this.mode != 0) {
-            return isRegularFile(this.mode);
+        if (_.mode != 0) {
+            return isRegularFile(_.mode);
         }
         return null;
     }
 
-    pub static fn init(pathlike: Node.PathOrFileDescriptor, mime_type: MimeType?): StoreFile {
+    static fn init(pathlike: Node.PathOrFileDescriptor, mime_type: MimeType?): StoreFile {
         return StoreFile {
             pathlike = pathlike,
             mime_type = mime_type ?? .other,
@@ -116,21 +185,21 @@ pub struct StoreS3 {
     storage_class: StorageClass? = null,
     request_payer: bool = false,
 
-    pub fn isSeekable(_: *const StoreS3): bool? {
+    fn isSeekable(): bool? {
         return true;
     }
 
-    pub fn getCredentials(_: *const StoreS3): *S3Credentials {
-        assert(this.credentials != null);
-        return this.credentials.?;
+    fn getCredentials(): *S3Credentials {
+        assert(_.credentials != null);
+        return _.credentials.?;
     }
 
-    pub fn getCredentialsWithOptions(_: *const StoreS3, options: JSValue?, globalObject: *JSGlobalObject): JSError!S3CredentialsWithOptions {
-        return S3Credentials.getCredentialsWithOptions(this.getCredentials().*, this.options, options, this.acl, this.storage_class, this.request_payer, globalObject);
+    fn getCredentialsWithOptions(options: JSValue?, globalObject: *JSGlobalObject): S3CredentialsWithOptions ! JSError {
+        return S3Credentials.getCredentialsWithOptions(_.getCredentials().*, _.options, options, _.acl, _.storage_class, _.request_payer, globalObject);
     }
 
-    pub fn path(_: *const StoreS3): string {
-        let parsed_url = URL.parse(this.pathlike.slice());
+    fn path(): string {
+        let parsed_url = URL.parse(_.pathlike.slice());
         let path_name_raw = parsed_url.s3Path();
         let path_name = path_name_raw;
         if (strings.endsWith(path_name, "/")) {
@@ -146,109 +215,52 @@ pub struct StoreS3 {
         return path_name;
     }
 
-    pub fn unlink(_: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, extra_options: JSValue?): JSError!JSValue {
-        const Wrapper = struct {
-            promise: JSPromise.Strong,
-            store: *Store,
-            global: *JSGlobalObject,
-
-            pub fn resolve(result: S3DeleteResult, opaque_self: *!?): !void {
-                let wrap: *@This() = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
-                const wrap_guard = DeinitPtrGuard<@This()>{ ptr: wrap };
-                const globalObject = wrap.global;
-                switch (result) {
-                    .success => {
-                        try wrap.promise.resolve(globalObject, .true);
-                    },
-                    .not_found, .failure => |err| {
-                        try wrap.promise.reject(globalObject, err.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()));
-                    },
-                }
-            }
-
-            fn deinit(wrap: *@This()) {
-                wrap.store.deref();
-                wrap.promise.deinit();
-                destroy(wrap);
-            }
-        };
-
+    fn unlink(store: *Store, globalThis: *JSGlobalObject, extra_options: JSValue?): JSValue ! JSError {
         let promise = JSPromise.Strong.init(globalThis);
         const value_fn = JSPromise.Strong.value;
         let value = value_fn(promise);
         let proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
         let proxy = if (proxy_url != null) proxy_url.?.href else null;
-        let aws_options = try this.getCredentialsWithOptions(extra_options, globalThis);
+        let aws_options = _.getCredentialsWithOptions(extra_options, globalThis)?;
         const aws_options_guard = DeinitGuard<S3CredentialsWithOptions>{ val: aws_options };
         store.ref();
 
-        try s3Delete(&aws_options.credentials, this.path(), unsafe { @ptrCast(&Wrapper.resolve) }, bun.new(Wrapper, .{
+        s3Delete(&aws_options.credentials, _.path(), unsafe { @ptrCast(&StoreS3UnlinkWrapper.resolve) }, bun.new(StoreS3UnlinkWrapper, .{
             .promise = promise,
             .store = store,
             .global = globalThis,
-        }), proxy, aws_options.request_payer);
+        }), proxy, aws_options.request_payer)?;
 
         return value;
     }
 
-    pub fn listObjects(_: *const StoreS3, store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: JSValue?): JSError!JSValue {
+    fn listObjects(store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: JSValue?): JSValue ! JSError {
         if (!listOptions.isEmptyOrUndefinedOrNull() and !listOptions.isObject()) {
             return globalThis.throwInvalidArguments("S3Client.listObjects() needs a S3ListObjectsOption as it's first argument", .{});
         }
 
-        const Wrapper = struct {
-            promise: JSPromise.Strong,
-            store: *Store,
-            resolvedlistOptions: S3ListObjectsOptions,
-            global: *JSGlobalObject,
-
-            pub fn resolve(result: S3ListObjectsResult, opaque_self: *!?): !void {
-                let wrap: *@This() = unsafe { @ptrCast(@alignCast(opaque_self.?)) };
-                const wrap_guard = DeinitPtrGuard<@This()>{ ptr: wrap };
-                const globalObject = wrap.global;
-                switch (result) {
-                    .success => |list_result| {
-                        let list_result_mut = list_result;
-                        const list_result_guard = DeinitGuard<@TypeOf(list_result_mut)>{ val: list_result_mut };
-                        const list_result_js = list_result_mut.toJS(globalObject) catch return wrap.promise.reject(globalObject, error.JSError);
-                        try wrap.promise.resolve(globalObject, list_result_js);
-                    },
-                    inline .not_found, .failure => |err| {
-                        try wrap.promise.reject(globalObject, err.toJSWithAsyncStack(globalObject, wrap.store.getPath(), wrap.promise.get()));
-                    },
-                }
-            }
-
-            fn deinit(wrap: *@This()) {
-                wrap.store.deref();
-                wrap.promise.deinit();
-                wrap.resolvedlistOptions.deinit();
-                destroy(wrap);
-            }
-        };
-
         let promise = JSPromise.Strong.init(globalThis);
         const value_fn = JSPromise.Strong.value;
         let value = value_fn(promise);
         let proxy_url = globalThis.bunVM().transpiler.env.getHttpProxy(true, null, null);
         let proxy = if (proxy_url != null) proxy_url.?.href else null;
-        let aws_options = try this.getCredentialsWithOptions(extra_options, globalThis);
+        let aws_options = _.getCredentialsWithOptions(extra_options, globalThis)?;
         const aws_options_guard = DeinitGuard<S3CredentialsWithOptions>{ val: aws_options };
 
-        let options = try getListObjectsOptionsFromJS(globalThis, listOptions);
+        let options = getListObjectsOptionsFromJS(globalThis, listOptions)?;
         store.ref();
 
-        try s3ListObjects(&aws_options.credentials, options, unsafe { @ptrCast(&Wrapper.resolve) }, bun.new(Wrapper, .{
+        s3ListObjects(&aws_options.credentials, options, unsafe { @ptrCast(&StoreS3ListObjectsWrapper.resolve) }, bun.new(StoreS3ListObjectsWrapper, .{
             .promise = promise,
             .store = store,
             .resolvedlistOptions = options,
             .global = globalThis,
-        }), proxy);
+        }), proxy)?;
 
         return value;
     }
 
-    pub static fn initWithReferencedCredentials(pathlike: node.PathLike, mime_type: MimeType?, credentials: *S3Credentials): StoreS3 {
+    static fn initWithReferencedCredentials(pathlike: node.PathLike, mime_type: MimeType?, credentials: *S3Credentials): StoreS3 {
         credentials.ref();
         return StoreS3 {
             credentials = credentials,
@@ -261,7 +273,7 @@ pub struct StoreS3 {
         };
     }
 
-    pub static fn init(pathlike: node.PathLike, mime_type: MimeType?, credentials: S3Credentials): StoreS3 {
+    static fn init(pathlike: node.PathLike, mime_type: MimeType?, credentials: S3Credentials): StoreS3 {
         return StoreS3 {
             credentials = credentials.dupe(),
             pathlike = pathlike,
@@ -273,22 +285,22 @@ pub struct StoreS3 {
         };
     }
 
-    pub fn estimatedSize(_: *const StoreS3): usize {
-        let cred_size = if (this.credentials != null) this.credentials.?.estimatedSize() else 0;
-        return this.pathlike.estimatedSize() + cred_size;
+    fn estimatedSize(): usize {
+        let cred_size = if (_.credentials != null) _.credentials.?.estimatedSize() else 0;
+        return _.pathlike.estimatedSize() + cred_size;
     }
 
-    pub fn deinit(*_, allocator: Allocator) {
-        switch (this.pathlike) {
-            .string => allocator.free(unsafe { @constCast(this.pathlike.slice()) }),
-            else => this.pathlike.deinit(),
+    fn deinit(*_, allocator: Allocator) {
+        switch (_.pathlike) {
+            .string => allocator.free(unsafe { @constCast(_.pathlike.slice()) }),
+            else => _.pathlike.deinit(),
         }
-        this.pathlike = .{
+        _.pathlike = .{
             .string = PathString.empty,
         };
-        if (this.credentials != null) {
-            this.credentials.?.deref();
-            this.credentials = null;
+        if (_.credentials != null) {
+            _.credentials.?.deref();
+            _.credentials = null;
         }
     }
 }
@@ -300,7 +312,7 @@ pub struct StoreBytes {
     allocator: Allocator,
     stored_name: PathString = PathString.empty,
 
-    pub static fn init(bytes: []u8, allocator: Allocator): StoreBytes {
+    static fn init(bytes: []u8, allocator: Allocator): StoreBytes {
         return StoreBytes {
             ptr = bytes.ptr,
             len = @as(SizeType, @truncate(bytes.len)),
@@ -310,7 +322,7 @@ pub struct StoreBytes {
         };
     }
 
-    pub static fn initEmptyWithName(name: PathString, allocator: Allocator): StoreBytes {
+    static fn initEmptyWithName(name: PathString, allocator: Allocator): StoreBytes {
         return StoreBytes {
             ptr = null,
             len = 0,
@@ -320,65 +332,65 @@ pub struct StoreBytes {
         };
     }
 
-    pub static fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator): !*StoreBytes {
+    static fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator): (*StoreBytes)! {
         return StoreBytes.init(list.items, allocator);
     }
 
-    pub fn toInternalBlob(*_): Blob.Internal {
-        let ptr = this.ptr orelse return Blob.Internal{
+    fn toInternalBlob(*_): Blob.Internal {
+        let ptr = _.ptr orelse return Blob.Internal{
             .bytes = .{
                 .items = &.{},
                 .capacity = 0,
-                .allocator = this.allocator,
+                .allocator = _.allocator,
             },
         };
 
         let result: Blob.Internal = .{
             .bytes = .{
-                .items = unsafe { ptr[0..this.len] },
-                .capacity = this.cap,
-                .allocator = this.allocator,
+                .items = unsafe { ptr[0.._.len] },
+                .capacity = _.cap,
+                .allocator = _.allocator,
             },
         };
 
-        this.allocator = default_allocator;
-        this.len = @as(SizeType, 0);
-        this.cap = @as(SizeType, 0);
+        _.allocator = default_allocator;
+        _.len = @as(SizeType, 0);
+        _.cap = @as(SizeType, 0);
         return result;
     }
 
-    pub fn slice(_: *const StoreBytes): []u8 {
-        if (this.ptr != null) {
-            return unsafe { this.ptr.?[0..this.len] };
+    fn slice(): []u8 {
+        if (_.ptr != null) {
+            return unsafe { _.ptr.?[0.._.len] };
         }
         return "";
     }
 
-    pub fn allocatedSlice(_: *const StoreBytes): []u8 {
-        if (this.ptr != null) {
-            return unsafe { this.ptr.?[0..this.cap] };
+    fn allocatedSlice(): []u8 {
+        if (_.ptr != null) {
+            return unsafe { _.ptr.?[0.._.cap] };
         }
         return "";
     }
 
-    pub fn deinit(*_) {
-        default_allocator.free(this.stored_name.slice());
-        if (this.ptr != null) {
-            this.allocator.free(unsafe { this.ptr.?[0..this.cap] });
+    fn deinit(*_) {
+        default_allocator.free(_.stored_name.slice());
+        if (_.ptr != null) {
+            _.allocator.free(unsafe { _.ptr.?[0.._.cap] });
         }
-        this.ptr = null;
-        this.len = @as(SizeType, 0);
-        this.cap = @as(SizeType, 0);
+        _.ptr = null;
+        _.len = @as(SizeType, 0);
+        _.cap = @as(SizeType, 0);
     }
 
-    pub fn asArrayList(_: *const StoreBytes): ArrayListUnmanaged(u8) {
-        return this.asArrayListLeak();
+    fn asArrayList(): ArrayListUnmanaged(u8) {
+        return _.asArrayListLeak();
     }
 
-    pub fn asArrayListLeak(_: *const StoreBytes): ArrayListUnmanaged(u8) {
+    fn asArrayListLeak(): ArrayListUnmanaged(u8) {
         return .{
-            .items = if (this.ptr != null) unsafe { this.ptr.?[0..this.len] } else &.{},
-            .capacity = this.cap,
+            .items = if (_.ptr != null) unsafe { _.ptr.?[0.._.len] } else &.{},
+            .capacity = _.cap,
         };
     }
 }
@@ -396,50 +408,46 @@ export class Store {
     pub const S3 = StoreS3;
     pub const Bytes = StoreBytes;
 
-    pub fn memoryCost(_: *const Store): usize {
-        return if (this.hasOneRef()) @sizeOf(Store) + switch (this.data) {
-            .bytes => this.data.bytes.len,
+    pub fn memoryCost(): usize {
+        return if (_.hasOneRef()) @sizeOf(Store) + switch (_.data) {
+            .bytes => _.data.bytes.len,
             .file => 0,
-            .s3 => |s3| s3.estimatedSize(),
+            .s3 s3 => s3.estimatedSize(),
         } else 0;
     }
 
-    pub fn getPath(_: *const Store): string? {
-        return switch (this.data) {
+    pub fn getPath(): string? {
+        return switch (_.data) {
             .bytes(bytes) => if (bytes.stored_name.len > 0) bytes.stored_name.slice() else null,
             .file(file) => if (file.pathlike == .path) file.pathlike.path.slice() else null,
             .s3(s3) => s3.pathlike.slice(),
         };
     }
 
-    pub fn size(_: *const Store): SizeType {
-        return switch (this.data) {
-            .bytes => this.data.bytes.len,
+    pub fn size(): SizeType {
+        return switch (_.data) {
+            .bytes => _.data.bytes.len,
             .s3, .file => Blob.max_size,
         };
     }
 
     pub const Map = std.HashMap(u64, *WebCore.Blob.Store, IdentityContext(u64), 80);
 
-    pub const Data = union(enum) {
-        bytes: StoreBytes,
-        file: StoreFile,
-        s3: StoreS3,
-    };
+    pub const Data = StoreData;
 
     pub fn ref(*_) {
-        let old = this.ref_count.fetchAdd(1, .monotonic);
+        let old = _.ref_count.fetchAdd(1, .monotonic);
         assert(old > 0);
     }
 
-    pub fn hasOneRef(_: *const Store): bool {
-        return this.ref_count.load(.monotonic) == 1;
+    pub fn hasOneRef(): bool {
+        return _.ref_count.load(.monotonic) == 1;
     }
 
     pub fn toAnyBlob(*_): Blob.Any? {
-        if (this.hasOneRef()) {
-            if (this.data == .bytes) {
-                return .{ .InternalBlob = this.data.bytes.toInternalBlob() };
+        if (_.hasOneRef()) {
+            if (_.data == .bytes) {
+                return .{ .InternalBlob = _.data.bytes.toInternalBlob() };
             }
         }
         return null;
@@ -540,27 +548,27 @@ export class Store {
         });
     }
 
-    pub fn sharedView(_: *const Store): []u8 {
-        if (this.data == .bytes)
-            return this.data.bytes.slice();
+    pub fn sharedView(): []u8 {
+        if (_.data == .bytes)
+            return _.data.bytes.slice();
         return "";
     }
 
     pub fn deref(*_) {
-        let old = this.ref_count.fetchSub(1, .monotonic);
+        let old = _.ref_count.fetchSub(1, .monotonic);
         assert(old >= 1);
         if (old == 1) {
-            this.deinit();
+            _.deinit();
         }
     }
 
     pub fn deinit(*_) {
-        let allocator = this.allocator;
-        switch (this.data) {
-            .bytes => |*bytes| {
+        let allocator = _.allocator;
+        switch (_.data) {
+            .bytes *bytes => {
                 bytes.deinit();
             },
-            .file => |file| {
+            .file file => {
                 if (file.pathlike == .path) {
                     switch (file.pathlike.path) {
                         .string => allocator.free(unsafe { @constCast(file.pathlike.path.slice()) }),
@@ -568,52 +576,48 @@ export class Store {
                     }
                 }
             },
-            .s3 => |*s3| {
+            .s3 *s3 => {
                 s3.deinit(allocator);
             },
         }
-        destroy(this);
+        destroy(_);
     }
 
-    pub const SerializeTag = enum(u8) {
-        file = 0,
-        bytes = 1,
-        empty = 2,
-    };
+    pub const SerializeTag = StoreSerializeTag;
 
     pub fn serialize(*_, comptime Writer: type, writer: Writer): ! {
-        switch (this.data) {
-            .file => |file| {
+        switch (_.data) {
+            .file file => {
                 switch (file.pathlike) {
-                    .fd => |fd| {
-                        try writer.writeInt(u8, 0, .little);
-                        try writer.writeStruct(fd);
+                    .fd fd => {
+                        writer.writeInt(u8, 0, .little)?;
+                        writer.writeStruct(fd)?;
                     },
-                    .path => |path| {
-                        try writer.writeInt(u8, 1, .little);
+                    .path path => {
+                        writer.writeInt(u8, 1, .little)?;
                         let path_slice = path.slice();
-                        try writer.writeInt(u32, @as(u32, @truncate(path_slice.len)), .little);
-                        try writer.writeAll(path_slice);
+                        writer.writeInt(u32, @as(u32, @truncate(path_slice.len)), .little)?;
+                        writer.writeAll(path_slice)?;
                     },
                 }
             },
-            .s3 => |s3| {
-                try writer.writeInt(u8, 1, .little);
+            .s3 s3 => {
+                writer.writeInt(u8, 1, .little)?;
                 let path_slice = s3.pathlike.slice();
-                try writer.writeInt(u32, @as(u32, @truncate(path_slice.len)), .little);
-                try writer.writeAll(path_slice);
+                writer.writeInt(u32, @as(u32, @truncate(path_slice.len)), .little)?;
+                writer.writeAll(path_slice)?;
             },
-            .bytes => |bytes| {
+            .bytes bytes => {
                 let slice = bytes.slice();
-                try writer.writeInt(u32, @truncate(slice.len), .little);
-                try writer.writeAll(slice);
-                try writer.writeInt(u32, @truncate(bytes.stored_name.slice().len), .little);
-                try writer.writeAll(bytes.stored_name.slice());
+                writer.writeInt(u32, @truncate(slice.len), .little)?;
+                writer.writeAll(slice)?;
+                writer.writeInt(u32, @truncate(bytes.stored_name.slice().len), .little)?;
+                writer.writeAll(bytes.stored_name.slice())?;
             },
         }
     }
 
-    pub static fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator): !*Store {
+    pub static fn fromArrayList(list: ArrayListUnmanaged(u8), allocator: Allocator): (*Store)! {
         return Store.init(list.items, allocator);
     }
 }

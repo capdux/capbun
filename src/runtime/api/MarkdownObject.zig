@@ -70,6 +70,43 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const TagIndex = enum(u8) {
+    h1 = 0,
+    h2 = 1,
+    h3 = 2,
+    h4 = 3,
+    h5 = 4,
+    h6 = 5,
+    p = 6,
+    blockquote = 7,
+    ul = 8,
+    ol = 9,
+    li = 10,
+    pre = 11,
+    hr = 12,
+    html = 13,
+    table = 14,
+    thead = 15,
+    tbody = 16,
+    tr = 17,
+    th = 18,
+    td = 19,
+    div = 20,
+    em = 21,
+    strong = 22,
+    a = 23,
+    img = 24,
+    code = 25,
+    del = 26,
+    math = 27,
+    u = 28,
+    br = 29,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -96,6 +133,47 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const ParseComponents = struct {
+    h1: JSValue = .zero,
+    h2: JSValue = .zero,
+    h3: JSValue = .zero,
+    h4: JSValue = .zero,
+    h5: JSValue = .zero,
+    h6: JSValue = .zero,
+    p: JSValue = .zero,
+    blockquote: JSValue = .zero,
+    ul: JSValue = .zero,
+    ol: JSValue = .zero,
+    li: JSValue = .zero,
+    pre: JSValue = .zero,
+    hr: JSValue = .zero,
+    html: JSValue = .zero,
+    table: JSValue = .zero,
+    thead: JSValue = .zero,
+    tbody: JSValue = .zero,
+    tr: JSValue = .zero,
+    th: JSValue = .zero,
+    td: JSValue = .zero,
+    em: JSValue = .zero,
+    strong: JSValue = .zero,
+    a: JSValue = .zero,
+    img: JSValue = .zero,
+    code: JSValue = .zero,
+    del: JSValue = .zero,
+    math: JSValue = .zero,
+    u: JSValue = .zero,
+    br: JSValue = .zero,
+};
+
+pub const ParseStackEntry = struct {
+    children: JSValue,
+    block_type: ?md.BlockType = null,
+    span_type: ?md.SpanType = null,
+    data: u32 = 0,
+    flags: u32 = 0,
+    detail: md.SpanDetail = .{},
+};
 
 pub const ParseRenderer = struct {
     #globalObject: *jsc.JSGlobalObject,
@@ -503,46 +581,42 @@ const str = try bun.String.createUTF8ForJS(g, content);
 },
 }
     }
-    const Components = struct {
-        h1: JSValue = .zero,
-        h2: JSValue = .zero,
-        h3: JSValue = .zero,
-        h4: JSValue = .zero,
-        h5: JSValue = .zero,
-        h6: JSValue = .zero,
-        p: JSValue = .zero,
-        blockquote: JSValue = .zero,
-        ul: JSValue = .zero,
-        ol: JSValue = .zero,
-        li: JSValue = .zero,
-        pre: JSValue = .zero,
-        hr: JSValue = .zero,
-        html: JSValue = .zero,
-        table: JSValue = .zero,
-        thead: JSValue = .zero,
-        tbody: JSValue = .zero,
-        tr: JSValue = .zero,
-        th: JSValue = .zero,
-        td: JSValue = .zero,
-        em: JSValue = .zero,
-        strong: JSValue = .zero,
-        a: JSValue = .zero,
-        img: JSValue = .zero,
-        code: JSValue = .zero,
-        del: JSValue = .zero,
-        math: JSValue = .zero,
-        u: JSValue = .zero,
-        br: JSValue = .zero,
-    };
-    const StackEntry = struct {
-        children: JSValue,
-        block_type: ?md.BlockType = null,
-        span_type: ?md.SpanType = null,
-        data: u32 = 0,
-        flags: u32 = 0,
-        detail: md.SpanDetail = .{},
-    };
+    const Components = ParseComponents;
+    const StackEntry = ParseStackEntry;
     const vtable: md.Renderer.VTable = .{ .enterBlock = enterBlockImpl, .leaveBlock = leaveBlockImpl, .enterSpan = enterSpanImpl, .leaveSpan = leaveSpanImpl, .text = textImpl };
+};
+
+pub const JsCallbacks = struct {
+    heading: JSValue = .zero,
+    paragraph: JSValue = .zero,
+    blockquote: JSValue = .zero,
+    code: JSValue = .zero,
+    list: JSValue = .zero,
+    listItem: JSValue = .zero,
+    hr: JSValue = .zero,
+    table: JSValue = .zero,
+    thead: JSValue = .zero,
+    tbody: JSValue = .zero,
+    tr: JSValue = .zero,
+    th: JSValue = .zero,
+    td: JSValue = .zero,
+    html: JSValue = .zero,
+    strong: JSValue = .zero,
+    emphasis: JSValue = .zero,
+    link: JSValue = .zero,
+    image: JSValue = .zero,
+    codespan: JSValue = .zero,
+    strikethrough: JSValue = .zero,
+    text: JSValue = .zero,
+};
+
+pub const JsStackEntry = struct {
+    buffer: std.ArrayListUnmanaged(u8) = .{},
+    block_type: md.BlockType = .doc,
+    data: u32 = 0,
+    flags: u32 = 0,
+    child_index: u32 = 0,
+    detail: md.SpanDetail = .{},
 };
 
 pub const JsCallbackRenderer = struct {
@@ -924,37 +998,8 @@ return null;
 },
 }
     }
-    const Callbacks = struct {
-        heading: JSValue = .zero,
-        paragraph: JSValue = .zero,
-        blockquote: JSValue = .zero,
-        code: JSValue = .zero,
-        list: JSValue = .zero,
-        listItem: JSValue = .zero,
-        hr: JSValue = .zero,
-        table: JSValue = .zero,
-        thead: JSValue = .zero,
-        tbody: JSValue = .zero,
-        tr: JSValue = .zero,
-        th: JSValue = .zero,
-        td: JSValue = .zero,
-        html: JSValue = .zero,
-        strong: JSValue = .zero,
-        emphasis: JSValue = .zero,
-        link: JSValue = .zero,
-        image: JSValue = .zero,
-        codespan: JSValue = .zero,
-        strikethrough: JSValue = .zero,
-        text: JSValue = .zero,
-    };
-    const StackEntry = struct {
-        buffer: std.ArrayListUnmanaged(u8) = .{},
-        block_type: md.BlockType = .doc,
-        data: u32 = 0,
-        flags: u32 = 0,
-        child_index: u32 = 0,
-        detail: md.SpanDetail = .{},
-    };
+    const Callbacks = JsCallbacks;
+    const StackEntry = JsStackEntry;
     const vtable: md.Renderer.VTable = .{ .enterBlock = enterBlockImpl, .leaveBlock = leaveBlockImpl, .enterSpan = enterSpanImpl, .leaveSpan = leaveSpanImpl, .text = textImpl };
 };
 
@@ -963,38 +1008,6 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 pub const renderReact = jsc.MarkedArgumentBuffer.wrap(renderReactImpl);
-const TagIndex = enum(u8) {
-    h1 = 0,
-    h2 = 1,
-    h3 = 2,
-    h4 = 3,
-    h5 = 4,
-    h6 = 5,
-    p = 6,
-    blockquote = 7,
-    ul = 8,
-    ol = 9,
-    li = 10,
-    pre = 11,
-    hr = 12,
-    html = 13,
-    table = 14,
-    thead = 15,
-    tbody = 16,
-    tr = 17,
-    th = 18,
-    td = 19,
-    div = 20,
-    em = 21,
-    strong = 22,
-    a = 23,
-    img = 24,
-    code = 25,
-    del = 26,
-    math = 27,
-    u = 28,
-    br = 29,
-};
 
 extern "c" fn JSReactElement__createFragment(globalObject: *jsc.JSGlobalObject, react_version: u8, children: JSValue) callconv(.c) JSValue;
 

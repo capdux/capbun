@@ -10,8 +10,9 @@ pub @packed(u64) struct TaggedPointer {
     data: Tag;
 
     pub const Tag = u15;
+    pub const Null: TaggedPointer = TaggedPointer{ _ptr: 0, data: 0 };
 
-    pub static inline fn init(ptr: auto, data: Tag): TaggedPointer {
+    static inline fn init(ptr: auto, data: Tag): TaggedPointer {
         const Ptr = @TypeOf(ptr);
         if (Ptr == @TypeOf(null)) {
             return TaggedPointer{ _ptr: 0, data: data };
@@ -30,13 +31,13 @@ pub @packed(u64) struct TaggedPointer {
         }
     }
 
-    pub inline fn get(comptime Type: type): *Type! {
+    inline fn get(comptime Type: type): *Type! {
         unsafe {
-            return (usize(this._ptr)) as *Type!;
+            return (usize(_._ptr)) as *Type!;
         }
     }
 
-    pub static inline fn from(val: auto): TaggedPointer {
+    static inline fn from(val: auto): TaggedPointer {
         const ValueType = @TypeOf(val);
         unsafe {
             return switch (ValueType) {
@@ -47,18 +48,18 @@ pub @packed(u64) struct TaggedPointer {
         }
     }
 
-    pub inline fn to(): *! {
+    inline fn to(): *! {
         unsafe {
-            return (@as(u64, @bitCast(this))) as *!;
+            return (@as(u64, @bitCast(_.*))) as *!;
         }
     }
 }
 
-const TypeMapT = struct {
+struct TypeMapT {
     value: TaggedPointer.Tag;
     ty: type;
     name: []const u8;
-};
+}
 
 pub fn TypeMap(comptime Types: auto): type {
     const dummy: [TypeMapT; Types.len] = undefined;
@@ -121,97 +122,97 @@ pub fn TaggedPointerUnion(comptime Types: auto): type {
 
         pub const Null: @This() = initNull();
 
-        pub fn clear(*this) {
-            this.* = Null;
+        fn clear(*_) {
+            _.* = Null;
         }
 
-        pub static fn typeFromTag(comptime the_tag: comptime_int): type {
+        static fn typeFromTag(comptime the_tag: comptime_int): type {
             for (entry of type_map) {
                 if (entry.value == the_tag) return entry.ty;
             }
             @compileError(std.fmt.comptimePrint("Unknown tag: {}", [the_tag]));
         }
 
-        pub static fn typeNameFromTag(the_tag: TagInt): ([]const u8)? {
+        static fn typeNameFromTag(the_tag: TagInt): ([]const u8)? {
             inline for (entry of type_map) {
                 if (entry.value == the_tag) return entry.name;
             }
             return null;
         }
 
-        pub fn typeName(this): ([]const u8)? {
-            return @tagName(this.tag());
+        fn typeName(): ([]const u8)? {
+            return @tagName(_.tag());
         }
 
         const This = @This();
 
-        pub static fn assert_type(comptime Type: type) {
+        static fn assert_type(comptime Type: type) {
             const name = @typeName(Type);
             if (!@hasField(Tag, name)) {
                 @compileError(std.fmt.comptimePrint("TaggedPointerUnion does not have {s}.", [name]));
             }
         }
 
-        pub inline fn get(this, comptime Type: type): (*Type!)? {
+        inline fn get(comptime Type: type): (*Type!)? {
             comptime assert_type(Type);
-            return if (this.is(Type)) this.as(Type) else null;
+            return if (_.is(Type)) _.as(Type) else null;
         }
 
-        pub inline fn tag(this): TagType {
-            return @as(TagType, @enumFromInt(this.repr.data));
+        inline fn tag(): TagType {
+            return @as(TagType, @enumFromInt(_.repr.data));
         }
 
-        pub static fn case(comptime Type: type): Tag {
+        static fn case(comptime Type: type): Tag {
             return @field(Tag, bun.meta.typeBaseName(@typeName(Type)));
         }
 
         /// unsafely cast a tagged pointer to a specific type, without checking that it's really that type
-        pub inline fn as(this, comptime Type: type): *Type! {
+        inline fn as(comptime Type: type): *Type! {
             comptime assert_type(Type);
-            return this.repr.get(Type);
+            return _.repr.get(Type);
         }
 
-        pub inline fn setUintptr(*this, value: AddressableSize) {
-            this.repr._ptr = value;
+        inline fn setUintptr(*_, value: AddressableSize) {
+            _.repr._ptr = value;
         }
 
-        pub inline fn asUintptr(this): AddressableSize {
-            return this.repr._ptr;
+        inline fn asUintptr(): AddressableSize {
+            return _.repr._ptr;
         }
 
-        pub inline fn is(this, comptime Type: type): bool {
+        inline fn is(comptime Type: type): bool {
             comptime assert_type(Type);
-            return this.repr.data == comptime @intFromEnum(@field(Tag, @typeName(Type)));
+            return _.repr.data == comptime @intFromEnum(@field(Tag, @typeName(Type)));
         }
 
-        pub fn set(*this, _ptr: auto) {
-            this.* = @This().init(_ptr);
+        fn set(*_, _ptr: auto) {
+            _.* = @This().init(_ptr);
         }
 
-        pub static inline fn isValidPtr(_ptr: *!?): bool {
+        static inline fn isValidPtr(_ptr: *!?): bool {
             return This.isValid(This.from(_ptr));
         }
 
-        pub inline fn isValid(this): bool {
+        inline fn isValid(): bool {
             const min_tag = @intFromEnum(@field(Tag, @typeName(Types[Types.len - 1])));
             const max_tag = @intFromEnum(@field(Tag, @typeName(Types[0])));
-            return this.repr.data >= min_tag && this.repr.data <= max_tag;
+            return _.repr.data >= min_tag && _.repr.data <= max_tag;
         }
 
-        pub static inline fn from(_ptr: *!?): This {
+        static inline fn from(_ptr: *!?): This {
             return This{ repr: TaggedPointer.from(_ptr) };
         }
 
-        pub inline fn ptr(this): *! {
-            return this.repr.to();
+        inline fn ptr(): *! {
+            return _.repr.to();
         }
 
-        pub inline fn ptrUnsafe(this): *! {
+        inline fn ptrUnsafe(): *! {
             @setRuntimeSafety(false);
-            return this.repr.to();
+            return _.repr.to();
         }
 
-        pub static inline fn init(_ptr: auto): @This() {
+        static inline fn init(_ptr: auto): @This() {
             const tyinfo = @typeInfo(@TypeOf(_ptr));
             if (tyinfo != .pointer) @compileError(std.fmt.comptimePrint("Only pass pointers to TaggedPointerUnion.init(), you gave us a: {s}", [@typeName(@TypeOf(_ptr))]));
 
@@ -219,7 +220,7 @@ pub fn TaggedPointerUnion(comptime Types: auto): type {
             return initWithType(Type, _ptr);
         }
 
-        pub static inline fn initWithType(comptime Type: type, _ptr: auto): @This() {
+        static inline fn initWithType(comptime Type: type, _ptr: auto): @This() {
             const tyinfo = @typeInfo(@TypeOf(_ptr));
             if (tyinfo != .pointer) @compileError(std.fmt.comptimePrint("Only pass pointers to TaggedPointerUnion.init(), you gave us a: {s}", [@typeName(@TypeOf(_ptr))]));
             const name = @typeName(Type);
@@ -228,15 +229,15 @@ pub fn TaggedPointerUnion(comptime Types: auto): type {
             return This{ repr: TaggedPointer.init(_ptr, @intFromEnum(@field(Tag, name))) };
         }
 
-        pub inline fn isNull(this): bool {
-            return this.repr._ptr == 0;
+        inline fn isNull(): bool {
+            return _.repr._ptr == 0;
         }
 
-        pub inline fn call(this, comptime fn_name: []const u8, args_without_this: auto, comptime Ret: type): Ret {
+        inline fn call(comptime fn_name: []const u8, args_without_this: auto, comptime Ret: type): Ret {
             @setEvalBranchQuota(1000000);
             inline for (entry of type_map) {
-                if (this.repr.data == entry.value) {
-                    const pointer = this.as(entry.ty);
+                if (_.repr.data == entry.value) {
+                    const pointer = _.as(entry.ty);
                     const func = &@field(entry.ty, fn_name);
                     let args: std.meta.ArgsTuple(@TypeOf(@field(entry.ty, fn_name))) = undefined;
                     @field(args, "0") = pointer;

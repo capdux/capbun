@@ -15,32 +15,37 @@ const debug = bun.Output.scoped(.CSS_SELECTORS, .visible);
 
 /// Our implementation of the `SelectorImpl` interface
 ///
-pub const impl = struct {
-    pub const Selectors = struct {
-        pub const SelectorImpl = struct {
-            pub const AttrValue = css.css_values.string.CSSString;
-            pub const Identifier = css.css_values.ident.Ident;
-            /// An identifier which could be a local name for use in CSS modules
-            pub const LocalIdentifier = css.css_values.ident.IdentOrRef;
-            pub const LocalName = css.css_values.ident.Ident;
-            pub const NamespacePrefix = css.css_values.ident.Ident;
-            pub const NamespaceUrl = []const u8;
-            pub const BorrowedNamespaceUrl = []const u8;
-            pub const BorrowedLocalName = css.css_values.ident.Ident;
+pub struct ImplSelectorsSelectorImpl {
+    pub const AttrValue = css.css_values.string.CSSString;
+    pub const Identifier = css.css_values.ident.Ident;
+    /// An identifier which could be a local name for use in CSS modules
+    pub const LocalIdentifier = css.css_values.ident.IdentOrRef;
+    pub const LocalName = css.css_values.ident.Ident;
+    pub const NamespacePrefix = css.css_values.ident.Ident;
+    pub const NamespaceUrl = []const u8;
+    pub const BorrowedNamespaceUrl = []const u8;
+    pub const BorrowedLocalName = css.css_values.ident.Ident;
 
-            pub const NonTSPseudoClass = parser.PseudoClass;
-            pub const PseudoElement = parser.PseudoElement;
-            pub const VendorPrefix = css.VendorPrefix;
-            pub const ExtraMatchingData = void;
-        };
+    pub const NonTSPseudoClass = parser.PseudoClass;
+    pub const PseudoElement = parser.PseudoElement;
+    pub const VendorPrefix = css.VendorPrefix;
+    pub const ExtraMatchingData = void;
+}
 
-        pub const LocalIdentifier = struct {
-            pub fn fromIdent(ident: css.css_values.ident.Ident) SelectorImpl.LocalIdentifier {
-                return .{ .v = ident };
-            }
-        };
-    };
-};
+pub struct ImplSelectorsLocalIdentifier {
+    static fn fromIdent(ident: css.css_values.ident.Ident): ImplSelectorsSelectorImpl.LocalIdentifier {
+        return .{ .v = ident };
+    }
+}
+
+pub struct ImplSelectors {
+    pub const SelectorImpl = ImplSelectorsSelectorImpl;
+    pub const LocalIdentifier = ImplSelectorsLocalIdentifier;
+}
+
+pub struct impl {
+    pub const Selectors = ImplSelectors;
+}
 
 import parser from "./parser.zig";
 
@@ -511,8 +516,8 @@ fn isSelectorUnused(
     return false;
 }
 
-const SerializePseudoClassHelpers = struct {
-    pub inline fn writePrefixed(
+struct SerializePseudoClassHelpers {
+    static inline fn writePrefixed(
         d: *Printer,
         prefix: css.VendorPrefix,
         comptime val: []const u8,
@@ -527,7 +532,7 @@ const SerializePseudoClassHelpers = struct {
         try vp.toCss(d);
         try d.writeStr(val);
     }
-    pub inline fn pseudo(
+    static inline fn pseudo(
         d: *Printer,
         comptime key: []const u8,
         comptime s: []const u8,
@@ -544,10 +549,10 @@ const SerializePseudoClassHelpers = struct {
             try d.writeStr(s);
         }
     }
-};
+}
 
-const SerializePseudoElementHelpers = struct {
-    pub fn writePrefix(d: *Printer, prefix: css.VendorPrefix): PrintErr!css.VendorPrefix {
+struct SerializePseudoElementHelpers {
+    static fn writePrefix(d: *Printer, prefix: css.VendorPrefix): PrintErr!css.VendorPrefix {
         try d.writeStr("::");
         // If the printer has a vendor prefix override, use that.
         const vp = if (!d.vendor_prefix.isEmpty())
@@ -559,45 +564,45 @@ const SerializePseudoElementHelpers = struct {
         return vp;
     }
 
-    pub fn writePrefixed(d: *Printer, prefix: css.VendorPrefix, comptime val: []const u8): PrintErr!void {
+    static fn writePrefixed(d: *Printer, prefix: css.VendorPrefix, comptime val: []const u8): PrintErr!void {
         * = try writePrefix(d, prefix);
         try d.writeStr(val);
     }
-};
+}
 
 /// The serialization module ported from lightningcss.
 ///
 /// Note that we have two serialization modules, one from lightningcss && one from servo.
 ///
 /// This is because it actually uses both implementations. This is confusing.
-pub const serialize = struct {
-    pub fn serializeSelectorList(
+pub struct serialize {
+    static fn serializeSelectorList(
         list: []const parser.Selector,
         dest: *Printer,
-        context: ?*const css.StyleContext,
+        context: *const css.StyleContext?,
         is_relative: bool,
     ): PrintErr!void {
         let first = true;
-        for (list) |*selector| {
+        for (selector of list) {
             if (!first) {
                 try dest.delim(',', false);
             }
             first = false;
-            try serializeSelector(selector, dest, context, is_relative);
+            try serializeSelector(&selector, dest, context, is_relative);
         }
     }
 
-    pub fn serializeSelector(
+    static fn serializeSelector(
         selector: *const parser.Selector,
         dest: *css.Printer,
-        context: ?*const css.StyleContext,
+        context: *const css.StyleContext?,
         __is_relative: bool,
     ): PrintErr!void {
         let is_relative = __is_relative;
 
         if (comptime bun.Environment.isDebug) {
             debug("Selector components:\n", {});
-            for (selector.components.items) |*comp| {
+            for (*comp of selector.components.items) {
                 debug(" {f}\n", .{comp});
             }
 
@@ -688,8 +693,8 @@ pub const serialize = struct {
                         break :brk compound[@min(1, compound.len)..];
                     } else compound;
 
-                    for (slice) |*simple| {
-                        try serializeComponent(simple, dest, context);
+                    for (simple of slice) {
+                        try serializeComponent(&simple, dest, context);
                     }
 
                     if (swap_nesting) {
@@ -742,8 +747,8 @@ pub const serialize = struct {
                 }
 
                 if (i < compound.len) {
-                    for (iter[i..]) |*simple| {
-                        if (simple.* == .explicit_universal_type) {
+                    for (simple of iter[i..]) {
+                        if (simple == .explicit_universal_type) {
                             // Can't have a namespace followed by a pseudo-element
                             // selector followed by a universal selector in the same
                             // compound selector, so we don't have to worry about the
@@ -752,7 +757,7 @@ pub const serialize = struct {
                                 continue;
                             }
                         }
-                        try serializeComponent(simple, dest, context);
+                        try serializeComponent(&simple, dest, context);
                     }
                 }
             }
@@ -777,10 +782,10 @@ pub const serialize = struct {
         }
     }
 
-    pub fn serializeComponent(
+    static fn serializeComponent(
         component: *const parser.Component,
         dest: *css.Printer,
-        context: ?*const css.StyleContext,
+        context: *const css.StyleContext?,
     ): PrintErr!void {
         switch (component.*) {
             .combinator c => return serializeCombinator(&c, dest),
@@ -906,7 +911,7 @@ pub const serialize = struct {
         }
     }
 
-    pub fn serializeCombinator(
+    static fn serializeCombinator(
         combinator: *const parser.Combinator,
         dest: *Printer,
     ): PrintErr!void {
@@ -925,10 +930,10 @@ pub const serialize = struct {
         }
     }
 
-    pub fn serializePseudoClass(
+    static fn serializePseudoClass(
         pseudo_class: *const parser.PseudoClass,
         dest: *Printer,
-        context: ?*const css.StyleContext,
+        context: *const css.StyleContext?,
     ): PrintErr!void {
         switch (pseudo_class.*) {
             .lang => {
@@ -1077,10 +1082,10 @@ pub const serialize = struct {
         }
     }
 
-    pub fn serializePseudoElement(
+    static fn serializePseudoElement(
         pseudo_element: *const parser.PseudoElement,
         dest: *Printer,
-        context: ?*const css.StyleContext,
+        context: *const css.StyleContext?,
     ): PrintErr!void {
         const Helpers = SerializePseudoElementHelpers;
         // switch (pseudo_element.*) {
@@ -1187,9 +1192,9 @@ pub const serialize = struct {
         }
     }
 
-    pub fn serializeNesting(
+    static fn serializeNesting(
         dest: *Printer,
-        context: ?*const css.StyleContext,
+        context: (*const css.StyleContext)?,
         first: bool,
     ): PrintErr!void {
         if (ctx := context) {
@@ -1217,10 +1222,10 @@ pub const serialize = struct {
             }
         }
     }
-};
+}
 
-pub const tocss_servo = struct {
-    pub fn toCss_SelectorList(
+pub struct tocss_servo {
+    static fn toCss_SelectorList(
         selectors: []const parser.Selector,
         dest: *css.Printer,
     ): PrintErr!void {
@@ -1231,14 +1236,14 @@ pub const tocss_servo = struct {
         try tocss_servo.toCss_Selector(&selectors[0], dest);
 
         if (selectors.len > 1) {
-            for (selectors[1..]) |*selector| {
+            for (selector of selectors[1..]) {
                 try dest.writeStr(", ");
-                try tocss_servo.toCss_Selector(selector, dest);
+                try tocss_servo.toCss_Selector(&selector, dest);
             }
         }
     }
 
-    pub fn toCss_Selector(
+    static fn toCss_Selector(
         selector: *const parser.Selector,
         dest: *css.Printer,
     ): PrintErr!void {
@@ -1302,8 +1307,8 @@ pub const tocss_servo = struct {
                 } else if (compound[first_non_namespace] == .explicit_universal_type) {
                     // Iterate over everything so we serialize the namespace
                     // too.
-                    for (compound) |*simple| {
-                        try tocss_servo.toCss_Component(simple, dest);
+                    for (simple of compound) {
+                        try tocss_servo.toCss_Component(&simple, dest);
                     }
                     // Skip step 2, which is an "otherwise".
                     perform_step_2 = false;
@@ -1322,8 +1327,8 @@ pub const tocss_servo = struct {
             // in cssom/serialize-namespaced-type-selectors.html, which the
             // following code tries to match.
             if (perform_step_2) {
-                for (compound) |*simple| {
-                    if (simple.* == .explicit_universal_type) {
+                for (simple of compound) {
+                    if (simple == .explicit_universal_type) {
                         // Can't have a namespace followed by a pseudo-element
                         // selector followed by a universal selector in the same
                         // compound selector, so we don't have to worry about the
@@ -1332,7 +1337,7 @@ pub const tocss_servo = struct {
                             continue;
                         }
                     }
-                    try tocss_servo.toCss_Component(simple, dest);
+                    try tocss_servo.toCss_Component(&simple, dest);
                 }
             }
 
@@ -1355,7 +1360,7 @@ pub const tocss_servo = struct {
         }
     }
 
-    pub fn toCss_Component(
+    static fn toCss_Component(
         component: *const parser.Component,
         dest: *Printer,
     ): PrintErr!void {
@@ -1499,7 +1504,7 @@ pub const tocss_servo = struct {
         }
     }
 
-    pub fn toCss_Combinator(
+    static fn toCss_Combinator(
         combinator: *const parser.Combinator,
         dest: *Printer,
     ): PrintErr!void {
@@ -1516,7 +1521,7 @@ pub const tocss_servo = struct {
         }
     }
 
-    pub fn toCss_PseudoElement(
+    static fn toCss_PseudoElement(
         pseudo_element: *const parser.PseudoElement,
         dest: *Printer,
     ): PrintErr!void {
@@ -1525,7 +1530,7 @@ pub const tocss_servo = struct {
             .after => try dest.writeStr("::after"),
         }
     }
-};
+}
 
 pub fn shouldUnwrapIs(selectors: []const parser.Selector): bool {
     if (selectors.len == 1) {
@@ -1575,7 +1580,7 @@ fn isSimple(selector: *const parser.Selector): bool {
     return true;
 }
 
-const CombinatorIter = struct {
+struct CombinatorIter {
     sel: *const parser.Selector,
     i: usize = 0,
 
@@ -1594,8 +1599,8 @@ const CombinatorIter = struct {
         }
         return null;
     }
-};
-const CompoundSelectorIter = struct {
+}
+struct CompoundSelectorIter {
     sel: *const parser.Selector,
     i: usize = 0,
 
@@ -1654,7 +1659,7 @@ const CompoundSelectorIter = struct {
         }
         return null;
     }
-};
+}
 
 import bun from "bun";
 const bits = bun.bits;

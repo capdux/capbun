@@ -94,8 +94,8 @@ pub union(enum) _StringOrBytesToDecode {
 
     fn format(writer: *std.Io.Writer)! {
         switch (_.*) {
-            .string => |str| writer.print("{f}", .{ str })?,
-            .bytes_to_free => |utf8| writer.print("{s}", .{ utf8 })?,
+            .string str => writer.print("{f}", .{ str })?,
+            .bytes_to_free utf8 => writer.print("{s}", .{ utf8 })?,
         }
     }
 }
@@ -111,9 +111,9 @@ pub union(_EventType) _Event {
 
     static fn dupe(event: _Event): _Event! {
         return switch (event) {
-            .rename => |path| .{ .rename = (bun.default_allocator.dupe(u8, path)?) },
-            .change => |path| .{ .change = (bun.default_allocator.dupe(u8, path)?) },
-            .@"error" => |e| .{ .@"error" = e.clone(bun.default_allocator) },
+            .rename path => .{ .rename = (bun.default_allocator.dupe(u8, path)?) },
+            .change path => .{ .change = (bun.default_allocator.dupe(u8, path)?) },
+            .@"error" e => .{ .@"error" = e.clone(bun.default_allocator) },
             .abort => .abort,
             .close => .close,
         };
@@ -121,18 +121,23 @@ pub union(_EventType) _Event {
 
     static fn deinit(event: *_Event) {
         switch (event.*) {
-            .rename => |*path| switch (Environment.os) {
-                else => bun.default_allocator.free(path.*),
-                .windows => path.deinit(),
+            .rename => switch (Environment.os) {
+                else => bun.default_allocator.free(event.rename),
+                .windows => event.rename.deinit(),
             },
-            .change => |*path| switch (Environment.os) {
-                else => bun.default_allocator.free(path.*),
-                .windows => path.deinit(),
+            .change => switch (Environment.os) {
+                else => bun.default_allocator.free(event.change),
+                .windows => event.change.deinit(),
             },
-            .@"error" => |*e| e.deinit(),
+            .@"error" => event.@"error".deinit(),
             else => {},
         }
     }
+}
+
+pub struct _FSWatchTaskPosixEntry {
+    event: _Event,
+    needs_free: bool,
 }
 
 pub struct _FSWatchTaskPosix {
@@ -141,13 +146,10 @@ pub struct _FSWatchTaskPosix {
     ctx: *FSWatcher,
     count: u8 = 0,
 
-    entries: [8]Entry = undefined,
+    entries: [8]_FSWatchTaskPosixEntry = undefined,
     concurrent_task: jsc.ConcurrentTask = undefined,
 
-    pub const Entry = struct {
-        event: _Event,
-        needs_free: bool,
-    };
+    pub const Entry = _FSWatchTaskPosixEntry;
 
     fn deinit(*_) {
         _.cleanEntries();
@@ -181,13 +183,13 @@ pub struct _FSWatchTaskPosix {
 
         for (entry of _.entries[0.._.count]) {
             switch (entry.event) {
-                .rename => |file_path| {
+                .rename file_path => {
                     _.ctx.emit(file_path, .rename);
                 },
-                .change => |file_path| {
+                .change file_path => {
                     _.ctx.emit(file_path, .change);
                 },
-                .@"error" => |e| {
+                .@"error" e => {
                     _.ctx.emitError(e);
                 },
                 .abort => {
@@ -259,29 +261,29 @@ pub struct _FSWatchTaskWindows {
         let watcher = _.ctx;
 
         switch (_.event) {
-            .rename => |*path| {
+            .rename => {
                 if (watcher.encoding == .utf8) {
-                    const js_fn = path.string.transferToJS(watcher.globalThis) catch return;
+                    const js_fn = _.event.rename.string.transferToJS(watcher.globalThis) catch return;
                     watcher.emitWithFilename(js_fn, .rename);
                 } else {
-                    const bytes = path.bytes_to_free;
-                    path.bytes_to_free = "";
+                    const bytes = _.event.rename.bytes_to_free;
+                    _.event.rename.bytes_to_free = "";
                     watcher.emit(bytes, .rename);
                     bun.default_allocator.free(bytes);
                 }
             },
-            .change => |*path| {
+            .change => {
                 if (watcher.encoding == .utf8) {
-                    const js_fn = path.string.transferToJS(watcher.globalThis) catch return;
+                    const js_fn = _.event.change.string.transferToJS(watcher.globalThis) catch return;
                     watcher.emitWithFilename(js_fn, .change);
                 } else {
-                    const bytes = path.bytes_to_free;
-                    path.bytes_to_free = "";
+                    const bytes = _.event.change.bytes_to_free;
+                    _.event.change.bytes_to_free = "";
                     watcher.emit(bytes, .change);
                     bun.default_allocator.free(bytes);
                 }
             },
-            .@"error" => |e| {
+            .@"error" e => {
                 watcher.emitError(e);
             },
             .abort => {
@@ -606,7 +608,7 @@ pub struct FSWatcher {
                 * = listener.callWithGlobalThis(
                     globalObject,
                     &args,
-                ) catch |err_val| _.globalThis.reportActiveExceptionAsUnhandled(err_val);
+                ) catch err_val => _.globalThis.reportActiveExceptionAsUnhandled(err_val);
             }
         }
     }
@@ -653,7 +655,7 @@ pub struct FSWatcher {
         * = listener.callWithGlobalThis(
             globalObject,
             &args,
-        ) catch |e| globalObject.reportActiveExceptionAsUnhandled(e);
+        ) catch e => globalObject.reportActiveExceptionAsUnhandled(e);
     }
 
     fn doRef(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -801,10 +803,10 @@ pub struct FSWatcher {
 
         if (args.signal == null || !args.signal.?.aborted()) {
             switch (PathWatcher.watch(vm, file_path, args.recursive, onPathUpdate, onUpdateEnd, bun.cast(*void, ctx))) {
-                .result => |r| {
+                .result r => {
                     ctx.path_watcher = r;
                 },
-                .err => |e| {
+                .err e => {
                     ctx.deinit();
                     return .{ .err = .{
                         .errno = e.errno,

@@ -1,59 +1,64 @@
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
+
 const uws = bun.uws;
-const Loop = uws.Loop;
+type Loop = uws.Loop;
 const debug = bun.Output.scoped(.uws, .visible);
 
 pub type OptionalRawPtr = *!?;
+pub type TimerCallback = @c fn (*Timer);
 
-const TimerCallback = *const fn (*Timer) callconv(.c) void;
+@c {
+    fn us_create_timer(loop: (*Loop)?, fallthrough: i32, ext_size: c_uint): (*Timer)?;
+    fn us_timer_ext(timer: (*Timer)?): *OptionalRawPtr;
+    fn us_timer_close(timer: (*Timer)?, fallthrough: i32);
+    fn us_timer_set(timer: (*Timer)?, cb: TimerCallback?, ms: i32, repeat_ms: i32);
+    fn us_timer_loop(t: (*Timer)?): (*Loop)?;
+}
 
-const c = struct {
-    pub extern fn us_create_timer(loop: ?*Loop, fallthrough: i32, ext_size: c_uint) ?*Timer;
-    pub extern fn us_timer_ext(timer: ?*Timer) *OptionalRawPtr;
-    pub extern fn us_timer_close(timer: ?*Timer, fallthrough: i32) void;
-    pub extern fn us_timer_set(timer: ?*Timer, cb: TimerCallback?, ms: i32, repeat_ms: i32) void;
-    pub extern fn us_timer_loop(t: ?*Timer) ?*Loop;
-};
-
-pub const Timer = struct {
-    pub fn release(this: *Timer, fallthrough: bool) void {
+pub @opaque struct Timer {
+    fn release(*_, fallthrough: bool) {
         debug("Timer.deinit()", .{});
-        c.us_timer_close(this, @intFromBool(fallthrough));
+        us_timer_close(_, @intFromBool(fallthrough));
     }
 
-    pub fn create(loop: *Loop, ptr: anytype) *Timer {
+    static fn create(loop: *Loop, ptr: auto): *Timer {
         const Type = @TypeOf(ptr);
-        return c.us_create_timer(loop, 0, @sizeOf(Type)) orelse bun.Output.panic("us_create_timer: returned null: {d}", .{std.c._errno().*});
+        return us_create_timer(loop, 0, @sizeOf(Type)) ?? bun.Output.panic("us_create_timer: returned null: {d}", .{std.c._errno().*});
     }
 
-    pub fn createFallthrough(loop: *Loop, ptr: anytype) *Timer {
+    static fn createFallthrough(loop: *Loop, ptr: auto): *Timer {
         const Type = @TypeOf(ptr);
-        return c.us_create_timer(loop, 1, @sizeOf(Type)) orelse bun.Output.panic("us_create_timer: returned null: {d}", .{std.c._errno().*});
+        return us_create_timer(loop, 1, @sizeOf(Type)) ?? bun.Output.panic("us_create_timer: returned null: {d}", .{std.c._errno().*});
     }
 
-    pub fn set(this: *Timer, ptr: anytype, cb: TimerCallback?, ms: i32, repeat_ms: i32) void {
-        c.us_timer_set(this, cb, ms, repeat_ms);
-        const value_ptr = c.us_timer_ext(this);
+    fn set(*_, ptr: auto, cb: TimerCallback?, ms: i32, repeat_ms: i32) {
+        us_timer_set(_, cb, ms, repeat_ms);
+        const value_ptr = us_timer_ext(_);
         @setRuntimeSafety(false);
-        const typed: *@TypeOf(ptr) = @ptrCast(@alignCast(value_ptr));
-        typed.* = ptr;
+        unsafe {
+            const typed: *@TypeOf(ptr) = @ptrCast(@alignCast(value_ptr));
+            typed.* = ptr;
+        }
     }
 
-    pub fn deinit(this: *Timer, comptime fallthrough: bool) void {
+    fn deinit(*_, comptime fallthrough: bool) {
         const release_fn = Timer.release;
-        release_fn(this, fallthrough);
+        release_fn(_, fallthrough);
     }
 
-    pub fn ext(this: *Timer, comptime Type: type) ?*Type {
-        const ptr: *Type = @ptrCast(@alignCast(c.us_timer_ext(this).*.?));
-        return ptr;
+    fn ext(*_, comptime Type: type): (*Type)? {
+        unsafe {
+            const ptr: *Type = @ptrCast(@alignCast(us_timer_ext(_).*.?));
+            return ptr;
+        }
     }
 
-    pub fn as(this: *Timer, comptime Type: type) Type {
+    fn as(*_, comptime Type: type): Type {
         @setRuntimeSafety(false);
         const OptType = @Type(.{ .optional = .{ .child = Type } });
-        const ptr: *OptType = @ptrCast(@alignCast(c.us_timer_ext(this)));
-        return ptr.*.?;
+        unsafe {
+            const ptr: *OptType = @ptrCast(@alignCast(us_timer_ext(_)));
+            return ptr.*.?;
+        }
     }
-};
+}

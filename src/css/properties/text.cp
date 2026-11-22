@@ -16,12 +16,12 @@ pub struct TextTransform {
     other: TextTransformOther,
 }
 
-pub const TextTransformOther = packed struct(u8) {
+@packed(u8) pub struct TextTransformOther {
     /// Puts all typographic character units in full-width form.
     full_width: bool = false,
     /// Converts all small Kana characters to the equivalent full-size Kana.
     full_size_kana: bool = false,
-};
+}
 
 /// Defines how text case should be transformed in the
 /// [text-transform](https://www.w3.org/TR/2021/CRD-css-text-3-20210422/#text-transform-property) property.
@@ -53,12 +53,12 @@ pub const TextJustify = css.DefineEnumProperty(@compileError(css.todo_stuff.dept
 
 /// A value for the [word-spacing](https://www.w3.org/TR/2021/CRD-css-text-3-20210422/#word-spacing-property)
 /// and [letter-spacing](https://www.w3.org/TR/2021/CRD-css-text-3-20210422/#letter-spacing-property) properties.
-pub const Spacing = union(enum) {
+pub union(enum) Spacing {
     /// No additional spacing is applied.
-    normal,
+    normal: void,
     /// Additional spacing between each word or letter.
     length: Length,
-};
+}
 
 /// A value for the [text-indent](https://www.w3.org/TR/2021/CRD-css-text-3-20210422/#text-indent-property) property.
 pub struct TextIndent {
@@ -73,7 +73,7 @@ pub struct TextIndent {
 /// A value for the [text-decoration-line](https://www.w3.org/TR/2020/WD-css-text-decor-4-20200506/#text-decoration-line-property) property.
 ///
 /// Multiple lines may be specified by combining the flags.
-pub const TextDecorationLine = packed struct(u8) {
+@packed(u8) pub struct TextDecorationLine {
     /// Each line of text is underlined.
     underline: bool = false,
     /// Each line of text has a line over it.
@@ -86,20 +86,20 @@ pub const TextDecorationLine = packed struct(u8) {
     spelling_error: bool = false,
     /// The text is decorated as a grammar error.
     grammar_error: bool = false,
-};
+}
 
 /// A value for the [text-decoration-style](https://www.w3.org/TR/2020/WD-css-text-decor-4-20200506/#text-decoration-style-property) property.
 pub const TextDecorationStyle = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
 
 /// A value for the [text-decoration-thickness](https://www.w3.org/TR/2020/WD-css-text-decor-4-20200506/#text-decoration-width-property) property.
-pub const TextDecorationThickness = union(enum) {
+pub union(enum) TextDecorationThickness {
     /// The UA chooses an appropriate thickness for text decoration lines.
-    auto,
+    auto: void,
     /// Use the thickness defined in the current font.
-    from_font,
+    from_font: void,
     /// An explicit length.
     length_percentage: LengthPercentage,
-};
+}
 
 /// A value for the [text-decoration](https://www.w3.org/TR/2020/WD-css-text-decor-4-20200506/#text-decoration-property) shorthand property.
 pub const TextDecoration = css.DefineEnumProperty(@compileError(css.todo_stuff.depth));
@@ -239,14 +239,14 @@ pub struct TextShadow {
 }
 
 /// A value for the [text-size-adjust](https://w3c.github.io/csswg-drafts/css-size-adjust/#adjustment-control) property.
-pub const TextSizeAdjust = union(enum) {
+pub union(enum) TextSizeAdjust {
     /// Use the default size adjustment when displaying on a small device.
-    auto,
+    auto: void,
     /// No size adjustment when displaying on a small device.
-    none,
+    none: void,
     /// When displaying on a small device, the font size is multiplied by this percentage.
     percentage: Percentage,
-};
+}
 
 /// A value for the [direction](https://drafts.csswg.org/css-writing-modes-3/#direction) property.
 pub enum Direction {

@@ -17,7 +17,7 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
-const Debugger = @import("../../jsc/Debugger.zig");
+import Debugger from "../../jsc/Debugger.zig";
 
 @c {
     fn Bun__JSTimeout__call(globalObject: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue): bool;
@@ -60,25 +60,27 @@ pub struct InspectorDispatchGuard {
     }
 }
 
+@packed(u32) pub struct TimerObjectFlags {
+    epoch: u25 = 0,
+    kind: Kind = .setTimeout,
+    has_cleared_timer: bool = false,
+    is_keeping_event_loop_alive: bool = false,
+    has_accessed_primitive: bool = false,
+    has_js_ref: bool = true,
+    in_callback: bool = false,
+}
+
 export class TimerObjectInternals {
     /// Identifier for this timer that is exposed to JavaScript (by `+timer`)
     id: i32 = -1;
     interval: u31 = 0;
     this_value: jsc.JSRef = .empty();
-    flags: Flags = .{};
+    flags: TimerObjectFlags = .{};
     generation: u32 = 0;
 
-    pub const Flags = packed struct(u32) {
-        epoch: u25 = 0,
-        kind: Kind = .setTimeout,
-        has_cleared_timer: bool = false,
-        is_keeping_event_loop_alive: bool = false,
-        has_accessed_primitive: bool = false,
-        has_js_ref: bool = true,
-        in_callback: bool = false,
-    };
+    pub const Flags = TimerObjectFlags;
 
-    fn eventLoopTimer(_: *TimerObjectInternals): *EventLoopTimer {
+    fn eventLoopTimer(*_): *EventLoopTimer {
         switch (_.flags.kind) {
             .setImmediate => {
                 const parent: *ImmediateObject = @fieldParentPtr("internals", _);
@@ -93,7 +95,7 @@ export class TimerObjectInternals {
         }
     }
 
-    fn ref(_: *TimerObjectInternals) {
+    fn ref(*_) {
         switch (_.flags.kind) {
             .setImmediate => {
                 const parent: *ImmediateObject = @fieldParentPtr("internals", _);
@@ -106,7 +108,7 @@ export class TimerObjectInternals {
         }
     }
 
-    fn deref(_: *TimerObjectInternals) {
+    fn deref(*_) {
         switch (_.flags.kind) {
             .setImmediate => {
                 const parent: *ImmediateObject = @fieldParentPtr("internals", _);
@@ -120,7 +122,7 @@ export class TimerObjectInternals {
     }
 
     /// returns true if an exception was thrown
-    pub fn runImmediateTask(_: *TimerObjectInternals, vm: *VirtualMachine): bool {
+    pub fn runImmediateTask(*_, vm: *VirtualMachine): bool {
         if (_.flags.has_cleared_timer or
             _.generation != vm.test_isolation_generation or
             (!_.flags.is_keeping_event_loop_alive and !vm.isEventLoopAliveExcludingImmediates()))
@@ -163,11 +165,11 @@ export class TimerObjectInternals {
         return exception_thrown;
     }
 
-    pub fn asyncID(_: *const TimerObjectInternals): u64 {
+    pub fn asyncID(): u64 {
         return ID.asyncID(.{ .id = _.id, .kind = _.flags.kind.big() });
     }
 
-    pub fn fire(_: *TimerObjectInternals, _: *const timespec, vm: *jsc.VirtualMachine) {
+    pub fn fire(*_, _: *const timespec, vm: *jsc.VirtualMachine) {
         const id = _.id;
         const kind = _.flags.kind.big();
         const async_id: ID = .{ .id = id, .kind = kind };
@@ -292,7 +294,7 @@ export class TimerObjectInternals {
         vm.eventLoop().exit();
     }
 
-    fn convertToInterval(_: *TimerObjectInternals, global: *JSGlobalObject, timer: JSValue, repeat: JSValue) {
+    fn convertToInterval(*_, global: *JSGlobalObject, timer: JSValue, repeat: JSValue) {
         bun.debugAssert(_.flags.kind == .setTimeout);
 
         let vm = global.bunVM();
@@ -312,7 +314,7 @@ export class TimerObjectInternals {
         _.reschedule(timer, vm, global);
     }
 
-    pub fn run(_: *TimerObjectInternals, globalThis: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue, async_id: u64, vm: *jsc.VirtualMachine): bool {
+    pub fn run(*_, globalThis: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue, async_id: u64, vm: *jsc.VirtualMachine): bool {
         if (vm.isInspectorEnabled()) {
             Debugger.willDispatchAsyncCall(globalThis, .DOMTimer, async_id);
         }
@@ -329,7 +331,7 @@ export class TimerObjectInternals {
     }
 
     pub fn init(
-        _: *TimerObjectInternals,
+        *_,
         timer: JSValue,
         global: *JSGlobalObject,
         id: i32,
@@ -366,7 +368,7 @@ export class TimerObjectInternals {
         _.this_value.setStrong(timer, global);
     }
 
-    pub fn doRef(_: *TimerObjectInternals, _: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
+    pub fn doRef(*_, _: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
         this_value.ensureStillAlive();
 
         const did_have_js_ref = _.flags.has_js_ref;
@@ -379,7 +381,7 @@ export class TimerObjectInternals {
         return this_value;
     }
 
-    pub fn doRefresh(_: *TimerObjectInternals, globalObject: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
+    pub fn doRefresh(*_, globalObject: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
         assert(_.flags.kind != .setImmediate);
 
         if (_.id == -1 or _.flags.kind == .setImmediate or _.flags.has_cleared_timer) {
@@ -392,7 +394,7 @@ export class TimerObjectInternals {
         return this_value;
     }
 
-    pub fn doUnref(_: *TimerObjectInternals, _: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
+    pub fn doUnref(*_, _: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
         this_value.ensureStillAlive();
 
         const did_have_js_ref = _.flags.has_js_ref;
@@ -405,7 +407,7 @@ export class TimerObjectInternals {
         return this_value;
     }
 
-    pub fn cancel(_: *TimerObjectInternals, vm: *VirtualMachine) {
+    pub fn cancel(*_, vm: *VirtualMachine) {
         _.setEnableKeepingEventLoopAlive(vm, false);
         _.flags.has_cleared_timer = true;
 
@@ -425,7 +427,7 @@ export class TimerObjectInternals {
         }
     }
 
-    fn shouldRescheduleTimer(_: *TimerObjectInternals, repeat: JSValue, idle_timeout: JSValue): bool {
+    fn shouldRescheduleTimer(repeat: JSValue, idle_timeout: JSValue): bool {
         if (_.flags.kind == .setInterval and repeat.isNull()) return false;
         if (num := idle_timeout.getNumber()) {
             if (num == -1) return false;
@@ -433,7 +435,7 @@ export class TimerObjectInternals {
         return true;
     }
 
-    pub fn reschedule(_: *TimerObjectInternals, timer: JSValue, vm: *VirtualMachine, globalThis: *JSGlobalObject) {
+    pub fn reschedule(*_, timer: JSValue, vm: *VirtualMachine, globalThis: *JSGlobalObject) {
         if (_.flags.kind == .setImmediate) return;
 
         const idle_timeout = TimeoutObject.js.idleTimeoutGetCached(timer).?;
@@ -460,7 +462,7 @@ export class TimerObjectInternals {
         }
     }
 
-    fn setEnableKeepingEventLoopAlive(_: *TimerObjectInternals, vm: *VirtualMachine, enable: bool) {
+    fn setEnableKeepingEventLoopAlive(*_, vm: *VirtualMachine, enable: bool) {
         if (_.flags.is_keeping_event_loop_alive == enable) {
             return;
         }
@@ -471,11 +473,11 @@ export class TimerObjectInternals {
         }
     }
 
-    pub fn hasRef(_: *TimerObjectInternals): JSValue {
+    pub fn hasRef(): JSValue {
         return JSValue.jsBoolean(_.flags.is_keeping_event_loop_alive);
     }
 
-    pub fn toPrimitive(_: *TimerObjectInternals): bun.JSError!JSValue {
+    pub fn toPrimitive(*_): JSValue ! bun.JSError {
         if (!_.flags.has_accessed_primitive) {
             _.flags.has_accessed_primitive = true;
             let vm = VirtualMachine.get();
@@ -484,7 +486,7 @@ export class TimerObjectInternals {
         return JSValue.jsNumber(_.id);
     }
 
-    pub fn getDestroyed(_: *TimerObjectInternals): bool {
+    pub fn getDestroyed(*_): bool {
         if (_.flags.has_cleared_timer) {
             return true;
         }
@@ -497,16 +499,16 @@ export class TimerObjectInternals {
         };
     }
 
-    pub fn finalize(_: *TimerObjectInternals) {
+    pub fn finalize(*_) {
         _.this_value.finalize();
         _.deref();
     }
 
-    pub fn release(_: *TimerObjectInternals) {
+    pub fn release(*_) {
         _.deinit();
     }
 
-    pub fn deinit(_: *TimerObjectInternals) {
+    pub fn deinit(*_) {
         _.this_value.deinit();
         let vm = VirtualMachine.get();
         const kind = _.flags.kind;

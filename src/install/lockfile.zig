@@ -125,6 +125,23 @@ pub const LoadResultMigrated = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const _PackageIndexTag = enum(u8) {
+    id = 0,
+    ids = 1,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _PrinterFormat = enum {
+    yarn,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn ClampGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -328,16 +345,15 @@ pub fn chooseConfigVersion(self: LoadResult) ConfigVersionTuple {
     pub const Step = LoadResultStep;
 };
 
+pub const _PackageIndexEntry = union(_PackageIndexTag) {
+    id: PackageID,
+    ids: PackageIDList,
+    pub const Tag = _PackageIndexTag;
+};
+
 pub const PackageIndex = struct {
-    pub const Map = std.HashMap(PackageNameHash, PackageIndex.Entry, IdentityContext(PackageNameHash), 80);
-    pub const Entry = union(Tag) {
-        id: PackageID,
-        ids: PackageIDList,
-        pub const Tag = enum(u8) {
-                    id = 0,
-                    ids = 1,
-                };
-    };
+    pub const Map = std.HashMap(PackageNameHash, _PackageIndexEntry, IdentityContext(PackageNameHash), 80);
+    pub const Entry = _PackageIndexEntry;
 };
 
 pub const Scratch = struct {
@@ -578,7 +594,7 @@ _ = try Yarn.print((&printer), Writer, writer);
 },
 }
     }
-    pub const Format = enum { yarn };
+    pub const Format = _PrinterFormat;
     pub const Tree = @import("./lockfile/printer/tree_printer.zig");
     pub const Yarn = @import("./lockfile/printer/Yarn.zig");
 };
@@ -715,6 +731,11 @@ pub fn appendWithHash(self: *StringBuilder, comptime Type: type, slice: []const 
     }
 };
 
+pub const _EqlSorterPathToId = struct {
+    pkg_id: PackageID,
+    tree_path: []const u8,
+};
+
 pub const EqlSorter = struct {
     string_buf: []const u8,
     pkg_names: []const String,
@@ -735,10 +756,43 @@ return false;
             const r_name = self_sorter.pkg_names[@as(usize, @intCast(r.pkg_id))];
             return (l_name.order((&r_name), self_sorter.string_buf, self_sorter.string_buf) == .lt);
     }
-    pub const PathToId = struct {
-        pkg_id: PackageID,
-        tree_path: []const u8,
-    };
+    pub const PathToId = _EqlSorterPathToId;
+};
+
+pub const WorkspacePathSorter = struct {
+    string_buf: []const u8,
+    entries: NameHashMap.DataList,
+
+pub fn lessThan(self: WorkspacePathSorter, a: usize, b: usize) bool {
+            const left = self.entries.items(.value)[@as(usize, @intCast(a))];
+            const right = self.entries.items(.value)[@as(usize, @intCast(b))];
+            return (strings.order(left.slice(self.string_buf), right.slice(self.string_buf)) == .lt);
+    }
+};
+
+pub const _DefaultTrustedSorter = struct {
+
+pub fn lessThan(unused: void, lhs: []const u8, rhs: []const u8) bool {
+            _ = &unused;
+            return (std.mem.order(u8, lhs, rhs) == .lt);
+    }
+};
+
+pub const _DefaultTrustedStringHashContext = struct {
+
+pub fn hash(self: _DefaultTrustedStringHashContext, s: []const u8) u64 {
+            const _ctx = self;
+            _ = &_ctx;
+            _ = @setEvalBranchQuota(999999);
+            return (if (comptime @typeInfo(@TypeOf(@as(u32, @truncate(String.Builder.stringHash(s))))) == .@"enum") cp_cast_int(u64, @intFromEnum(@as(u32, @truncate(String.Builder.stringHash(s))))) else cp_cast_int(u64, @as(u32, @truncate(String.Builder.stringHash(s)))));
+    }
+
+pub fn eql(self: _DefaultTrustedStringHashContext, a: []const u8, b: []const u8) bool {
+            const _ctx = self;
+            _ = &_ctx;
+            _ = @setEvalBranchQuota(999999);
+            return std.mem.eql(u8, a, b);
+    }
 };
 
 pub const Lockfile = @This();
@@ -1232,7 +1286,6 @@ pub fn hoist(lockfile: *Lockfile, log: *logger.Log, comptime method: Tree.Builde
         var slice = lockfile.packages.slice();
         _ = &slice;
         const BuilderType = Tree.Builder(method);
-        _ = &BuilderType;
         var builder = BuilderType{ .queue = Tree.TreeFiller.init(allocator), .resolution_lists = slice.items(.resolutions), .resolutions = lockfile.buffers.resolutions.items, .allocator = allocator, .dependencies = lockfile.buffers.dependencies.items, .log = log, .lockfile = lockfile, .manager = manager, .install_root_dependencies = install_root_dependencies, .workspace_filters = workspace_filters, .packages_to_install = packages_to_install, .pending_optional_peers = std.AutoArrayHashMap(PackageNameHash, std.AutoArrayHashMap(DependencyID, void)).init(allocator) };
         _ = &builder;
         var root_tree = Tree{  };
@@ -1941,16 +1994,6 @@ pub fn hasTrustedDependency(client: *const Lockfile, name: []const u8, resolutio
 const StreamByteSlice = []u8;
 pub const Stream = std.io.FixedBufferStream(StreamByteSlice);
 pub const default_filename = "bun.lockb";
-const WorkspacePathSorter = struct {
-    string_buf: []const u8,
-    entries: NameHashMap.DataList,
-
-pub fn lessThan(self: @This(), a: usize, b: usize) bool {
-            const left = self.entries.items(.value)[@as(usize, @intCast(a))];
-            const right = self.entries.items(.value)[@as(usize, @intCast(b))];
-            return (strings.order(left.slice(self.string_buf), right.slice(self.string_buf)) == .lt);
-    }
-};
 const PendingResolutions = std.array_list.Managed(PendingResolution);
 pub const FormatVersion = enum(u32) {
     v0 = 0,
@@ -1994,15 +2037,9 @@ pub const default_trusted_dependencies_list: []const []const u8 = brk: {
         buf[cp_cast_int(usize, i)] = (&package);
         i = (i + 1);
     }
-    const Sorter = struct {
-
-pub fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
-            return (std.mem.order(u8, lhs, rhs) == .lt);
-    }
-};
     const empty_ctx: void = undefined;
     _ = &empty_ctx;
-    _ = std.sort.pdq(string, buf[0..i], empty_ctx, Sorter.lessThan);
+    _ = std.sort.pdq(string, buf[0..i], empty_ctx, _DefaultTrustedSorter.lessThan);
     var names: [i][]const u8 = undefined;
     _ = &names;
     _ = @memcpy(names[0..i], buf[0..i]);
@@ -2011,21 +2048,7 @@ pub fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
     break :brk (&final);
 };
 pub const default_trusted_dependencies = brk: {
-    const StringHashContext = struct {
-
-pub fn hash(self: @This(), s: []const u8) u64 {
-        _ = self;
-            _ = @setEvalBranchQuota(999999);
-            return (if (comptime @typeInfo(@TypeOf(@as(u32, @truncate(String.Builder.stringHash(s))))) == .@"enum") cp_cast_int(u64, @intFromEnum(@as(u32, @truncate(String.Builder.stringHash(s))))) else cp_cast_int(u64, @as(u32, @truncate(String.Builder.stringHash(s)))));
-    }
-
-pub fn eql(self: @This(), a: []const u8, b: []const u8) bool {
-        _ = self;
-            _ = @setEvalBranchQuota(999999);
-            return std.mem.eql(u8, a, b);
-    }
-};
-    var map: StaticHashMap(string, void, StringHashContext, max_default_trusted_dependencies) = .{};
+    var map: StaticHashMap(string, void, _DefaultTrustedStringHashContext, max_default_trusted_dependencies) = .{};
     _ = &map;
     for (cp_iter_slice(default_trusted_dependencies_list)) |dep| {
         _ = &dep;
@@ -2051,6 +2074,7 @@ const zero_hash = std.mem.zeroes(MetaHash);
 pub const StringPool = String.Builder.StringPool;
 const string = []const u8;
 const stringZ = [:0]const u8;
+pub const ConfigVersionTuple = struct { bun.ConfigVersion, bool };
 const Crypto = ShaHmac.Hashers;
 const Resolution = ResolutionMod.Resolution;
 const StaticHashMap = StaticHashMapMod.StaticHashMap;
@@ -2090,4 +2114,3 @@ const invalid_dependency_id = Install.invalid_dependency_id;
 const invalid_package_id = Install.invalid_package_id;
 const PackageManager = Install.PackageManager;
 const WorkspaceFilter = PackageManager.WorkspaceFilter;
-pub const ConfigVersionTuple = struct { bun.ConfigVersion, bool };

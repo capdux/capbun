@@ -60,14 +60,36 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _Flags = packed struct(u8) {
+    disconnected: bool = true,
+    is_closed: bool = false,
+    is_client: bool = false,
+    is_ssl: bool = false,
+    _: u4 = 0,
+};
+
+pub const _Handlers = struct {
+    ctx: *anyopaque,
+    ref_ctx: *const fn (*anyopaque) void,
+    deref_ctx: *const fn (*anyopaque) void,
+    onOpen: *const fn (*anyopaque) void,
+    onHandshake: *const fn (*anyopaque, bool, uws.us_bun_verify_error_t) void,
+    onData: *const fn (*anyopaque, []const u8) void,
+    onClose: *const fn (*anyopaque) void,
+    onEnd: *const fn (*anyopaque) void,
+    onWritable: *const fn (*anyopaque) void,
+    onError: *const fn (*anyopaque, bun.sys.Error) void,
+    onTimeout: *const fn (*anyopaque) void,
+};
+
 pub const WindowsNamedPipe = struct {
     wrapper: ?WrapperType = null,
     pipe: if (Environment.isWindows) ?*uv.Pipe else void = null,
     vm: *bun.jsc.VirtualMachine,
-    writer: bun.io.StreamingWriter(WindowsNamedPipe,.{.onClose=onClose,.onWritable=onWritable,.onError=onError,.onWrite=onWrite,}) = .{},
+    writer: bun.io.StreamingWriter(WindowsNamedPipe, .{ .onClose = onClose, .onWritable = onWritable, .onError = onError, .onWrite = onWrite, }) = .{},
     incoming: bun.ByteList = .{},
     ssl_error: CertError = .{},
     handlers: Handlers,
@@ -78,7 +100,7 @@ pub const WindowsNamedPipe = struct {
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.wrapper = null; self_ptr.pipe = null; self_ptr.writer = .{}; self_ptr.incoming = .{}; self_ptr.ssl_error = .{}; self_ptr.connect_req = std.mem.zeroes(uv.uv_connect_t); self_ptr.event_loop_timer = .{ .next = .epoch, .tag = .WindowsNamedPipe }; self_ptr.current_timeout = 0; self_ptr.flags = .{}; return self_ptr; }
 
-pub fn init(self: *WindowsNamedPipe, wrapper: ?WrapperType, pipe: if (Environment.isWindows) ?*uv.Pipe else void, vm: *bun.jsc.VirtualMachine, writer: bun.io.StreamingWriter(WindowsNamedPipe,.{.onClose=onClose,.onWritable=onWritable,.onError=onError,.onWrite=onWrite,}), incoming: bun.ByteList, ssl_error: CertError, handlers: Handlers, connect_req: uv.uv_connect_t, event_loop_timer: EventLoopTimer, current_timeout: u32, flags: Flags) void {
+pub fn init(self: *WindowsNamedPipe, wrapper: ?WrapperType, pipe: if (Environment.isWindows) ?*uv.Pipe else void, vm: *bun.jsc.VirtualMachine, writer: bun.io.StreamingWriter(WindowsNamedPipe, .{ .onClose = onClose, .onWritable = onWritable, .onError = onError, .onWrite = onWrite, }), incoming: bun.ByteList, ssl_error: CertError, handlers: Handlers, connect_req: uv.uv_connect_t, event_loop_timer: EventLoopTimer, current_timeout: u32, flags: Flags) void {
         var __writer_moved = false; _ = &__writer_moved;
         defer if (!__writer_moved) { __writer_moved = true; const __T = @TypeOf(writer); if (@typeInfo(__T) == .optional) { if (writer) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { writer.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = writer; _drop_val.__cp_deinit(); } };
         var __incoming_moved = false; _ = &__incoming_moved;
@@ -529,7 +551,13 @@ pub fn ssl(self: *const WindowsNamedPipe) ?*BoringSSL.SSL {
     }
 
 pub fn sslError(self: *const WindowsNamedPipe) us_bun_verify_error_t {
-            return .{ .error_no = self.ssl_error.error_no, .code = @ptrCast(self.ssl_error.code.ptr), .reason = @ptrCast(self.ssl_error.reason.ptr) };
+            return .{ .error_no = self.ssl_error.error_no, .code = (blk: {
+            break :blk @ptrCast(self.ssl_error.code.ptr);
+
+}), .reason = (blk: {
+            break :blk @ptrCast(self.ssl_error.reason.ptr);
+
+}) };
     }
 
 pub fn resetTimeout(self: *WindowsNamedPipe) void {
@@ -575,26 +603,8 @@ pub fn release(self: *WindowsNamedPipe) void {
 pub fn deinit(self: *WindowsNamedPipe) void {
             _ = self.release();
     }
-    pub const Flags = packed struct(u8) {
-            disconnected: bool = true,
-            is_closed: bool = false,
-            is_client: bool = false,
-            is_ssl: bool = false,
-            _: u4 = 0,
-        };
-    pub const Handlers = struct {
-        ctx: *anyopaque,
-        ref_ctx: *const fn (*anyopaque) void,
-        deref_ctx: *const fn (*anyopaque) void,
-        onOpen: *const fn (*anyopaque) void,
-        onHandshake: *const fn (*anyopaque, bool, uws.us_bun_verify_error_t) void,
-        onData: *const fn (*anyopaque, []const u8) void,
-        onClose: *const fn (*anyopaque) void,
-        onEnd: *const fn (*anyopaque) void,
-        onWritable: *const fn (*anyopaque) void,
-        onError: *const fn (*anyopaque, bun.sys.Error) void,
-        onTimeout: *const fn (*anyopaque) void,
-    };
+    pub const Flags = _Flags;
+    pub const Handlers = _Handlers;
 };
 
 const Environment = bun.Environment;

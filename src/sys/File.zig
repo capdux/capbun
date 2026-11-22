@@ -70,6 +70,15 @@ pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _SizeGuess = enum {
+    probably_small,
+    unknown_size,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn CloseGuard(comptime T: type) type {
     return struct {
         target: T,
@@ -85,6 +94,23 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const _ReadToEndResult = struct {
+    bytes: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(default_allocator),
+    err: ?Error = null,
+
+pub fn unwrap(self: *const _ReadToEndResult) ![]u8 {
+            if (self.err) |e| {
+                _ = &e;
+                _ = try bun.sys.Maybe(void).initErr(e).unwrap();
+            }
+            return self.bytes.items;
+    }
+};
+
+pub const _ToSourceOptions = struct {
+    convert_bom: bool = false,
+};
 
 pub const File = @This();
 
@@ -429,7 +455,8 @@ pub fn getPath(self: File, out_buffer: *bun.PathBuffer) Maybe([]u8) {
 pub fn readFromUserInput(dir_fd: anytype, input_path: anytype, allocator: std.mem.Allocator) Maybe([]u8) {
         var buf: bun.PathBuffer = undefined;
         _ = &buf;
-        const normalized = bun.path.joinAbsStringBufZ(bun.fs.FileSystem.instance.top_level_dir, (&buf), (&.{ input_path }), .loose);
+        const paths: [1]@TypeOf(input_path) = .{ input_path };
+        const normalized = bun.path.joinAbsStringBufZ(bun.fs.FileSystem.instance.top_level_dir, (&buf), (&paths), .loose);
         return File.readFrom(dir_fd, normalized, allocator);
 }
 
@@ -505,23 +532,11 @@ pub const Reader = std.Io.GenericReader(File, anyerror, stdIoRead);
 pub const WriteError = anyerror;
 pub const Writer = std.Io.GenericWriter(File, anyerror, stdIoWrite);
 pub const QuietWriter = (if (Environment.isDebug) std.Io.GenericWriter(File, anyerror, stdIoWriteQuietDebug) else Writer);
-pub const ReadToEndResult = struct {
-    bytes: std.array_list.Managed(u8) = std.array_list.Managed(u8).init(default_allocator),
-    err: ?Error = null,
-
-pub fn unwrap(self: *const @This()) ![]u8 {
-            if (self.err) |e| {
-                _ = &e;
-                _ = try (bun.sys.Maybe(void){ .err = e }).unwrap();
-            }
-            return self.bytes.items;
-    }
-};
-pub const SizeGuess = enum { probably_small, unknown_size };
-pub const ReadFileFromResult = struct { File, []u8 };
-pub const ToSourceOptions = struct {
-    convert_bom: bool = false,
-};
+pub const ReadToEndResult = _ReadToEndResult;
+pub const SizeGuess = _SizeGuess;
+pub const ReadFileFromResult = _ReadFileFromResult;
+pub const ToSourceOptions = _ToSourceOptions;
+pub const _ReadFileFromResult = struct { File, []u8 };
 const Environment = bun.Environment;
 const default_allocator = bun.default_allocator;
 const windows = bun.windows;

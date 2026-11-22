@@ -4,18 +4,25 @@
 const std = @import("std");
 const string = []const u8;
 
-pub const API = struct {
-    pub const Transpiler = struct {
-    };
-};
-
 pub const C = struct {
 };
+
 pub const WebCore = struct {
 };
+
 pub const Jest = struct {
 };
+
+pub const _APITranspiler = struct {
+};
+
+pub const API = struct {
+    pub const Transpiler = _APITranspiler;
+};
+
 pub const Node = struct {
 };
+
 pub const VirtualMachine = struct {
 };
+

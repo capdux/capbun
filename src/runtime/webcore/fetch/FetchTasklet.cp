@@ -55,6 +55,59 @@ const Blob = jsc.WebCore.Blob;
 const AnyBlob = jsc.WebCore.Blob.Any;
 const log = Output.scoped(.FetchTasklet, .visible);
 
+let empty_u8: [0]u8 = undefined;
+
+struct ProgressHolder {
+    held: jsc.Strong.Optional,
+    promise: jsc.Strong.Optional,
+    globalObject: *jsc.JSGlobalObject,
+    task: jsc.AnyTask,
+
+    fn resolve(*_): JSTerminated!void {
+        const _guard_holder = HolderGuard<ProgressHolder>{ holder: _ };
+
+        let prom = _.promise.swap().asAnyPromise().?;
+        const res = _.held.swap();
+        res.ensureStillAlive();
+        prom.resolve(_.globalObject, res)?;
+    }
+
+    fn reject(*_): JSTerminated!void {
+        const _guard_holder = HolderGuard<ProgressHolder>{ holder: _ };
+
+        let prom = _.promise.swap().asAnyPromise().?;
+        const res = _.held.swap();
+        res.ensureStillAlive();
+        prom.rejectWithAsyncStack(_.globalObject, res)?;
+    }
+}
+
+pub struct FetchTaskletOptions {
+    method: Method,
+    headers: Headers,
+    body: FetchHTTPRequestBody,
+    disable_timeout: bool,
+    disable_keepalive: bool,
+    disable_decompression: bool,
+    reject_unauthorized: bool,
+    url: ZigURL,
+    verbose: http.HTTPVerboseLevel = .none,
+    redirect_type: FetchRedirect = FetchRedirect.follow,
+    proxy: ZigURL? = null,
+    proxy_headers: Headers? = null,
+    url_proxy_buffer: []const u8 = "",
+    signal: (*jsc.WebCore.AbortSignal)? = null,
+    globalThis: (*JSGlobalObject)?,
+    hostname: ([]u8)? = null,
+    check_server_identity: jsc.Strong.Optional = .empty,
+    unix_socket_path: ZigString.Slice,
+    ssl_config: SSLConfig.SharedPtr? = null,
+    upgraded_connection: bool = false,
+    force_http2: bool = false,
+    force_http3: bool = false,
+    force_http1: bool = false,
+}
+
 struct DeinitGuard<T> {
     ptr: *T!,
     ~init() {
@@ -209,16 +262,16 @@ pub union(enum) FetchHTTPRequestBody {
     }
 
     pub fn fromJS(globalThis: *JSGlobalObject, value: JSValue): JSError!FetchHTTPRequestBody {
-        let body_value = try Body.Value.fromJS(globalThis, value);
-        if (body_value == .Used or (body_value == .Locked and (body_value.Locked.action != .none or body_value.Locked.isDisturbed2(globalThis)))) {
+        let body_value = Body.Value.fromJS(globalThis, value)?;
+        if (body_value == .Used || (body_value == .Locked && (body_value.Locked.action != .none || body_value.Locked.isDisturbed2(globalThis)))) {
             return globalThis.ERR(.BODY_ALREADY_USED, "body already used", .{}).throw();
         }
         if (body_value == .Locked) {
             if (body_value.Locked.readable.has()) {
                 return FetchHTTPRequestBody{ .ReadableStream = body_value.Locked.readable };
             }
-            const readable = try body_value.toReadableStream(globalThis);
-            if (!readable.isEmptyOrUndefinedOrNull() and body_value == .Locked and body_value.Locked.readable.has()) {
+            const readable = body_value.toReadableStream(globalThis)?;
+            if (!readable.isEmptyOrUndefinedOrNull() && body_value == .Locked && body_value.Locked.readable.has()) {
                 return FetchHTTPRequestBody{ .ReadableStream = body_value.Locked.readable };
             }
         }
@@ -411,7 +464,7 @@ export class FetchTasklet {
         _.clearSink();
     }
 
-    pub fn deinit(*_): !void {
+    pub fn deinit(*_)! {
         log("deinit", .{});
 
         assert(_.ref_count.load(.monotonic) == 0);
@@ -459,7 +512,7 @@ export class FetchTasklet {
         }
     }
 
-    pub fn onBodyReceived(*_): !void {
+    pub fn onBodyReceived(*_)! {
         const success = _.result.isSuccess();
         const globalThis = _.global_this;
         let _guard_buf = BufferResetGuard{ task: _ };
@@ -587,7 +640,7 @@ export class FetchTasklet {
         }
     }
 
-    pub fn onProgressUpdate(*_): !void {
+    pub fn onProgressUpdate(*_)! {
         jsc.markBinding(@src());
         log("onProgressUpdate", .{});
         _.mutex.lock();
@@ -669,31 +722,7 @@ export class FetchTasklet {
             };
 
         promise_value.ensureStillAlive();
-        const Holder = struct {
-            held: jsc.Strong.Optional,
-            promise: jsc.Strong.Optional,
-            globalObject: *jsc.JSGlobalObject,
-            task: jsc.AnyTask,
-
-            pub fn resolve(holder: *@This()) JSTerminated!void {
-                const _guard_holder = HolderGuard<@This()>{ holder: holder };
-
-                let prom = holder.promise.swap().asAnyPromise().?;
-                const res = holder.held.swap();
-                res.ensureStillAlive();
-                try prom.resolve(holder.globalObject, res);
-            }
-
-            pub fn reject(holder: *@This()) JSTerminated!void {
-                const _guard_holder = HolderGuard<@This()>{ holder: holder };
-
-                let prom = holder.promise.swap().asAnyPromise().?;
-                const res = holder.held.swap();
-                res.ensureStillAlive();
-                try prom.rejectWithAsyncStack(holder.globalObject, res);
-            }
-        };
-        let holder = handleOom(default_allocator.create(Holder));
+        let holder = handleOom(default_allocator.create(ProgressHolder));
         holder.* = .{
             .held = result,
             .promise = _.promise.strong,
@@ -702,9 +731,9 @@ export class FetchTasklet {
         };
         _.promise.strong = .empty;
         holder.task = if (success)
-            jsc.AnyTask.New(Holder, Holder.resolve).init(holder)
+            jsc.AnyTask.New(ProgressHolder, ProgressHolder.resolve).init(holder)
         else
-            jsc.AnyTask.New(Holder, Holder.reject).init(holder);
+            jsc.AnyTask.New(ProgressHolder, ProgressHolder.reject).init(holder);
 
         vm.enqueueTask(jsc.Task.init(&holder.task));
     }
@@ -1251,7 +1280,7 @@ export class FetchTasklet {
         _.javascript_vm.eventLoop().enqueueTaskConcurrent(jsc.ConcurrentTask.fromCallback(_, FetchTasklet.resumeRequestDataStream));
     }
 
-    pub fn resumeRequestDataStream(*_): !void {
+    pub fn resumeRequestDataStream(*_)! {
         const _guard_deref = DerefGuard<FetchTasklet>{ ptr: _ };
         log("resumeRequestDataStream", .{});
         if (sink := _.sink) {
@@ -1344,31 +1373,7 @@ export class FetchTasklet {
         }
     }
 
-    pub const FetchOptions = struct {
-        method: Method,
-        headers: Headers,
-        body: HTTPRequestBody,
-        disable_timeout: bool,
-        disable_keepalive: bool,
-        disable_decompression: bool,
-        reject_unauthorized: bool,
-        url: ZigURL,
-        verbose: http.HTTPVerboseLevel = .none,
-        redirect_type: FetchRedirect = FetchRedirect.follow,
-        proxy: ?ZigURL = null,
-        proxy_headers: ?Headers = null,
-        url_proxy_buffer: []const u8 = "",
-        signal: ?*jsc.WebCore.AbortSignal = null,
-        globalThis: ?*JSGlobalObject,
-        hostname: ?[]u8 = null,
-        check_server_identity: jsc.Strong.Optional = .empty,
-        unix_socket_path: ZigString.Slice,
-        ssl_config: ?SSLConfig.SharedPtr = null,
-        upgraded_connection: bool = false,
-        force_http2: bool = false,
-        force_http3: bool = false,
-        force_http1: bool = false,
-    };
+    pub const FetchOptions = FetchTaskletOptions;
 
     pub static fn queue(
         allocator: Allocator,

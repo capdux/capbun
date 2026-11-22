@@ -244,12 +244,7 @@ pub fn createWithCtx(file_blob: Blob, bytes_blob: Blob, onWriteFileContext: *any
     }
 
 pub fn create(file_blob: Blob, bytes_blob: Blob, comptime Context: type, context: Context, comptime callback: *const fn (Context, WriteFileResultType) bun.JSTerminated!void, mkdirp_if_not_exists: bool) !*WriteFile {
-            const Handler = struct {
-
-pub fn run(ptr: *anyopaque, bytes: WriteFileResultType) bun.JSTerminated!void {
-            _ = try callback(cast(Context, ptr), bytes);
-    }
-};
+            const Handler = WriteFileHandler(Context, callback);
             return try WriteFile.createWithCtx(file_blob, bytes_blob, (blk: {
             break :blk @ptrCast(context);
 
@@ -864,3 +859,12 @@ const log = Output.scoped(.WriteFile, .hidden);
 const bloblog = Output.scoped(.WriteFile, .hidden);
 pub const WriteFileResultType = SystemError.Maybe(SizeType);
 pub const WriteFileTask = WorkTask(WriteFile);
+
+pub fn WriteFileHandler(comptime Context: type, comptime callback: *const fn (Context, WriteFileResultType) bun.JSTerminated!void) type {
+        return struct {
+
+pub fn run(ptr: *anyopaque, bytes: WriteFileResultType) bun.JSTerminated!void {
+            _ = try callback(cast(Context, ptr), bytes);
+    }
+};
+}

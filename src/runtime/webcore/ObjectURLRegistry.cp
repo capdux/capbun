@@ -1,6 +1,5 @@
 // Global registry for Blob URL objects in CP
-const std = @import("std");
-const bun = @import("bun");
+import bun from "bun";
 const UUID = bun.UUID;
 const jsc = bun.jsc;
 
@@ -26,94 +25,103 @@ fn singleton_get() {
     singleton_registry = .{};
 }
 
-pub const Entry = struct {
+pub struct Entry {
     blob: jsc.WebCore.Blob,
 
     pub const new = bun.TrivialNew(Entry);
-    pub fn init(blob: *const jsc.WebCore.Blob) *Entry {
+
+    static fn init(blob: *const jsc.WebCore.Blob): *Entry! {
         return Entry.new(.{
             .blob = blob.dupeWithContentType(true),
         });
     }
 
-    pub fn release(this: *Entry) void {
-        this.blob.deinit();
+    fn release(*_) {
+        _.blob.deinit();
     }
 
-    pub fn deinit(this: *Entry) void {
-        this.release();
-        bun.destroy(this);
+    fn deinit(*_) {
+        _.release();
+        bun.destroy(_);
     }
-};
+}
 
 @root struct ObjectURLRegistry {
     lock: bun.Mutex = .{},
     map: std.AutoHashMap(UUID, *Entry) = std.AutoHashMap(UUID, *Entry).init(bun.default_allocator),
 
-    pub fn register(*_: *ObjectURLRegistry, vm: *jsc.VirtualMachine, blob: *const jsc.WebCore.Blob): UUID {
+    fn register(*_, vm: *jsc.VirtualMachine, blob: *const jsc.WebCore.Blob): UUID {
         const uuid = vm.rareData().nextUUID();
         const entry = Entry.init(blob);
 
-        this.lock.lock();
-        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
-        bun.handleOom(this.map.put(uuid, entry));
+        _.lock.lock();
+        const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
+        bun.handleOom(_.map.put(uuid, entry));
         return uuid;
     }
 
-    pub fn singleton(): *ObjectURLRegistry {
+    static fn singleton(): *ObjectURLRegistry! {
         singleton_once.call();
-        return &singleton_registry;
+        return unsafe { &singleton_registry };
     }
 
-    fn getDupedBlob(*_: *ObjectURLRegistry, uuid: *const UUID): jsc.WebCore.Blob? {
-        this.lock.lock();
-        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
-        const entry = this.map.get(uuid.*) orelse return null;
-        return entry.blob.dupeWithContentType(true);
+    fn getDupedBlob(*_, uuid: *const UUID): jsc.WebCore.Blob? {
+        _.lock.lock();
+        const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
+        if (entry := _.map.get(uuid.*)) {
+            return entry.blob.dupeWithContentType(true);
+        }
+        return null;
     }
 
-    fn uuidFromPathname(pathname: []const u8): UUID? {
-        return UUID.parse(pathname) catch return null;
+    static fn uuidFromPathname(pathname: []const u8): UUID? {
+        return UUID.parse(pathname) catch null;
     }
 
-    pub fn resolveAndDupe(*_: *ObjectURLRegistry, pathname: []const u8): jsc.WebCore.Blob? {
-        const uuid = uuidFromPathname(pathname) orelse return null;
-        this.lock.lock();
-        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
-        const entry = this.map.get(uuid) orelse return null;
-        return entry.blob.dupeWithContentType(true);
+    fn resolveAndDupe(*_, pathname: []const u8): jsc.WebCore.Blob? {
+        const uuid = uuidFromPathname(pathname) ?? return null;
+        _.lock.lock();
+        const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
+        if (entry := _.map.get(uuid)) {
+            return entry.blob.dupeWithContentType(true);
+        }
+        return null;
     }
 
-    pub fn resolveAndDupeToJS(*_: *ObjectURLRegistry, pathname: []const u8, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
-        let blob = jsc.WebCore.Blob.new(this.resolveAndDupe(pathname) orelse return null);
-        return blob.toJS(globalObject);
+    fn resolveAndDupeToJS(*_, pathname: []const u8, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+        if (resolved := _.resolveAndDupe(pathname)) {
+            let blob = jsc.WebCore.Blob.new(resolved);
+            return blob.toJS(globalObject);
+        }
+        return null;
     }
 
-    pub fn revoke(*_: *ObjectURLRegistry, pathname: []const u8)  {
-        const uuid = uuidFromPathname(pathname) orelse return;
-        this.lock.lock();
-        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
-        const entry = this.map.fetchRemove(uuid) orelse return;
-        entry.value.deinit();
+    fn revoke(*_, pathname: []const u8) {
+        const uuid = uuidFromPathname(pathname) ?? return;
+        _.lock.lock();
+        const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
+        if (entry := _.map.fetchRemove(uuid)) {
+            entry.value.deinit();
+        }
     }
 
-    pub fn has(*_: *ObjectURLRegistry, pathname: []const u8): bool {
-        const uuid = uuidFromPathname(pathname) orelse return false;
-        this.lock.lock();
-        const _lock_g = LockGuard{ lock: unsafe { &this.lock } };
-        return this.map.contains(uuid);
+    fn has(*_, pathname: []const u8): bool {
+        const uuid = uuidFromPathname(pathname) ?? return false;
+        _.lock.lock();
+        const _lock_g = LockGuard{ lock: unsafe { &_.lock } };
+        return _.map.contains(uuid);
     }
 }
 
 pub const specifier_len = "blob:".len + UUID.stringLength;
 
 pub fn isBlobURL(url: []const u8): bool {
-    return url.len >= specifier_len and bun.strings.hasPrefixComptime(url, "blob:");
+    return url.len >= specifier_len && bun.strings.hasPrefixComptime(url, "blob:");
 }
 
 comptime {
     const bun_create_object_url = jsc.toJSHostFn(Bun__createObjectURL_);
-    unsafe { @export(&bun_create_object_url, .{ .name = "Bun__createObjectURL" }); }
+    unsafe { @export(&bun_create_object_url, { name: "Bun__createObjectURL" }); }
 }
 
 fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -121,7 +129,7 @@ fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
     if (arguments.len < 1) {
         return globalObject.throwNotEnoughArguments("createObjectURL", 1, arguments.len);
     }
-    const blob = arguments.ptr[0].as(jsc.WebCore.Blob) orelse {
+    const blob = arguments.ptr[0].as(jsc.WebCore.Blob) ?? {
         return globalObject.throwInvalidArguments("createObjectURL expects a Blob object", .{});
     };
     const registry = ObjectURLRegistry.singleton();
@@ -132,7 +140,7 @@ fn Bun__createObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
 
 comptime {
     const bun_revoke_object_url = jsc.toJSHostFn(Bun__revokeObjectURL_);
-    unsafe { @export(&bun_revoke_object_url, .{ .name = "Bun__revokeObjectURL" }); }
+    unsafe { @export(&bun_revoke_object_url, { name: "Bun__revokeObjectURL" }); }
 }
 
 fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -162,7 +170,7 @@ fn Bun__revokeObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.Call
 
 comptime {
     const jsFunctionResolveObjectURL = jsc.toJSHostFn(jsFunctionResolveObjectURL_);
-    unsafe { @export(&jsFunctionResolveObjectURL, .{ .name = "jsFunctionResolveObjectURL" }); }
+    unsafe { @export(&jsFunctionResolveObjectURL, { name: "jsFunctionResolveObjectURL" }); }
 }
 
 fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -170,14 +178,14 @@ fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *js
     if (arguments.len < 1) {
         return jsc.JSValue.js_undefined;
     }
-    let str = try arguments.ptr[0].toBunString(globalObject);
+    let str = arguments.ptr[0].toBunString(globalObject)?;
     const _str_g = DerefGuard<@TypeOf(str)>{ ptr: &str };
 
     if (globalObject.hasException()) {
         return jsc.JSValue.zero;
     }
 
-    if (!str.hasPrefixComptime("blob:") or str.length() < specifier_len) {
+    if (!str.hasPrefixComptime("blob:") || str.length() < specifier_len) {
         return jsc.JSValue.js_undefined;
     }
 
@@ -187,5 +195,5 @@ fn jsFunctionResolveObjectURL_(globalObject: *jsc.JSGlobalObject, callframe: *js
 
     const registry = ObjectURLRegistry.singleton();
     const blob = registry.resolveAndDupeToJS(sliced["blob:".len..], globalObject);
-    return blob orelse .js_undefined;
+    return blob ?? .js_undefined;
 }

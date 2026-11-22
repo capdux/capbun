@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,9 +60,153 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const BlockType = enum(u8) {
+    doc,
+    quote,
+    ul,
+    ol,
+    li,
+    hr,
+    h,
+    code,
+    html,
+    p,
+    table,
+    thead,
+    tbody,
+    tr,
+    th,
+    td,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const SpanType = enum(u8) {
+    em,
+    strong,
+    a,
+    img,
+    code,
+    del,
+    latexmath,
+    latexmath_display,
+    wikilink,
+    u,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TextType = enum(u8) {
+    normal,
+    null_char,
+    br,
+    softbr,
+    entity,
+    code,
+    html,
+    latexmath,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Align = enum(u8) {
+    default,
+    left,
+    center,
+    right,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _AttrSubstrType = enum(u8) {
+    normal,
+    entity,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const LineType = enum(u8) {
+    blank,
+    hr,
+    atxheader,
+    setextunderline,
+    setextheader,
+    indentedcode,
+    fencedcode,
+    html,
+    text,
+    table,
+    tableunderline,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const UlDetail = struct {
+    is_tight: bool,
+    mark: u8,
+};
+
+pub const OlDetail = struct {
+    start: u32,
+    is_tight: bool,
+    mark_delimiter: u8,
+};
+
+pub const LiDetail = struct {
+    is_task: bool,
+    task_mark: u8,
+    task_mark_offset: OFF,
+};
+
+pub const HDetail = struct {
+    level: u8,
+};
+
+pub const CodeDetail = struct {
+    info: Attribute,
+    lang: Attribute,
+    fence_char: u8,
+};
+
+pub const TableDetail = struct {
+    col_count: u32,
+    head_row_count: u32,
+    body_row_count: u32,
+};
+
+pub const TdDetail = struct {
+    alignment: Align,
+};
+
+pub const ADetail = struct {
+    href: Attribute,
+    title: Attribute,
+};
+
+pub const ImgDetail = struct {
+    src: Attribute,
+    title: Attribute,
+};
+
+pub const WikilinkDetail = struct {
+    target: Attribute,
+};
+
 pub const RendererVTable = struct {
     enterBlock: *const fn (*anyopaque, BlockType, u32, u32) bun.JSError!void,
     leaveBlock: *const fn (*anyopaque, BlockType, u32) bun.JSError!void,
@@ -97,6 +241,99 @@ pub inline fn text(self: Renderer, text_type: TextType, content: []const u8) bun
     pub const VTable = RendererVTable;
 };
 
+pub const SpanDetail = struct {
+    href: []const u8 = "",
+    title: []const u8 = "",
+    autolink: bool = false,
+    autolink_email: bool = false,
+    permissive_autolink: bool = false,
+    autolink_www: bool = false,
+};
+
+pub const _AttrSubstrOffset = struct {
+    beg: OFF,
+    end: OFF,
+};
+
+pub const Attribute = struct {
+    substr_offsets: []const SubstrOffset,
+    substr_types: []const SubstrType,
+
+pub fn text(self: *const Attribute, src: []const u8) []const u8 {
+            if ((self.substr_offsets.len == 0)) {
+                return "";
+            }
+            const first = self.substr_offsets[0].beg;
+            const last = self.substr_offsets[@as(usize, @intCast((self.substr_offsets.len - 1)))].end;
+            return src[first..last];
+    }
+    pub const SubstrType = _AttrSubstrType;
+    pub const SubstrOffset = _AttrSubstrOffset;
+};
+
+pub const Line = struct {
+    type: LineType = .blank,
+    beg: OFF = 0,
+    end: OFF = 0,
+    indent: u32 = 0,
+    data: u32 = 0,
+    enforce_new_block: bool = false,
+};
+
+pub const VerbatimLine = extern struct {
+    beg: OFF,
+    end: OFF,
+    indent: u32,
+};
+
+pub const Container = struct {
+    ch: u8 = 0,
+    is_loose: bool = false,
+    is_task: bool = false,
+    task_mark_off: OFF = 0,
+    start: u32 = 0,
+    mark_indent: u32 = 0,
+    contents_indent: u32 = 0,
+    block_byte_off: u32 = 0,
+};
+
+pub const BlockFlags = packed struct(u32) {
+    container_closer: bool = false,
+    container_opener: bool = false,
+    loose_list: bool = false,
+    setext_header: bool = false,
+    _padding: u28 = 0,
+};
+
+pub const Block = struct {
+    type: BlockType,
+    flags: u32 = 0,
+    data: u32 = 0,
+    n_lines: u32 = 0,
+};
+
+pub const MarkFlags = struct {
+    pub const POTENTIAL_OPENER: u16 = 1;
+    pub const POTENTIAL_CLOSER: u16 = 2;
+    pub const OPENER: u16 = 4;
+    pub const CLOSER: u16 = 8;
+    pub const RESOLVED: u16 = 16;
+    pub const EMPH_INTRAWORD: u16 = 32;
+    pub const EMPH_MOD3_0: u16 = 64;
+    pub const EMPH_MOD3_1: u16 = 128;
+    pub const EMPH_MOD3_2: u16 = 256;
+    pub const EMPH_OC: u16 = (POTENTIAL_OPENER | POTENTIAL_CLOSER);
+};
+
+pub const Mark = struct {
+    beg: OFF = 0,
+    end: OFF = 0,
+    prev: i32 = -1,
+    next: i32 = -1,
+    ch: u8 = 0,
+    flags: u16 = 0,
+};
+
 pub const Flags = struct {
     collapse_whitespace: bool = false,
     permissive_atx_headers: bool = false,
@@ -121,199 +358,28 @@ pub fn permissiveAutolinks(self: Flags) bool {
     pub const github: Flags = flags_github;
 };
 
+pub const OpenerStack = struct {
+    top: i32 = -1,
+};
+
+pub const RefDef = struct {
+    label: []const u8,
+    title: Attribute,
+    dest_beg: OFF,
+    dest_end: OFF,
+    label_needs_free: bool = false,
+    title_needs_free: bool = false,
+};
+
 pub const OFF = u32;
 pub const SZ = u32;
-pub const BlockType = enum(u8) {
-    doc,
-    quote,
-    ul,
-    ol,
-    li,
-    hr,
-    h,
-    code,
-    html,
-    p,
-    table,
-    thead,
-    tbody,
-    tr,
-    th,
-    td,
-};
-pub const SpanType = enum(u8) {
-    em,
-    strong,
-    a,
-    img,
-    code,
-    del,
-    latexmath,
-    latexmath_display,
-    wikilink,
-    u,
-};
-pub const TextType = enum(u8) {
-    normal,
-    null_char,
-    br,
-    softbr,
-    entity,
-    code,
-    html,
-    latexmath,
-};
-pub const Align = enum(u8) {
-    default,
-    left,
-    center,
-    right,
-};
-pub const UlDetail = struct {
-    is_tight: bool,
-    mark: u8,
-};
-pub const OlDetail = struct {
-    start: u32,
-    is_tight: bool,
-    mark_delimiter: u8,
-};
-pub const LiDetail = struct {
-    is_task: bool,
-    task_mark: u8,
-    task_mark_offset: OFF,
-};
-pub const HDetail = struct {
-    level: u8,
-};
-pub const CodeDetail = struct {
-    info: Attribute,
-    lang: Attribute,
-    fence_char: u8,
-};
-pub const TableDetail = struct {
-    col_count: u32,
-    head_row_count: u32,
-    body_row_count: u32,
-};
-pub const TdDetail = struct {
-    alignment: Align,
-};
-pub const ADetail = struct {
-    href: Attribute,
-    title: Attribute,
-};
-pub const ImgDetail = struct {
-    src: Attribute,
-    title: Attribute,
-};
-pub const WikilinkDetail = struct {
-    target: Attribute,
-};
-pub const SpanDetail = struct {
-    href: []const u8 = "",
-    title: []const u8 = "",
-    autolink: bool = false,
-    autolink_email: bool = false,
-    permissive_autolink: bool = false,
-    autolink_www: bool = false,
-};
-pub const Attribute = struct {
-    substr_offsets: []const SubstrOffset,
-    substr_types: []const SubstrType,
-
-pub fn text(self: @This(), src: []const u8) []const u8 {
-            if ((self.substr_offsets.len == 0)) {
-                return "";
-            }
-            const first = self.substr_offsets[0].beg;
-            const last = self.substr_offsets[@as(usize, @intCast((self.substr_offsets.len - 1)))].end;
-            return src[first..last];
-    }
-    pub const SubstrType = enum(u8) {
-            normal,
-            entity,
-        };
-    pub const SubstrOffset = struct {
-        beg: OFF,
-        end: OFF,
-    };
-};
-pub const LineType = enum(u8) {
-    blank,
-    hr,
-    atxheader,
-    setextunderline,
-    setextheader,
-    indentedcode,
-    fencedcode,
-    html,
-    text,
-    table,
-    tableunderline,
-};
-pub const Line = struct {
-    type: LineType = .blank,
-    beg: OFF = 0,
-    end: OFF = 0,
-    indent: u32 = 0,
-    data: u32 = 0,
-    enforce_new_block: bool = false,
-};
-pub const VerbatimLine = extern struct {
-    beg: OFF,
-    end: OFF,
-    indent: u32,
-};
-pub const Container = struct {
-    ch: u8 = 0,
-    is_loose: bool = false,
-    is_task: bool = false,
-    task_mark_off: OFF = 0,
-    start: u32 = 0,
-    mark_indent: u32 = 0,
-    contents_indent: u32 = 0,
-    block_byte_off: u32 = 0,
-};
-pub const BlockFlags = packed struct(u32) {
-    container_closer: bool = false,
-    container_opener: bool = false,
-    loose_list: bool = false,
-    setext_header: bool = false,
-    _padding: u28 = 0,
-};
+pub const TABLE_MAXCOLCOUNT: u32 = 128;
 pub const BLOCK_CONTAINER_CLOSER: u32 = 1;
 pub const BLOCK_CONTAINER_OPENER: u32 = 2;
 pub const BLOCK_LOOSE_LIST: u32 = 4;
 pub const BLOCK_SETEXT_HEADER: u32 = 8;
 pub const BLOCK_FENCED_CODE: u32 = 16;
 pub const BLOCK_REF_DEF_ONLY: u32 = 32;
-pub const Block = struct {
-    type: BlockType,
-    flags: u32 = 0,
-    data: u32 = 0,
-    n_lines: u32 = 0,
-};
-pub const MarkFlags = struct {
-    pub const POTENTIAL_OPENER: u16 = 1;
-    pub const POTENTIAL_CLOSER: u16 = 2;
-    pub const OPENER: u16 = 4;
-    pub const CLOSER: u16 = 8;
-    pub const RESOLVED: u16 = 16;
-    pub const EMPH_INTRAWORD: u16 = 32;
-    pub const EMPH_MOD3_0: u16 = 64;
-    pub const EMPH_MOD3_1: u16 = 128;
-    pub const EMPH_MOD3_2: u16 = 256;
-    pub const EMPH_OC: u16 = (POTENTIAL_OPENER | POTENTIAL_CLOSER);
-};
-pub const Mark = struct {
-    beg: OFF = 0,
-    end: OFF = 0,
-    prev: i32 = -1,
-    next: i32 = -1,
-    ch: u8 = 0,
-    flags: u16 = 0,
-};
 const flags_commonmark = Flags{ .tables = false, .strikethrough = false, .tasklists = false };
 const flags_github = Flags{ .tables = true, .strikethrough = true, .tasklists = true, .permissive_url_autolinks = true, .permissive_www_autolinks = true, .permissive_email_autolinks = true };
 pub const NUM_OPENER_STACKS: usize = 16;
@@ -333,19 +399,6 @@ pub const TILDE_OPENERS_1: usize = 12;
 pub const TILDE_OPENERS_2: usize = 13;
 pub const BRACKET_OPENERS: usize = 14;
 pub const DOLLAR_OPENERS: usize = 15;
-pub const OpenerStack = struct {
-    top: i32 = -1,
-};
-pub const CODESPAN_MARK_MAXLEN: u32 = 255;
-pub const TABLE_MAXCOLCOUNT: u32 = 128;
-pub const RefDef = struct {
-    label: []const u8,
-    title: Attribute,
-    dest_beg: OFF,
-    dest_end: OFF,
-    label_needs_free: bool = false,
-    title_needs_free: bool = false,
-};
 
 pub fn alignmentFromData(data: u32) Align {
         return @enumFromInt(@as(u2, @truncate(data)));

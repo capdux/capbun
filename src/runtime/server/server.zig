@@ -217,59 +217,22 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-pub const ServerAllConnectionsClosedTask = struct {
-    globalObject: *jsc.JSGlobalObject,
-    promise: jsc.JSPromise.Strong,
-    tracker: jsc.Debugger.AsyncTaskTracker,
-
-pub fn schedule(task: ServerAllConnectionsClosedTask, vm: *VirtualMachine) void {
-            const ptr = ServerAllConnectionsClosedTask.new(task);
-            _ = vm.eventLoop().enqueueTask(jsc.Task.init(ptr));
-    }
-
-pub fn runFromJSThread(self: *ServerAllConnectionsClosedTask, vm: *jsc.VirtualMachine) bun.JSTerminated!void {
-            _ = httplog("ServerAllConnectionsClosedTask runFromJSThread", .{});
-            const globalObject = self.globalObject;
-            const tracker = self.tracker;
-            _ = tracker.willDispatch(globalObject);
-            defer {
-            _ = tracker.didDispatch(globalObject);
-            }
-            var promise = self.promise;
-            _ = &promise;
-            var _guard_promise = DeinitGuard(@TypeOf(promise)){ .ptr = (blk: {
-            break :blk (&promise);
-
-}) };
-            _ = &_guard_promise;
-            var ___guard_promise_moved = false; _ = &___guard_promise_moved;
-            defer if (!___guard_promise_moved) { ___guard_promise_moved = true; const __T = @TypeOf(_guard_promise); if (@typeInfo(__T) == .optional) { if (_guard_promise) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_promise.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_promise; _drop_val.__cp_deinit(); } };
-            _ = bun.destroy(self);
-            if ((!vm.isShuttingDown())) {
-                _ = try promise.resolve(globalObject, .js_undefined);
-            }
-    }
-    pub const new = bun.TrivialNew(@This());
+pub const _ServerInitContext = struct {
+    arena: std.heap.ArenaAllocator,
+    dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
+    js_string_allocations: bun.bake.StringRefList,
+    global: *jsc.JSGlobalObject,
+    framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
+    user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
 };
 
-pub const ProtocolEnum = enum { http, https };
-pub const DevelopmentKind = enum { debug, production };
-const httplog = Output.scoped(.Server, .visible);
-const ctxLog = Output.scoped(.RequestContext, .visible);
-pub const WebSocketServerContext = @import("./WebSocketServerContext.zig");
-pub const HTTPStatusText = @import("./HTTPStatusText.zig");
-pub const HTMLBundle = @import("./HTMLBundle.zig");
-pub const StaticRoute = @import("./StaticRoute.zig");
-pub const FileRoute = @import("./FileRoute.zig").FileRoute;
-pub const FileResponseStream = @import("./FileResponseStream.zig");
-pub const RangeRequest = @import("./RangeRequest.zig");
 pub const AnyRoute = union(enum) {
     static: *StaticRoute,
     file: *FileRoute,
     html: bun.ptr.RefPtr(HTMLBundle.Route),
     framework_router: bun.bake.FrameworkRouter.Type.Index,
 
-pub fn memoryCost(self: @This()) usize {
+pub fn memoryCost(self: AnyRoute) usize {
             return (switch (self) {
 .static => |static_route| static_route.memoryCost(),
 .file => |file_route| file_route.memoryCost(),
@@ -278,7 +241,7 @@ pub fn memoryCost(self: @This()) usize {
 });
     }
 
-pub fn setServer(self: @This(), server: ?AnyServer) void {
+pub fn setServer(self: AnyRoute, server: ?AnyServer) void {
             switch (self) {
 .static => |static_route| {
 static_route.server = server;
@@ -295,7 +258,7 @@ html_bundle_route.server = server;
 }
     }
 
-pub fn deref(self: @This()) void {
+pub fn deref(self: AnyRoute) void {
             switch (self) {
 .static => |static_route| {
 _ = static_route.deref();
@@ -312,7 +275,7 @@ _ = html_bundle_route.deref();
 }
     }
 
-pub fn ref(self: @This()) void {
+pub fn ref(self: AnyRoute) void {
             switch (self) {
 .static => |static_route| {
 _ = static_route.ref();
@@ -538,19 +501,35 @@ pub fn fromJS(global: *jsc.JSGlobalObject, path: []const u8, argument: jsc.JSVal
             const static_route = static_route_opt.?;
             return .{ .static = static_route };
     }
-    pub const ServerInitContext = struct {
-        arena: std.heap.ArenaAllocator,
-        dedupe_html_bundle_map: std.AutoHashMap(*HTMLBundle, bun.ptr.RefPtr(HTMLBundle.Route)),
-        js_string_allocations: bun.bake.StringRefList,
-        global: *jsc.JSGlobalObject,
-        framework_router_list: std.array_list.Managed(bun.bake.Framework.FileSystemRouterType),
-        user_routes: *std.array_list.Managed(ServerConfig.StaticRouteEntry),
-    };
+    pub const ServerInitContext = _ServerInitContext;
 };
-pub const ServerConfig = @import("./ServerConfig.zig");
-pub const ServerWebSocket = @import("./ServerWebSocket.zig");
-pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig").NodeHTTPResponse;
-const ServePlugins = struct {
+
+pub const _ServePluginsPending = struct {
+    plugin: *bun.jsc.API.JSBundler.Plugin,
+    promise: jsc.JSPromise.Strong,
+    html_bundle_routes: std.ArrayListUnmanaged(*HTMLBundle.Route),
+    dev_server: ?*bun.bake.DevServer,
+};
+
+pub const _ServePluginsState = union(enum) {
+    unqueued: []const []const u8,
+    pending: _ServePluginsPending,
+    loaded: *bun.jsc.API.JSBundler.Plugin,
+    err: void,
+};
+
+pub const _ServePluginsGetOrStartLoadResult = union(enum) {
+    ready: ?*bun.jsc.API.JSBundler.Plugin,
+    pending: void,
+    err: void,
+};
+
+pub const _ServePluginsCallback = union(enum) {
+    html_bundle_route: *HTMLBundle.Route,
+    dev_server: *bun.bake.DevServer,
+};
+
+pub const ServePlugins = struct {
     state: State,
     ref_count: RefCount,
 
@@ -558,7 +537,7 @@ pub fn init(plugins: []const []const u8) *ServePlugins {
             return bun.new(ServePlugins, .{ .ref_count = .init(), .state = .{ .unqueued = plugins } });
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *ServePlugins) void {
             switch (self.state) {
 .unqueued => {
 
@@ -576,7 +555,7 @@ _ = loaded.deinit();
             _ = bun.destroy(self);
     }
 
-pub fn getOrStartLoad(self: *@This(), global: *jsc.JSGlobalObject, cb: Callback) bun.JSError!GetOrStartLoadResult {
+pub fn getOrStartLoad(self: *ServePlugins, global: *jsc.JSGlobalObject, cb: Callback) bun.JSError!GetOrStartLoadResult {
             while (true) {
                 switch (self.state) {
 .unqueued => {
@@ -608,7 +587,7 @@ return .err;
 
 pub extern "c" fn JSBundlerPlugin__loadAndResolvePluginsForServe(plugin: *bun.jsc.API.JSBundler.Plugin, plugins: jsc.JSValue, bunfig_folder: jsc.JSValue) callconv(.c) JSValue;
 
-pub fn loadAndResolvePlugins(self: *@This(), global: *jsc.JSGlobalObject) bun.JSError!void {
+pub fn loadAndResolvePlugins(self: *ServePlugins, global: *jsc.JSGlobalObject) bun.JSError!void {
             _ = bun.assert((self.state == .unqueued));
             const plugin_list = self.state.unqueued;
             const bunfig_folder = bun.path.dirname(global.bunVM().transpiler.options.bunfig_path, .auto);
@@ -621,15 +600,18 @@ pub fn loadAndResolvePlugins(self: *@This(), global: *jsc.JSGlobalObject) bun.JS
             var sfb = std.heap.stackFallback((@sizeOf(bun.String) * 4), bun.default_allocator);
             _ = &sfb;
             const alloc = sfb.get();
-            const bunstring_array = bun.handleOom(alloc.alloc(bun.String, plugin_list.len));
+            var bunstring_array = bun.handleOom(alloc.alloc(bun.String, plugin_list.len));
+            _ = &bunstring_array;
             var _guard_bunstring_array = FreeGuard(@TypeOf(bunstring_array)){ .alloc = alloc, .slice = bunstring_array };
             _ = &_guard_bunstring_array;
             var ___guard_bunstring_array_moved = false; _ = &___guard_bunstring_array_moved;
             defer if (!___guard_bunstring_array_moved) { ___guard_bunstring_array_moved = true; const __T = @TypeOf(_guard_bunstring_array); if (@typeInfo(__T) == .optional) { if (_guard_bunstring_array) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstring_array.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstring_array; _drop_val.__cp_deinit(); } };
-            for (plugin_list, bunstring_array) |raw_plugin, *out| {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(plugin_list)) |raw_plugin| {
                 _ = &raw_plugin;
-                _ = &out;
-                out.* = bun.String.init(raw_plugin);
+                bunstring_array[cp_cast_int(usize, i)] = bun.String.init(raw_plugin);
+                i = (i + 1);
             }
             const plugin_js_array = try bun.String.toJSArray(global, bunstring_array);
             const bunfig_folder_bunstr = try bun.String.createUTF8ForJS(global, bunfig_folder);
@@ -639,7 +621,7 @@ pub fn loadAndResolvePlugins(self: *@This(), global: *jsc.JSGlobalObject) bun.JS
             _ = global.bunVM().eventLoop().exit();
             if (global.tryTakeException()) |e| {
                 _ = &e;
-                _ = handleOnReject(self, global, e);
+                _ = self.handleOnReject(global, e);
                 return;
             }
             if ((!result.isEmptyOrUndefinedOrNull())) {
@@ -654,23 +636,23 @@ _ = self.ref();
                     return;
 },
 .fulfilled => {
-_ = handleOnResolve(self);
+_ = self.handleOnResolve();
                     return;
 },
 .rejected => {
 var pm = promise;
                     _ = &pm;
                     const value = pm.result(global.vm());
-                    _ = handleOnReject(self, global, value);
+                    _ = self.handleOnReject(global, value);
                     return;
 },
 }
                 }
                 if (result.toError()) |e| {
                     _ = &e;
-                    _ = handleOnReject(self, global, e);
+                    _ = self.handleOnReject(global, e);
                 } else {
-                    _ = handleOnResolve(self);
+                    _ = self.handleOnResolve();
                 }
             }
     }
@@ -691,7 +673,7 @@ pub fn onResolveImpl(_: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSEr
             return JSValue.js_undefined;
     }
 
-pub fn handleOnResolve(self: *@This()) void {
+pub fn handleOnResolve(self: *ServePlugins) void {
             _ = bun.assert((self.state == .pending));
             const pending = (&self.state.pending);
             const plugin = pending.plugin;
@@ -729,11 +711,11 @@ pub fn onRejectImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
             _ = &_guard_plugins;
             var ___guard_plugins_moved = false; _ = &___guard_plugins_moved;
             defer if (!___guard_plugins_moved) { ___guard_plugins_moved = true; const __T = @TypeOf(_guard_plugins); if (@typeInfo(__T) == .optional) { if (_guard_plugins) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_plugins.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_plugins; _drop_val.__cp_deinit(); } };
-            _ = handleOnReject(plugins, globalThis, error_js);
+            _ = plugins.handleOnReject(globalThis, error_js);
             return JSValue.js_undefined;
     }
 
-pub fn handleOnReject(self: *@This(), global: *jsc.JSGlobalObject, err: JSValue) void {
+pub fn handleOnReject(self: *ServePlugins, global: *jsc.JSGlobalObject, err_val: JSValue) void {
             _ = bun.assert((self.state == .pending));
             const pending = (&self.state.pending);
             const dev_server = pending.dev_server;
@@ -760,34 +742,14 @@ pub fn handleOnReject(self: *@This(), global: *jsc.JSGlobalObject, err: JSValue)
                 _ = bun.handleOom(server.onPluginsRejected());
             }
             _ = Output.errGeneric("Failed to load plugins for Bun.serve:", .{});
-            _ = global.bunVM().runErrorHandler(err, null);
+            _ = global.bunVM().runErrorHandler(err_val, null);
     }
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-    pub const State = union(enum) {
-            unqueued: []const []const u8,
-            pending: struct {
-                /// Promise may be empty if the plugin load finishes synchronously.
-                plugin: *bun.jsc.API.JSBundler.Plugin,
-                promise: jsc.JSPromise.Strong,
-                html_bundle_routes: std.ArrayListUnmanaged(*HTMLBundle.Route),
-                dev_server: ?*bun.bake.DevServer,
-            },
-            loaded: *bun.jsc.API.JSBundler.Plugin,
-            /// Error information is not stored as it is already reported.
-            err,
-        };
-    pub const GetOrStartLoadResult = union(enum) {
-            /// null = no plugins, used by server implementation
-            ready: ?*bun.jsc.API.JSBundler.Plugin,
-            pending,
-            err,
-        };
-    pub const Callback = union(enum) {
-        html_bundle_route: *HTMLBundle.Route,
-        dev_server: *bun.bake.DevServer,
-    };
+    pub const State = _ServePluginsState;
+    pub const GetOrStartLoadResult = _ServePluginsGetOrStartLoadResult;
+    pub const Callback = _ServePluginsCallback;
     pub const onResolve = jsc.toJSHostFn(onResolveImpl);
     pub const onReject = jsc.toJSHostFn(onRejectImpl);
     comptime {
@@ -795,37 +757,77 @@ pub fn handleOnReject(self: *@This(), global: *jsc.JSGlobalObject, err: JSValue)
             @export(&onReject, .{ .name = "BunServe__onRejectPlugins" });
         }
 };
-const PluginsResult = union(enum) {
-    pending,
+
+pub const PluginsResult = union(enum) {
+    pending: void,
     found: ?*bun.jsc.API.JSBundler.Plugin,
-    err,
+    err: void,
 };
-var did_send_idletimeout_warning_once: bool = false;
-pub const AnyRequestContext = @import("./AnyRequestContext.zig");
-pub const NewRequestContext = @import("./RequestContext.zig").NewRequestContext;
+
+pub const _SavedRequestUnion = union(enum) {
+    stack: *uws.Request,
+    saved: bun.jsc.API.SavedRequest,
+};
+
 pub const SavedRequest = struct {
     js_request: jsc.Strong.Optional,
     request: *Request,
     ctx: AnyRequestContext,
     response: uws.AnyResponse,
 
-pub fn deinit(sr: *SavedRequest) void {
-            _ = sr.js_request.deinit();
-            _ = sr.ctx.deref();
+pub fn deinit(self: *SavedRequest) void {
+            _ = self.js_request.deinit();
+            _ = self.ctx.deref();
     }
-    pub const Union = union(enum) {
-        stack: *uws.Request,
-        saved: bun.jsc.API.SavedRequest,
-    };
+    pub const Union = _SavedRequestUnion;
 };
-pub const HTTPServer = NewServer(.http, .production);
-pub const HTTPSServer = NewServer(.https, .production);
-pub const DebugHTTPServer = NewServer(.http, .debug);
-pub const DebugHTTPSServer = NewServer(.https, .debug);
+
+pub const ServerAllConnectionsClosedTask = struct {
+    globalObject: *jsc.JSGlobalObject,
+    promise: jsc.JSPromise.Strong,
+    tracker: jsc.Debugger.AsyncTaskTracker,
+
+pub fn schedule(task: ServerAllConnectionsClosedTask, vm: *VirtualMachine) void {
+            const ptr = ServerAllConnectionsClosedTask.new(task);
+            _ = vm.eventLoop().enqueueTask(jsc.Task.init(ptr));
+    }
+
+pub fn runFromJSThread(self: *ServerAllConnectionsClosedTask, vm: *jsc.VirtualMachine) bun.JSTerminated!void {
+            _ = httplog("ServerAllConnectionsClosedTask runFromJSThread", .{});
+            const globalObject = self.globalObject;
+            const tracker = self.tracker;
+            _ = tracker.willDispatch(globalObject);
+            defer {
+            _ = tracker.didDispatch(globalObject);
+            }
+            var promise = self.promise;
+            _ = &promise;
+            var _guard_promise = DeinitGuard(@TypeOf(promise)){ .ptr = (blk: {
+            break :blk (&promise);
+
+}) };
+            _ = &_guard_promise;
+            var ___guard_promise_moved = false; _ = &___guard_promise_moved;
+            defer if (!___guard_promise_moved) { ___guard_promise_moved = true; const __T = @TypeOf(_guard_promise); if (@typeInfo(__T) == .optional) { if (_guard_promise) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_promise.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_promise; _drop_val.__cp_deinit(); } };
+            _ = bun.destroy(self);
+            if ((!vm.isShuttingDown())) {
+                _ = try promise.resolve(globalObject, .js_undefined);
+            }
+    }
+    pub const new = bun.TrivialNew(@This());
+};
+
+pub const _AnyUserRouteList = union(enum) {
+    HTTPServer: []const HTTPServer.UserRoute,
+    HTTPSServer: []const HTTPSServer.UserRoute,
+    DebugHTTPServer: []const DebugHTTPServer.UserRoute,
+    DebugHTTPSServer: []const DebugHTTPSServer.UserRoute,
+};
+
 pub const AnyServer = struct {
     ptr: Ptr,
 
-pub fn userRoutes(self: @This()) AnyUserRouteList {
+pub fn userRoutes(self: AnyServer) AnyUserRouteList {
             if ((self.ptr.tag() == case_http)) {
                 return .{ .HTTPServer = self.ptr.as(HTTPServer).user_routes.items };
             } else {
@@ -845,7 +847,7 @@ pub fn userRoutes(self: @This()) AnyUserRouteList {
             }
     }
 
-pub fn getURLAsString(self: @This()) bun.OOM!bun.String {
+pub fn getURLAsString(self: AnyServer) bun.OOM!bun.String {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).getURLAsString();
             } else {
@@ -865,7 +867,7 @@ pub fn getURLAsString(self: @This()) bun.OOM!bun.String {
             }
     }
 
-pub fn vm(self: *const @This()) *jsc.VirtualMachine {
+pub fn vm(self: *const AnyServer) *jsc.VirtualMachine {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).vm;
             } else {
@@ -885,7 +887,7 @@ pub fn vm(self: *const @This()) *jsc.VirtualMachine {
             }
     }
 
-pub fn h3AltSvc(self: *const @This()) ?[]const u8 {
+pub fn h3AltSvc(self: *const AnyServer) ?[]const u8 {
             if ((self.ptr.tag() == case_https)) {
                 return self.ptr.as(HTTPSServer).h3AltSvc();
             } else {
@@ -897,7 +899,7 @@ pub fn h3AltSvc(self: *const @This()) ?[]const u8 {
             }
     }
 
-pub fn setInspectorServerID(self: @This(), id: jsc.Debugger.DebuggerId) void {
+pub fn setInspectorServerID(self: AnyServer, id: jsc.Debugger.DebuggerId) void {
             if ((self.ptr.tag() == case_http)) {
                 self.ptr.as(HTTPServer).inspector_server_id = id;
                 if (self.ptr.as(HTTPServer).dev_server) |dev_server| {
@@ -933,7 +935,7 @@ pub fn setInspectorServerID(self: @This(), id: jsc.Debugger.DebuggerId) void {
             }
     }
 
-pub fn inspectorServerID(self: @This()) jsc.Debugger.DebuggerId {
+pub fn inspectorServerID(self: AnyServer) jsc.Debugger.DebuggerId {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).inspector_server_id;
             } else {
@@ -953,7 +955,7 @@ pub fn inspectorServerID(self: @This()) jsc.Debugger.DebuggerId {
             }
     }
 
-pub fn plugins(self: *const @This()) ?*ServePlugins {
+pub fn plugins(self: *const AnyServer) ?*ServePlugins {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).plugins;
             } else {
@@ -973,7 +975,7 @@ pub fn plugins(self: *const @This()) ?*ServePlugins {
             }
     }
 
-pub fn getPlugins(self: @This()) PluginsResult {
+pub fn getPlugins(self: AnyServer) PluginsResult {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).getPlugins();
             } else {
@@ -993,7 +995,7 @@ pub fn getPlugins(self: @This()) PluginsResult {
             }
     }
 
-pub fn loadAndResolvePlugins(self: @This(), bundle: *HTMLBundle.HTMLBundleRoute, raw_plugins: []const []const u8, bunfig_path: []const u8) void {
+pub fn loadAndResolvePlugins(self: AnyServer, bundle: *HTMLBundle.HTMLBundleRoute, raw_plugins: []const []const u8, bunfig_path: []const u8) void {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).getPluginsAsync(bundle, raw_plugins, bunfig_path);
             } else {
@@ -1013,18 +1015,18 @@ pub fn loadAndResolvePlugins(self: @This(), bundle: *HTMLBundle.HTMLBundleRoute,
             }
     }
 
-pub fn getOrLoadPlugins(server: AnyServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
-            if ((server.ptr.tag() == case_http)) {
-                return server.ptr.as(HTTPServer).getOrLoadPlugins(callback);
+pub fn getOrLoadPlugins(self: AnyServer, callback: ServePlugins.Callback) ServePlugins.GetOrStartLoadResult {
+            if ((self.ptr.tag() == case_http)) {
+                return self.ptr.as(HTTPServer).getOrLoadPlugins(callback);
             } else {
-                if ((server.ptr.tag() == case_https)) {
-                    return server.ptr.as(HTTPSServer).getOrLoadPlugins(callback);
+                if ((self.ptr.tag() == case_https)) {
+                    return self.ptr.as(HTTPSServer).getOrLoadPlugins(callback);
                 } else {
-                    if ((server.ptr.tag() == case_debug_http)) {
-                        return server.ptr.as(DebugHTTPServer).getOrLoadPlugins(callback);
+                    if ((self.ptr.tag() == case_debug_http)) {
+                        return self.ptr.as(DebugHTTPServer).getOrLoadPlugins(callback);
                     } else {
-                        if ((server.ptr.tag() == case_debug_https)) {
-                            return server.ptr.as(DebugHTTPSServer).getOrLoadPlugins(callback);
+                        if ((self.ptr.tag() == case_debug_https)) {
+                            return self.ptr.as(DebugHTTPSServer).getOrLoadPlugins(callback);
                         } else {
                             return bun.unreachablePanic("Invalid pointer tag", .{});
                         }
@@ -1033,7 +1035,7 @@ pub fn getOrLoadPlugins(server: AnyServer, callback: ServePlugins.Callback) Serv
             }
     }
 
-pub fn reloadStaticRoutes(self: @This()) !bool {
+pub fn reloadStaticRoutes(self: AnyServer) !bool {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).reloadStaticRoutes();
             } else {
@@ -1053,7 +1055,7 @@ pub fn reloadStaticRoutes(self: @This()) !bool {
             }
     }
 
-pub fn appendStaticRoute(self: @This(), path: []const u8, route: AnyRoute, method: HTTP.Method.Optional) !void {
+pub fn appendStaticRoute(self: AnyServer, path: []const u8, route: AnyRoute, method: HTTP.Method.Optional) !void {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).appendStaticRoute(path, route, method);
             } else {
@@ -1073,7 +1075,7 @@ pub fn appendStaticRoute(self: @This(), path: []const u8, route: AnyRoute, metho
             }
     }
 
-pub fn globalThis(self: *const @This()) *jsc.JSGlobalObject {
+pub fn globalThis(self: *const AnyServer) *jsc.JSGlobalObject {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).globalThis;
             } else {
@@ -1093,7 +1095,7 @@ pub fn globalThis(self: *const @This()) *jsc.JSGlobalObject {
             }
     }
 
-pub fn config(self: *const @This()) *const ServerConfig {
+pub fn config(self: *const AnyServer) *const ServerConfig {
             if ((self.ptr.tag() == case_http)) {
                 return (&self.ptr.as(HTTPServer).config);
             } else {
@@ -1113,7 +1115,7 @@ pub fn config(self: *const @This()) *const ServerConfig {
             }
     }
 
-pub fn webSocketHandler(self: *const @This()) ?*WebSocketServerContext.Handler {
+pub fn webSocketHandler(self: *const AnyServer) ?*WebSocketServerContext.Handler {
             const server_config: *ServerConfig = (if ((self.ptr.tag() == case_http)) (&self.ptr.as(HTTPServer).config) else (if ((self.ptr.tag() == case_https)) (&self.ptr.as(HTTPSServer).config) else (if ((self.ptr.tag() == case_debug_http)) (&self.ptr.as(DebugHTTPServer).config) else (if ((self.ptr.tag() == case_debug_https)) (&self.ptr.as(DebugHTTPSServer).config) else bun.unreachablePanic("Invalid pointer tag", .{})))));
             if ((server_config.websocket == null)) {
                 return null;
@@ -1121,7 +1123,7 @@ pub fn webSocketHandler(self: *const @This()) ?*WebSocketServerContext.Handler {
             return (&server_config.websocket.?.handler);
     }
 
-pub fn onRequest(self: @This(), req: *uws.Request, resp: bun.uws.AnyResponse) void {
+pub fn onRequest(self: AnyServer, req: *uws.Request, resp: bun.uws.AnyResponse) void {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).onRequest(req, resp.assertNoSSL());
             } else {
@@ -1145,7 +1147,7 @@ pub fn from(server: anytype) AnyServer {
             return .{ .ptr = Ptr.init(server) };
     }
 
-pub fn onPendingRequest(self: @This()) void {
+pub fn onPendingRequest(self: AnyServer) void {
             if ((self.ptr.tag() == case_http)) {
                 _ = self.ptr.as(HTTPServer).onPendingRequest();
             } else {
@@ -1165,7 +1167,7 @@ pub fn onPendingRequest(self: @This()) void {
             }
     }
 
-pub fn onRequestComplete(self: @This()) void {
+pub fn onRequestComplete(self: AnyServer) void {
             if ((self.ptr.tag() == case_http)) {
                 _ = self.ptr.as(HTTPServer).onRequestComplete();
             } else {
@@ -1185,7 +1187,7 @@ pub fn onRequestComplete(self: @This()) void {
             }
     }
 
-pub fn onStaticRequestComplete(self: @This()) void {
+pub fn onStaticRequestComplete(self: AnyServer) void {
             if ((self.ptr.tag() == case_http)) {
                 _ = self.ptr.as(HTTPServer).onStaticRequestComplete();
             } else {
@@ -1205,7 +1207,7 @@ pub fn onStaticRequestComplete(self: @This()) void {
             }
     }
 
-pub fn publish(self: @This(), topic: []const u8, message: []const u8, opcode: uws.Opcode, compress: bool) bool {
+pub fn publish(self: AnyServer, topic: []const u8, message: []const u8, opcode: uws.Opcode, compress: bool) bool {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).app.?.publish(topic, message, opcode, compress);
             } else {
@@ -1225,7 +1227,7 @@ pub fn publish(self: @This(), topic: []const u8, message: []const u8, opcode: uw
             }
     }
 
-pub fn onSavedRequest(self: @This(), req: SavedRequest.Union, resp: uws.AnyResponse, callback: jsc.JSValue, comptime extra_arg_count: usize, extra_args: [extra_arg_count]JSValue) void {
+pub fn onSavedRequest(self: AnyServer, req: SavedRequest.Union, resp: uws.AnyResponse, callback: jsc.JSValue, comptime extra_arg_count: usize, extra_args: [extra_arg_count]JSValue) void {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).onSavedRequest(req, resp.TCP, callback, extra_arg_count, extra_args);
             } else {
@@ -1245,30 +1247,30 @@ pub fn onSavedRequest(self: @This(), req: SavedRequest.Union, resp: uws.AnyRespo
             }
     }
 
-pub fn prepareAndSaveJsRequestContext(server: AnyServer, req: *uws.Request, resp: uws.AnyResponse, global: *jsc.JSGlobalObject, method: ?bun.http.Method) bun.JSError!?SavedRequest {
-            if ((server.ptr.tag() == case_http)) {
-                if (server.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
+pub fn prepareAndSaveJsRequestContext(self: AnyServer, req: *uws.Request, resp: uws.AnyResponse, global: *jsc.JSGlobalObject, method: ?bun.http.Method) bun.JSError!?SavedRequest {
+            if ((self.ptr.tag() == case_http)) {
+                if (self.ptr.as(HTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
                     _ = &ctx;
                     return ctx.save(global, req, resp.TCP);
                 }
                 return null;
             } else {
-                if ((server.ptr.tag() == case_https)) {
-                    if (server.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) |ctx| {
+                if ((self.ptr.tag() == case_https)) {
+                    if (self.ptr.as(HTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) |ctx| {
                         _ = &ctx;
                         return ctx.save(global, req, resp.SSL);
                     }
                     return null;
                 } else {
-                    if ((server.ptr.tag() == case_debug_http)) {
-                        if (server.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
+                    if ((self.ptr.tag() == case_debug_http)) {
+                        if (self.ptr.as(DebugHTTPServer).prepareJsRequestContext(req, resp.TCP, null, .bake, method)) |ctx| {
                             _ = &ctx;
                             return ctx.save(global, req, resp.TCP);
                         }
                         return null;
                     } else {
-                        if ((server.ptr.tag() == case_debug_https)) {
-                            if (server.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) |ctx| {
+                        if ((self.ptr.tag() == case_debug_https)) {
+                            if (self.ptr.as(DebugHTTPSServer).prepareJsRequestContext(req, resp.SSL, null, .bake, method)) |ctx| {
                                 _ = &ctx;
                                 return ctx.save(global, req, resp.SSL);
                             }
@@ -1281,7 +1283,7 @@ pub fn prepareAndSaveJsRequestContext(server: AnyServer, req: *uws.Request, resp
             }
     }
 
-pub fn numSubscribers(self: @This(), topic: []const u8) u32 {
+pub fn numSubscribers(self: AnyServer, topic: []const u8) u32 {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).app.?.numSubscribers(topic);
             } else {
@@ -1301,7 +1303,7 @@ pub fn numSubscribers(self: @This(), topic: []const u8) u32 {
             }
     }
 
-pub fn devServer(self: *const @This()) ?*bun.bake.DevServer {
+pub fn devServer(self: *const AnyServer) ?*bun.bake.DevServer {
             if ((self.ptr.tag() == case_http)) {
                 return self.ptr.as(HTTPServer).dev_server;
             } else {
@@ -1325,13 +1327,30 @@ pub fn devServer(self: *const @This()) ?*bun.bake.DevServer {
     const case_debug_http = Ptr.case(DebugHTTPServer);
     const case_debug_https = Ptr.case(DebugHTTPSServer);
     pub const Ptr = bun.TaggedPointerUnion(.{ HTTPServer, HTTPSServer, DebugHTTPServer, DebugHTTPSServer });
-    pub const AnyUserRouteList = union(enum) {
-        HTTPServer: []const HTTPServer.UserRoute,
-        HTTPSServer: []const HTTPSServer.UserRoute,
-        DebugHTTPServer: []const DebugHTTPServer.UserRoute,
-        DebugHTTPSServer: []const DebugHTTPSServer.UserRoute,
-    };
+    pub const AnyUserRouteList = _AnyUserRouteList;
 };
+
+pub const ProtocolEnum = enum { http, https };
+pub const DevelopmentKind = enum { debug, production };
+const httplog = Output.scoped(.Server, .visible);
+const ctxLog = Output.scoped(.RequestContext, .visible);
+pub const WebSocketServerContext = @import("./WebSocketServerContext.zig");
+pub const HTTPStatusText = @import("./HTTPStatusText.zig");
+pub const HTMLBundle = @import("./HTMLBundle.zig");
+pub const StaticRoute = @import("./StaticRoute.zig");
+pub const FileRoute = @import("./FileRoute.zig").FileRoute;
+pub const FileResponseStream = @import("./FileResponseStream.zig");
+pub const RangeRequest = @import("./RangeRequest.zig");
+pub const ServerConfig = @import("./ServerConfig.zig");
+pub const ServerWebSocket = @import("./ServerWebSocket.zig");
+pub const NodeHTTPResponse = @import("./NodeHTTPResponse.zig").NodeHTTPResponse;
+var did_send_idletimeout_warning_once: bool = false;
+pub const AnyRequestContext = @import("./AnyRequestContext.zig");
+pub const NewRequestContext = @import("./RequestContext.zig").NewRequestContext;
+pub const HTTPServer = NewServer(.http, .production);
+pub const HTTPSServer = NewServer(.https, .production);
+pub const DebugHTTPServer = NewServer(.http, .debug);
+pub const DebugHTTPSServer = NewServer(.https, .debug);
 const Sys = @import("../../sys/sys.zig");
 const options = @import("../../bundler/options.zig");
 const URL = @import("../../url/url.zig").URL;

@@ -75,7 +75,10 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const Dependency = @import("../install/dependency.zig");
 pub const Fs = @import("../resolver/fs.zig");
 pub const options = @import("../bundler/options.zig");
+const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
+const dumpSource = @import("./RuntimeTranspilerStore.zig").dumpSource;
 pub const Install = @import("../install/install.zig");
+const PackageManager = @import("../install/install.zig").PackageManager;
 pub const bun = @import("bun");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
@@ -137,6 +140,12 @@ pub const PackageResolveError = struct {
     e: anyerror,
     url: []const u8,
     version: Dependency.Version,
+};
+
+pub const _DeferredDependencyError = struct {
+    dependency: Dependency,
+    root_dependency_id: Install.DependencyID,
+    e: anyerror,
 };
 
 pub const AsyncModuleQueue = struct {
@@ -371,11 +380,7 @@ pub fn vm(self: *AsyncModuleQueue) *VirtualMachine {
 });
     }
     pub const Map = std.ArrayListUnmanaged(AsyncModule);
-    const DeferredDependencyError = struct {
-        dependency: Dependency,
-        root_dependency_id: Install.DependencyID,
-        e: anyerror,
-    };
+    const DeferredDependencyError = _DeferredDependencyError;
 };
 
 pub const AsyncModule = struct {
@@ -656,9 +661,6 @@ pub fn deinit(self: *AsyncModule) void {
 };
 
 const debug = Output.scoped(.AsyncModule, .hidden);
-const PackageJSON = @import("../resolver/package_json.zig").PackageJSON;
-const dumpSource = @import("./RuntimeTranspilerStore.zig").dumpSource;
-const PackageManager = @import("../install/install.zig").PackageManager;
 const Async = bun.Async;
 const Environment = bun.Environment;
 const FD = bun.FD;

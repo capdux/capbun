@@ -1,8 +1,8 @@
 pub fn ExternalSlice(comptime Type: type): type {
     return extern struct {
-        pub const Slice = @This();
+        const Slice = @This();
 
-        pub const Child: type = Type;
+        const Child: type = Type;
 
         off: u32 = 0,
         len: u32 = 0,
@@ -54,10 +54,10 @@ pub fn ExternalSlice(comptime Type: type): type {
     };
 }
 
-pub const ExternalStringMap = extern struct {
+@c pub struct ExternalStringMap {
     name: ExternalStringList = .{},
     value: ExternalStringList = .{},
-};
+}
 
 pub const ExternalStringList = ExternalSlice(ExternalString);
 pub const ExternalPackageNameHashList = ExternalSlice(PackageNameHash);

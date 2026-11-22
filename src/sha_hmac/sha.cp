@@ -1,16 +1,14 @@
-const std = @import("std");
-
 const BoringSSL = bun.BoringSSL.c;
-pub const bun = @import("bun");
+import bun from "bun";
 
-fn NewHasher(comptime digest_size: comptime_int, comptime ContextType: type, comptime Full: anytype, comptime Init: anytype, comptime Update: anytype, comptime Final: anytype): type {
+fn NewHasher(comptime digest_size: comptime_int, comptime ContextType: type, comptime Full: auto, comptime Init: auto, comptime Update: auto, comptime Final: auto): type {
     return struct {
         hasher: ContextType = undefined,
 
         pub const Digest = [digest_size]u8;
         pub const digest: comptime_int = digest_size;
 
-        pub fn init() @This() {
+        static fn init(): @This() {
             bun.BoringSSL.load();
             let res: @This() = .{
                 .hasher = undefined,
@@ -20,19 +18,19 @@ fn NewHasher(comptime digest_size: comptime_int, comptime ContextType: type, com
             return res;
         }
 
-        pub fn hash(bytes: []const u8, out: *Digest) void {
+        static fn hash(bytes: []const u8, out: *Digest) {
             @setRuntimeSafety(false);
             * = Full(bytes.ptr, bytes.len, out);
         }
 
-        pub fn update(this: *@This(), data: []const u8) void {
+        fn update(*_, data: []const u8) {
             @setRuntimeSafety(false);
-            bun.assert(Update(&this.hasher, data.ptr, data.len) == 1);
+            bun.assert(Update(&_.hasher, data.ptr, data.len) == 1);
         }
 
-        pub fn final(this: *@This(), out: *Digest) void {
+        fn final(*_, out: *Digest) {
             @setRuntimeSafety(false);
-            bun.assert(Final(out, &this.hasher) == 1);
+            bun.assert(Final(out, &_.hasher) == 1);
         }
     };
 }
@@ -44,7 +42,7 @@ fn NewEVP(comptime digest_size: comptime_int, comptime MDName: []const u8): type
         pub const Digest = [digest_size]u8;
         pub const digest: comptime_int = digest_size;
 
-        pub fn init() @This() {
+        static fn init(): @This() {
             bun.BoringSSL.load();
 
             const md = @field(BoringSSL, MDName)();
@@ -59,27 +57,27 @@ fn NewEVP(comptime digest_size: comptime_int, comptime MDName: []const u8): type
             return res;
         }
 
-        pub fn hash(bytes: []const u8, out: *Digest, engine: ?*BoringSSL.ENGINE) void {
+        static fn hash(bytes: []const u8, out: *Digest, engine: (*BoringSSL.ENGINE)?) {
             const md = @field(BoringSSL, MDName)();
 
             bun.assert(BoringSSL.EVP_Digest(bytes.ptr, bytes.len, out, null, md, engine) == 1);
         }
 
-        pub fn update(this: *@This(), data: []const u8) void {
-            bun.assert(BoringSSL.EVP_DigestUpdate(&this.ctx, data.ptr, data.len) == 1);
+        fn update(*_, data: []const u8) {
+            bun.assert(BoringSSL.EVP_DigestUpdate(&_.ctx, data.ptr, data.len) == 1);
         }
 
-        pub fn final(this: *@This(), out: *Digest) void {
-            bun.assert(BoringSSL.EVP_DigestFinal(&this.ctx, out, null) == 1);
+        fn final(*_, out: *Digest) {
+            bun.assert(BoringSSL.EVP_DigestFinal(&_.ctx, out, null) == 1);
         }
 
-        pub fn deinit(this: *@This()) void {
-            * = BoringSSL.EVP_MD_CTX_cleanup(&this.ctx);
+        fn deinit(*_) {
+            * = BoringSSL.EVP_MD_CTX_cleanup(&_.ctx);
         }
     };
 }
 
-pub const EVP = struct {
+pub struct EVP {
     pub const SHA1 = NewEVP(std.crypto.hash.Sha1.digest_length, "EVP_sha1");
     pub const MD5 = NewEVP(16, "EVP_md5");
     pub const MD4 = NewEVP(16, "EVP_md4");
@@ -90,7 +88,7 @@ pub const EVP = struct {
     pub const SHA512_256 = NewEVP(std.crypto.hash.sha2.Sha512T256.digest_length, "EVP_sha512_256");
     pub const MD5_SHA1 = NewEVP(std.crypto.hash.Sha1.digest_length, "EVP_md5_sha1");
     pub const Blake2 = NewEVP(256 / 8, "EVP_blake2b256");
-};
+}
 
 pub const SHA1 = EVP.SHA1;
 pub const MD5 = EVP.MD5;
@@ -103,7 +101,7 @@ pub const SHA512_256 = EVP.SHA512_256;
 pub const MD5_SHA1 = EVP.MD5_SHA1;
 
 /// API that OpenSSL 3 deprecated
-pub const Hashers = struct {
+pub struct Hashers {
     pub const SHA1 = NewHasher(
         std.crypto.hash.Sha1.digest_length,
         BoringSSL.SHA_CTX,
@@ -157,7 +155,7 @@ pub const Hashers = struct {
         BoringSSL.RIPEMD160_Update,
         BoringSSL.RIPEMD160_Final,
     );
-};
+}
 
 const boring = [
     Hashers.SHA1,

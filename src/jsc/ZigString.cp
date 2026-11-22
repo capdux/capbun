@@ -8,6 +8,143 @@ pub struct DeinitGuard<T> {
     }
 }
 
+pub union(enum) ZigStringByteString {
+    latin1: []const u8,
+    utf16: []const u16,
+}
+
+pub struct ZigStringSlice {
+    allocator: NullableAllocator = {},
+    ptr: [*]const u8 = [],
+    len: u32 = 0,
+
+    fn reportExtraMemory(vm: *jsc.VM) {
+        if (allocator := _.allocator.get()) {
+            // Don't report it if the memory is actually owned by jsc.
+            if (!bun.String.isWTFAllocator(allocator)) {
+                vm.reportExtraMemory(_.len);
+            }
+        }
+    }
+
+    fn isWTFAllocated(): bool {
+        return bun.String.isWTFAllocator(_.allocator.get() ?? return false);
+    }
+
+    static fn init(allocator: std.mem.Allocator, input: []const u8): ZigStringSlice {
+        return {
+            ptr: input.ptr,
+            len: @as(u32, @truncate(input.len)),
+            allocator: NullableAllocator.init(allocator),
+        };
+    }
+
+    static fn initDupe(allocator: std.mem.Allocator, input: []const u8): OOM!ZigStringSlice {
+        return ZigStringSlice.init(allocator, allocator.dupe(u8, input)?);
+    }
+
+    fn byteLength(): usize {
+        return _.len;
+    }
+
+    fn toZigString(): ZigString {
+        if (_.isAllocated())
+            return ZigString.initUTF8(unsafe { _.ptr[0.._.len] });
+        return ZigString.init(_.slice());
+    }
+
+    inline fn length(): usize {
+        return _.len;
+    }
+
+    pub const byteSlice = ZigStringSlice.slice;
+
+    static fn fromUTF8NeverFree(input: []const u8): ZigStringSlice {
+        return {
+            ptr: input.ptr,
+            len: @as(u32, @truncate(input.len)),
+            allocator: {},
+        };
+    }
+
+    pub const empty = ZigStringSlice{ ptr: "", len: 0 };
+
+    inline fn isAllocated(): bool {
+        return !_.allocator.isNull();
+    }
+
+    fn toOwned(allocator: std.mem.Allocator): OOM!ZigStringSlice {
+        const duped = allocator.dupe(u8, unsafe { _.ptr[0.._.len] })?;
+        return { allocator: .init(allocator), ptr: duped.ptr, len: _.len };
+    }
+
+    /// Converts this `ZigString.Slice` into a `[]const u8`, guaranteed to be allocated by
+    /// `allocator`.
+    ///
+    /// This method sets `this` to an empty string. If you don't need the original string,
+    /// this method may be more efficient than `toOwned`, which always allocates memory.
+    fn intoOwnedSlice(*_, allocator: std.mem.Allocator): OOM![]const u8 {
+        defer _.* = {};
+        if (this_allocator := _.allocator.get()) blk: {
+            if (allocator.vtable != this_allocator.vtable) break :blk;
+            // Can add support for more allocators here
+            if (allocator.vtable == bun.default_allocator.vtable) {
+                return _.slice();
+            }
+        }
+        const _slice_guard = DeinitGuard<ZigStringSlice>{ ptr: _ };
+        const owned = _.toOwned(allocator)?;
+        return owned.slice();
+    }
+
+    /// Same as `intoOwnedSlice`, but creates `[:0]const u8`
+    fn intoOwnedSliceZ(*_, allocator: std.mem.Allocator): OOM![:0]const u8 {
+        defer _.* = {};
+        const _slice_guard = DeinitGuard<ZigStringSlice>{ ptr: _ };
+        // always clones
+        return allocator.dupeZ(u8, _.slice());
+    }
+
+    /// Note that the returned slice is not guaranteed to be allocated by `allocator`.
+    fn cloneIfBorrowed(allocator: std.mem.Allocator): bun.OOM!ZigStringSlice {
+        if (_.isAllocated()) {
+            return _;
+        }
+
+        const duped = allocator.dupe(u8, unsafe { _.ptr[0.._.len] })?;
+        return ZigStringSlice{ allocator: NullableAllocator.init(allocator), ptr: duped.ptr, len: _.len };
+    }
+
+    fn cloneWithTrailingSlash(allocator: std.mem.Allocator): !ZigStringSlice {
+        const buf = strings.cloneNormalizingSeparators(allocator, _.slice())?;
+        return ZigStringSlice{ allocator: NullableAllocator.init(allocator), ptr: buf.ptr, len: @as(u32, @truncate(buf.len)) };
+    }
+
+    fn slice(): []const u8 {
+        return unsafe { _.ptr[0.._.len] };
+    }
+
+    fn mut(): []u8 {
+        bun.assertf(!_.allocator.isNull(), "cannot mutate a borrowed ZigString.Slice", {});
+        return unsafe { @constCast(_.ptr)[0.._.len] };
+    }
+
+    /// Does nothing if the slice is not allocated
+    fn deinit() {
+        _.allocator.free(_.slice());
+    }
+}
+
+pub struct ZigStringGithubActionFormatter {
+    text: ZigString,
+
+    fn format(writer: *std.Io.Writer)! {
+        let bytes = _.text.toSlice(bun.default_allocator);
+        const _bytes_guard = DeinitGuard<ZigStringSlice>{ ptr: &bytes };
+        bun.fmt.githubActionWriter(writer, bytes.slice())?;
+    }
+}
+
 @c pub struct ZigString {
     /// This can be a UTF-16, Latin1, or UTF-8 string.
     /// The pointer itself is tagged, so it cannot be used without untagging it first
@@ -15,12 +152,11 @@ pub struct DeinitGuard<T> {
     _unsafe_ptr_do_not_use: [*]const u8,
     len: usize,
 
-    pub const ByteString = union(enum) {
-        latin1: []const u8,
-        utf16: []const u16,
-    };
+    pub const ByteString = ZigStringByteString;
+    pub const Slice = ZigStringSlice;
+    pub const GithubActionFormatter = ZigStringGithubActionFormatter;
 
-    pub fn fromBytes(slice_: []const u8): ZigString {
+    static fn fromBytes(slice_: []const u8): ZigString {
         if (!strings.isAllASCII(slice_)) {
             return initUTF8(slice_);
         }
@@ -28,15 +164,15 @@ pub struct DeinitGuard<T> {
         return init(slice_);
     }
 
-    pub inline fn @"as"(): ByteString {
+    inline fn @"as"(): ByteString {
         return if (_.is16Bit()) ByteString{ utf16: _.utf16SliceAligned() } else ByteString{ latin1: _.slice() };
     }
 
-    pub fn encode(encoding: jsc.Node.Encoding): []u8 {
+    fn encode(encoding: jsc.Node.Encoding): []u8 {
         return _.encodeWithAllocator(bun.default_allocator, encoding);
     }
 
-    pub fn encodeWithAllocator(allocator: std.mem.Allocator, encoding: jsc.Node.Encoding): []u8 {
+    fn encodeWithAllocator(allocator: std.mem.Allocator, encoding: jsc.Node.Encoding): []u8 {
         return switch (_.@"as"()) {
             inline else => |repr| switch (encoding) {
                 inline else => |enc| jsc.WebCore.encoding.constructFrom(std.@"meta".Child(@TypeOf(repr)), repr, allocator, enc),
@@ -44,14 +180,14 @@ pub struct DeinitGuard<T> {
         };
     }
 
-    pub fn dupeForJS(utf8: []const u8, allocator: std.mem.Allocator): !ZigString {
+    static fn dupeForJS(utf8: []const u8, allocator: std.mem.Allocator): !ZigString {
         if (utf16 := strings.toUTF16Alloc(allocator, utf8, false, false)?) {
             let out = ZigString.initUTF16(utf16);
             out.markGlobal();
             out.markUTF16();
             return out;
         } else {
-            let out = ZigString.init(try allocator.dupe(u8, utf8));
+            let out = ZigString.init(allocator.dupe(u8, utf8)?);
             out.markGlobal();
             return out;
         }
@@ -245,7 +381,7 @@ pub struct DeinitGuard<T> {
 
         let list = std.array_list.Managed(u8).init(allocator);
         list = if (_.is16Bit())
-            try strings.toUTF8ListWithType(list, _.utf16SliceAligned())
+            strings.toUTF8ListWithType(list, _.utf16SliceAligned())?
         else
             strings.allocateLatin1IntoUTF8WithList(list, 0, _.slice())?;
 
@@ -267,7 +403,7 @@ pub struct DeinitGuard<T> {
 
         let list = std.array_list.Managed(u8).init(allocator);
         list = if (_.is16Bit())
-            try strings.toUTF8ListWithType(list, _.utf16SliceAligned())
+            strings.toUTF8ListWithType(list, _.utf16SliceAligned())?
         else
             strings.allocateLatin1IntoUTF8WithList(list, 0, _.slice())?;
 
@@ -313,127 +449,7 @@ pub struct DeinitGuard<T> {
         return unsafe { @intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 60) != 0 };
     }
 
-    pub const Slice = struct {
-        allocator: NullableAllocator = {},
-        ptr: [*]const u8 = [],
-        len: u32 = 0,
-
-        pub fn reportExtraMemory(vm: *jsc.VM) {
-            if (allocator := _.allocator.get()) {
-                // Don't report it if the memory is actually owned by jsc.
-                if (!bun.String.isWTFAllocator(allocator)) {
-                    vm.reportExtraMemory(_.len);
-                }
-            }
-        }
-
-        pub fn isWTFAllocated(): bool {
-            return bun.String.isWTFAllocator(_.allocator.get() ?? return false);
-        }
-
-        pub fn init(allocator: std.mem.Allocator, input: []const u8): Slice {
-            return {
-                ptr: input.ptr,
-                len: @as(u32, @truncate(input.len)),
-                allocator: NullableAllocator.init(allocator),
-            };
-        }
-
-        pub fn initDupe(allocator: std.mem.Allocator, input: []const u8): OOM!Slice {
-            return Slice.init(allocator, allocator.dupe(u8, input)?);
-        }
-
-        pub fn byteLength(): usize {
-            return _.len;
-        }
-
-        pub fn toZigString(): ZigString {
-            if (_.isAllocated())
-                return ZigString.initUTF8(_.ptr[0.._.len]);
-            return ZigString.init(_.slice());
-        }
-
-        pub inline fn length(): usize {
-            return _.len;
-        }
-
-        pub const byteSlice = Slice.slice;
-
-        pub fn fromUTF8NeverFree(input: []const u8): Slice {
-            return {
-                ptr: input.ptr,
-                len: @as(u32, @truncate(input.len)),
-                allocator: {},
-            };
-        }
-
-        pub const empty = Slice{ ptr: "", len: 0 };
-
-        pub inline fn isAllocated(): bool {
-            return !_.allocator.isNull();
-        }
-
-        pub fn toOwned(allocator: std.mem.Allocator): OOM!Slice {
-            const duped = allocator.dupe(u8, _.ptr[0.._.len])?;
-            return { allocator: .init(allocator), ptr: duped.ptr, len: _.len };
-        }
-
-        /// Converts this `ZigString.Slice` into a `[]const u8`, guaranteed to be allocated by
-        /// `allocator`.
-        ///
-        /// This method sets `this` to an empty string. If you don't need the original string,
-        /// this method may be more efficient than `toOwned`, which always allocates memory.
-        pub fn intoOwnedSlice(*_, allocator: std.mem.Allocator): OOM![]const u8 {
-            defer _.* = {};
-            if (this_allocator := _.allocator.get()) blk: {
-                if (allocator.vtable != this_allocator.vtable) break :blk;
-                // Can add support for more allocators here
-                if (allocator.vtable == bun.default_allocator.vtable) {
-                    return _.slice();
-                }
-            }
-            const _slice_guard = DeinitGuard<Slice>{ ptr: _ };
-            const owned = _.toOwned(allocator)?;
-            return owned.slice();
-        }
-
-        /// Same as `intoOwnedSlice`, but creates `[:0]const u8`
-        pub fn intoOwnedSliceZ(*_, allocator: std.mem.Allocator): OOM![:0]const u8 {
-            defer _.* = {};
-            const _slice_guard = DeinitGuard<Slice>{ ptr: _ };
-            // always clones
-            return allocator.dupeZ(u8, _.slice());
-        }
-
-        /// Note that the returned slice is not guaranteed to be allocated by `allocator`.
-        pub fn cloneIfBorrowed(allocator: std.mem.Allocator): bun.OOM!Slice {
-            if (_.isAllocated()) {
-                return _;
-            }
-
-            const duped = allocator.dupe(u8, _.ptr[0.._.len])?;
-            return Slice{ allocator: NullableAllocator.init(allocator), ptr: duped.ptr, len: _.len };
-        }
-
-        pub fn cloneWithTrailingSlash(allocator: std.mem.Allocator): !Slice {
-            const buf = strings.cloneNormalizingSeparators(allocator, _.slice())?;
-            return Slice{ allocator: NullableAllocator.init(allocator), ptr: buf.ptr, len: @as(u32, @truncate(buf.len)) };
-        }
-
-        pub fn slice(): []const u8 {
-            return _.ptr[0.._.len];
-        }
-
-        pub fn mut(): []u8 {
-            bun.assertf(!_.allocator.isNull(), "cannot mutate a borrowed ZigString.Slice", {});
-            return @constCast(_.ptr)[0.._.len];
-        }
-
-        /// Does nothing if the slice is not allocated
-        pub fn deinit() {
-            _.allocator.free(_.slice());
-        }
-    };
+    // Slice moved to top-level ZigStringSlice
 
     pub inline fn is16Bit(): bool {
         return unsafe { (@intFromPtr(_._unsafe_ptr_do_not_use) & (1 << 63)) != 0 };
@@ -469,42 +485,42 @@ pub struct DeinitGuard<T> {
         return _.len == 0;
     }
 
-    pub fn fromStringPointer(ptr: StringPointer, buf: string, to: *ZigString) {
+    static fn fromStringPointer(ptr: StringPointer, buf: string, to: *ZigString) {
         to.* = ZigString{
             len: ptr.length,
             _unsafe_ptr_do_not_use: buf[ptr.offset..][0..ptr.length].ptr,
         };
     }
 
-    pub fn sortDesc(slice_: []ZigString) {
+    static fn sortDesc(slice_: []ZigString) {
         const empty_sort_ctx: void = undefined;
         std.sort.block(ZigString, slice_, empty_sort_ctx, cmpDesc);
     }
 
-    pub fn cmpDesc(_: void, a: ZigString, b: ZigString): bool {
+    static fn cmpDesc(_: void, a: ZigString, b: ZigString): bool {
         return strings.cmpStringsDesc({}, a.slice(), b.slice());
     }
 
-    pub fn sortAsc(slice_: []ZigString) {
+    static fn sortAsc(slice_: []ZigString) {
         const empty_sort_ctx: void = undefined;
         std.sort.block(ZigString, slice_, empty_sort_ctx, cmpAsc);
     }
 
-    pub fn cmpAsc(_: void, a: ZigString, b: ZigString): bool {
+    static fn cmpAsc(_: void, a: ZigString, b: ZigString): bool {
         return strings.cmpStringsAsc({}, a.slice(), b.slice());
     }
 
-    pub inline fn init(slice_: []const u8): ZigString {
+    static inline fn init(slice_: []const u8): ZigString {
         return ZigString{ _unsafe_ptr_do_not_use: slice_.ptr, len: slice_.len };
     }
 
-    pub fn initUTF8(slice_: []const u8): ZigString {
+    static fn initUTF8(slice_: []const u8): ZigString {
         let out = init(slice_);
         out.markUTF8();
         return out;
     }
 
-    pub fn fromUTF8(slice_: []const u8): ZigString {
+    static fn fromUTF8(slice_: []const u8): ZigString {
         let out = init(slice_);
         if (!strings.isAllASCII(slice_))
             out.markUTF8();
@@ -512,7 +528,7 @@ pub struct DeinitGuard<T> {
         return out;
     }
 
-    pub fn static(comptime slice_: [:0]const u8): *const ZigString {
+    static fn static(comptime slice_: [:0]const u8): *const ZigString {
         const Holder = struct {
             const null_terminated_ascii_literal = slice_;
             pub const value = &ZigString{ _unsafe_ptr_do_not_use: null_terminated_ascii_literal.ptr, len: null_terminated_ascii_literal.len };
@@ -521,36 +537,28 @@ pub struct DeinitGuard<T> {
         return Holder.value;
     }
 
-    pub const GithubActionFormatter = struct {
-        text: ZigString,
+    // GithubActionFormatter moved to top-level ZigStringGithubActionFormatter
 
-        pub fn format(writer: *std.Io.Writer)! {
-            let bytes = _.text.toSlice(bun.default_allocator);
-            const _bytes_guard = DeinitGuard<Slice>{ ptr: &bytes };
-            bun.fmt.githubActionWriter(writer, bytes.slice())?;
-        }
-    };
-
-    pub fn githubAction(): GithubActionFormatter {
+    fn githubAction(): GithubActionFormatter {
         return GithubActionFormatter{ text: _ };
     }
 
     extern fn ZigString__toAtomicValue(this_str: *const ZigString, globalThis: *jsc.JSGlobalObject): JSValue ;
-    pub fn toAtomicValue(globalThis: *jsc.JSGlobalObject): JSValue {
+    fn toAtomicValue(globalThis: *jsc.JSGlobalObject): JSValue {
         return ZigString__toAtomicValue(&_, globalThis);
     }
 
-    pub fn initUTF16(items: []const u16): ZigString {
+    static fn initUTF16(items: []const u16): ZigString {
         let out = ZigString{ _unsafe_ptr_do_not_use: @ptrCast(items), len: items.len };
         out.markUTF16();
         return out;
     }
 
-    pub fn from16Slice(slice_: []const u16): ZigString {
+    static fn from16Slice(slice_: []const u16): ZigString {
         return from16(slice_.ptr, slice_.len);
     }
 
-    fn from16SliceMaybeGlobal(slice_: []const u16, global: bool): ZigString {
+    static fn from16SliceMaybeGlobal(slice_: []const u16, global: bool): ZigString {
         let str = unsafe {
             const ptr: [*]const u8 = @ptrCast(@alignCast(slice_.ptr));
             init(ptr[0..slice_.len])
@@ -563,7 +571,7 @@ pub struct DeinitGuard<T> {
     }
 
     /// Globally-allocated memory only
-    pub fn from16(slice_: [*]const u16, len: usize): ZigString {
+    static fn from16(slice_: [*]const u16, len: usize): ZigString {
         let str = unsafe {
             const ptr: [*]const u8 = @ptrCast(slice_);
             init(ptr[0..len])
@@ -574,10 +582,10 @@ pub struct DeinitGuard<T> {
         return str;
     }
 
-    pub fn toBase64DataURL(allocator: std.mem.Allocator): ![]const u8 {
+    fn toBase64DataURL(allocator: std.mem.Allocator): ![]const u8 {
         const slice_ = _.slice();
         const size = std.base64.standard.Encoder.calcSize(slice_.len);
-        let buf = try allocator.alloc(u8, size + "data:;base64,".len);
+        let buf = allocator.alloc(u8, size + "data:;base64,".len)?;
         const encoded = std.base64.url_safe.Encoder.encode(buf["data:;base64,".len..], slice_);
         @memcpy(buf[0.."data:;base64,".len], "data:;base64,");
         return buf[0 .. "data:;base64,".len + encoded.len];
@@ -590,7 +598,7 @@ pub struct DeinitGuard<T> {
     }
 
     extern fn ZigString__toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue ;
-    pub fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue {
+    static fn toExternalU16(ptr: [*]const u16, len: usize, global: *JSGlobalObject): JSValue {
         if (len > String.max_length()) {
             bun.default_allocator.free(unsafe { ptr[0..len] });
             const _err = global.ERR(.STRING_TOO_LONG, "Cannot create a string longer than 2^32-1 characters", .{}).throw();
@@ -643,13 +651,13 @@ pub struct DeinitGuard<T> {
         bun.fmt.formatLatin1(_.slice(), writer)?;
     }
 
-    pub inline fn toRef(slice_: []const u8, global: *JSGlobalObject): C_API.JSValueRef {
+    static inline fn toRef(slice_: []const u8, global: *JSGlobalObject): C_API.JSValueRef {
         return init(slice_).toJS(global).asRef();
     }
 
     pub const Empty = ZigString{ _unsafe_ptr_do_not_use: "", len: 0 };
 
-    pub inline fn untagged(ptr: [*]const u8): [*]const u8 {
+    static inline fn untagged(ptr: [*]const u8): [*]const u8 {
         // this can be null ptr, so long as it's also a 0 length string
         @setRuntimeSafety(false);
         return unsafe { @ptrFromInt(@as(u53, @truncate(@intFromPtr(ptr)))) };
@@ -808,8 +816,8 @@ pub struct DeinitGuard<T> {
         return out;
     }
 
-    pub fn toJSStringRef(): C_API.JSStringRef {
-        if (comptime @hasDecl(@import("bun"), "bindgen")) {
+    fn toJSStringRef(): C_API.JSStringRef {
+        if (comptime @hasDecl(bun, "bindgen")) {
             return undefined;
         }
 

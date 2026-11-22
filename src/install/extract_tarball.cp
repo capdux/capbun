@@ -57,13 +57,13 @@ const tl_bufs = bun.ThreadlocalBuffers(struct {
     json_path_buf: bun.PathBuffer = undefined,
 });
 
-const DirnameReader = struct {
+struct DirnameReader {
     needs_first_dirname: bool = true,
     outdirname: *[]const u8,
-    pub fn onFirstDirectoryName(dirname_reader: *DirnameReader, first_dirname: []const u8) void {
-        bun.assert(dirname_reader.needs_first_dirname);
-        dirname_reader.needs_first_dirname = false;
-        dirname_reader.outdirname.* = FileSystem.DirnameStore.instance.append(@TypeOf(first_dirname), first_dirname) catch unreachable;
+    fn onFirstDirectoryName(*_, first_dirname: []const u8) {
+        bun.assert(_.needs_first_dirname);
+        _.needs_first_dirname = false;
+        _.outdirname.* = FileSystem.DirnameStore.instance.append(@TypeOf(first_dirname), first_dirname) catch unreachable;
     }
 }
 

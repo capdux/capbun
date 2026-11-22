@@ -142,7 +142,49 @@ export enum ShouldContinue {
     finished,
 }
 
-pub const Flags = packed struct(u32) {
+struct _InitialRequestPayloadResult {
+    has_sent_headers: bool,
+    has_sent_body: bool,
+    try_sending_more_data: bool,
+}
+
+pub union(enum) _BodySize {
+    total_received: usize,
+    content_length: usize,
+    unknown: void,
+}
+
+pub const _CallbackFunction = *const fn (ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
+
+pub struct _Callback {
+    ctx: HttpCallbackCtx,
+    function: _CallbackFunction,
+
+    pub const Function = _CallbackFunction;
+
+    fn run(async_http: *AsyncHTTP, result: HTTPClientResult) {
+        @call(.auto, _.function, .{ _.ctx, async_http, result });
+    }
+
+    static fn New(comptime Type: type, comptime callback: auto): type {
+        return struct {
+            pub fn init(this_val: Type): _Callback {
+                return .{
+                    .ctx = this_val,
+                    .function = wrapped_callback,
+                };
+            }
+
+            fn wrapped_callback(ptr: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) {
+                const casted: Type = unsafe { @ptrCast(@alignCast(ptr)) };
+                @call(bun.callmod_inline, callback, .{ casted, async_http, result });
+            }
+        };
+    }
+}
+
+@packed(u32)
+pub struct Flags {
     disable_timeout: bool = false,
     disable_keepalive: bool = false,
     disable_decompression: bool = false,
@@ -161,7 +203,7 @@ pub const Flags = packed struct(u32) {
     force_http3: bool = false,
     h3_retried: bool = false,
     _: u13 = 0,
-};
+}
 
 pub const SOCKET_FLAGS: u32 = if (bun.Environment.isLinux)
     std.posix.SOCK.CLOEXEC | std.posix.MSG.NOSIGNAL
@@ -1336,11 +1378,7 @@ export @root @value struct HTTPClient {
             this.result_callback.run(@fieldParentPtr("client", this), HTTPClientResult{ .fail = null, .metadata = null, .has_more = false });
         }
 
-        const InitialRequestPayloadResult = struct {
-            has_sent_headers: bool,
-            has_sent_body: bool,
-            try_sending_more_data: bool,
-        };
+        const InitialRequestPayloadResult = _InitialRequestPayloadResult;
 
         noinline fn sendInitialRequestPayload(*_, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket): InitialRequestPayloadResult! {
             let request_body_buffer = this.getRequestBodySendBuffer();
@@ -2853,36 +2891,7 @@ export @value struct HTTPClientResult {
         return false;
     }
 
-    pub const BodySize = union(enum) {
-        total_received: usize,
-        content_length: usize,
-        unknown: void,
-    };
+    pub const BodySize = _BodySize;
 
-    pub const Callback = struct {
-        ctx: HttpCallbackCtx,
-        function: Function,
-
-        pub const Function = fn (ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
-
-        pub fn run(self: Callback, async_http: *AsyncHTTP, result: HTTPClientResult) void {
-            self.function(self.ctx, async_http, result);
-        }
-
-        pub fn New(comptime Type: type, comptime callback: anytype) type {
-            return struct {
-                pub fn init(this: Type) Callback {
-                    return Callback{
-                        .ctx = this,
-                        .function = wrapped_callback,
-                    };
-                }
-
-                fn wrapped_callback(ptr: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void {
-                    const casted: Type = @ptrCast(@alignCast(ptr));
-                    @call(bun.callmod_inline, callback, .{ casted, async_http, result });
-                }
-            };
-        }
-    };
+    pub const Callback = _Callback;
 }

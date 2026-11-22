@@ -22,70 +22,70 @@ pub union(enum) AnyPromise {
     normal: *JSPromise,
     internal: *JSInternalPromise,
 
-    pub fn unwrap(vm: *VM, mode: JSPromise.UnwrapMode): JSPromise.Unwrapped {
+    fn unwrap(vm: *VM, mode: JSPromise.UnwrapMode): JSPromise.Unwrapped {
         return switch (_) {
             inline else => |promise| promise.unwrap(vm, mode),
         };
     }
-    pub fn status(): JSPromise.Status {
+    fn status(): JSPromise.Status {
         return switch (_) {
             inline else => |promise| promise.status(),
         };
     }
-    pub fn result(vm: *VM): JSValue {
+    fn result(vm: *VM): JSValue {
         return switch (_) {
             inline else => |promise| promise.result(vm),
         };
     }
-    pub fn isHandled(): bool {
+    fn isHandled(): bool {
         return switch (_) {
             inline else => |promise| promise.isHandled(),
         };
     }
-    pub fn setHandled(vm: *VM) {
+    fn setHandled(vm: *VM) {
         * = vm;
         switch (_) {
             inline else => |promise| promise.setHandled(),
         };
     }
 
-    pub fn resolve(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
+    fn resolve(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
         switch (_) {
             inline else => |promise| promise.resolve(globalThis, value)?,
         };
     }
 
-    pub fn reject(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
+    fn reject(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
         switch (_) {
             inline else => |promise| promise.reject(globalThis, value)?,
         };
     }
 
-    pub fn rejectWithAsyncStack(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
+    fn rejectWithAsyncStack(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
         value.attachAsyncStackFromPromise(globalThis, _.asJSPromise());
         _.reject(globalThis, value)?;
     }
 
-    pub fn asJSPromise(): *JSPromise {
+    fn asJSPromise(): *JSPromise {
         return switch (_) {
             .normal => |p| p,
             .internal => |p| unsafe { @ptrCast(p) },
         };
     }
 
-    pub fn rejectAsHandled(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
+    fn rejectAsHandled(globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
         switch (_) {
             inline else => |promise| promise.rejectAsHandled(globalThis, value)?,
         };
     }
 
-    pub fn asValue(): JSValue {
+    fn asValue(): JSValue {
         return switch (_) {
             inline else => |promise| promise.toJS(),
         };
     }
 
-    pub fn wrap(
+    fn wrap(
         globalObject: *JSGlobalObject,
         comptime Function: auto,
         args: std.meta.ArgsTuple(@TypeOf(Function)),
@@ -95,7 +95,7 @@ pub union(enum) AnyPromise {
         const Wrapper = struct {
             args: Args,
 
-            pub fn call(wrap_: *@This(), global: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+            static fn call(wrap_: *@This(), global: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
                 return jsc.toJSHostCall(global, @src(), Fn, wrap_.args);
             }
         };

@@ -86,7 +86,7 @@ pub const _EventType = enum(u8) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn toJS(self: *_EventType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+pub fn toJS(self: _EventType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
             return Bun__domEventNameToJS(globalObject, self);
     }
 };
@@ -218,28 +218,28 @@ pub fn dupe(event: _Event) !_Event {
 
 pub fn deinit(event: *_Event) void {
             switch (event.*) {
-.rename => |*path| {
+.rename => {
 switch (Environment.os) {
 else => {
-_ = bun.default_allocator.free(path.*);
+_ = bun.default_allocator.free(event.rename);
 },
 .windows => {
-_ = path.deinit();
+_ = event.rename.deinit();
 },
 }
 },
-.change => |*path| {
+.change => {
 switch (Environment.os) {
 else => {
-_ = bun.default_allocator.free(path.*);
+_ = bun.default_allocator.free(event.change);
 },
 .windows => {
-_ = path.deinit();
+_ = event.change.deinit();
 },
 }
 },
-.@"error" => |*e| {
-_ = e.deinit();
+.@"error" => {
+_ = event.@"error".deinit();
 },
 else => {
 
@@ -248,10 +248,15 @@ else => {
     }
 };
 
+pub const _FSWatchTaskPosixEntry = struct {
+    event: _Event,
+    needs_free: bool,
+};
+
 pub const _FSWatchTaskPosix = struct {
     ctx: *FSWatcher,
     count: u8 = 0,
-    entries: [8]Entry = undefined,
+    entries: [8]_FSWatchTaskPosixEntry = undefined,
     concurrent_task: jsc.ConcurrentTask = undefined,
 
 pub fn deinit(self: *_FSWatchTaskPosix) void {
@@ -326,10 +331,7 @@ pub fn cleanEntries(self: *_FSWatchTaskPosix) void {
             self.count = 0;
     }
     pub const new = bun.TrivialNew(@This());
-    pub const Entry = struct {
-        event: _Event,
-        needs_free: bool,
-    };
+    pub const Entry = _FSWatchTaskPosixEntry;
 };
 
 pub const _FSWatchTaskWindows = struct {
@@ -350,24 +352,24 @@ pub fn run(self: *_FSWatchTaskWindows) void {
             var watcher = self.ctx;
             _ = &watcher;
             switch (self.event) {
-.rename => |*path| {
+.rename => {
 if ((watcher.encoding == .utf8)) {
-                const js_fn = (blk_catch_0: { break :blk_catch_0 ((path.string.transferToJS(watcher.globalThis)) catch |__ce_0| { _ = &__ce_0; return; }); });
+                const js_fn = (blk_catch_0: { break :blk_catch_0 ((self.event.rename.string.transferToJS(watcher.globalThis)) catch |__ce_0| { _ = &__ce_0; return; }); });
                 _ = watcher.emitWithFilename(js_fn, .rename);
             } else {
-                const bytes = path.bytes_to_free;
-                path.bytes_to_free = "";
+                const bytes = self.event.rename.bytes_to_free;
+                self.event.rename.bytes_to_free = "";
                 _ = watcher.emit(bytes, .rename);
                 _ = bun.default_allocator.free(bytes);
             }
 },
-.change => |*path| {
+.change => {
 if ((watcher.encoding == .utf8)) {
-                const js_fn = (blk_catch_1: { break :blk_catch_1 ((path.string.transferToJS(watcher.globalThis)) catch |__ce_1| { _ = &__ce_1; return; }); });
+                const js_fn = (blk_catch_1: { break :blk_catch_1 ((self.event.change.string.transferToJS(watcher.globalThis)) catch |__ce_1| { _ = &__ce_1; return; }); });
                 _ = watcher.emitWithFilename(js_fn, .change);
             } else {
-                const bytes = path.bytes_to_free;
-                path.bytes_to_free = "";
+                const bytes = self.event.change.bytes_to_free;
+                self.event.change.bytes_to_free = "";
                 _ = watcher.emit(bytes, .change);
                 _ = bun.default_allocator.free(bytes);
             }

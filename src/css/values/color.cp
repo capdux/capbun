@@ -1385,7 +1385,7 @@ fn clamp_floor_256_f32(val: f32): u8 {
 }
 
 /// A color in a LAB color space, including the `lab()`, `lch()`, `oklab()`, and `oklch()` functions.
-pub const LABColor = union(enum) {
+pub union(enum) LABColor {
     /// A `lab()` color.
     lab: LAB,
     /// An `lch()` color.
@@ -1395,37 +1395,37 @@ pub const LABColor = union(enum) {
     /// An `oklch()` color.
     oklch: OKLCH,
 
-    pub fn newLAB(l: f32, a: f32, b: f32, alpha: f32): LABColor {
+    static fn newLAB(l: f32, a: f32, b: f32, alpha: f32): LABColor {
         return LABColor{
             lab: LAB.new(l, a, b, alpha),
         };
     }
 
-    pub fn newOKLAB(l: f32, a: f32, b: f32, alpha: f32): LABColor {
+    static fn newOKLAB(l: f32, a: f32, b: f32, alpha: f32): LABColor {
         return LABColor{
             lab: OKLAB.new(l, a, b, alpha),
         };
     }
 
-    pub fn newLCH(l: f32, a: f32, b: f32, alpha: f32): LABColor {
+    static fn newLCH(l: f32, a: f32, b: f32, alpha: f32): LABColor {
         return LABColor{
             lab: LCH.new(l, a, b, alpha),
         };
     }
 
-    pub fn newOKLCH(l: f32, a: f32, b: f32, alpha: f32): LABColor {
+    static fn newOKLCH(l: f32, a: f32, b: f32, alpha: f32): LABColor {
         return LABColor{
             lab: LCH.new(l, a, b, alpha),
         };
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
     }
-};
+}
 
 /// A color in a predefined color space, e.g. `display-p3`.
-pub const PredefinedColor = union(enum) {
+pub union(enum) PredefinedColor {
     /// A color in the `srgb` color space.
     srgb: SRGB,
     /// A color in the `srgb-linear` color space.
@@ -1443,15 +1443,15 @@ pub const PredefinedColor = union(enum) {
     /// A color in the `xyz-d65` color space.
     xyz_d65: XYZd65,
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
     }
-};
+}
 
 /// A floating point representation of color types that
 /// are usually stored as RGBA. These are used when there
 /// are any `none` components, which are represented as NaN.
-pub const FloatColor = union(enum) {
+pub union(enum) FloatColor {
     /// An RGB color.
     rgb: SRGB,
     /// An HSL color.
@@ -1459,10 +1459,10 @@ pub const FloatColor = union(enum) {
     /// An HWB color.
     hwb: HWB,
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        return css.implementHash(@This(), &_, hasher);
     }
-};
+}
 
 /// A CSS [system color](https://drafts.csswg.org/css-color/#css-system-colors) keyword.
 /// *NOTE* these are intentionally in flat case
@@ -2394,77 +2394,81 @@ pub struct ComponentParser {
     }
 }
 
+pub struct NumberOrPercentageNumber {
+    /// The numeric value parsed, as a float.
+    value: f32,
+}
+
+pub struct NumberOrPercentagePercentage {
+    /// The value as a float, divided by 100 so that the nominal range is
+    /// 0.0 to 1.0.
+    unit_value: f32,
+}
+
 /// Either a number or a percentage.
-pub const NumberOrPercentage = union(enum) {
+pub union(enum) NumberOrPercentage {
     /// `<number>`.
-    number: struct {
-        /// The numeric value parsed, as a float.
-        value: f32,
-    },
+    number: NumberOrPercentageNumber,
     /// `<percentage>`
-    percentage: struct {
-        /// The value as a float, divided by 100 so that the nominal range is
-        /// 0.0 to 1.0.
-        unit_value: f32,
-    },
+    percentage: NumberOrPercentagePercentage,
 
     /// Return the value as a percentage.
-    pub fn unitValue(this: *const NumberOrPercentage): f32 {
-        return switch (this.*) {
-            .number => |v| v.value,
-            .percentage => |v| v.unit_value,
+    fn unitValue(): f32 {
+        return switch (_) {
+            .number v => v.value,
+            .percentage v => v.unit_value,
         };
     }
 
     /// Return the value as a number with a percentage adjusted to the
     /// `percentage_basis`.
-    pub fn value(this: *const NumberOrPercentage, percentage_basis: f32): f32 {
-        return switch (this.*) {
-            .number => |v| v.value,
-            .percentage => |v| v.unit_value * percentage_basis,
+    fn value(percentage_basis: f32): f32 {
+        return switch (_) {
+            .number v => v.value,
+            .percentage v => v.unit_value * percentage_basis,
         };
     }
-};
+}
 
-const RelativeComponentParser = struct {
-    names: struct { []const u8, []const u8, []const u8 },
+struct RelativeComponentParser {
+    names: [ []const u8, []const u8, []const u8 ],
     components: [4]f32,
-    types: struct { ChannelType, ChannelType, ChannelType },
+    types: [ ChannelType, ChannelType, ChannelType ],
 
     static fn new(color: auto): RelativeComponentParser {
         const c = color.components();
         return RelativeComponentParser{
-            .names = color.channels(),
-            .components = [ c[0], c[1], c[2], c[3] ],
-            .types = color.types(),
+            names: color.channels(),
+            components: [ c[0], c[1], c[2], c[3] ],
+            types: color.types(),
         };
     }
 
-    static fn parseAngleOrNumber(input: *css.Parser, this: *const RelativeComponentParser): Result(css.color.AngleOrNumber) {
-        if (input.tryParse(
+    static fn parseAngleOrNumber(input: *css.Parser, parser: *const RelativeComponentParser): Result(css.color.AngleOrNumber) {
+        if (value := input.tryParse(
             RelativeComponentParser.parseIdent,
-            .{
-                this,
-                ChannelType{ .angle = true, .number = true },
+            {
+                parser,
+                ChannelType{ angle: true, number: true },
             },
-        ).asValue()) |value| {
-            return .{ .result = .{
-                .number = .{
-                    .value = value,
+        ).asValue()) {
+            return { result: {
+                number: {
+                    value: value,
                 },
             } };
         }
 
-        if (input.tryParse(
+        if (value := input.tryParse(
             RelativeComponentParser.parseCalc,
-            .{
-                this,
-                ChannelType{ .angle = true, .number = true },
+            {
+                parser,
+                ChannelType{ angle: true, number: true },
             },
-        ).asValue()) |value| {
-            return .{ .result = .{
-                .number = .{
-                    .value = value,
+        ).asValue()) {
+            return { result: {
+                number: {
+                    value: value,
                 },
             } };
         }
@@ -2473,46 +2477,48 @@ const RelativeComponentParser = struct {
             angle: Angle,
             parser: *const RelativeComponentParser,
             static fn tryParseFn(i: *css.Parser, t: *@This()): Result(Angle) {
-                if (Calc(Angle).parseWith(i, t, @This().calcParseIdentFn).asValue()) |val| {
+                if (val := Calc(Angle).parseWith(i, t, @This().calcParseIdentFn).asValue()) {
                     if (val == .value) {
-                        return .{ .result = val.value.* };
+                        return { result: val.value.* };
                     }
                 }
-                return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+                return { err: i.newCustomError(css.ParserError.invalid_value) };
             }
 
-            static fn calcParseIdentFn(t: *@This(), ident: []const u8): ?Calc(Angle) {
-                const value = t.parser.getIdent(ident, ChannelType{ .angle = true, .number = true }) orelse return null;
-                t.angle = .{ .deg = value };
-                return Calc(Angle){
-                    .value = &t.angle,
-                };
+            static fn calcParseIdentFn(t: *@This(), ident: []const u8): Calc(Angle)? {
+                if (value := t.parser.getIdent(ident, ChannelType{ angle: true, number: true })) {
+                    t.angle = { deg: value };
+                    const CalcAngle = Calc(Angle);
+                    return CalcAngle{
+                        value: &t.angle,
+                    };
+                } else return null;
             }
         };
         let closure = Closure{
-            .angle = undefined,
-            .parser = this,
+            angle: undefined,
+            parser: parser,
         };
-        if (input.tryParse(Closure.tryParseFn, .{&closure}).asValue()) |value| {
-            return .{ .result = .{
-                .angle = .{
-                    .degrees = value.toDegrees(),
+        if (value := input.tryParse(Closure.tryParseFn, {&closure}).asValue()) {
+            return { result: {
+                angle: {
+                    degrees: value.toDegrees(),
                 },
             } };
         }
 
-        return .{ .err = input.newErrorForNextToken() };
+        return { err: input.newErrorForNextToken() };
     }
 
-    static fn parseNumberOrPercentage(input: *css.Parser, this: *const RelativeComponentParser): Result(NumberOrPercentage) {
-        if (input.tryParse(RelativeComponentParser.parseIdent, .{ this, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
-            return .{ .result = NumberOrPercentage{ .percentage = .{ .unit_value = value } } };
+    static fn parseNumberOrPercentage(input: *css.Parser, parser: *const RelativeComponentParser): Result(NumberOrPercentage) {
+        if (value := input.tryParse(RelativeComponentParser.parseIdent, { parser, ChannelType{ percentage: true, number: true } }).asValue()) {
+            return { result: NumberOrPercentage{ percentage: { unit_value: value } } };
         }
 
-        if (input.tryParse(RelativeComponentParser.parseCalc, .{ this, ChannelType{ .percentage = true, .number = true } }).asValue()) |value| {
-            return .{ .result = NumberOrPercentage{
-                .percentage = .{
-                    .unit_value = value,
+        if (value := input.tryParse(RelativeComponentParser.parseCalc, { parser, ChannelType{ percentage: true, number: true } }).asValue()) {
+            return { result: NumberOrPercentage{
+                percentage: {
+                    unit_value: value,
                 },
             } };
         }
@@ -2523,168 +2529,171 @@ const RelativeComponentParser = struct {
                 percentage: Percentage = .{ .v = 0 },
 
                 static fn parsefn(i: *css.Parser, c: *@This()): Result(Percentage) {
-                    if (Calc(Percentage).parseWith(i, c, @This().calcparseident).asValue()) |calc_value| {
-                        if (calc_value == .value) return .{ .result = calc_value.value.* };
+                    if (calc_value := Calc(Percentage).parseWith(i, c, @This().calcparseident).asValue()) {
+                        if (calc_value == .value) return { result: calc_value.value.* };
                     }
-                    return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+                    return { err: i.newCustomError(css.ParserError.invalid_value) };
                 }
 
-                static fn calcparseident(c: *@This(), ident: []const u8): ?Calc(Percentage) {
-                    const v = c.parser.getIdent(ident, ChannelType{ .percentage = true, .number = true }) orelse return null;
-                    c.percentage = .{ .v = v };
-                    // value variant is a *Percentage
-                    // but we immediately dereference it and discard the pointer
-                    // so using a field on this closure struct instead of making a gratuitous allocation
-                    return .{
-                        .value = &c.percentage,
-                    };
+                static fn calcparseident(c: *@This(), ident: []const u8): Calc(Percentage)? {
+                    if (v := c.parser.getIdent(ident, ChannelType{ percentage: true, number: true })) {
+                        c.percentage = { v: v };
+                        // value variant is a *Percentage
+                        // but we immediately dereference it and discard the pointer
+                        // so using a field on this closure struct instead of making a gratuitous allocation
+                        return {
+                            value: &c.percentage,
+                        };
+                    } else return null;
                 }
             };
             let closure = Closure{
-                .parser = this,
+                parser: parser,
             };
-            if (input.tryParse(Closure.parsefn, .{
+            if (value := input.tryParse(Closure.parsefn, {
                 &closure,
-            }).asValue()) |value| {
-                return .{ .result = NumberOrPercentage{
-                    .percentage = .{
-                        .unit_value = value.v,
+            }).asValue()) {
+                return { result: NumberOrPercentage{
+                    percentage: {
+                        unit_value: value.v,
                     },
                 } };
             }
         }
 
-        return .{ .err = input.newErrorForNextToken() };
+        return { err: input.newErrorForNextToken() };
     }
 
     static fn parsePercentage(
         input: *css.Parser,
-        this: *const RelativeComponentParser,
+        parser: *const RelativeComponentParser,
     ): Result(f32) {
-        if (input.tryParse(RelativeComponentParser.parseIdent, .{ this, ChannelType{ .percentage = true } }).asValue()) |value| {
-            return .{ .result = value };
+        if (value := input.tryParse(RelativeComponentParser.parseIdent, { parser, ChannelType{ percentage: true } }).asValue()) {
+            return { result: value };
         }
 
-        const Closure = struct { self: *const RelativeComponentParser, temp: Percentage = .{ .v = 0 } };
-        let _closure = Closure{ .self = this };
-        if (input.tryParse(struct {
+        const Closure = struct { parser: *const RelativeComponentParser, temp: Percentage = .{ .v = 0 } };
+        let _closure = Closure{ parser: parser };
+        if (value := input.tryParse(struct {
             static fn parseFn(i: *css.Parser, closure: *Closure): Result(Percentage) {
                 const calc_value = switch (Calc(Percentage).parseWith(i, closure, parseIdentFn)) {
                     .result => |v| v,
-                    .err => return .{ .err = i.newCustomError(css.ParserError.invalid_value) },
+                    .err => return { err: i.newCustomError(css.ParserError.invalid_value) },
                 };
-                if (calc_value == .value) return .{ .result = calc_value.value.* };
-                return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+                if (calc_value == .value) return { result: calc_value.value.* };
+                return { err: i.newCustomError(css.ParserError.invalid_value) };
             }
 
-            static fn parseIdentFn(closure: *Closure, ident: []const u8): ?Calc(Percentage) {
-                const v = closure.self.getIdent(ident, ChannelType{ .percentage = true }) orelse return null;
-                closure.temp = .{ .v = v };
-                return Calc(Percentage){ .value = &closure.temp };
+            static fn parseIdentFn(closure: *Closure, ident: []const u8): Calc(Percentage)? {
+                if (v := closure.parser.getIdent(ident, ChannelType{ percentage: true })) {
+                    closure.temp = { v: v };
+                    const CalcPerc = Calc(Percentage);
+                    return CalcPerc{ value: &closure.temp };
+                } else return null;
             }
-        }.parseFn, .{&_closure}).asValue()) |value| {
-            return .{ .result = value.v };
+        }.parseFn, {&_closure}).asValue()) {
+            return { result: value.v };
         }
 
-        return .{ .err = input.newErrorForNextToken() };
+        return { err: input.newErrorForNextToken() };
     }
 
     static fn parseNumber(
         input: *css.Parser,
-        this: *const RelativeComponentParser,
+        parser: *const RelativeComponentParser,
     ): Result(f32) {
-        if (input.tryParse(
+        if (value := input.tryParse(
             RelativeComponentParser.parseIdent,
-            .{ this, ChannelType{ .number = true } },
-        ).asValue()) |value| {
-            return .{ .result = value };
+            { parser, ChannelType{ number: true } },
+        ).asValue()) {
+            return { result: value };
         }
 
-        if (input.tryParse(
+        if (value := input.tryParse(
             RelativeComponentParser.parseCalc,
-            .{ this, ChannelType{ .number = true } },
-        ).asValue()) |value| {
-            return .{ .result = value };
+            { parser, ChannelType{ number: true } },
+        ).asValue()) {
+            return { result: value };
         }
 
-        return .{ .err = input.newErrorForNextToken() };
+        return { err: input.newErrorForNextToken() };
     }
 
     static fn parseIdent(
         input: *css.Parser,
-        this: *const RelativeComponentParser,
+        parser: *const RelativeComponentParser,
         allowed_types: ChannelType,
     ): Result(f32) {
-        const v = this.getIdent(
-            switch (input.expectIdent()) {
-                .result => |v| v,
-                .err => |e| return .{ .err = e },
-            },
-            allowed_types,
-        ) orelse return .{ .err = input.newErrorForNextToken() };
-        return .{ .result = v };
+        const ident_str = switch (input.expectIdent()) {
+            .result => |v| v,
+            .err => |e| return { err: e },
+        };
+        if (v := parser.getIdent(ident_str, allowed_types)) {
+            return { result: v };
+        } else return { err: input.newErrorForNextToken() };
     }
 
     static fn parseCalc(
         input: *css.Parser,
-        this: *const RelativeComponentParser,
+        parser: *const RelativeComponentParser,
         allowed_types: ChannelType,
     ): Result(f32) {
         const Closure = struct {
             p: *const RelativeComponentParser,
             allowed_types: ChannelType,
 
-            static fn parseIdentFn(c: *@This(), ident: []const u8): ?Calc(f32) {
-                const v = c.p.getIdent(ident, c.allowed_types) orelse return null;
-                return .{ .number = v };
+            static fn parseIdentFn(c: *@This(), ident: []const u8): Calc(f32)? {
+                if (v := c.p.getIdent(ident, c.allowed_types)) {
+                    return { number: v };
+                } else return null;
             }
         };
         let closure = Closure{
-            .p = this,
-            .allowed_types = allowed_types,
+            p: parser,
+            allowed_types: allowed_types,
         };
-        if (Calc(f32).parseWith(input, &closure, Closure.parseIdentFn).asValue()) |calc_val| {
+        if (calc_val := Calc(f32).parseWith(input, &closure, Closure.parseIdentFn).asValue()) {
             // PERF: I don't like this redundant allocation
-            if (calc_val == .value) return .{ .result = calc_val.value.* };
-            if (calc_val == .number) return .{ .result = calc_val.number };
+            if (calc_val == .value) return { result: calc_val.value.* };
+            if (calc_val == .number) return { result: calc_val.number };
         }
-        return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+        return { err: input.newCustomError(css.ParserError.invalid_value) };
     }
 
-    pub fn getIdent(
-        this: *const RelativeComponentParser,
+    fn getIdent(
         ident: []const u8,
         allowed_types: ChannelType,
-    ) ?f32 {
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, this.names[0]) and
-            bits.intersects(ChannelType, allowed_types, this.types[0]))
+    ): f32? {
+        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, _.names[0]) &&
+            bits.intersects(ChannelType, allowed_types, _.types[0]))
         {
-            return this.components[0];
+            return _.components[0];
         }
 
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, this.names[1]) and
-            bits.intersects(ChannelType, allowed_types, this.types[1]))
+        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, _.names[1]) &&
+            bits.intersects(ChannelType, allowed_types, _.types[1]))
         {
-            return this.components[1];
+            return _.components[1];
         }
 
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, this.names[2]) and
-            bits.intersects(ChannelType, allowed_types, this.types[2]))
+        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, _.names[2]) &&
+            bits.intersects(ChannelType, allowed_types, _.types[2]))
         {
-            return this.components[2];
+            return _.components[2];
         }
 
-        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "alpha") and allowed_types.percentage) {
-            return this.components[3];
+        if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, "alpha") && allowed_types.percentage) {
+            return _.components[3];
         }
 
         return null;
     }
-};
+}
 
 /// A channel type for a color space.
 /// TODO(zack): why tf is this bitflags?
-pub const ChannelType = packed struct(u8) {
+@packed(u8)
+pub struct ChannelType {
     /// Channel represents a percentage.
     percentage: bool = false,
     /// Channel represents an angle.
@@ -2692,7 +2701,7 @@ pub const ChannelType = packed struct(u8) {
     /// Channel represents a number.
     number: bool = false,
     __unused: u5 = 0,
-};
+}
 
 pub fn parsePredefined(input: *css.Parser, parser: *ComponentParser): Result(CssColor) {
     const Closure = struct { p: *ComponentParser };
@@ -2899,73 +2908,78 @@ pub fn parsePredefinedRelative(
 }
 
 /// A color type that is used as a fallback when compiling colors for older browsers.
-pub const ColorFallbackKind = packed struct(u8) {
+@packed(u8)
+pub struct ColorFallbackKind {
     rgb: bool = false,
     p3: bool = false,
     lab: bool = false,
     oklab: bool = false,
     __unused: u4 = 0,
 
-    pub const P3 = ColorFallbackKind{ .p3 = true };
-    pub const RGB = ColorFallbackKind{ .rgb = true };
-    pub const LAB = ColorFallbackKind{ .lab = true };
-    pub const OKLAB = ColorFallbackKind{ .oklab = true };
+    const P3 = ColorFallbackKind{ p3: true };
+    const RGB = ColorFallbackKind{ rgb: true };
+    const LAB = ColorFallbackKind{ lab: true };
+    const OKLAB = ColorFallbackKind{ oklab: true };
 
-    pub fn lowest(this: @This()) ColorFallbackKind {
+    fn lowest(): ColorFallbackKind {
         return bun.bits.@"and"(
             ColorFallbackKind,
-            this,
-            fromBitsTruncate(bun.wrappingNegation(@as(u8, @bitCast(this)))),
+            _,
+            fromBitsTruncate(bun.wrappingNegation(@as(u8, @bitCast(_)))),
         );
     }
 
-    pub fn highest(this: @This()) ColorFallbackKind {
+    fn highest(): ColorFallbackKind {
         // This finds the highest set bit.
-        if (this.isEmpty()) return ColorFallbackKind{};
+        if (_.isEmpty()) return ColorFallbackKind{};
 
-        const zeroes: u3 = @intCast(@as(u4, 7) - bun.bits.leadingZeros(ColorFallbackKind, this));
+        const zeroes: u3 = @intCast(@as(u4, 7) - bun.bits.leadingZeros(ColorFallbackKind, _));
         return fromBitsTruncate(@as(u8, 1) << zeroes);
     }
 
-    pub fn difference(left: @This(), right: @This()) ColorFallbackKind {
+    static fn difference(left: @This(), right: @This()): ColorFallbackKind {
         return @bitCast(@as(u8, @bitCast(left)) - @as(u8, @bitCast(right)));
     }
 
-    pub fn andBelow(this: @This()) ColorFallbackKind {
-        if (this.isEmpty()) return .{};
+    fn andBelow(): ColorFallbackKind {
+        if (_.isEmpty()) return ColorFallbackKind{};
 
-        return bun.bits.@"or"(ColorFallbackKind, this, fromBitsTruncate(@as(u8, @bitCast(this)) - 1));
+        return bun.bits.@"or"(ColorFallbackKind, _, fromBitsTruncate(@as(u8, @bitCast(_)) - 1));
     }
 
-    pub fn supportsCondition(this: @This()) css.SupportsCondition {
-        const s = switch (this.asBits()) {
-            ColorFallbackKind.P3.asBits() => "color(display-p3 0 0 0)",
-            ColorFallbackKind.LAB.asBits() => "lab(0% 0 0)",
-            else => bun.unreachablePanic("Expected P3 or LAB. This is a bug in Bun.", .{}),
-        };
+    fn supportsCondition(): css.SupportsCondition {
+        const bits_val = _.asBits();
+        let s: []const u8 = undefined;
+        if (bits_val == ColorFallbackKind.P3.asBits()) {
+            s = "color(display-p3 0 0 0)";
+        } else if (bits_val == ColorFallbackKind.LAB.asBits()) {
+            s = "lab(0% 0 0)";
+        } else {
+            bun.unreachablePanic("Expected P3 or LAB. This is a bug in Bun.", {});
+        }
 
         return css.SupportsCondition{
-            .declaration = .{
-                .property_id = .color,
-                .value = s,
+            declaration: {
+                property_id: .color,
+                value: s,
             },
         };
     }
 
-    pub fn isEmpty(cfk: ColorFallbackKind) bool {
-        return @as(u8, @bitCast(cfk)) == 0;
+    fn isEmpty(): bool {
+        return @as(u8, @bitCast(_)) == 0;
     }
 
-    pub inline fn fromBitsTruncate(b: u8) ColorFallbackKind {
+    static fn fromBitsTruncate(b: u8): ColorFallbackKind {
         let cfk: ColorFallbackKind = @bitCast(b);
         cfk.__unused = 0;
         return cfk;
     }
 
-    pub fn asBits(this: @This()) u8 {
-        return @bitCast(this);
+    fn asBits(): u8 {
+        return @bitCast(_);
     }
-};
+}
 
 /// A [color space](https://www.w3.org/TR/css-color-4/#interpolation-space) keyword
 /// used in interpolation functions such as `color-mix()`.
@@ -3646,946 +3660,962 @@ pub fn polarToRectangular(l: f32, c: f32, h: f32): F32x3 {
 const D50: []const f32 = &.{ @floatCast(@as(f64, 0.3457) / @as(f64, 0.3585)), 1.00000, @floatCast((@as(f64, 1.0) - @as(f64, 0.3457) - @as(f64, 0.3585)) / @as(f64, 0.3585)) };
 // const D50: []const f32 = &.{ 0.9642956, 1.0, 0.82510453 };
 
-struct color_conversions {
-    pub const convert_RGBA = struct {};
+struct _convert_RGBA {}
 
-    pub const convert_LAB = struct {
-        static fn intoCssColor(c: *const LAB, allocator: Allocator): CssColor {
-            return CssColor{ .lab = bun.create(
-                allocator,
-                LABColor,
-                LABColor{ .lab = c.* },
-            ) };
-        }
+struct _convert_LAB {
+    static fn intoCssColor(c: *const LAB, allocator: Allocator): CssColor {
+        return CssColor{ .lab = bun.create(
+            allocator,
+            LABColor,
+            LABColor{ .lab = c.* },
+        ) };
+    }
 
-        fn intoLCH(_lab: *const LAB): LCH {
-            const lab = _lab.resolveMissing();
-            const _t5 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t5[0]; const c = _t5[1]; const h = _t5[2];
-            return LCH{
-                l: l,
-                c: c,
-                h: h,
-                alpha: lab.alpha,
-            };
-        }
+    fn intoLCH(_lab: *const LAB): LCH {
+        const lab = _lab.resolveMissing();
+        const _t5 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t5[0]; const c = _t5[1]; const h = _t5[2];
+        return LCH{
+            l: l,
+            c: c,
+            h: h,
+            alpha: lab.alpha,
+        };
+    }
 
-        fn intoXYZd50(_lab: *const LAB): XYZd50 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L352
-            const K: f32 = @floatCast(@as(f64, 24389.0) / @as(f64, 27.0)); // 29^3/3^3
-            const E: f32 = @floatCast(@as(f64, 216.0) / @as(f64, 24389.0)); // 6^3/29^3
+    fn intoXYZd50(_lab: *const LAB): XYZd50 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L352
+        const K: f32 = @floatCast(@as(f64, 24389.0) / @as(f64, 27.0)); // 29^3/3^3
+        const E: f32 = @floatCast(@as(f64, 216.0) / @as(f64, 24389.0)); // 6^3/29^3
 
-            const lab = _lab.resolveMissing();
-            const l = lab.l * 100.0;
-            const a = lab.a;
-            const b = lab.b;
+        const lab = _lab.resolveMissing();
+        const l = lab.l * 100.0;
+        const a = lab.a;
+        const b = lab.b;
 
-            // compute f, starting with the luminance-related term
-            const f1: f32 = (l + 16.0) / 116.0;
-            const f0: f32 = a / 500.0 + f1;
-            const f2: f32 = f1 - b / 200.0;
+        // compute f, starting with the luminance-related term
+        const f1: f32 = (l + 16.0) / 116.0;
+        const f0: f32 = a / 500.0 + f1;
+        const f2: f32 = f1 - b / 200.0;
 
-            // compute xyz
-            const x = if (bun.powf(f0, 3) > E)
-                bun.powf(f0, 3)
+        // compute xyz
+        const x = if (bun.powf(f0, 3) > E)
+            bun.powf(f0, 3)
+        else
+            (116.0 * f0 - 16.0) / K;
+
+        const y = if (l > K * E) bun.powf((l + 16.0) / 116.0, 3) else l / K;
+
+        const z = if (bun.powf(f2, 3) > E)
+            bun.powf(f2, 3)
+        else
+            (@as(f32, 116.0) * f2 - 16.0) / K;
+
+        const final_x = x * D50[0];
+        const final_y = y * D50[1];
+        const final_z = z * D50[2];
+
+        // Compute XYZ by scaling xyz by reference white
+        return XYZd50{
+            x: final_x,
+            y: final_y,
+            z: final_z,
+            alpha: lab.alpha,
+        };
+    }
+}
+
+struct _convert_SRGB {
+    static fn intoCssColor(srgb: *const SRGB, _: Allocator): CssColor {
+        // TODO: should we serialize as color(srgb, ...)?
+        // would be more precise than 8-bit color.
+        return CssColor{ .rgba = srgb.into(.RGBA) };
+    }
+
+    static fn intoSRGBLinear(rgb: *const SRGB): SRGBLinear {
+        const srgb = rgb.resolveMissing();
+        const _t6 = linSrgb(srgb.r, srgb.g, srgb.b); const r = _t6[0]; const g = _t6[1]; const b = _t6[2];
+        return SRGBLinear{
+            r: r,
+            g: g,
+            b: b,
+            alpha: srgb.alpha,
+        };
+    }
+
+    fn intoHSL(_rgb: *const SRGB): HSL {
+        // https://drafts.csswg.org/css-color/#rgb-to-hsl
+        const rgb = _rgb.resolve();
+        const r = rgb.r;
+        const g = rgb.g;
+        const b = rgb.b;
+        const max = @max(
+            @max(r, g),
+            b,
+        );
+        const min = @min(@min(r, g), b);
+        let h = std.math.nan(f32);
+        let s: f32 = 0.0;
+        const l = (min + max) / 2.0;
+        const d = max - min;
+
+        if (d != 0.0) {
+            s = if (l == 0.0 || l == 1.0)
+                0.0
             else
-                (116.0 * f0 - 16.0) / K;
+                (max - l) / @min(l, 1.0 - l);
 
-            const y = if (l > K * E) bun.powf((l + 16.0) / 116.0, 3) else l / K;
-
-            const z = if (bun.powf(f2, 3) > E)
-                bun.powf(f2, 3)
-            else
-                (@as(f32, 116.0) * f2 - 16.0) / K;
-
-            const final_x = x * D50[0];
-            const final_y = y * D50[1];
-            const final_z = z * D50[2];
-
-            // Compute XYZ by scaling xyz by reference white
-            return XYZd50{
-                x: final_x,
-                y: final_y,
-                z: final_z,
-                alpha: lab.alpha,
-            };
-        }
-    };
-
-    pub const convert_SRGB = struct {
-        static fn intoCssColor(srgb: *const SRGB, _: Allocator): CssColor {
-            // TODO: should we serialize as color(srgb, ...)?
-            // would be more precise than 8-bit color.
-            return CssColor{ .rgba = srgb.into(.RGBA) };
-        }
-
-        static fn intoSRGBLinear(rgb: *const SRGB): SRGBLinear {
-            const srgb = rgb.resolveMissing();
-            const _t6 = linSrgb(srgb.r, srgb.g, srgb.b); const r = _t6[0]; const g = _t6[1]; const b = _t6[2];
-            return SRGBLinear{
-                r: r,
-                g: g,
-                b: b,
-                alpha: srgb.alpha,
-            };
-        }
-
-        fn intoHSL(_rgb: *const SRGB): HSL {
-            // https://drafts.csswg.org/css-color/#rgb-to-hsl
-            const rgb = _rgb.resolve();
-            const r = rgb.r;
-            const g = rgb.g;
-            const b = rgb.b;
-            const max = @max(
-                @max(r, g),
-                b,
-            );
-            const min = @min(@min(r, g), b);
-            let h = std.math.nan(f32);
-            let s: f32 = 0.0;
-            const l = (min + max) / 2.0;
-            const d = max - min;
-
-            if (d != 0.0) {
-                s = if (l == 0.0 || l == 1.0)
-                    0.0
-                else
-                    (max - l) / @min(l, 1.0 - l);
-
-                if (max == r) {
-                    h = (g - b) / d + (if (g < b) @as(f32, 6.0) else @as(f32, 0.0));
-                } else if (max == g) {
-                    h = (b - r) / d + 2.0;
-                } else if (max == b) {
-                    h = (r - g) / d + 4.0;
-                }
-
-                h = h * 60.0;
+            if (max == r) {
+                h = (g - b) / d + (if (g < b) @as(f32, 6.0) else @as(f32, 0.0));
+            } else if (max == g) {
+                h = (b - r) / d + 2.0;
+            } else if (max == b) {
+                h = (r - g) / d + 4.0;
             }
 
-            return HSL{
-                h: h,
-                s: s,
-                l: l,
-                alpha: rgb.alpha,
-            };
+            h = h * 60.0;
         }
 
-        fn intoHWB(_rgb: *const SRGB): HWB {
-            const rgb = _rgb.resolve();
-            const hsl = rgb.into(.HSL);
-            const r = rgb.r;
-            const g = rgb.g;
-            const _b = rgb.b;
-            const w = @min(@min(r, g), _b);
-            const b = 1.0 - @max(@max(r, g), _b);
-            return HWB{
-                h: hsl.h,
-                w: w,
-                b: b,
-                alpha: rgb.alpha,
-            };
-        }
-    };
+        return HSL{
+            h: h,
+            s: s,
+            l: l,
+            alpha: rgb.alpha,
+        };
+    }
 
-    pub const convert_HSL = struct {
-        static fn intoCssColor(c: *const HSL, _: Allocator): CssColor {
-            // TODO: should we serialize as color(srgb, ...)?
-            // would be more precise than 8-bit color.
-            return CssColor{ .rgba = c.into(.RGBA) };
-        }
+    fn intoHWB(_rgb: *const SRGB): HWB {
+        const rgb = _rgb.resolve();
+        const hsl = rgb.into(.HSL);
+        const r = rgb.r;
+        const g = rgb.g;
+        const _b = rgb.b;
+        const w = @min(@min(r, g), _b);
+        const b = 1.0 - @max(@max(r, g), _b);
+        return HWB{
+            h: hsl.h,
+            w: w,
+            b: b,
+            alpha: rgb.alpha,
+        };
+    }
+}
 
-        static fn intoSRGB(hsl_: *const HSL): SRGB {
-            // https://drafts.csswg.org/css-color/#hsl-to-rgb
-            const hsl = hsl_.resolveMissing();
-            const h = (hsl.h - 360.0 * @floor(hsl.h / 360.0)) / 360.0;
-            const _t7 = css.color.hslToRgb(h, hsl.s, hsl.l); const r = _t7[0]; const g = _t7[1]; const b = _t7[2];
+struct _convert_HSL {
+    static fn intoCssColor(c: *const HSL, _: Allocator): CssColor {
+        // TODO: should we serialize as color(srgb, ...)?
+        // would be more precise than 8-bit color.
+        return CssColor{ .rgba = c.into(.RGBA) };
+    }
+
+    static fn intoSRGB(hsl_: *const HSL): SRGB {
+        // https://drafts.csswg.org/css-color/#hsl-to-rgb
+        const hsl = hsl_.resolveMissing();
+        const h = (hsl.h - 360.0 * @floor(hsl.h / 360.0)) / 360.0;
+        const _t7 = css.color.hslToRgb(h, hsl.s, hsl.l); const r = _t7[0]; const g = _t7[1]; const b = _t7[2];
+        return SRGB{
+            r: r,
+            g: g,
+            b: b,
+            alpha: hsl.alpha,
+        };
+    }
+}
+
+struct _convert_HWB {
+    static fn intoCssColor(c: *const HWB, _: Allocator): CssColor {
+        // TODO: should we serialize as color(srgb, ...)?
+        // would be more precise than 8-bit color.
+        return CssColor{ .rgba = c.into(.RGBA) };
+    }
+
+    fn intoSRGB(_hwb: *const HWB): SRGB {
+        // https://drafts.csswg.org/css-color/#hwb-to-rgb
+        const hwb = _hwb.resolveMissing();
+        const h = hwb.h;
+        const w = hwb.w;
+        const b = hwb.b;
+
+        if (w + b >= 1.0) {
+            const gray = w / (w + b);
             return SRGB{
-                r: r,
-                g: g,
-                b: b,
-                alpha: hsl.alpha,
-            };
-        }
-    };
-
-    pub const convert_HWB = struct {
-        static fn intoCssColor(c: *const HWB, _: Allocator): CssColor {
-            // TODO: should we serialize as color(srgb, ...)?
-            // would be more precise than 8-bit color.
-            return CssColor{ .rgba = c.into(.RGBA) };
-        }
-
-        fn intoSRGB(_hwb: *const HWB): SRGB {
-            // https://drafts.csswg.org/css-color/#hwb-to-rgb
-            const hwb = _hwb.resolveMissing();
-            const h = hwb.h;
-            const w = hwb.w;
-            const b = hwb.b;
-
-            if (w + b >= 1.0) {
-                const gray = w / (w + b);
-                return SRGB{
-                    r: gray,
-                    g: gray,
-                    b: gray,
-                    alpha: hwb.alpha,
-                };
-            }
-
-            const hsl = HSL{
-                h: h,
-                s: 1.0,
-                l: 0.5,
+                r: gray,
+                g: gray,
+                b: gray,
                 alpha: hwb.alpha,
             };
-            let rgba = hsl.into(.SRGB);
-            const x = 1.0 - w - b;
-            rgba.r = rgba.r * x + w;
-            rgba.g = rgba.g * x + w;
-            rgba.b = rgba.b * x + w;
-            return rgba;
-        }
-    };
-
-    pub const convert_SRGBLinear = struct {
-        static fn intoPredefinedColor(rgb: *const SRGBLinear): PredefinedColor {
-            return PredefinedColor{ .srgb_linear = rgb.* };
         }
 
-        static fn intoCssColor(rgb: *const SRGBLinear, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoSRGB(_rgb: *const SRGBLinear): SRGB {
-            const rgb = _rgb.resolveMissing();
-            const _t8 = gamSrgb(rgb.r, rgb.g, rgb.b); const r = _t8[0]; const g = _t8[1]; const b = _t8[2];
-            return SRGB{
-                r: r,
-                g: g,
-                b: b,
-                alpha: rgb.alpha,
-            };
-        }
-
-        fn intoXYZd65(_rgb: *const SRGBLinear): XYZd65 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L50
-            // convert an array of linear-light sRGB values to CIE XYZ
-            // using sRGB's own white, D65 (no chromatic adaptation)
-            const MATRIX: [9]f32 = .{
-                0.41239079926595934,
-                0.357584339383878,
-                0.1804807884018343,
-                0.21263900587151027,
-                0.715168678767756,
-                0.07219231536073371,
-                0.01933081871559182,
-                0.11919477979462598,
-                0.9505321522496607,
-            };
-
-            const rgb = _rgb.resolveMissing();
-            const _t9 = multiplyMatrix(&MATRIX, rgb.r, rgb.g, rgb.b); const x = _t9[0]; const y = _t9[1]; const z = _t9[2];
-            return XYZd65{
-                x: x,
-                y: y,
-                z: z,
-                alpha: rgb.alpha,
-            };
-        }
-    };
-
-    pub const convert_P3 = struct {
-        static fn intoPredefinedColor(rgb: *const P3): PredefinedColor {
-            return PredefinedColor{ .display_p3 = rgb.* };
-        }
-
-        static fn intoCssColor(rgb: *const P3, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoXYZd65(_p3: *const P3): XYZd65 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L91
-            // convert linear-light display-p3 values to CIE XYZ
-            // using D65 (no chromatic adaptation)
-            // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-            const MATRIX: [9]f32 = .{
-                0.4865709486482162,
-                0.26566769316909306,
-                0.1982172852343625,
-                0.2289745640697488,
-                0.6917385218365064,
-                0.079286914093745,
-                0.0000000000000000,
-                0.04511338185890264,
-                1.043944368900976,
-            };
-
-            const p3 = _p3.resolveMissing();
-            const _t10 = linSrgb(p3.r, p3.g, p3.b); const r = _t10[0]; const g = _t10[1]; const b = _t10[2];
-            const _t11 = multiplyMatrix(&MATRIX, r, g, b); const x = _t11[0]; const y = _t11[1]; const z = _t11[2];
-            return XYZd65{
-                x: x,
-                y: y,
-                z: z,
-                alpha: p3.alpha,
-            };
-        }
-    };
-
-    pub const convert_A98 = struct {
-        static fn intoPredefinedColor(rgb: *const A98): PredefinedColor {
-            return PredefinedColor{ .a98 = rgb.* };
-        }
-
-        static fn intoCssColor(rgb: *const A98, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoXYZd65(_a98: *const A98): XYZd65 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L181
-            const H = struct {
-                static fn linA98rgbComponent(c: f32): f32 {
-                    const sign: f32 = if (c < 0.0) @as(f32, -1.0) else @as(f32, 1.0);
-                    return sign * bun.powf(@abs(c), 563.0 / 256.0);
-                }
-            };
-
-            // convert an array of a98-rgb values in the range 0.0 - 1.0
-            // to linear light (un-companded) form.
-            // negative values are also now accepted
-            const a98 = _a98.resolveMissing();
-            const r = H.linA98rgbComponent(a98.r);
-            const g = H.linA98rgbComponent(a98.g);
-            const b = H.linA98rgbComponent(a98.b);
-
-            // convert an array of linear-light a98-rgb values to CIE XYZ
-            // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-            // has greater numerical precision than section 4.3.5.3 of
-            // https://www.adobe.com/digitalimag/pdfs/AdobeRGB1998.pdf
-            // but the values below were calculated from first principles
-            // from the chromaticity coordinates of R G B W
-            // see matrixmaker.html
-            const MATRIX: [9]f32 = .{
-                0.5766690429101305,
-                0.1855582379065463,
-                0.1882286462349947,
-                0.29734497525053605,
-                0.6273635662554661,
-                0.07529145849399788,
-                0.02703136138641234,
-                0.07068885253582723,
-                0.9913375368376388,
-            };
-
-            const _t12 = multiplyMatrix(&MATRIX, r, g, b); const x = _t12[0]; const y = _t12[1]; const z = _t12[2];
-            return XYZd65{
-                x: x,
-                y: y,
-                z: z,
-                alpha: a98.alpha,
-            };
-        }
-    };
-
-    pub const convert_ProPhoto = struct {
-        static fn intoPredefinedColor(rgb: *const ProPhoto): PredefinedColor {
-            return PredefinedColor{ .prophoto = rgb.* };
-        }
-
-        static fn intoCssColor(rgb: *const ProPhoto, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoXYZd50(_prophoto: *const ProPhoto): XYZd50 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L118
-            // convert an array of prophoto-rgb values
-            // where in-gamut colors are in the range [0.0 - 1.0]
-            // to linear light (un-companded) form.
-            // Transfer curve is gamma 1.8 with a small linear portion
-            // Extended transfer function
-
-            const H = struct {
-                static fn linProPhotoComponent(c: f32): f32 {
-                    const ET2: f32 = 16.0 / 512.0;
-                    const abs = @abs(c);
-                    if (abs <= ET2) {
-                        return c / 16.0;
-                    }
-                    const sign: f32 = if (c < 0.0) -1.0 else 1.0;
-                    return sign * bun.powf(abs, 1.8);
-                }
-            };
-
-            const prophoto = _prophoto.resolveMissing();
-            const r = H.linProPhotoComponent(prophoto.r);
-            const g = H.linProPhotoComponent(prophoto.g);
-            const b = H.linProPhotoComponent(prophoto.b);
-
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L155
-            // convert an array of linear-light prophoto-rgb values to CIE XYZ
-            // using  D50 (so no chromatic adaptation needed afterwards)
-            // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-            const MATRIX: [9]f32 = .{
-                0.7977604896723027,
-                0.13518583717574031,
-                0.0313493495815248,
-                0.2880711282292934,
-                0.7118432178101014,
-                0.00008565396060525902,
-                0.0,
-                0.0,
-                0.8251046025104601,
-            };
-
-            const _t13 = multiplyMatrix(&MATRIX, r, g, b); const x = _t13[0]; const y = _t13[1]; const z = _t13[2];
-            return XYZd50{
-                x: x,
-                y: y,
-                z: z,
-                alpha: prophoto.alpha,
-            };
-        }
-    };
-
-    pub const convert_Rec2020 = struct {
-        static fn intoPredefinedColor(rgb: *const Rec2020): PredefinedColor {
-            return PredefinedColor{ .rec2020 = rgb.* };
-        }
-
-        static fn intoCssColor(rgb: *const Rec2020, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoXYZd65(_rec2020: *const Rec2020): XYZd65 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L235
-            // convert an array of rec2020 RGB values in the range 0.0 - 1.0
-            // to linear light (un-companded) form.
-            // ITU-R BT.2020-2 p.4
-
-            const H = struct {
-                static fn linRec2020Component(c: f32): f32 {
-                    const A: f32 = 1.09929682680944;
-                    const B: f32 = 0.018053968510807;
-
-                    const abs = @abs(c);
-                    if (abs < B * 4.5) {
-                        return c / 4.5;
-                    }
-
-                    const sign: f32 = if (c < 0.0) -1.0 else 1.0;
-                    return sign * bun.powf(
-                        (abs + A - 1.0) / A,
-                        1.0 / 0.45,
-                    );
-                }
-            };
-
-            const rec2020 = _rec2020.resolveMissing();
-            const r = H.linRec2020Component(rec2020.r);
-            const g = H.linRec2020Component(rec2020.g);
-            const b = H.linRec2020Component(rec2020.b);
-
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L276
-            // convert an array of linear-light rec2020 values to CIE XYZ
-            // using  D65 (no chromatic adaptation)
-            // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-            const MATRIX: [9]f32 = .{
-                0.6369580483012914,
-                0.14461690358620832,
-                0.1688809751641721,
-                0.2627002120112671,
-                0.6779980715188708,
-                0.05930171646986196,
-                0.000000000000000,
-                0.028072693049087428,
-                1.060985057710791,
-            };
-
-            const _t14 = multiplyMatrix(&MATRIX, r, g, b); const x = _t14[0]; const y = _t14[1]; const z = _t14[2];
-
-            return XYZd65{
-                x: x,
-                y: y,
-                z: z,
-                alpha: rec2020.alpha,
-            };
-        }
-    };
-
-    pub const convert_XYZd50 = struct {
-        static fn intoPredefinedColor(rgb: *const XYZd50): PredefinedColor {
-            return PredefinedColor{ .xyz_d50 = rgb.* };
-        }
-
-        static fn intoCssColor(rgb: *const XYZd50, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoLAB(_xyz: *const XYZd50): LAB {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L332
-            // Assuming XYZ is relative to D50, convert to CIE LAB
-            // from CIE standard, which now defines these as a rational fraction
-            const E: f32 = 216.0 / 24389.0; // 6^3/29^3
-            const K: f32 = 24389.0 / 27.0; // 29^3/3^3
-
-            // compute xyz, which is XYZ scaled relative to reference white
-            const xyz = _xyz.resolveMissing();
-            const x = xyz.x / D50[0];
-            const y = xyz.y / D50[1];
-            const z = xyz.z / D50[2];
-
-            // now compute f
-
-            const f0 = if (x > E) std.math.cbrt(x) else (K * x + 16.0) / 116.0;
-
-            const f1 = if (y > E) std.math.cbrt(y) else (K * y + 16.0) / 116.0;
-
-            const f2 = if (z > E) std.math.cbrt(z) else (K * z + 16.0) / 116.0;
-
-            const l = ((116.0 * f1) - 16.0) / 100.0;
-            const a = 500.0 * (f0 - f1);
-            const b = 200.0 * (f1 - f2);
-
-            return LAB{
-                l: l,
-                a: a,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoXYZd65(_xyz: *const XYZd50): XYZd65 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L105
-            const MATRIX: [9]f32 = .{
-                0.9554734527042182,
-                -0.023098536874261423,
-                0.0632593086610217,
-                -0.028369706963208136,
-                1.0099954580058226,
-                0.021041398966943008,
-                0.012314001688319899,
-                -0.020507696433477912,
-                1.3303659366080753,
-            };
-
-            const xyz = _xyz.resolveMissing();
-            const _t15 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const x = _t15[0]; const y = _t15[1]; const z = _t15[2];
-            return XYZd65{
-                x: x,
-                y: y,
-                z: z,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoProPhoto(_xyz: *const XYZd50): ProPhoto {
-            // convert XYZ to linear-light prophoto-rgb
-            const MATRIX: [9]f32 = .{
-                1.3457989731028281,
-                -0.25558010007997534,
-                -0.05110628506753401,
-                -0.5446224939028347,
-                1.5082327413132781,
-                0.02053603239147973,
-                0.0,
-                0.0,
-                1.2119675456389454,
-            };
-            const H = struct {
-                static fn gamProPhotoComponent(c: f32): f32 {
-                    // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L137
-                    // convert linear-light prophoto-rgb  in the range 0.0-1.0
-                    // to gamma corrected form
-                    // Transfer curve is gamma 1.8 with a small linear portion
-                    // TODO for negative values, extend linear portion on reflection of axis, then add pow below that
-                    const ET: f32 = 1.0 / 512.0;
-                    const abs = @abs(c);
-                    if (abs >= ET) {
-                        const sign: f32 = if (c < 0.0) -1.0 else 1.0;
-                        return sign * bun.powf(abs, 1.0 / 1.8);
-                    }
-                    return 16.0 * c;
-                }
-            };
-            const xyz = _xyz.resolveMissing();
-            const _t16 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t16[0]; const g1 = _t16[1]; const b1 = _t16[2];
-            const r = H.gamProPhotoComponent(r1);
-            const g = H.gamProPhotoComponent(g1);
-            const b = H.gamProPhotoComponent(b1);
-            return ProPhoto{
-                r: r,
-                g: g,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-    };
-
-    pub const convert_XYZd65 = struct {
-        static fn intoPredefinedColor(rgb: *const XYZd65): PredefinedColor {
-            return PredefinedColor{ .xyz_d65 = rgb.* };
-        }
-
-        static fn intoCssColor(rgb: *const XYZd65, allocator: Allocator): CssColor {
-            return CssColor{
-                predefined: bun.create(
-                    allocator,
-                    PredefinedColor,
-                    rgb.into(.PredefinedColor),
-                ),
-            };
-        }
-
-        fn intoXYZd50(_xyz: *const XYZd65): XYZd50 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L319
-
-            const MATRIX: [9]f32 = .{
-                1.0479298208405488,
-                0.022946793341019088,
-                -0.05019222954313557,
-                0.029627815688159344,
-                0.990434484573249,
-                -0.01707382502938514,
-                -0.009243058152591178,
-                0.015055144896577895,
-                0.7518742899580008,
-            };
-
-            const xyz = _xyz.resolveMissing();
-            const _t17 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const x = _t17[0]; const y = _t17[1]; const z = _t17[2];
-            return XYZd50{
-                x: x,
-                y: y,
-                z: z,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoSRGBLinear(_xyz: *const XYZd65): SRGBLinear {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L62
-            const MATRIX: [9]f32 = .{
-                3.2409699419045226,
-                -1.537383177570094,
-                -0.4986107602930034,
-                -0.9692436362808796,
-                1.8759675015077202,
-                0.04155505740717559,
-                0.05563007969699366,
-                -0.20397695888897652,
-                1.0569715142428786,
-            };
-
-            const xyz = _xyz.resolveMissing();
-            const _t18 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r = _t18[0]; const g = _t18[1]; const b = _t18[2];
-            return SRGBLinear{
-                r: r,
-                g: g,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoA98(_xyz: *const XYZd65): A98 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L222
-            // convert XYZ to linear-light a98-rgb
-
-            const MATRIX: [9]f32 = .{
-                2.0415879038107465,
-                -0.5650069742788596,
-                -0.34473135077832956,
-                -0.9692436362808795,
-                1.8759675015077202,
-                0.04155505740717557,
-                0.013444280632031142,
-                -0.11836239223101838,
-                1.0151749943912054,
-            };
-
-            const H = struct {
-                static fn gamA98Component(c: f32): f32 {
-                    // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L193
-                    // convert linear-light a98-rgb  in the range 0.0-1.0
-                    // to gamma corrected form
-                    // negative values are also now accepted
-                    const sign: f32 = if (c < 0.0) -1.0 else 1.0;
-                    return sign * bun.powf(@abs(c), 256.0 / 563.0);
-                }
-            };
-
-            const xyz = _xyz.resolveMissing();
-            const _t19 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t19[0]; const g1 = _t19[1]; const b1 = _t19[2];
-            const r = H.gamA98Component(r1);
-            const g = H.gamA98Component(g1);
-            const b = H.gamA98Component(b1);
-            return A98{
-                r: r,
-                g: g,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoRec2020(_xyz: *const XYZd65): Rec2020 {
-            // convert XYZ to linear-light rec2020
-            const MATRIX: [9]f32 = .{
-                1.7166511879712674,
-                -0.35567078377639233,
-                -0.25336628137365974,
-                -0.6666843518324892,
-                1.6164812366349395,
-                0.01576854581391113,
-                0.017639857445310783,
-                -0.042770613257808524,
-                0.9421031212354738,
-            };
-
-            const H = struct {
-                static fn gamRec2020Component(c: f32): f32 {
-                    // convert linear-light rec2020 RGB  in the range 0.0-1.0
-                    // to gamma corrected form
-                    // ITU-R BT.2020-2 p.4
-
-                    const A: f32 = 1.09929682680944;
-                    const B: f32 = 0.018053968510807;
-
-                    const abs = @abs(c);
-                    if (abs > B) {
-                        const sign: f32 = if (c < 0.0) -1.0 else 1.0;
-                        return sign * (A * bun.powf(abs, 0.45) - (A - 1.0));
-                    }
-
-                    return 4.5 * c;
-                }
-            };
-
-            const xyz = _xyz.resolveMissing();
-            const _t20 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t20[0]; const g1 = _t20[1]; const b1 = _t20[2];
-            const r = H.gamRec2020Component(r1);
-            const g = H.gamRec2020Component(g1);
-            const b = H.gamRec2020Component(b1);
-            return Rec2020{
-                r: r,
-                g: g,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoOKLAB(_xyz: *const XYZd65): OKLAB {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L400
-            const XYZ_TO_LMS: [9]f32 = .{
-                0.8190224432164319,
-                0.3619062562801221,
-                -0.12887378261216414,
-                0.0329836671980271,
-                0.9292868468965546,
-                0.03614466816999844,
-                0.048177199566046255,
-                0.26423952494422764,
-                0.6335478258136937,
-            };
-
-            const LMS_TO_OKLAB: [9]f32 = .{
-                0.2104542553,
-                0.7936177850,
-                -0.0040720468,
-                1.9779984951,
-                -2.4285922050,
-                0.4505937099,
-                0.0259040371,
-                0.7827717662,
-                -0.8086757660,
-            };
-
-            const cbrt = std.math.cbrt;
-
-            const xyz = _xyz.resolveMissing();
-            const _t21 = multiplyMatrix(&XYZ_TO_LMS, xyz.x, xyz.y, xyz.z); const a1 = _t21[0]; const b1 = _t21[1]; const c1 = _t21[2];
-            const _t22 = multiplyMatrix(&LMS_TO_OKLAB, cbrt(a1), cbrt(b1), cbrt(c1)); const l = _t22[0]; const a = _t22[1]; const b = _t22[2];
-
-            return OKLAB{
-                l: l,
-                a: a,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-
-        fn intoP3(_xyz: *const XYZd65): P3 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L105
-            const MATRIX: [9]f32 = .{
-                2.493496911941425,
-                -0.9313836179191239,
-                -0.40271078445071684,
-                -0.8294889695615747,
-                1.7626640603183463,
-                0.023624685841943577,
-                0.03584583024378447,
-                -0.07617238926804182,
-                0.9568845240076872,
-            };
-
-            const xyz = _xyz.resolveMissing();
-            const _t23 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t23[0]; const g1 = _t23[1]; const b1 = _t23[2];
-            const _t24 = gamSrgb(r1, g1, b1); const r = _t24[0]; const g = _t24[1]; const b = _t24[2]; // same as sRGB
-            return P3{
-                r: r,
-                g: g,
-                b: b,
-                alpha: xyz.alpha,
-            };
-        }
-    };
-
-    pub const convert_LCH = struct {
-        static fn intoCssColor(c: *const LCH, allocator: Allocator): CssColor {
-            return CssColor{ .lab = bun.create(
+        const hsl = HSL{
+            h: h,
+            s: 1.0,
+            l: 0.5,
+            alpha: hwb.alpha,
+        };
+        let rgba = hsl.into(.SRGB);
+        const x = 1.0 - w - b;
+        rgba.r = rgba.r * x + w;
+        rgba.g = rgba.g * x + w;
+        rgba.b = rgba.b * x + w;
+        return rgba;
+    }
+}
+
+struct _convert_SRGBLinear {
+    static fn intoPredefinedColor(rgb: *const SRGBLinear): PredefinedColor {
+        return PredefinedColor{ .srgb_linear = rgb.* };
+    }
+
+    static fn intoCssColor(rgb: *const SRGBLinear, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
                 allocator,
-                LABColor,
-                LABColor{ .lch = c.* },
-            ) };
-        }
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
 
-        fn intoLAB(_lch: *const LCH): LAB {
-            const lch = _lch.resolveMissing();
-            const _t25 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t25[0]; const a = _t25[1]; const b = _t25[2];
-            return LAB{
-                l: l,
-                a: a,
-                b: b,
-                alpha: lch.alpha,
-            };
-        }
-    };
+    fn intoSRGB(_rgb: *const SRGBLinear): SRGB {
+        const rgb = _rgb.resolveMissing();
+        const _t8 = gamSrgb(rgb.r, rgb.g, rgb.b); const r = _t8[0]; const g = _t8[1]; const b = _t8[2];
+        return SRGB{
+            r: r,
+            g: g,
+            b: b,
+            alpha: rgb.alpha,
+        };
+    }
 
-    pub const convert_OKLAB = struct {
-        static fn intoCssColor(c: *const OKLAB, allocator: Allocator): CssColor {
-            return CssColor{ .lab = bun.create(
+    fn intoXYZd65(_rgb: *const SRGBLinear): XYZd65 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L50
+        // convert an array of linear-light sRGB values to CIE XYZ
+        // using sRGB's own white, D65 (no chromatic adaptation)
+        const MATRIX: [9]f32 = .{
+            0.41239079926595934,
+            0.357584339383878,
+            0.1804807884018343,
+            0.21263900587151027,
+            0.715168678767756,
+            0.07219231536073371,
+            0.01933081871559182,
+            0.11919477979462598,
+            0.9505321522496607,
+        };
+
+        const rgb = _rgb.resolveMissing();
+        const _t9 = multiplyMatrix(&MATRIX, rgb.r, rgb.g, rgb.b); const x = _t9[0]; const y = _t9[1]; const z = _t9[2];
+        return XYZd65{
+            x: x,
+            y: y,
+            z: z,
+            alpha: rgb.alpha,
+        };
+    }
+}
+
+struct _convert_P3 {
+    static fn intoPredefinedColor(rgb: *const P3): PredefinedColor {
+        return PredefinedColor{ .display_p3 = rgb.* };
+    }
+
+    static fn intoCssColor(rgb: *const P3, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
                 allocator,
-                LABColor,
-                LABColor{ .oklab = c.* },
-            ) };
-        }
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
 
-        static fn intoOKLAB(labb: *const OKLAB): OKLAB {
-            return labb.*;
-        }
+    fn intoXYZd65(_p3: *const P3): XYZd65 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L91
+        // convert linear-light display-p3 values to CIE XYZ
+        // using D65 (no chromatic adaptation)
+        // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+        const MATRIX: [9]f32 = .{
+            0.4865709486482162,
+            0.26566769316909306,
+            0.1982172852343625,
+            0.2289745640697488,
+            0.6917385218365064,
+            0.079286914093745,
+            0.0000000000000000,
+            0.04511338185890264,
+            1.043944368900976,
+        };
 
-        static fn intoOKLCH(labb: *const OKLAB): OKLCH {
-            const lab = labb.resolveMissing();
-            const _t26 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t26[0]; const c = _t26[1]; const h = _t26[2];
-            return OKLCH{
-                l: l,
-                c: c,
-                h: h,
-                alpha: lab.alpha,
-            };
-        }
+        const p3 = _p3.resolveMissing();
+        const _t10 = linSrgb(p3.r, p3.g, p3.b); const r = _t10[0]; const g = _t10[1]; const b = _t10[2];
+        const _t11 = multiplyMatrix(&MATRIX, r, g, b); const x = _t11[0]; const y = _t11[1]; const z = _t11[2];
+        return XYZd65{
+            x: x,
+            y: y,
+            z: z,
+            alpha: p3.alpha,
+        };
+    }
+}
 
-        fn intoXYZd65(_lab: *const OKLAB): XYZd65 {
-            // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L418
-            const LMS_TO_XYZ: [9]f32 = .{
-                1.2268798733741557,
-                -0.5578149965554813,
-                0.28139105017721583,
-                -0.04057576262431372,
-                1.1122868293970594,
-                -0.07171106666151701,
-                -0.07637294974672142,
-                -0.4214933239627914,
-                1.5869240244272418,
-            };
+struct _convert_A98 {
+    static fn intoPredefinedColor(rgb: *const A98): PredefinedColor {
+        return PredefinedColor{ .a98 = rgb.* };
+    }
 
-            const OKLAB_TO_LMS: [9]f32 = .{
-                0.99999999845051981432,
-                0.39633779217376785678,
-                0.21580375806075880339,
-                1.0000000088817607767,
-                -0.1055613423236563494,
-                -0.063854174771705903402,
-                1.0000000546724109177,
-                -0.089484182094965759684,
-                -1.2914855378640917399,
-            };
-
-            const lab = _lab.resolveMissing();
-            const _t27 = multiplyMatrix(&OKLAB_TO_LMS, lab.l, lab.a, lab.b); const a = _t27[0]; const b = _t27[1]; const c = _t27[2];
-            const _t28 = multiplyMatrix(
-                &LMS_TO_XYZ,
-                bun.powf(a, 3),
-                bun.powf(b, 3),
-                bun.powf(c, 3),
-            ); const x = _t28[0]; const y = _t28[1]; const z = _t28[2];
-
-            return XYZd65{
-                x: x,
-                y: y,
-                z: z,
-                alpha: lab.alpha,
-            };
-        }
-    };
-
-    pub const convert_OKLCH = struct {
-        static fn intoCssColor(c: *const OKLCH, allocator: Allocator): CssColor {
-            return CssColor{ .lab = bun.create(
+    static fn intoCssColor(rgb: *const A98, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
                 allocator,
-                LABColor,
-                LABColor{ .oklch = c.* },
-            ) };
-        }
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
 
-        fn intoOKLAB(_lch: *const OKLCH): OKLAB {
-            const lch = _lch.resolveMissing();
-            const _t29 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t29[0]; const a = _t29[1]; const b = _t29[2];
-            return OKLAB{
-                l: l,
-                a: a,
-                b: b,
-                alpha: lch.alpha,
-            };
-        }
+    fn intoXYZd65(_a98: *const A98): XYZd65 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L181
+        const H = struct {
+            static fn linA98rgbComponent(c: f32): f32 {
+                const sign: f32 = if (c < 0.0) @as(f32, -1.0) else @as(f32, 1.0);
+                return sign * bun.powf(@abs(c), 563.0 / 256.0);
+            }
+        };
 
-        static fn intoOKLCH(x: *const OKLCH): OKLCH {
-            return x.*;
-        }
-    };
+        // convert an array of a98-rgb values in the range 0.0 - 1.0
+        // to linear light (un-companded) form.
+        // negative values are also now accepted
+        const a98 = _a98.resolveMissing();
+        const r = H.linA98rgbComponent(a98.r);
+        const g = H.linA98rgbComponent(a98.g);
+        const b = H.linA98rgbComponent(a98.b);
+
+        // convert an array of linear-light a98-rgb values to CIE XYZ
+        // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+        // has greater numerical precision than section 4.3.5.3 of
+        // https://www.adobe.com/digitalimag/pdfs/AdobeRGB1998.pdf
+        // but the values below were calculated from first principles
+        // from the chromaticity coordinates of R G B W
+        // see matrixmaker.html
+        const MATRIX: [9]f32 = .{
+            0.5766690429101305,
+            0.1855582379065463,
+            0.1882286462349947,
+            0.29734497525053605,
+            0.6273635662554661,
+            0.07529145849399788,
+            0.02703136138641234,
+            0.07068885253582723,
+            0.9913375368376388,
+        };
+
+        const _t12 = multiplyMatrix(&MATRIX, r, g, b); const x = _t12[0]; const y = _t12[1]; const z = _t12[2];
+        return XYZd65{
+            x: x,
+            y: y,
+            z: z,
+            alpha: a98.alpha,
+        };
+    }
+}
+
+struct _convert_ProPhoto {
+    static fn intoPredefinedColor(rgb: *const ProPhoto): PredefinedColor {
+        return PredefinedColor{ .prophoto = rgb.* };
+    }
+
+    static fn intoCssColor(rgb: *const ProPhoto, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
+                allocator,
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
+
+    fn intoXYZd50(_prophoto: *const ProPhoto): XYZd50 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L118
+        // convert an array of prophoto-rgb values
+        // where in-gamut colors are in the range [0.0 - 1.0]
+        // to linear light (un-companded) form.
+        // Transfer curve is gamma 1.8 with a small linear portion
+        // Extended transfer function
+
+        const H = struct {
+            static fn linProPhotoComponent(c: f32): f32 {
+                const ET2: f32 = 16.0 / 512.0;
+                const abs = @abs(c);
+                if (abs <= ET2) {
+                    return c / 16.0;
+                }
+                const sign: f32 = if (c < 0.0) -1.0 else 1.0;
+                return sign * bun.powf(abs, 1.8);
+            }
+        };
+
+        const prophoto = _prophoto.resolveMissing();
+        const r = H.linProPhotoComponent(prophoto.r);
+        const g = H.linProPhotoComponent(prophoto.g);
+        const b = H.linProPhotoComponent(prophoto.b);
+
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L155
+        // convert an array of linear-light prophoto-rgb values to CIE XYZ
+        // using  D50 (so no chromatic adaptation needed afterwards)
+        // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+        const MATRIX: [9]f32 = .{
+            0.7977604896723027,
+            0.13518583717574031,
+            0.0313493495815248,
+            0.2880711282292934,
+            0.7118432178101014,
+            0.00008565396060525902,
+            0.0,
+            0.0,
+            0.8251046025104601,
+        };
+
+        const _t13 = multiplyMatrix(&MATRIX, r, g, b); const x = _t13[0]; const y = _t13[1]; const z = _t13[2];
+        return XYZd50{
+            x: x,
+            y: y,
+            z: z,
+            alpha: prophoto.alpha,
+        };
+    }
+}
+
+struct _convert_Rec2020 {
+    static fn intoPredefinedColor(rgb: *const Rec2020): PredefinedColor {
+        return PredefinedColor{ .rec2020 = rgb.* };
+    }
+
+    static fn intoCssColor(rgb: *const Rec2020, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
+                allocator,
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
+
+    fn intoXYZd65(_rec2020: *const Rec2020): XYZd65 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L235
+        // convert an array of rec2020 RGB values in the range 0.0 - 1.0
+        // to linear light (un-companded) form.
+        // ITU-R BT.2020-2 p.4
+
+        const H = struct {
+            static fn linRec2020Component(c: f32): f32 {
+                const A: f32 = 1.09929682680944;
+                const B: f32 = 0.018053968510807;
+
+                const abs = @abs(c);
+                if (abs < B * 4.5) {
+                    return c / 4.5;
+                }
+
+                const sign: f32 = if (c < 0.0) -1.0 else 1.0;
+                return sign * bun.powf(
+                    (abs + A - 1.0) / A,
+                    1.0 / 0.45,
+                );
+            }
+        };
+
+        const rec2020 = _rec2020.resolveMissing();
+        const r = H.linRec2020Component(rec2020.r);
+        const g = H.linRec2020Component(rec2020.g);
+        const b = H.linRec2020Component(rec2020.b);
+
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L276
+        // convert an array of linear-light rec2020 values to CIE XYZ
+        // using  D65 (no chromatic adaptation)
+        // http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+        const MATRIX: [9]f32 = .{
+            0.6369580483012914,
+            0.14461690358620832,
+            0.1688809751641721,
+            0.2627002120112671,
+            0.6779980715188708,
+            0.05930171646986196,
+            0.000000000000000,
+            0.028072693049087428,
+            1.060985057710791,
+        };
+
+        const _t14 = multiplyMatrix(&MATRIX, r, g, b); const x = _t14[0]; const y = _t14[1]; const z = _t14[2];
+
+        return XYZd65{
+            x: x,
+            y: y,
+            z: z,
+            alpha: rec2020.alpha,
+        };
+    }
+}
+
+struct _convert_XYZd50 {
+    static fn intoPredefinedColor(rgb: *const XYZd50): PredefinedColor {
+        return PredefinedColor{ .xyz_d50 = rgb.* };
+    }
+
+    static fn intoCssColor(rgb: *const XYZd50, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
+                allocator,
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
+
+    fn intoLAB(_xyz: *const XYZd50): LAB {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L332
+        // Assuming XYZ is relative to D50, convert to CIE LAB
+        // from CIE standard, which now defines these as a rational fraction
+        const E: f32 = 216.0 / 24389.0; // 6^3/29^3
+        const K: f32 = 24389.0 / 27.0; // 29^3/3^3
+
+        // compute xyz, which is XYZ scaled relative to reference white
+        const xyz = _xyz.resolveMissing();
+        const x = xyz.x / D50[0];
+        const y = xyz.y / D50[1];
+        const z = xyz.z / D50[2];
+
+        // now compute f
+
+        const f0 = if (x > E) std.math.cbrt(x) else (K * x + 16.0) / 116.0;
+
+        const f1 = if (y > E) std.math.cbrt(y) else (K * y + 16.0) / 116.0;
+
+        const f2 = if (z > E) std.math.cbrt(z) else (K * z + 16.0) / 116.0;
+
+        const l = ((116.0 * f1) - 16.0) / 100.0;
+        const a = 500.0 * (f0 - f1);
+        const b = 200.0 * (f1 - f2);
+
+        return LAB{
+            l: l,
+            a: a,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoXYZd65(_xyz: *const XYZd50): XYZd65 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L105
+        const MATRIX: [9]f32 = .{
+            0.9554734527042182,
+            -0.023098536874261423,
+            0.0632593086610217,
+            -0.028369706963208136,
+            1.0099954580058226,
+            0.021041398966943008,
+            0.012314001688319899,
+            -0.020507696433477912,
+            1.3303659366080753,
+        };
+
+        const xyz = _xyz.resolveMissing();
+        const _t15 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const x = _t15[0]; const y = _t15[1]; const z = _t15[2];
+        return XYZd65{
+            x: x,
+            y: y,
+            z: z,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoProPhoto(_xyz: *const XYZd50): ProPhoto {
+        // convert XYZ to linear-light prophoto-rgb
+        const MATRIX: [9]f32 = .{
+            1.3457989731028281,
+            -0.25558010007997534,
+            -0.05110628506753401,
+            -0.5446224939028347,
+            1.5082327413132781,
+            0.02053603239147973,
+            0.0,
+            0.0,
+            1.2119675456389454,
+        };
+        const H = struct {
+            static fn gamProPhotoComponent(c: f32): f32 {
+                // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L137
+                // convert linear-light prophoto-rgb  in the range 0.0-1.0
+                // to gamma corrected form
+                // Transfer curve is gamma 1.8 with a small linear portion
+                // TODO for negative values, extend linear portion on reflection of axis, then add pow below that
+                const ET: f32 = 1.0 / 512.0;
+                const abs = @abs(c);
+                if (abs >= ET) {
+                    const sign: f32 = if (c < 0.0) -1.0 else 1.0;
+                    return sign * bun.powf(abs, 1.0 / 1.8);
+                }
+                return 16.0 * c;
+            }
+        };
+        const xyz = _xyz.resolveMissing();
+        const _t16 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t16[0]; const g1 = _t16[1]; const b1 = _t16[2];
+        const r = H.gamProPhotoComponent(r1);
+        const g = H.gamProPhotoComponent(g1);
+        const b = H.gamProPhotoComponent(b1);
+        return ProPhoto{
+            r: r,
+            g: g,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+}
+
+struct _convert_XYZd65 {
+    static fn intoPredefinedColor(rgb: *const XYZd65): PredefinedColor {
+        return PredefinedColor{ .xyz_d65 = rgb.* };
+    }
+
+    static fn intoCssColor(rgb: *const XYZd65, allocator: Allocator): CssColor {
+        return CssColor{
+            predefined: bun.create(
+                allocator,
+                PredefinedColor,
+                rgb.into(.PredefinedColor),
+            ),
+        };
+    }
+
+    fn intoXYZd50(_xyz: *const XYZd65): XYZd50 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L319
+
+        const MATRIX: [9]f32 = .{
+            1.0479298208405488,
+            0.022946793341019088,
+            -0.05019222954313557,
+            0.029627815688159344,
+            0.990434484573249,
+            -0.01707382502938514,
+            -0.009243058152591178,
+            0.015055144896577895,
+            0.7518742899580008,
+        };
+
+        const xyz = _xyz.resolveMissing();
+        const _t17 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const x = _t17[0]; const y = _t17[1]; const z = _t17[2];
+        return XYZd50{
+            x: x,
+            y: y,
+            z: z,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoSRGBLinear(_xyz: *const XYZd65): SRGBLinear {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L62
+        const MATRIX: [9]f32 = .{
+            3.2409699419045226,
+            -1.537383177570094,
+            -0.4986107602930034,
+            -0.9692436362808796,
+            1.8759675015077202,
+            0.04155505740717559,
+            0.05563007969699366,
+            -0.20397695888897652,
+            1.0569715142428786,
+        };
+
+        const xyz = _xyz.resolveMissing();
+        const _t18 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r = _t18[0]; const g = _t18[1]; const b = _t18[2];
+        return SRGBLinear{
+            r: r,
+            g: g,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoA98(_xyz: *const XYZd65): A98 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L222
+        // convert XYZ to linear-light a98-rgb
+
+        const MATRIX: [9]f32 = .{
+            2.0415879038107465,
+            -0.5650069742788596,
+            -0.34473135077832956,
+            -0.9692436362808795,
+            1.8759675015077202,
+            0.04155505740717557,
+            0.013444280632031142,
+            -0.11836239223101838,
+            1.0151749943912054,
+        };
+
+        const H = struct {
+            static fn gamA98Component(c: f32): f32 {
+                // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L193
+                // convert linear-light a98-rgb  in the range 0.0-1.0
+                // to gamma corrected form
+                // negative values are also now accepted
+                const sign: f32 = if (c < 0.0) -1.0 else 1.0;
+                return sign * bun.powf(@abs(c), 256.0 / 563.0);
+            }
+        };
+
+        const xyz = _xyz.resolveMissing();
+        const _t19 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t19[0]; const g1 = _t19[1]; const b1 = _t19[2];
+        const r = H.gamA98Component(r1);
+        const g = H.gamA98Component(g1);
+        const b = H.gamA98Component(b1);
+        return A98{
+            r: r,
+            g: g,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoRec2020(_xyz: *const XYZd65): Rec2020 {
+        // convert XYZ to linear-light rec2020
+        const MATRIX: [9]f32 = .{
+            1.7166511879712674,
+            -0.35567078377639233,
+            -0.25336628137365974,
+            -0.6666843518324892,
+            1.6164812366349395,
+            0.01576854581391113,
+            0.017639857445310783,
+            -0.042770613257808524,
+            0.9421031212354738,
+        };
+
+        const H = struct {
+            static fn gamRec2020Component(c: f32): f32 {
+                // convert linear-light rec2020 RGB  in the range 0.0-1.0
+                // to gamma corrected form
+                // ITU-R BT.2020-2 p.4
+
+                const A: f32 = 1.09929682680944;
+                const B: f32 = 0.018053968510807;
+
+                const abs = @abs(c);
+                if (abs > B) {
+                    const sign: f32 = if (c < 0.0) -1.0 else 1.0;
+                    return sign * (A * bun.powf(abs, 0.45) - (A - 1.0));
+                }
+
+                return 4.5 * c;
+            }
+        };
+
+        const xyz = _xyz.resolveMissing();
+        const _t20 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t20[0]; const g1 = _t20[1]; const b1 = _t20[2];
+        const r = H.gamRec2020Component(r1);
+        const g = H.gamRec2020Component(g1);
+        const b = H.gamRec2020Component(b1);
+        return Rec2020{
+            r: r,
+            g: g,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoOKLAB(_xyz: *const XYZd65): OKLAB {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L400
+        const XYZ_TO_LMS: [9]f32 = .{
+            0.8190224432164319,
+            0.3619062562801221,
+            -0.12887378261216414,
+            0.0329836671980271,
+            0.9292868468965546,
+            0.03614466816999844,
+            0.048177199566046255,
+            0.26423952494422764,
+            0.6335478258136937,
+        };
+
+        const LMS_TO_OKLAB: [9]f32 = .{
+            0.2104542553,
+            0.7936177850,
+            -0.0040720468,
+            1.9779984951,
+            -2.4285922050,
+            0.4505937099,
+            0.0259040371,
+            0.7827717662,
+            -0.8086757660,
+        };
+
+        const cbrt = std.math.cbrt;
+
+        const xyz = _xyz.resolveMissing();
+        const _t21 = multiplyMatrix(&XYZ_TO_LMS, xyz.x, xyz.y, xyz.z); const a1 = _t21[0]; const b1 = _t21[1]; const c1 = _t21[2];
+        const _t22 = multiplyMatrix(&LMS_TO_OKLAB, cbrt(a1), cbrt(b1), cbrt(c1)); const l = _t22[0]; const a = _t22[1]; const b = _t22[2];
+
+        return OKLAB{
+            l: l,
+            a: a,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+
+    fn intoP3(_xyz: *const XYZd65): P3 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L105
+        const MATRIX: [9]f32 = .{
+            2.493496911941425,
+            -0.9313836179191239,
+            -0.40271078445071684,
+            -0.8294889695615747,
+            1.7626640603183463,
+            0.023624685841943577,
+            0.03584583024378447,
+            -0.07617238926804182,
+            0.9568845240076872,
+        };
+
+        const xyz = _xyz.resolveMissing();
+        const _t23 = multiplyMatrix(&MATRIX, xyz.x, xyz.y, xyz.z); const r1 = _t23[0]; const g1 = _t23[1]; const b1 = _t23[2];
+        const _t24 = gamSrgb(r1, g1, b1); const r = _t24[0]; const g = _t24[1]; const b = _t24[2]; // same as sRGB
+        return P3{
+            r: r,
+            g: g,
+            b: b,
+            alpha: xyz.alpha,
+        };
+    }
+}
+
+struct _convert_LCH {
+    static fn intoCssColor(c: *const LCH, allocator: Allocator): CssColor {
+        return CssColor{ .lab = bun.create(
+            allocator,
+            LABColor,
+            LABColor{ .lch = c.* },
+        ) };
+    }
+
+    fn intoLAB(_lch: *const LCH): LAB {
+        const lch = _lch.resolveMissing();
+        const _t25 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t25[0]; const a = _t25[1]; const b = _t25[2];
+        return LAB{
+            l: l,
+            a: a,
+            b: b,
+            alpha: lch.alpha,
+        };
+    }
+}
+
+struct _convert_OKLAB {
+    static fn intoCssColor(c: *const OKLAB, allocator: Allocator): CssColor {
+        return CssColor{ .lab = bun.create(
+            allocator,
+            LABColor,
+            LABColor{ .oklab = c.* },
+        ) };
+    }
+
+    static fn intoOKLAB(labb: *const OKLAB): OKLAB {
+        return labb.*;
+    }
+
+    static fn intoOKLCH(labb: *const OKLAB): OKLCH {
+        const lab = labb.resolveMissing();
+        const _t26 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t26[0]; const c = _t26[1]; const h = _t26[2];
+        return OKLCH{
+            l: l,
+            c: c,
+            h: h,
+            alpha: lab.alpha,
+        };
+    }
+
+    fn intoXYZd65(_lab: *const OKLAB): XYZd65 {
+        // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L418
+        const LMS_TO_XYZ: [9]f32 = .{
+            1.2268798733741557,
+            -0.5578149965554813,
+            0.28139105017721583,
+            -0.04057576262431372,
+            1.1122868293970594,
+            -0.07171106666151701,
+            -0.07637294974672142,
+            -0.4214933239627914,
+            1.5869240244272418,
+        };
+
+        const OKLAB_TO_LMS: [9]f32 = .{
+            0.99999999845051981432,
+            0.39633779217376785678,
+            0.21580375806075880339,
+            1.0000000088817607767,
+            -0.1055613423236563494,
+            -0.063854174771705903402,
+            1.0000000546724109177,
+            -0.089484182094965759684,
+            -1.2914855378640917399,
+        };
+
+        const lab = _lab.resolveMissing();
+        const _t27 = multiplyMatrix(&OKLAB_TO_LMS, lab.l, lab.a, lab.b); const a = _t27[0]; const b = _t27[1]; const c = _t27[2];
+        const _t28 = multiplyMatrix(
+            &LMS_TO_XYZ,
+            bun.powf(a, 3),
+            bun.powf(b, 3),
+            bun.powf(c, 3),
+        ); const x = _t28[0]; const y = _t28[1]; const z = _t28[2];
+
+        return XYZd65{
+            x: x,
+            y: y,
+            z: z,
+            alpha: lab.alpha,
+        };
+    }
+}
+
+struct _convert_OKLCH {
+    static fn intoCssColor(c: *const OKLCH, allocator: Allocator): CssColor {
+        return CssColor{ .lab = bun.create(
+            allocator,
+            LABColor,
+            LABColor{ .oklch = c.* },
+        ) };
+    }
+
+    fn intoOKLAB(_lch: *const OKLCH): OKLAB {
+        const lch = _lch.resolveMissing();
+        const _t29 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t29[0]; const a = _t29[1]; const b = _t29[2];
+        return OKLAB{
+            l: l,
+            a: a,
+            b: b,
+            alpha: lch.alpha,
+        };
+    }
+
+    static fn intoOKLCH(x: *const OKLCH): OKLCH {
+        return x.*;
+    }
+}
+
+struct color_conversions {
+    const convert_RGBA = _convert_RGBA;
+    const convert_LAB = _convert_LAB;
+    const convert_SRGB = _convert_SRGB;
+    const convert_HSL = _convert_HSL;
+    const convert_HWB = _convert_HWB;
+    const convert_SRGBLinear = _convert_SRGBLinear;
+    const convert_P3 = _convert_P3;
+    const convert_A98 = _convert_A98;
+    const convert_ProPhoto = _convert_ProPhoto;
+    const convert_Rec2020 = _convert_Rec2020;
+    const convert_XYZd50 = _convert_XYZd50;
+    const convert_XYZd65 = _convert_XYZd65;
+    const convert_LCH = _convert_LCH;
+    const convert_OKLAB = _convert_OKLAB;
+    const convert_OKLCH = _convert_OKLCH;
 }
 
 pub enum ConvertTo {

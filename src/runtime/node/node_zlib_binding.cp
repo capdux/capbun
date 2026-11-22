@@ -5,6 +5,24 @@ struct DeinitGuard<T> {
     }
 }
 
+fn _AsyncJob(comptime T: type): type {
+    return struct {
+        pub fn runTask(task: *jsc.WorkPoolTask) void {
+            const target: *T = @fieldParentPtr("task", task);
+            run(target);
+        }
+
+        pub fn run(stream: *T) void {
+            const globalThis: *jsc.JSGlobalObject = stream.globalThis;
+            const vm = globalThis.bunVMConcurrently();
+
+            stream.stream.doWork();
+
+            vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(stream)));
+        }
+    };
+}
+
 struct StreamRunGuard<T> {
     stream: *T!,
     vm: *jsc.VirtualMachine!,
@@ -146,21 +164,7 @@ pub fn CompressionStream(comptime T: type): type {
             return jsc.JSValue.js_undefined;
         }
 
-        const AsyncJob = struct {
-            static fn runTask(task: *jsc.WorkPoolTask) {
-                const target: *T = @fieldParentPtr("task", task);
-                AsyncJob.run(target);
-            }
-
-            pub static fn run(stream: *T) {
-                const globalThis: *jsc.JSGlobalObject = stream.globalThis;
-                const vm = globalThis.bunVMConcurrently();
-
-                stream.stream.doWork();
-
-                vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(jsc.Task.init(stream)));
-            }
-        };
+        const AsyncJob = _AsyncJob(T);
 
         pub static fn runFromJSThread(stream: *T) {
             const global: *jsc.JSGlobalObject = stream.globalThis;

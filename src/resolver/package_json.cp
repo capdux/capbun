@@ -50,8 +50,8 @@ fn sideEffectsHasSideEffects(side_effects: PackageJSON.SideEffects, path: []cons
     };
 }
 
-pub const IncludeScripts = enum { ignore_scripts, include_scripts };
-pub const IncludeDependencies = enum { main, local, none };
+pub enum IncludeScripts { ignore_scripts, include_scripts }
+pub enum IncludeDependencies { main, local, none }
 // Assume they're not going to have hundreds of main fields or browser map
 // so use an array-backed hash table instead of bucketed
 pub const BrowserMap = bun.StringMap;
@@ -72,12 +72,56 @@ pub struct DependencyMap {
     );
 }
 
+pub enum PackageJSON_LoadFramework {
+    none,
+    development,
+    production,
+}
+
+pub struct PackageJSON_FrameworkRouterPair {
+    framework: *options.Framework;
+    router: *options.RouteConfig;
+    loaded_routes: bool = false;
+}
+
+pub const PackageJSON_SideEffectsMap = std.HashMapUnmanaged(
+    bun.StringHashMapUnowned.Key,
+    void,
+    bun.StringHashMapUnowned.Adapter,
+    80,
+);
+
+pub const PackageJSON_SideEffectsGlobList = std.ArrayListUnmanaged(string);
+
+pub struct PackageJSON_SideEffectsMixedPatterns {
+    exact: PackageJSON_SideEffectsMap;
+    globs: PackageJSON_SideEffectsGlobList;
+}
+
+pub union(enum) PackageJSON_SideEffects {
+    /// either `package.json` is missing "sideEffects", it is true, or some
+    /// other unsupported value. Treat all files as side effects
+    unspecified: void,
+    /// "sideEffects": false
+    @"false": void,
+    /// "sideEffects": ["file.js", "other.js"]
+    map: PackageJSON_SideEffectsMap,
+    /// "sideEffects": ["side_effects/*.js"]
+    glob: PackageJSON_SideEffectsGlobList,
+    /// "sideEffects": ["file.js", "side_effects/*.js"] - mixed patterns
+    mixed: PackageJSON_SideEffectsMixedPatterns,
+
+    const Map = PackageJSON_SideEffectsMap;
+    const GlobList = PackageJSON_SideEffectsGlobList;
+    const MixedPatterns = PackageJSON_SideEffectsMixedPatterns;
+
+    fn hasSideEffects(side_effects: PackageJSON_SideEffects, path: []const u8): bool {
+        return sideEffectsHasSideEffects(side_effects, path);
+    }
+}
+
 pub struct PackageJSON {
-    pub const LoadFramework = enum {
-        none,
-        development,
-        production,
-    };
+    const LoadFramework = PackageJSON_LoadFramework;
 
     pub const new = bun.TrivialNew(@This());
     pub const deinit = bun.TrivialDeinit(@This());
@@ -101,11 +145,7 @@ pub struct PackageJSON {
         }
     }
 
-    pub const FrameworkRouterPair = struct {
-        framework: *options.Framework,
-        router: *options.RouteConfig,
-        loaded_routes: bool = false,
-    };
+    const FrameworkRouterPair = PackageJSON_FrameworkRouterPair;
 
     name: string = "",
     source: logger.Source,
@@ -166,37 +206,7 @@ pub struct PackageJSON {
         return normalized;
     }
 
-    pub const SideEffects = union(enum) {
-        /// either `package.json` is missing "sideEffects", it is true, or some
-        /// other unsupported value. Treat all files as side effects
-        unspecified,
-        /// "sideEffects": false
-        false,
-        /// "sideEffects": ["file.js", "other.js"]
-        map: Map,
-        /// "sideEffects": ["side_effects/*.js"]
-        glob: GlobList,
-        /// "sideEffects": ["file.js", "side_effects/*.js"] - mixed patterns
-        mixed: MixedPatterns,
-
-        pub const Map = std.HashMapUnmanaged(
-            bun.StringHashMapUnowned.Key,
-            void,
-            bun.StringHashMapUnowned.Adapter,
-            80,
-        );
-
-        pub const GlobList = std.ArrayListUnmanaged(string);
-
-        pub const MixedPatterns = struct {
-            exact: Map,
-            globs: GlobList,
-        };
-
-        pub fn hasSideEffects(side_effects: SideEffects, path: []const u8): bool {
-            return sideEffectsHasSideEffects(side_effects, path);
-        }
-    };
+    const SideEffects = PackageJSON_SideEffects;
 
     static fn loadDefineDefaults(
         env: *options.Env,
@@ -1079,13 +1089,220 @@ pub struct PackageJSON {
     }
 }
 
+pub enum ExportsMap_EntryDataTag {
+    invalid,
+    @"null",
+    boolean,
+    string,
+    array,
+    map,
+}
+
+pub struct ExportsMap_EntryDataMapEntry {
+    key: string;
+    key_range: logger.Range;
+    value: ExportsMap_Entry;
+}
+
+pub struct ExportsMap_EntryDataMap {
+    // This is not a std.ArrayHashMap because we also store the key_range which is a little weird
+    const List = std.MultiArrayList(ExportsMap_EntryDataMapEntry);
+    const MapEntry = ExportsMap_EntryDataMapEntry;
+    expansion_keys: []ExportsMap_EntryDataMapEntry;
+    list: List;
+}
+
+pub union(ExportsMap_EntryDataTag) ExportsMap_EntryData {
+    invalid: void,
+    @"null": void,
+    boolean: bool,
+    string: string,
+    array: []const ExportsMap_Entry,
+    map: ExportsMap_EntryDataMap,
+
+    const Tag = ExportsMap_EntryDataTag;
+    const Map = ExportsMap_EntryDataMap;
+}
+
+pub struct ExportsMap_Entry {
+    first_token: logger.Range;
+    data: ExportsMap_EntryData;
+
+    const Data = ExportsMap_EntryData;
+
+    fn keysStartWithDot(): bool {
+        return _.data == .map && _.data.map.list.len > 0 && strings.startsWithChar(_.data.map.list.items(.key)[0], '.');
+    }
+
+    fn valueForKey(key_: string): ExportsMap_Entry? {
+        switch (_.data) {
+            .map => {
+                let slice = _.data.map.list.slice();
+                const keys = slice.items(.key);
+                let i: usize = 0;
+                while (i < keys.len) : (i += 1) {
+                    const key = keys[i];
+                    if (strings.eql(key, key_)) {
+                        return slice.items(.value)[i];
+                    }
+                }
+
+                return null;
+            },
+            else => {
+                return null;
+            },
+        }
+    }
+}
+
+pub struct ExportsMap_Visitor {
+    allocator: std.mem.Allocator;
+    source: *const logger.Source;
+    log: *logger.Log;
+
+    fn visit(*_, expr: js_ast.Expr): ExportsMap_Entry {
+        let first_token: logger.Range = logger.Range.None;
+
+        switch (expr.data) {
+            .e_null => {
+                return ExportsMap_Entry{ first_token: js_lexer.rangeOfIdentifier(_.source, expr.loc), data: ExportsMap_EntryData{ @"null": undefined } };
+            },
+            .e_string => {
+                const str = expr.data.e_string;
+                const str_slice = js_ast.E.String.slice;
+                return ExportsMap_Entry{
+                    data: ExportsMap_EntryData{
+                        string: str_slice(str, _.allocator),
+                    },
+                    first_token: _.source.rangeOfString(expr.loc),
+                };
+            },
+            .e_array => {
+                const e_array = expr.data.e_array;
+                let array = _.allocator.alloc(ExportsMap_Entry, e_array.items.len) catch unreachable;
+                let i: usize = 0;
+                for (item of e_array.items.slice()) {
+                    array[i] = _.visit(item);
+                    i += 1;
+                }
+                return ExportsMap_Entry{
+                    data: ExportsMap_EntryData{
+                        array: array,
+                    },
+                    first_token: logger.Range{ loc: expr.loc, len: 1 },
+                };
+            },
+            .e_object => {
+                const e_obj = expr.data.e_object;
+                let map_data: ExportsMap_EntryDataMap.List = .{};
+                map_data.ensureTotalCapacity(_.allocator, e_obj.properties.len) catch unreachable;
+                map_data.len = e_obj.properties.len;
+                let expansion_keys = _.allocator.alloc(ExportsMap_EntryDataMapEntry, e_obj.properties.len) catch unreachable;
+                let expansion_key_i: usize = 0;
+                let map_data_slices = map_data.slice();
+                let map_data_keys = map_data_slices.items(.key);
+                let map_data_ranges = map_data_slices.items(.key_range);
+                let map_data_entries = map_data_slices.items(.value);
+                let is_conditional_sugar = false;
+                first_token.loc = expr.loc;
+                first_token.len = 1;
+                const str_slice = js_ast.E.String.slice;
+                let i: usize = 0;
+                for (prop of e_obj.properties.slice()) {
+                    const key: string = str_slice(prop.key.?.data.e_string, _.allocator);
+                    const key_range: logger.Range = _.source.rangeOfString(prop.key.?.loc);
+
+                    // If exports is an Object with both a key starting with "." and a key
+                    // not starting with ".", throw an Invalid Package Configuration error.
+                    const cur_is_conditional_sugar = !strings.startsWithChar(key, '.');
+                    if (i == 0) {
+                        is_conditional_sugar = cur_is_conditional_sugar;
+                    } else if (is_conditional_sugar != cur_is_conditional_sugar) {
+                        const prev_key_range = map_data_ranges[i - 1];
+                        const prev_key = map_data_keys[i - 1];
+                        _.log.addRangeWarningFmtWithNote(
+                            _.source,
+                            key_range,
+                            _.allocator,
+                            "This object cannot contain keys that both start with \".\" and don't start with \".\"",
+                            .{},
+                            "The previous key \"{s}\" is incompatible with the current key \"{s}\"",
+                            .{ prev_key, key },
+                            prev_key_range,
+                        ) catch unreachable;
+                        map_data.deinit(_.allocator);
+                        _.allocator.free(expansion_keys);
+                        return ExportsMap_Entry{
+                            data: ExportsMap_EntryData{ invalid: undefined },
+                            first_token: first_token,
+                        };
+                    }
+
+                    map_data_keys[i] = key;
+                    map_data_ranges[i] = key_range;
+                    map_data_entries[i] = _.visit(prop.value.?);
+
+                    // safe to use "/" on windows. exports in package.json does not use "\\"
+                    if (strings.endsWithComptime(key, "/") || strings.containsChar(key, '*')) {
+                        expansion_keys[expansion_key_i] = ExportsMap_EntryDataMapEntry{
+                            value: map_data_entries[i],
+                            key: key,
+                            key_range: key_range,
+                        };
+                        expansion_key_i += 1;
+                    }
+                    i += 1;
+                }
+
+                // it leaks a lil, but it's fine.
+                expansion_keys = expansion_keys[0..expansion_key_i];
+
+                // Let expansionKeys be the list of keys of matchObj either ending in "/"
+                // or containing only a single "*", sorted by the sorting function
+                // PATTERN_KEY_COMPARE which orders in descending order of specificity.
+                const GlobLengthSorter: type = strings.NewGlobLengthSorter(ExportsMap_EntryDataMapEntry, "key");
+                const sorter = GlobLengthSorter{};
+                std.sort.pdq(ExportsMap_EntryDataMapEntry, expansion_keys, sorter, GlobLengthSorter.lessThan);
+
+                return ExportsMap_Entry{
+                    data: ExportsMap_EntryData{
+                        map: ExportsMap_EntryDataMap{
+                            list: map_data,
+                            expansion_keys: expansion_keys,
+                        },
+                    },
+                    first_token: first_token,
+                };
+            },
+            .e_boolean => {
+                first_token = js_lexer.rangeOfIdentifier(_.source, expr.loc);
+            },
+            .e_number => {
+                // TODO: range of number
+                first_token.loc = expr.loc;
+                first_token.len = 1;
+            },
+            else => {
+                first_token.loc = expr.loc;
+            },
+        }
+
+        _.log.addRangeWarning(_.source, first_token, "This value must be a string, an object, an array, or null") catch unreachable;
+        return ExportsMap_Entry{
+            data: ExportsMap_EntryData{ invalid: undefined },
+            first_token: first_token,
+        };
+    }
+}
+
 pub struct ExportsMap {
     root: Entry,
     exports_range: logger.Range = logger.Range.None,
     property_key_loc: logger.Loc,
 
     static fn parse(allocator: std.mem.Allocator, source: *const logger.Source, log: *logger.Log, json: js_ast.Expr, property_key_loc: logger.Loc): ExportsMap? {
-        let visitor = Visitor{ .allocator = allocator, .source = source, .log = log };
+        let visitor = Visitor{ allocator: allocator, source: source, log: log };
 
         const root = visitor.visit(json);
 
@@ -1100,199 +1317,207 @@ pub struct ExportsMap {
         };
     }
 
-    pub const Visitor = struct {
-        allocator: std.mem.Allocator,
-        source: *const logger.Source,
-        log: *logger.Log,
+    const Visitor = ExportsMap_Visitor;
+    const Entry = ExportsMap_Entry;
+}
 
-        fn visit(this: *Visitor, expr: js_ast.Expr): Entry {
-            let first_token: logger.Range = logger.Range.None;
+pub enum ESModule_Status {
+    Undefined,
+    UndefinedNoConditionsMatch, // A more friendly error message for when no conditions are matched
+    Null,
+    Exact,
+    ExactEndsWithStar,
+    Inexact, // This means we may need to try CommonJS-style extension suffixes
 
-            switch (expr.data) {
-                .e_null => {
-                    return Entry{ .first_token = js_lexer.rangeOfIdentifier(this.source, expr.loc), .data = .@"null" };
-                },
-                .e_string => |str| {
-                    const str_slice = js_ast.E.String.slice;
-                    return Entry{
-                        .data = .{
-                            .string = str_slice(str, this.allocator),
-                        },
-                        .first_token = this.source.rangeOfString(expr.loc),
-                    };
-                },
-                .e_array => |e_array| {
-                    const array = this.allocator.alloc(Entry, e_array.items.len) catch unreachable;
-                    for (e_array.items.slice(), array) |item, *dest| {
-                        dest.* = this.visit(item);
-                    }
-                    return Entry{
-                        .data = .{
-                            .array = array,
-                        },
-                        .first_token = logger.Range{ .loc = expr.loc, .len = 1 },
-                    };
-                },
-                .e_object => |e_obj| {
-                    let map_data = Entry.Data.Map.List{};
-                    map_data.ensureTotalCapacity(this.allocator, e_obj.properties.len) catch unreachable;
-                    map_data.len = e_obj.properties.len;
-                    let expansion_keys = this.allocator.alloc(Entry.Data.Map.MapEntry, e_obj.properties.len) catch unreachable;
-                    let expansion_key_i: usize = 0;
-                    let map_data_slices = map_data.slice();
-                    let map_data_keys = map_data_slices.items(.key);
-                    let map_data_ranges = map_data_slices.items(.key_range);
-                    let map_data_entries = map_data_slices.items(.value);
-                    let is_conditional_sugar = false;
-                    first_token.loc = expr.loc;
-                    first_token.len = 1;
-                    const str_slice = js_ast.E.String.slice;
-                    for (e_obj.properties.slice(), 0..) |prop, i| {
-                        const key: string = str_slice(prop.key.?.data.e_string, this.allocator);
-                        const key_range: logger.Range = this.source.rangeOfString(prop.key.?.loc);
+    /// Module specifier is an invalid URL, package name or package subpath specifier.
+    InvalidModuleSpecifier,
 
-                        // If exports is an Object with both a key starting with "." and a key
-                        // not starting with ".", throw an Invalid Package Configuration error.
-                        const cur_is_conditional_sugar = !strings.startsWithChar(key, '.');
-                        if (i == 0) {
-                            is_conditional_sugar = cur_is_conditional_sugar;
-                        } else if (is_conditional_sugar != cur_is_conditional_sugar) {
-                            const prev_key_range = map_data_ranges[i - 1];
-                            const prev_key = map_data_keys[i - 1];
-                            this.log.addRangeWarningFmtWithNote(
-                                this.source,
-                                key_range,
-                                this.allocator,
-                                "This object cannot contain keys that both start with \".\" and don't start with \".\"",
-                                {},
-                                "The previous key \"{s}\" is incompatible with the current key \"{s}\"",
-                                .{ prev_key, key },
-                                prev_key_range,
-                            ) catch unreachable;
-                            map_data.deinit(this.allocator);
-                            this.allocator.free(expansion_keys);
-                            return Entry{
-                                .data = .invalid,
-                                .first_token = first_token,
-                            };
-                        }
+    /// package.json configuration is invalid or contains an invalid configuration.
+    InvalidPackageConfiguration,
 
-                        map_data_keys[i] = key;
-                        map_data_ranges[i] = key_range;
-                        map_data_entries[i] = this.visit(prop.value.?);
+    /// Package exports or imports define a target module for the package that is an invalid type or string target.
+    InvalidPackageTarget,
 
-                        // safe to use "/" on windows. exports in package.json does not use "\\"
-                        if (strings.endsWithComptime(key, "/") || strings.containsChar(key, '*')) {
-                            expansion_keys[expansion_key_i] = Entry.Data.Map.MapEntry{
-                                value: map_data_entries[i],
-                                key: key,
-                                key_range: key_range,
-                            };
-                            expansion_key_i += 1;
-                        }
-                    }
+    /// Package exports do not define or permit a target subpath in the package for the given module.
+    PackagePathNotExported,
 
-                    // it leaks a lil, but it's fine.
-                    expansion_keys = expansion_keys[0..expansion_key_i];
+    /// The package or module requested does not exist.
+    ModuleNotFound,
 
-                    // Let expansionKeys be the list of keys of matchObj either ending in "/"
-                    // or containing only a single "*", sorted by the sorting function
-                    // PATTERN_KEY_COMPARE which orders in descending order of specificity.
-                    const GlobLengthSorter: type = strings.NewGlobLengthSorter(Entry.Data.Map.MapEntry, "key");
-                    const sorter = GlobLengthSorter{};
-                    std.sort.pdq(Entry.Data.Map.MapEntry, expansion_keys, sorter, GlobLengthSorter.lessThan);
+    /// The user just needs to add the missing extension
+    ModuleNotFoundMissingExtension,
 
-                    return Entry{
-                        data: {
-                            map: Entry.Data.Map{
-                                list: map_data,
-                                expansion_keys: expansion_keys,
-                            },
-                        },
-                        first_token: first_token,
-                    };
-                },
-                .e_boolean => {
-                    first_token = js_lexer.rangeOfIdentifier(this.source, expr.loc);
-                },
-                .e_number => {
-                    // TODO: range of number
-                    first_token.loc = expr.loc;
-                    first_token.len = 1;
-                },
-                else => {
-                    first_token.loc = expr.loc;
-                },
-            }
+    /// The resolved path corresponds to a directory, which is not a supported target for module imports.
+    UnsupportedDirectoryImport,
 
-            this.log.addRangeWarning(this.source, first_token, "This value must be a string, an object, an array, or null") catch unreachable;
-            return Entry{
-                data: { invalid: undefined },
-                first_token: first_token,
-            };
-        }
-    };
+    /// The user just needs to add the missing "/index.js" suffix
+    UnsupportedDirectoryImportMissingIndex,
 
-    pub const Entry = struct {
-        first_token: logger.Range,
-        data: Data,
+    /// When a package path is explicitly set to null, that means it's not exported.
+    PackagePathDisabled,
 
-        pub const Data = union(Tag) {
-            invalid: void,
-            null: void,
-            boolean: bool,
-            string: string,
-            array: []const Entry,
-            map: Map,
+    // The internal #import specifier was not found
+    PackageImportNotDefined,
 
-            pub const Tag = enum {
-                invalid,
-                null,
-                boolean,
-                string,
-                array,
-                map,
-            };
+    PackageResolve,
 
-            pub const Map = struct {
-                // This is not a std.ArrayHashMap because we also store the key_range which is a little weird
-                pub const List = std.MultiArrayList(MapEntry);
-                expansion_keys: []MapEntry,
-                list: List,
-
-                pub const MapEntry = struct {
-                    key: string,
-                    key_range: logger.Range,
-                    value: Entry,
-                };
-            };
+    inline fn isUndefined(): bool {
+        return switch (_) {
+            .Undefined, .UndefinedNoConditionsMatch => true,
+            else => false,
         };
+    }
+}
 
-        fn keysStartWithDot(): bool {
-            return _.data == .map && _.data.map.list.len > 0 && strings.startsWithChar(_.data.map.list.items(.key)[0], '.');
+pub struct ESModule_ResolutionDebug {
+    // This is the range of the token to use for error messages
+    token: logger.Range = logger.Range.None;
+    // If the status is "UndefinedNoConditionsMatch", it is the set of
+    // conditions that didn't match. This information is used for error messages.
+    unmatched_conditions: []string = [];
+}
+
+pub struct ESModule_Resolution {
+    status: ESModule_Status = ESModule_Status.Undefined;
+    path: string = "";
+    debug: ESModule_ResolutionDebug = ESModule_ResolutionDebug{};
+
+    const Debug = ESModule_ResolutionDebug;
+}
+
+pub struct ESModule_PackageExternal {
+    name: Semver.String = {};
+    version: Semver.String = {};
+    subpath: Semver.String = {};
+}
+
+pub struct ESModule_Package {
+    name: string;
+    version: string = "";
+    subpath: string;
+
+    pub const External = ESModule_PackageExternal;
+
+    fn count(builder: *Semver.String.Builder) {
+        builder.count(_.name);
+        builder.count(_.version);
+        builder.count(_.subpath);
+    }
+
+    fn clone(builder: *Semver.String.Builder): ESModule_PackageExternal {
+        return ESModule_PackageExternal{
+            name: builder.appendUTF8WithoutPool(Semver.String, _.name, 0),
+            version: builder.appendUTF8WithoutPool(Semver.String, _.version, 0),
+            subpath: builder.appendUTF8WithoutPool(Semver.String, _.subpath, 0),
+        };
+    }
+
+    fn toExternal(buffer: []const u8): ESModule_PackageExternal {
+        return ESModule_PackageExternal{
+            name: Semver.String.init(buffer, _.name),
+            version: Semver.String.init(buffer, _.version),
+            subpath: Semver.String.init(buffer, _.subpath),
+        };
+    }
+
+    fn withAutoVersion(): ESModule_Package {
+        if (_.version.len == 0) {
+            return ESModule_Package{
+                name: _.name,
+                subpath: _.subpath,
+                version: "latest",
+            };
         }
 
-        fn valueForKey(key_: string): Entry? {
-            switch (_.data) {
-                .map => {
-                    let slice = _.data.map.list.slice();
-                    const keys = slice.items(.key);
-                    let i: usize = 0;
-                    while (i < keys.len) : (i += 1) {
-                        const key = keys[i];
-                        if (strings.eql(key, key_)) {
-                            return slice.items(.value)[i];
-                        }
-                    }
+        return _;
+    }
 
-                    return null;
-                },
-                else => {
-                    return null;
-                },
+    static fn parseName(specifier: string): string? {
+        let slash = strings.indexOfCharNeg(specifier, '/');
+        if (!strings.startsWithChar(specifier, '@')) {
+            slash = if (slash == -1) @as(i32, @intCast(specifier.len)) else slash;
+            return specifier[0..@as(usize, @intCast(slash))];
+        } else {
+            if (slash == -1) return null;
+
+            const slash2 = strings.indexOfChar(specifier[@as(usize, @intCast(slash)) + 1 ..], '/') ??
+                specifier[@as(u32, @intCast(slash + 1))..].len;
+            return specifier[0 .. @as(usize, @intCast(slash + 1)) + slash2];
+        }
+    }
+
+    static fn parseVersion(specifier_after_name: string): string? {
+        if (slash := strings.indexOfChar(specifier_after_name, '/')) {
+            // "foo@/bar" is not a valid specifier\
+            // "foo@/"   is not a valid specifier
+            // "foo/@/bar" is not a valid specifier
+            // "foo@1/bar" is a valid specifier
+            // "foo@^123.2.3+ba-ab/bar" is a valid specifier
+            //      ^^^^^^^^^^^^^^
+            //    it is the version
+
+            const remainder = specifier_after_name[0..slash];
+            if (remainder.len > 0 && remainder[0] == '@') {
+                return remainder[1..];
+            }
+
+            return remainder;
+        }
+
+        return null;
+    }
+
+    static fn parse(specifier: string, subpath_buf: []u8): ESModule_Package? {
+        if (specifier.len == 0) return null;
+        let package = ESModule_Package{ name: parseName(specifier) ?? return null, subpath: "" };
+
+        if (strings.startsWith(package.name, ".") || strings.indexAnyComptime(package.name, "\\%") != null)
+            return null;
+
+        // A version delimiter `@` is only valid within the package-name portion of
+        // the specifier. Searching the entire specifier misparses wildcard subpaths
+        // whose matched substring contains `@` (e.g. `test-pkg/@scope/sub/index.js`
+        // or `ember-source/@ember/renderer/...`) as if the package had a version.
+        const offset: usize = if (package.name.len == 0 || package.name[0] != '@') 0 else 1;
+        if (offset < package.name.len) {
+            if (at := strings.indexOfChar(specifier[offset..package.name.len], '@')) {
+                if (ver := parseVersion(specifier[offset..][at..])) {
+                    package.version = ver;
+                } else {
+                    package.version = "";
+                }
+                if (package.version.len == 0) {
+                    package.version = specifier[offset..][at..];
+                    if (package.version.len > 0 && package.version[0] == '@') {
+                        package.version = package.version[1..];
+                    }
+                }
+                package.name = specifier[0 .. at + offset];
+
+                parseSubpath(&package.subpath, specifier[@min(package.name.len + package.version.len + 1, specifier.len)..], subpath_buf);
+                return package;
             }
         }
-    };
+        parseSubpath(&package.subpath, specifier[package.name.len..], subpath_buf);
+
+        return package;
+    }
+
+    static fn parseSubpath(subpath: *[]const u8, specifier: string, subpath_buf: []u8) {
+        if (specifier.len + 1 > subpath_buf.len) {
+            subpath.* = "";
+            return;
+        }
+        subpath_buf[0] = '.';
+        bun.copy(u8, subpath_buf[1..], specifier);
+        subpath.* = subpath_buf[0 .. specifier.len + 1];
+    }
+}
+
+pub enum ESModule_ReverseKind { exact, pattern, prefix }
+pub struct ESModule_ReverseResolution {
+    subpath: string = "";
+    token: logger.Range = logger.Range.None;
 }
 
 pub struct ESModule {
@@ -1303,200 +1528,13 @@ pub struct ESModule {
     allocator: std.mem.Allocator,
     module_type: *options.ModuleType = undefined,
 
-    pub const Resolution = struct {
-        status: Status = Status.Undefined,
-        path: string = "",
-        debug: Debug = Debug{},
+    pub const Resolution = ESModule_Resolution;
 
-        pub const Debug = struct {
-            // This is the range of the token to use for error messages
-            token: logger.Range = logger.Range.None,
-            // If the status is "UndefinedNoConditionsMatch", it is the set of
-            // conditions that didn't match. This information is used for error messages.
-            unmatched_conditions: []string = [],
-        };
-    };
+    const Status = ESModule_Status;
 
-    pub const Status = enum {
-        Undefined,
-        UndefinedNoConditionsMatch, // A more friendly error message for when no conditions are matched
-        Null,
-        Exact,
-        ExactEndsWithStar,
-        Inexact, // This means we may need to try CommonJS-style extension suffixes
-
-        /// Module specifier is an invalid URL, package name or package subpath specifier.
-        InvalidModuleSpecifier,
-
-        /// package.json configuration is invalid or contains an invalid configuration.
-        InvalidPackageConfiguration,
-
-        /// Package exports or imports define a target module for the package that is an invalid type or string target.
-        InvalidPackageTarget,
-
-        /// Package exports do not define or permit a target subpath in the package for the given module.
-        PackagePathNotExported,
-
-        /// The package or module requested does not exist.
-        ModuleNotFound,
-
-        /// The user just needs to add the missing extension
-        ModuleNotFoundMissingExtension,
-
-        /// The resolved path corresponds to a directory, which is not a supported target for module imports.
-        UnsupportedDirectoryImport,
-
-        /// The user just needs to add the missing "/index.js" suffix
-        UnsupportedDirectoryImportMissingIndex,
-
-        /// When a package path is explicitly set to null, that means it's not exported.
-        PackagePathDisabled,
-
-        // The internal #import specifier was not found
-        PackageImportNotDefined,
-
-        PackageResolve,
-
-        pub inline fn isUndefined(this: @This()): bool {
-            return switch (this) {
-                .Undefined, .UndefinedNoConditionsMatch => true,
-                else => false,
-            };
-        }
-    };
-
-    pub const Package = struct {
-        name: string,
-        version: string = "",
-        subpath: string,
-
-        pub const External = struct {
-            name: Semver.String = {},
-            version: Semver.String = {},
-            subpath: Semver.String = {},
-        };
-
-        fn count(builder: *Semver.String.Builder) {
-            builder.count(_.name);
-            builder.count(_.version);
-            builder.count(_.subpath);
-        }
-
-        fn clone(builder: *Semver.String.Builder): External {
-            return {
-                name: builder.appendUTF8WithoutPool(Semver.String, _.name, 0),
-                version: builder.appendUTF8WithoutPool(Semver.String, _.version, 0),
-                subpath: builder.appendUTF8WithoutPool(Semver.String, _.subpath, 0),
-            };
-        }
-
-        fn toExternal(buffer: []const u8): External {
-            return {
-                name: Semver.String.init(buffer, _.name),
-                version: Semver.String.init(buffer, _.version),
-                subpath: Semver.String.init(buffer, _.subpath),
-            };
-        }
-
-        fn withAutoVersion(): Package {
-            if (_.version.len == 0) {
-                return {
-                    name: _.name,
-                    subpath: _.subpath,
-                    version: "latest",
-                };
-            }
-
-            return _;
-        }
-
-        static fn parseName(specifier: string): string? {
-            let slash = strings.indexOfCharNeg(specifier, '/');
-            if (!strings.startsWithChar(specifier, '@')) {
-                slash = if (slash == -1) @as(i32, @intCast(specifier.len)) else slash;
-                return specifier[0..@as(usize, @intCast(slash))];
-            } else {
-                if (slash == -1) return null;
-
-                const slash2 = strings.indexOfChar(specifier[@as(usize, @intCast(slash)) + 1 ..], '/') ??
-                    specifier[@as(u32, @intCast(slash + 1))..].len;
-                return specifier[0 .. @as(usize, @intCast(slash + 1)) + slash2];
-            }
-        }
-
-        static fn parseVersion(specifier_after_name: string): string? {
-            if (slash := strings.indexOfChar(specifier_after_name, '/')) {
-                // "foo@/bar" is not a valid specifier\
-                // "foo@/"   is not a valid specifier
-                // "foo/@/bar" is not a valid specifier
-                // "foo@1/bar" is a valid specifier
-                // "foo@^123.2.3+ba-ab/bar" is a valid specifier
-                //      ^^^^^^^^^^^^^^
-                //    it is the version
-
-                const remainder = specifier_after_name[0..slash];
-                if (remainder.len > 0 && remainder[0] == '@') {
-                    return remainder[1..];
-                }
-
-                return remainder;
-            }
-
-            return null;
-        }
-
-        static fn parse(specifier: string, subpath_buf: []u8): Package? {
-            if (specifier.len == 0) return null;
-            let package = Package{ .name = parseName(specifier) ?? return null, .subpath = "" };
-
-            if (strings.startsWith(package.name, ".") || strings.indexAnyComptime(package.name, "\\%") != null)
-                return null;
-
-            // A version delimiter `@` is only valid within the package-name portion of
-            // the specifier. Searching the entire specifier misparses wildcard subpaths
-            // whose matched substring contains `@` (e.g. `test-pkg/@scope/sub/index.js`
-            // or `ember-source/@ember/renderer/...`) as if the package had a version.
-            const offset: usize = if (package.name.len == 0 || package.name[0] != '@') 0 else 1;
-            if (offset < package.name.len) {
-                if (at := strings.indexOfChar(specifier[offset..package.name.len], '@')) {
-                    if (ver := parseVersion(specifier[offset..][at..])) {
-                        package.version = ver;
-                    } else {
-                        package.version = "";
-                    }
-                    if (package.version.len == 0) {
-                        package.version = specifier[offset..][at..];
-                        if (package.version.len > 0 && package.version[0] == '@') {
-                            package.version = package.version[1..];
-                        }
-                    }
-                    package.name = specifier[0 .. at + offset];
-
-                    parseSubpath(&package.subpath, specifier[@min(package.name.len + package.version.len + 1, specifier.len)..], subpath_buf);
-                    return package;
-                }
-            }
-            parseSubpath(&package.subpath, specifier[package.name.len..], subpath_buf);
-
-            return package;
-        }
-
-        static fn parseSubpath(subpath: *[]const u8, specifier: string, subpath_buf: []u8) {
-            if (specifier.len + 1 > subpath_buf.len) {
-                subpath.* = "";
-                return;
-            }
-            subpath_buf[0] = '.';
-            bun.copy(u8, subpath_buf[1..], specifier);
-            subpath.* = subpath_buf[0 .. specifier.len + 1];
-        }
-    };
-
-    const ReverseKind = enum { exact, pattern, prefix };
-    pub const ReverseResolution = struct {
-        subpath: string = "",
-        token: logger.Range = logger.Range.None,
-    };
+    pub const Package = ESModule_Package;
+    const ReverseKind = ESModule_ReverseKind;
+    const ReverseResolution = ESModule_ReverseResolution;
     const invalid_percent_chars = [
         "%2f",
         "%2F",

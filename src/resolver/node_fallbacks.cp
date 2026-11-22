@@ -1,5 +1,4 @@
 import Fs from "./fs.zig";
-import std from "std";
 import { PackageJSON } from "./package_json.zig";
 import bun from "bun";
 const Environment = bun.Environment;
@@ -11,26 +10,27 @@ comptime {
     bun.assert(import_path.len % 8 == 0);
 }
 
-pub struct FallbackModule {
-    path: Fs.Path,
-    package_json: *const PackageJSON,
-    code: *const fn () string,
-
-    static fn createSourceCodeGetter(comptime code_path: string): *const fn () string {
-        const Getter = struct {
-            static fn get(): string {
-                if (bun.Environment.codegen_embed) {
-                    return @embedFile(code_path);
-                }
-
-                return bun.runtimeEmbedFile(.codegen, code_path);
+fn createSourceCodeGetter(comptime code_path: string): *const fn (): string {
+    if (bun.Environment.codegen_embed) {
+        return struct {
+            pub fn get(): string {
+                return @embedFile(code_path);
             }
-        };
-
-        return Getter.get;
+        }.get;
     }
+    return struct {
+        pub fn get(): string {
+            return bun.runtimeEmbedFile(.codegen, code_path);
+        }
+    }.get;
+}
 
-    pub static fn init(comptime name: string): FallbackModule {
+pub struct FallbackModule {
+    path: Fs.Path;
+    package_json: *const PackageJSON;
+    code: *const fn (): string;
+
+    static fn init(comptime name: string): FallbackModule {
         @setEvalBranchQuota(99999);
         const version = "0.0.0-polyfill";
         const code_path = "node-fallbacks/" ++ name ++ ".js";

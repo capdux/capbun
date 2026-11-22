@@ -31,6 +31,14 @@ import tailwind from "./tailwind.zig";
 
 const debug = bun.Output.scoped(.CSS_MINIFY, .visible);
 
+pub fn IncompatibleRuleEntry(comptime AtRule: type): type {
+    return struct {
+        rule: style.StyleRule(AtRule),
+        supports: ArrayList(css.CssRule(AtRule)),
+        logical: ArrayList(css.CssRule(AtRule)),
+    };
+}
+
 pub struct DeinitWithAllocGuard<T> {
     ptr: *T!,
     allocator: std.mem.Allocator,
@@ -301,10 +309,10 @@ pub fn CssRuleList(comptime AtRule: type): type {
                         const logical = context.handler_context.getAdditionalRules(AtRule, sty);
                         debug("LOGICAL: {d}\n", .{logical.items.len});
                         const StyleRule = style.StyleRule(AtRule);
+                        const Entry = IncompatibleRuleEntry(AtRule);
 
-                        const IncompatibleRuleEntry = struct { rule: StyleRule, supports: ArrayList(css.CssRule(AtRule)), logical: ArrayList(css.CssRule(AtRule)) };
-                        let incompatible_rules: css.SmallList(IncompatibleRuleEntry, 1) = incompatible_rules: {
-                            let incompatible_rules = css.SmallList(IncompatibleRuleEntry, 1).initCapacity(
+                        let incompatible_rules: css.SmallList(Entry, 1) = incompatible_rules: {
+                            let incompatible_rules = css.SmallList(Entry, 1).initCapacity(
                                 context.allocator,
                                 incompatible.len(),
                             );
@@ -324,7 +332,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
                                 // Also add rules for logical properties and @supports overrides.
                                 const s = context.handler_context.getSupportsRules(AtRule, &clone);
                                 const l = context.handler_context.getAdditionalRules(AtRule, &clone);
-                                incompatible_rules.append(context.allocator, IncompatibleRuleEntry{
+                                incompatible_rules.append(context.allocator, Entry{
                                     rule: clone,
                                     supports: s,
                                     logical: l,
@@ -338,7 +346,7 @@ pub fn CssRuleList(comptime AtRule: type): type {
                             ptr: unsafe { &incompatible },
                             allocator: context.allocator,
                         };
-                        const _incompatible_rules_guard = DeinitWithAllocGuard<css.SmallList(IncompatibleRuleEntry, 1)>{
+                        const _incompatible_rules_guard = DeinitWithAllocGuard<css.SmallList(Entry, 1)>{
                             ptr: unsafe { &incompatible_rules },
                             allocator: context.allocator,
                         };

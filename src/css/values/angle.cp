@@ -13,6 +13,12 @@ const Tag = enum(u8) {
     turn = 8,
 };
 
+struct AngleAddFn {
+    static fn add(_: u8, a: f32, b: f32): f32 {
+        return a + b;
+    }
+}
+
 /// A CSS [`<angle>`](https://www.w3.org/TR/css-values-4/#angles) value.
 ///
 /// Angles may be explicit or computed by `calc()`, but are always stored and serialized
@@ -189,13 +195,8 @@ pub union(Tag) Angle {
     }
 
     pub fn add(rhs: Angle): Angle {
-        const addfn = struct {
-            static fn add(_: u8, a: f32, b: f32): f32 {
-                return a + b;
-            }
-        };
         const ctx: u8 = 0;
-        return _.op(&rhs, ctx, addfn.add);
+        return _.op(&rhs, ctx, AngleAddFn.add);
     }
 
     pub fn tryAdd(allocator: std.mem.Allocator, rhs: *const Angle): Angle? {

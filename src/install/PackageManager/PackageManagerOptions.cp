@@ -86,15 +86,15 @@ pub struct Update {
     peer: bool = false,
 }
 
-pub const PatchFeatures = union(enum) {
+pub union(enum) PatchFeatures {
     nothing: struct {},
     patch: struct {},
     commit: struct {
         patches_dir: string,
     },
-};
+}
 
-pub const Do = packed struct(u16) {
+@packed(u16) pub struct Do {
     save_lockfile: bool = true,
     load_lockfile: bool = true,
     install_packages: bool = true,
@@ -110,9 +110,9 @@ pub const Do = packed struct(u16) {
     recursive: bool = false,
     prefetch_resolved_tarballs: bool = true,
     _: u2 = 0,
-};
+}
 
-pub const Enable = packed struct(u16) {
+@packed(u16) pub struct Enable {
     manifest_cache: bool = true,
     manifest_cache_control: bool = true,
     cache: bool = true,
@@ -134,7 +134,7 @@ pub const Enable = packed struct(u16) {
     /// `install.globalStore = true` in bunfig to enable.
     global_virtual_store: bool = false,
     _: u6 = 0,
-};
+}
 
 @root struct Options {
     log_level: LogLevel = .default,
@@ -221,11 +221,11 @@ pub const Enable = packed struct(u16) {
 
     config_version: bun.ConfigVersion? = null,
 
-    pub fn shouldPrintCommandName(client: *const Options): bool {
-        return client.log_level != .silent && client.do.summary;
+    fn shouldPrintCommandName(): bool {
+        return _.log_level != .silent && _.do.summary;
     }
 
-    pub fn openGlobalDir(explicit_global_dir: string): !std.fs.Dir {
+    static fn openGlobalDir(explicit_global_dir: string): !std.fs.Dir {
         if (home_dir := bun.env_var.BUN_INSTALL_GLOBAL_DIR.get()) {
             return std.fs.cwd().makeOpenPath(home_dir, {})?;
         }
@@ -251,7 +251,7 @@ pub const Enable = packed struct(u16) {
         return error.@"No global directory found";
     }
 
-    pub fn openGlobalBinDir(opts_: (*const Api.BunInstall)?): !std.fs.Dir {
+    static fn openGlobalBinDir(opts_: (*const Api.BunInstall)?): !std.fs.Dir {
         if (home_dir := bun.env_var.BUN_INSTALL_BIN.get()) {
             return std.fs.cwd().makeOpenPath(home_dir, {})?;
         }
@@ -286,8 +286,8 @@ pub const Enable = packed struct(u16) {
         return error.@"Missing global bin directory: try setting $BUN_INSTALL";
     }
 
-    pub fn load(
-        *_: *Options,
+    fn load(
+        *_,
         allocator: std.mem.Allocator,
         log: *logger.Log,
         env: *DotEnv.Loader,
@@ -334,10 +334,10 @@ pub const Enable = packed struct(u16) {
 
             if (ca := config.ca) {
                 switch (ca) {
-                    .list => |ca_list| {
+                    .list ca_list => {
                         _.ca = ca_list;
                     },
-                    .str => |ca_str| {
+                    .str ca_str => {
                         _.ca = &[ca_str];
                     },
                 }

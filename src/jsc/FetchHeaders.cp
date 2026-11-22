@@ -9,10 +9,107 @@ const ZigString = jsc.ZigString;
 const api = bun.schema.api;
 const StringPointer = api.StringPointer;
 
-const PicoHeaders = struct {
+struct PicoHeaders {
     ptr: *!?,
     len: usize,
-};
+}
+
+pub enum _HTTPHeaderName: u8 {
+    Accept,
+    AcceptCharset,
+    AcceptEncoding,
+    AcceptLanguage,
+    AcceptRanges,
+    AccessControlAllowCredentials,
+    AccessControlAllowHeaders,
+    AccessControlAllowMethods,
+    AccessControlAllowOrigin,
+    AccessControlExposeHeaders,
+    AccessControlMaxAge,
+    AccessControlRequestHeaders,
+    AccessControlRequestMethod,
+    Age,
+    Authorization,
+    CacheControl,
+    Connection,
+    ContentDisposition,
+    ContentEncoding,
+    ContentLanguage,
+    ContentLength,
+    ContentLocation,
+    ContentRange,
+    ContentSecurityPolicy,
+    ContentSecurityPolicyReportOnly,
+    ContentType,
+    Cookie,
+    Cookie2,
+    CrossOriginEmbedderPolicy,
+    CrossOriginEmbedderPolicyReportOnly,
+    CrossOriginOpenerPolicy,
+    CrossOriginOpenerPolicyReportOnly,
+    CrossOriginResourcePolicy,
+    DNT,
+    Date,
+    DefaultStyle,
+    ETag,
+    Expect,
+    Expires,
+    Host,
+    IcyMetaInt,
+    IcyMetadata,
+    IfMatch,
+    IfModifiedSince,
+    IfNoneMatch,
+    IfRange,
+    IfUnmodifiedSince,
+    KeepAlive,
+    LastEventID,
+    LastModified,
+    Link,
+    Location,
+    Origin,
+    PingFrom,
+    PingTo,
+    Pragma,
+    ProxyAuthorization,
+    ProxyConnection,
+    Purpose,
+    Range,
+    Referer,
+    ReferrerPolicy,
+    Refresh,
+    ReportTo,
+    SecFetchDest,
+    SecFetchMode,
+    SecWebSocketAccept,
+    SecWebSocketExtensions,
+    SecWebSocketKey,
+    SecWebSocketProtocol,
+    SecWebSocketVersion,
+    ServerTiming,
+    ServiceWorker,
+    ServiceWorkerAllowed,
+    ServiceWorkerNavigationPreload,
+    SetCookie,
+    SetCookie2,
+    SourceMap,
+    StrictTransportSecurity,
+    TE,
+    TimingAllowOrigin,
+    Trailer,
+    TransferEncoding,
+    Upgrade,
+    UpgradeInsecureRequests,
+    UserAgent,
+    Vary,
+    Via,
+    XContentTypeOptions,
+    XDNSPrefetchControl,
+    XFrameOptions,
+    XSourceMap,
+    XTempTablet,
+    XXSSProtection,
+}
 
 @c {
     fn WebCore__FetchHeaders__append(arg0: *FetchHeaders, arg1: *const ZigString, arg2: *const ZigString, arg3: *JSGlobalObject);
@@ -39,11 +136,13 @@ const PicoHeaders = struct {
     fn WebCore__FetchHeaders__toUWSResponse(arg0: *FetchHeaders, kind: bun.uws.ResponseKind, arg2: *!?);
     fn WebCore__FetchHeaders__createFromH3(arg0: *!): *FetchHeaders;
     fn WebCore__FetchHeaders__createFromJS(arg0: *jsc.JSGlobalObject, arg1: JSValue): (*FetchHeaders)?;
-    fn WebCore__FetchHeaders__put(arg0: *FetchHeaders, name_: FetchHeaders.HTTPHeaderName, value: *const ZigString, global: *JSGlobalObject);
+    fn WebCore__FetchHeaders__put(arg0: *FetchHeaders, name_: _HTTPHeaderName, value: *const ZigString, global: *JSGlobalObject);
 }
 
 @opaque pub struct FetchHeaders {
-    pub fn createValue(
+    pub const HTTPHeaderName = _HTTPHeaderName;
+
+    static fn createValue(
         global: *JSGlobalObject,
         names: [*c]api.StringPointer,
         values: [*c]api.StringPointer,
@@ -67,11 +166,11 @@ const PicoHeaders = struct {
     /// Throws an exception if invalid.
     ///
     /// If empty, returns null.
-    pub fn createFromJS(global: *JSGlobalObject, value: JSValue): bun.JSError!(*FetchHeaders)? {
+    static fn createFromJS(global: *JSGlobalObject, value: JSValue): bun.JSError!(*FetchHeaders)? {
         return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__createFromJS, [ global, value ]);
     }
 
-    pub fn putDefault(*_, name_: HTTPHeaderName, value: []const u8, global: *JSGlobalObject): bun.JSError!void {
+    fn putDefault(*_, name_: _HTTPHeaderName, value: []const u8, global: *JSGlobalObject): bun.JSError!void {
         if (_.fastHas(name_)) {
             return;
         }
@@ -79,7 +178,7 @@ const PicoHeaders = struct {
         _.put(name_, value, global)?;
     }
 
-    pub fn create(
+    static fn create(
         global: *JSGlobalObject,
         names: [*c]api.StringPointer,
         values: [*c]api.StringPointer,
@@ -95,7 +194,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn @"from"(
+    static fn @"from"(
         global: *JSGlobalObject,
         names: [*c]api.StringPointer,
         values: [*c]api.StringPointer,
@@ -111,11 +210,11 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn isEmpty(*_): bool {
+    fn isEmpty(*_): bool {
         return WebCore__FetchHeaders__isEmpty(_);
     }
 
-    pub fn createFromUWS(
+    static fn createFromUWS(
         uws_request: *!,
     ): *FetchHeaders {
         return WebCore__FetchHeaders__createFromUWS(
@@ -123,7 +222,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn createFromH3(
+    static fn createFromH3(
         h3_request: *!,
     ): *FetchHeaders {
         return WebCore__FetchHeaders__createFromH3(
@@ -131,7 +230,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn toUWSResponse(
+    static fn toUWSResponse(
         headers: *FetchHeaders,
         kind: bun.uws.ResponseKind,
         uws_response: *!,
@@ -143,13 +242,11 @@ const PicoHeaders = struct {
         );
     }
 
-    
-
-    pub fn createEmpty(): *FetchHeaders {
+    static fn createEmpty(): *FetchHeaders {
         return WebCore__FetchHeaders__createEmpty();
     }
 
-    pub fn createFromPicoHeaders(
+    static fn createFromPicoHeaders(
         pico_headers: auto,
     ): *FetchHeaders {
         const out = PicoHeaders{ ptr: pico_headers.list.ptr, len: pico_headers.list.len };
@@ -159,13 +256,13 @@ const PicoHeaders = struct {
         return result;
     }
 
-    pub fn createFromPicoHeaders_(
+    static fn createFromPicoHeaders_(
         pico_headers: *const !,
     ): *FetchHeaders {
         return WebCore__FetchHeaders__createFromPicoHeaders_(pico_headers);
     }
 
-    pub fn append(
+    fn append(
         *_,
         name_: *const ZigString,
         value: *const ZigString,
@@ -179,9 +276,9 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn put(
+    fn put(
         *_,
-        name_: HTTPHeaderName,
+        name_: _HTTPHeaderName,
         value: []const u8,
         global: *JSGlobalObject,
     ): bun.JSError!void {
@@ -189,7 +286,7 @@ const PicoHeaders = struct {
         return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__put, [ _, name_, &str, global ]);
     }
 
-    pub fn get_(
+    fn get_(
         *_,
         name_: *const ZigString,
         out: *ZigString,
@@ -203,7 +300,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn get(
+    fn get(
         *_,
         name_: []const u8,
         global: *JSGlobalObject,
@@ -217,7 +314,7 @@ const PicoHeaders = struct {
         return null;
     }
 
-    pub fn has(
+    fn has(
         *_,
         name_: *const ZigString,
         global: *JSGlobalObject,
@@ -229,16 +326,16 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn fastHas(
+    fn fastHas(
         *_,
-        name_: HTTPHeaderName,
+        name_: _HTTPHeaderName,
     ): bool {
         return _.fastHas_(@intFromEnum(name_));
     }
 
-    pub fn fastGet(
+    fn fastGet(
         *_,
-        name_: HTTPHeaderName,
+        name_: _HTTPHeaderName,
     ): ZigString? {
         let str = ZigString.init("");
         _.fastGet_(@intFromEnum(name_), &str);
@@ -249,7 +346,7 @@ const PicoHeaders = struct {
         return str;
     }
 
-    pub fn fastHas_(
+    fn fastHas_(
         *_,
         name_: u8,
     ): bool {
@@ -259,7 +356,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn fastGet_(
+    fn fastGet_(
         *_,
         name_: u8,
         str: *ZigString,
@@ -271,111 +368,14 @@ const PicoHeaders = struct {
         );
     }
 
-    pub const HTTPHeaderName = enum(u8) {
-        Accept,
-        AcceptCharset,
-        AcceptEncoding,
-        AcceptLanguage,
-        AcceptRanges,
-        AccessControlAllowCredentials,
-        AccessControlAllowHeaders,
-        AccessControlAllowMethods,
-        AccessControlAllowOrigin,
-        AccessControlExposeHeaders,
-        AccessControlMaxAge,
-        AccessControlRequestHeaders,
-        AccessControlRequestMethod,
-        Age,
-        Authorization,
-        CacheControl,
-        Connection,
-        ContentDisposition,
-        ContentEncoding,
-        ContentLanguage,
-        ContentLength,
-        ContentLocation,
-        ContentRange,
-        ContentSecurityPolicy,
-        ContentSecurityPolicyReportOnly,
-        ContentType,
-        Cookie,
-        Cookie2,
-        CrossOriginEmbedderPolicy,
-        CrossOriginEmbedderPolicyReportOnly,
-        CrossOriginOpenerPolicy,
-        CrossOriginOpenerPolicyReportOnly,
-        CrossOriginResourcePolicy,
-        DNT,
-        Date,
-        DefaultStyle,
-        ETag,
-        Expect,
-        Expires,
-        Host,
-        IcyMetaInt,
-        IcyMetadata,
-        IfMatch,
-        IfModifiedSince,
-        IfNoneMatch,
-        IfRange,
-        IfUnmodifiedSince,
-        KeepAlive,
-        LastEventID,
-        LastModified,
-        Link,
-        Location,
-        Origin,
-        PingFrom,
-        PingTo,
-        Pragma,
-        ProxyAuthorization,
-        ProxyConnection,
-        Purpose,
-        Range,
-        Referer,
-        ReferrerPolicy,
-        Refresh,
-        ReportTo,
-        SecFetchDest,
-        SecFetchMode,
-        SecWebSocketAccept,
-        SecWebSocketExtensions,
-        SecWebSocketKey,
-        SecWebSocketProtocol,
-        SecWebSocketVersion,
-        ServerTiming,
-        ServiceWorker,
-        ServiceWorkerAllowed,
-        ServiceWorkerNavigationPreload,
-        SetCookie,
-        SetCookie2,
-        SourceMap,
-        StrictTransportSecurity,
-        TE,
-        TimingAllowOrigin,
-        Trailer,
-        TransferEncoding,
-        Upgrade,
-        UpgradeInsecureRequests,
-        UserAgent,
-        Vary,
-        Via,
-        XContentTypeOptions,
-        XDNSPrefetchControl,
-        XFrameOptions,
-        XSourceMap,
-        XTempTablet,
-        XXSSProtection,
-    };
-
-    pub fn fastRemove(
+    fn fastRemove(
         *_,
-        header: HTTPHeaderName,
+        header: _HTTPHeaderName,
     ) {
         return _.fastRemove_(@intFromEnum(header));
     }
 
-    pub fn fastRemove_(
+    fn fastRemove_(
         *_,
         header: u8,
     ) {
@@ -385,7 +385,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn remove(
+    fn remove(
         *_,
         name_: *const ZigString,
         global: *JSGlobalObject,
@@ -397,19 +397,19 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn cast_(value: JSValue, vm: *VM): (*FetchHeaders)? {
+    static fn cast_(value: JSValue, vm: *VM): (*FetchHeaders)? {
         return WebCore__FetchHeaders__cast_(value, vm);
     }
 
-    pub fn cast(value: JSValue): (*FetchHeaders)? {
+    static fn cast(value: JSValue): (*FetchHeaders)? {
         return cast_(value, jsc.VirtualMachine.get().global.vm());
     }
 
-    pub fn toJS(*_, globalThis: *JSGlobalObject): JSValue {
+    fn toJS(*_, globalThis: *JSGlobalObject): JSValue {
         return WebCore__FetchHeaders__toJS(_, globalThis);
     }
 
-    pub fn count(
+    fn count(
         *_,
         names: *u32,
         buf_len: *u32,
@@ -421,7 +421,7 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn clone(
+    fn clone(
         *_,
         global: *JSGlobalObject,
     ): JSValue {
@@ -431,20 +431,20 @@ const PicoHeaders = struct {
         );
     }
 
-    pub fn cloneThis(
+    fn cloneThis(
         *_,
         global: *JSGlobalObject,
     ): bun.JSError!(*FetchHeaders)? {
         return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__cloneThis, [ _, global ]);
     }
 
-    pub fn deref(
+    fn deref(
         *_,
     ) {
         return WebCore__FetchHeaders__deref(_);
     }
 
-    pub fn copyTo(
+    fn copyTo(
         *_,
         names: [*]api.StringPointer,
         values: [*]api.StringPointer,

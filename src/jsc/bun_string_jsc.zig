@@ -97,11 +97,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const SliceWithUnderlyingString = bun.SliceWithUnderlyingString;
-const String = bun.String;
-const strings = bun.strings;
-const jsc = bun.jsc;
-const ZigString = bun.jsc.ZigString;
 pub const UnicodeTestingAPIs = struct {
 
 pub fn toUTF16AllocSentinel(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun.jsc.CallFrame) bun.JSError!bun.jsc.JSValue {
@@ -109,11 +104,7 @@ pub fn toUTF16AllocSentinel(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun
             if ((arguments.len < 1)) {
                 return globalThis.throw("toUTF16AllocSentinel: expected 1 argument", .{});
             }
-            const opt_ab = arguments[0].asArrayBuffer(globalThis);
-            if ((opt_ab == null)) {
-                return globalThis.throw("toUTF16AllocSentinel: expected a Uint8Array", .{});
-            }
-            const array_buffer = opt_ab.?;
+            const array_buffer = ((arguments[0].asArrayBuffer(globalThis)) orelse { return globalThis.throw("toUTF16AllocSentinel: expected a Uint8Array", .{}); });
             const bytes = array_buffer.byteSlice();
             const allocator = bun.default_allocator;
             const result = (blk_catch_0: { break :blk_catch_0 ((strings.toUTF16AllocForReal(allocator, bytes, false, true)) catch |e| { _ = &e; return globalThis.throwError(e, "toUTF16AllocForReal failed"); }); });
@@ -131,6 +122,12 @@ pub fn toUTF16AllocSentinel(globalThis: *bun.jsc.JSGlobalObject, callframe: *bun
             return out.toJS(globalThis);
     }
 };
+
+const SliceWithUnderlyingString = bun.SliceWithUnderlyingString;
+const String = bun.String;
+const strings = bun.strings;
+const jsc = bun.jsc;
+const ZigString = bun.jsc.ZigString;
 
 extern "c" fn BunString__transferToJS(client: *String, globalThis: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue;
 
@@ -286,7 +283,7 @@ pub fn sliceWithUnderlyingStringToJSWithOptions(client: *SliceWithUnderlyingStri
                 }
             }
             if ((client.utf8.allocator.get() != null)) {
-                if ((blk_catch_0: { break :blk_catch_0 ((bun.strings.toUTF16Alloc(bun.default_allocator, client.utf8.slice(), false, false)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |utf16| {
+                if ((blk_catch_1: { break :blk_catch_1 ((bun.strings.toUTF16Alloc(bun.default_allocator, client.utf8.slice(), false, false)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |utf16| {
                     _ = &utf16;
                     _ = client.utf8.deinit();
                     client.utf8 = .{};
@@ -333,7 +330,7 @@ pub fn jsEscapeRegExp(global: *jsc.JSGlobalObject, call_frame: *jsc.CallFrame) b
         _ = &_buf_guard;
         var ___buf_guard_moved = false; _ = &___buf_guard_moved;
         defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_1: { break :blk_catch_1 ((bun.strings.escapeRegExp(input.slice(), (&buf.writer))) catch |__ce_1| { _ = &__ce_1; return error.OutOfMemory; }); });
+        _ = (blk_catch_2: { break :blk_catch_2 ((bun.strings.escapeRegExp(input.slice(), (&buf.writer))) catch |__ce_2| { _ = &__ce_2; return error.OutOfMemory; }); });
         var output = String.cloneUTF8(buf.written());
         _ = &output;
         return output.toJS(global);
@@ -356,7 +353,7 @@ pub fn jsEscapeRegExpForPackageNameMatching(global: *jsc.JSGlobalObject, call_fr
         _ = &_buf_guard;
         var ___buf_guard_moved = false; _ = &___buf_guard_moved;
         defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_2: { break :blk_catch_2 ((bun.strings.escapeRegExpForPackageNameMatching(input.slice(), (&buf.writer))) catch |__ce_2| { _ = &__ce_2; return error.OutOfMemory; }); });
+        _ = (blk_catch_3: { break :blk_catch_3 ((bun.strings.escapeRegExpForPackageNameMatching(input.slice(), (&buf.writer))) catch |__ce_3| { _ = &__ce_3; return error.OutOfMemory; }); });
         var output = String.cloneUTF8(buf.written());
         _ = &output;
         return output.toJS(global);

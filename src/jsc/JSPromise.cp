@@ -31,19 +31,22 @@ struct DeinitGuard<T> {
     }
 }
 
-pub const JSPromiseStatus = enum(u32) {
+pub enum JSPromiseStatus: u32 {
     pending = 0, // Making this as 0, so that, we can change the status from Pending to others without masking.
     fulfilled = 1,
     rejected = 2,
-};
+}
 
-pub const JSPromiseUnwrapMode = enum { mark_handled, leave_unhandled };
+pub enum JSPromiseUnwrapMode {
+    mark_handled,
+    leave_unhandled,
+}
 
-pub const JSPromiseUnwrapped = union(enum) {
-    pending,
+pub union(enum) JSPromiseUnwrapped {
+    pending: void,
     fulfilled: JSValue,
     rejected: JSValue,
-};
+}
 
 pub fn JSPromiseWeak(comptime T: type): type {
     return struct {
@@ -121,34 +124,34 @@ pub fn JSPromiseWeak(comptime T: type): type {
     };
 }
 
-pub const JSPromiseStrong = struct {
+pub struct JSPromiseStrong {
     strong: jsc.Strong.Optional = .empty,
 
     pub const empty: JSPromiseStrong = .{ strong: .empty };
 
-    pub fn rejectWithoutSwap(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) {
+    fn rejectWithoutSwap(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue) {
         (_.strong.get() orelse return).asPromise().?.reject(globalThis, val catch globalThis.tryTakeException().?);
     }
 
-    pub fn resolveWithoutSwap(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) {
+    fn resolveWithoutSwap(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue) {
         (_.strong.get() orelse return).asPromise().?.resolve(globalThis, val);
     }
 
-    pub fn reject(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue): bun.JSTerminated!void {
+    fn reject(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue): void ! bun.JSTerminated {
         _.swap().reject(globalThis, val catch globalThis.tryTakeException().?)?;
     }
 
     /// Like `reject` but first attaches async stack frames from this
     /// promise's await chain to the error. Use when rejecting from native
     /// code at the top of the event loop (threadpool callback).
-    pub fn rejectWithAsyncStack(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue): bun.JSTerminated!void {
+    fn rejectWithAsyncStack(*_, globalThis: *jsc.JSGlobalObject, val: JSError!jsc.JSValue): void ! bun.JSTerminated {
         const e = val catch return _.reject(globalThis, val);
         e.attachAsyncStackFromPromise(globalThis, _.get());
         _.swap().reject(globalThis, e)?;
     }
 
     /// Like `reject`, except it drains microtasks at the end of the current event loop iteration.
-    pub fn rejectTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): bun.JSTerminated!void {
+    fn rejectTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): void ! bun.JSTerminated {
         const loop = jsc.VirtualMachine.get().eventLoop();
         loop.enter();
         const loop_guard = ExitGuard<@TypeOf(loop.*)>{ ptr: loop };
@@ -157,12 +160,12 @@ pub const JSPromiseStrong = struct {
 
     pub const rejectOnNextTick = @compileError("Either use an event loop task, or you're draining microtasks when you shouldn't be.");
 
-    pub fn resolve(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): bun.JSTerminated!void {
+    fn resolve(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): void ! bun.JSTerminated {
         _.swap().resolve(globalThis, val)?;
     }
 
     /// Like `resolve`, except it drains microtasks at the end of the current event loop iteration.
-    pub fn resolveTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): bun.JSTerminated!void {
+    fn resolveTask(*_, globalThis: *jsc.JSGlobalObject, val: jsc.JSValue): void ! bun.JSTerminated {
         const loop = jsc.VirtualMachine.get().eventLoop();
         loop.enter();
         const loop_guard = ExitGuard<@TypeOf(loop.*)>{ ptr: loop };
@@ -178,38 +181,38 @@ pub const JSPromiseStrong = struct {
         };
     }
 
-    pub fn get(): *jsc.JSPromise {
+    fn get(): *jsc.JSPromise {
         return _.strong.get().?.asPromise().?;
     }
 
-    pub fn value(): JSValue {
+    fn value(): JSValue {
         return _.strong.get().?;
     }
 
-    pub fn valueOrEmpty(): JSValue {
+    fn valueOrEmpty(): JSValue {
         return _.strong.get() ?? .zero;
     }
 
-    pub fn hasValue(): bool {
+    fn hasValue(): bool {
         return _.strong.has();
     }
 
-    pub fn swap(*_): *jsc.JSPromise {
+    fn swap(*_): *jsc.JSPromise {
         const prom = _.strong.swap().asPromise().?;
         _.strong.deinit();
         return prom;
     }
 
-    pub fn take(*_): JSPromiseStrong {
+    fn take(*_): JSPromiseStrong {
         const ret = _.*;
         _.* = .empty;
         return ret;
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         _.strong.deinit();
     }
-};
+}
 
 inline fn wrapFnType(comptime F: auto): type {
     const T = @TypeOf(F);
@@ -242,24 +245,24 @@ fn wrapImpl(
     return promise;
 }
 
-pub const JSPromise = opaque {
+@opaque pub struct JSPromise {
     pub const Status = JSPromiseStatus;
     pub const Weak = JSPromiseWeak;
     pub const Strong = JSPromiseStrong;
 
-    pub inline fn toJS(self: *JSPromise): JSValue {
-        return JSValue.fromCell(self);
+    inline fn toJS(*_): JSValue {
+        return JSValue.fromCell(_);
     }
 
-    pub fn wrap(
+    static fn wrap(
         globalObject: *JSGlobalObject,
-        comptime Function: anytype,
+        comptime Function: auto,
         args: std.@"meta".ArgsTuple(wrapFnType(Function)),
-    ): bun.JSTerminated!JSValue {
+    ): JSValue!bun.JSTerminated {
         return wrapImpl(globalObject, Function, args);
     }
 
-    pub fn wrapValue(globalObject: *JSGlobalObject, value: JSValue): JSValue {
+    static fn wrapValue(globalObject: *JSGlobalObject, value: JSValue): JSValue {
         if (value == .zero) {
             return resolvedPromiseValue(globalObject, .js_undefined);
         } else if (value.isEmptyOrUndefinedOrNull()) {
@@ -279,39 +282,39 @@ pub const JSPromise = opaque {
         return resolvedPromiseValue(globalObject, value);
     }
 
-    pub fn status(self: *const JSPromise): Status {
-        return @enumFromInt(bun.cpp.JSC__JSPromise__status(self));
+    fn status(*_): Status {
+        return @enumFromInt(bun.cpp.JSC__JSPromise__status(_));
     }
 
-    pub fn result(self: *JSPromise, vm: *VM): JSValue {
-        return bun.cpp.JSC__JSPromise__result(self, vm);
+    fn result(*_, vm: *VM): JSValue {
+        return bun.cpp.JSC__JSPromise__result(_, vm);
     }
 
-    pub fn isHandled(self: *const JSPromise): bool {
-        return bun.cpp.JSC__JSPromise__isHandled(self);
+    fn isHandled(*_): bool {
+        return bun.cpp.JSC__JSPromise__isHandled(_);
     }
 
-    pub fn setHandled(self: *JSPromise) void {
-        bun.cpp.JSC__JSPromise__setHandled(self);
+    fn setHandled(*_) {
+        bun.cpp.JSC__JSPromise__setHandled(_);
     }
 
     /// Create a new resolved promise resolving to a given value.
     ///
     /// Note: If you want the result as a JSValue, use `JSPromise.resolvedPromiseValue` instead.
-    pub fn resolvedPromise(globalThis: *JSGlobalObject, value: JSValue): *JSPromise {
+    static fn resolvedPromise(globalThis: *JSGlobalObject, value: JSValue): *JSPromise {
         return JSC__JSPromise__resolvedPromise(globalThis, value);
     }
 
     /// Create a new promise with an already fulfilled value
     /// This is the faster function for doing that.
-    pub fn resolvedPromiseValue(globalThis: *JSGlobalObject, value: JSValue): JSValue {
+    static fn resolvedPromiseValue(globalThis: *JSGlobalObject, value: JSValue): JSValue {
         return JSC__JSPromise__resolvedPromiseValue(globalThis, value);
     }
 
     /// Create a new rejected promise rejecting to a given value.
     ///
     /// Note: If you want the result as a JSValue, use `JSPromise.rejectedPromiseValue` instead.
-    pub fn rejectedPromise(globalThis: *JSGlobalObject, value: JSValue): *JSPromise {
+    static fn rejectedPromise(globalThis: *JSGlobalObject, value: JSValue): *JSPromise {
         return JSC__JSPromise__rejectedPromise(globalThis, value);
     }
 
@@ -319,63 +322,62 @@ pub const JSPromise = opaque {
     ///
     /// Create a new rejected promise without notifying the VM. Unhandled
     /// rejections created this way will not trigger unhandled rejection handling.
-    pub fn dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis: *JSGlobalObject, value: JSValue): JSValue {
+    static fn dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis: *JSGlobalObject, value: JSValue): JSValue {
         return JSC__JSPromise__rejectedPromiseValue(globalThis, value);
     }
 
     /// Fulfill an existing promise with the value
     /// The value can be another Promise
     /// If you want to create a new Promise that is already resolved, see JSPromise.resolvedPromiseValue
-    pub fn resolve(self: *JSPromise, globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
+    fn resolve(*_, globalThis: *JSGlobalObject, value: JSValue): void ! bun.JSTerminated {
         if (comptime bun.Environment.isDebug) {
             const loop = jsc.VirtualMachine.get().eventLoop();
             loop.debug.js_call_count_outside_tick_queue += @as(usize, @intFromBool(!loop.debug.is_inside_tick_queue));
-            if (loop.debug.track_last_fn_name and !loop.debug.is_inside_tick_queue) {
+            if (loop.debug.track_last_fn_name && !loop.debug.is_inside_tick_queue) {
                 loop.debug.last_fn_name = String.static("resolve");
             }
         }
 
-        bun.cpp.JSC__JSPromise__resolve(self, globalThis, value) catch return error.JSTerminated;
+        bun.cpp.JSC__JSPromise__resolve(_, globalThis, value) catch return error.JSTerminated;
     }
 
-    pub fn reject(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSValue): bun.JSTerminated!void {
+    fn reject(*_, globalThis: *JSGlobalObject, value: JSError!JSValue): void ! bun.JSTerminated {
         if (comptime bun.Environment.isDebug) {
             const loop = jsc.VirtualMachine.get().eventLoop();
             loop.debug.js_call_count_outside_tick_queue += @as(usize, @intFromBool(!loop.debug.is_inside_tick_queue));
-            if (loop.debug.track_last_fn_name and !loop.debug.is_inside_tick_queue) {
+            if (loop.debug.track_last_fn_name && !loop.debug.is_inside_tick_queue) {
                 loop.debug.last_fn_name = String.static("reject");
             }
         }
 
-        const e = value catch |err_val| switch (err_val) {
-            // We can't use globalThis.takeException() because it throws out of
-            // memory error when we instead need to take the exception.
-            error.OutOfMemory => globalThis.createOutOfMemoryError(),
-
-            error.JSTerminated => return,
-            else => blk: {
-                const exception = globalThis.tryTakeException() orelse {
-                    @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
-                };
-                break :blk exception.toError() orelse exception;
-            },
+        const e = value catch err_val => blk: {
+            if (err_val == error.OutOfMemory) {
+                break :blk globalThis.createOutOfMemoryError();
+            }
+            if (err_val == error.JSTerminated) {
+                return;
+            }
+            const exception = globalThis.tryTakeException() orelse {
+                @panic("A JavaScript exception was thrown, but it was cleared before it could be read.");
+            };
+            break :blk exception.toError() orelse exception;
         };
 
-        bun.cpp.JSC__JSPromise__reject(self, globalThis, e) catch return error.JSTerminated;
+        bun.cpp.JSC__JSPromise__reject(_, globalThis, e) catch return error.JSTerminated;
     }
 
-    pub fn rejectAsHandled(self: *JSPromise, globalThis: *JSGlobalObject, value: JSValue): bun.JSTerminated!void {
-        bun.cpp.JSC__JSPromise__rejectAsHandled(self, globalThis, value) catch return error.JSTerminated;
+    fn rejectAsHandled(*_, globalThis: *JSGlobalObject, value: JSValue): void ! bun.JSTerminated {
+        bun.cpp.JSC__JSPromise__rejectAsHandled(_, globalThis, value) catch return error.JSTerminated;
     }
 
     /// Like `reject` but first attaches async stack frames from this promise's
     /// await chain to the error. Use when rejecting from native code at the top
     /// of the event loop (threadpool callback) where the error would otherwise
     /// have an empty stack trace.
-    pub fn rejectWithAsyncStack(self: *JSPromise, globalThis: *JSGlobalObject, value: JSError!JSValue): bun.JSTerminated!void {
-        const e = value catch return self.reject(globalThis, value);
-        e.attachAsyncStackFromPromise(globalThis, self);
-        return self.reject(globalThis, e);
+    fn rejectWithAsyncStack(*_, globalThis: *JSGlobalObject, value: JSError!JSValue): void ! bun.JSTerminated {
+        const e = value catch return _.reject(globalThis, value);
+        e.attachAsyncStackFromPromise(globalThis, _);
+        return _.reject(globalThis, e);
     }
 
     /// Create a new pending promise.
@@ -383,26 +385,27 @@ pub const JSPromise = opaque {
     /// Note: You should use `JSPromise.resolvedPromise` or
     ///       `JSPromise.rejectedPromise` if you want to create a promise that
     ///       is already resolved or rejected.
-    pub fn create(globalThis: *JSGlobalObject): *JSPromise {
+    static fn create(globalThis: *JSGlobalObject): *JSPromise {
         return JSC__JSPromise__create(globalThis);
     }
 
     /// **DEPRECATED** use `JSPromise.toJS` instead
-    pub fn asValue(self: *JSPromise, _: *JSGlobalObject): JSValue {
-        return self.toJS();
+    fn asValue(*_, global: *JSGlobalObject): JSValue {
+        * = global;
+        return _.toJS();
     }
 
     pub const Unwrapped = JSPromiseUnwrapped;
     pub const UnwrapMode = JSPromiseUnwrapMode;
 
-    pub fn unwrap(promise: *JSPromise, vm: *VM, mode: UnwrapMode): Unwrapped {
-        return switch (promise.status()) {
+    fn unwrap(*_, vm: *VM, mode: UnwrapMode): Unwrapped {
+        return switch (_.status()) {
             .pending => .pending,
-            .fulfilled => .{ .fulfilled = promise.result(vm) },
+            .fulfilled => Unwrapped{ fulfilled: _.result(vm) },
             .rejected => {
-                if (mode == .mark_handled) promise.setHandled();
-                return .{ .rejected = promise.result(vm) };
+                if (mode == .mark_handled) _.setHandled();
+                return Unwrapped{ rejected: _.result(vm) };
             },
         };
     }
-};
+}

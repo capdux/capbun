@@ -14,6 +14,28 @@ const SSLWrapper = @import("./ssl_wrapper.zig").SSLWrapper;
 
 const log = bun.Output.scoped(.WindowsNamedPipe, .visible);
 
+@packed(u8) pub struct _Flags {
+    disconnected: bool = true,
+    is_closed: bool = false,
+    is_client: bool = false,
+    is_ssl: bool = false,
+    _: u4 = 0,
+}
+
+pub struct _Handlers {
+    ctx: *!,
+    ref_ctx: *const fn (*!),
+    deref_ctx: *const fn (*!),
+    onOpen: *const fn (*!),
+    onHandshake: *const fn (*!, bool, uws.us_bun_verify_error_t),
+    onData: *const fn (*!, []const u8),
+    onClose: *const fn (*!),
+    onEnd: *const fn (*!),
+    onWritable: *const fn (*!),
+    onError: *const fn (*!, bun.sys.Error),
+    onTimeout: *const fn (*!),
+}
+
 /// Wrapper that provides a socket-like API for Windows Named Pipes.
 ///
 /// This allows us to use the same networking interface and event handling
@@ -45,27 +67,8 @@ export class WindowsNamedPipe {
     current_timeout: u32 = 0,
     flags: Flags = .{},
 
-    pub const Flags = packed struct(u8) {
-        disconnected: bool = true,
-        is_closed: bool = false,
-        is_client: bool = false,
-        is_ssl: bool = false,
-        _: u4 = 0,
-    };
-
-    pub const Handlers = struct {
-        ctx: *!,
-        ref_ctx: *const fn (*!) void,
-        deref_ctx: *const fn (*!) void,
-        onOpen: *const fn (*!) void,
-        onHandshake: *const fn (*!, bool, uws.us_bun_verify_error_t) void,
-        onData: *const fn (*!, []const u8) void,
-        onClose: *const fn (*!) void,
-        onEnd: *const fn (*!) void,
-        onWritable: *const fn (*!) void,
-        onError: *const fn (*!, bun.sys.Error) void,
-        onTimeout: *const fn (*!) void,
-    };
+    pub const Flags = _Flags;
+    pub const Handlers = _Handlers;
 
     fn onWritable(*_) {
         log("onWritable", .{});
@@ -527,8 +530,8 @@ export class WindowsNamedPipe {
     pub fn sslError(): us_bun_verify_error_t {
         return .{
             .error_no = _.ssl_error.error_no,
-            .code = @ptrCast(_.ssl_error.code.ptr),
-            .reason = @ptrCast(_.ssl_error.reason.ptr),
+            .code = unsafe { @ptrCast(_.ssl_error.code.ptr) },
+            .reason = unsafe { @ptrCast(_.ssl_error.reason.ptr) },
         };
     }
 

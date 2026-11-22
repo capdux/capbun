@@ -84,6 +84,18 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const DependencyResolution = struct {
+    package_id: PackageID,
+    resolution: Resolution,
+};
+
+pub const DependencyToEnqueue = union(enum) {
+    pending: DependencyID,
+    resolution: DependencyResolution,
+    not_found: void,
+    failure: anyerror,
+};
+
 pub const ResolvedPackageTask = union(enum) {
     network_task: *NetworkTask,
     patch_task: *PatchTask,
@@ -134,12 +146,6 @@ const assignResolution = PackageManager.assignResolution;
 const assignRootResolution = PackageManager.assignRootResolution;
 const debug = PackageManager.debug;
 const failRootResolution = PackageManager.failRootResolution;
-const DependencyToEnqueue = union(enum) {
-    pending: DependencyID,
-    resolution: struct { package_id: PackageID, resolution: Resolution },
-    not_found: void,
-    failure: anyerror,
-};
 const NameAndNameHash = struct { String, PackageNameHash };
 
 pub fn enqueueDependencyWithMain(mgr: *PackageManager, id: DependencyID, dependency: *const Dependency, resolution: PackageID, install_peer: bool) !void {

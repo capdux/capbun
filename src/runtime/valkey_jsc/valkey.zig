@@ -62,6 +62,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const ValkeyContext = @import("./ValkeyContext.zig");
@@ -69,6 +77,52 @@ pub const Command = @import("./ValkeyCommand.zig");
 pub const ValkeyCommand = @import("./ValkeyCommand.zig");
 pub const protocol = @import("../../valkey/valkey_protocol.zig");
 pub const bun = @import("bun");
+pub const Status = enum {
+    disconnected,
+    connecting,
+    connected,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Protocol = enum {
+    standalone,
+    standalone_unix,
+    standalone_tls,
+    standalone_tls_unix,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isTLS(self: Protocol) bool {
+            return (switch (self) {
+.standalone_tls, .standalone_tls_unix => true,
+else => false,
+});
+    }
+
+pub fn isUnix(self: Protocol) bool {
+            return (switch (self) {
+.standalone_unix, .standalone_tls_unix => true,
+else => false,
+});
+    }
+    
+    pub const Map = bun.ComptimeStringMap(Protocol, .{ .{ "valkey", .standalone }, .{ "valkeys", .standalone_tls }, .{ "valkey+tls", .standalone_tls }, .{ "valkey+unix", .standalone_unix }, .{ "valkey+tls+unix", .standalone_tls_unix }, .{ "redis", .standalone }, .{ "rediss", .standalone_tls }, .{ "redis+tls", .standalone_tls }, .{ "redis+unix", .standalone_unix }, .{ "redis+tls+unix", .standalone_tls_unix } });
+};
+
+pub const SubscribeResponseResult = enum {
+    handled,
+    fallthrough,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T,
@@ -165,71 +219,39 @@ pub const ConnectionFlags = struct {
     finalized: bool = false,
     connection_promise_returns_client: bool = false,
 };
-pub const Status = enum {
-    disconnected,
-    connecting,
-    connected,
-};
-pub const Protocol = enum {
-    standalone,
-    standalone_unix,
-    standalone_tls,
-    standalone_tls_unix,
 
-    pub const Map = bun.ComptimeStringMap(Protocol, .{
-        .{ "valkey", .standalone },
-        .{ "valkeys", .standalone_tls },
-        .{ "valkey+tls", .standalone_tls },
-        .{ "valkey+unix", .standalone_unix },
-        .{ "valkey+tls+unix", .standalone_tls_unix },
-        .{ "redis", .standalone },
-        .{ "rediss", .standalone_tls },
-        .{ "redis+tls", .standalone_tls },
-        .{ "redis+unix", .standalone_unix },
-        .{ "redis+tls+unix", .standalone_tls_unix },
-    });
-
-    pub fn isTLS(self: Protocol) bool {
-        return switch (self) {
-            .standalone_tls, .standalone_tls_unix => true,
-            else => false,
-        };
-    }
-
-    pub fn isUnix(self: Protocol) bool {
-        return switch (self) {
-            .standalone_unix, .standalone_tls_unix => true,
-            else => false,
-        };
-    }
-};
 pub const TLS = union(enum) {
-    none,
-    enabled,
+    none: void,
+    enabled: void,
     custom: jsc.API.ServerConfig.SSLConfig,
 
-    pub fn clone(this: *const TLS) TLS {
-        return switch (this.*) {
-            .custom => |*ssl_config| .{ .custom = ssl_config.clone() },
-            else => this.*,
-        };
+pub fn clone(self: TLS) TLS {
+            return (switch (self) {
+.custom => |ssl_config| .{ .custom = ssl_config.clone() },
+else => self,
+});
     }
 
-    pub fn deinit(this: *TLS) void {
-        switch (this.*) {
-            .custom => |*ssl_config| ssl_config.deinit(),
-            else => {},
-        }
+pub fn deinit(self: *TLS) void {
+            switch (self.*) {
+.custom => |*ssl_config| {
+_ = ssl_config.deinit();
+},
+else => {
+
+},
+}
     }
 
-    pub fn rejectUnauthorized(this: *const TLS, vm: *jsc.VirtualMachine) bool {
-        return switch (this.*) {
-            .custom => |*ssl_config| ssl_config.reject_unauthorized != 0,
-            .enabled => vm.getTLSRejectUnauthorized(),
-            else => false,
-        };
+pub fn rejectUnauthorized(self: TLS, vm: *jsc.VirtualMachine) bool {
+            return (switch (self) {
+.custom => |ssl_config| (ssl_config.reject_unauthorized != 0),
+.enabled => vm.getTLSRejectUnauthorized(),
+else => false,
+});
     }
 };
+
 pub const Options = struct {
     idle_timeout_ms: u32 = 0,
     connection_timeout_ms: u32 = 10000,
@@ -240,34 +262,63 @@ pub const Options = struct {
     enable_debug_logging: bool = false,
     tls: TLS = .none,
 };
+
+pub const AddressHost = struct {
+    host: []const u8,
+    port: u16,
+};
+
 pub const Address = union(enum) {
     unix: []const u8,
-    host: struct {
-        host: []const u8,
-        port: u16,
-    },
+    host: AddressHost,
 
-pub fn hostname(self: *const @This()) []const u8 {
+pub fn hostname(self: *const Address) []const u8 {
             return (switch (self.*) {
 .unix => |unix_addr| unix_addr,
 .host => |h| h.host,
 });
     }
 
-pub fn connect(self: *const @This(), client: *ValkeyClient, group: *uws.SocketGroup, ssl_ctx: ?*uws.SslCtx, is_tls: bool) !uws.AnySocket {
-            switch (is_tls) {
-inline else => |tls| {
-const SocketType = (if (tls) uws.SocketTLS else uws.SocketTCP);
-            const union_field = (if (tls) "SocketTLS" else "SocketTCP");
-            const kind: uws.SocketKind = (if (tls) .valkey_tls else .valkey);
-            return @unionInit(uws.AnySocket, union_field, (switch (self.*) {
-.unix => |path| try SocketType.connectUnixGroup(group, kind, ssl_ctx, path, client, false),
-.host => |h| try SocketType.connectGroup(group, kind, ssl_ctx, h.host, h.port, client, false),
+pub fn connect(self: Address, client: *ValkeyClient, group: *uws.SocketGroup, ssl_ctx: ?*uws.SslCtx, is_tls: bool) !uws.AnySocket {
+            if (is_tls) {
+                return @unionInit(uws.AnySocket, "SocketTLS", (switch (self) {
+.unix => |path| try uws.SocketTLS.connectUnixGroup(group, .valkey_tls, ssl_ctx, path, client, false),
+.host => |h| try uws.SocketTLS.connectGroup(group, .valkey_tls, ssl_ctx, h.host, h.port, client, false),
 }));
-},
-}
+            } else {
+                return @unionInit(uws.AnySocket, "SocketTCP", (switch (self) {
+.unix => |path| try uws.SocketTCP.connectUnixGroup(group, .valkey, ssl_ctx, path, client, false),
+.host => |h| try uws.SocketTCP.connectGroup(group, .valkey, ssl_ctx, h.host, h.port, client, false),
+}));
+            }
     }
 };
+
+pub const DeferredFailure = struct {
+    message: []const u8,
+    err: protocol.RedisError,
+    globalThis: *jsc.JSGlobalObject,
+    in_flight: Command.PromisePair.Queue,
+    queue: Command.Entry.Queue,
+
+pub fn run(self: *DeferredFailure) bun.JSTerminated!void {
+            var failure_guard = DeferredFailureGuard(DeferredFailure){ .ptr = self };
+            _ = &failure_guard;
+            var __failure_guard_moved = false; _ = &__failure_guard_moved;
+            defer if (!__failure_guard_moved) { __failure_guard_moved = true; const __T = @TypeOf(failure_guard); if (@typeInfo(__T) == .optional) { if (failure_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { failure_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = failure_guard; _drop_val.__cp_deinit(); } };
+            _ = (&failure_guard);
+            _ = debug("running deferred failure", .{});
+            const err_val = protocol.valkeyErrorToJS(self.globalThis, self.message, self.err);
+            _ = try ValkeyClient.rejectAllPendingCommands((&self.in_flight), (&self.queue), self.globalThis, bun.default_allocator, err_val);
+    }
+
+pub fn enqueue(self: *DeferredFailure) void {
+            _ = debug("enqueueing deferred failure", .{});
+            const managed_task = jsc.ManagedTask.New(DeferredFailure, run).init(self);
+            _ = jsc.VirtualMachine.get().eventLoop().enqueueTask(managed_task);
+    }
+};
+
 pub const ValkeyClient = struct {
     socket: uws.AnySocket,
     status: Status = Status.connecting,
@@ -291,7 +342,7 @@ pub const ValkeyClient = struct {
     auto_flusher: AutoFlusher = AutoFlusher{  },
     vm: *jsc.VirtualMachine,
 
-pub fn deinit(self: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) void {
+pub fn deinit(self: *ValkeyClient, globalObjectOrFinalizing: ?*jsc.JSGlobalObject) void {
             var pending = self.in_flight;
             _ = &pending;
             self.in_flight = .init(self.allocator);
@@ -311,13 +362,13 @@ pub fn deinit(self: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) vo
             if (globalObjectOrFinalizing) |globalThis| {
                 _ = &globalThis;
                 const object = protocol.valkeyErrorToJS(globalThis, "Connection closed", protocol.RedisError.ConnectionClosed);
-                for (pending.readableSlice(0)) |pair| {
+                for (cp_iter_slice(pending.readableSlice(0))) |pair| {
                     _ = &pair;
                     var pair_ = pair;
                     _ = &pair_;
                     _ = (blk_catch_0: { break :blk_catch_0 ((pair_.rejectCommand(globalThis, object)) catch |__ce_0| { _ = &__ce_0;  }); });
                 }
-                for (commands.readableSlice(0)) |cmd| {
+                for (cp_iter_slice(commands.readableSlice(0))) |cmd| {
                     _ = &cmd;
                     var offline_cmd = cmd;
                     _ = &offline_cmd;
@@ -325,13 +376,13 @@ pub fn deinit(self: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) vo
                     _ = offline_cmd.deinit(self.allocator);
                 }
             } else {
-                for (pending.readableSlice(0)) |pair| {
+                for (cp_iter_slice(pending.readableSlice(0))) |pair| {
                     _ = &pair;
                     var pair_ = pair;
                     _ = &pair_;
                     _ = pair_.promise.deinit();
                 }
-                for (commands.readableSlice(0)) |cmd| {
+                for (cp_iter_slice(commands.readableSlice(0))) |cmd| {
                     _ = &cmd;
                     var offline_cmd = cmd;
                     _ = &offline_cmd;
@@ -346,21 +397,21 @@ pub fn deinit(self: *@This(), globalObjectOrFinalizing: ?*jsc.JSGlobalObject) vo
             _ = self.unregisterAutoFlusher();
     }
 
-pub fn registerAutoFlusher(self: *@This(), vm: *jsc.VirtualMachine) void {
+pub fn registerAutoFlusher(self: *ValkeyClient, vm: *jsc.VirtualMachine) void {
             if ((!self.auto_flusher.registered)) {
                 _ = AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), self, vm);
                 self.auto_flusher.registered = true;
             }
     }
 
-pub fn unregisterAutoFlusher(self: *@This()) void {
+pub fn unregisterAutoFlusher(self: *ValkeyClient) void {
             if (self.auto_flusher.registered) {
                 _ = AutoFlusher.unregisterDeferredMicrotaskWithType(@This(), self, self.vm);
                 self.auto_flusher.registered = false;
             }
     }
 
-pub fn onAutoFlush(self: *@This()) bool {
+pub fn onAutoFlush(self: *ValkeyClient) bool {
             if ((self.status != .connected)) {
                 self.auto_flusher.registered = false;
                 return false;
@@ -383,22 +434,22 @@ pub fn onAutoFlush(self: *@This()) bool {
             _ = &to_process;
             var total: usize = 0;
             _ = &total;
-            for (to_process) |*command| {
+            for (cp_mut_slice(&to_process)) |*command| {
                 _ = &command;
-                if ((!command.meta.supports_auto_pipelining)) {
+                if ((!(command.*).meta.supports_auto_pipelining)) {
                     break;
                 }
-                _ = (blk_catch_2: { break :blk_catch_2 ((self.in_flight.writeItem(.{ .meta = command.meta, .promise = command.promise })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((self.in_flight.writeItem(.{ .meta = (command.*).meta, .promise = (command.*).promise })) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); });
                 total = (total + 1);
-                total_bytelength = (total_bytelength + command.serialized_data.len);
+                total_bytelength = (total_bytelength + (command.*).serialized_data.len);
             }
             break :brk to_process[0..total];
 };
             _ = bun.handleOom(self.write_buffer.byte_list.ensureUnusedCapacity(self.allocator, total_bytelength));
-            for (pipelineable_commands) |*command| {
+            for (cp_mut_slice(&pipelineable_commands)) |*command| {
                 _ = &command;
-                _ = bun.handleOom(self.write_buffer.write(self.allocator, command.serialized_data));
-                _ = self.allocator.free(command.serialized_data);
+                _ = bun.handleOom(self.write_buffer.write(self.allocator, (command.*).serialized_data));
+                _ = self.allocator.free((command.*).serialized_data);
             }
             _ = self.queue.discard(pipelineable_commands.len);
             _ = self.flushData();
@@ -407,7 +458,7 @@ pub fn onAutoFlush(self: *@This()) bool {
             return have_more;
     }
 
-pub fn getTimeoutInterval(self: *const @This()) u32 {
+pub fn getTimeoutInterval(self: ValkeyClient) u32 {
             if (self.flags.failed) {
                 return 0;
             }
@@ -417,11 +468,11 @@ else => self.connection_timeout_ms,
 });
     }
 
-pub fn hasAnyPendingCommands(self: *const @This()) bool {
+pub fn hasAnyPendingCommands(self: ValkeyClient) bool {
             return ((((self.in_flight.readableLength() > 0) or (self.queue.readableLength() > 0)) or (self.write_buffer.len() > 0)) or (self.read_buffer.len() > 0));
     }
 
-pub fn getReconnectDelay(self: *const @This()) u32 {
+pub fn getReconnectDelay(self: ValkeyClient) u32 {
             const base_delay: u32 = 50;
             const max_delay: u32 = 2000;
             if ((self.retry_attempts == 0)) {
@@ -455,13 +506,13 @@ pub fn rejectAllPendingCommands(pending_ptr: *Command.PromisePair.Queue, entries
             _ = (&entries_guard);
             pending_ptr.* = .init(allocator);
             entries_ptr.* = .init(allocator);
-            for (pending.readableSlice(0)) |item| {
+            for (cp_iter_slice(pending.readableSlice(0))) |item| {
                 _ = &item;
                 var command_pair = item;
                 _ = &command_pair;
                 _ = try command_pair.rejectCommand(globalThis, jsvalue);
             }
-            for (entries.readableSlice(0)) |item| {
+            for (cp_iter_slice(entries.readableSlice(0))) |item| {
                 _ = &item;
                 var cmd = item;
                 _ = &cmd;
@@ -474,7 +525,7 @@ pub fn rejectAllPendingCommands(pending_ptr: *Command.PromisePair.Queue, entries
             }
     }
 
-pub fn flushData(self: *@This()) bool {
+pub fn flushData(self: *ValkeyClient) bool {
             const chunk = self.write_buffer.remaining();
             if ((chunk.len == 0)) {
                 return false;
@@ -487,31 +538,36 @@ pub fn flushData(self: *@This()) bool {
             return has_remaining;
     }
 
-pub fn fail(self: *@This(), message: []const u8, err: protocol.RedisError) bun.JSTerminated!void {
-            _ = debug("failed: {s}: {}", .{ message, err });
-            if (self.flags.failed) {
+pub fn fail(self: *ValkeyClient, message: []const u8, err_code: protocol.RedisError) bun.JSTerminated!void {
+            _ = debug("failed: {s}: {}", .{ message, err_code });
+            const already_failed = self.flags.failed;
+            if (already_failed) {
                 return;
             }
-            if (self.flags.finalized) {
+            const is_finalized = self.flags.finalized;
+            if (is_finalized) {
                 if (((self.queue.count + self.in_flight.count) > 0)) {
                     const vm = self.vm;
-                    const deferred_failure = bun.new(DeferredFailure, .{ .message = bun.handleOom(bun.default_allocator.dupe(u8, message)), .err = err, .globalThis = vm.global, .in_flight = self.in_flight, .queue = self.queue });
+                    const deferred_failure = bun.new(DeferredFailure, .{ .message = bun.handleOom(bun.default_allocator.dupe(u8, message)), .err = err_code, .globalThis = vm.global, .in_flight = self.in_flight, .queue = self.queue });
                     self.in_flight = .init(self.allocator);
                     self.queue = .init(self.allocator);
                     _ = deferred_failure.enqueue();
                 }
                 return;
             }
-            const globalThis = self.globalObject();
-            _ = try self.failWithJSValue(globalThis, protocol.valkeyErrorToJS(globalThis, message, err));
+            const globalThis: *jsc.JSGlobalObject = (blk: {
+            break :blk self.globalObject();
+
+});
+            _ = try self.failWithJSValue(globalThis, protocol.valkeyErrorToJS(globalThis, message, err_code));
     }
 
-pub fn failWithJSValue(self: *@This(), globalThis: *jsc.JSGlobalObject, jsvalue: jsc.JSValue) bun.JSTerminated!void {
+pub fn failWithJSValue(self: *ValkeyClient, globalThis: *jsc.JSGlobalObject, jsvalue: jsc.JSValue) bun.JSTerminated!void {
             if (self.flags.failed) {
                 return;
             }
             self.flags.failed = true;
-            const val = rejectAllPendingCommands((&self.in_flight), (&self.queue), globalThis, self.allocator, jsvalue);
+            const val = ValkeyClient.rejectAllPendingCommands((&self.in_flight), (&self.queue), globalThis, self.allocator, jsvalue);
             if ((!self.connectionReady())) {
                 self.flags.is_manually_closed = true;
                 _ = self.close();
@@ -519,13 +575,13 @@ pub fn failWithJSValue(self: *@This(), globalThis: *jsc.JSGlobalObject, jsvalue:
             return val;
     }
 
-pub fn close(self: *@This()) void {
+pub fn close(self: *ValkeyClient) void {
             const socket = self.socket;
             self.socket = .{ .SocketTCP = .detached };
             _ = socket.close();
     }
 
-pub fn onClose(self: *@This()) bun.JSTerminated!void {
+pub fn onClose(self: *ValkeyClient) bun.JSTerminated!void {
             _ = self.unregisterAutoFlusher();
             _ = self.write_buffer.clearAndFree(self.allocator);
             if (self.flags.is_manually_closed) {
@@ -555,7 +611,7 @@ pub fn onClose(self: *@This()) bun.JSTerminated!void {
             _ = self.onValkeyReconnect();
     }
 
-pub fn sendNextCommand(self: *@This()) void {
+pub fn sendNextCommand(self: *ValkeyClient) void {
             if (((self.write_buffer.remaining().len == 0) and self.connectionReady())) {
                 if ((self.queue.readableLength() > 0)) {
                     const cmd_flags = (&self.queue.peekItem(0).meta);
@@ -579,7 +635,7 @@ pub fn sendNextCommand(self: *@This()) void {
             _ = self.flushData();
     }
 
-pub fn onData(self: *@This(), data: []const u8) bun.JSTerminated!void {
+pub fn onData(self: *ValkeyClient, data: []const u8) bun.JSTerminated!void {
             _ = debug("Low-level onData called with {d} bytes: {s}", .{ data.len, data });
             if ((self.read_buffer.remaining().len > 0)) {
                 _ = (blk_catch_3: { break :blk_catch_3 ((self.read_buffer.write(self.allocator, data)) catch |__ce_3| { _ = &__ce_3; @panic("failed to write to read buffer"); }); });
@@ -662,7 +718,7 @@ pub fn onData(self: *@This(), data: []const u8) bun.JSTerminated!void {
             }
     }
 
-pub fn handleSubscribeResponse(self: *@This(), value: *protocol.RESPValue, pair: ?*ValkeyCommand.PromisePair) bun.JSError!enum { handled, fallthrough } {
+pub fn handleSubscribeResponse(self: *ValkeyClient, value: *protocol.RESPValue, pair: ?*ValkeyCommand.PromisePair) bun.JSError!SubscribeResponseResult {
             const globalThis = self.globalObject();
             const loop = self.vm.eventLoop();
             _ = debug("Handling a subscribe response: {f}", .{ value.* });
@@ -723,11 +779,11 @@ return .fallthrough;
 });
     }
 
-pub fn handleHelloResponse(self: *@This(), value: *protocol.RESPValue) bun.JSTerminated!void {
+pub fn handleHelloResponse(self: *ValkeyClient, value: *protocol.RESPValue) bun.JSTerminated!void {
             _ = debug("Processing HELLO response", .{});
             switch (value.*) {
-.Error => |err| {
-_ = try self.fail(err, protocol.RedisError.AuthenticationFailed);
+.Error => |err_str| {
+_ = try self.fail(err_str, protocol.RedisError.AuthenticationFailed);
             return;
 },
 .SimpleString => |str| {
@@ -744,13 +800,13 @@ if (std.mem.eql(u8, str, "OK")) {
 },
 .Map => |map| {
 _ = debug("Got HELLO response map with {d} entries", .{ map.len });
-            for (map) |*entry| {
+            for (cp_mut_slice(&map)) |*entry| {
                 _ = &entry;
-                switch (entry.key) {
+                switch ((entry.*).key) {
 .SimpleString => |key| {
 if (std.mem.eql(u8, key, "proto")) {
-                    if (((if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value) == .Integer)) {
-                        const proto_version = (if (@typeInfo(@TypeOf(entry)) == .@"enum") @intFromEnum(entry) else entry.value).Integer;
+                    if (((if (@typeInfo(@TypeOf((entry.*))) == .@"enum") @intFromEnum((entry.*)) else (entry.*).value) == .Integer)) {
+                        const proto_version = (if (@typeInfo(@TypeOf((entry.*))) == .@"enum") @intFromEnum((entry.*)) else (entry.*).value).Integer;
                         _ = debug("Server protocol version: {d}", .{ proto_version });
                         if ((proto_version != 3)) {
                             _ = try self.fail("Server does not support RESP3", protocol.RedisError.UnsupportedProtocol);
@@ -778,7 +834,7 @@ _ = try self.fail("Authentication failed with unexpected response", protocol.Red
 }
     }
 
-pub fn handleResponse(self: *@This(), value: *protocol.RESPValue) !void {
+pub fn handleResponse(self: *ValkeyClient, value: *protocol.RESPValue) !void {
             if ((!self.flags.is_authenticated)) {
                 _ = try self.handleHelloResponse(value);
                 return;
@@ -837,12 +893,12 @@ else => {
             if ((self.parent().isSubscriber() or request_is_subscribe)) {
                 _ = debug("This client is a subscriber. Handling as subscriber...", .{});
                 switch (value.*) {
-.Error => |err| {
-_ = try self.fail(err, protocol.RedisError.InvalidResponse);
+.Error => |err_str| {
+_ = try self.fail(err_str, protocol.RedisError.InvalidResponse);
                 return;
 },
 .Push => |push| {
-if (protocol.SubscriptionPushMessage.map.get(push.kind)) |_| {
+if ((protocol.SubscriptionPushMessage.map.get(push.kind) != null)) {
                     if ((try self.handleSubscribeResponse(value, (if (pair_maybe) |*pm| pm else null)) == .handled)) {
                         return;
                     }
@@ -884,7 +940,7 @@ else => {
             }
     }
 
-pub fn authenticate(self: *@This()) bun.JSTerminated!void {
+pub fn authenticate(self: *ValkeyClient) bun.JSTerminated!void {
             _ = debug("Sending HELLO 3 command", .{});
             var hello_args_buf: [4][]const u8 = .{ "3", "AUTH", "", "" };
             _ = &hello_args_buf;
@@ -921,7 +977,7 @@ pub fn authenticate(self: *@This()) bun.JSTerminated!void {
             }
     }
 
-pub fn onOpen(self: *@This(), socket: uws.AnySocket) bun.JSTerminated!void {
+pub fn onOpen(self: *ValkeyClient, socket: uws.AnySocket) bun.JSTerminated!void {
             self.socket = socket;
             _ = self.write_buffer.clearAndFree(self.allocator);
             _ = self.read_buffer.clearAndFree(self.allocator);
@@ -933,16 +989,16 @@ pub fn onOpen(self: *@This(), socket: uws.AnySocket) bun.JSTerminated!void {
             }
     }
 
-pub fn start(self: *@This()) bun.JSTerminated!void {
+pub fn start(self: *ValkeyClient) bun.JSTerminated!void {
             _ = try self.authenticate();
             _ = self.flushData();
     }
 
-pub fn connectionReady(self: *const @This()) bool {
+pub fn connectionReady(self: ValkeyClient) bool {
             return (self.flags.is_authenticated and (!self.flags.is_selecting_db_internal));
     }
 
-pub fn drain(self: *@This()) bool {
+pub fn drain(self: *ValkeyClient) bool {
             if ((self.in_flight.readableLength() > 0)) {
                 const queue_slice = self.queue.readableSlice(0);
                 if (((queue_slice.len > 0) and (!queue_slice[0].meta.supports_auto_pipelining))) {
@@ -972,7 +1028,7 @@ pub fn drain(self: *@This()) bool {
             return true;
     }
 
-pub fn onWritable(self: *@This()) void {
+pub fn onWritable(self: *ValkeyClient) void {
             _ = self.ref();
             var deref_guard = DerefGuard(ValkeyClient){ .ptr = self };
             _ = &deref_guard;
@@ -982,7 +1038,7 @@ pub fn onWritable(self: *@This()) void {
             _ = self.sendNextCommand();
     }
 
-pub fn enqueue(self: *@This(), command: *const Command, promise: *Command.Promise) !void {
+pub fn enqueue(self: *ValkeyClient, command: *const Command, promise: *Command.Promise) !void {
             const can_pipeline = (command.meta.supports_auto_pipelining and self.flags.enable_auto_pipelining);
             const must_wait_for_queue = ((!command.meta.supports_auto_pipelining) and (self.queue.readableLength() > 0));
             if ((((((self.queue.readableLength() > 0) or ((!can_pipeline) and (self.in_flight.readableLength() > 0))) or (!self.connectionReady())) or must_wait_for_queue) or can_pipeline)) {
@@ -1007,7 +1063,7 @@ _ = unreachable;
             _ = self.flushData();
     }
 
-pub fn send(self: *@This(), globalThis: *jsc.JSGlobalObject, command: *const Command) !*jsc.JSPromise {
+pub fn send(self: *ValkeyClient, globalThis: *jsc.JSGlobalObject, command: *const Command) !*jsc.JSPromise {
             var checked_command = command.*;
             _ = &checked_command;
             checked_command.meta = command.meta.check(command);
@@ -1036,7 +1092,7 @@ if (self.flags.enable_offline_queue) {
             return js_promise;
     }
 
-pub fn disconnect(self: *@This()) void {
+pub fn disconnect(self: *ValkeyClient) void {
             self.flags.is_manually_closed = true;
             _ = self.unregisterAutoFlusher();
             if (((self.status == .connected) or (self.status == .connecting))) {
@@ -1044,83 +1100,60 @@ pub fn disconnect(self: *@This()) void {
             }
     }
 
-pub fn writer(self: *@This()) std.Io.GenericWriter(*ValkeyClient, protocol.RedisError, write) {
+pub fn writer(self: *ValkeyClient) std.Io.GenericWriter(*ValkeyClient, protocol.RedisError, write) {
             return .{ .context = self };
     }
 
-pub fn write(self: *@This(), data: []const u8) !usize {
+pub fn write(self: *ValkeyClient, data: []const u8) !usize {
             _ = try self.write_buffer.write(self.allocator, data);
             return data.len;
     }
 
-pub fn ref(self: *@This()) void {
+pub fn ref(self: *ValkeyClient) void {
             _ = self.parent().ref();
     }
 
-pub fn deref(self: *@This()) void {
+pub fn deref(self: *ValkeyClient) void {
             _ = self.parent().deref();
     }
 
-pub inline fn parent(self: *@This()) *JSValkeyClient {
+pub inline fn parent(self: *ValkeyClient) *JSValkeyClient {
             return @fieldParentPtr("client", self);
     }
 
-pub inline fn globalObject(self: *@This()) *jsc.JSGlobalObject {
+pub inline fn globalObject(self: *ValkeyClient) *jsc.JSGlobalObject {
             return self.parent().globalObject;
     }
 
-pub fn onValkeyConnect(self: *@This(), value: *protocol.RESPValue) bun.JSTerminated!void {
+pub fn onValkeyConnect(self: *ValkeyClient, value: *protocol.RESPValue) bun.JSTerminated!void {
             return self.parent().onValkeyConnect(value);
     }
 
-pub fn onValkeySubscribe(self: *@This(), value: *protocol.RESPValue) void {
+pub fn onValkeySubscribe(self: *ValkeyClient, value: *protocol.RESPValue) void {
             _ = self.parent().onValkeySubscribe(value);
     }
 
-pub fn onValkeyUnsubscribe(self: *@This()) bun.JSError!void {
+pub fn onValkeyUnsubscribe(self: *ValkeyClient) bun.JSError!void {
             return self.parent().onValkeyUnsubscribe();
     }
 
-pub fn onValkeyMessage(self: *@This(), value: []protocol.RESPValue) void {
+pub fn onValkeyMessage(self: *ValkeyClient, value: []protocol.RESPValue) void {
             _ = self.parent().onValkeyMessage(value);
     }
 
-pub fn onValkeyReconnect(self: *@This()) void {
+pub fn onValkeyReconnect(self: *ValkeyClient) void {
             _ = self.parent().onValkeyReconnect();
     }
 
-pub fn onValkeyClose(self: *@This()) bun.JSTerminated!void {
+pub fn onValkeyClose(self: *ValkeyClient) bun.JSTerminated!void {
             return self.parent().onValkeyClose();
     }
 
-pub fn onValkeyTimeout(self: *@This()) void {
+pub fn onValkeyTimeout(self: *ValkeyClient) void {
             _ = self.parent().onValkeyTimeout();
     }
-    const DeferredFailure = struct {
-        message: []const u8,
-        err: protocol.RedisError,
-        globalThis: *jsc.JSGlobalObject,
-        in_flight: Command.PromisePair.Queue,
-        queue: Command.Entry.Queue,
-    
-    pub fn run(self: *@This()) bun.JSTerminated!void {
-                var failure_guard = DeferredFailureGuard(DeferredFailure){ .ptr = self };
-                _ = &failure_guard;
-                var __failure_guard_moved = false; _ = &__failure_guard_moved;
-                defer if (!__failure_guard_moved) { __failure_guard_moved = true; const __T = @TypeOf(failure_guard); if (@typeInfo(__T) == .optional) { if (failure_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { failure_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = failure_guard; _drop_val.__cp_deinit(); } };
-                _ = (&failure_guard);
-                _ = debug("running deferred failure", .{});
-                const err = protocol.valkeyErrorToJS(self.globalThis, self.message, self.err);
-                _ = try rejectAllPendingCommands((&self.in_flight), (&self.queue), self.globalThis, bun.default_allocator, err);
-        }
-    
-    pub fn enqueue(self: *@This()) void {
-                _ = debug("enqueueing deferred failure", .{});
-                const managed_task = jsc.ManagedTask.New(DeferredFailure, run).init(self);
-                _ = jsc.VirtualMachine.get().eventLoop().enqueueTask(managed_task);
-        }
-    };
 };
+
 const debug = bun.Output.scoped(.Redis, .visible);
 var empty_connection_strings: [0]u8 = std.mem.zeroes([0]u8);
 const jsc = bun.jsc;

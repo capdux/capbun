@@ -8,7 +8,7 @@ const JSValue = jsc.JSValue;
 const log = bun.Output.scoped(.Terminal, .hidden);
 
 pub const CreatePtyError = error{ OpenPtyFailed, DupFailed, NotSupported };
-pub const TermiosField = enum { iflag, oflag, lflag, cflag };
+pub enum TermiosField { iflag, oflag, lflag, cflag }
 const Termios = if (Environment.isPosix) std.posix.termios else void;
 
 const HANDLE = bun.windows.HANDLE;
@@ -143,7 +143,7 @@ struct PtyResult {
 
 // OpenPtyTermios is required for the openpty() extern signature even though we pass null.
 // Kept for type correctness of the C function declaration.
-const OpenPtyTermios = extern struct {
+@c struct OpenPtyTermios {
     c_iflag: u32,
     c_oflag: u32,
     c_cflag: u32,
@@ -151,26 +151,26 @@ const OpenPtyTermios = extern struct {
     c_cc: [20]u8,
     c_ispeed: u32,
     c_ospeed: u32,
-};
+}
 
-const Winsize = extern struct {
+@c struct Winsize {
     ws_row: u16,
     ws_col: u16,
     ws_xpixel: u16,
     ws_ypixel: u16,
-};
+}
 
 pub type OpenPtyFn = @c fn (*c_int, *c_int, ([*]u8)?, (*const OpenPtyTermios)?, (*const Winsize)?) c_int;
 
-const MacOpenPty = struct {
-    extern "c" fn openpty(
+@c {
+    fn openpty(
         amaster: *c_int,
         aslave: *c_int,
-        name: ?[*]u8,
-        termp: ?*const OpenPtyTermios,
-        winp: ?*const Winsize,
-    ) c_int;
-};
+        name: ([*]u8)?,
+        termp: (*const OpenPtyTermios)?,
+        winp: (*const Winsize)?,
+    ): c_int;
+}
 
 /// Dynamic loading of openpty on Linux (it's in libutil which may not be linked)
 let libutil_handle: *!? = null;
@@ -198,7 +198,7 @@ struct LibUtil {
 fn getOpenPtyFn(): OpenPtyFn? {
     // On macOS, openpty is in libc, so we can use it directly
     if (comptime Environment.isMac) {
-        return &MacOpenPty.openpty;
+        return &openpty;
     }
 
     // On Linux, openpty is in libutil, which may not be linked
@@ -473,24 +473,20 @@ fn setTermios(fd: bun.FD, termios_p: *const Termios): bool {
     return true;
 }
 
-const PseudoConsoleRunner = struct {
-    fn run(h: bun.windows.HPCON) {
+struct PseudoConsoleRunner {
+    static fn run(h: bun.windows.HPCON) {
         bun.windows.ClosePseudoConsole(h);
     }
-};
+}
 
-const PosixIoctl = struct {
+@c {
+    fn ioctl(fd: c_int, request: c_ulong, ...): c_int;
+}
+
+struct PosixIoctl {
     const TIOCSWINSZ: c_ulong = if (Environment.isMac) 0x80087467 else 0x5414;
-
-    const Winsize = extern struct {
-        ws_row: u16,
-        ws_col: u16,
-        ws_xpixel: u16,
-        ws_ypixel: u16,
-    };
-
-    extern "c" fn ioctl(fd: c_int, request: c_ulong, ...) c_int;
-};
+    const IoctlWinsize = Winsize;
+}
 
 @root struct Terminal {
     //! Bun.Terminal - Creates a pseudo-terminal (PTY) for interactive terminal sessions.
@@ -914,14 +910,14 @@ const PosixIoctl = struct {
         };
 
         if (comptime Environment.isPosix) {
-            let winsize = PosixIoctl.Winsize{
+            let winsize = PosixIoctl.IoctlWinsize{
                 ws_row: new_rows,
                 ws_col: new_cols,
                 ws_xpixel: 0,
                 ws_ypixel: 0,
             };
 
-            const ioctl_result = PosixIoctl.ioctl(_.master_fd.cast(), PosixIoctl.TIOCSWINSZ, &winsize);
+            const ioctl_result = ioctl(_.master_fd.cast(), PosixIoctl.TIOCSWINSZ, &winsize);
             if (ioctl_result != 0) {
                 return globalObject.throw("Failed to resize terminal", {});
             }

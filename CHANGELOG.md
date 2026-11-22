@@ -2112,3 +2112,6 @@
 
 ## [2026-11-22 Wave #38] 旧式 `struct`/`union` 纯 CP 化专项首批（45 模块）
 - `posix_event_loop`, `DevServer`, `IncrementalGraph`, `FrameworkRouter`, `bake`, `brotli_c`, `MimallocArena`, `basic`, `bun_alloc`, `heap_breakdown`, `output`, `AstBuilder`, `BundleThread`, `Chunk`, `HTMLScanner`, `ServerComponentParseTask`, `ThreadPool`, `analyze_transpiled_module`, `bundle_v2`, `cache`, `defines-table`, `defines`, `linker`, `MetafileBuilder`, `OutputFileListBuilder`, `findAllImportedPartsInJSOrder`, `findImportedCSSFilesInJSOrder`, `options`, `c_ares`, `cli`, `SourceFileProjectGenerator`, `create_command`, `init_command`, `pack_command`, `publish_command`, `run_command`, `ChangedFilesFilter`, `Scanner`, `Channel`, `Coordinator`, `test_command`, `array_list`, `comptime_string_map`, `linear_fifo`, `csrf` (ratio `0.613 ~ 1.185`)
+
+## [2026-11-22 Wave #39~#46] `old_struct_todo.txt` 全面收官（Waves #39–#46）
+- 完成 `src/css/**`、`dotenv`/`errno`/`event_loop`/`glob`/`http`/`ini`、`install`/`interchange`、`io`/`js_parser`/`js_printer`、`jsc`/`libuv`/`md`/`napi`/`options_types`/`paths`/`ptr`/`resolver`/`router`、`runtime/**`、`s3_signing`/`semver`/`sha_hmac`/`shell`/`string`/`sys`/`test_runner`/`threading`/`unicode`/`url`/`uws_sys` 等 240+ 个 `.cp`/`.zig` 模块的纯 CP 结构化、`~init()`/`~errinit()` RAII 守卫与只读/可变借用边界重构。

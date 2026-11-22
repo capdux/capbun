@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -557,93 +557,89 @@ pub const FlexHandler = struct {
     flex_order: ?CSSIntegerAndPrefix = null,
     has_any: bool = false,
 
-pub fn handleProperty(self: *FlexHandler, property: *const Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
-            const maybeFlush = struct {
-
-pub fn maybeFlush(handler: *FlexHandler, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext, comptime prop: []const u8, val: anytype, vp: *const VendorPrefix) void {
-            if (@field(handler, prop)) |*field| {
+pub fn maybeFlush(self: *FlexHandler, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext, comptime prop: []const u8, val: anytype, vp: *const VendorPrefix) void {
+            if (@field(self, prop)) |*field| {
                 _ = &field;
                 if (((!std.@"meta".eql((field.*)[0], val.*)) and (!bun.bits.contains(css.VendorPrefix, (field.*)[1], vp.*)))) {
-                    _ = handler.flush(d, ctx);
+                    _ = self.flush(d, ctx);
                 }
             }
     }
-}.maybeFlush;
-            const propertyHelper = struct {
 
-pub fn propertyHelper(handler: *FlexHandler, ctx: *css.PropertyHandlerContext, d: *css.DeclarationList, comptime prop: []const u8, val: anytype, vp: *const VendorPrefix) void {
-            _ = maybeFlush(handler, d, ctx, prop, val, vp);
-            if ((@field(handler, prop) != null)) {
-                const field = (&(@field(handler, prop)).?);
+pub fn propertyHelper(self: *FlexHandler, ctx: *css.PropertyHandlerContext, d: *css.DeclarationList, comptime prop: []const u8, val: anytype, vp: *const VendorPrefix) void {
+            _ = self.maybeFlush(d, ctx, prop, val, vp);
+            if ((@field(self, prop) != null)) {
+                const field = (&(@field(self, prop)).?);
                 @field(field.*, "0") = css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator);
                 _ = bun.bits.insert(css.VendorPrefix, (&field[1]), vp.*);
             } else {
-                @field(handler, prop) = .{ css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator), vp.* };
-                handler.has_any = true;
+                @field(self, prop) = .{ css.generic.deepClone(@TypeOf(val.*), val, ctx.allocator), vp.* };
+                self.has_any = true;
             }
     }
-}.propertyHelper;
+
+pub fn handleProperty(self: *FlexHandler, property: *const Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
             switch (property.*) {
 .@"flex-direction" => |*val| {
 if ((context.targets.browsers != null)) {
                 self.box_direction = null;
                 self.box_orient = null;
             }
-            _ = propertyHelper(self, context, dest, "direction", (&val[0]), (&val[1]));
+            _ = self.propertyHelper(context, dest, "direction", (&val[0]), (&val[1]));
 },
 .@"box-orient" => |*val| {
-_ = propertyHelper(self, context, dest, "box_orient", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "box_orient", (&val[0]), (&val[1]));
 },
 .@"box-direction" => |*val| {
-_ = propertyHelper(self, context, dest, "box_direction", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "box_direction", (&val[0]), (&val[1]));
 },
 .@"flex-wrap" => |*val| {
 if ((context.targets.browsers != null)) {
                 self.box_lines = null;
             }
-            _ = propertyHelper(self, context, dest, "wrap", (&val[0]), (&val[1]));
+            _ = self.propertyHelper(context, dest, "wrap", (&val[0]), (&val[1]));
 },
 .@"box-lines" => |*val| {
-_ = propertyHelper(self, context, dest, "box_lines", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "box_lines", (&val[0]), (&val[1]));
 },
 .@"flex-flow" => |*val| {
 if ((context.targets.browsers != null)) {
                 self.box_direction = null;
                 self.box_orient = null;
             }
-            _ = propertyHelper(self, context, dest, "direction", (&val[0].direction), (&val[1]));
-            _ = propertyHelper(self, context, dest, "wrap", (&val[0].wrap), (&val[1]));
+            _ = self.propertyHelper(context, dest, "direction", (&val[0].direction), (&val[1]));
+            _ = self.propertyHelper(context, dest, "wrap", (&val[0].wrap), (&val[1]));
 },
 .@"flex-grow" => |*val| {
 if ((context.targets.browsers != null)) {
                 self.box_flex = null;
                 self.flex_positive = null;
             }
-            _ = propertyHelper(self, context, dest, "grow", (&val[0]), (&val[1]));
+            _ = self.propertyHelper(context, dest, "grow", (&val[0]), (&val[1]));
 },
 .@"box-flex" => |*val| {
-_ = propertyHelper(self, context, dest, "box_flex", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "box_flex", (&val[0]), (&val[1]));
 },
 .@"flex-positive" => |*val| {
-_ = propertyHelper(self, context, dest, "flex_positive", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "flex_positive", (&val[0]), (&val[1]));
 },
 .@"flex-shrink" => |*val| {
 if ((context.targets.browsers != null)) {
                 self.flex_negative = null;
             }
-            _ = propertyHelper(self, context, dest, "shrink", (&val[0]), (&val[1]));
+            _ = self.propertyHelper(context, dest, "shrink", (&val[0]), (&val[1]));
 },
 .@"flex-negative" => |*val| {
-_ = propertyHelper(self, context, dest, "flex_negative", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "flex_negative", (&val[0]), (&val[1]));
 },
 .@"flex-basis" => |*val| {
 if ((context.targets.browsers != null)) {
                 self.preferred_size = null;
             }
-            _ = propertyHelper(self, context, dest, "basis", (&val[0]), (&val[1]));
+            _ = self.propertyHelper(context, dest, "basis", (&val[0]), (&val[1]));
 },
 .@"flex-preferred-size" => |*val| {
-_ = propertyHelper(self, context, dest, "preferred_size", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "preferred_size", (&val[0]), (&val[1]));
 },
 .flex => |*val| {
 if ((context.targets.browsers != null)) {
@@ -652,25 +648,25 @@ if ((context.targets.browsers != null)) {
                 self.flex_negative = null;
                 self.preferred_size = null;
             }
-            _ = maybeFlush(self, dest, context, "grow", (&val[0].grow), (&val[1]));
-            _ = maybeFlush(self, dest, context, "shrink", (&val[0].shrink), (&val[1]));
-            _ = maybeFlush(self, dest, context, "basis", (&val[0].basis), (&val[1]));
-            _ = propertyHelper(self, context, dest, "grow", (&val[0].grow), (&val[1]));
-            _ = propertyHelper(self, context, dest, "shrink", (&val[0].shrink), (&val[1]));
-            _ = propertyHelper(self, context, dest, "basis", (&val[0].basis), (&val[1]));
+            _ = self.maybeFlush(dest, context, "grow", (&val[0].grow), (&val[1]));
+            _ = self.maybeFlush(dest, context, "shrink", (&val[0].shrink), (&val[1]));
+            _ = self.maybeFlush(dest, context, "basis", (&val[0].basis), (&val[1]));
+            _ = self.propertyHelper(context, dest, "grow", (&val[0].grow), (&val[1]));
+            _ = self.propertyHelper(context, dest, "shrink", (&val[0].shrink), (&val[1]));
+            _ = self.propertyHelper(context, dest, "basis", (&val[0].basis), (&val[1]));
 },
 .order => |*val| {
 if ((context.targets.browsers != null)) {
                 self.box_ordinal_group = null;
                 self.flex_order = null;
             }
-            _ = propertyHelper(self, context, dest, "order", (&val[0]), (&val[1]));
+            _ = self.propertyHelper(context, dest, "order", (&val[0]), (&val[1]));
 },
 .@"box-ordinal-group" => |*val| {
-_ = propertyHelper(self, context, dest, "box_ordinal_group", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "box_ordinal_group", (&val[0]), (&val[1]));
 },
 .@"flex-order" => |*val| {
-_ = propertyHelper(self, context, dest, "flex_order", (&val[0]), (&val[1]));
+_ = self.propertyHelper(context, dest, "flex_order", (&val[0]), (&val[1]));
 },
 .unparsed => |*val| {
 if (FlexHandler.isFlexProperty((&val.property_id))) {

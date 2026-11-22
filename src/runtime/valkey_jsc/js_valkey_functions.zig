@@ -62,10 +62,20 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const js_valkey = @import("./js_valkey.zig");
+pub const ClientStateRequirement = enum {
+    subscriber,
+    not_subscriber,
+    dont_care,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DerefGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -142,151 +152,7 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const valkeySend = JSValkeyClient.send;
-const JSValkeyClient = js_valkey.JSValkeyClient;
-const SubscriptionCtx = js_valkey.SubscriptionCtx;
-const jsc = bun.jsc;
-const JSValue = jsc.JSValue;
-const JSArgument = jsc.Node.BlobOrStringOrBuffer;
-const Slice = jsc.ZigString.Slice;
-const valkey = bun.valkey;
-const Command = valkey.Command;
-const protocol = valkey.protocol;
-var empty_args: [0]JSArgument = undefined;
-pub const hdel = compile.@"(key: RedisKey, ...args: RedisKey[])"("hdel", "HDEL", "key", .not_subscriber).call;
-pub const hrandfield = compile.@"(key: RedisKey, ...args: RedisKey[])"("hrandfield", "HRANDFIELD", "key", .not_subscriber).call;
-pub const hscan = compile.@"(key: RedisKey, ...args: RedisKey[])"("hscan", "HSCAN", "key", .not_subscriber).call;
-pub const hgetdel = compile.@"(...strings: string[])"("hgetdel", "HGETDEL", .not_subscriber).call;
-pub const hgetex = compile.@"(...strings: string[])"("hgetex", "HGETEX", .not_subscriber).call;
-pub const hsetex = compile.@"(...strings: string[])"("hsetex", "HSETEX", .not_subscriber).call;
-pub const hexpire = compile.@"(...strings: string[])"("hexpire", "HEXPIRE", .not_subscriber).call;
-pub const hexpireat = compile.@"(...strings: string[])"("hexpireat", "HEXPIREAT", .not_subscriber).call;
-pub const hexpiretime = compile.@"(...strings: string[])"("hexpiretime", "HEXPIRETIME", .not_subscriber).call;
-pub const hpersist = compile.@"(...strings: string[])"("hpersist", "HPERSIST", .not_subscriber).call;
-pub const hpexpire = compile.@"(...strings: string[])"("hpexpire", "HPEXPIRE", .not_subscriber).call;
-pub const hpexpireat = compile.@"(...strings: string[])"("hpexpireat", "HPEXPIREAT", .not_subscriber).call;
-pub const hpexpiretime = compile.@"(...strings: string[])"("hpexpiretime", "HPEXPIRETIME", .not_subscriber).call;
-pub const hpttl = compile.@"(...strings: string[])"("hpttl", "HPTTL", .not_subscriber).call;
-pub const httl = compile.@"(...strings: string[])"("httl", "HTTL", .not_subscriber).call;
-pub const bitcount = compile.@"(key: RedisKey)"("bitcount", "BITCOUNT", "key", .not_subscriber).call;
-pub const blmove = compile.@"(...strings: string[])"("blmove", "BLMOVE", .not_subscriber).call;
-pub const blmpop = compile.@"(...strings: string[])"("blmpop", "BLMPOP", .not_subscriber).call;
-pub const blpop = compile.@"(...strings: string[])"("blpop", "BLPOP", .not_subscriber).call;
-pub const brpop = compile.@"(...strings: string[])"("brpop", "BRPOP", .not_subscriber).call;
-pub const brpoplpush = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("brpoplpush", "BRPOPLPUSH", "source", "destination", "timeout", .not_subscriber).call;
-pub const getbit = compile.@"(key: RedisKey, value: RedisValue)"("getbit", "GETBIT", "key", "offset", .not_subscriber).call;
-pub const setbit = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("setbit", "SETBIT", "key", "offset", "value", .not_subscriber).call;
-pub const getrange = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("getrange", "GETRANGE", "key", "start", "end", .not_subscriber).call;
-pub const setrange = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("setrange", "SETRANGE", "key", "offset", "value", .not_subscriber).call;
-pub const dump = compile.@"(key: RedisKey)"("dump", "DUMP", "key", .not_subscriber).call;
-pub const expireat = compile.@"(key: RedisKey, value: RedisValue)"("expireat", "EXPIREAT", "key", "timestamp", .not_subscriber).call;
-pub const expiretime = compile.@"(key: RedisKey)"("expiretime", "EXPIRETIME", "key", .not_subscriber).call;
-pub const getdel = compile.@"(key: RedisKey)"("getdel", "GETDEL", "key", .not_subscriber).call;
-pub const getex = compile.@"(...strings: string[])"("getex", "GETEX", .not_subscriber).call;
-pub const hgetall = compile.@"(key: RedisKey)"("hgetall", "HGETALL", "key", .not_subscriber).call;
-pub const hkeys = compile.@"(key: RedisKey)"("hkeys", "HKEYS", "key", .not_subscriber).call;
-pub const hlen = compile.@"(key: RedisKey)"("hlen", "HLEN", "key", .not_subscriber).call;
-pub const hvals = compile.@"(key: RedisKey)"("hvals", "HVALS", "key", .not_subscriber).call;
-pub const keys = compile.@"(key: RedisKey)"("keys", "KEYS", "key", .not_subscriber).call;
-pub const lindex = compile.@"(key: RedisKey, value: RedisValue)"("lindex", "LINDEX", "key", "index", .not_subscriber).call;
-pub const linsert = compile.@"(...strings: string[])"("linsert", "LINSERT", .not_subscriber).call;
-pub const llen = compile.@"(key: RedisKey)"("llen", "LLEN", "key", .not_subscriber).call;
-pub const lmove = compile.@"(...strings: string[])"("lmove", "LMOVE", .not_subscriber).call;
-pub const lmpop = compile.@"(...strings: string[])"("lmpop", "LMPOP", .not_subscriber).call;
-pub const lpop = compile.@"(key: RedisKey, ...args: RedisKey[])"("lpop", "LPOP", "key", .not_subscriber).call;
-pub const lpos = compile.@"(...strings: string[])"("lpos", "LPOS", .not_subscriber).call;
-pub const lrange = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("lrange", "LRANGE", "key", "start", "stop", .not_subscriber).call;
-pub const lrem = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("lrem", "LREM", "key", "count", "element", .not_subscriber).call;
-pub const lset = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("lset", "LSET", "key", "index", "element", .not_subscriber).call;
-pub const ltrim = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("ltrim", "LTRIM", "key", "start", "stop", .not_subscriber).call;
-pub const persist = compile.@"(key: RedisKey)"("persist", "PERSIST", "key", .not_subscriber).call;
-pub const pexpire = compile.@"(key: RedisKey, value: RedisValue)"("pexpire", "PEXPIRE", "key", "milliseconds", .not_subscriber).call;
-pub const pexpireat = compile.@"(key: RedisKey, value: RedisValue)"("pexpireat", "PEXPIREAT", "key", "milliseconds-timestamp", .not_subscriber).call;
-pub const pexpiretime = compile.@"(key: RedisKey)"("pexpiretime", "PEXPIRETIME", "key", .not_subscriber).call;
-pub const pttl = compile.@"(key: RedisKey)"("pttl", "PTTL", "key", .not_subscriber).call;
-pub const randomkey = compile.@"()"("randomkey", "RANDOMKEY", .not_subscriber).call;
-pub const rpop = compile.@"(key: RedisKey, ...args: RedisKey[])"("rpop", "RPOP", "key", .not_subscriber).call;
-pub const rpoplpush = compile.@"(key: RedisKey, value: RedisValue)"("rpoplpush", "RPOPLPUSH", "source", "destination", .not_subscriber).call;
-pub const scan = compile.@"(...strings: string[])"("scan", "SCAN", .not_subscriber).call;
-pub const scard = compile.@"(key: RedisKey)"("scard", "SCARD", "key", .not_subscriber).call;
-pub const sdiff = compile.@"(...strings: string[])"("sdiff", "SDIFF", .not_subscriber).call;
-pub const sdiffstore = compile.@"(...strings: string[])"("sdiffstore", "SDIFFSTORE", .not_subscriber).call;
-pub const sinter = compile.@"(...strings: string[])"("sinter", "SINTER", .not_subscriber).call;
-pub const sintercard = compile.@"(...strings: string[])"("sintercard", "SINTERCARD", .not_subscriber).call;
-pub const sinterstore = compile.@"(...strings: string[])"("sinterstore", "SINTERSTORE", .not_subscriber).call;
-pub const smismember = compile.@"(...strings: string[])"("smismember", "SMISMEMBER", .not_subscriber).call;
-pub const sscan = compile.@"(...strings: string[])"("sscan", "SSCAN", .not_subscriber).call;
-pub const strlen = compile.@"(key: RedisKey)"("strlen", "STRLEN", "key", .not_subscriber).call;
-pub const sunion = compile.@"(...strings: string[])"("sunion", "SUNION", .not_subscriber).call;
-pub const sunionstore = compile.@"(...strings: string[])"("sunionstore", "SUNIONSTORE", .not_subscriber).call;
-pub const @"type" = compile.@"(key: RedisKey)"("type", "TYPE", "key", .not_subscriber).call;
-pub const zcard = compile.@"(key: RedisKey)"("zcard", "ZCARD", "key", .not_subscriber).call;
-pub const zcount = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zcount", "ZCOUNT", "key", "min", "max", .not_subscriber).call;
-pub const zlexcount = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zlexcount", "ZLEXCOUNT", "key", "min", "max", .not_subscriber).call;
-pub const zpopmax = compile.@"(key: RedisKey, ...args: RedisKey[])"("zpopmax", "ZPOPMAX", "key", .not_subscriber).call;
-pub const zpopmin = compile.@"(key: RedisKey, ...args: RedisKey[])"("zpopmin", "ZPOPMIN", "key", .not_subscriber).call;
-pub const zrandmember = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrandmember", "ZRANDMEMBER", "key", .not_subscriber).call;
-pub const zrange = compile.@"(...strings: string[])"("zrange", "ZRANGE", .not_subscriber).call;
-pub const zrevrange = compile.@"(...strings: string[])"("zrevrange", "ZREVRANGE", .not_subscriber).call;
-pub const zrangebyscore = compile.@"(...strings: string[])"("zrangebyscore", "ZRANGEBYSCORE", .not_subscriber).call;
-pub const zrevrangebyscore = compile.@"(...strings: string[])"("zrevrangebyscore", "ZREVRANGEBYSCORE", .not_subscriber).call;
-pub const zrangebylex = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrangebylex", "ZRANGEBYLEX", "key", .not_subscriber).call;
-pub const zrevrangebylex = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrevrangebylex", "ZREVRANGEBYLEX", "key", .not_subscriber).call;
-pub const append = compile.@"(key: RedisKey, value: RedisValue)"("append", "APPEND", "key", "value", .not_subscriber).call;
-pub const getset = compile.@"(key: RedisKey, value: RedisValue)"("getset", "GETSET", "key", "value", .not_subscriber).call;
-pub const hget = compile.@"(key: RedisKey, value: RedisValue)"("hget", "HGET", "key", "field", .not_subscriber).call;
-pub const incrby = compile.@"(key: RedisKey, value: RedisValue)"("incrby", "INCRBY", "key", "increment", .not_subscriber).call;
-pub const incrbyfloat = compile.@"(key: RedisKey, value: RedisValue)"("incrbyfloat", "INCRBYFLOAT", "key", "increment", .not_subscriber).call;
-pub const decrby = compile.@"(key: RedisKey, value: RedisValue)"("decrby", "DECRBY", "key", "decrement", .not_subscriber).call;
-pub const lpush = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("lpush", "LPUSH", .not_subscriber).call;
-pub const lpushx = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("lpushx", "LPUSHX", .not_subscriber).call;
-pub const pfadd = compile.@"(key: RedisKey, value: RedisValue)"("pfadd", "PFADD", "key", "value", .not_subscriber).call;
-pub const rpush = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("rpush", "RPUSH", .not_subscriber).call;
-pub const rpushx = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("rpushx", "RPUSHX", .not_subscriber).call;
-pub const setnx = compile.@"(key: RedisKey, value: RedisValue)"("setnx", "SETNX", "key", "value", .not_subscriber).call;
-pub const setex = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("setex", "SETEX", "key", "seconds", "value", .not_subscriber).call;
-pub const psetex = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("psetex", "PSETEX", "key", "milliseconds", "value", .not_subscriber).call;
-pub const zscore = compile.@"(key: RedisKey, value: RedisValue)"("zscore", "ZSCORE", "key", "value", .not_subscriber).call;
-pub const zincrby = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zincrby", "ZINCRBY", "key", "increment", "member", .not_subscriber).call;
-pub const zmscore = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("zmscore", "ZMSCORE", .not_subscriber).call;
-pub const zadd = compile.@"(...strings: string[])"("zadd", "ZADD", .not_subscriber).call;
-pub const zscan = compile.@"(...strings: string[])"("zscan", "ZSCAN", .not_subscriber).call;
-pub const zdiff = compile.@"(...strings: string[])"("zdiff", "ZDIFF", .not_subscriber).call;
-pub const zdiffstore = compile.@"(...strings: string[])"("zdiffstore", "ZDIFFSTORE", .not_subscriber).call;
-pub const zinter = compile.@"(...strings: string[])"("zinter", "ZINTER", .not_subscriber).call;
-pub const zintercard = compile.@"(...strings: string[])"("zintercard", "ZINTERCARD", .not_subscriber).call;
-pub const zinterstore = compile.@"(...strings: string[])"("zinterstore", "ZINTERSTORE", .not_subscriber).call;
-pub const zunion = compile.@"(...strings: string[])"("zunion", "ZUNION", .not_subscriber).call;
-pub const zunionstore = compile.@"(...strings: string[])"("zunionstore", "ZUNIONSTORE", .not_subscriber).call;
-pub const zmpop = compile.@"(...strings: string[])"("zmpop", "ZMPOP", .not_subscriber).call;
-pub const bzmpop = compile.@"(...strings: string[])"("bzmpop", "BZMPOP", .not_subscriber).call;
-pub const bzpopmin = compile.@"(...strings: string[])"("bzpopmin", "BZPOPMIN", .not_subscriber).call;
-pub const bzpopmax = compile.@"(...strings: string[])"("bzpopmax", "BZPOPMAX", .not_subscriber).call;
-pub const del = compile.@"(key: RedisKey, ...args: RedisKey[])"("del", "DEL", "key", .not_subscriber).call;
-pub const mget = compile.@"(key: RedisKey, ...args: RedisKey[])"("mget", "MGET", "key", .not_subscriber).call;
-pub const mset = compile.@"(...strings: string[])"("mset", "MSET", .not_subscriber).call;
-pub const msetnx = compile.@"(...strings: string[])"("msetnx", "MSETNX", .not_subscriber).call;
-pub const script = compile.@"(...strings: string[])"("script", "SCRIPT", .not_subscriber).call;
-pub const select = compile.@"(...strings: string[])"("select", "SELECT", .not_subscriber).call;
-pub const spublish = compile.@"(key: RedisKey, value: RedisValue)"("spublish", "SPUBLISH", "channel", "message", .not_subscriber).call;
-pub const substr = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("substr", "SUBSTR", "key", "start", "end", .not_subscriber).call;
-pub const hstrlen = compile.@"(key: RedisKey, value: RedisValue)"("hstrlen", "HSTRLEN", "key", "field", .not_subscriber).call;
-pub const zrank = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrank", "ZRANK", "key", .not_subscriber).call;
-pub const zrangestore = compile.@"(...strings: string[])"("zrangestore", "ZRANGESTORE", .not_subscriber).call;
-pub const zrem = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrem", "ZREM", "key", .not_subscriber).call;
-pub const zremrangebylex = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zremrangebylex", "ZREMRANGEBYLEX", "key", "min", "max", .not_subscriber).call;
-pub const zremrangebyrank = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zremrangebyrank", "ZREMRANGEBYRANK", "key", "start", "stop", .not_subscriber).call;
-pub const zremrangebyscore = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zremrangebyscore", "ZREMRANGEBYSCORE", "key", "min", "max", .not_subscriber).call;
-pub const zrevrank = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrevrank", "ZREVRANK", "key", .not_subscriber).call;
-pub const psubscribe = compile.@"(...strings: string[])"("psubscribe", "PSUBSCRIBE", .dont_care).call;
-pub const punsubscribe = compile.@"(...strings: string[])"("punsubscribe", "PUNSUBSCRIBE", .dont_care).call;
-pub const pubsub = compile.@"(...strings: string[])"("pubsub", "PUBSUB", .dont_care).call;
-pub const copy = compile.@"(...strings: string[])"("copy", "COPY", .not_subscriber).call;
-pub const unlink = compile.@"(key: RedisKey, ...args: RedisKey[])"("unlink", "UNLINK", "key", .not_subscriber).call;
-pub const touch = compile.@"(key: RedisKey, ...args: RedisKey[])"("touch", "TOUCH", "key", .not_subscriber).call;
-pub const rename = compile.@"(key: RedisKey, value: RedisValue)"("rename", "RENAME", "key", "newkey", .not_subscriber).call;
-pub const renamenx = compile.@"(key: RedisKey, value: RedisValue)"("renamenx", "RENAMENX", "key", "newkey", .not_subscriber).call;
-const compile = struct {
+pub const compile = struct {
 
 pub fn testCorrectState(client: *JSValkeyClient, js_client_prototype_function_name: []const u8, comptime client_state_requirement: ClientStateRequirement) bun.JSError!void {
             return (switch (client_state_requirement) {
@@ -435,7 +301,7 @@ pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             _ = &_args_list_guard;
             var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
             defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-            for (callframe.arguments()) |arg| {
+            for (cp_iter_slice(callframe.arguments())) |arg| {
                 _ = &arg;
                 const another = ((try fromJS(globalObject, arg)) orelse {
                 return globalObject.throwInvalidArgumentType(name, "additional arguments", "string or buffer");
@@ -463,7 +329,7 @@ pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             _ = &_args_list_guard;
             var ___args_list_guard_moved = false; _ = &___args_list_guard_moved;
             defer if (!___args_list_guard_moved) { ___args_list_guard_moved = true; const __T = @TypeOf(_args_list_guard); if (@typeInfo(__T) == .optional) { if (_args_list_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _args_list_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _args_list_guard; _drop_val.__cp_deinit(); } };
-            for (callframe.arguments()) |arg| {
+            for (cp_iter_slice(callframe.arguments())) |arg| {
                 _ = &arg;
                 if (arg.isUndefinedOrNull()) {
                     continue;
@@ -478,15 +344,152 @@ pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
     }
 };
     }
-    pub const ClientStateRequirement = enum {
-            /// The client must be a subscriber (in subscription mode).
-            subscriber,
-            /// The client must not be a subscriber (not in subscription mode).
-            not_subscriber,
-            /// We don't care about the client state (subscriber || not).
-            dont_care,
-        };
 };
+
+const valkeySend = JSValkeyClient.send;
+const JSValkeyClient = js_valkey.JSValkeyClient;
+const SubscriptionCtx = js_valkey.SubscriptionCtx;
+const jsc = bun.jsc;
+const JSValue = jsc.JSValue;
+const JSArgument = jsc.Node.BlobOrStringOrBuffer;
+const Slice = jsc.ZigString.Slice;
+const valkey = bun.valkey;
+const Command = valkey.Command;
+const protocol = valkey.protocol;
+var empty_args: [0]JSArgument = undefined;
+pub const hdel = compile.@"(key: RedisKey, ...args: RedisKey[])"("hdel", "HDEL", "key", .not_subscriber).call;
+pub const hrandfield = compile.@"(key: RedisKey, ...args: RedisKey[])"("hrandfield", "HRANDFIELD", "key", .not_subscriber).call;
+pub const hscan = compile.@"(key: RedisKey, ...args: RedisKey[])"("hscan", "HSCAN", "key", .not_subscriber).call;
+pub const hgetdel = compile.@"(...strings: string[])"("hgetdel", "HGETDEL", .not_subscriber).call;
+pub const hgetex = compile.@"(...strings: string[])"("hgetex", "HGETEX", .not_subscriber).call;
+pub const hsetex = compile.@"(...strings: string[])"("hsetex", "HSETEX", .not_subscriber).call;
+pub const hexpire = compile.@"(...strings: string[])"("hexpire", "HEXPIRE", .not_subscriber).call;
+pub const hexpireat = compile.@"(...strings: string[])"("hexpireat", "HEXPIREAT", .not_subscriber).call;
+pub const hexpiretime = compile.@"(...strings: string[])"("hexpiretime", "HEXPIRETIME", .not_subscriber).call;
+pub const hpersist = compile.@"(...strings: string[])"("hpersist", "HPERSIST", .not_subscriber).call;
+pub const hpexpire = compile.@"(...strings: string[])"("hpexpire", "HPEXPIRE", .not_subscriber).call;
+pub const hpexpireat = compile.@"(...strings: string[])"("hpexpireat", "HPEXPIREAT", .not_subscriber).call;
+pub const hpexpiretime = compile.@"(...strings: string[])"("hpexpiretime", "HPEXPIRETIME", .not_subscriber).call;
+pub const hpttl = compile.@"(...strings: string[])"("hpttl", "HPTTL", .not_subscriber).call;
+pub const httl = compile.@"(...strings: string[])"("httl", "HTTL", .not_subscriber).call;
+pub const bitcount = compile.@"(key: RedisKey)"("bitcount", "BITCOUNT", "key", .not_subscriber).call;
+pub const blmove = compile.@"(...strings: string[])"("blmove", "BLMOVE", .not_subscriber).call;
+pub const blmpop = compile.@"(...strings: string[])"("blmpop", "BLMPOP", .not_subscriber).call;
+pub const blpop = compile.@"(...strings: string[])"("blpop", "BLPOP", .not_subscriber).call;
+pub const brpop = compile.@"(...strings: string[])"("brpop", "BRPOP", .not_subscriber).call;
+pub const brpoplpush = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("brpoplpush", "BRPOPLPUSH", "source", "destination", "timeout", .not_subscriber).call;
+pub const getbit = compile.@"(key: RedisKey, value: RedisValue)"("getbit", "GETBIT", "key", "offset", .not_subscriber).call;
+pub const setbit = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("setbit", "SETBIT", "key", "offset", "value", .not_subscriber).call;
+pub const getrange = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("getrange", "GETRANGE", "key", "start", "end", .not_subscriber).call;
+pub const setrange = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("setrange", "SETRANGE", "key", "offset", "value", .not_subscriber).call;
+pub const dump = compile.@"(key: RedisKey)"("dump", "DUMP", "key", .not_subscriber).call;
+pub const expireat = compile.@"(key: RedisKey, value: RedisValue)"("expireat", "EXPIREAT", "key", "timestamp", .not_subscriber).call;
+pub const expiretime = compile.@"(key: RedisKey)"("expiretime", "EXPIRETIME", "key", .not_subscriber).call;
+pub const getdel = compile.@"(key: RedisKey)"("getdel", "GETDEL", "key", .not_subscriber).call;
+pub const getex = compile.@"(...strings: string[])"("getex", "GETEX", .not_subscriber).call;
+pub const hgetall = compile.@"(key: RedisKey)"("hgetall", "HGETALL", "key", .not_subscriber).call;
+pub const hkeys = compile.@"(key: RedisKey)"("hkeys", "HKEYS", "key", .not_subscriber).call;
+pub const hlen = compile.@"(key: RedisKey)"("hlen", "HLEN", "key", .not_subscriber).call;
+pub const hvals = compile.@"(key: RedisKey)"("hvals", "HVALS", "key", .not_subscriber).call;
+pub const keys = compile.@"(key: RedisKey)"("keys", "KEYS", "key", .not_subscriber).call;
+pub const lindex = compile.@"(key: RedisKey, value: RedisValue)"("lindex", "LINDEX", "key", "index", .not_subscriber).call;
+pub const linsert = compile.@"(...strings: string[])"("linsert", "LINSERT", .not_subscriber).call;
+pub const llen = compile.@"(key: RedisKey)"("llen", "LLEN", "key", .not_subscriber).call;
+pub const lmove = compile.@"(...strings: string[])"("lmove", "LMOVE", .not_subscriber).call;
+pub const lmpop = compile.@"(...strings: string[])"("lmpop", "LMPOP", .not_subscriber).call;
+pub const lpop = compile.@"(key: RedisKey, ...args: RedisKey[])"("lpop", "LPOP", "key", .not_subscriber).call;
+pub const lpos = compile.@"(...strings: string[])"("lpos", "LPOS", .not_subscriber).call;
+pub const lrange = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("lrange", "LRANGE", "key", "start", "stop", .not_subscriber).call;
+pub const lrem = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("lrem", "LREM", "key", "count", "element", .not_subscriber).call;
+pub const lset = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("lset", "LSET", "key", "index", "element", .not_subscriber).call;
+pub const ltrim = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("ltrim", "LTRIM", "key", "start", "stop", .not_subscriber).call;
+pub const persist = compile.@"(key: RedisKey)"("persist", "PERSIST", "key", .not_subscriber).call;
+pub const pexpire = compile.@"(key: RedisKey, value: RedisValue)"("pexpire", "PEXPIRE", "key", "milliseconds", .not_subscriber).call;
+pub const pexpireat = compile.@"(key: RedisKey, value: RedisValue)"("pexpireat", "PEXPIREAT", "key", "milliseconds-timestamp", .not_subscriber).call;
+pub const pexpiretime = compile.@"(key: RedisKey)"("pexpiretime", "PEXPIRETIME", "key", .not_subscriber).call;
+pub const pttl = compile.@"(key: RedisKey)"("pttl", "PTTL", "key", .not_subscriber).call;
+pub const randomkey = compile.@"()"("randomkey", "RANDOMKEY", .not_subscriber).call;
+pub const rpop = compile.@"(key: RedisKey, ...args: RedisKey[])"("rpop", "RPOP", "key", .not_subscriber).call;
+pub const rpoplpush = compile.@"(key: RedisKey, value: RedisValue)"("rpoplpush", "RPOPLPUSH", "source", "destination", .not_subscriber).call;
+pub const scan = compile.@"(...strings: string[])"("scan", "SCAN", .not_subscriber).call;
+pub const scard = compile.@"(key: RedisKey)"("scard", "SCARD", "key", .not_subscriber).call;
+pub const sdiff = compile.@"(...strings: string[])"("sdiff", "SDIFF", .not_subscriber).call;
+pub const sdiffstore = compile.@"(...strings: string[])"("sdiffstore", "SDIFFSTORE", .not_subscriber).call;
+pub const sinter = compile.@"(...strings: string[])"("sinter", "SINTER", .not_subscriber).call;
+pub const sintercard = compile.@"(...strings: string[])"("sintercard", "SINTERCARD", .not_subscriber).call;
+pub const sinterstore = compile.@"(...strings: string[])"("sinterstore", "SINTERSTORE", .not_subscriber).call;
+pub const smismember = compile.@"(...strings: string[])"("smismember", "SMISMEMBER", .not_subscriber).call;
+pub const sscan = compile.@"(...strings: string[])"("sscan", "SSCAN", .not_subscriber).call;
+pub const strlen = compile.@"(key: RedisKey)"("strlen", "STRLEN", "key", .not_subscriber).call;
+pub const sunion = compile.@"(...strings: string[])"("sunion", "SUNION", .not_subscriber).call;
+pub const sunionstore = compile.@"(...strings: string[])"("sunionstore", "SUNIONSTORE", .not_subscriber).call;
+pub const @"type" = compile.@"(key: RedisKey)"("type", "TYPE", "key", .not_subscriber).call;
+pub const zcard = compile.@"(key: RedisKey)"("zcard", "ZCARD", "key", .not_subscriber).call;
+pub const zcount = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zcount", "ZCOUNT", "key", "min", "max", .not_subscriber).call;
+pub const zlexcount = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zlexcount", "ZLEXCOUNT", "key", "min", "max", .not_subscriber).call;
+pub const zpopmax = compile.@"(key: RedisKey, ...args: RedisKey[])"("zpopmax", "ZPOPMAX", "key", .not_subscriber).call;
+pub const zpopmin = compile.@"(key: RedisKey, ...args: RedisKey[])"("zpopmin", "ZPOPMIN", "key", .not_subscriber).call;
+pub const zrandmember = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrandmember", "ZRANDMEMBER", "key", .not_subscriber).call;
+pub const zrange = compile.@"(...strings: string[])"("zrange", "ZRANGE", .not_subscriber).call;
+pub const zrevrange = compile.@"(...strings: string[])"("zrevrange", "ZREVRANGE", .not_subscriber).call;
+pub const zrangebyscore = compile.@"(...strings: string[])"("zrangebyscore", "ZRANGEBYSCORE", .not_subscriber).call;
+pub const zrevrangebyscore = compile.@"(...strings: string[])"("zrevrangebyscore", "ZREVRANGEBYSCORE", .not_subscriber).call;
+pub const zrangebylex = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrangebylex", "ZRANGEBYLEX", "key", .not_subscriber).call;
+pub const zrevrangebylex = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrevrangebylex", "ZREVRANGEBYLEX", "key", .not_subscriber).call;
+pub const append = compile.@"(key: RedisKey, value: RedisValue)"("append", "APPEND", "key", "value", .not_subscriber).call;
+pub const getset = compile.@"(key: RedisKey, value: RedisValue)"("getset", "GETSET", "key", "value", .not_subscriber).call;
+pub const hget = compile.@"(key: RedisKey, value: RedisValue)"("hget", "HGET", "key", "field", .not_subscriber).call;
+pub const incrby = compile.@"(key: RedisKey, value: RedisValue)"("incrby", "INCRBY", "key", "increment", .not_subscriber).call;
+pub const incrbyfloat = compile.@"(key: RedisKey, value: RedisValue)"("incrbyfloat", "INCRBYFLOAT", "key", "increment", .not_subscriber).call;
+pub const decrby = compile.@"(key: RedisKey, value: RedisValue)"("decrby", "DECRBY", "key", "decrement", .not_subscriber).call;
+pub const lpush = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("lpush", "LPUSH", .not_subscriber).call;
+pub const lpushx = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("lpushx", "LPUSHX", .not_subscriber).call;
+pub const pfadd = compile.@"(key: RedisKey, value: RedisValue)"("pfadd", "PFADD", "key", "value", .not_subscriber).call;
+pub const rpush = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("rpush", "RPUSH", .not_subscriber).call;
+pub const rpushx = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("rpushx", "RPUSHX", .not_subscriber).call;
+pub const setnx = compile.@"(key: RedisKey, value: RedisValue)"("setnx", "SETNX", "key", "value", .not_subscriber).call;
+pub const setex = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("setex", "SETEX", "key", "seconds", "value", .not_subscriber).call;
+pub const psetex = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("psetex", "PSETEX", "key", "milliseconds", "value", .not_subscriber).call;
+pub const zscore = compile.@"(key: RedisKey, value: RedisValue)"("zscore", "ZSCORE", "key", "value", .not_subscriber).call;
+pub const zincrby = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zincrby", "ZINCRBY", "key", "increment", "member", .not_subscriber).call;
+pub const zmscore = compile.@"(key: RedisKey, value: RedisValue, ...args: RedisValue)"("zmscore", "ZMSCORE", .not_subscriber).call;
+pub const zadd = compile.@"(...strings: string[])"("zadd", "ZADD", .not_subscriber).call;
+pub const zscan = compile.@"(...strings: string[])"("zscan", "ZSCAN", .not_subscriber).call;
+pub const zdiff = compile.@"(...strings: string[])"("zdiff", "ZDIFF", .not_subscriber).call;
+pub const zdiffstore = compile.@"(...strings: string[])"("zdiffstore", "ZDIFFSTORE", .not_subscriber).call;
+pub const zinter = compile.@"(...strings: string[])"("zinter", "ZINTER", .not_subscriber).call;
+pub const zintercard = compile.@"(...strings: string[])"("zintercard", "ZINTERCARD", .not_subscriber).call;
+pub const zinterstore = compile.@"(...strings: string[])"("zinterstore", "ZINTERSTORE", .not_subscriber).call;
+pub const zunion = compile.@"(...strings: string[])"("zunion", "ZUNION", .not_subscriber).call;
+pub const zunionstore = compile.@"(...strings: string[])"("zunionstore", "ZUNIONSTORE", .not_subscriber).call;
+pub const zmpop = compile.@"(...strings: string[])"("zmpop", "ZMPOP", .not_subscriber).call;
+pub const bzmpop = compile.@"(...strings: string[])"("bzmpop", "BZMPOP", .not_subscriber).call;
+pub const bzpopmin = compile.@"(...strings: string[])"("bzpopmin", "BZPOPMIN", .not_subscriber).call;
+pub const bzpopmax = compile.@"(...strings: string[])"("bzpopmax", "BZPOPMAX", .not_subscriber).call;
+pub const del = compile.@"(key: RedisKey, ...args: RedisKey[])"("del", "DEL", "key", .not_subscriber).call;
+pub const mget = compile.@"(key: RedisKey, ...args: RedisKey[])"("mget", "MGET", "key", .not_subscriber).call;
+pub const mset = compile.@"(...strings: string[])"("mset", "MSET", .not_subscriber).call;
+pub const msetnx = compile.@"(...strings: string[])"("msetnx", "MSETNX", .not_subscriber).call;
+pub const script = compile.@"(...strings: string[])"("script", "SCRIPT", .not_subscriber).call;
+pub const select = compile.@"(...strings: string[])"("select", "SELECT", .not_subscriber).call;
+pub const spublish = compile.@"(key: RedisKey, value: RedisValue)"("spublish", "SPUBLISH", "channel", "message", .not_subscriber).call;
+pub const substr = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("substr", "SUBSTR", "key", "start", "end", .not_subscriber).call;
+pub const hstrlen = compile.@"(key: RedisKey, value: RedisValue)"("hstrlen", "HSTRLEN", "key", "field", .not_subscriber).call;
+pub const zrank = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrank", "ZRANK", "key", .not_subscriber).call;
+pub const zrangestore = compile.@"(...strings: string[])"("zrangestore", "ZRANGESTORE", .not_subscriber).call;
+pub const zrem = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrem", "ZREM", "key", .not_subscriber).call;
+pub const zremrangebylex = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zremrangebylex", "ZREMRANGEBYLEX", "key", "min", "max", .not_subscriber).call;
+pub const zremrangebyrank = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zremrangebyrank", "ZREMRANGEBYRANK", "key", "start", "stop", .not_subscriber).call;
+pub const zremrangebyscore = compile.@"(key: RedisKey, value: RedisValue, value2: RedisValue)"("zremrangebyscore", "ZREMRANGEBYSCORE", "key", "min", "max", .not_subscriber).call;
+pub const zrevrank = compile.@"(key: RedisKey, ...args: RedisKey[])"("zrevrank", "ZREVRANK", "key", .not_subscriber).call;
+pub const psubscribe = compile.@"(...strings: string[])"("psubscribe", "PSUBSCRIBE", .dont_care).call;
+pub const punsubscribe = compile.@"(...strings: string[])"("punsubscribe", "PUNSUBSCRIBE", .dont_care).call;
+pub const pubsub = compile.@"(...strings: string[])"("pubsub", "PUBSUB", .dont_care).call;
+pub const copy = compile.@"(...strings: string[])"("copy", "COPY", .not_subscriber).call;
+pub const unlink = compile.@"(key: RedisKey, ...args: RedisKey[])"("unlink", "UNLINK", "key", .not_subscriber).call;
+pub const touch = compile.@"(key: RedisKey, ...args: RedisKey[])"("touch", "TOUCH", "key", .not_subscriber).call;
+pub const rename = compile.@"(key: RedisKey, value: RedisValue)"("rename", "RENAME", "key", "newkey", .not_subscriber).call;
+pub const renamenx = compile.@"(key: RedisKey, value: RedisValue)"("renamenx", "RENAMENX", "key", "newkey", .not_subscriber).call;
 
 pub fn requireNotSubscriber(client: *JSValkeyClient, function_name: []const u8) bun.JSError!void {
         if (client.isSubscriber()) {

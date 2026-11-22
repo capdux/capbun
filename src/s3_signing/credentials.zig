@@ -89,6 +89,7 @@ const ACL = @import("./acl.zig").ACL;
 const StorageClass = @import("./storage_class.zig").StorageClass;
 pub const bun = @import("bun");
 pub const multipart_options = @import("../runtime/webcore/s3/multipart_options.zig");
+pub const CredentialsJsc = @import("../runtime/webcore/s3/credentials_jsc.zig");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T,
@@ -122,10 +123,83 @@ pub fn __cp_deinit(self: *SliceFreeGuard) void {
     }
 };
 
-const MultiPartUploadOptions = multipart_options.MultiPartUploadOptions;
-const jsc = bun.jsc;
-const picohttp = bun.picohttp;
-const strings = bun.strings;
+pub const S3SignResult = struct {
+    amz_date: []const u8,
+    host: []const u8,
+    authorization: []const u8,
+    url: []const u8,
+    content_disposition: []const u8 = "",
+    content_encoding: []const u8 = "",
+    content_md5: []const u8 = "",
+    session_token: []const u8 = "",
+    acl: ?ACL = null,
+    storage_class: ?StorageClass = null,
+    request_payer: bool = false,
+    _headers: [MAX_HEADERS]picohttp.Header = .{ .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" } },
+    _headers_len: u8 = 0,
+
+pub fn headers(self: *const S3SignResult) []const picohttp.Header {
+            return self._headers[0..self._headers_len];
+    }
+
+pub fn mixWithHeader(self: *const S3SignResult, headers_buffer: []picohttp.Header, header: picohttp.Header) []const picohttp.Header {
+            const len = self._headers_len;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < len)) : (i = (i + 1)) {
+                headers_buffer[cp_cast_int(usize, i)] = self._headers[@as(usize, @intCast(i))];
+            }
+            headers_buffer[cp_cast_int(usize, len)] = header;
+            return headers_buffer[0..(len + 1)];
+    }
+
+pub fn deinit(self: S3SignResult) void {
+            if ((self.amz_date.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.amz_date);
+            }
+            if ((self.session_token.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.session_token);
+            }
+            if ((self.content_disposition.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.content_disposition);
+            }
+            if ((self.content_encoding.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.content_encoding);
+            }
+            if ((self.host.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.host);
+            }
+            if ((self.authorization.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.authorization);
+            }
+            if ((self.url.len > 0)) {
+                _ = bun.freeSensitive(bun.default_allocator, self.url);
+            }
+            if ((self.content_md5.len > 0)) {
+                _ = bun.default_allocator.free(self.content_md5);
+            }
+    }
+    pub const MAX_HEADERS = 11;
+};
+
+pub const S3SignQueryOptions = struct {
+    expires: usize = 86400,
+};
+
+pub const S3SignOptions = struct {
+    path: []const u8,
+    method: bun.http.Method,
+    content_hash: ?[]const u8 = null,
+    content_md5: ?[]const u8 = null,
+    search_params: ?[]const u8 = null,
+    content_disposition: ?[]const u8 = null,
+    content_type: ?[]const u8 = null,
+    content_encoding: ?[]const u8 = null,
+    acl: ?ACL = null,
+    storage_class: ?StorageClass = null,
+    request_payer: bool = false,
+};
+
 pub const S3Credentials = struct {
     ref_count: RefCount,
     accessKeyId: []const u8,
@@ -138,7 +212,7 @@ pub const S3Credentials = struct {
     insecure_http: bool = false,
     virtual_hosted_style: bool = false,
 
-pub fn estimatedSize(self: *const @This()) usize {
+pub fn estimatedSize(self: S3Credentials) usize {
             return (((((@sizeOf(S3Credentials) + self.accessKeyId.len) + self.region.len) + self.secretAccessKey.len) + self.endpoint.len) + self.bucket.len);
     }
 
@@ -158,11 +232,11 @@ pub fn hashConst(acl: []const u8) u64 {
             return hasher.final();
     }
 
-pub fn dupe(self: *const @This()) *S3Credentials {
+pub fn dupe(self: *const S3Credentials) *S3Credentials {
             return bun.new(S3Credentials, .{ .ref_count = .init(), .accessKeyId = (if ((self.accessKeyId.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.accessKeyId)) else ""), .secretAccessKey = (if ((self.secretAccessKey.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.secretAccessKey)) else ""), .region = (if ((self.region.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.region)) else ""), .endpoint = (if ((self.endpoint.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.endpoint)) else ""), .bucket = (if ((self.bucket.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.bucket)) else ""), .sessionToken = (if ((self.sessionToken.len > 0)) bun.handleOom(bun.default_allocator.dupe(u8, self.sessionToken)) else ""), .insecure_http = self.insecure_http, .virtual_hosted_style = self.virtual_hosted_style });
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *S3Credentials) void {
             if ((self.accessKeyId.len > 0)) {
                 _ = bun.default_allocator.free(self.accessKeyId);
             }
@@ -197,7 +271,7 @@ pub fn getAMZDate(allocator: std.mem.Allocator) DateResult {
             const hours = time.getHoursIntoDay();
             const minutes = time.getMinutesIntoHour();
             const seconds = time.getSecondsIntoMinute();
-            return .{ .numeric_day = (secs - time.secs), .date = (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{ year, month, day, hours, minutes, seconds })) catch |err| { _ = &err; break :blk_catch_0 bun.handleOom(err); }); }) };
+            return DateResult{ .numeric_day = (secs - time.secs), .date = (blk_catch_0: { break :blk_catch_0 ((std.fmt.allocPrint(allocator, "{d:0>4}{d:0>2}{d:0>2}T{d:0>2}{d:0>2}{d:0>2}Z", .{ year, month, day, hours, minutes, seconds })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); }) };
     }
 
 pub fn guessBucket(endpoint: []const u8) ?[]const u8 {
@@ -253,7 +327,7 @@ else => error.InvalidHexChar,
 pub fn encodeURIComponent(input: []const u8, buffer: []u8, comptime encode_slash: bool) ![]const u8 {
             var written: usize = 0;
             _ = &written;
-            for (input) |c| {
+            for (cp_iter_slice(input)) |c| {
                 _ = &c;
                 switch (c) {
 65...90, 97...122, 48...57, '-', '_', '.', '~' => {
@@ -294,94 +368,20 @@ pub fn normalizeName(name: []const u8) []const u8 {
             return std.mem.trim(u8, name, "/\\");
     }
 
-pub fn signRequest(self: *const @This(), signOptions: SignOptions, comptime allow_empty_path: bool, signQueryOption: ?SignQueryOptions) !SignResult {
-            return s3CredentialsSignRequest(self, signOptions, allow_empty_path, signQueryOption);
+pub fn signRequest(self: S3Credentials, signOptions: S3SignOptions, comptime allow_empty_path: bool, signQueryOption: ?S3SignQueryOptions) !S3SignResult {
+            return s3CredentialsSignRequest((&self), signOptions, allow_empty_path, signQueryOption);
     }
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
-    pub const getCredentialsWithOptions = @import("../runtime/webcore/s3/credentials_jsc.zig").getCredentialsWithOptions;
+    pub const getCredentialsWithOptions = CredentialsJsc.getCredentialsWithOptions;
     const log = bun.Output.scoped(.AWS, .visible);
-    const DateResult = struct {
-        numeric_day: u64,
-        date: []const u8,
-    };
     pub const DIGESTED_HMAC_256_LEN = 32;
-    pub const SignResult = struct {
-        amz_date: []const u8,
-        host: []const u8,
-        authorization: []const u8,
-        url: []const u8,
-        content_disposition: []const u8 = "",
-        content_encoding: []const u8 = "",
-        content_md5: []const u8 = "",
-        session_token: []const u8 = "",
-        acl: ?ACL = null,
-        storage_class: ?StorageClass = null,
-        request_payer: bool = false,
-        _headers: [MAX_HEADERS]picohttp.Header = .{ .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" }, .{ .name = "", .value = "" } },
-        _headers_len: u8 = 0,
-    
-    pub fn headers(self: *const @This()) []const picohttp.Header {
-                return self._headers[0..self._headers_len];
-        }
-    
-    pub fn mixWithHeader(self: *const @This(), headers_buffer: []picohttp.Header, header: picohttp.Header) []const picohttp.Header {
-                const len = self._headers_len;
-                var i: usize = 0;
-                _ = &i;
-                while ((i < len)) : (i = (i + 1)) {
-                    headers_buffer[cp_cast_int(usize, i)] = self._headers[@as(usize, @intCast(i))];
-                }
-                headers_buffer[cp_cast_int(usize, len)] = header;
-                return headers_buffer[0..(len + 1)];
-        }
-    
-    pub fn deinit(self: *const @This()) void {
-                if ((self.amz_date.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.amz_date);
-                }
-                if ((self.session_token.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.session_token);
-                }
-                if ((self.content_disposition.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.content_disposition);
-                }
-                if ((self.content_encoding.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.content_encoding);
-                }
-                if ((self.host.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.host);
-                }
-                if ((self.authorization.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.authorization);
-                }
-                if ((self.url.len > 0)) {
-                    _ = bun.freeSensitive(bun.default_allocator, self.url);
-                }
-                if ((self.content_md5.len > 0)) {
-                    _ = bun.default_allocator.free(self.content_md5);
-                }
-        }
-        pub const MAX_HEADERS = 11;
-    };
-    pub const SignQueryOptions = struct {
-        expires: usize = 86400,
-    };
-    pub const SignOptions = struct {
-        path: []const u8,
-        method: bun.http.Method,
-        content_hash: ?[]const u8 = null,
-        content_md5: ?[]const u8 = null,
-        search_params: ?[]const u8 = null,
-        content_disposition: ?[]const u8 = null,
-        content_type: ?[]const u8 = null,
-        content_encoding: ?[]const u8 = null,
-        acl: ?ACL = null,
-        storage_class: ?StorageClass = null,
-        request_payer: bool = false,
-    };
+    pub const SignResult = S3SignResult;
+    pub const SignQueryOptions = S3SignQueryOptions;
+    pub const SignOptions = S3SignOptions;
 };
+
 pub const S3CredentialsWithOptions = struct {
     credentials: S3Credentials,
     options: MultiPartUploadOptions = .{},
@@ -403,7 +403,7 @@ pub const S3CredentialsWithOptions = struct {
     _contentTypeSlice: ?jsc.ZigString.Slice = null,
     _contentEncodingSlice: ?jsc.ZigString.Slice = null,
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *S3CredentialsWithOptions) void {
             if (self._accessKeyIdSlice) |slice| {
                 _ = &slice;
                 _ = slice.deinit();
@@ -442,7 +442,18 @@ pub fn deinit(self: *@This()) void {
             }
     }
 };
-const SignedHeaders = struct {
+
+pub const SignedHeadersKey = packed struct(u7) {
+    content_disposition: bool,
+    content_encoding: bool,
+    content_md5: bool,
+    acl: bool,
+    request_payer: bool,
+    session_token: bool,
+    storage_class: bool,
+};
+
+pub const SignedHeaders = struct {
 
 pub fn generate(comptime key: Key) []const u8 {
             return (((((((((if (key.content_disposition) "content-disposition;" else "") ++ (if (key.content_encoding) "content-encoding;" else "")) ++ (if (key.content_md5) "content-md5;" else "")) ++ "host;") ++ (if (key.acl) "x-amz-acl;" else "")) ++ "x-amz-content-sha256;x-amz-date") ++ (if (key.request_payer) ";x-amz-request-payer" else "")) ++ (if (key.session_token) ";x-amz-security-token" else "")) ++ (if (key.storage_class) ";x-amz-storage-class" else ""));
@@ -451,108 +462,77 @@ pub fn generate(comptime key: Key) []const u8 {
 pub fn get(key: Key) []const u8 {
             return table[@as(usize, @intCast(@as(u7, @bitCast(key))))];
     }
-    const Key = packed struct(u7) {
-                content_disposition: bool,
-                content_encoding: bool,
-                content_md5: bool,
-                acl: bool,
-                request_payer: bool,
-                session_token: bool,
-                storage_class: bool,
-            };
+    const Key = SignedHeadersKey;
     const table = init: {
             var t: [128][]const u8 = undefined;
             _ = &t;
-            for (0..128) |i| {
-                _ = &i;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < 128)) : (i = (i + 1)) {
                 t[cp_cast_int(usize, i)] = generate(@bitCast(@as(u7, @intCast(i))));
             }
             break :init t;
     };
 };
-const CanonicalRequest = struct {
-        fn fmtString(comptime key: SignedHeaders.Key) []const u8 {
-            return "{s}\n{s}\n{s}\n" ++ // method, path, query
-                (if (key.content_disposition) "content-disposition:{s}\n" else "") ++
-                (if (key.content_encoding) "content-encoding:{s}\n" else "") ++
-                (if (key.content_md5) "content-md5:{s}\n" else "") ++
-                "host:{s}\n" ++
-                (if (key.acl) "x-amz-acl:{s}\n" else "") ++
-                "x-amz-content-sha256:{s}\nx-amz-date:{s}\n" ++
-                (if (key.request_payer) "x-amz-request-payer:requester\n" else "") ++
-                (if (key.session_token) "x-amz-security-token:{s}\n" else "") ++
-                (if (key.storage_class) "x-amz-storage-class:{s}\n" else "") ++
-                "\n{s}\n{s}"; // signed_headers, hash
-        }
 
-        inline fn formatForKey(
-            comptime key: SignedHeaders.Key,
-            buf: []u8,
-            method: []const u8,
-            path: []const u8,
-            query: []const u8,
-            content_disposition: ?[]const u8,
-            content_encoding: ?[]const u8,
-            content_md5: ?[]const u8,
-            host: []const u8,
-            acl: ?[]const u8,
-            hash: []const u8,
-            date: []const u8,
-            session_token: ?[]const u8,
-            storage_class: ?[]const u8,
-            signed_headers: []const u8,
-        ) error{NoSpaceLeft}![]u8 {
-            return std.fmt.bufPrint(buf, fmtString(key), .{ method, path, query } ++
-                (if (key.content_disposition) .{content_disposition.?} else .{}) ++
-                (if (key.content_encoding) .{content_encoding.?} else .{}) ++
-                (if (key.content_md5) .{content_md5.?} else .{}) ++
-                .{host} ++
-                (if (key.acl) .{acl.?} else .{}) ++
-                .{ hash, date } ++
-                (if (key.session_token) .{session_token.?} else .{}) ++
-                (if (key.storage_class) .{storage_class.?} else .{}) ++
-                .{ signed_headers, hash });
-        }
+pub const CanonicalRequest = struct {
 
-        pub fn format(
-            buf: []u8,
-            key: SignedHeaders.Key,
-            method: []const u8,
-            path: []const u8,
-            query: []const u8,
-            content_disposition: ?[]const u8,
-            content_encoding: ?[]const u8,
-            content_md5: ?[]const u8,
-            host: []const u8,
-            acl: ?[]const u8,
-            hash: []const u8,
-            date: []const u8,
-            session_token: ?[]const u8,
-            storage_class: ?[]const u8,
-            signed_headers: []const u8,
-        ) error{NoSpaceLeft}![]u8 {
-            // Dispatch to the right comptime-specialized function based on runtime key
-            return switch (@as(u7, @bitCast(key))) {
-                inline 0...127 => |idx| formatForKey(
-                    @bitCast(idx),
-                    buf,
-                    method,
-                    path,
-                    query,
-                    content_disposition,
-                    content_encoding,
-                    content_md5,
-                    host,
-                    acl,
-                    hash,
-                    date,
-                    session_token,
-                    storage_class,
-                    signed_headers,
-                ),
-            };
-        }
+pub fn fmtString(comptime key: SignedHeaders.Key) []const u8 {
+            return (((((((((("{s}\n{s}\n{s}\n" ++ (if (key.content_disposition) "content-disposition:{s}\n" else "")) ++ (if (key.content_encoding) "content-encoding:{s}\n" else "")) ++ (if (key.content_md5) "content-md5:{s}\n" else "")) ++ "host:{s}\n") ++ (if (key.acl) "x-amz-acl:{s}\n" else "")) ++ "x-amz-content-sha256:{s}\nx-amz-date:{s}\n") ++ (if (key.request_payer) "x-amz-request-payer:requester\n" else "")) ++ (if (key.session_token) "x-amz-security-token:{s}\n" else "")) ++ (if (key.storage_class) "x-amz-storage-class:{s}\n" else "")) ++ "\n{s}\n{s}");
+    }
+
+pub fn formatForKey(comptime key: SignedHeaders.Key, buf: []u8, method: []const u8, path: []const u8, query: []const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, content_md5: ?[]const u8, host: []const u8, acl: ?[]const u8, hash: []const u8, date: []const u8, session_token: ?[]const u8, storage_class: ?[]const u8, signed_headers: []const u8) ![]u8 {
+            return std.fmt.bufPrint(buf, fmtString(key), (((((((((.{ method, path, query } ++ (if (key.content_disposition) .{ content_disposition.? } else .{})) ++ (if (key.content_encoding) .{ content_encoding.? } else .{})) ++ (if (key.content_md5) .{ content_md5.? } else .{})) ++ .{ host }) ++ (if (key.acl) .{ acl.? } else .{})) ++ .{ hash, date }) ++ (if (key.session_token) .{ session_token.? } else .{})) ++ (if (key.storage_class) .{ storage_class.? } else .{})) ++ .{ signed_headers, hash }));
+    }
+
+pub fn makeFormatFn(comptime key: SignedHeaders.Key) FormatFn {
+            return (struct {
+
+pub fn call(buf: []u8, method: []const u8, path: []const u8, query: []const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, content_md5: ?[]const u8, host: []const u8, acl: ?[]const u8, hash: []const u8, date: []const u8, session_token: ?[]const u8, storage_class: ?[]const u8, signed_headers: []const u8) ![]u8 {
+            return formatForKey(key, buf, method, path, query, content_disposition, content_encoding, content_md5, host, acl, hash, date, session_token, storage_class, signed_headers);
+    }
+}).call;
+    }
+
+pub fn format(buf: []u8, key: SignedHeaders.Key, method: []const u8, path: []const u8, query: []const u8, content_disposition: ?[]const u8, content_encoding: ?[]const u8, content_md5: ?[]const u8, host: []const u8, acl: ?[]const u8, hash: []const u8, date: []const u8, session_token: ?[]const u8, storage_class: ?[]const u8, signed_headers: []const u8) ![]u8 {
+            return format_table[@as(usize, @intCast(@as(u7, @bitCast(key))))](buf, method, path, query, content_disposition, content_encoding, content_md5, host, acl, hash, date, session_token, storage_class, signed_headers);
+    }
+    const FormatFn = *const fn(
+            []u8,
+            []const u8,
+            []const u8,
+            []const u8,
+            ?[]const u8,
+            ?[]const u8,
+            ?[]const u8,
+            []const u8,
+            ?[]const u8,
+            []const u8,
+            []const u8,
+            ?[]const u8,
+            ?[]const u8,
+            []const u8,
+        ) anyerror![]u8;
+    const format_table = init: {
+            var t: [128]FormatFn = undefined;
+            _ = &t;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < 128)) : (i = (i + 1)) {
+                t[cp_cast_int(usize, i)] = makeFormatFn(@bitCast(@as(u7, @intCast(i))));
+            }
+            break :init t;
     };
+};
+
+const MultiPartUploadOptions = multipart_options.MultiPartUploadOptions;
+const jsc = bun.jsc;
+const picohttp = bun.picohttp;
+const strings = bun.strings;
+const DateResult = struct {
+    numeric_day: u64,
+    date: []const u8,
+};
 
 pub fn s3CredentialsSignRequest(creds: *const S3Credentials, signOptions: S3Credentials.SignOptions, comptime allow_empty_path: bool, signQueryOption: ?S3Credentials.SignQueryOptions) !S3Credentials.SignResult {
         const method = signOptions.method;
@@ -673,8 +653,8 @@ return error.InvalidMethod;
         _ = &path_buffer;
         var bucket_buffer: [63]u8 = undefined;
         _ = &bucket_buffer;
-        bucket = (blk_catch_0: { break :blk_catch_0 ((S3Credentials.encodeURIComponent(bucket, (&bucket_buffer), false)) catch |__ce_0| { _ = &__ce_0; return error.InvalidPath; }); });
-        path = (blk_catch_1: { break :blk_catch_1 ((S3Credentials.encodeURIComponent(path, (&path_buffer), false)) catch |__ce_1| { _ = &__ce_1; return error.InvalidPath; }); });
+        bucket = (blk_catch_1: { break :blk_catch_1 ((S3Credentials.encodeURIComponent(bucket, (&bucket_buffer), false)) catch |__ce_1| { _ = &__ce_1; return error.InvalidPath; }); });
+        path = (blk_catch_2: { break :blk_catch_2 ((S3Credentials.encodeURIComponent(path, (&path_buffer), false)) catch |__ce_2| { _ = &__ce_2; return error.InvalidPath; }); });
         const protocol = (if (creds.insecure_http) "http" else "https");
         var endpoint = creds.endpoint;
         _ = &endpoint;
@@ -713,9 +693,9 @@ return error.InvalidMethod;
         var normalizedPath: []const u8 = "";
         _ = &normalizedPath;
         if (creds.virtual_hosted_style) {
-            normalizedPath = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}", .{ extra_path, path })) catch |__ce_2| { _ = &__ce_2; return error.InvalidPath; }); });
+            normalizedPath = (blk_catch_3: { break :blk_catch_3 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}", .{ extra_path, path })) catch |__ce_3| { _ = &__ce_3; return error.InvalidPath; }); });
         } else {
-            normalizedPath = (blk_catch_3: { break :blk_catch_3 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}/{s}", .{ extra_path, bucket, path })) catch |__ce_3| { _ = &__ce_3; return error.InvalidPath; }); });
+            normalizedPath = (blk_catch_4: { break :blk_catch_4 ((std.fmt.bufPrint((&normalized_path_buffer), "{s}/{s}/{s}", .{ extra_path, bucket, path })) catch |__ce_4| { _ = &__ce_4; return error.InvalidPath; }); });
         }
         const date_result = S3Credentials.getAMZDate(bun.default_allocator);
         const amz_date = date_result.date;
@@ -725,7 +705,7 @@ return error.InvalidMethod;
         defer if (!__amz_date_guard_moved) { __amz_date_guard_moved = true; const __T = @TypeOf(amz_date_guard); if (@typeInfo(__T) == .optional) { if (amz_date_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { amz_date_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = amz_date_guard; _drop_val.__cp_deinit(); } };
         const amz_day = amz_date[0..8];
         const request_payer = signOptions.request_payer;
-        const header_key = SignedHeaders.Key{ .content_disposition = (content_disposition != null), .content_encoding = (content_encoding != null), .content_md5 = (content_md5 != null), .acl = (acl != null), .request_payer = request_payer, .session_token = (session_token != null), .storage_class = (storage_class != null) };
+        const header_key = SignedHeadersKey{ .content_disposition = (content_disposition != null), .content_encoding = (content_encoding != null), .content_md5 = (content_md5 != null), .acl = (acl != null), .request_payer = request_payer, .session_token = (session_token != null), .storage_class = (storage_class != null) };
         const signed_headers = (if (signQuery) "host" else SignedHeaders.get(header_key));
         const service_name: []const u8 = "s3";
         var aws_content_hash: []const u8 = "UNSIGNED-PAYLOAD";
@@ -767,7 +747,7 @@ return error.InvalidMethod;
             _ = &encoded_session_token;
             if (session_token) |token| {
                 _ = &token;
-                encoded_session_token = (blk_catch_4: { break :blk_catch_4 ((S3Credentials.encodeURIComponent(token, (&token_encoded_buffer), true)) catch |__ce_4| { _ = &__ce_4; return error.InvalidSessionToken; }); });
+                encoded_session_token = (blk_catch_5: { break :blk_catch_5 ((S3Credentials.encodeURIComponent(token, (&token_encoded_buffer), true)) catch |__ce_5| { _ = &__ce_5; return error.InvalidSessionToken; }); });
             }
             var content_md5_encoded_buffer: [128]u8 = undefined;
             _ = &content_md5_encoded_buffer;
@@ -775,7 +755,7 @@ return error.InvalidMethod;
             _ = &encoded_content_md5;
             if (content_md5) |content_md5_value| {
                 _ = &content_md5_value;
-                encoded_content_md5 = (blk_catch_5: { break :blk_catch_5 ((S3Credentials.encodeURIComponent(content_md5_value, (&content_md5_encoded_buffer), true)) catch |__ce_5| { _ = &__ce_5; return error.FailedToGenerateSignature; }); });
+                encoded_content_md5 = (blk_catch_6: { break :blk_catch_6 ((S3Credentials.encodeURIComponent(content_md5_value, (&content_md5_encoded_buffer), true)) catch |__ce_6| { _ = &__ce_6; return error.FailedToGenerateSignature; }); });
             }
             var content_disposition_encoded_buffer: [512]u8 = undefined;
             _ = &content_disposition_encoded_buffer;
@@ -783,7 +763,7 @@ return error.InvalidMethod;
             _ = &encoded_content_disposition;
             if (content_disposition) |cd| {
                 _ = &cd;
-                encoded_content_disposition = (blk_catch_6: { break :blk_catch_6 ((S3Credentials.encodeURIComponent(cd, (&content_disposition_encoded_buffer), true)) catch |__ce_6| { _ = &__ce_6; return error.FailedToGenerateSignature; }); });
+                encoded_content_disposition = (blk_catch_7: { break :blk_catch_7 ((S3Credentials.encodeURIComponent(cd, (&content_disposition_encoded_buffer), true)) catch |__ce_7| { _ = &__ce_7; return error.FailedToGenerateSignature; }); });
             }
             var content_type_encoded_buffer: [256]u8 = undefined;
             _ = &content_type_encoded_buffer;
@@ -791,7 +771,7 @@ return error.InvalidMethod;
             _ = &encoded_content_type;
             if (content_type) |ct| {
                 _ = &ct;
-                encoded_content_type = (blk_catch_7: { break :blk_catch_7 ((S3Credentials.encodeURIComponent(ct, (&content_type_encoded_buffer), true)) catch |__ce_7| { _ = &__ce_7; return error.FailedToGenerateSignature; }); });
+                encoded_content_type = (blk_catch_8: { break :blk_catch_8 ((S3Credentials.encodeURIComponent(ct, (&content_type_encoded_buffer), true)) catch |__ce_8| { _ = &__ce_8; return error.FailedToGenerateSignature; }); });
             }
             var canonical: []const u8 = "";
             _ = &canonical;

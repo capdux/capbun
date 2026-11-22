@@ -14,11 +14,11 @@ pub struct NameOfSymbol {
     has_property_key_comment: bool = false,
 }
 
-const ArraySorter = struct {
+struct ArraySorter {
     static fn isLessThan(ctx: void, lhs: Expr, rhs: Expr): bool {
         return strings.cmpStringsAsc(ctx, lhs.data.e_string.data, rhs.data.e_string.data);
     }
-};
+}
 
 pub struct Array {
     items: ExprNodeList = ExprNodeList{},
@@ -95,46 +95,48 @@ pub struct Array {
     const Sorter = ArraySorter;
 }
 
+@packed(u8) pub struct UnaryFlags {
+    /// The expression "typeof (0, x)" must not become "typeof x" if "x"
+    /// is unbound because that could suppress a ReferenceError from "x".
+    ///
+    /// Also if we know a typeof operator was originally an identifier, then
+    /// we know that this typeof operator always has no side effects (even if
+    /// we consider the identifier by itself to have a side effect).
+    ///
+    /// Note that there *is* actually a case where "typeof x" can throw an error:
+    /// when "x" is being referenced inside of its TDZ (temporal dead zone). TDZ
+    /// checks are not yet handled correctly by Bun, so this possibility is
+    /// currently ignored.
+    was_originally_typeof_identifier: bool = false,
+
+    /// Similarly the expression "delete (0, x)" must not become "delete x"
+    /// because that syntax is invalid in strict mode. We also need to make sure
+    /// we don't accidentally change the return value:
+    ///
+    ///   Returns false:
+    ///     "var a; delete (a)"
+    ///     "var a = Object.freeze({b: 1}); delete (a.b)"
+    ///     "var a = Object.freeze({b: 1}); delete (a?.b)"
+    ///     "var a = Object.freeze({b: 1}); delete (a['b'])"
+    ///     "var a = Object.freeze({b: 1}); delete (a?.['b'])"
+    ///
+    ///   Returns true:
+    ///     "var a; delete (0, a)"
+    ///     "var a = Object.freeze({b: 1}); delete (true && a.b)"
+    ///     "var a = Object.freeze({b: 1}); delete (false || a?.b)"
+    ///     "var a = Object.freeze({b: 1}); delete (null ?? a?.['b'])"
+    ///
+    ///     "var a = Object.freeze({b: 1}); delete (true ? a['b'] : a['b'])"
+    was_originally_delete_of_identifier_or_property_access: bool = false,
+    _: u6 = 0,
+}
+
 pub struct Unary {
     op: Op.Code,
     value: ExprNodeIndex,
-    flags: Unary.Flags = {},
+    flags: UnaryFlags = {},
 
-    pub const Flags = packed struct(u8) {
-        /// The expression "typeof (0, x)" must not become "typeof x" if "x"
-        /// is unbound because that could suppress a ReferenceError from "x".
-        ///
-        /// Also if we know a typeof operator was originally an identifier, then
-        /// we know that this typeof operator always has no side effects (even if
-        /// we consider the identifier by itself to have a side effect).
-        ///
-        /// Note that there *is* actually a case where "typeof x" can throw an error:
-        /// when "x" is being referenced inside of its TDZ (temporal dead zone). TDZ
-        /// checks are not yet handled correctly by Bun, so this possibility is
-        /// currently ignored.
-        was_originally_typeof_identifier: bool = false,
-
-        /// Similarly the expression "delete (0, x)" must not become "delete x"
-        /// because that syntax is invalid in strict mode. We also need to make sure
-        /// we don't accidentally change the return value:
-        ///
-        ///   Returns false:
-        ///     "var a; delete (a)"
-        ///     "var a = Object.freeze({b: 1}); delete (a.b)"
-        ///     "var a = Object.freeze({b: 1}); delete (a?.b)"
-        ///     "var a = Object.freeze({b: 1}); delete (a['b'])"
-        ///     "var a = Object.freeze({b: 1}); delete (a?.['b'])"
-        ///
-        ///   Returns true:
-        ///     "var a; delete (0, a)"
-        ///     "var a = Object.freeze({b: 1}); delete (true && a.b)"
-        ///     "var a = Object.freeze({b: 1}); delete (false || a?.b)"
-        ///     "var a = Object.freeze({b: 1}); delete (null ?? a?.['b'])"
-        ///
-        ///     "var a = Object.freeze({b: 1}); delete (true ? a['b'] : a['b'])"
-        was_originally_delete_of_identifier_or_property_access: bool = false,
-        _: u6 = 0,
-    };
+    const Flags = UnaryFlags;
 }
 
 pub struct Binary {
@@ -147,10 +149,10 @@ pub struct Boolean {
     value: bool,
     pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").boolToJS;
 }
-pub const Super = struct {};
-pub const Null = struct {};
-pub const This = struct {};
-pub const Undefined = struct {};
+pub struct Super {}
+pub struct Null {}
+pub struct This {}
+pub struct Undefined {}
 pub struct New {
     target: ExprNodeIndex,
     args: ExprNodeList = ExprNodeList{},
@@ -164,7 +166,7 @@ pub struct New {
 pub struct NewTarget {
     range: logger.Range,
 }
-pub const ImportMeta = struct {};
+pub struct ImportMeta {}
 pub struct ImportMetaMain {
     /// If we want to print `!import.meta.main`, set this flag to true
     /// instead of wrapping in a unary not. This way, the printer can easily
@@ -172,23 +174,23 @@ pub struct ImportMetaMain {
     inverted: bool = false,
 }
 
-pub const Special = union(enum) {
+pub union(enum) Special {
     /// emits `exports` or `module.exports` depending on `commonjs_named_exports_deoptimized`
-    module_exports,
+    module_exports: void,
     /// `import.meta.hot`
-    hot_enabled,
+    hot_enabled: void,
     /// Acts as .e_undefined, but allows property accesses to the rest of the HMR API.
-    hot_disabled,
+    hot_disabled: void,
     /// `import.meta.hot.data` when HMR is enabled. Not reachable when it is disabled.
-    hot_data,
+    hot_data: void,
     /// `import.meta.hot.accept` when HMR is enabled. Truthy.
-    hot_accept,
+    hot_accept: void,
     /// Converted from `hot_accept` in P.zig's handleImportMetaHotAcceptCall
     /// when passed strings. Printed as `hmr.acceptSpecifiers`
-    hot_accept_visited,
+    hot_accept_visited: void,
     /// Prints the resolved specifier string for an import record.
     resolved_specifier_string: ImportRecord.Index,
-};
+}
 
 pub struct Call {
     // Node:
@@ -218,11 +220,11 @@ pub struct Call {
     }
 }
 
-pub const CallUnwrap = enum(u2) {
+pub enum CallUnwrap: u2 {
     never,
     if_unused,
     if_unused_and_toString_safe,
-};
+}
 
 pub struct Dot {
     // target is Node
@@ -274,7 +276,9 @@ pub struct Arrow {
     };
 }
 
-pub const Function = struct { func: G.Fn };
+pub struct Function {
+    func: G.Fn,
+}
 
 pub struct Identifier {
     ref: Ref = Ref.None,
@@ -589,15 +593,15 @@ pub enum PackageJSONFields: u8 {
     }
 }
 
-const ObjectPackageJSONSort = struct {
+struct ObjectPackageJSONSort {
     const Fields = PackageJSONFields;
-};
+}
 
-const ObjectSorter = struct {
+struct ObjectSorter {
     static fn isLessThan(ctx: void, lhs: G.Property, rhs: G.Property): bool {
         return strings.cmpStringsAsc(ctx, lhs.key.?.data.e_string.data, rhs.key.?.data.e_string.data);
     }
-};
+}
 
 pub struct Object {
     properties: G.Property.List = G.Property.List{},
@@ -842,7 +846,9 @@ pub struct Object {
     }
 }
 
-pub const Spread = struct { value: ExprNodeIndex };
+pub struct Spread {
+    value: ExprNodeIndex,
+}
 
 /// JavaScript string literal type
 pub struct String {

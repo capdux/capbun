@@ -8,17 +8,17 @@ pub struct ArrayBufferStrong {
     array_buffer: ArrayBuffer,
     held: jsc.Strong.Optional = .empty,
 
-    pub fn clear(*_) {
+    fn clear(*_) {
         const opt = _.ref;
         if (opt == null) return;
         opt.?.set(jsc.JSValue.zero);
     }
 
-    pub fn slice(): []u8 {
+    fn slice(): []u8 {
         return _.array_buffer.slice();
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         _.held.deinit();
     }
 }
@@ -377,7 +377,7 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
     }
 
     static fn fromBytes(bytes: []u8, typed_array_type: jsc.JSValue.JSType): ArrayBuffer {
-        return ArrayBuffer{ .len = @as(u32, @intCast(bytes.len)), .byte_len = @as(u32, @intCast(bytes.len)), .typed_array_type = typed_array_type, .ptr = bytes.ptr };
+        return ArrayBuffer{ len: @as(u32, @intCast(bytes.len)), byte_len: @as(u32, @intCast(bytes.len)), typed_array_type: typed_array_type, ptr: bytes.ptr };
     }
 
     pub fn toJSUnchecked(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
@@ -503,24 +503,24 @@ extern fn Bun__makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, 
 }
 
 pub struct MarkedArrayBuffer {
-    buffer: ArrayBuffer = .{},
+    buffer: ArrayBuffer = ArrayBuffer{},
     allocator: std.mem.Allocator? = null,
 
-    pub inline fn stream(*_): ArrayBuffer.Stream {
+    inline fn stream(*_): ArrayBuffer.Stream {
         return _.buffer.stream();
     }
 
     static fn fromTypedArray(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): MarkedArrayBuffer {
         return MarkedArrayBuffer{
-            .allocator = null,
-            .buffer = ArrayBuffer.fromTypedArray(ctx, value),
+            allocator: null,
+            buffer: ArrayBuffer.fromTypedArray(ctx, value),
         };
     }
 
     static fn fromArrayBuffer(ctx: *jsc.JSGlobalObject, value: jsc.JSValue): MarkedArrayBuffer {
         return MarkedArrayBuffer{
-            .allocator = null,
-            .buffer = ArrayBuffer.fromArrayBuffer(ctx, value),
+            allocator: null,
+            buffer: ArrayBuffer.fromArrayBuffer(ctx, value),
         };
     }
 
@@ -531,24 +531,24 @@ pub struct MarkedArrayBuffer {
 
     static fn fromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue): MarkedArrayBuffer? {
         if (array_buffer := value.asArrayBuffer(global)) {
-            return MarkedArrayBuffer{ .buffer = array_buffer, .allocator = null };
+            return MarkedArrayBuffer{ buffer: array_buffer, allocator: null };
         }
         return null;
     }
 
     static fn fromBytes(bytes: []u8, allocator: std.mem.Allocator, typed_array_type: jsc.JSValue.JSType): MarkedArrayBuffer {
         return MarkedArrayBuffer{
-            .buffer = ArrayBuffer.fromBytes(bytes, typed_array_type),
-            .allocator = allocator,
+            buffer: ArrayBuffer.fromBytes(bytes, typed_array_type),
+            allocator: allocator,
         };
     }
 
     pub const empty = MarkedArrayBuffer{
-        .allocator = null,
-        .buffer = ArrayBuffer.empty,
+        allocator: null,
+        buffer: ArrayBuffer.empty,
     };
 
-    pub inline fn slice(): []u8 {
+    inline fn slice(): []u8 {
         return _.buffer.byteSlice();
     }
 
@@ -609,10 +609,10 @@ pub fn makeTypedArrayWithBytesNoCopy(globalObject: *jsc.JSGlobalObject, arrayTyp
     return bun.jsc.fromJSHostCall(globalObject, @src(), Bun__makeTypedArrayWithBytesNoCopy, .{ globalObject, arrayType, ptr, len, deallocator, deallocatorContext });
 }
 
-const JSCArrayBufferExternalSharedDescriptor = struct {
+struct JSCArrayBufferExternalSharedDescriptor {
     pub const ref = JSC__ArrayBuffer__ref;
     pub const deref = JSC__ArrayBuffer__deref;
-};
+}
 
 extern fn JSC__ArrayBuffer__asBunArrayBuffer(buffer: *JSCArrayBuffer, out: *ArrayBuffer);
 extern fn JSC__ArrayBuffer__ref(buffer: *JSCArrayBuffer);
@@ -625,7 +625,7 @@ extern fn JSC__ArrayBuffer__deref(buffer: *JSCArrayBuffer);
     pub const Ref = bun.ptr.ExternalShared(Self);
     pub const external_shared_descriptor = JSCArrayBufferExternalSharedDescriptor;
 
-    pub fn asArrayBuffer(*_): ArrayBuffer {
+    fn asArrayBuffer(*_): ArrayBuffer {
         let out: ArrayBuffer = undefined;
         JSC__ArrayBuffer__asBunArrayBuffer(_, &out);
         return out;

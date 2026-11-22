@@ -79,17 +79,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-pub const BindgenBool = BindgenTrivial(bool);
-pub const BindgenU8 = BindgenTrivial(u8);
-pub const BindgenI8 = BindgenTrivial(i8);
-pub const BindgenU16 = BindgenTrivial(u16);
-pub const BindgenI16 = BindgenTrivial(i16);
-pub const BindgenU32 = BindgenTrivial(u32);
-pub const BindgenI32 = BindgenTrivial(i32);
-pub const BindgenU64 = BindgenTrivial(u64);
-pub const BindgenI64 = BindgenTrivial(i64);
-pub const BindgenF64 = BindgenTrivial(f64);
-pub const BindgenRawAny = BindgenTrivial(jsc.JSValue);
 pub const BindgenStrongAny = struct {
 
 pub fn convertFromExtern(extern_value: ExternType) ZigType {
@@ -104,6 +93,7 @@ pub fn convertOptionalFromExtern(extern_value: OptionalExternType) OptionalZigTy
     pub const OptionalZigType = ZigType.Optional;
     pub const OptionalExternType = ExternType;
 };
+
 pub const BindgenNull = struct {
 
 pub fn convertFromExtern(extern_value: ExternType) ZigType {
@@ -112,6 +102,7 @@ pub fn convertFromExtern(extern_value: ExternType) ZigType {
     pub const ZigType = void;
     pub const ExternType = u8;
 };
+
 pub const BindgenString = struct {
 
 pub fn convertFromExtern(extern_value: ExternType) ZigType {
@@ -126,6 +117,18 @@ pub fn convertOptionalFromExtern(extern_value: OptionalExternType) OptionalZigTy
     pub const OptionalZigType = ZigType.Optional;
     pub const OptionalExternType = ExternType;
 };
+
+pub const BindgenBool = BindgenTrivial(bool);
+pub const BindgenU8 = BindgenTrivial(u8);
+pub const BindgenI8 = BindgenTrivial(i8);
+pub const BindgenU16 = BindgenTrivial(u16);
+pub const BindgenI16 = BindgenTrivial(i16);
+pub const BindgenU32 = BindgenTrivial(u32);
+pub const BindgenI32 = BindgenTrivial(i32);
+pub const BindgenU64 = BindgenTrivial(u64);
+pub const BindgenI64 = BindgenTrivial(i64);
+pub const BindgenF64 = BindgenTrivial(f64);
+pub const BindgenRawAny = BindgenTrivial(jsc.JSValue);
 pub const BindgenArrayBuffer = BindgenExternalShared(jsc.JSCArrayBuffer);
 pub const BindgenBlob = BindgenExternalShared(webcore.Blob);
 const jsc = bun.bun_js.jsc;

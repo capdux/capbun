@@ -13,6 +13,45 @@ struct DeinitWithAllocGuard<T> {
     }
 }
 
+struct HoistedClosure {
+    installer: *PackageInstaller,
+    err_val: anyerror? = null,
+    manager: *PackageManager,
+
+    fn isDone(*_): bool {
+        const pm = _.manager;
+        _.manager.runTasks(
+            *PackageInstaller,
+            _.installer,
+            {
+                onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
+                onResolve: {},
+                onPackageManifestError: {},
+                onPackageDownloadError: {},
+            },
+            true,
+            pm.options.log_level,
+        ) catch e => {
+            _.err_val = e;
+        };
+
+        if (_.err_val != null) {
+            return true;
+        }
+
+        _.manager.reportSlowLifecycleScripts();
+
+        if (PackageManager.verbose_install && _.manager.pendingTaskCount() > 0) {
+            const pending_task_count = _.manager.pendingTaskCount();
+            if (pending_task_count > 0 && PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
+                Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", { pending_task_count });
+            }
+        }
+
+        return _.manager.pendingTaskCount() == 0 && _.manager.hasNoMorePendingLifecycleScripts();
+    }
+}
+
 pub fn installHoistedPackages(
     *_: *PackageManager,
     ctx: Command.Context,
@@ -279,46 +318,7 @@ pub fn installHoistedPackages(
         }
 
         while (this.pendingTaskCount() > 0 && installer_guard.val.options.do.install_packages) {
-            const Closure = struct {
-                installer: *PackageInstaller,
-                err_val: anyerror? = null,
-                manager: *PackageManager,
-
-                fn isDone(closure: *@This()): bool {
-                    const pm = closure.manager;
-                    closure.manager.runTasks(
-                        *PackageInstaller,
-                        closure.installer,
-                        {
-                            onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
-                            onResolve: {},
-                            onPackageManifestError: {},
-                            onPackageDownloadError: {},
-                        },
-                        true,
-                        pm.options.log_level,
-                    ) catch |e| {
-                        closure.err_val = e;
-                    };
-
-                    if (closure.err_val != null) {
-                        return true;
-                    }
-
-                    closure.manager.reportSlowLifecycleScripts();
-
-                    if (PackageManager.verbose_install && closure.manager.pendingTaskCount() > 0) {
-                        const pending_task_count = closure.manager.pendingTaskCount();
-                        if (pending_task_count > 0 && PackageManager.hasEnoughTimePassedBetweenWaitingMessages()) {
-                            Output.prettyErrorln("<d>[PackageManager]<r> waiting for {d} tasks\n", { pending_task_count});
-                        }
-                    }
-
-                    return closure.manager.pendingTaskCount() == 0 && closure.manager.hasNoMorePendingLifecycleScripts();
-                }
-            };
-
-            let closure = Closure{
+            let closure = HoistedClosure{
                 installer: &installer_guard.val,
                 manager: this,
             };
@@ -326,7 +326,7 @@ pub fn installHoistedPackages(
             // Whenever the event loop wakes up, we need to call `runTasks`
             // If we call sleep() instead of sleepUntil(), it will wait forever until there are no more lifecycle scripts
             // which means it will not call runTasks until _all_ current lifecycle scripts have finished running
-            this.sleepUntil(&closure, &Closure.isDone);
+            this.sleepUntil(&closure, &HoistedClosure.isDone);
 
             if (e := closure.err_val) {
                 return e;

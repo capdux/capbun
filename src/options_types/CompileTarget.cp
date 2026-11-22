@@ -54,35 +54,35 @@ export @root struct CompileTarget {
     };
     libc: Libc = if (Environment.isMusl) .musl else if (Environment.isAndroid) .android else .default;
 
-    pub fn eql(this, other: &CompileTarget): bool {
-        return this.os == other.os && this.arch == other.arch && this.baseline == other.baseline && this.version.eql(other.version) && this.libc == other.libc;
+    fn eql(other: *const CompileTarget): bool {
+        return _.os == other.os && _.arch == other.arch && _.baseline == other.baseline && _.version.eql(other.version) && _.libc == other.libc;
     }
 
-    pub fn isDefault(this): bool {
+    fn isDefault(): bool {
         const default_target = CompileTarget{};
-        return this.eql(&default_target);
+        return _.eql(&default_target);
     }
 
-    pub fn toNPMRegistryURL(this, buf: []u8): ([]const u8)! {
+    fn toNPMRegistryURL(buf: []u8): ([]const u8)! {
         if (url := bun.env_var.BUN_COMPILE_TARGET_TARBALL_URL.get()) {
             if (strings.hasPrefixComptime(url, "http://") || strings.hasPrefixComptime(url, "https://")) {
                 return url;
             }
         }
 
-        return this.toNPMRegistryURLWithURL(buf, "https://registry.npmjs.org")?;
+        return _.toNPMRegistryURLWithURL(buf, "https://registry.npmjs.org")?;
     }
 
-    pub fn toNPMRegistryURLWithURL(this, buf: []u8, registry_url: []const u8): ([]const u8)! {
+    fn toNPMRegistryURLWithURL(buf: []u8, registry_url: []const u8): ([]const u8)! {
         // Validate the target is supported before building URL
-        if (!this.isSupported()) {
+        if (!_.isSupported()) {
             return error.UnsupportedTarget;
         }
 
-        return switch (this.os) {
-            inline else => |os| switch (this.arch) {
-                inline else => |arch| switch (this.libc) {
-                    inline else => |libc| switch (this.baseline) {
+        return switch (_.os) {
+            inline else => |os| switch (_.arch) {
+                inline else => |arch| switch (_.libc) {
+                    inline else => |libc| switch (_.baseline) {
                         // https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-0.1.6.tgz
                         inline else => |is_baseline| {
                             const fmt_str = comptime "{s}/@oven/bun-" ++
@@ -96,9 +96,9 @@ export @root struct CompileTarget {
                                 "-{d}.{d}.{d}.tgz";
                             return std.fmt.bufPrint(buf, fmt_str, [
                                 registry_url,
-                                this.version.major,
-                                this.version.minor,
-                                this.version.patch,
+                                _.version.major,
+                                _.version.minor,
+                                _.version.patch,
                             ]) catch err_val => {
                                 // Catch buffer overflow or other formatting errors
                                 if (err_val == error.NoSpaceLeft) {
@@ -113,25 +113,25 @@ export @root struct CompileTarget {
         };
     }
 
-    pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
         writer.print(
             // bun-darwin-x64-baseline-v1.0.0
             // This doesn't match up 100% with npm, but that's okay.
             "bun-{s}-{s}{f}{f}-v{d}.{d}.{d}",
             [
-                this.os.npmName(),
-                this.arch.npmName(),
-                this.libc,
-                BaselineFormatter{ baseline: this.baseline },
-                this.version.major,
-                this.version.minor,
-                this.version.patch,
+                _.os.npmName(),
+                _.arch.npmName(),
+                _.libc,
+                BaselineFormatter{ baseline: _.baseline },
+                _.version.major,
+                _.version.minor,
+                _.version.patch,
             ],
         )?;
     }
 
-    pub fn exePath(this, buf: *bun.PathBuffer, version_str: [:0]const u8, env: *bun.DotEnv.Loader, needs_download: *bool): [:0]const u8 {
-        if (this.isDefault()) {
+    fn exePath(buf: *bun.PathBuffer, version_str: [:0]const u8, env: *bun.DotEnv.Loader, needs_download: *bool): [:0]const u8 {
+        if (_.isDefault()) {
             brk: {
                 const self_exe_path = bun.selfExePath() catch break :brk;
                 @memcpy(buf, self_exe_path);
@@ -163,7 +163,7 @@ export @root struct CompileTarget {
         return dest;
     }
 
-    pub fn downloadToPath(env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
+    fn downloadToPath(env: *bun.DotEnv.Loader, allocator: std.mem.Allocator, dest_z: [:0]const u8): ! {
         const _init_opts = HTTP.HTTPThread.InitOpts{};
         HTTP.HTTPThread.init(&_init_opts);
         let refresher = bun.Progress{};
@@ -276,7 +276,7 @@ export @root struct CompileTarget {
 
                     let did_retry = false;
                     while (true) {
-                        bun.sys.moveFileZ(.fromStdDir(tmpdir_guard.item), if (this.os == .windows) "bun.exe" else "bun", bun.invalid_fd, dest_z) catch {
+                        bun.sys.moveFileZ(.fromStdDir(tmpdir_guard.item), if (_.os == .windows) "bun.exe" else "bun", bun.invalid_fd, dest_z) catch {
                             if (!did_retry) {
                                 did_retry = true;
                                 const dirname = bun.path.dirname(dest_z, .loose);
@@ -299,9 +299,9 @@ export @root struct CompileTarget {
         }
     }
 
-    pub fn isSupported(): bool {
-        return switch (this.os) {
-            .windows => this.arch == .x64 || this.arch == .arm64,
+    fn isSupported(): bool {
+        return switch (_.os) {
+            .windows => _.arch == .x64 || _.arch == .arm64,
             .mac => true,
             .linux => true,
             .freebsd => true,
@@ -309,7 +309,7 @@ export @root struct CompileTarget {
         };
     }
 
-    pub static fn tryFrom(input_: []const u8): CompileTarget ! ParseError {
+    static fn tryFrom(input_: []const u8): CompileTarget ! ParseError {
         let target = CompileTarget{};
         const input = bun.strings.trim(input_, " \t\r");
         if (input.len == 0) {
@@ -402,7 +402,7 @@ export @root struct CompileTarget {
         return target;
     }
 
-    pub static fn from(input_: []const u8): CompileTarget {
+    static fn from(input_: []const u8): CompileTarget {
         const res = CompileTarget.tryFrom(input_) catch err_val => {
             switch (err_val) {
                 ParseError.UnsupportedTarget => {
@@ -461,7 +461,7 @@ export @root struct CompileTarget {
     }
 
     // Exists for consistentcy with values.
-    pub fn defineKeys(): []const []const u8 {
+    fn defineKeys(): []const []const u8 {
         * = _.os;
         return &[
             "process.platform",
@@ -491,11 +491,11 @@ export @root struct CompileTarget {
         return &S.values;
     }
 
-    pub fn defineValues(): []const []const u8 {
+    fn defineValues(): []const []const u8 {
         // Use inline else to avoid extra allocations.
-        switch (this.os) {
-            inline else => |os| switch (this.arch) {
-                inline .arm64 | .x64 => |arch| switch (this.libc) {
+        switch (_.os) {
+            inline else => |os| switch (_.arch) {
+                inline .arm64 | .x64 => |arch| switch (_.libc) {
                     inline else => |libc| return CompileTarget.makeDefineValues(os, arch, libc),
                 },
                 else => @panic("TODO"),
@@ -517,23 +517,23 @@ enum Libc {
     android,
 
     /// npm package name, `@oven-sh/bun-{os}-{arch}`
-    pub fn npmName(): []const u8 {
-        return switch (this) {
+    fn npmName(): []const u8 {
+        return switch (_) {
             .default => "",
             .musl => "-musl",
             .android => "-android",
         };
     }
 
-    static fn format(val: Libc, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    static fn format(val: Libc, writer: *std.Io.Writer): std.Io.Writer.Error!void {
         writer.writeAll(val.npmName())?;
     }
 }
 
 struct BaselineFormatter {
     baseline: bool = false;
-    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        if (this.baseline) {
+    fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
+        if (_.baseline) {
             writer.writeAll("-baseline")?;
         }
     }

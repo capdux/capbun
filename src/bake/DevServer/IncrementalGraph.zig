@@ -1159,7 +1159,6 @@ pub fn insertFailure(self: *@This(), comptime mode: enum { abs_path, index }, ke
             _ = self.owner().graph_safety_lock.assertLocked();
             const dev_alloc = self.allocator();
             const Gop = bun.StringArrayHashMapUnmanaged(File.Packed).GetOrPutResult;
-            _ = &Gop;
             const gop_tuple = (switch (mode) {
 .abs_path => brk: {
             const gop_res = try self.bundled_files.getOrPut(dev_alloc, key);

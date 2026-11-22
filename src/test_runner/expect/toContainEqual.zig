@@ -60,11 +60,12 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const ExpectedEntry = struct {
+pub const ExpectedEntry = struct {
     globalThis: *JSGlobalObject,
     expected: JSValue,
     pass: *bool,
 };
+
 const strings = bun.strings;
 const jsc = bun.jsc;
 const CallFrame = bun.jsc.CallFrame;

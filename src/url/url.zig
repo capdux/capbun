@@ -89,6 +89,7 @@ const Output = @import("bun").Output;
 const jsc = @import("bun").jsc;
 const strings = @import("bun").strings;
 const schema = @import("bun").schema;
+pub const bun = @import("bun");
 pub fn DerefGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -134,25 +135,6 @@ pub const URL = struct {
     searchParams: ?QueryStringMap = null,
     username: []const u8 = "",
     port_was_automatically_set: bool = false,
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.hash = ""; self_ptr.host = ""; self_ptr.hostname = ""; self_ptr.href = ""; self_ptr.origin = ""; self_ptr.password = ""; self_ptr.pathname = "/"; self_ptr.path = "/"; self_ptr.port = ""; self_ptr.protocol = ""; self_ptr.search = ""; self_ptr.searchParams = null; self_ptr.username = ""; self_ptr.port_was_automatically_set = false; return self_ptr; }
-
-pub fn init(self: *URL, hash: []const u8, host: []const u8, hostname: []const u8, href: []const u8, origin: []const u8, password: []const u8, pathname: []const u8, path: []const u8, port: []const u8, protocol: []const u8, search: []const u8, searchParams: ?QueryStringMap, username: []const u8, port_was_automatically_set: bool) void {
-            self.hash = hash;
-            self.host = host;
-            self.hostname = hostname;
-            self.href = href;
-            self.origin = origin;
-            self.password = password;
-            self.pathname = pathname;
-            self.path = path;
-            self.port = port;
-            self.protocol = protocol;
-            self.search = search;
-            self.searchParams = searchParams;
-            self.username = username;
-            self.port_was_automatically_set = port_was_automatically_set;
-    }
 
 pub fn isFile(self: *const URL) bool {
             return strings.eqlComptime(self.protocol, "file");
@@ -620,6 +602,11 @@ pub fn deinit(self: *URL) void {
     pub const fromJS = @import("../url_jsc/url_jsc.zig").urlFromJS;
 };
 
+pub const QueryStringMapResult = struct {
+    name: []const u8,
+    values: [][]const u8,
+};
+
 pub const QueryStringMapIterator = struct {
     i: usize = 0,
     map: *const QueryStringMap,
@@ -673,10 +660,14 @@ pub fn next(self: *QueryStringMapIterator, target: [][]const u8) ?Result {
             return result;
     }
     pub const VisitedMap = bun.bit_set.ArrayBitSet(usize, 2048);
-    pub const Result = struct {
-        name: []const u8,
-        values: [][]const u8,
-    };
+    pub const Result = QueryStringMapResult;
+};
+
+pub const QueryStringParam = struct {
+    name: api.StringPointer,
+    name_hash: u64,
+    value: api.StringPointer,
+    pub const List = std.MultiArrayList(QueryStringParam);
 };
 
 pub const QueryStringMap = struct {
@@ -923,17 +914,10 @@ pub fn deinit(self: *QueryStringMap) void {
             _ = self.release();
     }
     pub const Iterator = QueryStringMapIterator;
-    pub const Param = struct {
-        name: api.StringPointer,
-        name_hash: u64,
-        value: api.StringPointer,
-        pub const List = std.MultiArrayList(Param);
-    };
+    pub const Param = QueryStringParam;
 };
 
 pub const PercentEncoding = struct {
-    
-pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; return self_ptr; }
 
 pub fn decode(comptime Writer: type, writer: Writer, input: []const u8) !u32 {
             return decodeFaultTolerant(Writer, writer, input, null, false);
@@ -1043,6 +1027,21 @@ pub fn next(self: *PathnameScanner) ?Scanner.Result {
     }
 };
 
+pub const ScannerResult = struct {
+    name_needs_decoding: bool = false,
+    value_needs_decoding: bool = false,
+    name: api.StringPointer,
+    value: api.StringPointer,
+
+pub inline fn rawName(self: *const ScannerResult, query_string: []const u8) []const u8 {
+            return (if ((self.name.length > 0)) query_string[self.name.offset..][0..self.name.length] else "");
+    }
+
+pub inline fn rawValue(self: *const ScannerResult, query_string: []const u8) []const u8 {
+            return (if ((self.value.length > 0)) query_string[self.value.offset..][0..self.value.length] else "");
+    }
+};
+
 pub const Scanner = struct {
     query_string: []const u8,
     i: usize,
@@ -1123,23 +1122,9 @@ else => {
                 return Result{ .name = name, .value = value, .name_needs_decoding = name_needs_decoding };
             }
     }
-    pub const Result = struct {
-        name_needs_decoding: bool = false,
-        value_needs_decoding: bool = false,
-        name: api.StringPointer,
-        value: api.StringPointer,
-    
-    pub inline fn rawName(self: *const @This(), query_string: []const u8) []const u8 {
-                return (if ((self.name.length > 0)) query_string[self.name.offset..][0..self.name.length] else "");
-        }
-    
-    pub inline fn rawValue(self: *const @This(), query_string: []const u8) []const u8 {
-                return (if ((self.value.length > 0)) query_string[self.value.offset..][0..self.value.length] else "");
-        }
-    };
+    pub const Result = ScannerResult;
 };
 
-const bun = @import("bun");
 const resolve_path = @import("../paths/resolve_path.zig");
 const ParamsList = @import("../router/router.zig").Param.List;
 const api = bun.schema.api;

@@ -1,4 +1,8 @@
 import bun from "bun";
+import { ObjectPool } from "../collections/pool.zig";
+import CliMod from "../cli/cli.zig";
+const CLI = CliMod.Command;
+import { JestPrettyFormat } from "../test_runner/pretty_format.zig";
 @root struct ConsoleObject {
 
 const ScriptArguments = opaque {};
@@ -1644,27 +1648,26 @@ pub struct Formatter {
         }
     }
 
-    pub fn goodTimeForANewLine(*_): bool {
-        if (this.estimated_line_length > 80) {
-            this.resetLine();
+    fn goodTimeForANewLine(*_): bool {
+        if (_.estimated_line_length > 80) {
+            _.resetLine();
             return true;
         }
         return false;
     }
 
-    pub fn resetLine(*_) {
-        this.estimated_line_length = this.indent * 2;
+    fn resetLine(*_) {
+        _.estimated_line_length = _.indent * 2;
     }
 
-    pub fn addForNewLine(*_, len: usize) {
-        this.estimated_line_length = this.estimated_line_length +| len;
+    fn addForNewLine(*_, len: usize) {
+        _.estimated_line_length = _.estimated_line_length +| len;
     }
 
     pub const ZigFormatter = ConsoleZigFormatter;
 
     // For detecting circular references
     pub const Visited = struct {
-        const ObjectPool = @import("../collections/pool.zig").ObjectPool;
         pub const Map = std.AutoHashMap(JSValue, void);
         pub const Pool = ObjectPool(
             Map,
@@ -2077,7 +2080,7 @@ pub struct Formatter {
                                 if (i >= fmt_str.len)
                                     break;
                             },
-                            128...255 => {
+                            128..=255 => {
                                 @compileError("Format string too complicated for pretty() right now");
                             },
                             else => {},
@@ -4027,8 +4030,6 @@ comptime {
 }
 
 
-const CLI = @import("../cli/cli.zig").Command;
-const JestPrettyFormat = @import("../test_runner/pretty_format.zig").JestPrettyFormat;
 
 const Environment = bun.Environment;
 const JSLexer = bun.js_lexer;

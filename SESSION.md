@@ -389,3 +389,101 @@
 ### [2026-11-22 Wave #38] 旧式 `struct`/`union` 纯 CP 化专项首批（45 模块，全仓 `zig:check` + `bun bd test` 通过）
 - 完成 45 个含旧式 `pub const X = struct/union` 模块（`aio/posix_event_loop`, `bake/{DevServer,IncrementalGraph,FrameworkRouter,bake}`, `brotli_c`, `bun_alloc/{MimallocArena,basic,bun_alloc,heap_breakdown}`, `output`, `bundler/{AstBuilder,BundleThread,Chunk,HTMLScanner,ServerComponentParseTask,ThreadPool,analyze_transpiled_module,bundle_v2,cache,defines-table,defines,linker,options}`, `bundler/linker_context/{MetafileBuilder,OutputFileListBuilder,findAllImportedPartsInJSOrder,findImportedCSSFilesInJSOrder}`, `cares_sys/c_ares`, `cli/{cli,SourceFileProjectGenerator,create_command,init_command,pack_command,publish_command,run_command,ChangedFilesFilter,Scanner,Channel,Coordinator,test_command}`, `collections/{array_list,comptime_string_map,linear_fifo}`, `csrf`）的顶层与嵌套结构体纯 CP 化及借用检查收窄。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.613 ~ 1.185 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls，Debug + ASan）。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-ref-union-addr-of`（repro: `/data/dev/cp/temp/repro_ref_union_addr_of.cp`）：含 `[]const u8` 切片字段的 `union(enum)` 被视作 `ref` 类型后，调用传参 `&u` 会被 `cpc` codegen 剥离 `&`，导致 Zig 报 `expected *U, found U`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-ref-union-addr-of`：已修复并验收（`ack` 完成）。`cpc/src/codegen/borrow.rs`（`is_zig_heap_ptr_type`）不再把 `ref_classes`（含切片/借用字段的栈绑定 `ref struct` 与 `union`）及 `union`/泛型类误判为堆指针，不再剥离 `&u`；复现 `/data/dev/cp/temp/repro_ref_union_addr_of.cp` 现已正确生成 `self.take((&u))`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递（2 条）]
+- `task-bun-20261122-enum-inline-fn`（repro: `/data/dev/cp/temp/repro_enum_inline_fn.cp`）：`pub enum` 内声明 `inline fn` 方法时，`cpc` 将 `inline` 误解析为枚举变体并生成 `inline,`，导致 `zig ast-check` 报 `expected function, found ','`。
+- `task-bun-20261122-static-let-addr`（repro: `/data/dev/cp/temp/repro_static_let_addr.cp`）：`struct` 内 `static fn` 返回 `static let` 静态变量地址 `&q` 时，借用检查误报 `E0200: Cannot return reference to local variable 'this'`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（2 条）]
+- `task-bun-20261122-enum-inline-fn`：已修复并验收（`ack` 完成）。`parse_enum` 现已正确识别 `inline`/`extern`/`noinline` 修饰方法及 `meta.extend` 保留逻辑，复现 `/data/dev/cp/temp/repro_enum_inline_fn.cp` 通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-static-let-addr`：已修复并验收（`ack` 完成）。`is_class_field` 已剥离 `static let` 并新增 `is_static_class_field` 静态存储期豁免，复现 `/data/dev/cp/temp/repro_static_let_addr.cp` 通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递（2 条）]
+- `task-bun-20261122-struct-map-collision`（repro: `/data/dev/cp/temp/repro_struct_map_collision.cp`）：顶层声明 `pub struct Map` 与内置 `Map` 冲突时，`cpc` 无报错但静默丢弃整段结构体输出。
+- `task-bun-20261122-generic-arg-opt`（repro: `/data/dev/cp/temp/repro_generic_arg_opt_typeof.cp`）：泛型实参位后缀可选类型 `Box(i32?)` 未被 lower 为 `Box(?i32)`，原样输出导致 `zig ast-check` 失败。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（2 条）]
+- `task-bun-20261122-struct-map-collision`：已修复并验收（`ack` 完成）。`decl_class.rs` 已移除对顶层 `struct Map`/`Set` 的静默跳过，并在 `runtime_emit.rs`/`borrow.rs`/`call.rs` 补充 `class_defs` 冲突守卫；复现 `/data/dev/cp/temp/repro_struct_map_collision.cp` 现已正确输出 `pub const Map = struct` 并通过 `zig ast-check`。
+- `task-bun-20261122-generic-arg-opt`：已修复并验收（`ack` 完成）。`map_type.rs`（`map_call_type_sym`）及 `error_flow.rs` 现已对泛型圆括号实参位递归 lower 后缀可选类型，`Box(i32?)` 正确生成 `Box(?i32)` 并通过 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-enum-shl-missing`（repro: `/data/dev/cp/temp/repro_enum_shl_missing.cp`）：`pub enum` 内含移位常量 `1 << 1` 时，`cpc` 生成 `cp_shl(1, 1)` 但未发射 `fn cp_shl` 辅助函数，导致 `zig ast-check` 报 `use of undeclared identifier 'cp_shl'`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-return-this-struct-lit`（repro: `/data/dev/cp/temp/repro_return_this_lit.cp`）：`@This(){ x: 1 }` 结构体字面量前缀为 `@This()` 时，parser 报 `E0100 unexpected token 'Colon'`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-enum-shl-missing`：已修复并验收（`ack` 完成）。`cpc/src/codegen/prelude.rs`（`ModuleFeatures`）现已扫描 `Decl::Enum` 的 `e.extra_zig` 与 `e.variants` 并正确发射 `fn cp_shl` / `fn cp_shr`；复现 `/data/dev/cp/temp/repro_enum_shl_missing.cp` 通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-return-this-struct-lit`：已修复并验收（`ack` 完成）。`cpc/src/parser/primary.rs`、`error_flow.rs`、`infer_cp.rs` 现已支持 `@This(){ ... }` 结构体字面量（CP 冒号/Zig 点号/简写/空字面量）与返回 `@This()` 的类型具化推导；复现 `/data/dev/cp/temp/repro_return_this_lit.cp` 已正确输出 `return @This(){ .x = 1 };` 并通过 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递（2 条）]
+- `task-bun-20261122-switch-multitag-capture`（repro: `/data/dev/cp/temp/repro_switch_multitag_capture.cp`）：`switch` 多 tag 合并分支 `.a, .b v => v.x` 丢失载荷绑定 `v`，导致 `zig ast-check` 报 `use of undeclared identifier 'v'`。
+- `task-bun-20261122-c-struct-align`（repro: `/data/dev/cp/temp/repro_c_struct_align.cp`）：`@c pub struct` 字段声明不支持 `align(1)`（如 `tag: u8 align(1)`），parser 报 `E0111: expected token 'Colon', found 'LParen'`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递（2 条）]
+- `task-bun-20261122-expr-fn-ret-opt`（repro: `/data/dev/cp/temp/repro_expr_fn_ret_opt.cp`）：表达式位函数类型返回后缀可选类型 `fn(val: u64): (*T)?` 未被 lower 为 `?*T`，导致 `zig ast-check` 失败。
+- `task-bun-20261122-switch-type-dot-opt`（repro: `/data/dev/cp/temp/repro_switch_type_dot_opt.cp`）：`comptime switch(T)` 分支不支持多级点表达式（`B.C =>`）或后缀可选类型（`A? =>`），parser 报 `E0111`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-comptime-err-union-ret`（repro: `/data/dev/cp/temp/repro_comptime_err_union_ret.cp`）：`comptime` 函数返回错误联合类型构造 `return T ! MyErr;` 被 `cpc` 误拆分为 `return T; _ = (!MyErr);`，导致 `zig ast-check` 报 `unreachable code`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-underscore-struct-lit`（repro: `/data/dev/cp/temp/repro_underscore_struct_lit.cp`）：下划线开头的结构体类型名 `_S` 在结构体字面量 `_S{ x: 1 }` 中未被识别为类型名，parser 报 `E0100 unexpected token 'Colon'`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（4 条）]
+- `task-bun-20261122-switch-multitag-capture`：已修复并验收（`ack` 完成）。`codegen/pattern.rs` 新增 `extract_or_enum_capture`，`.a, .b v => v.x` 现正确绑定载荷 `v`，复现通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-c-struct-align`：已修复并验收（`ack` 完成）。`parser/container.rs` 与 `parser/types.rs` 现支持结构体字段后缀 `align(expr)`，复现通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-expr-fn-ret-opt`：已修复并验收（`ack` 完成）。`parser/primary.rs` 将表达式位函数类型转为 `Expr::TypeVal(Type::Fn)` 并经 `map_type` lower `(*T)?` -> `?*T`，复现通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-switch-type-dot-opt`：已修复并验收（`ack` 完成）。`parser/pattern.rs` 现支持 `switch` 类型分支多级点路径与后缀可选/切片修饰，复现通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（2 条）]
+- `task-bun-20261122-comptime-err-union-ret`：已修复并验收（`ack` 完成）。`parser/expr.rs`（`parse_bin_expr`）现支持表达式位错误联合类型构造 `T ! MyErr` 与 `T!`，复现通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-underscore-struct-lit`：已修复并验收（`ack` 完成）。`parser/{primary,expr,pattern}.rs` 改用 `trim_start_matches('_')` 判定类型名首字母大写，支持 `_S{ x: 1 }`，复现通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-switch-mut-payload`（repro: `/data/dev/cp/temp/repro_switch_mut_payload.cp`）：`switch` 分支无管道可变载荷捕获 `.a *v =>` 报 `E0111: expected token 'FatArrow', found 'Star'`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-switch-mut-payload`：已修复并验收（`ack` 完成）。`cpc` 现已支持 `switch` 分支无管道可变载荷捕获 `.a *v =>` / `.a, .b *v =>` / `.a *v if ... =>`；复现 `/data/dev/cp/temp/repro_switch_mut_payload.cp` 通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递（2 条）]
+- `task-bun-20261122-fn-noalias-param`（repro: `/data/dev/cp/temp/repro_fn_noalias_param.cp`）：`fn` 形参修饰符 `noalias` 导致参数解析错位，报 `E0207`。
+- `task-bun-20261122-extern-any-ptr`（repro: `/data/dev/cp/temp/repro_extern_any_ptr.cp`）：`@extern(*!, { name: "foo" })` 首个类型参数直接传 `*!` 报 `E0100`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（2 条）]
+- `task-bun-20261122-fn-noalias-param`：已修复并验收（`ack` 完成）。`Param` AST 与 `parse_params`/`parse_fn_type_sig_body` 现已支持 `noalias` 修饰符，`sema` 也解包 `[*]const u8` 索引赋值限定符，复现通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-extern-any-ptr`：已修复并验收（`ack` 完成）。`parser/primary.rs` 为 `@extern` 首个参数走 `parse_type()`（支持 `*!` / `*!?`），`sema` 正确推导返回类型，复现通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-discard-underscore-receiver`（repro: `/data/dev/cp/temp/repro_discard_underscore_receiver.cp`）：省略只读接收者的方法中写 `* = _;` 被 `cpc` 丢弃未生成 `_ = self;`，导致 `zig ast-check` 报 `unused function parameter`。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-comptime-generic-param-discard`（repro: `/data/dev/cp/temp/repro_comptime_generic_param_discard.cp`）：`fn wrap(comptime W: type): i32 { return S<W>.f(); }` 中 `W` 被 `cpc` 误插入 `_ = W;`，导致 `zig ast-check` 报 `pointless discard of function parameter`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-discard-underscore-receiver`：已修复并验收（`ack` 完成）。`cpc/src/codegen/stmt.rs` 现已在类方法体内正确生成 `_ = self;`（并修复状态机内 `* = ident` 未走 `expr_code`）；复现 `/data/dev/cp/temp/repro_discard_underscore_receiver.cp` 通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（1 条）]
+- `task-bun-20261122-comptime-generic-param-discard`：已修复并验收（`ack` 完成）。`cpc/src/ast_visitor.rs`（`find_referenced_vars_in_expr`）现已提取 `S<W>`、`EnumInit`/`Downcast`/`ComptimeMap` 内部类型标识，不再对 `W` 误插 `_ = W;`（`wrap` 报错已彻底消除）。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-top-if-enum-lit`（repro: `/data/dev/cp/temp/repro_top_if_enum_lit.cp`）：顶层 `pub const k: PT = if (true) .u16 else .u8;` 中的裸枚举字面量 `.u16` 触发 `E0190`（误判为管道占位符 `.`）。
+
+### [2026-11-22 上游 `cp_agy` 工单投递]
+- `task-bun-20261122-while-break-expr`（repro: `/data/dev/cp/temp/repro_const_while_break_val.cp`）：`while` 循环作为表达式赋值（`const val = while (true) { ... break 42; };`）时，parser 报 `E0100 unexpected token 'While'`。
+
+### [2026-11-22 上游 `cp_agy` 结单验收（2 条）]
+- `task-bun-20261122-top-if-enum-lit`：已修复并验收（`ack` 完成）。`parser/primary.rs` 中 `Token::Dot` 分支已对齐 `is_ident_token`，支持 `.u16`/`.u8` 等裸枚举字面量，复现通过 `cpc --lib` 与 `zig ast-check`。
+- `task-bun-20261122-while-break-expr`：已修复并验收（`ack` 完成）。全栈新增 `Expr::While`（支持 `while (...) { break val; }`、`else` 分支及 `label: while` 表达式），复现通过 `cpc --lib` 与 `zig ast-check`。
+
+### [2026-11-22 Wave #39~#46] 全仓 `old_struct_todo.txt` 296 个旧式 `struct` 模块清零收官（全仓 `zig:check` + `bun bd test` 通过）
+- **范围**：完成 `src/css/**`（36）、`dotenv/errno/event_loop/glob/http/http_types/ini`（12）、`install/interchange`（30）、`io/js_parser/js_printer`（18）、`jsc/jsc_stub/libuv/md/napi/options_types/paths/ptr/resolver/router`（48）、`runtime/{api,crypto,dns_jsc,ffi,image,node,server,socket,timer,valkey_jsc,webcore}`（59）、`s3_signing/semver/sha_hmac/shell/shell_parser/string/sys/test_runner/threading/unicode/url/uws_sys`（44）等全部剩余模块纯 CP 结构体/联合体结构化与所有权/借用深度净化，`old_struct_todo.txt` 296 项全面清零。
+- **全仓验证**：`cpc_brief.py` 四门禁全绿（膨胀率 `<= 1.2x`、`0` 违例）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls，Debug + ASan）。

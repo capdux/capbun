@@ -104,37 +104,38 @@ pub const Allocator = std.mem.Allocator;
 pub const ArrayList = std.ArrayList;
 pub const Log = bun.logger.Log;
 
-pub const ParserFlags = packed struct(u8) {
+@packed(u8) pub struct ParserFlags {
     nesting: bool = false,
     custom_media: bool = false,
     deep_combinators: bool = false,
     empty: u5 = 0,
-};
+}
 
-pub const CopyOnWriteStr = union(enum) {
+pub union(enum) CopyOnWriteStr {
     borrowed: []const u8,
     owned: std.array_list.Managed(u8),
-    pub fn append(self: *@This(), allocator: Allocator, slice: []const u8) void {}
-    pub fn appendByte(self: *@This(), allocator: Allocator, b: u8) void {}
-    pub fn toSlice(self: *@This()): []const u8 { return ""; }
-};
+    fn append(*_, allocator: Allocator, slice: []const u8) {}
+    fn appendByte(*_, allocator: Allocator, b: u8) {}
+    fn toSlice(*_): []const u8 { return ""; }
+}
 
 pub const Opts = ParserOptions;
-pub const NthResult = struct { a: i32, b: i32 };
+pub struct NthResult { a: i32, b: i32 }
 pub const SeenStatus = enum { dont_care, looking_for_them, seen };
 pub const ColorError = error{ parse };
-pub const CssRef = packed struct(u32) {
+@packed(u6) pub struct _CssRefTag {
+    class: bool = false,
+    id: bool = false,
+    animation: bool = false,
+    keyframes: bool = false,
+    container: bool = false,
+    counter_style: bool = false,
+}
+@packed(u32) pub struct CssRef {
     inner_index: u26 = 0,
-    tag: Tag = .{},
-    pub const Tag = packed struct(u6) {
-        class: bool = false,
-        id: bool = false,
-        animation: bool = false,
-        keyframes: bool = false,
-        container: bool = false,
-        counter_style: bool = false,
-    };
-};
+    tag: _CssRefTag = .{},
+    pub const Tag = _CssRefTag;
+}
 
 export fn OOM(e: anyerror): noreturn;
 export struct todo_stuff {

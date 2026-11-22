@@ -64,6 +64,19 @@ fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .ar
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const StreamType = struct {
+    bytes: *std.array_list.Managed(u8),
+
+pub inline fn getPos(self: StreamType) !usize {
+            return self.bytes.items.len;
+    }
+
+pub fn pwrite(self: StreamType, data: []const u8, index: usize) usize {
+            _ = @memcpy(self.bytes.items[index..][0..data.len], data);
+            return data.len;
+    }
+};
+
 pub fn DeinitWithAllocGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -571,18 +584,6 @@ const PackageIndex = Lockfile.PackageIndex;
 const Stream = Lockfile.Stream;
 const StringPool = Lockfile.StringPool;
 const VersionHashMap = Lockfile.VersionHashMap;
-const StreamType = struct {
-    bytes: *std.array_list.Managed(u8),
-
-pub inline fn getPos(s: StreamType) !usize {
-            return s.bytes.items.len;
-    }
-
-pub fn pwrite(s: StreamType, data: []const u8, index: usize) usize {
-            _ = @memcpy(s.bytes.items[index..][0..data.len], data);
-            return data.len;
-    }
-};
 pub const version = "bun-lockfile-format-v0\n";
 const header_bytes: []const u8 = ("#!/usr/bin/env bun\n" ++ version);
 const has_patched_dependencies_tag: u64 = @bitCast(@as([8]u8, ("pAtChEdD").*));

@@ -3,18 +3,18 @@
 // so we just use this in some cases
 pub const @"bool" = bool;
 pub type JSCell = (*void)?;
-const struct_unnamed_1 = extern struct {
+@c struct struct_unnamed_1 {
     payload: i32,
     tag: i32,
-};
-pub const union_EncodedJSValue = extern union {
+}
+@c pub union union_EncodedJSValue {
     asInt64: i64,
     ptr: [*c]JSCell,
     asBits: struct_unnamed_1,
     asPtr: *!?,
     asDouble: f64,
     asJSValue: jsc.JSValue,
-};
+}
 pub const EncodedJSValue = union_EncodedJSValue;
 pub export let ValueUndefined: EncodedJSValue = EncodedJSValue{
     asInt64: @as(i64, @bitCast(@as(c_longlong, @as(c_int, 2) | @as(c_int, 8)))),
@@ -70,7 +70,7 @@ pub inline fn UINT64_TO_JSVALUE(arg_globalObject: *!?, arg_val: u64): EncodedJSV
     if (val < @as(c_ulonglong, @bitCast(@as(c_longlong, @as(c_long, 9007199254740991))))) {
         return DOUBLE_TO_JSVALUE(@as(f64, @floatFromInt(val)));
     }
-    const global: *jsc.JSGlobalObject = @ptrCast(globalObject.?);
+    const global: *jsc.JSGlobalObject = unsafe { @ptrCast(globalObject.?) };
     return UINT64_TO_JSVALUE_SLOW(global, val).asEncoded();
 }
 pub inline fn INT64_TO_JSVALUE(arg_globalObject: *!?, arg_val: i64): EncodedJSValue {
@@ -82,7 +82,7 @@ pub inline fn INT64_TO_JSVALUE(arg_globalObject: *!?, arg_val: i64): EncodedJSVa
     if ((val >= @as(c_longlong, @bitCast(@as(c_longlong, -@as(c_long, 9007199254740991))))) && (val <= @as(c_longlong, @bitCast(@as(c_longlong, @as(c_long, 9007199254740991)))))) {
         return DOUBLE_TO_JSVALUE(@as(f64, @floatFromInt(val)));
     }
-    const global: *jsc.JSGlobalObject = @ptrCast(globalObject.?);
+    const global: *jsc.JSGlobalObject = unsafe { @ptrCast(globalObject.?) };
     return INT64_TO_JSVALUE_SLOW(global, val).asEncoded();
 }
 pub inline fn INT32_TO_JSVALUE(arg_val: i32): EncodedJSValue {

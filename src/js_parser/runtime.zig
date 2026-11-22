@@ -155,6 +155,13 @@ pub fn next(self: *RuntimeImportsIterator) ?RuntimeImportsEntry {
     pub const Entry = RuntimeImportsEntry;
 };
 
+pub const _RuntimeImportsSorter = struct {
+
+pub fn compare(_: void, a: []const u8, b: []const u8) bool {
+            return (std.mem.order(u8, a, b) == .lt);
+    }
+};
+
 pub const RuntimeImports = struct {
     __name: ?Ref = null,
     __require: ?Ref = null,
@@ -259,13 +266,8 @@ pub fn count(self: RuntimeImports) usize {
     const all_sorted: [all.len]string = brk: {
             @setEvalBranchQuota(1000000);
             var list = all;
-            const Sorter = struct {
-                fn compare(_: void, a: []const u8, b: []const u8) bool {
-                    return std.mem.order(u8, a, b) == .lt;
-                }
-            };
             const empty_sort_ctx: void = undefined;
-            std.sort.pdq(string, &list, empty_sort_ctx, Sorter.compare);
+            std.sort.pdq(string, &list, empty_sort_ctx, _RuntimeImportsSorter.compare);
             break :brk list;
         };
     pub const all_sorted_index = brk: {
@@ -295,6 +297,63 @@ pub fn count(self: RuntimeImports) usize {
     pub const Iterator = RuntimeImportsIterator;
 };
 
+pub const _Base64Encoder = struct {
+
+pub fn encode(source: []const u8, comptime Writer: type, writer: Writer) !void {
+            var acc: u12 = 0;
+            _ = &acc;
+            var acc_len: u4 = 0;
+            _ = &acc_len;
+            for (cp_iter_slice(source)) |v| {
+                _ = &v;
+                acc = (cp_shl(acc, 8) + v);
+                acc_len = (acc_len + 8);
+                while ((acc_len >= 6)) {
+                    acc_len = (acc_len - 6);
+                    _ = try writer.writeByte(alphabet_chars[@as(usize, @intCast(@as(u6, @truncate(cp_shr(acc, acc_len)))))]);
+                }
+            }
+            if ((acc_len > 0)) {
+                _ = try writer.writeByte(alphabet_chars[@as(usize, @intCast(@as(u6, @truncate(cp_shl(acc, (6 - acc_len))))))]);
+            }
+    }
+    const alphabet_chars = std.base64.standard_alphabet_chars;
+};
+
+pub const _Base64FallbackMessage = struct {
+    msg: *const api.FallbackMessageContainer,
+    allocator: std.mem.Allocator,
+
+pub fn format(self: _Base64FallbackMessage, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            var bb = DeinitGuard(std.array_list.Managed(u8)){ .inner = std.array_list.Managed(u8).init(self.allocator) };
+            _ = &bb;
+            var __bb_moved = false; _ = &__bb_moved;
+            defer if (!__bb_moved) { __bb_moved = true; const __T = @TypeOf(bb); if (@typeInfo(__T) == .optional) { if (bb) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { bb.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = bb; _drop_val.__cp_deinit(); } };
+            const bb_writer = bb.inner.writer();
+            const Encoder = schema.Writer(@TypeOf(bb_writer));
+            var encoder = Encoder.init(bb_writer);
+            _ = &encoder;
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.msg.encode((&encoder))) catch |__ce_0| { _ = &__ce_0;  }); });
+            _ = (blk_catch_1: { break :blk_catch_1 ((Base64Encoder.encode(bb.inner.items, @TypeOf(writer), writer)) catch |__ce_1| { _ = &__ce_1;  }); });
+    }
+    pub const Base64Encoder = _Base64Encoder;
+};
+
+pub const _FallbackRenderArgs = struct {
+    blob: _Base64FallbackMessage,
+    preload: []const u8,
+    fallback: []const u8,
+    entry_point: []const u8,
+};
+
+pub const _FallbackBackendRenderArgs = struct {
+    blob: _Base64FallbackMessage,
+    bun_error_css: []const u8,
+    bun_error: []const u8,
+    fallback: []const u8,
+    bun_error_page_css: []const u8,
+};
+
 pub const Fallback = struct {
 
 pub inline fn errorJS() []const u8 {
@@ -321,67 +380,119 @@ pub fn version() []const u8 {
     }
 
 pub fn render(allocator: std.mem.Allocator, msg: *const api.FallbackMessageContainer, preload: []const u8, entry_point: []const u8, comptime WriterType: type, writer: WriterType) !void {
-            const PrintArgs = struct {
-    blob: Base64FallbackMessage,
-    preload: []const u8,
-    fallback: []const u8,
-    entry_point: []const u8,
-};
-            _ = try writer.print(HTMLTemplate, PrintArgs{ .blob = Base64FallbackMessage{ .msg = msg, .allocator = allocator }, .preload = preload, .fallback = fallbackDecoderJS(), .entry_point = entry_point });
+            const args = _FallbackRenderArgs{ .blob = Base64FallbackMessage{ .msg = msg, .allocator = allocator }, .preload = preload, .fallback = fallbackDecoderJS(), .entry_point = entry_point };
+            _ = try writer.print(HTMLTemplate, args);
     }
 
 pub fn renderBackend(allocator: std.mem.Allocator, msg: *const api.FallbackMessageContainer, comptime WriterType: type, writer: WriterType) !void {
-            const PrintArgs = struct {
-    blob: Base64FallbackMessage,
-    bun_error_css: []const u8,
-    bun_error: []const u8,
-    fallback: []const u8,
-    bun_error_page_css: []const u8,
-};
-            _ = try writer.print(HTMLBackendTemplate, PrintArgs{ .blob = Base64FallbackMessage{ .msg = msg, .allocator = allocator }, .bun_error_css = errorCSS(), .bun_error = errorJS(), .bun_error_page_css = "", .fallback = fallbackDecoderJS() });
+            const args = _FallbackBackendRenderArgs{ .blob = Base64FallbackMessage{ .msg = msg, .allocator = allocator }, .bun_error_css = errorCSS(), .bun_error = errorJS(), .bun_error_page_css = "", .fallback = fallbackDecoderJS() };
+            _ = try writer.print(HTMLBackendTemplate, args);
     }
     pub const HTMLTemplate = @embedFile("../fallback.html");
     pub const HTMLBackendTemplate = @embedFile("../fallback-backend.html");
-    const Base64FallbackMessage = struct {
-        msg: *const api.FallbackMessageContainer,
-        allocator: std.mem.Allocator,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-                var bb = DeinitGuard(std.array_list.Managed(u8)){ .inner = std.array_list.Managed(u8).init(self.allocator) };
-                _ = &bb;
-                var __bb_moved = false; _ = &__bb_moved;
-                defer if (!__bb_moved) { __bb_moved = true; const __T = @TypeOf(bb); if (@typeInfo(__T) == .optional) { if (bb) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { bb.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = bb; _drop_val.__cp_deinit(); } };
-                const bb_writer = bb.inner.writer();
-                const Encoder = schema.Writer(@TypeOf(bb_writer));
-                var encoder = Encoder.init(bb_writer);
-                _ = &encoder;
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.msg.encode((&encoder))) catch |__ce_0| { _ = &__ce_0;  }); });
-                _ = (blk_catch_1: { break :blk_catch_1 ((Base64Encoder.encode(bb.inner.items, @TypeOf(writer), writer)) catch |__ce_1| { _ = &__ce_1;  }); });
-        }
-        pub const Base64Encoder = struct {
-        
-        pub fn encode(source: []const u8, comptime Writer: type, writer: Writer) !void {
-                    var acc: u12 = 0;
-                    _ = &acc;
-                    var acc_len: u4 = 0;
-                    _ = &acc_len;
-                    for (cp_iter_slice(source)) |v| {
-                        _ = &v;
-                        acc = (cp_shl(acc, 8) + v);
-                        acc_len = (acc_len + 8);
-                        while ((acc_len >= 6)) {
-                            acc_len = (acc_len - 6);
-                            _ = try writer.writeByte(alphabet_chars[@as(usize, @intCast(@as(u6, @truncate(cp_shr(acc, acc_len)))))]);
-                        }
-                    }
-                    if ((acc_len > 0)) {
-                        _ = try writer.writeByte(alphabet_chars[@as(usize, @intCast(@as(u6, @truncate(cp_shl(acc, (6 - acc_len))))))]);
-                    }
-            }
-            const alphabet_chars = std.base64.standard_alphabet_chars;
-        };
-    };
+    const Base64FallbackMessage = _Base64FallbackMessage;
     pub const version_hash = @import("build_options").fallback_html_version;
+};
+
+pub const _RuntimeReplaceableExportInject = struct {
+    name: []const u8,
+    value: JSAst.Expr,
+};
+
+pub const _RuntimeReplaceableExport = union(enum) {
+    delete: void,
+    replace: JSAst.Expr,
+    inject: _RuntimeReplaceableExportInject,
+    pub const Map = bun.StringArrayHashMapUnmanaged(_RuntimeReplaceableExport);
+};
+
+pub const _RuntimeFeaturesSortCtx = struct {
+    keys: []const []const u8,
+
+pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
+            return std.mem.lessThan(u8, ctx.keys[@as(usize, @intCast(a))], ctx.keys[@as(usize, @intCast(b))]);
+    }
+};
+
+pub const _RuntimeFeatures = struct {
+    react_fast_refresh: bool = false,
+    hot_module_reloading: bool = false,
+    server_components: RuntimeServerComponentsMode = .none,
+    is_macro_runtime: bool = false,
+    top_level_await: bool = false,
+    auto_import_jsx: bool = false,
+    allow_runtime: bool = true,
+    inlining: bool = false,
+    inject_jest_globals: bool = false,
+    no_macros: bool = false,
+    commonjs_named_exports: bool = true,
+    minify_syntax: bool = false,
+    minify_identifiers: bool = false,
+    minify_keep_names: bool = false,
+    minify_whitespace: bool = false,
+    dead_code_elimination: bool = true,
+    set_breakpoint_on_first_line: bool = false,
+    trim_unused_imports: bool = false,
+    auto_polyfill_require: bool = false,
+    replace_exports: _RuntimeReplaceableExport.Map = .{},
+    dont_bundle_twice: bool = false,
+    unwrap_commonjs_packages: []const []const u8 = &.{},
+    commonjs_at_runtime: bool = false,
+    unwrap_commonjs_to_esm: bool = false,
+    emit_decorator_metadata: bool = false,
+    standard_decorators: bool = false,
+    remove_cjs_module_wrapper: bool = false,
+    runtime_transpiler_cache: ?*bun.jsc.RuntimeTranspilerCache = null,
+    lower_using: bool = true,
+    bundler_feature_flags: *const bun.StringSet = (&default_empty_bundler_feature_flags),
+    repl_mode: bool = false,
+
+pub fn initBundlerFeatureFlags(allocator: std.mem.Allocator, feature_flags: []const []const u8) *const bun.StringSet {
+            if ((feature_flags.len == 0)) {
+                return (&default_empty_bundler_feature_flags);
+            }
+            const set = bun.handleOom(allocator.create(bun.StringSet));
+            set.* = bun.StringSet.init(allocator);
+            for (cp_iter_slice(feature_flags)) |flag| {
+                _ = &flag;
+                _ = bun.handleOom(set.insert(flag));
+            }
+            const sort_ctx = _RuntimeFeaturesSortCtx{ .keys = set.map.keys() };
+            _ = set.map.sort(sort_ctx);
+            return set;
+    }
+
+pub fn hashForRuntimeTranspiler(self: _RuntimeFeatures, hasher: *std.hash.Wyhash) void {
+            _ = bun.assert((self.runtime_transpiler_cache != null));
+            const hash_field_count = (comptime std.@"meta".fieldNames(@TypeOf(hash_fields_for_runtime_transpiler)).len);
+            _ = &hash_field_count;
+            var bools: [hash_field_count]bool = undefined;
+            _ = &bools;
+            var i: usize = 0;
+            _ = &i;
+            inline for (hash_fields_for_runtime_transpiler) |field| {
+                bools[cp_cast_int(usize, i)] = @field(self, @tagName(field));
+                i = (i + 1);
+            }
+            _ = hasher.update(std.mem.asBytes((&bools)));
+            for (cp_iter_slice(self.bundler_feature_flags.keys())) |flag| {
+                _ = &flag;
+                _ = hasher.update(flag);
+                _ = hasher.update("\x00");
+            }
+    }
+
+pub fn shouldUnwrapRequire(self: _RuntimeFeatures, package_name: []const u8) bool {
+            return ((package_name.len > 0) and (strings.indexEqualAny(self.unwrap_commonjs_packages, package_name) != null));
+    }
+    pub const empty_bundler_feature_flags: bun.StringSet = default_empty_bundler_feature_flags;
+    const hash_fields_for_runtime_transpiler = .{ .top_level_await, .auto_import_jsx, .allow_runtime, .inlining, .commonjs_named_exports, .minify_syntax, .minify_identifiers, .minify_keep_names, .dead_code_elimination, .set_breakpoint_on_first_line, .trim_unused_imports, .dont_bundle_twice, .commonjs_at_runtime, .emit_decorator_metadata, .standard_decorators, .lower_using, .repl_mode };
+    pub const ReplaceableExport = _RuntimeReplaceableExport;
+    pub const ServerComponentsMode = RuntimeServerComponentsMode;
+};
+
+pub const _RuntimeNames = struct {
+    pub const ActivateFunction = "activate";
 };
 
 pub const Runtime = struct {
@@ -394,102 +505,13 @@ pub fn versionHash() u32 {
             const hash = bun.Wyhash11.hash(0, sourceCode());
             return @truncate(hash);
     }
-    pub const Features = struct {
-        react_fast_refresh: bool = false,
-        hot_module_reloading: bool = false,
-        server_components: ServerComponentsMode = .none,
-        is_macro_runtime: bool = false,
-        top_level_await: bool = false,
-        auto_import_jsx: bool = false,
-        allow_runtime: bool = true,
-        inlining: bool = false,
-        inject_jest_globals: bool = false,
-        no_macros: bool = false,
-        commonjs_named_exports: bool = true,
-        minify_syntax: bool = false,
-        minify_identifiers: bool = false,
-        minify_keep_names: bool = false,
-        minify_whitespace: bool = false,
-        dead_code_elimination: bool = true,
-        set_breakpoint_on_first_line: bool = false,
-        trim_unused_imports: bool = false,
-        auto_polyfill_require: bool = false,
-        replace_exports: ReplaceableExport.Map = .{},
-        dont_bundle_twice: bool = false,
-        unwrap_commonjs_packages: []const []const u8 = &.{},
-        commonjs_at_runtime: bool = false,
-        unwrap_commonjs_to_esm: bool = false,
-        emit_decorator_metadata: bool = false,
-        standard_decorators: bool = false,
-        remove_cjs_module_wrapper: bool = false,
-        runtime_transpiler_cache: ?*bun.jsc.RuntimeTranspilerCache = null,
-        lower_using: bool = true,
-        bundler_feature_flags: *const bun.StringSet = (&default_empty_bundler_feature_flags),
-        repl_mode: bool = false,
-    
-    pub fn initBundlerFeatureFlags(allocator: std.mem.Allocator, feature_flags: []const []const u8) *const bun.StringSet {
-                if ((feature_flags.len == 0)) {
-                    return (&default_empty_bundler_feature_flags);
-                }
-                const set = bun.handleOom(allocator.create(bun.StringSet));
-                set.* = bun.StringSet.init(allocator);
-                for (cp_iter_slice(feature_flags)) |flag| {
-                    _ = &flag;
-                    _ = bun.handleOom(set.insert(flag));
-                }
-                const SortCtx = struct {
-        keys: []const []const u8,
-    
-    pub fn lessThan(ctx: @This(), a: usize, b: usize) bool {
-                return std.mem.lessThan(u8, ctx.keys[@as(usize, @intCast(a))], ctx.keys[@as(usize, @intCast(b))]);
-        }
-    };
-                _ = set.map.sort(SortCtx{ .keys = set.map.keys() });
-                return set;
-        }
-    
-    pub fn hashForRuntimeTranspiler(self: @This(), hasher: *std.hash.Wyhash) void {
-                _ = bun.assert((self.runtime_transpiler_cache != null));
-                const hash_field_count = (comptime std.@"meta".fieldNames(@TypeOf(hash_fields_for_runtime_transpiler)).len);
-                _ = &hash_field_count;
-                var bools: [hash_field_count]bool = undefined;
-                _ = &bools;
-                inline for (hash_fields_for_runtime_transpiler, 0..) |field, i| {
-                    _ = &field;
-                    _ = &i;
-                    bools[cp_cast_int(usize, i)] = @field(self, @tagName(field));
-                }
-                _ = hasher.update(std.mem.asBytes((&bools)));
-                for (cp_iter_slice(self.bundler_feature_flags.keys())) |flag| {
-                    _ = &flag;
-                    _ = hasher.update(flag);
-                    _ = hasher.update("\x00");
-                }
-        }
-    
-    pub fn shouldUnwrapRequire(self: @This(), package_name: []const u8) bool {
-                return ((package_name.len > 0) and (strings.indexEqualAny(self.unwrap_commonjs_packages, package_name) != null));
-        }
-        pub const empty_bundler_feature_flags: bun.StringSet = default_empty_bundler_feature_flags;
-        const hash_fields_for_runtime_transpiler = .{ .top_level_await, .auto_import_jsx, .allow_runtime, .inlining, .commonjs_named_exports, .minify_syntax, .minify_identifiers, .minify_keep_names, .dead_code_elimination, .set_breakpoint_on_first_line, .trim_unused_imports, .dont_bundle_twice, .commonjs_at_runtime, .emit_decorator_metadata, .standard_decorators, .lower_using, .repl_mode };
-        pub const ReplaceableExport = union(enum) {
-            delete: void,
-            replace: JSAst.Expr,
-            inject: struct {
-                        name: string,
-                        value: JSAst.Expr,
-                    },
-            pub const Map = bun.StringArrayHashMapUnmanaged(ReplaceableExport);
-        };
-        pub const ServerComponentsMode = RuntimeServerComponentsMode;
-    };
-    pub const Names = struct {
-        pub const ActivateFunction = "activate";
-    };
+    pub const Features = _RuntimeFeatures;
+    pub const Names = _RuntimeNames;
     pub const Imports = RuntimeImports;
 };
 
 const string = []const u8;
+var fallback_message_has_printed: bool = false;
 const default_empty_bundler_feature_flags: bun.StringSet = bun.StringSet.initComptime();
 var fallback_version_hash_int: u32 = 0;
 const Environment = bun.Environment;
@@ -501,11 +523,8 @@ const schema = bun.schema;
 const api = schema.api;
 
 pub fn embedDebugFallback(comptime msg: []const u8, comptime code: []const u8) []const u8 {
-        const FallbackMessage = struct {
-        pub var has_printed = false;
-    };
-        if ((!FallbackMessage.has_printed)) {
-            FallbackMessage.has_printed = true;
+        if ((!fallback_message_has_printed)) {
+            fallback_message_has_printed = true;
             _ = Output.debug(msg, .{});
         }
         return code;

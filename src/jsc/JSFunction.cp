@@ -1,20 +1,20 @@
-const _ImplementationVisibility = enum(u8) {
+pub enum _ImplementationVisibility: u8 {
     public,
-    private,
+    @"private",
     private_recursive,
-};
+}
 
 /// In WebKit: Intrinsic.h
-const _Intrinsic = enum(u8) {
+pub enum _Intrinsic: u8 {
     none,
     _,
-};
+}
 
-const _CreateJSFunctionOptions = struct {
+pub struct _CreateJSFunctionOptions {
     implementation_visibility: _ImplementationVisibility = .public,
     intrinsic: _Intrinsic = .none,
     constructor: (*const JSHostFn)? = null,
-};
+}
 
 @c {
     fn JSFunction__createFromZig(

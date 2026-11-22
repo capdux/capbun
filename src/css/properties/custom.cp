@@ -629,16 +629,18 @@ pub struct TokenList {
 
         let res: css.SmallList(Fallbacks, 2) = .{};
         if (fallbacks.p3) {
+            const p3_kind = ColorFallbackKind{ p3: true };
             res.appendAssumeCapacity(.{
-                ColorFallbackKind.P3.supportsCondition(),
-                _.getFallback(allocator, ColorFallbackKind.P3),
+                p3_kind.supportsCondition(),
+                _.getFallback(allocator, p3_kind),
             });
         }
 
         if (fallbacks.lab) {
+            const lab_kind = ColorFallbackKind{ lab: true };
             res.appendAssumeCapacity(.{
-                ColorFallbackKind.LAB.supportsCondition(),
-                _.getFallback(allocator, ColorFallbackKind.LAB),
+                lab_kind.supportsCondition(),
+                _.getFallback(allocator, lab_kind),
             });
         }
 
@@ -718,75 +720,86 @@ pub const TokenListFns = TokenList;
 /// These can be converted from the modern slash syntax to older comma syntax.
 /// This can only be done when the only unresolved component is the alpha
 /// since variables can resolve to multiple tokens.
-pub const UnresolvedColor = union(enum) {
-    /// An rgb() color.
-    RGB: struct {
-        /// The red component.
-        r: f32,
-        /// The green component.
-        g: f32,
-        /// The blue component.
-        b: f32,
-        /// The unresolved alpha component.
-        alpha: TokenList,
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-        pub fn __generateHash() void {}
-    },
-    /// An hsl() color.
-    HSL: struct {
-        /// The hue component.
-        h: f32,
-        /// The saturation component.
-        s: f32,
-        /// The lightness component.
-        l: f32,
-        /// The unresolved alpha component.
-        alpha: TokenList,
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-        pub fn __generateHash() void {}
-    },
-    /// The light-dark() function.
-    light_dark: struct {
-        /// The light value.
-        light: TokenList,
-        /// The dark value.
-        dark: TokenList,
+pub struct UnresolvedColorRGB {
+    /// The red component.
+    r: f32,
+    /// The green component.
+    g: f32,
+    /// The blue component.
+    b: f32,
+    /// The unresolved alpha component.
+    alpha: TokenList,
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+    static fn __generateHash() {}
+}
 
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
+pub struct UnresolvedColorHSL {
+    /// The hue component.
+    h: f32,
+    /// The saturation component.
+    s: f32,
+    /// The lightness component.
+    l: f32,
+    /// The unresolved alpha component.
+    alpha: TokenList,
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
+    }
+    static fn __generateHash() {}
+}
 
-        pub fn __generateHash() void {}
-    },
-    const This = @This();
+pub struct UnresolvedColorLightDark {
+    /// The light value.
+    light: TokenList,
+    /// The dark value.
+    dark: TokenList,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
+    static fn __generateHash() {}
+}
+
+fn unresolvedColorConv(c: f32): i32 {
+    return bun.intFromFloat(i32, bun.clamp(@round(c * 255.0), 0.0, 255.0));
+}
+
+pub union(enum) UnresolvedColor {
+    /// An rgb() color.
+    RGB: UnresolvedColorRGB,
+    /// An hsl() color.
+    HSL: UnresolvedColorHSL,
+    /// The light-dark() function.
+    light_dark: UnresolvedColorLightDark,
+    const This = @This();
+
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        return css.implementEql(@This(), lhs, rhs);
     }
 
-    pub fn deepClone(this: *const This, allocator: Allocator) This {
-        return switch (this.*) {
-            .RGB => |*rgb| .{ .RGB = .{ .r = rgb.r, .g = rgb.g, .b = rgb.b, .alpha = rgb.alpha.deepClone(allocator) } },
-            .HSL => |*hsl| .{ .HSL = .{ .h = hsl.h, .s = hsl.s, .l = hsl.l, .alpha = hsl.alpha.deepClone(allocator) } },
-            .light_dark => |*light_dark| .{
-                .light_dark = .{
-                    .light = light_dark.light.deepClone(allocator),
-                    .dark = light_dark.dark.deepClone(allocator),
+    fn hash(hasher: *std.hash.Wyhash) {
+        const s = _;
+        return css.implementHash(@This(), unsafe { &s }, hasher);
+    }
+
+    fn deepClone(allocator: Allocator): This {
+        return switch (_) {
+            .RGB => |*rgb| UnresolvedColor{ RGB: UnresolvedColorRGB{ r: rgb.r, g: rgb.g, b: rgb.b, alpha: rgb.alpha.deepClone(allocator) } },
+            .HSL => |*hsl| UnresolvedColor{ HSL: UnresolvedColorHSL{ h: hsl.h, s: hsl.s, l: hsl.l, alpha: hsl.alpha.deepClone(allocator) } },
+            .light_dark => |*light_dark| UnresolvedColor{
+                light_dark: UnresolvedColorLightDark{
+                    light: light_dark.light.deepClone(allocator),
+                    dark: light_dark.dark.deepClone(allocator),
                 },
             },
         };
     }
 
-    pub fn deinit(this: *This, allocator: Allocator) void {
-        return switch (this.*) {
+    fn deinit(*_, allocator: Allocator) {
+        return switch (_.*) {
             .RGB => |*rgb| rgb.alpha.deinit(allocator),
             .HSL => |*hsl| hsl.alpha.deinit(allocator),
             .light_dark => |*light_dark| {
@@ -796,64 +809,57 @@ pub const UnresolvedColor = union(enum) {
         };
     }
 
-    pub fn toCss(
-        this: *const This,
+    fn toCss(
         dest: *Printer,
         is_custom_property: bool,
-    ) PrintErr!void {
-        const Helper = struct {
-            pub fn conv(c: f32) i32 {
-                return bun.intFromFloat(i32, bun.clamp(@round(c * 255.0), 0.0, 255.0));
-            }
-        };
-
-        switch (this.*) {
-            .RGB => |rgb| {
+    ): PrintErr!void {
+        switch (_) {
+            .RGB rgb => {
                 if (dest.targets.shouldCompileSame(.space_separated_color_notation)) {
-                    try dest.writeStr("rgba(");
-                    try css.to_css.integer(i32, Helper.conv(rgb.r), dest);
-                    try dest.delim(',', false);
-                    try css.to_css.integer(i32, Helper.conv(rgb.g), dest);
-                    try dest.delim(',', false);
-                    try css.to_css.integer(i32, Helper.conv(rgb.b), dest);
-                    try rgb.alpha.toCss(dest, is_custom_property);
-                    try dest.writeChar(')');
+                    dest.writeStr("rgba(")?;
+                    css.to_css.integer(i32, unresolvedColorConv(rgb.r), dest)?;
+                    dest.delim(',', false)?;
+                    css.to_css.integer(i32, unresolvedColorConv(rgb.g), dest)?;
+                    dest.delim(',', false)?;
+                    css.to_css.integer(i32, unresolvedColorConv(rgb.b), dest)?;
+                    rgb.alpha.toCss(dest, is_custom_property)?;
+                    dest.writeChar(')')?;
                     return;
                 }
 
-                try dest.writeStr("rgb(");
-                try css.to_css.integer(i32, Helper.conv(rgb.r), dest);
-                try dest.writeChar(' ');
-                try css.to_css.integer(i32, Helper.conv(rgb.g), dest);
-                try dest.writeChar(' ');
-                try css.to_css.integer(i32, Helper.conv(rgb.b), dest);
-                try dest.delim('/', true);
-                try rgb.alpha.toCss(dest, is_custom_property);
-                try dest.writeChar(')');
+                dest.writeStr("rgb(")?;
+                css.to_css.integer(i32, unresolvedColorConv(rgb.r), dest)?;
+                dest.writeChar(' ')?;
+                css.to_css.integer(i32, unresolvedColorConv(rgb.g), dest)?;
+                dest.writeChar(' ')?;
+                css.to_css.integer(i32, unresolvedColorConv(rgb.b), dest)?;
+                dest.delim('/', true)?;
+                rgb.alpha.toCss(dest, is_custom_property)?;
+                dest.writeChar(')')?;
             },
-            .HSL => |hsl| {
+            .HSL hsl => {
                 if (dest.targets.shouldCompileSame(.space_separated_color_notation)) {
-                    try dest.writeStr("hsla(");
-                    try CSSNumberFns.toCss(&hsl.h, dest);
-                    try dest.delim(',', false);
-                    try (Percentage{ .v = hsl.s }).toCss(dest);
-                    try dest.delim(',', false);
-                    try (Percentage{ .v = hsl.l }).toCss(dest);
-                    try dest.delim(',', false);
-                    try hsl.alpha.toCss(dest, is_custom_property);
-                    try dest.writeChar(')');
+                    dest.writeStr("hsla(")?;
+                    CSSNumberFns.toCss(&hsl.h, dest)?;
+                    dest.delim(',', false)?;
+                    (Percentage{ v: hsl.s }).toCss(dest)?;
+                    dest.delim(',', false)?;
+                    (Percentage{ v: hsl.l }).toCss(dest)?;
+                    dest.delim(',', false)?;
+                    hsl.alpha.toCss(dest, is_custom_property)?;
+                    dest.writeChar(')')?;
                     return;
                 }
 
-                try dest.writeStr("hsl(");
-                try CSSNumberFns.toCss(&hsl.h, dest);
-                try dest.writeChar(' ');
-                try (Percentage{ .v = hsl.s }).toCss(dest);
-                try dest.writeChar(' ');
-                try (Percentage{ .v = hsl.l }).toCss(dest);
-                try dest.delim('/', true);
-                try hsl.alpha.toCss(dest, is_custom_property);
-                try dest.writeChar(')');
+                dest.writeStr("hsl(")?;
+                CSSNumberFns.toCss(&hsl.h, dest)?;
+                dest.writeChar(' ')?;
+                (Percentage{ v: hsl.s }).toCss(dest)?;
+                dest.writeChar(' ')?;
+                (Percentage{ v: hsl.l }).toCss(dest)?;
+                dest.delim('/', true)?;
+                hsl.alpha.toCss(dest, is_custom_property)?;
+                dest.writeChar(')')?;
                 return;
             },
             .light_dark => |*ld| {
@@ -861,31 +867,31 @@ pub const UnresolvedColor = union(enum) {
                 const dark: *const TokenList = &ld.dark;
 
                 if (!dest.targets.isCompatible(.light_dark)) {
-                    try dest.writeStr("var(--buncss-light");
-                    try dest.delim(',', false);
-                    try light.toCss(dest, is_custom_property);
-                    try dest.writeChar(')');
-                    try dest.whitespace();
-                    try dest.writeStr("var(--buncss-dark");
-                    try dest.delim(',', false);
-                    try dark.toCss(dest, is_custom_property);
-                    return dest.writeChar(')');
+                    dest.writeStr("var(--buncss-light")?;
+                    dest.delim(',', false)?;
+                    light.toCss(dest, is_custom_property)?;
+                    dest.writeChar(')')?;
+                    dest.whitespace()?;
+                    dest.writeStr("var(--buncss-dark")?;
+                    dest.delim(',', false)?;
+                    dark.toCss(dest, is_custom_property)?;
+                    return dest.writeChar(')')?;
                 }
 
-                try dest.writeStr("light-dark(");
-                try light.toCss(dest, is_custom_property);
-                try dest.delim(',', false);
-                try dark.toCss(dest, is_custom_property);
-                try dest.writeChar(')');
+                dest.writeStr("light-dark(")?;
+                light.toCss(dest, is_custom_property)?;
+                dest.delim(',', false)?;
+                dark.toCss(dest, is_custom_property)?;
+                dest.writeChar(')')?;
             },
         }
     }
 
-    pub fn parse(
+    static fn parse(
         input: *css.Parser,
         f: []const u8,
         options: *const css.ParserOptions,
-    ) Result(UnresolvedColor) {
+    ): Result(UnresolvedColor) {
         let parser = ComponentParser.new(false);
         // css.todo_stuff.match_ignore_ascii_case
         if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "rgb")) {
@@ -897,34 +903,34 @@ pub const UnresolvedColor = union(enum) {
                 }
                 static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
                     const rgb = switch (css.css_values.color.parseRGBComponents(i, p)) {
-                        .result => |vv| vv,
-                        .err => |e| return .{ .err = e },
+                        .result vv => vv,
+                        .err e => return { err: e },
                     };
                     const r = rgb[0];
                     const g = rgb[1];
                     const b = rgb[2];
                     const is_legacy = rgb[3];
                     if (is_legacy) {
-                        return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+                        return { err: i.newCustomError(css.ParserError.invalid_value) };
                     }
-                    if (i.expectDelim('/').asErr()) |e| return .{ .err = e };
+                    if (e := i.expectDelim('/').asErr()) return { err: e };
                     const alpha = switch (TokenListFns.parse(i, opts, 0)) {
-                        .result => |vv| vv,
-                        .err => |e| return .{ .err = e },
+                        .result vv => vv,
+                        .err e => return { err: e },
                     };
-                    return .{ .result = UnresolvedColor{
-                        .RGB = .{
-                            .r = r,
-                            .g = g,
-                            .b = b,
-                            .alpha = alpha,
+                    return { result: UnresolvedColor{
+                        RGB: {
+                            r: r,
+                            g: g,
+                            b: b,
+                            alpha: alpha,
                         },
                     } };
                 }
             };
             let closure = Closure{
-                .options = options,
-                .parser = &parser,
+                options: options,
+                parser: &parser,
             };
             return input.parseNestedBlock(UnresolvedColor, &closure, Closure.parsefn);
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "hsl")) {
@@ -936,34 +942,34 @@ pub const UnresolvedColor = union(enum) {
                 }
                 static fn innerParseFn(i: *css.Parser, p: *ComponentParser, opts: *const css.ParserOptions): Result(UnresolvedColor) {
                     const hsl = switch (css.css_values.color.parseHSLHWBComponents(HSL, i, p, false)) {
-                        .result => |vv| vv,
-                        .err => |e| return .{ .err = e },
+                        .result vv => vv,
+                        .err e => return { err: e },
                     };
                     const h = hsl[0];
                     const s = hsl[1];
                     const l = hsl[2];
                     const is_legacy = hsl[3];
                     if (is_legacy) {
-                        return .{ .err = i.newCustomError(css.ParserError.invalid_value) };
+                        return { err: i.newCustomError(css.ParserError.invalid_value) };
                     }
-                    if (i.expectDelim('/').asErr()) |e| return .{ .err = e };
+                    if (e := i.expectDelim('/').asErr()) return { err: e };
                     const alpha = switch (TokenListFns.parse(i, opts, 0)) {
-                        .result => |vv| vv,
-                        .err => |e| return .{ .err = e },
+                        .result vv => vv,
+                        .err e => return { err: e },
                     };
-                    return .{ .result = UnresolvedColor{
-                        .HSL = .{
-                            .h = h,
-                            .s = s,
-                            .l = l,
-                            .alpha = alpha,
+                    return { result: UnresolvedColor{
+                        HSL: {
+                            h: h,
+                            s: s,
+                            l: l,
+                            alpha: alpha,
                         },
                     } };
                 }
             };
             let closure = Closure{
-                .options = options,
-                .parser = &parser,
+                options: options,
+                parser: &parser,
             };
             return input.parseNestedBlock(UnresolvedColor, &closure, Closure.parsefn);
         } else if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(f, "light-dark")) {
@@ -973,25 +979,25 @@ pub const UnresolvedColor = union(enum) {
                 static fn parsefn(c: *@This(), input2: *css.Parser): Result(UnresolvedColor) {
                     // errdefer doesn't fire on `return .{ .err = ... }` — Result(T) is a
                     // tagged union, not an error union. Clean up `light` inline.
-                    let light = switch (input2.parseUntilBefore(css.Delimiters{ .comma = true }, TokenList, c, @This().parsefn2)) {
-                        .result => |vv| vv,
-                        .err => |e| return .{ .err = e },
+                    let light = switch (input2.parseUntilBefore(css.Delimiters{ comma: true }, TokenList, c, @This().parsefn2)) {
+                        .result vv => vv,
+                        .err e => return { err: e },
                     };
-                    if (input2.expectComma().asErr()) |e| {
+                    if (e := input2.expectComma().asErr()) {
                         light.deinit(input2.allocator());
-                        return .{ .err = e };
+                        return { err: e };
                     }
                     const dark = switch (TokenListFns.parse(input2, c.options, 0)) {
-                        .result => |vv| vv,
-                        .err => |e| {
+                        .result vv => vv,
+                        .err e => {
                             light.deinit(input2.allocator());
-                            return .{ .err = e };
+                            return { err: e };
                         },
                     };
-                    return .{ .result = UnresolvedColor{
-                        .light_dark = .{
-                            .light = light,
-                            .dark = dark,
+                    return { result: UnresolvedColor{
+                        light_dark: {
+                            light: light,
+                            dark: dark,
                         },
                     } };
                 }
@@ -1001,28 +1007,28 @@ pub const UnresolvedColor = union(enum) {
                 }
             };
             let closure = Closure{
-                .options = options,
-                .parser = &parser,
+                options: options,
+                parser: &parser,
             };
             return input.parseNestedBlock(UnresolvedColor, &closure, Closure.parsefn);
         } else {
-            return .{ .err = input.newCustomError(css.ParserError.invalid_value) };
+            return { err: input.newCustomError(css.ParserError.invalid_value) };
         }
     }
 
-    pub fn lightDarkOwned(allocator: Allocator, light: UnresolvedColor, dark: UnresolvedColor) UnresolvedColor {
+    static fn lightDarkOwned(allocator: Allocator, light: UnresolvedColor, dark: UnresolvedColor): UnresolvedColor {
         let lightlist = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, 1));
-        bun.handleOom(lightlist.append(allocator, TokenOrValue{ .unresolved_color = light }));
+        bun.handleOom(lightlist.append(allocator, TokenOrValue{ unresolved_color: light }));
         let darklist = bun.handleOom(ArrayList(TokenOrValue).initCapacity(allocator, 1));
-        bun.handleOom(darklist.append(allocator, TokenOrValue{ .unresolved_color = dark }));
+        bun.handleOom(darklist.append(allocator, TokenOrValue{ unresolved_color: dark }));
         return UnresolvedColor{
-            .light_dark = .{
-                .light = css.TokenList{ .v = lightlist },
-                .dark = css.TokenList{ .v = darklist },
+            light_dark: {
+                light: css.TokenList{ v: lightlist },
+                dark: css.TokenList{ v: darklist },
             },
         };
     }
-};
+}
 
 /// A CSS variable reference.
 pub struct Variable {
@@ -1222,7 +1228,7 @@ pub struct EnvironmentVariable {
 }
 
 /// A CSS environment variable name.
-pub const EnvironmentVariableName = union(enum) {
+pub union(enum) EnvironmentVariableName {
     /// A UA-defined environment variable.
     ua: UAEnvironmentVariable,
     /// A custom author-defined environment variable.
@@ -1230,42 +1236,43 @@ pub const EnvironmentVariableName = union(enum) {
     /// An unknown environment variable.
     unknown: CustomIdent,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        const s = _;
+        return css.implementHash(@This(), unsafe { &s }, hasher);
     }
 
-    pub fn parse(input: *css.Parser) Result(EnvironmentVariableName) {
-        if (input.tryParse(UAEnvironmentVariable.parse, .{}).asValue()) |ua| {
-            return .{ .result = .{ .ua = ua } };
+    static fn parse(input: *css.Parser): Result(EnvironmentVariableName) {
+        if (ua := input.tryParse(UAEnvironmentVariable.parse, .{}).asValue()) {
+            return { result: { ua: ua } };
         }
 
-        if (input.tryParse(DashedIdentReference.parseWithOptions, .{
+        if (dashed := input.tryParse(DashedIdentReference.parseWithOptions, .{
             &css.ParserOptions.default(
                 input.allocator(),
                 null,
             ),
-        }).asValue()) |dashed| {
-            return .{ .result = .{ .custom = dashed } };
+        }).asValue()) {
+            return { result: { custom: dashed } };
         }
 
         const ident = switch (CustomIdentFns.parse(input)) {
-            .result => |vv| vv,
-            .err => |e| return .{ .err = e },
+            .result vv => vv,
+            .err e => return { err: e },
         };
-        return .{ .result = .{ .unknown = ident } };
+        return { result: { unknown: ident } };
     }
 
-    pub fn toCss(this: *const @This(), dest: *Printer) PrintErr!void {
-        return switch (this.*) {
-            .ua => |ua| ua.toCss(dest),
-            .custom => |custom| custom.toCss(dest),
-            .unknown => |unknown| CustomIdentFns.toCss(unknown, dest),
+    fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) {
+            .ua ua => ua.toCss(dest),
+            .custom custom => custom.toCss(dest),
+            .unknown unknown => CustomIdentFns.toCss(unknown, dest),
         };
     }
-};
+}
 
 /// A UA-defined environment variable name.
 pub enum UAEnvironmentVariable {
@@ -1345,7 +1352,7 @@ pub struct Function {
 }
 
 /// A raw CSS token, or a parsed value.
-pub const TokenOrValue = union(enum) {
+pub union(enum) TokenOrValue {
     /// A token.
     token: css.Token,
     /// A parsed CSS color.
@@ -1373,34 +1380,35 @@ pub const TokenOrValue = union(enum) {
     /// An animation name.
     animation_name: AnimationName,
 
-    pub fn eql(lhs: *const TokenOrValue, rhs: *const TokenOrValue) bool {
+    static fn eql(lhs: *const TokenOrValue, rhs: *const TokenOrValue): bool {
         return css.implementEql(TokenOrValue, lhs, rhs);
     }
 
-    pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-        return css.implementHash(@This(), this, hasher);
+    fn hash(hasher: *std.hash.Wyhash) {
+        const s = _;
+        return css.implementHash(@This(), unsafe { &s }, hasher);
     }
 
-    pub fn deepClone(this: *const TokenOrValue, allocator: Allocator) TokenOrValue {
-        return switch (this.*) {
-            .token => this.*,
-            .color => |*color| .{ .color = color.deepClone(allocator) },
-            .unresolved_color => |*color| .{ .unresolved_color = color.deepClone(allocator) },
-            .url => this.*,
-            .@"var" => |*@"var"| .{ .@"var" = @"var".deepClone(allocator) },
-            .env => |*env| .{ .env = env.deepClone(allocator) },
-            .function => |*f| .{ .function = f.deepClone(allocator) },
-            .length => this.*,
-            .angle => this.*,
-            .time => this.*,
-            .resolution => this.*,
-            .dashed_ident => this.*,
-            .animation_name => this.*,
+    fn deepClone(allocator: Allocator): TokenOrValue {
+        return switch (_) {
+            .token => _,
+            .color => |*color| TokenOrValue{ color: color.deepClone(allocator) },
+            .unresolved_color => |*color| TokenOrValue{ unresolved_color: color.deepClone(allocator) },
+            .url => _,
+            .@"var" => |*@"var"| TokenOrValue{ @"var": @"var".deepClone(allocator) },
+            .env => |*env| TokenOrValue{ env: env.deepClone(allocator) },
+            .function => |*f| TokenOrValue{ function: f.deepClone(allocator) },
+            .length => _,
+            .angle => _,
+            .time => _,
+            .resolution => _,
+            .dashed_ident => _,
+            .animation_name => _,
         };
     }
 
-    pub fn deinit(this: *TokenOrValue, allocator: Allocator) void {
-        return switch (this.*) {
+    fn deinit(*_, allocator: Allocator) {
+        return switch (_.*) {
             .token => {},
             .color => |*color| color.deinit(allocator),
             .unresolved_color => |*color| color.deinit(allocator),
@@ -1417,13 +1425,13 @@ pub const TokenOrValue = union(enum) {
         };
     }
 
-    pub fn isWhitespace(self: *const TokenOrValue) bool {
-        switch (self.*) {
-            .token => |tok| return tok == .whitespace,
+    fn isWhitespace(): bool {
+        switch (_) {
+            .token tok => return tok == .whitespace,
             else => return false,
         }
     }
-};
+}
 
 /// A known property with an unparsed value.
 ///
@@ -1522,40 +1530,40 @@ pub struct CustomProperty {
 }
 
 /// A CSS custom property name.
-pub const CustomPropertyName = union(enum) {
+pub union(enum) CustomPropertyName {
     /// An author-defined CSS custom property.
     custom: DashedIdent,
     /// An unknown CSS property.
     unknown: Ident,
 
-    pub fn toCss(this: *const CustomPropertyName, dest: *Printer) PrintErr!void {
-        return switch (this.*) {
-            .custom => |custom| try custom.toCss(dest),
-            .unknown => |unknown| css.serializer.serializeIdentifier(unknown.v, dest) catch return dest.addFmtError(),
+    fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) {
+            .custom custom => custom.toCss(dest)?,
+            .unknown unknown => css.serializer.serializeIdentifier(unknown.v, dest) catch return dest.addFmtError(),
         };
     }
 
-    pub fn fromStr(name: []const u8) CustomPropertyName {
-        if (bun.strings.startsWith(name, "--")) return .{ .custom = .{ .v = name } };
-        return .{ .unknown = .{ .v = name } };
+    static fn fromStr(name: []const u8): CustomPropertyName {
+        if (bun.strings.startsWith(name, "--")) return { custom: { v: name } };
+        return { unknown: { v: name } };
     }
 
-    pub fn asStr(self: *const CustomPropertyName) []const u8 {
-        switch (self.*) {
-            .custom => |custom| return custom.v,
-            .unknown => |unknown| return unknown.v,
+    fn asStr(): []const u8 {
+        switch (_) {
+            .custom custom => return custom.v,
+            .unknown unknown => return unknown.v,
         }
     }
 
-    pub fn deepClone(allocator: Allocator): @This() {
+    fn deepClone(allocator: Allocator): @This() {
         const s = _;
         return css.implementDeepClone(@This(), unsafe { &s }, allocator);
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
-};
+}
 
 pub fn tryParseColorToken(f: []const u8, state: *const css.ParserState, input: *css.Parser): CssColor? {
     // css.todo_stuff.match_ignore_ascii_case

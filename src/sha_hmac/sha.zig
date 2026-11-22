@@ -4,7 +4,6 @@
 const std = @import("std");
 const string = []const u8;
 
-const BoringSSL = bun.BoringSSL.c;
 pub const bun = @import("bun");
 pub const EVP = struct {
     pub const SHA1 = NewEVP(std.crypto.hash.Sha1.digest_length, "EVP_sha1");
@@ -18,6 +17,17 @@ pub const EVP = struct {
     pub const MD5_SHA1 = NewEVP(std.crypto.hash.Sha1.digest_length, "EVP_md5_sha1");
     pub const Blake2 = NewEVP((256 / 8), "EVP_blake2b256");
 };
+
+pub const Hashers = struct {
+    pub const SHA1 = NewHasher(std.crypto.hash.Sha1.digest_length, BoringSSL.SHA_CTX, BoringSSL.SHA1, BoringSSL.SHA1_Init, BoringSSL.SHA1_Update, BoringSSL.SHA1_Final);
+    pub const SHA512 = NewHasher(std.crypto.hash.sha2.Sha512.digest_length, BoringSSL.SHA512_CTX, BoringSSL.SHA512, BoringSSL.SHA512_Init, BoringSSL.SHA512_Update, BoringSSL.SHA512_Final);
+    pub const SHA384 = NewHasher(std.crypto.hash.sha2.Sha384.digest_length, BoringSSL.SHA512_CTX, BoringSSL.SHA384, BoringSSL.SHA384_Init, BoringSSL.SHA384_Update, BoringSSL.SHA384_Final);
+    pub const SHA256 = NewHasher(std.crypto.hash.sha2.Sha256.digest_length, BoringSSL.SHA256_CTX, BoringSSL.SHA256, BoringSSL.SHA256_Init, BoringSSL.SHA256_Update, BoringSSL.SHA256_Final);
+    pub const SHA512_256 = NewHasher(std.crypto.hash.sha2.Sha512T256.digest_length, BoringSSL.SHA512_CTX, BoringSSL.SHA512_256, BoringSSL.SHA512_256_Init, BoringSSL.SHA512_256_Update, BoringSSL.SHA512_256_Final);
+    pub const RIPEMD160 = NewHasher(BoringSSL.RIPEMD160_DIGEST_LENGTH, BoringSSL.RIPEMD160_CTX, BoringSSL.RIPEMD160, BoringSSL.RIPEMD160_Init, BoringSSL.RIPEMD160_Update, BoringSSL.RIPEMD160_Final);
+};
+
+const BoringSSL = bun.BoringSSL.c;
 pub const SHA1 = EVP.SHA1;
 pub const MD5 = EVP.MD5;
 pub const MD4 = EVP.MD4;
@@ -27,14 +37,6 @@ pub const SHA384 = EVP.SHA384;
 pub const SHA256 = EVP.SHA256;
 pub const SHA512_256 = EVP.SHA512_256;
 pub const MD5_SHA1 = EVP.MD5_SHA1;
-pub const Hashers = struct {
-    pub const SHA1 = NewHasher(std.crypto.hash.Sha1.digest_length, BoringSSL.SHA_CTX, BoringSSL.SHA1, BoringSSL.SHA1_Init, BoringSSL.SHA1_Update, BoringSSL.SHA1_Final);
-    pub const SHA512 = NewHasher(std.crypto.hash.sha2.Sha512.digest_length, BoringSSL.SHA512_CTX, BoringSSL.SHA512, BoringSSL.SHA512_Init, BoringSSL.SHA512_Update, BoringSSL.SHA512_Final);
-    pub const SHA384 = NewHasher(std.crypto.hash.sha2.Sha384.digest_length, BoringSSL.SHA512_CTX, BoringSSL.SHA384, BoringSSL.SHA384_Init, BoringSSL.SHA384_Update, BoringSSL.SHA384_Final);
-    pub const SHA256 = NewHasher(std.crypto.hash.sha2.Sha256.digest_length, BoringSSL.SHA256_CTX, BoringSSL.SHA256, BoringSSL.SHA256_Init, BoringSSL.SHA256_Update, BoringSSL.SHA256_Final);
-    pub const SHA512_256 = NewHasher(std.crypto.hash.sha2.Sha512T256.digest_length, BoringSSL.SHA512_CTX, BoringSSL.SHA512_256, BoringSSL.SHA512_256_Init, BoringSSL.SHA512_256_Update, BoringSSL.SHA512_256_Final);
-    pub const RIPEMD160 = NewHasher(BoringSSL.RIPEMD160_DIGEST_LENGTH, BoringSSL.RIPEMD160_CTX, BoringSSL.RIPEMD160, BoringSSL.RIPEMD160_Init, BoringSSL.RIPEMD160_Update, BoringSSL.RIPEMD160_Final);
-};
 const boring = .{ Hashers.SHA1, Hashers.SHA512, Hashers.SHA384, Hashers.SHA256, Hashers.SHA512_256, void, void };
 const zig = .{ std.crypto.hash.Sha1, std.crypto.hash.sha2.Sha512, std.crypto.hash.sha2.Sha384, std.crypto.hash.sha2.Sha256, std.crypto.hash.sha2.Sha512T256, std.crypto.hash.blake2.Blake2b256, std.crypto.hash.Blake3 };
 const evp = .{ EVP.SHA1, EVP.SHA512, EVP.SHA384, EVP.SHA256, EVP.SHA512_256, EVP.Blake2, void };

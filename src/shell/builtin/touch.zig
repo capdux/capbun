@@ -62,6 +62,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const interpreter = @import("../interpreter.zig");
@@ -91,6 +99,13 @@ pub const ExecState = struct {
     started_output_queue: bool = false,
     args: []const [*:0]const u8,
     err: ?jsc.SystemError = null,
+};
+
+pub const State = union(enum) {
+    idle: void,
+    exec: ExecState,
+    waiting_write_err: void,
+    done: void,
 };
 
 pub const Opts = struct {
@@ -158,6 +173,131 @@ return .{ .illegal_option = smallflags[(1 + i)..] };
     }
 };
 
+pub const ShellTouchTask = struct {
+    touch: *Touch,
+    opts: Opts,
+    filepath: [:0]const u8,
+    cwd_path: [:0]const u8,
+    err: ?jsc.SystemError = null,
+    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    event_loop: jsc.EventLoopHandle,
+    concurrent_task: jsc.EventLoopTask,
+
+pub fn format(self: ShellTouchTask, writer: anytype) !void {
+            _ = try writer.print("ShellTouchTask(0x{x}, filepath={s})", .{ (blk: {
+            break :blk @intFromPtr((&self));
+
+}), self.filepath });
+    }
+
+pub fn deinit(self: *ShellTouchTask) void {
+            if (self.err) |e| {
+                _ = &e;
+                var err_obj = e;
+                _ = &err_obj;
+                _ = err_obj.deref();
+            }
+            _ = bun.default_allocator.destroy(self);
+    }
+
+pub fn create(touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellTouchTask {
+            var task = bun.handleOom(bun.default_allocator.create(ShellTouchTask));
+            _ = &task;
+            task.* = ShellTouchTask{ .touch = touch, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .event_loop = touch.bltn().eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(touch.bltn().eventLoop()) };
+            return task;
+    }
+
+pub fn schedule(self: *ShellTouchTask) void {
+            _ = debug("{f} schedule", .{ self });
+            _ = WorkPool.schedule((&self.task));
+    }
+
+pub fn runFromMainThread(self: *ShellTouchTask) void {
+            _ = debug("{f} runFromJS", .{ self });
+            _ = self.touch.onShellTouchTaskDone(self);
+    }
+
+pub fn runFromMainThreadMini(self: *ShellTouchTask, _: *void) void {
+            _ = self.runFromMainThread();
+    }
+
+pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
+            var task_self: *ShellTouchTask = @fieldParentPtr("task", task);
+            _ = &task_self;
+            _ = debug("{f} runFromThreadPool", .{ task_self });
+            var filepath: [:0]const u8 = task_self.filepath;
+            _ = &filepath;
+            if ((!ResolvePath.Platform.auto.isAbsolute(task_self.filepath))) {
+                const parts: [2][]const u8 = .{ task_self.cwd_path[0..], task_self.filepath[0..] };
+                filepath = ResolvePath.joinZ((&parts), .auto);
+            }
+            var node_fs = jsc.Node.fs.NodeFS{  };
+            _ = &node_fs;
+            const milliseconds: f64 = @floatFromInt(std.time.milliTimestamp());
+            const atime: jsc.Node.TimeLike = (if (bun.Environment.isWindows) (milliseconds / 1000.0) else jsc.Node.TimeLike{ .sec = @intFromFloat(@divFloor(milliseconds, std.time.ms_per_s)), .nsec = @intFromFloat((@mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms)) });
+            const mtime = atime;
+            const args = jsc.Node.fs.Arguments.Utimes{ .atime = atime, .mtime = mtime, .path = .{ .string = bun.PathString.init(filepath) } };
+            if (node_fs.utimes(args, .sync).asErr()) |err_| {
+                _ = &err_;
+                if ((err_.getErrno() == .NOENT)) {
+                    const perm: i32 = 436;
+                    switch (Syscall.open(filepath, (bun.O.CREAT | bun.O.WRONLY), perm)) {
+.result => |fd| {
+_ = fd.close();
+},
+.err => |e| {
+task_self.err = e.withPath(filepath).toShellSystemError();
+},
+}
+                } else {
+                    task_self.err = err_.withPath(filepath).toShellSystemError();
+                }
+            }
+            if ((task_self.event_loop == .js)) {
+                _ = task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
+            } else {
+                _ = task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
+            }
+    }
+};
+
+pub const ShellTouchOutputTaskVTable = struct {
+
+pub fn writeErr(parent: *Touch, childptr: anytype, errbuf: []const u8) ?Yield {
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stderr.needsIO()) |safeguard| {
+                _ = &safeguard;
+                return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
+            }
+            _ = parent.bltn().writeNoIO(.stderr, errbuf);
+            return null;
+    }
+
+pub fn onWriteErr(parent: *Touch) void {
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
+    }
+
+pub fn writeOut(parent: *Touch, childptr: anytype, output: *OutputSrc) ?Yield {
+            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
+            if (parent.bltn().stdout.needsIO()) |safeguard| {
+                _ = &safeguard;
+                const slice = output.slice();
+                _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
+                return parent.bltn().stdout.enqueue(childptr, slice, safeguard);
+            }
+            _ = parent.bltn().writeNoIO(.stdout, output.slice());
+            return null;
+    }
+
+pub fn onWriteOut(parent: *Touch) void {
+            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
+    }
+
+pub fn onDone(parent: *Touch) Yield {
+            return parent.next();
+    }
+};
+
 pub const Touch = @This();
 
 opts: Opts = .{},
@@ -217,7 +357,7 @@ var exec = (&self.state.exec);
             return .suspended;
         }
         exec.started = true;
-        exec.tasks_count = exec.args.len;
+        exec.tasks_count = bun.len(exec.args);
         for (cp_iter_slice(exec.args)) |dir_to_mk_| {
             _ = &dir_to_mk_;
             const dir_to_mk = dir_to_mk_[0..std.mem.len(dir_to_mk_) :0];
@@ -313,130 +453,4 @@ const ExitCode = shell.ExitCode;
 const Yield = bun.shell.Yield;
 const debug = bun.Output.scoped(.ShellTouch, .hidden);
 const log = debug;
-pub const State = union(enum) {
-    idle,
-    exec: ExecState,
-    waiting_write_err,
-    done,
-};
-pub const ShellTouchTask = struct {
-    touch: *Touch,
-    opts: Opts,
-    filepath: [:0]const u8,
-    cwd_path: [:0]const u8,
-    err: ?jsc.SystemError = null,
-    task: jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
-    event_loop: jsc.EventLoopHandle,
-    concurrent_task: jsc.EventLoopTask,
-
-pub fn format(self: *const @This(), writer: anytype) !void {
-            _ = try writer.print("ShellTouchTask(0x{x}, filepath={s})", .{ @intFromPtr(self), self.filepath });
-    }
-
-pub fn deinit(self: *@This()) void {
-            if (self.err) |e| {
-                _ = &e;
-                var err_obj = e;
-                _ = &err_obj;
-                _ = err_obj.deref();
-            }
-            _ = bun.default_allocator.destroy(self);
-    }
-
-pub fn create(touch: *Touch, opts: Opts, filepath: [:0]const u8, cwd_path: [:0]const u8) *ShellTouchTask {
-            var task = bun.handleOom(bun.default_allocator.create(ShellTouchTask));
-            _ = &task;
-            task.* = ShellTouchTask{ .touch = touch, .opts = opts, .cwd_path = cwd_path, .filepath = filepath, .event_loop = touch.bltn().eventLoop(), .concurrent_task = jsc.EventLoopTask.fromEventLoop(touch.bltn().eventLoop()) };
-            return task;
-    }
-
-pub fn schedule(self: *@This()) void {
-            _ = debug("{f} schedule", .{ self });
-            _ = WorkPool.schedule((&self.task));
-    }
-
-pub fn runFromMainThread(self: *@This()) void {
-            _ = debug("{f} runFromJS", .{ self });
-            _ = self.touch.onShellTouchTaskDone(self);
-    }
-
-pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
-            _ = self.runFromMainThread();
-    }
-
-pub fn runFromThreadPool(task: *jsc.WorkPoolTask) void {
-            var task_self: *ShellTouchTask = @fieldParentPtr("task", task);
-            _ = &task_self;
-            _ = debug("{f} runFromThreadPool", .{ task_self });
-            var filepath: [:0]const u8 = task_self.filepath;
-            _ = &filepath;
-            if ((!ResolvePath.Platform.auto.isAbsolute(task_self.filepath))) {
-                const parts: [2][]const u8 = .{ task_self.cwd_path[0..], task_self.filepath[0..] };
-                filepath = ResolvePath.joinZ((&parts), .auto);
-            }
-            var node_fs = jsc.Node.fs.NodeFS{  };
-            _ = &node_fs;
-            const milliseconds: f64 = @floatFromInt(std.time.milliTimestamp());
-            const atime: jsc.Node.TimeLike = (if (bun.Environment.isWindows) (milliseconds / 1000.0) else jsc.Node.TimeLike{ .sec = @intFromFloat(@divFloor(milliseconds, std.time.ms_per_s)), .nsec = @intFromFloat((@mod(milliseconds, std.time.ms_per_s) * std.time.ns_per_ms)) });
-            const mtime = atime;
-            const args = jsc.Node.fs.Arguments.Utimes{ .atime = atime, .mtime = mtime, .path = .{ .string = bun.PathString.init(filepath) } };
-            if (node_fs.utimes(args, .sync).asErr()) |err_| {
-                _ = &err_;
-                if ((err_.getErrno() == .NOENT)) {
-                    const perm: i32 = 436;
-                    switch (Syscall.open(filepath, (bun.O.CREAT | bun.O.WRONLY), perm)) {
-.result => |fd| {
-_ = fd.close();
-},
-.err => |e| {
-task_self.err = e.withPath(filepath).toShellSystemError();
-},
-}
-                } else {
-                    task_self.err = err_.withPath(filepath).toShellSystemError();
-                }
-            }
-            if ((task_self.event_loop == .js)) {
-                _ = task_self.event_loop.js.enqueueTaskConcurrent(task_self.concurrent_task.js.@"from"(task_self, .manual_deinit));
-            } else {
-                _ = task_self.event_loop.mini.enqueueTaskConcurrent(task_self.concurrent_task.mini.@"from"(task_self, "runFromMainThreadMini"));
-            }
-    }
-};
-const ShellTouchOutputTaskVTable = struct {
-
-pub fn writeErr(parent: *Touch, childptr: anytype, errbuf: []const u8) ?Yield {
-            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
-            if (parent.bltn().stderr.needsIO()) |safeguard| {
-                _ = &safeguard;
-                return parent.bltn().stderr.enqueue(childptr, errbuf, safeguard);
-            }
-            _ = parent.bltn().writeNoIO(.stderr, errbuf);
-            return null;
-    }
-
-pub fn onWriteErr(parent: *Touch) void {
-            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
-    }
-
-pub fn writeOut(parent: *Touch, childptr: anytype, output: *OutputSrc) ?Yield {
-            parent.state.exec.output_waiting = (parent.state.exec.output_waiting + 1);
-            if (parent.bltn().stdout.needsIO()) |safeguard| {
-                _ = &safeguard;
-                const slice = output.slice();
-                _ = log("THE SLICE: {d} {s}", .{ slice.len, slice });
-                return parent.bltn().stdout.enqueue(childptr, slice, safeguard);
-            }
-            _ = parent.bltn().writeNoIO(.stdout, output.slice());
-            return null;
-    }
-
-pub fn onWriteOut(parent: *Touch) void {
-            parent.state.exec.output_done = (parent.state.exec.output_done + 1);
-    }
-
-pub fn onDone(parent: *Touch) Yield {
-            return parent.next();
-    }
-};
 pub const ShellTouchOutputTask = OutputTask(Touch, .{ .writeErr = ShellTouchOutputTaskVTable.writeErr, .onWriteErr = ShellTouchOutputTaskVTable.onWriteErr, .writeOut = ShellTouchOutputTaskVTable.writeOut, .onWriteOut = ShellTouchOutputTaskVTable.onWriteOut, .onDone = ShellTouchOutputTaskVTable.onDone });

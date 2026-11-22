@@ -25,13 +25,21 @@ pub inline fn call(s: *us_socket_t, comptime f: anytype, extra: anytype) void {
     }
 
 pub fn on_open(s: *us_socket_t, is_client: c_int, ip: [*c]u8, ip_len: c_int) callconv(.c) ?*us_socket_t {
-            const ip_slice: []const u8 = (if ((@intFromPtr(ip) != 0)) ip[0..@intCast(ip_len)] else "");
+            var ip_slice: []const u8 = "";
+            _ = &ip_slice;
+            {
+                if ((@intFromPtr(ip) != 0)) {
+                    ip_slice = ip[0..@intCast(ip_len)];
+                }
+            }
             _ = call(s, H.onOpen, .{ (is_client != 0), ip_slice });
             return s;
     }
 
 pub fn on_data(s: *us_socket_t, data: [*c]u8, len: c_int) callconv(.c) ?*us_socket_t {
-            _ = call(s, H.onData, .{ data[0..@intCast(len)] });
+            {
+                _ = call(s, H.onData, .{ data[0..@intCast(len)] });
+            }
             return s;
     }
 
@@ -75,8 +83,8 @@ pub fn on_connecting_error(cs: *ConnectingSocket, code: c_int) callconv(.c) ?*Co
             return cs;
     }
 
-pub fn on_handshake(s: *us_socket_t, ok: c_int, err: bun.uws.us_bun_verify_error_t, _: ?*anyopaque) callconv(.c) void {
-            _ = call(s, H.onHandshake, .{ (ok != 0), err });
+pub fn on_handshake(s: *us_socket_t, ok: c_int, verify_err: bun.uws.us_bun_verify_error_t, _: ?*anyopaque) callconv(.c) void {
+            _ = call(s, H.onHandshake, .{ (ok != 0), verify_err });
     }
 };
 }

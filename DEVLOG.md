@@ -1643,3 +1643,9 @@
 - `FrameworkRouter.cp`：空结构体（如 `EncodedPatternEffectiveURLContext`）上的 `hash`/`eql` 实例方法若未引用 `_`，`cpc` 会生成无 `self` 的静态函数导致 `std.ArrayHashMap` 报错；须在函数体内 `const _ctx = _; * = _ctx;` 显式保留接收者形参。
 - `bundle_v2.cp`：`pub union(enum)` 内的 `switch` 分支不可写 `.css *c =>` 或 `inline else *r =>`（`cpc` 语法不接受 `*` 前缀捕获），须写为 `.css c =>` 或显式列出各分支；`Chunk.cp` 中 `writer.print("[", [])` 须改为 `writer.writeAll("[")` 避免 `[]` 被生成成 `&.{}`。
 - `c_ares.cp`：`@c pub struct struct_hostent` 内不应嵌入 `comptime` 类型构造子 `Sig = struct { ... }`，应将其提升至模块顶层再以 `pub const` 引用，确保 `extern struct` 完整闭合生成。
+
+### [2026-11-22 Wave #39~#46] 结构体/联合体纯 CP 化与全仓 `zig:check` 闭环经验
+- **返回值错误联合写法**：无载荷错误返回统一使用 `: Err!void`（避免 `: !Err` 被生成为 `anyerror!Err`）。
+- **`@opaque` 结构体方法**：不透明类型不可按值传递，只读/可变方法需使用 `*_` 或 `static fn(..., self: *const T)`。
+- **匿名嵌套提炼与 `pub` 别名**：提炼嵌套结构体/枚举至模块顶层后，父类型内必须保留 `pub const Sub = _Sub;` 以维持跨模块可见性；空状态 Hash/Eql 上下文需保留 `const _ctx = _; * = _ctx;`。
+- **`[]const [*:0]const u8` 长度读取**：使用 `bun.len(slice)` 规避 `cpc` 将 `.len` 误转为 `std.mem.span(slice).len`。

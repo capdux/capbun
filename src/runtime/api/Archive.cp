@@ -5,12 +5,14 @@ const jsc = bun.jsc;
 
 type PatternList = []const string;
 
-pub const Compression = union(enum) {
-    none,
-    gzip: struct {
-        level: u8 = 6,
-    },
-};
+pub struct CompressionGzip {
+    level: u8 = 6,
+}
+
+pub union(enum) Compression {
+    none: void,
+    gzip: CompressionGzip,
+}
 
 struct ArchiveReader {
     handle: *libarchive.lib.Archive,
@@ -360,7 +362,7 @@ fn extractToDiskFiltered(
     return count;
 }
 
-const PromiseResult = union(enum) {
+union(enum) PromiseResult {
     resolve: jsc.JSValue,
     reject: jsc.JSValue,
 
@@ -370,7 +372,7 @@ const PromiseResult = union(enum) {
             .reject => |v| promise.rejectWithAsyncStack(globalThis, v)?,
         }
     }
-};
+}
 
 /// Generic async task that handles all the boilerplate for thread pool tasks.
 /// Context must provide:
@@ -438,11 +440,15 @@ fn AsyncTask(comptime Context: type): type {
     };
 }
 
+const ExtractReadErr = error{ReadError};
+
+union(enum) ExtractResult {
+    success: u32,
+    @"err": ExtractReadErr,
+}
+
 struct ExtractContext {
-    const Result = union(enum) {
-        success: u32,
-        @"err": error{ReadError},
-    };
+    const Result = ExtractResult;
 
     store: *jsc.WebCore.Blob.Store,
     path: []const u8,
@@ -512,14 +518,18 @@ fn startExtractTask(
     return promise_js;
 }
 
+enum BlobOutputType { blob, bytes }
+
+union(enum) BlobResult {
+    compressed: []u8,
+    uncompressed: void,
+    @"err": anyerror,
+}
+
 struct BlobContext {
-    const OutputType = enum { blob, bytes };
+    const OutputType = BlobOutputType;
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
-    const Result = union(enum) {
-        compressed: []u8,
-        uncompressed: void,
-        @"err": anyerror,
-    };
+    const Result = BlobResult;
 
     store: *jsc.WebCore.Blob.Store,
     compress: Compression,
@@ -582,17 +592,21 @@ fn startBlobTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store
     return promise_js;
 }
 
+union(enum) WriteResult {
+    success: void,
+    @"err": anyerror,
+    sys_err: bun.sys.Error,
+}
+
+union(enum) WriteData {
+    owned: []u8,
+    store: *jsc.WebCore.Blob.Store,
+}
+
 struct WriteContext {
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
-    const Result = union(enum) {
-        success: void,
-        @"err": anyerror,
-        sys_err: bun.sys.Error,
-    };
-    const Data = union(enum) {
-        owned: []u8,
-        store: *jsc.WebCore.Blob.Store,
-    };
+    const Result = WriteResult;
+    const Data = WriteData;
 
     data: Data,
     path: [:0]const u8,
@@ -697,23 +711,31 @@ struct FileEntryListGuard {
     }
 }
 
-struct FilesContext {
-    const FileEntry = struct { path: []u8, data: []u8, mtime: i64 };
-    const FileEntryList = std.ArrayList(FileEntry);
-    const FilesErr = error{ OutOfMemory, ReadError };
-    const Result = union(enum) {
-        success: FileEntryList,
-        libarchive_err: [*:0]u8,
-        @"err": FilesErr,
+struct ArchiveFileEntry { path: []u8, data: []u8, mtime: i64 }
 
-        fn deinit(*_) {
-            switch (_.*) {
-                .libarchive_err => |s| bun.default_allocator.free(std.mem.span(s)),
-                .success => |*list| freeEntries(list),
-                .err => {},
-            }
+type ArchiveFileEntryList = std.ArrayList(ArchiveFileEntry);
+
+const ArchiveFilesErr = error{ OutOfMemory, ReadError };
+
+union(enum) ArchiveFilesResult {
+    success: ArchiveFileEntryList,
+    libarchive_err: [*:0]u8,
+    @"err": ArchiveFilesErr,
+
+    fn deinit(*_) {
+        switch (_.*) {
+            .libarchive_err => |s| bun.default_allocator.free(std.mem.span(s)),
+            .success => |*list| FilesContext.freeEntries(list),
+            .err => {},
         }
-    };
+    }
+}
+
+struct FilesContext {
+    const FileEntry = ArchiveFileEntry;
+    const FileEntryList = ArchiveFileEntryList;
+    const FilesErr = ArchiveFilesErr;
+    const Result = ArchiveFilesResult;
 
     static fn freeEntries(list: *FileEntryList) {
         for (e of list.items) {

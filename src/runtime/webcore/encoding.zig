@@ -90,16 +90,17 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const BunString = bun.String;
-const Allocator = std.mem.Allocator;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const Encoding = jsc.Node.Encoding;
 pub const Types = struct {
     pub const U16Slice = []align(1) u16;
     pub const U16SliceAligned = []u16;
     pub const U16Ptr = [*]align(1) u16;
 };
+
+const BunString = bun.String;
+const Allocator = std.mem.Allocator;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const Encoding = jsc.Node.Encoding;
 var empty_u8: [0]u8 = undefined;
 
 pub export fn Bun__encoding__writeLatin1(input: [*]const u8, len: usize, to: [*]u8, to_len: usize, encoding: u8) callconv(.c) usize {

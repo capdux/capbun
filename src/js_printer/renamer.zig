@@ -111,6 +111,123 @@ pub fn __cp_deinit(self: *NumberScopePoolGuard) void {
     }
 };
 
+pub const NoOpRenamer = struct {
+    symbols: js_ast.Symbol.Map,
+    source: *const logger.Source,
+
+pub fn init(symbols: js_ast.Symbol.Map, source: *const logger.Source) NoOpRenamer {
+            return NoOpRenamer{ .symbols = symbols, .source = source };
+    }
+
+pub fn nameForSymbol(self: *const NoOpRenamer, symbol_ref: Ref) []const u8 {
+            if (symbol_ref.isSourceContentsSlice()) {
+                return self.source.contents[symbol_ref.sourceIndex()..(symbol_ref.sourceIndex() + symbol_ref.innerIndex())];
+            }
+            const resolved = self.symbols.follow(symbol_ref);
+            if (self.symbols.getConst(resolved)) |symbol| {
+                _ = &symbol;
+                return symbol.original_name;
+            } else {
+                _ = Output.panic("Invalid symbol {f} in {s}", .{ symbol_ref, self.source.path.text });
+            }
+    }
+
+pub fn toRenamer(self: *NoOpRenamer) Renamer {
+            return .{ .NoOpRenamer = (blk: {
+            break :blk self;
+
+}) };
+    }
+    pub const originalName = nameForSymbol;
+};
+
+pub const Renamer = union(enum) {
+    NumberRenamer: *NumberRenamer,
+    NoOpRenamer: *NoOpRenamer,
+    MinifyRenamer: *MinifyRenamer,
+
+pub fn symbols(self: Renamer) js_ast.Symbol.Map {
+            return (switch (self) {
+inline else => |r| r.symbols,
+});
+    }
+
+pub fn nameForSymbol(self: *const Renamer, symbol_ref: Ref) []const u8 {
+            return (switch (self.*) {
+inline else => |r| r.nameForSymbol(symbol_ref),
+});
+    }
+
+pub fn originalName(self: *const Renamer, symbol_ref: Ref) ?[]const u8 {
+            return (switch (self.*) {
+inline else => |r| r.originalName(symbol_ref),
+});
+    }
+
+pub fn deinit(self: Renamer, allocator: std.mem.Allocator) void {
+            switch (self) {
+.NumberRenamer => |r| {
+_ = r.deinit();
+},
+.MinifyRenamer => |r| {
+_ = r.deinit(allocator);
+},
+else => {
+
+},
+}
+    }
+};
+
+pub const InlineString = struct {
+    bytes: [15]u8 = std.mem.zeroes([15]u8),
+    len: u8 = 0,
+
+pub fn init(str: []const u8) InlineString {
+            var out: InlineString = .{};
+            _ = &out;
+            out.len = @as(u8, @intCast(@min(str.len, 15)));
+            var i: usize = 0;
+            _ = &i;
+            while ((i < out.len)) {
+                out.bytes[cp_cast_int(usize, i)] = str[@as(usize, @intCast(i))];
+                i = (i + 1);
+            }
+            return out;
+    }
+
+pub fn slice(self: *InlineString) []const u8 {
+            return self.bytes[0..self.len];
+    }
+};
+
+pub const TinyString = union(enum) {
+    inline_string: InlineString,
+    string: []const u8,
+
+pub fn init(input: []const u8, allocator: std.mem.Allocator) !TinyString {
+            if ((input.len <= 15)) {
+                return TinyString{ .inline_string = InlineString.init(input) };
+            } else {
+                return TinyString{ .string = try allocator.dupe(u8, input) };
+            }
+    }
+
+pub fn slice(self: *TinyString) []const u8 {
+            return (switch (self.*) {
+.inline_string => self.inline_string.slice(),
+.string => self.string,
+});
+    }
+};
+
+pub const SymbolSlot = struct {
+    name: TinyString = TinyString{ .string = "" },
+    count: u32 = 0,
+    needs_capital_for_jsx: bool = false,
+    pub const List = std.EnumArray(js_ast.Symbol.SlotNamespace, std.array_list.Managed(SymbolSlot));
+};
+
 pub const MinifyRenamer = struct {
     reserved_names: bun.StringHashMapUnmanaged(u32),
     allocator: std.mem.Allocator,
@@ -308,6 +425,45 @@ else => {
             }
     }
     pub const TopLevelSymbolSlotMap = std.HashMapUnmanaged(Ref, usize, RefCtx, 80);
+};
+
+pub const StableSymbolCount = struct {
+    stable_source_index: u32,
+    ref: Ref,
+    count: u32,
+
+pub fn lessThan(_: void, i: StableSymbolCount, j: StableSymbolCount) bool {
+            if ((i.count > j.count)) {
+                return true;
+            }
+            if ((i.count < j.count)) {
+                return false;
+            }
+            if ((i.stable_source_index < j.stable_source_index)) {
+                return true;
+            }
+            if ((i.stable_source_index > j.stable_source_index)) {
+                return false;
+            }
+            return (i.ref.innerIndex() < j.ref.innerIndex());
+    }
+    pub const Array = std.array_list.Managed(StableSymbolCount);
+};
+
+pub const SlotAndCount = packed struct(u64) {
+    slot: u32,
+    count: u32,
+
+pub fn lessThan(_: void, a: SlotAndCount, b: SlotAndCount) bool {
+            if ((a.count > b.count)) {
+                return true;
+            }
+            if ((a.count < b.count)) {
+                return false;
+            }
+            return (a.slot < b.slot);
+    }
+    pub const Array = std.array_list.Managed(SlotAndCount);
 };
 
 pub const NameUse = union(enum) {
@@ -635,150 +791,6 @@ pub fn nameForSymbol(self: *NumberRenamer, sym_ref: Ref) []const u8 {
     }
 };
 
-pub const NoOpRenamer = struct {
-    symbols: js_ast.Symbol.Map,
-    source: *const logger.Source,
-
-pub fn init(symbols: js_ast.Symbol.Map, source: *const logger.Source) NoOpRenamer {
-            return NoOpRenamer{ .symbols = symbols, .source = source };
-    }
-
-pub fn nameForSymbol(renamer: *NoOpRenamer, symbol_ref: Ref) []const u8 {
-            if (symbol_ref.isSourceContentsSlice()) {
-                return renamer.source.contents[symbol_ref.sourceIndex()..(symbol_ref.sourceIndex() + symbol_ref.innerIndex())];
-            }
-            const resolved = renamer.symbols.follow(symbol_ref);
-            if (renamer.symbols.getConst(resolved)) |symbol| {
-                _ = &symbol;
-                return symbol.original_name;
-            } else {
-                _ = Output.panic("Invalid symbol {f} in {s}", .{ symbol_ref, renamer.source.path.text });
-            }
-    }
-
-pub fn toRenamer(self: *@This()) Renamer {
-            return .{ .NoOpRenamer = self };
-    }
-    pub const originalName = nameForSymbol;
-};
-pub const Renamer = union(enum) {
-    NumberRenamer: *NumberRenamer,
-    NoOpRenamer: *NoOpRenamer,
-    MinifyRenamer: *MinifyRenamer,
-
-pub fn symbols(self: @This()) js_ast.Symbol.Map {
-            return (switch (self) {
-inline else => |r| r.symbols,
-});
-    }
-
-pub fn nameForSymbol(renamer: Renamer, symbol_ref: Ref) []const u8 {
-            return (switch (renamer) {
-inline else => |r| r.nameForSymbol(symbol_ref),
-});
-    }
-
-pub fn originalName(renamer: Renamer, symbol_ref: Ref) ?[]const u8 {
-            return (switch (renamer) {
-inline else => |r| r.originalName(symbol_ref),
-});
-    }
-
-pub fn deinit(renamer: Renamer, allocator: std.mem.Allocator) void {
-            switch (renamer) {
-.NumberRenamer => |r| {
-_ = r.deinit();
-},
-.MinifyRenamer => |r| {
-_ = r.deinit(allocator);
-},
-else => {
-
-},
-}
-    }
-};
-pub const InlineString = struct {
-    bytes: [15]u8 = [_]u8{0} ** 15,
-    len: u8 = 0,
-
-    pub fn init(str: []const u8) InlineString {
-        var this: InlineString = .{};
-        this.len = @as(u8, @intCast(@min(str.len, 15)));
-        var i: usize = 0;
-        while (i < this.len) {
-            this.bytes[i] = str[i];
-            i += 1;
-        }
-        return this;
-    }
-
-    // do not make this *const || you will run into memory bugs.
-    // we cannot let the compiler decide to copy this struct because
-    // that would cause this to become a pointer to stack memory.
-    pub fn slice(this: *InlineString) string {
-        return this.bytes[0..this.len];
-    }
-};
-pub const TinyString = union(enum) {
-    inline_string: InlineString,
-    string: []const u8,
-
-pub fn init(input: []const u8, allocator: std.mem.Allocator) !TinyString {
-            if ((input.len <= 15)) {
-                return TinyString{ .inline_string = InlineString.init(input) };
-            } else {
-                return TinyString{ .string = try allocator.dupe(u8, input) };
-            }
-    }
-
-pub fn slice(self: *@This()) []const u8 {
-            return (switch (self.*) {
-.inline_string => self.inline_string.slice(),
-.string => self.string,
-});
-    }
-};
-pub const SymbolSlot = struct {
-    name: TinyString = TinyString{ .string = "" },
-    count: u32 = 0,
-    needs_capital_for_jsx: bool = false,
-    pub const List = std.EnumArray(js_ast.Symbol.SlotNamespace, std.array_list.Managed(SymbolSlot));
-};
-pub const StableSymbolCount = struct {
-    stable_source_index: u32,
-    ref: Ref,
-    count: u32,
-
-pub fn lessThan(_: void, i: StableSymbolCount, j: StableSymbolCount) bool {
-            if ((i.count > j.count)) {
-                return true;
-            }
-            if ((i.count < j.count)) {
-                return false;
-            }
-            if ((i.stable_source_index < j.stable_source_index)) {
-                return true;
-            }
-            if ((i.stable_source_index > j.stable_source_index)) {
-                return false;
-            }
-            return (i.ref.innerIndex() < j.ref.innerIndex());
-    }
-    pub const Array = std.array_list.Managed(StableSymbolCount);
-};
-const SlotAndCount = packed struct(u64) {
-    slot: u32,
-    count: u32,
-
-    pub const Array = std.array_list.Managed(SlotAndCount);
-
-    pub fn lessThan(_: void, a: SlotAndCount, b: SlotAndCount) bool {
-        if (a.count > b.count) return true;
-        if (a.count < b.count) return false;
-        return a.slot < b.slot;
-    }
-};
 pub const ExportRenamer = struct {
     string_buffer: bun.MutableString,
     used: bun.StringHashMap(u32),
@@ -788,17 +800,17 @@ pub fn init(allocator: std.mem.Allocator) ExportRenamer {
             return ExportRenamer{ .string_buffer = MutableString.initEmpty(allocator), .used = bun.StringHashMap(u32).init(allocator) };
     }
 
-pub fn clearRetainingCapacity(self: *@This()) void {
+pub fn clearRetainingCapacity(self: *ExportRenamer) void {
             _ = self.used.clearRetainingCapacity();
             _ = self.string_buffer.reset();
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *ExportRenamer) void {
             _ = self.used.deinit();
             _ = self.string_buffer.deinit();
     }
 
-pub fn nextRenamedName(self: *@This(), input: []const u8) []const u8 {
+pub fn nextRenamedName(self: *ExportRenamer, input: []const u8) []const u8 {
             var entry = ((self.used.getOrPut(input)) catch unreachable);
             _ = &entry;
             var tries: u32 = 1;
@@ -827,12 +839,13 @@ pub fn nextRenamedName(self: *@This(), input: []const u8) []const u8 {
             return entry.key_ptr.*;
     }
 
-pub fn nextMinifiedName(self: *@This(), allocator: std.mem.Allocator) ![]const u8 {
+pub fn nextMinifiedName(self: *ExportRenamer, allocator: std.mem.Allocator) ![]const u8 {
             const name = try js_ast.NameMinifier.defaultNumberToMinifiedName(allocator, self.count);
             self.count = (self.count + 1);
             return name;
     }
 };
+
 const Environment = bun.Environment;
 const MutableString = bun.MutableString;
 const Output = bun.Output;

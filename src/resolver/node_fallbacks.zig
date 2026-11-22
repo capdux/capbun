@@ -16,19 +16,6 @@ pub const FallbackModule = struct {
     package_json: *const PackageJSON,
     code: *const fn () []const u8,
 
-pub fn createSourceCodeGetter(comptime code_path: []const u8) *const fn () []const u8 {
-            const Getter = struct {
-
-pub fn get() []const u8 {
-            if (bun.Environment.codegen_embed) {
-                return @embedFile(code_path);
-            }
-            return bun.runtimeEmbedFile(.codegen, code_path);
-    }
-};
-            return Getter.get;
-    }
-
 pub fn init(comptime name: []const u8) FallbackModule {
             _ = @setEvalBranchQuota(99999);
             const version: []const u8 = "0.0.0-polyfill";
@@ -41,6 +28,23 @@ const Environment = bun.Environment;
 const logger = bun.logger;
 pub const import_path = "/bun-vfs$$/node_modules/";
 pub const Map = bun.ComptimeStringMap(FallbackModule, .{ .{ "assert", FallbackModule.init("assert") }, .{ "buffer", FallbackModule.init("buffer") }, .{ "console", FallbackModule.init("console") }, .{ "constants", FallbackModule.init("constants") }, .{ "crypto", FallbackModule.init("crypto") }, .{ "domain", FallbackModule.init("domain") }, .{ "events", FallbackModule.init("events") }, .{ "http", FallbackModule.init("http") }, .{ "https", FallbackModule.init("https") }, .{ "net", FallbackModule.init("net") }, .{ "os", FallbackModule.init("os") }, .{ "path", FallbackModule.init("path") }, .{ "process", FallbackModule.init("process") }, .{ "punycode", FallbackModule.init("punycode") }, .{ "querystring", FallbackModule.init("querystring") }, .{ "stream", FallbackModule.init("stream") }, .{ "string_decoder", FallbackModule.init("string_decoder") }, .{ "sys", FallbackModule.init("sys") }, .{ "timers", FallbackModule.init("timers") }, .{ "tty", FallbackModule.init("tty") }, .{ "url", FallbackModule.init("url") }, .{ "util", FallbackModule.init("util") }, .{ "zlib", FallbackModule.init("zlib") } });
+
+pub fn createSourceCodeGetter(comptime code_path: []const u8) *const fn () []const u8 {
+        if (bun.Environment.codegen_embed) {
+            return (struct {
+
+pub fn get() []const u8 {
+            return @embedFile(code_path);
+    }
+}).get;
+        }
+        return (struct {
+
+pub fn get() []const u8 {
+            return bun.runtimeEmbedFile(.codegen, code_path);
+    }
+}).get;
+}
 
 pub fn contentsFromPath(path: []const u8) ?[]const u8 {
         if (Environment.allow_assert) {

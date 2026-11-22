@@ -1,7 +1,7 @@
 //! libspng decode/encode for `Bun.Image`. Indexed-PNG encode quantises via
 //! `quantize.zig`. Dispatch lives in codecs.zig; this file is the codec body.
 
-const spng_ctx = opaque {};
+@opaque struct spng_ctx {}
 extern fn spng_ctx_new(flags: c_int): (*spng_ctx)? ;
 extern fn spng_ctx_free(ctx: *spng_ctx) ;
 extern fn spng_set_png_buffer(ctx: *spng_ctx, buf: [*]const u8, len: usize): c_int ;
@@ -12,7 +12,7 @@ extern fn spng_set_ihdr(ctx: *spng_ctx, ihdr: *const Ihdr): c_int ;
 extern fn spng_set_plte(ctx: *spng_ctx, plte: *const Plte): c_int ;
 extern fn spng_set_trns(ctx: *spng_ctx, trns: *const Trns): c_int ;
 extern fn spng_encode_image(ctx: *spng_ctx, img: [*]const u8, len: usize, fmt: c_int, flags: c_int): c_int ;
-extern fn spng_get_png_buffer(ctx: *spng_ctx, len: *usize, e: *c_int): [*]u8? ;
+extern fn spng_get_png_buffer(ctx: *spng_ctx, len: *usize, e: *c_int): ([*]u8)? ;
 extern fn spng_set_option(ctx: *spng_ctx, opt: c_int, value: c_int): c_int ;
 /// iCCP chunk read/write — PNG carries an optional ICC profile alongside
 /// the pixels for every colour type (including indexed). `spng_get_iccp`
@@ -24,7 +24,7 @@ extern fn spng_set_option(ctx: *spng_ctx, opt: c_int, value: c_int): c_int ;
 extern fn spng_get_iccp(ctx: *spng_ctx, iccp: *Iccp): c_int ;
 extern fn spng_set_iccp(ctx: *spng_ctx, iccp: *const Iccp): c_int ;
 
-const Iccp = extern struct {
+@c struct Iccp {
     /// PNG's Latin-1 iCCP keyword (1-79 chars + NUL). libspng requires it
     /// non-empty on encode; the PNG spec marks it purely informational
     /// (the profile bytes are what describe the colour space), so on
@@ -32,10 +32,10 @@ const Iccp = extern struct {
     /// keyword is not threaded through `Decoded`.
     profile_name: [80]u8,
     profile_len: usize,
-    profile: ?[*]u8,
-};
+    profile: ([*]u8)?,
+}
 
-const Ihdr = extern struct {
+@c struct Ihdr {
     width: u32,
     height: u32,
     bit_depth: u8,
@@ -43,7 +43,7 @@ const Ihdr = extern struct {
     compression_method: u8 = 0,
     filter_method: u8 = 0,
     interlace_method: u8 = 0,
-};
+}
 
 const SPNG_CTX_ENCODER = 2;
 const SPNG_FMT_RGBA8 = 1;
@@ -56,18 +56,18 @@ const SPNG_ENCODE_TO_BUFFER = 12;
 const SPNG_COLOR_TYPE_INDEXED = 3;
 const SPNG_COLOR_TYPE_TRUECOLOR_ALPHA = 6;
 
-const Plte = extern struct {
+@c struct Plte {
     n_entries: u32,
     entries: [256][4]u8, // r,g,b,alpha(reserved)
-};
-const Trns = extern struct {
+}
+@c struct Trns {
     gray: u16 = 0,
     red: u16 = 0,
     green: u16 = 0,
     blue: u16 = 0,
     n_type3_entries: u32,
     type3_alpha: [256]u8,
-};
+}
 
 struct SpngCtxGuard {
     ctx: *spng_ctx,
@@ -77,11 +77,9 @@ struct SpngCtxGuard {
 }
 
 struct SliceFreeGuard {
-    slice: ([]u8)?,
-    ~init() {
-        if (s := _.slice) {
-            bun.default_allocator.free(s);
-        }
+    slice: []u8,
+    ~errinit() {
+        bun.default_allocator.free(_.slice);
     }
 }
 
@@ -104,7 +102,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
     let size: usize = 0;
     if (spng_decoded_image_size(ctx, SPNG_FMT_RGBA8, &size) != 0) return error.DecodeFailed;
     const out = bun.default_allocator.alloc(u8, size)?;
-    let out_guard = SliceFreeGuard{ slice: out };
+    const out_guard = SliceFreeGuard{ slice: out };
     if (spng_decode_image(ctx, out.ptr, out.len, SPNG_FMT_RGBA8, SPNG_DECODE_TRNS) != 0)
         return error.DecodeFailed;
 
@@ -121,7 +119,6 @@ pub fn decode(bytes: []const u8, max_pixels: u64): codecs.Error!codecs.Decoded {
         bun.default_allocator.dupe(u8, unsafe { iccp.profile.?[0..iccp.profile_len] })?
     else
         null;
-    out_guard.slice = null;
     return { rgba: out, width: ihdr.width, height: ihdr.height, icc_profile: icc };
 }
 
@@ -207,8 +204,9 @@ pub fn encodeIndexed(rgba: []const u8, w: u32, h: u32, level: i8, colors: u16, d
 
     let plte: Plte = { n_entries: q_guard.val.colors, entries: undefined };
     let trns: Trns = { n_type3_entries: q_guard.val.colors, type3_alpha: undefined };
+    const alpha255: u8 = 255;
     for (i of 0..q_guard.val.colors) {
-        plte.entries[i] = .{ q_guard.val.palette[i * 4], q_guard.val.palette[i * 4 + 1], q_guard.val.palette[i * 4 + 2], 255 };
+        plte.entries[i] = [ q_guard.val.palette[i * 4], q_guard.val.palette[i * 4 + 1], q_guard.val.palette[i * 4 + 2], alpha255 ];
         trns.type3_alpha[i] = q_guard.val.palette[i * 4 + 3];
     }
     if (spng_set_plte(ctx, &plte) != 0) return error.EncodeFailed;

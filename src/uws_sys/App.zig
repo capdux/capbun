@@ -89,7 +89,15 @@ pub const uws_app_listen_config_t = extern struct {
     options: i32 = 0,
 };
 
-pub const uws_app_t = *uws_app_s;
+pub const c = struct {
+    pub const uws_listen_handler = ListenConfigHandler;
+    pub const uws_method_handler = RouteHandler;
+    pub const uws_filter_handler = FilterHandler;
+    pub const uws_missing_server_handler = MissingServerHandler;
+    pub const uws_app_listen_config_t = AppListenConfig;
+};
+
+pub const uws_app_t = uws_app_s;
 pub const OptListenSocket = ?*UwsListenSocket;
 pub const ClientErrorHandler = ?ClientErrorHandlerFn;
 pub const RouteHandler = ?RouteHandlerFn;
@@ -109,13 +117,6 @@ pub const ListenConfigHandlerFn = *const fn(socket: OptListenSocket, data: ?*any
 pub const ListenDomainHandlerFn = *const fn(ls: *UwsListenSocket, domain_str: [*:0]const u8, flags: i32, data: ?*anyopaque) callconv(.c) void;
 pub const FilterHandlerFn = *const fn(res: *uws_res, code: i32, ud: ?*anyopaque) callconv(.c) void;
 pub const MissingServerHandlerFn = *const fn(host: [*c]const u8, ud: ?*anyopaque) callconv(.c) void;
-pub const c = struct {
-    pub const uws_listen_handler = ListenConfigHandler;
-    pub const uws_method_handler = RouteHandler;
-    pub const uws_filter_handler = FilterHandler;
-    pub const uws_missing_server_handler = MissingServerHandler;
-    pub const uws_app_listen_config_t = AppListenConfig;
-};
 pub const App = NewApp;
 pub const AppTCP = NewApp(false);
 pub const AppTLS = NewApp(true);
@@ -202,7 +203,9 @@ pub fn create(opts: BunSocketContextOptions) ?*@This() {
             if ((app == null)) {
                 return null;
             }
-            return bun.cast(?*@This(), app);
+            const Self = @This();
+            const Ptr = ?*Self;
+            return bun.cast(Ptr, app);
     }
 
 pub fn destroy(self: *@This()) void {
@@ -334,7 +337,7 @@ pub fn numSubscribers(self: *@This(), topic: []const u8) u32 {
     }
 
 pub fn getNativeHandle(self: *@This()) ?*anyopaque {
-        _ = self;
+            return uws_get_native_handle(ssl_flag, bun.cast(*anyopaque, self));
     }
 
 pub fn removeServerName(self: *@This(), hostname_pattern: [*:0]const u8) void {
@@ -369,7 +372,9 @@ pub fn listen(self: *@This(), port: i32, user_data: anytype, comptime handler: a
             const Wrapper = struct {
 
 pub fn handle(socket: ?*UwsListenSocket, conf: uws_app_listen_config_t, data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(data)), socket, conf);
+            {
+                _ = handler(@ptrCast(@alignCast(data)), socket, conf);
+            }
     }
 };
             _ = uws_app_listen(ssl_flag, bun.cast(*uws_app_t, self), null, port, 0, Wrapper.handle, @ptrCast(user_data));
@@ -384,7 +389,9 @@ pub fn handle(data: ?*anyopaque, code: i32, socket: *us_socket_t, error_code: u8
             break :blk raw_packet[0..@intCast(raw_packet_length)];
 
 }) else "");
-            _ = handler(@ptrCast(@alignCast(data)), socket, error_code, bytes);
+            {
+                _ = handler(@ptrCast(@alignCast(data)), socket, error_code, bytes);
+            }
     }
 };
             _ = uws_app_set_on_clienterror(ssl_flag, bun.cast(*uws_app_s, self), Wrapper.handle, @ptrCast(user_data));
@@ -394,7 +401,9 @@ pub fn listenWithConfig(self: *@This(), user_data: anytype, comptime handler: an
             const Wrapper = struct {
 
 pub fn handle(socket: ?*UwsListenSocket, data: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(data)), socket);
+            {
+                _ = handler(@ptrCast(@alignCast(data)), socket);
+            }
     }
 };
             _ = uws_app_listen_with_config(ssl_flag, bun.cast(*uws_app_t, self), config.host, @intCast(config.port), config.options, Wrapper.handle, @ptrCast(user_data));
@@ -406,7 +415,9 @@ pub fn listenOnUnixSocket(self: *@This(), user_data: anytype, comptime handler: 
 pub fn handle(socket: *UwsListenSocket, domain_str: [*:0]const u8, fl: i32, data: ?*anyopaque) callconv(.c) void {
             _ = &domain_str;
             _ = &fl;
-            _ = handler(@ptrCast(@alignCast(data)), socket);
+            {
+                _ = handler(@ptrCast(@alignCast(data)), socket);
+            }
     }
 };
             const domainZ: [:0]const u8 = bun.handleOom(bun.default_allocator.dupeZ(u8, domain_name));
@@ -422,15 +433,15 @@ pub fn handle(socket: *UwsListenSocket, domain_str: [*:0]const u8, fl: i32, data
     pub const ResponseType = Response;
     pub const WebSocket = WebSocketMod.WebSocket((if (ssl) 1 else 0));
     pub const ListenSocket = opaque {
-            pub inline fn close(this: *@This()) void {
-                return @as(*bun.uws.ListenSocket, @ptrCast(this)).close();
-            }
-            pub inline fn getLocalPort(this: *@This()) i32 {
-                return @as(*bun.uws.ListenSocket, @ptrCast(this)).getLocalPort();
-            }
-            pub fn socket(this: *@This()) bun.uws.NewSocketHandler(ssl) {
-                return bun.uws.NewSocketHandler(ssl).from(@ptrCast(this));
-            }
-        };
+                pub inline fn close(s: *@This()) void {
+                    return @as(*bun.uws.ListenSocket, @ptrCast(s)).close();
+                }
+                pub inline fn getLocalPort(s: *@This()) i32 {
+                    return @as(*bun.uws.ListenSocket, @ptrCast(s)).getLocalPort();
+                }
+                pub fn socket(s: *@This()) bun.uws.NewSocketHandler(ssl) {
+                    return bun.uws.NewSocketHandler(ssl).from(@ptrCast(s));
+                }
+            };
 };
 }

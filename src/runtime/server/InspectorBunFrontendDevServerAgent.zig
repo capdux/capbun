@@ -5,101 +5,89 @@ const std = @import("std");
 const string = []const u8;
 
 pub const bun = @import("bun");
-const InspectorBunFrontendDevServerAgentHandle = opaque {
-    const c = struct {
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientConnected(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, connectionId: i32) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientDisconnected(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, connectionId: i32) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyBundleStart(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, triggerFiles: [*]bun.String, triggerFilesLen: usize) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyBundleComplete(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, durationMs: f64) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyBundleFailed(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, buildErrorsPayloadBase64: *bun.String) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientNavigated(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, connectionId: i32, url: *bun.String, routeBundleId: i32) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientErrorReported(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, clientErrorPayloadBase64: *bun.String) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyGraphUpdate(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, visualizerPayloadBase64: *bun.String) void;
-        extern "c" fn InspectorBunFrontendDevServerAgent__notifyConsoleLog(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, kind: u8, data: *bun.String) void;
-    };
-    const notifyClientConnected = c.InspectorBunFrontendDevServerAgent__notifyClientConnected;
-    const notifyClientDisconnected = c.InspectorBunFrontendDevServerAgent__notifyClientDisconnected;
-    const notifyBundleStart = c.InspectorBunFrontendDevServerAgent__notifyBundleStart;
-    const notifyBundleComplete = c.InspectorBunFrontendDevServerAgent__notifyBundleComplete;
-    const notifyBundleFailed = c.InspectorBunFrontendDevServerAgent__notifyBundleFailed;
-    const notifyClientNavigated = c.InspectorBunFrontendDevServerAgent__notifyClientNavigated;
-    const notifyClientErrorReported = c.InspectorBunFrontendDevServerAgent__notifyClientErrorReported;
-    const notifyGraphUpdate = c.InspectorBunFrontendDevServerAgent__notifyGraphUpdate;
-    const notifyConsoleLog = c.InspectorBunFrontendDevServerAgent__notifyConsoleLog;
+pub const InspectorBunFrontendDevServerAgentHandle = opaque {
+    const notifyClientConnected = InspectorBunFrontendDevServerAgent__notifyClientConnected;
+    const notifyClientDisconnected = InspectorBunFrontendDevServerAgent__notifyClientDisconnected;
+    const notifyBundleStart = InspectorBunFrontendDevServerAgent__notifyBundleStart;
+    const notifyBundleComplete = InspectorBunFrontendDevServerAgent__notifyBundleComplete;
+    const notifyBundleFailed = InspectorBunFrontendDevServerAgent__notifyBundleFailed;
+    const notifyClientNavigated = InspectorBunFrontendDevServerAgent__notifyClientNavigated;
+    const notifyClientErrorReported = InspectorBunFrontendDevServerAgent__notifyClientErrorReported;
+    const notifyGraphUpdate = InspectorBunFrontendDevServerAgent__notifyGraphUpdate;
+    const notifyConsoleLog = InspectorBunFrontendDevServerAgent__notifyConsoleLog;
 };
+
 pub const BunFrontendDevServerAgent = struct {
     next_inspector_connection_id: i32 = 0,
     handle: ?*InspectorBunFrontendDevServerAgentHandle = null,
 
-pub fn nextConnectionID(self: *@This()) i32 {
+pub fn nextConnectionID(self: *BunFrontendDevServerAgent) i32 {
             const id = self.next_inspector_connection_id;
+            self.next_inspector_connection_id = (self.next_inspector_connection_id +% 1);
             return id;
     }
 
-pub fn isEnabled(self: *const @This()) bool {
+pub fn isEnabled(self: BunFrontendDevServerAgent) bool {
             return (self.handle != null);
     }
 
-pub fn notifyClientConnected(self: *const @This(), devServerId: DebuggerId, connectionId: i32) void {
+pub fn notifyClientConnected(self: BunFrontendDevServerAgent, devServerId: DebuggerId, connectionId: i32) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyClientConnected(devServerId.get(), connectionId);
             }
     }
 
-pub fn notifyClientDisconnected(self: *const @This(), devServerId: DebuggerId, connectionId: i32) void {
+pub fn notifyClientDisconnected(self: BunFrontendDevServerAgent, devServerId: DebuggerId, connectionId: i32) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyClientDisconnected(devServerId.get(), connectionId);
             }
     }
 
-pub fn notifyBundleStart(self: *const @This(), devServerId: DebuggerId, triggerFiles: []bun.String) void {
+pub fn notifyBundleStart(self: BunFrontendDevServerAgent, devServerId: DebuggerId, triggerFiles: []bun.String) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyBundleStart(devServerId.get(), triggerFiles.ptr, triggerFiles.len);
             }
     }
 
-pub fn notifyBundleComplete(self: *const @This(), devServerId: DebuggerId, durationMs: f64) void {
+pub fn notifyBundleComplete(self: BunFrontendDevServerAgent, devServerId: DebuggerId, durationMs: f64) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyBundleComplete(devServerId.get(), durationMs);
             }
     }
 
-pub fn notifyBundleFailed(self: *const @This(), devServerId: DebuggerId, buildErrorsPayloadBase64: *bun.String) void {
+pub fn notifyBundleFailed(self: BunFrontendDevServerAgent, devServerId: DebuggerId, buildErrorsPayloadBase64: *bun.String) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyBundleFailed(devServerId.get(), buildErrorsPayloadBase64);
             }
     }
 
-pub fn notifyClientNavigated(self: *const @This(), devServerId: DebuggerId, connectionId: i32, url: *bun.String, routeBundleId: ?DevServer.RouteBundle.Index) void {
-        _ = devServerId;
-        _ = connectionId;
-        _ = url;
-        _ = routeBundleId;
+pub fn notifyClientNavigated(self: BunFrontendDevServerAgent, devServerId: DebuggerId, connectionId: i32, url: *bun.String, routeBundleId: ?DevServer.RouteBundle.Index) void {
             if (self.handle) |handle| {
                 _ = &handle;
+                _ = handle.notifyClientNavigated(devServerId.get(), connectionId, url, (if (routeBundleId) |id| id.get() else -1));
             }
     }
 
-pub fn notifyClientErrorReported(self: *const @This(), devServerId: DebuggerId, clientErrorPayloadBase64: *bun.String) void {
+pub fn notifyClientErrorReported(self: BunFrontendDevServerAgent, devServerId: DebuggerId, clientErrorPayloadBase64: *bun.String) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyClientErrorReported(devServerId.get(), clientErrorPayloadBase64);
             }
     }
 
-pub fn notifyGraphUpdate(self: *const @This(), devServerId: DebuggerId, visualizerPayloadBase64: *bun.String) void {
+pub fn notifyGraphUpdate(self: BunFrontendDevServerAgent, devServerId: DebuggerId, visualizerPayloadBase64: *bun.String) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyGraphUpdate(devServerId.get(), visualizerPayloadBase64);
             }
     }
 
-pub fn notifyConsoleLog(self: @This(), devServerId: DebuggerId, kind: bun.bake.DevServer.ConsoleLogKind, data: *bun.String) void {
+pub fn notifyConsoleLog(self: BunFrontendDevServerAgent, devServerId: DebuggerId, kind: bun.bake.DevServer.ConsoleLogKind, data: *bun.String) void {
             if (self.handle) |handle| {
                 _ = &handle;
                 _ = handle.notifyConsoleLog(devServerId.get(), @intFromEnum(kind), data);
@@ -113,6 +101,25 @@ pub export fn Bun__InspectorBunFrontendDevServerAgent__setEnabled(agent: ?*Inspe
             }
     }
 };
+
 const jsc = bun.jsc;
 const DevServer = bun.bake.DevServer;
 const DebuggerId = jsc.Debugger.DebuggerId;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientConnected(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, connectionId: i32) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientDisconnected(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, connectionId: i32) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyBundleStart(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, triggerFiles: [*]bun.String, triggerFilesLen: usize) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyBundleComplete(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, durationMs: f64) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyBundleFailed(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, buildErrorsPayloadBase64: *bun.String) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientNavigated(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, connectionId: i32, url: *bun.String, routeBundleId: i32) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyClientErrorReported(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, clientErrorPayloadBase64: *bun.String) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyGraphUpdate(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, visualizerPayloadBase64: *bun.String) callconv(.c) void;
+
+extern "c" fn InspectorBunFrontendDevServerAgent__notifyConsoleLog(agent: *InspectorBunFrontendDevServerAgentHandle, devServerId: i32, kind: u8, data: *bun.String) callconv(.c) void;

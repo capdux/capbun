@@ -38,15 +38,121 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _HTTPHeaderName = enum(u8) {
+    Accept,
+    AcceptCharset,
+    AcceptEncoding,
+    AcceptLanguage,
+    AcceptRanges,
+    AccessControlAllowCredentials,
+    AccessControlAllowHeaders,
+    AccessControlAllowMethods,
+    AccessControlAllowOrigin,
+    AccessControlExposeHeaders,
+    AccessControlMaxAge,
+    AccessControlRequestHeaders,
+    AccessControlRequestMethod,
+    Age,
+    Authorization,
+    CacheControl,
+    Connection,
+    ContentDisposition,
+    ContentEncoding,
+    ContentLanguage,
+    ContentLength,
+    ContentLocation,
+    ContentRange,
+    ContentSecurityPolicy,
+    ContentSecurityPolicyReportOnly,
+    ContentType,
+    Cookie,
+    Cookie2,
+    CrossOriginEmbedderPolicy,
+    CrossOriginEmbedderPolicyReportOnly,
+    CrossOriginOpenerPolicy,
+    CrossOriginOpenerPolicyReportOnly,
+    CrossOriginResourcePolicy,
+    DNT,
+    Date,
+    DefaultStyle,
+    ETag,
+    Expect,
+    Expires,
+    Host,
+    IcyMetaInt,
+    IcyMetadata,
+    IfMatch,
+    IfModifiedSince,
+    IfNoneMatch,
+    IfRange,
+    IfUnmodifiedSince,
+    KeepAlive,
+    LastEventID,
+    LastModified,
+    Link,
+    Location,
+    Origin,
+    PingFrom,
+    PingTo,
+    Pragma,
+    ProxyAuthorization,
+    ProxyConnection,
+    Purpose,
+    Range,
+    Referer,
+    ReferrerPolicy,
+    Refresh,
+    ReportTo,
+    SecFetchDest,
+    SecFetchMode,
+    SecWebSocketAccept,
+    SecWebSocketExtensions,
+    SecWebSocketKey,
+    SecWebSocketProtocol,
+    SecWebSocketVersion,
+    ServerTiming,
+    ServiceWorker,
+    ServiceWorkerAllowed,
+    ServiceWorkerNavigationPreload,
+    SetCookie,
+    SetCookie2,
+    SourceMap,
+    StrictTransportSecurity,
+    TE,
+    TimingAllowOrigin,
+    Trailer,
+    TransferEncoding,
+    Upgrade,
+    UpgradeInsecureRequests,
+    UserAgent,
+    Vary,
+    Via,
+    XContentTypeOptions,
+    XDNSPrefetchControl,
+    XFrameOptions,
+    XSourceMap,
+    XTempTablet,
+    XXSSProtection,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const PicoHeaders = struct {
+    ptr: ?*anyopaque,
+    len: usize,
+};
+
 pub const FetchHeaders = opaque {
 
 pub fn createValue(global: *JSGlobalObject, names: [*c]api.StringPointer, values: [*c]api.StringPointer, buf: *const ZigString, count_: u32) JSValue {
@@ -57,7 +163,7 @@ pub fn createFromJS(global: *JSGlobalObject, value: JSValue) bun.JSError!?*Fetch
             return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__createFromJS, .{ global, value });
     }
 
-pub fn putDefault(self: *FetchHeaders, name_: HTTPHeaderName, value: []const u8, global: *JSGlobalObject) bun.JSError!void {
+pub fn putDefault(self: *FetchHeaders, name_: _HTTPHeaderName, value: []const u8, global: *JSGlobalObject) bun.JSError!void {
             if (self.fastHas(name_)) {
                 return;
             }
@@ -106,7 +212,7 @@ pub fn append(self: *FetchHeaders, name_: *const ZigString, value: *const ZigStr
             return WebCore__FetchHeaders__append(self, name_, value, global);
     }
 
-pub fn put(self: *FetchHeaders, name_: HTTPHeaderName, value: []const u8, global: *JSGlobalObject) bun.JSError!void {
+pub fn put(self: *FetchHeaders, name_: _HTTPHeaderName, value: []const u8, global: *JSGlobalObject) bun.JSError!void {
             const str = ZigString.init(value);
             return bun.jsc.fromJSHostCallGeneric(global, @src(), WebCore__FetchHeaders__put, .{ self, name_, (&str), global });
     }
@@ -129,11 +235,11 @@ pub fn has(self: *FetchHeaders, name_: *const ZigString, global: *JSGlobalObject
             return WebCore__FetchHeaders__has(self, name_, global);
     }
 
-pub fn fastHas(self: *FetchHeaders, name_: HTTPHeaderName) bool {
+pub fn fastHas(self: *FetchHeaders, name_: _HTTPHeaderName) bool {
             return self.fastHas_(@intFromEnum(name_));
     }
 
-pub fn fastGet(self: *FetchHeaders, name_: HTTPHeaderName) ?ZigString {
+pub fn fastGet(self: *FetchHeaders, name_: _HTTPHeaderName) ?ZigString {
             var str = ZigString.init("");
             _ = &str;
             _ = self.fastGet_(@intFromEnum(name_), (&str));
@@ -151,7 +257,7 @@ pub fn fastGet_(self: *FetchHeaders, name_: u8, str: *ZigString) void {
             return WebCore__FetchHeaders__fastGet_(self, name_, str);
     }
 
-pub fn fastRemove(self: *FetchHeaders, header: HTTPHeaderName) void {
+pub fn fastRemove(self: *FetchHeaders, header: _HTTPHeaderName) void {
             return self.fastRemove_(@intFromEnum(header));
     }
 
@@ -194,102 +300,7 @@ pub fn deref(self: *FetchHeaders) void {
 pub fn copyTo(self: *FetchHeaders, names: [*]api.StringPointer, values: [*]api.StringPointer, buf: [*]u8) void {
             return WebCore__FetchHeaders__copyTo(self, names, values, buf);
     }
-    pub const HTTPHeaderName = enum(u8) {
-            Accept,
-            AcceptCharset,
-            AcceptEncoding,
-            AcceptLanguage,
-            AcceptRanges,
-            AccessControlAllowCredentials,
-            AccessControlAllowHeaders,
-            AccessControlAllowMethods,
-            AccessControlAllowOrigin,
-            AccessControlExposeHeaders,
-            AccessControlMaxAge,
-            AccessControlRequestHeaders,
-            AccessControlRequestMethod,
-            Age,
-            Authorization,
-            CacheControl,
-            Connection,
-            ContentDisposition,
-            ContentEncoding,
-            ContentLanguage,
-            ContentLength,
-            ContentLocation,
-            ContentRange,
-            ContentSecurityPolicy,
-            ContentSecurityPolicyReportOnly,
-            ContentType,
-            Cookie,
-            Cookie2,
-            CrossOriginEmbedderPolicy,
-            CrossOriginEmbedderPolicyReportOnly,
-            CrossOriginOpenerPolicy,
-            CrossOriginOpenerPolicyReportOnly,
-            CrossOriginResourcePolicy,
-            DNT,
-            Date,
-            DefaultStyle,
-            ETag,
-            Expect,
-            Expires,
-            Host,
-            IcyMetaInt,
-            IcyMetadata,
-            IfMatch,
-            IfModifiedSince,
-            IfNoneMatch,
-            IfRange,
-            IfUnmodifiedSince,
-            KeepAlive,
-            LastEventID,
-            LastModified,
-            Link,
-            Location,
-            Origin,
-            PingFrom,
-            PingTo,
-            Pragma,
-            ProxyAuthorization,
-            ProxyConnection,
-            Purpose,
-            Range,
-            Referer,
-            ReferrerPolicy,
-            Refresh,
-            ReportTo,
-            SecFetchDest,
-            SecFetchMode,
-            SecWebSocketAccept,
-            SecWebSocketExtensions,
-            SecWebSocketKey,
-            SecWebSocketProtocol,
-            SecWebSocketVersion,
-            ServerTiming,
-            ServiceWorker,
-            ServiceWorkerAllowed,
-            ServiceWorkerNavigationPreload,
-            SetCookie,
-            SetCookie2,
-            SourceMap,
-            StrictTransportSecurity,
-            TE,
-            TimingAllowOrigin,
-            Trailer,
-            TransferEncoding,
-            Upgrade,
-            UpgradeInsecureRequests,
-            UserAgent,
-            Vary,
-            Via,
-            XContentTypeOptions,
-            XDNSPrefetchControl,
-            XFrameOptions,
-            XSourceMap,
-            XTempTablet,
-            XXSSProtection,
-        };
+    pub const HTTPHeaderName = _HTTPHeaderName;
 };
 
 const jsc = bun.jsc;
@@ -299,10 +310,6 @@ const VM = jsc.VM;
 const ZigString = jsc.ZigString;
 const api = bun.schema.api;
 const StringPointer = api.StringPointer;
-const PicoHeaders = struct {
-    ptr: ?*anyopaque,
-    len: usize,
-};
 
 extern "c" fn WebCore__FetchHeaders__append(arg0: *FetchHeaders, arg1: *const ZigString, arg2: *const ZigString, arg3: *JSGlobalObject) callconv(.c) void;
 
@@ -352,4 +359,4 @@ extern "c" fn WebCore__FetchHeaders__createFromH3(arg0: *anyopaque) callconv(.c)
 
 extern "c" fn WebCore__FetchHeaders__createFromJS(arg0: *jsc.JSGlobalObject, arg1: JSValue) callconv(.c) ?*FetchHeaders;
 
-extern "c" fn WebCore__FetchHeaders__put(arg0: *FetchHeaders, name_: FetchHeaders.HTTPHeaderName, value: *const ZigString, global: *JSGlobalObject) callconv(.c) void;
+extern "c" fn WebCore__FetchHeaders__put(arg0: *FetchHeaders, name_: _HTTPHeaderName, value: *const ZigString, global: *JSGlobalObject) callconv(.c) void;

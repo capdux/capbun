@@ -23,7 +23,10 @@ else
 // All async FS functions are run in a thread pool, but some implementations may
 // decide to do something slightly different. For example, reading a file has
 // an extra stack buffer in the async case.
-pub const Flavor = enum { sync, async };
+pub enum Flavor {
+    sync,
+    @"async",
+}
 
 struct UvFsReqCleanupGuard {
     req: *uv.fs_t!,
@@ -242,6 +245,42 @@ struct StdDirPtrGuard {
     ~init() { if (_.armed) unsafe { _.dir.close(); } }
 }
 
+pub struct _AsyncAsyncMkdirp {
+    completion_ctx: *!,
+    completion: *const fn (*!, bun.sys.Maybe(void)) void,
+
+    /// Memory is not owned by this struct
+    path: []u8,
+
+    task: jsc.WorkPoolTask = { callback: &workPoolCallback },
+
+    pub const new = bun.TrivialNew(@This());
+
+    static fn workPoolCallback(task: *jsc.WorkPoolTask) {
+        let t: *_AsyncAsyncMkdirp = @fieldParentPtr("task", task);
+
+        let node_fs = NodeFS{};
+        const result = node_fs.mkdirRecursive(
+            Arguments.Mkdir{
+                path: PathLike{ string: PathString.init(t.path) },
+                recursive: true,
+            },
+        );
+        switch (result) {
+            .err e => {
+                t.completion(t.completion_ctx, { err: e.withPath(bun.handleOom(bun.default_allocator.dupe(u8, e.path))) });
+            },
+            .result => {
+                t.completion(t.completion_ctx, .success);
+            },
+        }
+    }
+
+    fn schedule(*_) {
+        jsc.WorkPool.schedule(&_.task);
+    }
+}
+
 pub struct Async {
     pub const access = NewAsyncFSTask(Return.Access, Arguments.Access, NodeFS.access);
     pub const appendFile = NewAsyncFSTask(Return.AppendFile, Arguments.AppendFile, NodeFS.appendFile);
@@ -290,41 +329,7 @@ pub struct Async {
     pub const readdir_recursive = AsyncReaddirRecursiveTask;
 
     /// Used internally. Not from JavaScript.
-    pub const AsyncMkdirp = struct {
-        completion_ctx: *!,
-        completion: *const fn (*!, bun.sys.Maybe(void)) void,
-
-        /// Memory is not owned by this struct
-        path: []u8,
-
-        task: jsc.WorkPoolTask = { callback: &workPoolCallback },
-
-        pub const new = bun.TrivialNew(@This());
-
-        static fn workPoolCallback(task: *jsc.WorkPoolTask) {
-            let t: *AsyncMkdirp = @fieldParentPtr("task", task);
-
-            let node_fs = NodeFS{};
-            const result = node_fs.mkdirRecursive(
-                Arguments.Mkdir{
-                    path: PathLike{ string: PathString.init(t.path) },
-                    recursive: true,
-                },
-            );
-            switch (result) {
-                .err => |e| {
-                    t.completion(t.completion_ctx, { err: e.withPath(bun.handleOom(bun.default_allocator.dupe(u8, e.path))) });
-                },
-                .result => {
-                    t.completion(t.completion_ctx, .success);
-                },
-            }
-        }
-
-        fn schedule(*_) {
-            jsc.WorkPool.schedule(&_.task);
-        }
-    };
+    pub const AsyncMkdirp = _AsyncAsyncMkdirp;
 
     static fn NewUVFSRequest(comptime ReturnType: type, comptime ArgumentType: type, comptime FunctionEnum: NodeFSFunctionEnum): type {
         if (!Environment.isWindows) {
@@ -508,9 +513,9 @@ pub struct Async {
                 let promise_value = _.promise.value();
                 let promise = _.promise.get();
                 const result = switch (_.result) {
-                    .err => |e| e.toJSWithAsyncStack(globalObject, promise) catch |e2| return promise.reject(globalObject, globalObject.takeException(e2)),
+                    .err e => e.toJSWithAsyncStack(globalObject, promise) catch e2 => return promise.reject(globalObject, globalObject.takeException(e2)),
                     .result => |*res| brk: {
-                        break :brk globalObject.toJS(res) catch |e| return promise.reject(globalObject, globalObject.takeException(e));
+                        break :brk globalObject.toJS(res) catch e => return promise.reject(globalObject, globalObject.takeException(e));
                     },
                 };
                 promise_value.ensureStillAlive();
@@ -614,9 +619,9 @@ pub struct Async {
                 let promise_value = _.promise.value();
                 let promise = _.promise.get();
                 const result = switch (_.result) {
-                    .err => |e| e.toJSWithAsyncStack(globalObject, promise) catch |e2| return promise.reject(globalObject, globalObject.takeException(e2)),
+                    .err e => e.toJSWithAsyncStack(globalObject, promise) catch e2 => return promise.reject(globalObject, globalObject.takeException(e2)),
                     .result => |*res| brk: {
-                        break :brk globalObject.toJS(res) catch |e| return promise.reject(globalObject, globalObject.takeException(e));
+                        break :brk globalObject.toJS(res) catch e => return promise.reject(globalObject, globalObject.takeException(e));
                     },
                 };
                 promise_value.ensureStillAlive();
@@ -733,7 +738,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
 
                 brk: {
                     switch (result) {
-                        .err => |e| {
+                        .err e => {
                             if (e.errno == @intFromEnum(E.EXIST) && !args.flags.errorOnExist) {
                                 break :brk;
                             }
@@ -903,9 +908,9 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             let promise_value = _.promise.value();
             let promise = _.promise.get();
             const result = switch (_.result) {
-                .err => |e| e.toJSWithAsyncStack(globalObject, promise) catch |e2| return promise.reject(globalObject, globalObject.takeException(e2)),
+                .err e => e.toJSWithAsyncStack(globalObject, promise) catch e2 => return promise.reject(globalObject, globalObject.takeException(e2)),
                 .result => |*res| brk: {
-                    break :brk globalObject.toJS(res) catch |e| return promise.reject(globalObject, globalObject.takeException(e));
+                    break :brk globalObject.toJS(res) catch e => return promise.reject(globalObject, globalObject.takeException(e));
                 },
             };
             promise_value.ensureStillAlive();
@@ -989,8 +994,8 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
                 }
             } else {
                 const stat_ = switch (Syscall.lstat(src)) {
-                    .result => |result| result,
-                    .err => |e| {
+                    .result result => result,
+                    .err e => {
                         @memcpy(nodefs.sync_error_buf[0..src.len], src);
                         this_.finishConcurrently({ err: e.withPath(nodefs.sync_error_buf[0..src.len]) });
                         return;
@@ -1065,11 +1070,11 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
 
             const open_flags = bun.O.DIRECTORY | bun.O.RDONLY;
             const fd = switch (Syscall.openatOSPath(bun.FD.cwd(), src, open_flags, 0)) {
-                .err => |e| {
+                .err e => {
                     this_.finishConcurrently({ err: e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
                     return false;
                 },
-                .result => |fd_| fd_,
+                .result fd_ => fd_,
             };
             const _fd_guard = FDGuard{ fd: fd };
 
@@ -1077,18 +1082,18 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
 
             const normdest: bun.OSPathSliceZ = if (Environment.isWindows)
                 switch (bun.sys.normalizePathWindows(u16, bun.invalid_fd, dest, &buf, { add_nt_prefix: false })) {
-                    .err => |e| {
+                    .err e => {
                         this_.finishConcurrently({ err: e });
                         return false;
                     },
-                    .result => |normdest| normdest,
+                    .result normdest => normdest,
                 }
             else
                 dest;
 
             const mkdir_ = nodefs.mkdirRecursiveOSPath(normdest, Arguments.Mkdir.DefaultMode, false);
             switch (mkdir_) {
-                .err => |e| {
+                .err e => {
                     this_.finishConcurrently({ err: e });
                     return false;
                 },
@@ -1100,12 +1105,12 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             let iterator = DirIterator.iterate(fd, if (Environment.isWindows) .@"u16" else .@"u8");
             let entry = iterator.next();
             while (current := switch (entry) {
-                .err => |e| {
+                .err e => {
                     // @memcpy(this.sync_error_buf[0..src.len], src);
                     this_.finishConcurrently({ err: e.withPath(nodefs.osPathIntoSyncErrorBuf(src)) });
                     return false;
                 },
-                .result => |ent| ent,
+                .result ent => ent,
             }) : (entry = iterator.next()) {
                 const cname = current.name.slice();
 
@@ -1151,7 +1156,7 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
                         let path_buf = bun.default_allocator.alloc(
                             bun.OSPathChar,
                             src_dir_len + 1 + cname.len + 1 + dest_dir_len + 1 + cname.len + 1,
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
 
                         @memcpy(path_buf[0..src_dir_len], src_buf[0..src_dir_len]);
                         path_buf[src_dir_len] = std.fs.path.sep;
@@ -1175,6 +1180,65 @@ pub fn NewAsyncCpTask(comptime is_shell: bool): type {
             return true;
         }
     };
+}
+
+pub union(Return.Readdir.Tag) _AsyncReaddirResultListEntryValue {
+    with_file_types: std.array_list.Managed(bun.jsc.Node.Dirent),
+    buffers: std.array_list.Managed(Buffer),
+    files: std.array_list.Managed(bun.String),
+
+    fn deinit(*_) {
+        switch (_.*) {
+            .with_file_types => |*res| {
+                for (item of res.items) {
+                    item.deref();
+                }
+                res.clearAndFree();
+            },
+            .buffers => |*res| {
+                for (item of res.items) {
+                    bun.default_allocator.free(item.buffer.byteSlice());
+                }
+                res.clearAndFree();
+            },
+            .files => |*res| {
+                for (item of res.items) {
+                    item.deref();
+                }
+
+                res.clearAndFree();
+            },
+        }
+    }
+}
+
+pub struct _AsyncReaddirResultListEntry {
+    pub const Value = _AsyncReaddirResultListEntryValue;
+    next: (*_AsyncReaddirResultListEntry)? = null,
+    value: Value,
+
+    pub const Queue = bun.UnboundedQueue(_AsyncReaddirResultListEntry, .next);
+}
+
+pub struct _AsyncReaddirSubtask {
+    readdir_task: *AsyncReaddirRecursiveTask,
+    basename: bun.PathString = bun.PathString.empty,
+    task: jsc.WorkPoolTask = { callback: call },
+
+    pub const new = bun.TrivialNew(@This());
+
+    static fn destroyOpaque(ptr: *!) {
+        let t: *_AsyncReaddirSubtask = unsafe { @ptrCast(@alignCast(ptr)) };
+        bun.default_allocator.free(t.basename.sliceAssumeZ());
+        bun.destroy(t);
+    }
+
+    static fn call(task: *jsc.WorkPoolTask) {
+        let t: *_AsyncReaddirSubtask = unsafe { @alignCast(@fieldParentPtr("task", task)) };
+        const _subtask_guard = OpaqueCallbackGuard{ ctx: unsafe { @ptrCast(t) }, callback: &_AsyncReaddirSubtask.destroyOpaque };
+        let buf: bun.PathBuffer = undefined;
+        t.readdir_task.performWork(t.basename.sliceAssumeZ(), &buf, false);
+    }
 }
 
 pub struct AsyncReaddirRecursiveTask {
@@ -1212,62 +1276,9 @@ pub struct AsyncReaddirRecursiveTask {
 
     pub const new = bun.TrivialNew(@This());
 
-    pub const ResultListEntry = struct {
-        pub const Value = union(Return.Readdir.Tag) {
-            with_file_types: std.array_list.Managed(bun.jsc.Node.Dirent),
-            buffers: std.array_list.Managed(Buffer),
-            files: std.array_list.Managed(bun.String),
+    pub const ResultListEntry = _AsyncReaddirResultListEntry;
 
-            static fn deinit(this: *@This()) {
-                switch (this.*) {
-                    .with_file_types => |*res| {
-                        for (item of res.items) {
-                            item.deref();
-                        }
-                        res.clearAndFree();
-                    },
-                    .buffers => |*res| {
-                        for (item of res.items) {
-                            bun.default_allocator.free(item.buffer.byteSlice());
-                        }
-                        res.clearAndFree();
-                    },
-                    .files => |*res| {
-                        for (item of res.items) {
-                            item.deref();
-                        }
-
-                        res.clearAndFree();
-                    },
-                }
-            }
-        };
-        next: (*ResultListEntry)? = null,
-        value: Value,
-
-        pub const Queue = bun.UnboundedQueue(ResultListEntry, .next);
-    };
-
-    pub const Subtask = struct {
-        readdir_task: *AsyncReaddirRecursiveTask,
-        basename: bun.PathString = bun.PathString.empty,
-        task: jsc.WorkPoolTask = { callback: call },
-
-        pub const new = bun.TrivialNew(@This());
-
-        static fn destroyOpaque(ptr: *!) {
-            let t: *Subtask = unsafe { @ptrCast(@alignCast(ptr)) };
-            bun.default_allocator.free(t.basename.sliceAssumeZ());
-            bun.destroy(t);
-        }
-
-        static fn call(task: *jsc.WorkPoolTask) {
-            let t: *Subtask = unsafe { @alignCast(@fieldParentPtr("task", task)) };
-            const _subtask_guard = OpaqueCallbackGuard{ ctx: unsafe { @ptrCast(t) }, callback: &Subtask.destroyOpaque };
-            let buf: bun.PathBuffer = undefined;
-            t.readdir_task.performWork(t.basename.sliceAssumeZ(), &buf, false);
-        }
-    };
+    pub const Subtask = _AsyncReaddirSubtask;
 
     static fn enqueue(
         readdir_task: *AsyncReaddirRecursiveTask,
@@ -1339,7 +1350,7 @@ pub struct AsyncReaddirRecursiveTask {
                     &entries,
                     is_root,
                 )) {
-                    .err => |e| {
+                    .err e => {
                         for (*item of entries.items) {
                             if (ResultType == bun.String) {
                                 item.deref();
@@ -1484,14 +1495,14 @@ pub struct AsyncReaddirRecursiveTask {
         let result: jsc.JSValue = undefined;
         if (_.pending_err != null) {
             let e = &_.pending_err.?;
-            result = e.toJSWithAsyncStack(globalObject, promise) catch |err_val| return promise.reject(globalObject, globalObject.takeException(err_val));
+            result = e.toJSWithAsyncStack(globalObject, promise) catch err_val => return promise.reject(globalObject, globalObject.takeException(err_val));
         } else {
             const res = switch (_.result_list) {
                 .with_file_types => |*res| Return.Readdir{ with_file_types: res.moveToUnmanaged().items },
                 .buffers => |*res| Return.Readdir{ buffers: res.moveToUnmanaged().items },
                 .files => |*res| Return.Readdir{ files: res.moveToUnmanaged().items },
             };
-            result = res.toJS(globalObject) catch |err_val| return promise.reject(globalObject, globalObject.takeException(err_val));
+            result = res.toJS(globalObject) catch err_val => return promise.reject(globalObject, globalObject.takeException(err_val));
         }
         promise_value.ensureStillAlive();
 
@@ -1527,1089 +1538,1926 @@ pub struct AsyncReaddirRecursiveTask {
 // The tagged unions for each type should become regular unions
 // and the tags should be passed in as comptime arguments to the functions performing the syscalls
 // This would reduce stack size, at the cost of instruction cache misses
-pub struct Arguments {
-    pub const Rename = struct {
-        old_path: PathLike,
-        new_path: PathLike,
+pub struct _ArgumentsRename {
+    old_path: PathLike,
+    new_path: PathLike,
 
-        static fn deinit(this: @This()) {
-            this.old_path.deinit();
-            this.new_path.deinit();
-        }
-
-        static fn deinitAndUnprotect(this: @This()) {
-            this.old_path.deinitAndUnprotect();
-            this.new_path.deinitAndUnprotect();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.old_path.toThreadSafe();
-            this.new_path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Rename {
-            const old_path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArgumentTypeValue("oldPath", "string or an instance of Buffer or URL", arguments.next() ?? .js_undefined);
-            };
-            let _old_path_guard = PathLikeGuard{ path: old_path };
-
-            const new_path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArgumentTypeValue("newPath", "string or an instance of Buffer or URL", arguments.next() ?? .js_undefined);
-            };
-            let _new_path_guard = PathLikeGuard{ path: new_path };
-
-            _old_path_guard.armed = false;
-            _new_path_guard.armed = false;
-            return Rename{ old_path: old_path, new_path: new_path };
-        }
-    };
-
-    pub const Truncate = struct {
-        /// Passing a file descriptor is deprecated and may result in an error being thrown in the future.
-        path: PathOrFileDescriptor,
-        len: u63 = 0,
-        flags: i32 = 0,
-
-        static fn deinit(this: @This()) {
-            this.path.deinit();
-        }
-
-        static fn deinitAndUnprotect(this: *@This()) {
-            this.path.deinitAndUnprotect();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Truncate {
-            const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let len: u63 = 0;
-            if (len_value := arguments.next()) {
-                len = @max(0, try jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null));
-            }
-            return { path: path, len: len };
-        }
-    };
-
-    pub const Writev = struct {
-        fd: FD,
-        buffers: jsc.Node.VectorArrayBuffer,
-        position: u52? = 0,
-
-        static fn deinit(self: *const @This()) { * = self; }
-
-        static fn deinitAndUnprotect(this: *const @This()) {
-            this.buffers.value.unprotect();
-            this.buffers.buffers.deinit();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.buffers.value.protect();
-
-            const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, this.buffers.buffers.items));
-            this.buffers.buffers.deinit();
-            this.buffers.buffers.items = clone;
-            this.buffers.buffers.capacity = clone.len;
-            this.buffers.buffers.allocator = bun.default_allocator;
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Writev {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const buffers = try jsc.Node.VectorArrayBuffer.fromJS(
-                ctx,
-                arguments.protectEatNext() ?? {
-                    return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
-                },
-                arguments.@"arena".allocator(),
-            );
-
-            let position: u52? = null;
-
-            if (pos_value := arguments.nextEat()) {
-                if (!pos_value.isUndefinedOrNull()) {
-                    if (pos_value.isNumber()) {
-                        position = pos_value.to(u52);
-                    } else {
-                        return ctx.throwInvalidArguments("position must be a number", {});
-                    }
-                }
-            }
-
-            return Writev{ fd: fd, buffers: buffers, position: position };
-        }
-    };
-
-    pub const Readv = struct {
-        fd: FD,
-        buffers: jsc.Node.VectorArrayBuffer,
-        position: u52? = 0,
-
-        static fn deinit(_: *const @This()) {}
-
-        static fn deinitAndUnprotect(this: *const @This()) {
-            this.buffers.value.unprotect();
-            this.buffers.buffers.deinit();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.buffers.value.protect();
-
-            const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, this.buffers.buffers.items));
-            this.buffers.buffers.deinit();
-            this.buffers.buffers.items = clone;
-            this.buffers.buffers.capacity = clone.len;
-            this.buffers.buffers.allocator = bun.default_allocator;
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Readv {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const buffers = try jsc.Node.VectorArrayBuffer.fromJS(
-                ctx,
-                arguments.protectEatNext() ?? {
-                    return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
-                },
-                arguments.@"arena".allocator(),
-            );
-
-            let position: u52? = null;
-
-            if (pos_value := arguments.nextEat()) {
-                if (!pos_value.isUndefinedOrNull()) {
-                    if (pos_value.isNumber()) {
-                        position = pos_value.to(u52);
-                    } else {
-                        return ctx.throwInvalidArguments("position must be a number", {});
-                    }
-                }
-            }
-
-            return Readv{ fd: fd, buffers: buffers, position: position };
-        }
-    };
-
-    pub const FTruncate = struct {
-        fd: FD,
-        len: jsc.WebCore.Blob.SizeType? = null,
-
-        static fn deinit(_: @This()) {}
-
-        static fn deinitAndUnprotect(_: *@This()) {}
-
-        static fn toThreadSafe(_: *const @This()) {}
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!FTruncate {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(jsc.Node.validators.validateInteger(
-                ctx,
-                arguments.next() ?? jsc.JSValue.jsNumber(0),
-                "len",
-                std.math.minInt(i52),
-                std.math.maxInt(jsc.WebCore.Blob.SizeType),
-            )?, 0)));
-
-            return FTruncate{ fd: fd, len: len };
-        }
-    };
-
-    pub const Chown = struct {
-        path: PathLike,
-        uid: uid_t = 0,
-        gid: gid_t = 0,
-
-        static fn deinit(this: @This()) {
-            this.path.deinit();
-        }
-
-        static fn deinitAndUnprotect(this: *@This()) {
-            this.path.deinitAndUnprotect();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Chown {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            const uid: uid_t = brk: {
-                let uid_value: jsc.JSValue = undefined;
-                if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
-
-                arguments.eat();
-                break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
-            };
-
-            const gid: gid_t = brk: {
-                let gid_value: jsc.JSValue = undefined;
-                if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
-                arguments.eat();
-                break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
-            };
-
-            _path_guard.armed = false;
-            return Chown{ path: path, uid: uid, gid: gid };
-        }
-    };
-
-    pub const Fchown = struct {
-        fd: FD,
-        uid: uid_t,
-        gid: gid_t,
-
-        static fn deinit(self: *const @This()) { * = self; }
-
-        static fn toThreadSafe(_: *const @This()) {}
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fchown {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const uid: uid_t = brk: {
-                let uid_value: jsc.JSValue = undefined;
-                if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
-
-                arguments.eat();
-                break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
-            };
-
-            const gid: gid_t = brk: {
-                let gid_value: jsc.JSValue = undefined;
-                if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
-                arguments.eat();
-                break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
-            };
-
-            return Fchown{ fd: fd, uid: uid, gid: gid };
-        }
-    };
-
-    static fn wrapTo(comptime T: type, in_val: i64): T {
-        comptime bun.assert(@typeInfo(T).int.signedness == .unsigned);
-        return (@as(T, @intCast(@mod(in_val, std.math.maxInt(T)))));
+    fn deinit() {
+        _.old_path.deinit();
+        _.new_path.deinit();
     }
+
+    fn deinitAndUnprotect() {
+        _.old_path.deinitAndUnprotect();
+        _.new_path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.old_path.toThreadSafe();
+        _.new_path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRename {
+        const old_path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArgumentTypeValue("oldPath", "string or an instance of Buffer or URL", arguments.next() ?? .js_undefined);
+        };
+        let _old_path_guard = PathLikeGuard{ path: old_path };
+
+        const new_path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArgumentTypeValue("newPath", "string or an instance of Buffer or URL", arguments.next() ?? .js_undefined);
+        };
+        let _new_path_guard = PathLikeGuard{ path: new_path };
+
+        _old_path_guard.armed = false;
+        _new_path_guard.armed = false;
+        return _ArgumentsRename{ old_path: old_path, new_path: new_path };
+    }
+}
+
+pub struct _ArgumentsTruncate {
+    /// Passing a file descriptor is deprecated and may result in an error being thrown in the future.
+    path: PathOrFileDescriptor,
+    len: u63 = 0,
+    flags: i32 = 0,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsTruncate {
+        const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let len: u63 = 0;
+        if (len_value := arguments.next()) {
+            len = @max(0, try jsc.Node.validators.validateInteger(ctx, len_value, "len", null, null));
+        }
+        return { path: path, len: len };
+    }
+}
+
+pub struct _ArgumentsWritev {
+    fd: FD,
+    buffers: jsc.Node.VectorArrayBuffer,
+    position: u52? = 0,
+
+    static fn deinit(_: *const @This()) {}
+
+    fn deinitAndUnprotect() {
+        _.buffers.value.unprotect();
+        _.buffers.buffers.deinit();
+    }
+
+    fn toThreadSafe(*_) {
+        _.buffers.value.protect();
+
+        const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, _.buffers.buffers.items));
+        _.buffers.buffers.deinit();
+        _.buffers.buffers.items = clone;
+        _.buffers.buffers.capacity = clone.len;
+        _.buffers.buffers.allocator = bun.default_allocator;
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWritev {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const buffers = try jsc.Node.VectorArrayBuffer.fromJS(
+            ctx,
+            arguments.protectEatNext() ?? {
+                return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
+            },
+            arguments.@"arena".allocator(),
+        );
+
+        let position: u52? = null;
+
+        if (pos_value := arguments.nextEat()) {
+            if (!pos_value.isUndefinedOrNull()) {
+                if (pos_value.isNumber()) {
+                    position = pos_value.to(u52);
+                } else {
+                    return ctx.throwInvalidArguments("position must be a number", {});
+                }
+            }
+        }
+
+        return _ArgumentsWritev{ fd: fd, buffers: buffers, position: position };
+    }
+}
+
+pub struct _ArgumentsReadv {
+    fd: FD,
+    buffers: jsc.Node.VectorArrayBuffer,
+    position: u52? = 0,
+
+    static fn deinit(_: *const @This()) {}
+
+    fn deinitAndUnprotect() {
+        _.buffers.value.unprotect();
+        _.buffers.buffers.deinit();
+    }
+
+    fn toThreadSafe(*_) {
+        _.buffers.value.protect();
+
+        const clone = bun.handleOom(bun.default_allocator.dupe(bun.PlatformIOVec, _.buffers.buffers.items));
+        _.buffers.buffers.deinit();
+        _.buffers.buffers.items = clone;
+        _.buffers.buffers.capacity = clone.len;
+        _.buffers.buffers.allocator = bun.default_allocator;
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadv {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const buffers = try jsc.Node.VectorArrayBuffer.fromJS(
+            ctx,
+            arguments.protectEatNext() ?? {
+                return ctx.throwInvalidArguments("Expected an ArrayBufferView[]", {});
+            },
+            arguments.@"arena".allocator(),
+        );
+
+        let position: u52? = null;
+
+        if (pos_value := arguments.nextEat()) {
+            if (!pos_value.isUndefinedOrNull()) {
+                if (pos_value.isNumber()) {
+                    position = pos_value.to(u52);
+                } else {
+                    return ctx.throwInvalidArguments("position must be a number", {});
+                }
+            }
+        }
+
+        return _ArgumentsReadv{ fd: fd, buffers: buffers, position: position };
+    }
+}
+
+pub struct _ArgumentsFTruncate {
+    fd: FD,
+    len: jsc.WebCore.Blob.SizeType? = null,
+
+    static fn deinit(_: @This()) {}
+
+    static fn deinitAndUnprotect(_: *@This()) {}
+
+    static fn toThreadSafe(_: *const @This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFTruncate {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const len: jsc.WebCore.Blob.SizeType = @as(jsc.WebCore.Blob.SizeType, @intCast(@max(jsc.Node.validators.validateInteger(
+            ctx,
+            arguments.next() ?? jsc.JSValue.jsNumber(0),
+            "len",
+            std.math.minInt(i52),
+            std.math.maxInt(jsc.WebCore.Blob.SizeType),
+        )?, 0)));
+
+        return _ArgumentsFTruncate{ fd: fd, len: len };
+    }
+}
+
+pub struct _ArgumentsChown {
+    path: PathLike,
+    uid: uid_t = 0,
+    gid: gid_t = 0,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsChown {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        const uid: uid_t = brk: {
+            let uid_value: jsc.JSValue = undefined;
+            if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
+
+            arguments.eat();
+            break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
+        };
+
+        const gid: gid_t = brk: {
+            let gid_value: jsc.JSValue = undefined;
+            if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
+            arguments.eat();
+            break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
+        };
+
+        _path_guard.armed = false;
+        return _ArgumentsChown{ path: path, uid: uid, gid: gid };
+    }
+}
+
+pub struct _ArgumentsFchown {
+    fd: FD,
+    uid: uid_t,
+    gid: gid_t,
+
+    static fn deinit(_: *const @This()) {}
+
+    static fn toThreadSafe(_: *const @This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFchown {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const uid: uid_t = brk: {
+            let uid_value: jsc.JSValue = undefined;
+            if (v := arguments.next()) { uid_value = v; } else { return ctx.throwInvalidArguments("uid is required", {}); }
+
+            arguments.eat();
+            break :brk wrapTo(uid_t, try jsc.Node.validators.validateInteger(ctx, uid_value, "uid", -1, std.math.maxInt(u32)));
+        };
+
+        const gid: gid_t = brk: {
+            let gid_value: jsc.JSValue = undefined;
+            if (v := arguments.next()) { gid_value = v; } else return ctx.throwInvalidArguments("gid is required", .{});
+            arguments.eat();
+            break :brk wrapTo(gid_t, try jsc.Node.validators.validateInteger(ctx, gid_value, "gid", -1, std.math.maxInt(u32)));
+        };
+
+        return _ArgumentsFchown{ fd: fd, uid: uid, gid: gid };
+    }
+}
+
+pub struct _ArgumentsLutimes {
+    path: PathLike,
+    atime: TimeLike,
+    mtime: TimeLike,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsLutimes {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        const atime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+            return ctx.throwInvalidArguments("atime is required", {});
+        }) ?? {
+            return ctx.throwInvalidArguments("atime must be a number or a Date", {});
+        };
+
+        arguments.eat();
+
+        const mtime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+            return ctx.throwInvalidArguments("mtime is required", {});
+        }) ?? {
+            return ctx.throwInvalidArguments("mtime must be a number or a Date", {});
+        };
+
+        arguments.eat();
+
+        _path_guard.armed = false;
+        return { path: path, atime: atime, mtime: mtime };
+    }
+}
+
+pub struct _ArgumentsChmod {
+    path: PathLike,
+    mode: Mode = 0x777,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsChmod {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let mode_arg: jsc.JSValue = arguments.next() ?? .js_undefined;
+        let mode: Mode = undefined;
+        if (m := jsc.Node.modeFromJS(ctx, mode_arg)?) {
+            mode = m;
+        } else {
+            return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", {}, "number", mode_arg);
+        }
+
+        arguments.eat();
+
+        _path_guard.armed = false;
+        return _ArgumentsChmod{ path: path, mode: mode };
+    }
+}
+
+pub struct _ArgumentsFChmod {
+    fd: FD,
+    mode: Mode = 0x777,
+
+    static fn deinit(_: *const @This()) {}
+
+    static fn toThreadSafe(_: *const @This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFChmod {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        let mode_arg: jsc.JSValue = arguments.next() ?? .js_undefined;
+        let mode: Mode = undefined;
+        if (m := jsc.Node.modeFromJS(ctx, mode_arg)?) {
+            mode = m;
+        } else {
+            return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", {}, "number", mode_arg);
+        }
+
+        arguments.eat();
+
+        return _ArgumentsFChmod{ fd: fd, mode: mode };
+    }
+}
+
+pub struct _ArgumentsStatFS {
+    path: PathLike,
+    big_int: bool = false,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Arguments.StatFS {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        const big_int = brk: {
+            if (next_val := arguments.next()) {
+                if (next_val.isObject()) {
+                    if (next_val.isCallable()) break :brk false;
+                    arguments.eat();
+
+                    if (big_int := next_val.getBooleanStrict(ctx, "bigint")?) {
+                        break :brk big_int;
+                    }
+                }
+            }
+            break :brk false;
+        };
+
+        _path_guard.armed = false;
+        return { path: path, big_int: big_int };
+    }
+}
+
+pub struct _ArgumentsStat {
+    path: PathLike,
+    big_int: bool = false,
+    throw_if_no_entry: bool = true,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect() {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsStat {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let throw_if_no_entry = true;
+
+        const big_int = brk: {
+            if (next_val := arguments.next()) {
+                if (next_val.isObject()) {
+                    if (next_val.isCallable()) break :brk false;
+                    arguments.eat();
+
+                    if (throw_if_no_entry_val := next_val.getBooleanStrict(ctx, "throwIfNoEntry")?) {
+                        throw_if_no_entry = throw_if_no_entry_val;
+                    }
+
+                    if (big_int := next_val.getBooleanStrict(ctx, "bigint")?) {
+                        break :brk big_int;
+                    }
+                }
+            }
+            break :brk false;
+        };
+
+        _path_guard.armed = false;
+        return _ArgumentsStat{ path: path, big_int: big_int, throw_if_no_entry: throw_if_no_entry };
+    }
+}
+
+pub struct _ArgumentsFstat {
+    fd: FD,
+    big_int: bool = false,
+
+    static fn deinit(_: *const @This()) {}
+
+    static fn toThreadSafe(_: *@This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFstat {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const big_int = brk: {
+            if (next_val := arguments.next()) {
+                if (next_val.isObject()) {
+                    if (next_val.isCallable()) break :brk false;
+                    arguments.eat();
+
+                    if (big_int := next_val.getBooleanStrict(ctx, "bigint")?) {
+                        break :brk big_int;
+                    }
+                }
+            }
+            break :brk false;
+        };
+
+        return _ArgumentsFstat{ fd: fd, big_int: big_int };
+    }
+}
+
+pub struct _ArgumentsLink {
+    old_path: PathLike,
+    new_path: PathLike,
+
+    fn deinit() {
+        _.old_path.deinit();
+        _.new_path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.old_path.deinitAndUnprotect();
+        _.new_path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.old_path.toThreadSafe();
+        _.new_path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsLink {
+        const old_path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("oldPath must be a string or TypedArray", {});
+        };
+        let _old_path_guard = PathLikeGuard{ path: old_path };
+
+        const new_path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("newPath must be a string or TypedArray", {});
+        };
+        let _new_path_guard = PathLikeGuard{ path: new_path };
+
+        _old_path_guard.armed = false;
+        _new_path_guard.armed = false;
+        return _ArgumentsLink{ old_path: old_path, new_path: new_path };
+    }
+}
+
+enum _ArgumentsSymlinkLinkType {
+    unspecified,
+    file,
+    dir,
+    junction,
+}
+
+pub struct _ArgumentsSymlink {
+    /// Where the symbolic link is targetting.
+    target_path: PathLike,
+    /// The path to create the symbolic link at.
+    new_path: PathLike,
+    /// Windows has multiple link types. By default, only junctions can be created by non-admin.
+    link_type: if (Environment.isWindows) LinkType else void,
+
+    const LinkType = _ArgumentsSymlinkLinkType;
+
+    fn deinit() {
+        _.target_path.deinit();
+        _.new_path.deinit();
+    }
+
+    fn deinitAndUnprotect() {
+        _.target_path.deinitAndUnprotect();
+        _.new_path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.target_path.toThreadSafe();
+        _.new_path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsSymlink {
+        const old_path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("target must be a string or TypedArray", {});
+        };
+        let _old_path_guard = PathLikeGuard{ path: old_path };
+
+        const new_path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _new_path_guard = PathLikeGuard{ path: new_path };
+
+        // The type argument is only available on Windows and
+        // ignored on other platforms. It can be set to 'dir',
+        // 'file', or 'junction'. If the type argument is not set,
+        // Node.js will autodetect target type and use 'file' or
+        // 'dir'. If the target does not exist, 'file' will be used.
+        // Windows junction points require the destination path to
+        // be absolute. When using 'junction', the target argument
+        // will automatically be normalized to absolute path.
+        const link_type: LinkType = link_type: {
+            if (next_val := arguments.next()) {
+                if (next_val.isUndefinedOrNull()) {
+                    break :link_type .unspecified;
+                }
+                if (next_val.isString()) {
+                    arguments.eat();
+                    let str = next_val.toBunString(ctx)?;
+                    const _str_guard = BunStringGuard{ str: str };
+                    if (str.eqlComptime("dir")) break :link_type .dir;
+                    if (str.eqlComptime("file")) break :link_type .file;
+                    if (str.eqlComptime("junction")) break :link_type .junction;
+                    return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\". Received \"{f}\"", { str}).throw();
+                }
+                // not a string. fallthrough to auto detect.
+                return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\".", {}).throw();
+            }
+            break :link_type .unspecified;
+        };
+
+        const empty_link_type: void = undefined;
+        _old_path_guard.armed = false;
+        _new_path_guard.armed = false;
+        return _ArgumentsSymlink{
+            target_path: old_path,
+            new_path: new_path,
+            link_type: if (comptime Environment.isWindows) link_type else empty_link_type,
+        };
+    }
+}
+
+pub struct _ArgumentsReadlink {
+    path: PathLike,
+    encoding: Encoding = Encoding.utf8,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadlink {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let encoding = Encoding.utf8;
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            switch (val.jsType()) {
+                .String, .StringObject, .DerivedStringObject => {
+                    encoding = Encoding.assert(val, ctx, encoding)?;
+                },
+                else => {
+                    if (val.isObject()) {
+                        encoding = getEncoding(val, ctx, encoding)?;
+                    }
+                },
+            }
+        }
+
+        _path_guard.armed = false;
+        return _ArgumentsReadlink{ path: path, encoding: encoding };
+    }
+}
+
+pub struct _ArgumentsRealpath {
+    path: PathLike,
+    encoding: Encoding = .utf8,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRealpath {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let encoding = Encoding.utf8;
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            switch (val.jsType()) {
+                .String,
+                .StringObject,
+                .DerivedStringObject
+                => {
+                    encoding = Encoding.assert(val, ctx, encoding)?;
+                },
+                else => {
+                    if (val.isObject()) {
+                        encoding = getEncoding(val, ctx, encoding)?;
+                    }
+                },
+            }
+        }
+
+        _path_guard.armed = false;
+        return _ArgumentsRealpath{ path: path, encoding: encoding };
+    }
+}
+
+pub struct _ArgumentsUnlink {
+    path: PathLike,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsUnlink {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+        _path_guard.armed = false;
+
+        return _ArgumentsUnlink{
+            path: path,
+        };
+    }
+}
+
+pub struct _ArgumentsRmDir {
+    path: PathLike,
+
+    force: bool = false,
+
+    max_retries: u32 = 0,
+    recursive: bool = false,
+    retry_delay: c_uint = 100,
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRmDir {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let recursive = false;
+        let force = false;
+        let max_retries: u32 = 0;
+        let retry_delay: c_uint = 100;
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            if (val.isObject()) {
+                if (boolean := val.get(ctx, "recursive")?) {
+                    if (boolean.isBoolean()) {
+                        recursive = boolean.toBoolean();
+                    } else {
+                        return ctx.throwInvalidArguments("The \"options.recursive\" property must be of type boolean.", {});
+                    }
+                }
+
+                if (boolean := val.get(ctx, "force")?) {
+                    if (boolean.isBoolean()) {
+                        force = boolean.toBoolean();
+                    } else {
+                        return ctx.throwInvalidArguments("The \"options.force\" property must be of type boolean.", {});
+                    }
+                }
+
+                if (delay := val.get(ctx, "retryDelay")?) {
+                    retry_delay = @as(c_uint, @intCast(jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))?));
+                }
+
+                if (retries := val.get(ctx, "maxRetries")?) {
+                    max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
+                }
+            } else if (!val.isUndefined()) {
+                return ctx.throwInvalidArguments("The \"options\" argument must be of type object.", {});
+            }
+        }
+
+        _path_guard.armed = false;
+        return {
+            path: path,
+            recursive: recursive,
+            force: force,
+            max_retries: max_retries,
+            retry_delay: retry_delay,
+        };
+    }
+}
+
+pub struct _ArgumentsMkdir {
+    path: PathLike,
+    /// Indicates whether parent folders should be created.
+    /// If a folder was created, the path to the first created folder will be returned.
+    /// @default false
+    recursive: bool = false,
+    /// A file mode. If a string is passed, it is parsed as an octal integer. If not specified
+    mode: Mode = DefaultMode,
+    /// If set to true, the return value is never set to a string
+    always_return_none: bool = false,
+
+    pub const DefaultMode = 0o777;
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsMkdir {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let recursive = false;
+        let mode: Mode = @as(Mode, 0o777);
+
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            if (val.isObject()) {
+                if (boolean := val.getBooleanStrict(ctx, "recursive")?) {
+                    recursive = boolean;
+                }
+
+                if (mode_ := val.get(ctx, "mode")?) {
+                    if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
+                }
+            }
+            if (val.isNumber() || val.isString()) {
+                if (m := jsc.Node.modeFromJS(ctx, val)?) { mode = m; }
+            }
+        }
+
+        _path_guard.armed = false;
+        return _ArgumentsMkdir{
+            path: path,
+            recursive: recursive,
+            mode: mode,
+        };
+    }
+}
+
+struct _ArgumentsMkdirTemp {
+    prefix: PathLike = { buffer: { buffer: jsc.ArrayBuffer.empty } },
+    encoding: Encoding = .utf8,
+
+    fn deinit() {
+        _.prefix.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.prefix.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.prefix.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsMkdirTemp {
+        const prefix = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArgumentTypeValue("prefix", "string, Buffer, or URL", arguments.next() ?? .js_undefined);
+        };
+        let _prefix_guard = PathLikeGuard{ path: prefix };
+
+        let encoding = Encoding.utf8;
+
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            switch (val.jsType()) {
+                .String, .StringObject, .DerivedStringObject => {
+                    encoding = Encoding.assert(val, ctx, encoding)?;
+                },
+                else => {
+                    if (val.isObject()) {
+                        encoding = getEncoding(val, ctx, encoding)?;
+                    }
+                },
+            }
+        }
+
+        _prefix_guard.armed = false;
+        return {
+            prefix: prefix,
+            encoding: encoding,
+        };
+    }
+}
+
+pub struct _ArgumentsReaddir {
+    path: PathLike,
+    encoding: Encoding = .utf8,
+    with_file_types: bool = false,
+    recursive: bool = false,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect() {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    fn tag(): Return.Readdir.Tag {
+        return switch (_.encoding) {
+            .buffer => .buffers,
+            else => if (_.with_file_types)
+                .with_file_types
+            else
+                .files,
+        };
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReaddir {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let encoding: Encoding = .utf8;
+        let with_file_types = false;
+        let recursive = false;
+
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            switch (val.jsType()) {
+                .String,
+                .StringObject,
+                .DerivedStringObject
+                => {
+                    encoding = Encoding.assert(val, ctx, encoding)?;
+                },
+                else => {
+                    if (val.isObject()) {
+                        encoding = getEncoding(val, ctx, encoding)?;
+
+                        if (recursive_ := val.getBooleanStrict(ctx, "recursive")?) {
+                            recursive = recursive_;
+                        }
+
+                        if (with_file_types_ := val.getBooleanStrict(ctx, "withFileTypes")?) {
+                            with_file_types = with_file_types_;
+                        }
+                    }
+                },
+            }
+        }
+
+        _path_guard.armed = false;
+        return {
+            path: path,
+            encoding: encoding,
+            with_file_types: with_file_types,
+            recursive: recursive,
+        };
+    }
+}
+
+pub struct _ArgumentsClose {
+    fd: FD,
+
+    static fn deinit(_: *const @This()) {}
+    static fn toThreadSafe(_: _ArgumentsClose) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsClose {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        return _ArgumentsClose{ fd: fd };
+    }
+}
+
+pub struct _ArgumentsOpen {
+    path: PathLike,
+    flags: FileSystemFlags = .r,
+    mode: Mode = default_permission,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn deinitAndUnprotect() {
+        _.path.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsOpen {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let flags = FileSystemFlags.r;
+        let mode: Mode = default_permission;
+
+        if (val := arguments.next()) {
+            arguments.eat();
+
+            if (val.isObject()) {
+                if (flags_ := val.getTruthy(ctx, "flags")?) {
+                    if (f := FileSystemFlags.fromJS(ctx, flags_)?) { flags = f; }
+                }
+
+                if (mode_ := val.getTruthy(ctx, "mode")?) {
+                    if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
+                }
+            } else if (val != .zero) {
+                if (!val.isUndefinedOrNull()) {
+                    // error is handled below
+                    if (f := FileSystemFlags.fromJS(ctx, val)?) { flags = f; }
+                }
+
+                if (next := arguments.nextEat()) {
+                    if (m := jsc.Node.modeFromJS(ctx, next)?) { mode = m; }
+                }
+            }
+        }
+
+        _path_guard.armed = false;
+        return _ArgumentsOpen{
+            path: path,
+            flags: flags,
+            mode: mode,
+        };
+    }
+}
+
+pub struct _ArgumentsFutimes {
+    fd: FD,
+    atime: TimeLike,
+    mtime: TimeLike,
+
+    static fn deinit(_: *const @This()) {}
+
+    static fn toThreadSafe(_: *const @This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFutimes {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const atime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+            return ctx.throwInvalidArguments("atime is required", {});
+        }) ?? {
+            return ctx.throwInvalidArguments("atime must be a number or a Date", {});
+        };
+        arguments.eat();
+
+        const mtime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
+            return ctx.throwInvalidArguments("mtime is required", {});
+        }) ?? {
+            return ctx.throwInvalidArguments("mtime must be a number or a Date", {});
+        };
+        arguments.eat();
+
+        return _ArgumentsFutimes{
+            fd: fd,
+            atime: atime,
+            mtime: mtime,
+        };
+    }
+}
+
+pub struct _ArgumentsWrite {
+    fd: FD,
+    buffer: StringOrBuffer,
+    // buffer_val: jsc.JSValue = jsc.JSValue.zero,
+    offset: u64 = 0,
+    length: u64 = std.math.maxInt(u64),
+    position: ReadPosition? = null,
+    encoding: Encoding = Encoding.buffer,
+
+    fn deinit() {
+        _.buffer.deinit();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.buffer.deinitAndUnprotect();
+    }
+
+    fn toThreadSafe(*_) {
+        _.buffer.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWrite {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        const buffer_value = arguments.next();
+        const buffer = try StringOrBuffer.fromJS(ctx, bun.default_allocator, buffer_value ?? {
+            return ctx.throwInvalidArguments("data is required", {});
+        }) ?? {
+            return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
+        };
+        if (buffer_value.?.isString() && !buffer_value.?.isStringLiteral()) {
+            return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
+        }
+
+        let args = _ArgumentsWrite{
+            fd: fd,
+            buffer: buffer,
+            encoding: switch (buffer) {
+                .buffer => Encoding.buffer,
+                inline else => Encoding.utf8,
+            },
+        };
+        let _args_guard = WriteArgsGuard{ args: unsafe { &args } };
+        arguments.eat();
+
+        if (first_arg := arguments.next()) {
+            parse: {
+                let current = first_arg;
+                switch (buffer) {
+                    // fs.write(fd, string[, position[, encoding]], callback)
+                    else => {
+                        if (current.isNumber()) {
+                            args.position = current.to(i52);
+                            arguments.eat();
+                            if (next_cur := arguments.next()) {
+                                current = next_cur;
+                            } else {
+                                break :parse;
+                            }
+                        }
+
+                        if (current.isString()) {
+                            args.encoding = Encoding.assert(current, ctx, args.encoding)?;
+                            arguments.eat();
+                        }
+                    },
+                    // fs.write(fd, buffer[, offset[, length[, position]]], callback)
+                    .buffer => {
+                        if (current.isUndefinedOrNull() || current.isFunction()) break :parse;
+                        args.offset = @as(u64, @intCast(jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)?));
+                        arguments.eat();
+                        if (next_cur := arguments.next()) {
+                            current = next_cur;
+                        } else {
+                            break :parse;
+                        }
+
+                        if (!(current.isNumber() || current.isBigInt())) break :parse;
+                        const length = current.to(i64);
+                        const buf_len = args.buffer.buffer.slice().len;
+                        const max_offset = @min(buf_len, std.math.maxInt(i64));
+                        if (args.offset > max_offset) {
+                            return ctx.throwRangeError(
+                                @as(f64, @floatFromInt(args.offset)),
+                                { field_name: "offset", max: i32(max_offset) },
+                            );
+                        }
+                        const max_len = @min(buf_len - args.offset, std.math.maxInt(i32));
+                        if (length > max_len || length < 0) {
+                            return ctx.throwRangeError(
+                                @as(f64, @floatFromInt(length)),
+                                { field_name: "length", min: 0, max: i32(max_len) },
+                            );
+                        }
+                        args.length = @intCast(length);
+
+                        arguments.eat();
+                        if (next_cur := arguments.next()) {
+                            current = next_cur;
+                        } else {
+                            break :parse;
+                        }
+
+                        if (!(current.isNumber() || current.isBigInt())) break :parse;
+                        const position = current.to(i52);
+                        if (position >= 0) args.position = position;
+                        arguments.eat();
+                    },
+                }
+            }
+        }
+
+        _args_guard.armed = false;
+        return args;
+    }
+}
+
+pub struct _ArgumentsRead {
+    fd: FD,
+    buffer: Buffer,
+    offset: u64,
+    length: u64,
+    position: ReadPosition? = null,
+
+    static fn deinit(_: *const @This()) {}
+
+    fn toThreadSafe() {
+        _.buffer.buffer.value.protect();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.buffer.buffer.value.unprotect();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsRead {
+        // About half of the normalization has already been done. The second half is done in the native code.
+        // fs_binding.read(fd, buffer, offset, length, position)
+
+        // fd = getValidatedFd(fd);
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        //  validateBuffer(buffer);
+        let buffer_value: jsc.JSValue = undefined;
+        if (v := arguments.nextEat()) { buffer_value = v; } else { return ctx.throwInvalidArguments("buffer is required", {}); }
+        let buffer: jsc.MarkedArrayBuffer = undefined;
+        if (b := Buffer.fromJS(ctx, buffer_value)) { buffer = b; } else { return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value); }
+
+        const offset_value: jsc.JSValue = arguments.nextEat() ?? .@"null";
+        // if (offset == null) {
+        //   offset = 0;
+        // } else {
+        //   validateInteger(offset, 'offset', 0);
+        // }
+        const offset: u64 = if (offset_value.isUndefinedOrNull())
+            0
+        else
+            @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER));
+
+        // length |= 0;
+        let length_float: f64 = 0;
+        if (arg := arguments.nextEat()) {
+            length_float = try arg.toNumber(ctx);
+        }
+
+        //   if (length === 0) {
+        //     return process.nextTick(function tick() {
+        //       callback(null, 0, buffer);
+        //     });
+        //   }
+        if (length_float == 0) {
+            return { fd: fd, buffer: buffer, length: 0, offset: 0 };
+        }
+
+        const buf_len = buffer.slice().len;
+        if (buf_len == 0) {
+            return ctx.ERR(.INVALID_ARG_VALUE, "The argument 'buffer' is empty and cannot be written.", {}).throw();
+        }
+        // validateOffsetLengthRead(offset, length, buffer.byteLength);
+        if (@mod(length_float, 1) != 0) {
+            return ctx.throwRangeError(length_float, { field_name: "length", msg: "an integer" });
+        }
+        const length_int: i64 = @intFromFloat(length_float);
+        if (length_int > buf_len) {
+            return ctx.throwRangeError(
+                length_float,
+                { field_name: "length", max: i32(@min(buf_len, std.math.maxInt(i64))) },
+            );
+        }
+        if (@as(i64, i32(offset)) +| length_int > buf_len) {
+            return ctx.throwRangeError(
+                length_float,
+                { field_name: "length", max: i32(buf_len -| offset) },
+            );
+        }
+        if (length_int < 0) {
+            return ctx.throwRangeError(length_float, { field_name: "length", min: 0 });
+        }
+        const length: u64 = @intCast(length_int);
+
+        // if (position == null) {
+        //   position = -1;
+        // } else {
+        //   validatePosition(position, 'position', length);
+        // }
+        const position_value: jsc.JSValue = arguments.nextEat() ?? .@"null";
+        let position_int: i64 = -1;
+        if (position_value.isUndefinedOrNull()) {
+            position_int = -1;
+        } else if (position_value.isNumber()) {
+            position_int = try jsc.Node.validators.validateInteger(ctx, position_value, "position", -1, jsc.MAX_SAFE_INTEGER);
+        } else if (position := jsc.JSBigInt.fromJS(position_value)) {
+            // const maxPosition = 2n ** 63n - 1n - BigInt(length)
+            const max_position = std.math.maxInt(i64) - length_int;
+            if (position.order(i64, -1) == .lt || position.order(i64, max_position) == .gt) {
+                const position_str = position.toString(ctx)?;
+                const _pos_str_guard = BunStringGuard{ str: position_str };
+
+                return ctx.throwRangeError(position_str, {
+                    field_name: "position",
+                    min: -1,
+                    max: i32(max_position),
+                });
+            }
+            position_int = position.toInt64();
+        } else {
+            return ctx.throwInvalidArgumentTypeValue("position", "number or bigint", position_value);
+        }
+
+        // Bun needs `null` to tell the native function if to use pread or read
+        const position: ReadPosition? = if (position_int >= 0)
+            position_int
+        else
+            null;
+
+        return {
+            fd: fd,
+            buffer: buffer,
+            offset: offset,
+            length: length,
+            position: position,
+        };
+    }
+}
+
+pub struct _ArgumentsReadFile {
+    path: PathOrFileDescriptor,
+    encoding: Encoding = Encoding.utf8,
+
+    offset: jsc.WebCore.Blob.SizeType = 0,
+    max_size: jsc.WebCore.Blob.SizeType? = null,
+    limit_size_for_javascript: bool = false,
+
+    flag: FileSystemFlags = FileSystemFlags.r,
+
+    signal: (*AbortSignal)? = null,
+
+    fn deinit() {
+        _.path.deinit();
+        if (signal := _.signal) {
+            signal.pendingActivityUnref();
+            signal.unref();
+        }
+    }
+
+    fn deinitAndUnprotect() {
+        _.path.deinitAndUnprotect();
+        if (signal := _.signal) {
+            signal.pendingActivityUnref();
+            signal.unref();
+        }
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsReadFile {
+        const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
+            return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
+        };
+        let _path_guard = PathOrFDGuard{ path: path };
+
+        let encoding = Encoding.buffer;
+        let flag = FileSystemFlags.r;
+
+        let _signal_guard = AbortSignalGuard{};
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            if (arg.isString()) {
+                encoding = Encoding.assert(arg, ctx, encoding)?;
+            } else if (arg.isObject()) {
+                encoding = getEncoding(arg, ctx, encoding)?;
+
+                if (flag_ := arg.getTruthy(ctx, "flag")?) {
+                    if (f := FileSystemFlags.fromJS(ctx, flag_)?) {
+                        flag = f;
+                    } else {
+                        return ctx.throwInvalidArguments("Invalid flag", {});
+                    }
+                }
+
+                if (value := arg.getTruthy(ctx, "signal")?) {
+                    if (signal := AbortSignal.fromJS(value)) {
+                        _signal_guard.signal = signal.ref();
+                        signal.pendingActivityRef();
+                    } else {
+                        return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
+                    }
+                }
+            }
+        }
+
+        _path_guard.armed = false;
+        _signal_guard.armed = false;
+        return {
+            path: path,
+            encoding: encoding,
+            flag: flag,
+            limit_size_for_javascript: true,
+            signal: _signal_guard.signal,
+        };
+    }
+
+    fn aborted(): bool {
+        if (signal := _.signal) {
+            return signal.aborted();
+        }
+        return false;
+    }
+}
+
+pub struct _ArgumentsWriteFile {
+    encoding: Encoding = Encoding.utf8,
+
+    flag: FileSystemFlags = FileSystemFlags.w,
+    mode: Mode = 0o666,
+    file: PathOrFileDescriptor,
+    flush: bool = false,
+
+    /// Encoded at the time of construction.
+    data: StringOrBuffer,
+
+    dirfd: FD,
+
+    signal: (*AbortSignal)? = null,
+
+    fn deinit() {
+        _.file.deinit();
+        _.data.deinit();
+        if (signal := _.signal) {
+            signal.pendingActivityUnref();
+            signal.unref();
+        }
+    }
+
+    fn toThreadSafe(*_) {
+        _.file.toThreadSafe();
+        _.data.toThreadSafe();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.file.deinitAndUnprotect();
+        _.data.deinitAndUnprotect();
+        if (signal := _.signal) {
+            signal.pendingActivityUnref();
+            signal.unref();
+        }
+    }
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsWriteFile {
+        const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
+            return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
+        };
+        let _path_guard = PathOrFDGuard{ path: path };
+
+        const data_value = arguments.nextEat() ?? {
+            return ctx.throwInvalidArguments("data is required", {});
+        };
+
+        let encoding = Encoding.buffer;
+        let flag = FileSystemFlags.w;
+        let mode: Mode = default_permission;
+        let _signal_guard = AbortSignalGuard{};
+
+        let flush: bool = false;
+        if (data_value.isString()) {
+            encoding = Encoding.utf8;
+        }
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            if (arg.isString()) {
+                encoding = Encoding.assert(arg, ctx, encoding)?;
+            } else if (arg.isObject()) {
+                encoding = getEncoding(arg, ctx, encoding)?;
+
+                if (flag_ := arg.getTruthy(ctx, "flag")?) {
+                    if (f := FileSystemFlags.fromJS(ctx, flag_)?) {
+                        flag = f;
+                    } else {
+                        return ctx.throwInvalidArguments("Invalid flag", {});
+                    }
+                }
+
+                if (mode_ := arg.getTruthy(ctx, "mode")?) {
+                    if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
+                }
+
+                if (value := arg.getTruthy(ctx, "signal")?) {
+                    if (signal := AbortSignal.fromJS(value)) {
+                        _signal_guard.signal = signal.ref();
+                        signal.pendingActivityRef();
+                    } else {
+                        return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
+                    }
+                }
+
+                if (flush_ := arg.getOptional(ctx, "flush", jsc.JSValue)?) {
+                    if (flush_.isBoolean() || flush_.isUndefinedOrNull()) {
+                        flush = flush_ == .true;
+                    } else {
+                        return ctx.throwInvalidArgumentTypeValue("flush", "boolean", flush_);
+                    }
+                }
+            }
+        }
+
+        // String objects not allowed (typeof new String("hi") === "object")
+        // https://github.com/nodejs/node/blob/6f946c95b9da75c70e868637de8161bc8d048379/lib/internal/fs/utils.js#L916
+        const allow_string_object = false;
+        // the pattern in node_fs.zig is to call toThreadSafe after Arguments.*.fromJS
+        const is_async = false;
+        const data = try StringOrBuffer.fromJSWithEncodingMaybeAsync(ctx, bun.default_allocator, data_value, encoding, is_async, allow_string_object) ?? {
+            return ctx.ERR(.INVALID_ARG_TYPE, "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView", {}).throw();
+        };
+
+        _path_guard.armed = false;
+        _signal_guard.armed = false;
+        return {
+            file: path,
+            encoding: encoding,
+            flag: flag,
+            mode: mode,
+            data: data,
+            dirfd: bun.FD.cwd(),
+            signal: _signal_guard.signal,
+            flush: flush,
+        };
+    }
+
+    fn aborted(): bool {
+        if (signal := _.signal) {
+            return signal.aborted();
+        }
+        return false;
+    }
+}
+
+pub struct _ArgumentsOpenDir {
+    path: PathLike,
+    encoding: Encoding = Encoding.utf8,
+
+    /// Number of directory entries that are buffered internally when reading from the directory. Higher values lead to better performance but higher memory usage. Default: 32
+    buffer_size: c_int = 32,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsOpenDir {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let encoding = Encoding.buffer;
+        let buffer_size: c_int = 32;
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            if (arg.isString()) {
+                encoding = Encoding.assert(arg, ctx, encoding) catch encoding;
+            } else if (arg.isObject()) {
+                if (encoding_ := getEncoding(arg, ctx)) {
+                    encoding = encoding_;
+                }
+
+                if (buffer_size_ := arg.get(ctx, "bufferSize")?) {
+                    buffer_size = buffer_size_.toInt32();
+                    if (buffer_size < 0) {
+                        return ctx.throwInvalidArguments("bufferSize must be > 0", {});
+                    }
+                }
+            }
+        }
+
+        _path_guard.armed = false;
+        return _ArgumentsOpenDir{
+            path: path,
+            encoding: encoding,
+            buffer_size: buffer_size,
+        };
+    }
+}
+
+pub struct _ArgumentsExists {
+    path: PathLike?,
+
+    fn deinit() {
+        if (path := _.path) {
+            path.deinit();
+        }
+    }
+
+    fn toThreadSafe(*_) {
+        if (*path := _.path) {
+            path.toThreadSafe();
+        }
+    }
+
+    fn deinitAndUnprotect(*_) {
+        if (*path := _.path) {
+            path.deinitAndUnprotect();
+        }
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsExists {
+        return _ArgumentsExists{
+            path: try PathLike.fromJS(ctx, arguments),
+        };
+    }
+}
+
+pub struct _ArgumentsAccess {
+    path: PathLike,
+    mode: FileSystemFlags = FileSystemFlags.r,
+
+    fn deinit() {
+        _.path.deinit();
+    }
+
+    fn toThreadSafe(*_) {
+        _.path.toThreadSafe();
+    }
+
+    fn deinitAndUnprotect(*_) {
+        _.path.deinitAndUnprotect();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsAccess {
+        const path = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
+        };
+        let _path_guard = PathLikeGuard{ path: path };
+
+        let mode = FileSystemFlags.r;
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            mode = FileSystemFlags.fromJSNumberOnly(ctx, arg, .access)?;
+        }
+
+        _path_guard.armed = false;
+        return _ArgumentsAccess{
+            path: path,
+            mode: mode,
+        };
+    }
+}
+
+pub struct _ArgumentsFdataSync {
+    fd: FD,
+
+    static fn deinit(_: *const @This()) {}
+    static fn toThreadSafe(_: *const @This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFdataSync {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        return _ArgumentsFdataSync{ fd: fd };
+    }
+}
+
+pub struct _ArgumentsCopyFile {
+    src: PathLike,
+    dest: PathLike,
+    mode: constants.Copyfile,
+
+    fn deinit() {
+        _.src.deinit();
+        _.dest.deinit();
+    }
+
+    fn toThreadSafe(*_) {
+        _.src.toThreadSafe();
+        _.dest.toThreadSafe();
+    }
+
+    fn deinitAndUnprotect() {
+        _.src.deinitAndUnprotect();
+        _.dest.deinitAndUnprotect();
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsCopyFile {
+        const src = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("src must be a string or TypedArray", {});
+        };
+        let _src_guard = PathLikeGuard{ path: src };
+
+        const dest = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("dest must be a string or TypedArray", {});
+        };
+        let _dest_guard = PathLikeGuard{ path: dest };
+
+        let mode: constants.Copyfile = @enumFromInt(0);
+        if (arg := arguments.next()) {
+            arguments.eat();
+            mode = @enumFromInt(@intFromEnum(try FileSystemFlags.fromJSNumberOnly(ctx, arg, .copy_file)));
+        }
+
+        _src_guard.armed = false;
+        _dest_guard.armed = false;
+        return _ArgumentsCopyFile{
+            src: src,
+            dest: dest,
+            mode: mode,
+        };
+    }
+}
+
+struct _ArgumentsCpFlags {
+    mode: constants.Copyfile,
+    recursive: bool,
+    errorOnExist: bool,
+    force: bool,
+    deinit_paths: bool = true,
+}
+
+pub struct _ArgumentsCp {
+    src: PathLike,
+    dest: PathLike,
+    flags: Flags,
+
+    const Flags = _ArgumentsCpFlags;
+
+    fn deinit() {
+        if (_.flags.deinit_paths) {
+            _.src.deinit();
+            _.dest.deinit();
+        }
+    }
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsCp {
+        const src = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("src must be a string or TypedArray", {});
+        };
+        let _src_guard = PathLikeGuard{ path: src };
+
+        const dest = try PathLike.fromJS(ctx, arguments) ?? {
+            return ctx.throwInvalidArguments("dest must be a string or TypedArray", {});
+        };
+        let _dest_guard = PathLikeGuard{ path: dest };
+
+        let recursive: bool = false;
+        let errorOnExist: bool = false;
+        let force: bool = true;
+        let mode: i32 = 0;
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            recursive = arg.toBoolean();
+        }
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            errorOnExist = arg.toBoolean();
+        }
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            force = arg.toBoolean();
+        }
+
+        if (arg := arguments.next()) {
+            arguments.eat();
+            if (arg.isNumber()) {
+                mode = arg.coerce(i32, ctx)?;
+            }
+        }
+
+        _src_guard.armed = false;
+        _dest_guard.armed = false;
+        return _ArgumentsCp{
+            src: src,
+            dest: dest,
+            flags: {
+                mode: @enumFromInt(mode),
+                recursive: recursive,
+                errorOnExist: errorOnExist,
+                force: force,
+            },
+        };
+    }
+}
+
+pub struct _ArgumentsWriteEv {
+    fd: FD,
+    buffers: []const ArrayBuffer,
+    position: ReadPosition,
+}
+
+pub struct _ArgumentsReadEv {
+    fd: FD,
+    buffers: []ArrayBuffer,
+    position: ReadPosition,
+}
+
+pub struct _ArgumentsFsync {
+    fd: FD,
+
+    static fn deinit(_: *const @This()) {}
+    static fn toThreadSafe(_: *const @This()) {}
+
+    static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!_ArgumentsFsync {
+        const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
+        const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
+            return throwInvalidFdError(ctx, fd_value);
+        };
+
+        return _ArgumentsFsync{ fd: fd };
+    }
+}
+
+fn wrapTo(comptime T: type, in_val: i64): T {
+    comptime bun.assert(@typeInfo(T).int.signedness == .unsigned);
+    return (@as(T, @intCast(@mod(in_val, std.math.maxInt(T)))));
+}
+
+fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: Encoding): bun.JSError!Encoding {
+    if (value := object.fastGet(globalObject, .encoding)?) {
+        return Encoding.assert(value, globalObject, default);
+    }
+
+    return default;
+}
+
+pub struct Arguments {
+    pub const Rename = _ArgumentsRename;
+
+    pub const Truncate = _ArgumentsTruncate;
+
+    pub const Writev = _ArgumentsWritev;
+
+    pub const Readv = _ArgumentsReadv;
+
+    pub const FTruncate = _ArgumentsFTruncate;
+
+    pub const Chown = _ArgumentsChown;
+
+    pub const Fchown = _ArgumentsFchown;
+
 
     pub const LChown = Chown;
 
-    pub const Lutimes = struct {
-        path: PathLike,
-        atime: TimeLike,
-        mtime: TimeLike,
+    pub const Lutimes = _ArgumentsLutimes;
 
-        static fn deinit(this: @This()) {
-            this.path.deinit();
-        }
+    pub const Chmod = _ArgumentsChmod;
 
-        static fn deinitAndUnprotect(this: *@This()) {
-            this.path.deinitAndUnprotect();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Lutimes {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            const atime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
-                return ctx.throwInvalidArguments("atime is required", {});
-            }) ?? {
-                return ctx.throwInvalidArguments("atime must be a number or a Date", {});
-            };
-
-            arguments.eat();
-
-            const mtime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
-                return ctx.throwInvalidArguments("mtime is required", {});
-            }) ?? {
-                return ctx.throwInvalidArguments("mtime must be a number or a Date", {});
-            };
-
-            arguments.eat();
-
-            _path_guard.armed = false;
-            return { path: path, atime: atime, mtime: mtime };
-        }
-    };
-
-    pub const Chmod = struct {
-        path: PathLike,
-        mode: Mode = 0x777,
-
-        static fn deinit(this: @This()) {
-            this.path.deinit();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.path.toThreadSafe();
-        }
-
-        static fn deinitAndUnprotect(this: *@This()) {
-            this.path.deinitAndUnprotect();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Chmod {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let mode_arg: jsc.JSValue = arguments.next() ?? .js_undefined;
-            let mode: Mode = try jsc.Node.modeFromJS(ctx, mode_arg) ?? {
-                return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", {}, "number", mode_arg);
-            };
-
-            arguments.eat();
-
-            _path_guard.armed = false;
-            return Chmod{ path: path, mode: mode };
-        }
-    };
-
-    pub const FChmod = struct {
-        fd: FD,
-        mode: Mode = 0x777,
-
-        static fn deinit(self: *const @This()) { * = self; }
-
-        static fn toThreadSafe(_: *const @This()) {}
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!FChmod {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            let mode_arg: jsc.JSValue = arguments.next() ?? .js_undefined;
-            let mode: Mode = try jsc.Node.modeFromJS(ctx, mode_arg) ?? {
-                return jsc.Node.validators.throwErrInvalidArgType(ctx, "mode", {}, "number", mode_arg);
-            };
-
-            arguments.eat();
-
-            return FChmod{ fd: fd, mode: mode };
-        }
-    };
+    pub const FChmod = _ArgumentsFChmod;
 
     pub const LCHmod = Chmod;
 
-    pub const StatFS = struct {
-        path: PathLike,
-        big_int: bool = false,
+    pub const StatFS = _ArgumentsStatFS;
 
-        fn deinit() {
-            _.path.deinit();
-        }
+    pub const Stat = _ArgumentsStat;
 
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Arguments.StatFS {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            const big_int = brk: {
-                if (next_val := arguments.next()) {
-                    if (next_val.isObject()) {
-                        if (next_val.isCallable()) break :brk false;
-                        arguments.eat();
-
-                        if (big_int := next_val.getBooleanStrict(ctx, "bigint")?) {
-                            break :brk big_int;
-                        }
-                    }
-                }
-                break :brk false;
-            };
-
-            _path_guard.armed = false;
-            return { path: path, big_int: big_int };
-        }
-    };
-
-    pub const Stat = struct {
-        path: PathLike,
-        big_int: bool = false,
-        throw_if_no_entry: bool = true,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn deinitAndUnprotect() {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Stat {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let throw_if_no_entry = true;
-
-            const big_int = brk: {
-                if (next_val := arguments.next()) {
-                    if (next_val.isObject()) {
-                        if (next_val.isCallable()) break :brk false;
-                        arguments.eat();
-
-                        if (throw_if_no_entry_val := next_val.getBooleanStrict(ctx, "throwIfNoEntry")?) {
-                            throw_if_no_entry = throw_if_no_entry_val;
-                        }
-
-                        if (big_int := next_val.getBooleanStrict(ctx, "bigint")?) {
-                            break :brk big_int;
-                        }
-                    }
-                }
-                break :brk false;
-            };
-
-            _path_guard.armed = false;
-            return Stat{ path: path, big_int: big_int, throw_if_no_entry: throw_if_no_entry };
-        }
-    };
-
-    pub const Fstat = struct {
-        fd: FD,
-        big_int: bool = false,
-
-        static fn deinit(self: *const @This()) { * = self; }
-
-        static fn toThreadSafe(_: *@This()) {}
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fstat {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const big_int = brk: {
-                if (next_val := arguments.next()) {
-                    if (next_val.isObject()) {
-                        if (next_val.isCallable()) break :brk false;
-                        arguments.eat();
-
-                        if (big_int := next_val.getBooleanStrict(ctx, "bigint")?) {
-                            break :brk big_int;
-                        }
-                    }
-                }
-                break :brk false;
-            };
-
-            return Fstat{ fd: fd, big_int: big_int };
-        }
-    };
+    pub const Fstat = _ArgumentsFstat;
 
     pub const Lstat = Stat;
 
-    pub const Link = struct {
-        old_path: PathLike,
-        new_path: PathLike,
+    pub const Link = _ArgumentsLink;
 
-        fn deinit() {
-            _.old_path.deinit();
-            _.new_path.deinit();
-        }
+    pub const Symlink = _ArgumentsSymlink;
 
-        fn deinitAndUnprotect(*_) {
-            _.old_path.deinitAndUnprotect();
-            _.new_path.deinitAndUnprotect();
-        }
+    pub const Readlink = _ArgumentsReadlink;
 
-        fn toThreadSafe(*_) {
-            _.old_path.toThreadSafe();
-            _.new_path.toThreadSafe();
-        }
+    pub const Realpath = _ArgumentsRealpath;
 
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Link {
-            const old_path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("oldPath must be a string or TypedArray", {});
-            };
-            let _old_path_guard = PathLikeGuard{ path: old_path };
 
-            const new_path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("newPath must be a string or TypedArray", {});
-            };
-            let _new_path_guard = PathLikeGuard{ path: new_path };
-
-            _old_path_guard.armed = false;
-            _new_path_guard.armed = false;
-            return Link{ old_path: old_path, new_path: new_path };
-        }
-    };
-
-    pub const Symlink = struct {
-        /// Where the symbolic link is targetting.
-        target_path: PathLike,
-        /// The path to create the symbolic link at.
-        new_path: PathLike,
-        /// Windows has multiple link types. By default, only junctions can be created by non-admin.
-        link_type: if (Environment.isWindows) LinkType else void,
-
-        const LinkType = enum {
-            unspecified,
-            file,
-            dir,
-            junction,
-        };
-
-        fn deinit() {
-            _.target_path.deinit();
-            _.new_path.deinit();
-        }
-
-        fn deinitAndUnprotect() {
-            _.target_path.deinitAndUnprotect();
-            _.new_path.deinitAndUnprotect();
-        }
-
-        static fn toThreadSafe(this: *@This()) {
-            this.target_path.toThreadSafe();
-            this.new_path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Symlink {
-            const old_path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("target must be a string or TypedArray", {});
-            };
-            let _old_path_guard = PathLikeGuard{ path: old_path };
-
-            const new_path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _new_path_guard = PathLikeGuard{ path: new_path };
-
-            // The type argument is only available on Windows and
-            // ignored on other platforms. It can be set to 'dir',
-            // 'file', or 'junction'. If the type argument is not set,
-            // Node.js will autodetect target type and use 'file' or
-            // 'dir'. If the target does not exist, 'file' will be used.
-            // Windows junction points require the destination path to
-            // be absolute. When using 'junction', the target argument
-            // will automatically be normalized to absolute path.
-            const link_type: LinkType = link_type: {
-                if (next_val := arguments.next()) {
-                    if (next_val.isUndefinedOrNull()) {
-                        break :link_type .unspecified;
-                    }
-                    if (next_val.isString()) {
-                        arguments.eat();
-                        let str = next_val.toBunString(ctx)?;
-                        const _str_guard = BunStringGuard{ str: str };
-                        if (str.eqlComptime("dir")) break :link_type .dir;
-                        if (str.eqlComptime("file")) break :link_type .file;
-                        if (str.eqlComptime("junction")) break :link_type .junction;
-                        return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\". Received \"{f}\"", { str}).throw();
-                    }
-                    // not a string. fallthrough to auto detect.
-                    return ctx.ERR(.INVALID_ARG_VALUE, "Symlink type must be one of \"dir\", \"file\", or \"junction\".", {}).throw();
-                }
-                break :link_type .unspecified;
-            };
-
-            const empty_link_type: void = undefined;
-            _old_path_guard.armed = false;
-            _new_path_guard.armed = false;
-            return Symlink{
-                target_path: old_path,
-                new_path: new_path,
-                link_type: if (comptime Environment.isWindows) link_type else empty_link_type,
-            };
-        }
-    };
-
-    pub const Readlink = struct {
-        path: PathLike,
-        encoding: Encoding = Encoding.utf8,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Readlink {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let encoding = Encoding.utf8;
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                switch (val.jsType()) {
-                    .String, .StringObject, .DerivedStringObject => {
-                        encoding = Encoding.assert(val, ctx, encoding)?;
-                    },
-                    else => {
-                        if (val.isObject()) {
-                            encoding = getEncoding(val, ctx, encoding)?;
-                        }
-                    },
-                }
-            }
-
-            _path_guard.armed = false;
-            return Readlink{ path: path, encoding: encoding };
-        }
-    };
-
-    pub const Realpath = struct {
-        path: PathLike,
-        encoding: Encoding = .utf8,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Realpath {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let encoding = Encoding.utf8;
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                switch (val.jsType()) {
-                    .String,
-                    .StringObject,
-                    .DerivedStringObject
-                    => {
-                        encoding = Encoding.assert(val, ctx, encoding)?;
-                    },
-                    else => {
-                        if (val.isObject()) {
-                            encoding = getEncoding(val, ctx, encoding)?;
-                        }
-                    },
-                }
-            }
-
-            _path_guard.armed = false;
-            return Realpath{ path: path, encoding: encoding };
-        }
-    };
-
-    static fn getEncoding(object: jsc.JSValue, globalObject: *jsc.JSGlobalObject, default: Encoding): bun.JSError!Encoding {
-        if (value := object.fastGet(globalObject, .encoding)?) {
-            return Encoding.assert(value, globalObject, default);
-        }
-
-        return default;
-    }
-
-    pub const Unlink = struct {
-        path: PathLike,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Unlink {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-            _path_guard.armed = false;
-
-            return Unlink{
-                path: path,
-            };
-        }
-    };
+    pub const Unlink = _ArgumentsUnlink;
 
     pub const Rm = RmDir;
 
-    pub const RmDir = struct {
-        path: PathLike,
-
-        force: bool = false,
-
-        max_retries: u32 = 0,
-        recursive: bool = false,
-        retry_delay: c_uint = 100,
-
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!RmDir {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let recursive = false;
-            let force = false;
-            let max_retries: u32 = 0;
-            let retry_delay: c_uint = 100;
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                if (val.isObject()) {
-                    if (boolean := val.get(ctx, "recursive")?) {
-                        if (boolean.isBoolean()) {
-                            recursive = boolean.toBoolean();
-                        } else {
-                            return ctx.throwInvalidArguments("The \"options.recursive\" property must be of type boolean.", {});
-                        }
-                    }
-
-                    if (boolean := val.get(ctx, "force")?) {
-                        if (boolean.isBoolean()) {
-                            force = boolean.toBoolean();
-                        } else {
-                            return ctx.throwInvalidArguments("The \"options.force\" property must be of type boolean.", {});
-                        }
-                    }
-
-                    if (delay := val.get(ctx, "retryDelay")?) {
-                        retry_delay = @as(c_uint, @intCast(jsc.Node.validators.validateInteger(ctx, delay, "options.retryDelay", 0, std.math.maxInt(c_uint))?));
-                    }
-
-                    if (retries := val.get(ctx, "maxRetries")?) {
-                        max_retries = @intCast(try jsc.Node.validators.validateInteger(ctx, retries, "options.maxRetries", 0, std.math.maxInt(u32)));
-                    }
-                } else if (!val.isUndefined()) {
-                    return ctx.throwInvalidArguments("The \"options\" argument must be of type object.", {});
-                }
-            }
-
-            _path_guard.armed = false;
-            return {
-                path: path,
-                recursive: recursive,
-                force: force,
-                max_retries: max_retries,
-                retry_delay: retry_delay,
-            };
-        }
-    };
+    pub const RmDir = _ArgumentsRmDir;
 
     /// https://github.com/nodejs/node/blob/master/lib/fs.js#L1285
-    pub const Mkdir = struct {
-        path: PathLike,
-        /// Indicates whether parent folders should be created.
-        /// If a folder was created, the path to the first created folder will be returned.
-        /// @default false
-        recursive: bool = false,
-        /// A file mode. If a string is passed, it is parsed as an octal integer. If not specified
-        mode: Mode = DefaultMode,
-        /// If set to true, the return value is never set to a string
-        always_return_none: bool = false,
+    pub const Mkdir = _ArgumentsMkdir;
 
-        pub const DefaultMode = 0o777;
+    const MkdirTemp = _ArgumentsMkdirTemp;
 
-        fn deinit() {
-            _.path.deinit();
-        }
+    pub const Readdir = _ArgumentsReaddir;
 
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
+    pub const Close = _ArgumentsClose;
 
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Mkdir {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let recursive = false;
-            let mode: Mode = 0o777;
-
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                if (val.isObject()) {
-                    if (boolean := val.getBooleanStrict(ctx, "recursive")?) {
-                        recursive = boolean;
-                    }
-
-                    if (mode_ := val.get(ctx, "mode")?) {
-                        if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
-                    }
-                }
-                if (val.isNumber() || val.isString()) {
-                    if (m := jsc.Node.modeFromJS(ctx, val)?) { mode = m; }
-                }
-            }
-
-            _path_guard.armed = false;
-            return Mkdir{
-                path: path,
-                recursive: recursive,
-                mode: mode,
-            };
-        }
-    };
-
-    const MkdirTemp = struct {
-        prefix: PathLike = { buffer: { buffer: jsc.ArrayBuffer.empty } },
-        encoding: Encoding = .utf8,
-
-        fn deinit() {
-            _.prefix.deinit();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.prefix.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.prefix.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!MkdirTemp {
-            const prefix = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArgumentTypeValue("prefix", "string, Buffer, or URL", arguments.next() ?? .js_undefined);
-            };
-            let _prefix_guard = PathLikeGuard{ path: prefix };
-
-            let encoding = Encoding.utf8;
-
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                switch (val.jsType()) {
-                    .String, .StringObject, .DerivedStringObject => {
-                        encoding = Encoding.assert(val, ctx, encoding)?;
-                    },
-                    else => {
-                        if (val.isObject()) {
-                            encoding = getEncoding(val, ctx, encoding)?;
-                        }
-                    },
-                }
-            }
-
-            _prefix_guard.armed = false;
-            return {
-                prefix: prefix,
-                encoding: encoding,
-            };
-        }
-    };
-
-    pub const Readdir = struct {
-        path: PathLike,
-        encoding: Encoding = .utf8,
-        with_file_types: bool = false,
-        recursive: bool = false,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn deinitAndUnprotect() {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        fn tag(): Return.Readdir.Tag {
-            return switch (_.encoding) {
-                .buffer => .buffers,
-                else => if (_.with_file_types)
-                    .with_file_types
-                else
-                    .files,
-            };
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Readdir {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let encoding: Encoding = .utf8;
-            let with_file_types = false;
-            let recursive = false;
-
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                switch (val.jsType()) {
-                    .String,
-                    .StringObject,
-                    .DerivedStringObject
-                    => {
-                        encoding = Encoding.assert(val, ctx, encoding)?;
-                    },
-                    else => {
-                        if (val.isObject()) {
-                            encoding = getEncoding(val, ctx, encoding)?;
-
-                            if (recursive_ := val.getBooleanStrict(ctx, "recursive")?) {
-                                recursive = recursive_;
-                            }
-
-                            if (with_file_types_ := val.getBooleanStrict(ctx, "withFileTypes")?) {
-                                with_file_types = with_file_types_;
-                            }
-                        }
-                    },
-                }
-            }
-
-            _path_guard.armed = false;
-            return {
-                path: path,
-                encoding: encoding,
-                with_file_types: with_file_types,
-                recursive: recursive,
-            };
-        }
-    };
-
-    pub const Close = struct {
-        fd: FD,
-
-        static fn deinit(self: *const @This()) { * = self; }
-        static fn toThreadSafe(_: Close) {}
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Close {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            return Close{ fd: fd };
-        }
-    };
-
-    pub const Open = struct {
-        path: PathLike,
-        flags: FileSystemFlags = .r,
-        mode: Mode = default_permission,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn deinitAndUnprotect() {
-            _.path.deinitAndUnprotect();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Open {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let flags = FileSystemFlags.r;
-            let mode: Mode = default_permission;
-
-            if (val := arguments.next()) {
-                arguments.eat();
-
-                if (val.isObject()) {
-                    if (flags_ := val.getTruthy(ctx, "flags")?) {
-                        if (f := FileSystemFlags.fromJS(ctx, flags_)?) { flags = f; }
-                    }
-
-                    if (mode_ := val.getTruthy(ctx, "mode")?) {
-                        if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
-                    }
-                } else if (val != .zero) {
-                    if (!val.isUndefinedOrNull()) {
-                        // error is handled below
-                        if (f := FileSystemFlags.fromJS(ctx, val)?) { flags = f; }
-                    }
-
-                    if (next := arguments.nextEat()) {
-                        if (m := jsc.Node.modeFromJS(ctx, next)?) { mode = m; }
-                    }
-                }
-            }
-
-            _path_guard.armed = false;
-            return Open{
-                path: path,
-                flags: flags,
-                mode: mode,
-            };
-        }
-    };
+    pub const Open = _ArgumentsOpen;
 
     /// Change the file system timestamps of the object referenced by `path`.
     ///
@@ -2620,44 +3468,7 @@ pub struct Arguments {
     /// @since v0.4.2
     pub const Utimes = Lutimes;
 
-    pub const Futimes = struct {
-        fd: FD,
-        atime: TimeLike,
-        mtime: TimeLike,
-
-        static fn deinit(self: *const @This()) { * = self; }
-
-        static fn toThreadSafe(self: *const @This()) {
-            * = self;
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Futimes {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const atime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
-                return ctx.throwInvalidArguments("atime is required", {});
-            }) ?? {
-                return ctx.throwInvalidArguments("atime must be a number or a Date", {});
-            };
-            arguments.eat();
-
-            const mtime = try jsc.Node.timeLikeFromJS(ctx, arguments.next() ?? {
-                return ctx.throwInvalidArguments("mtime is required", {});
-            }) ?? {
-                return ctx.throwInvalidArguments("mtime must be a number or a Date", {});
-            };
-            arguments.eat();
-
-            return Futimes{
-                fd: fd,
-                atime: atime,
-                mtime: mtime,
-            };
-        }
-    };
+    pub const Futimes = _ArgumentsFutimes;
 
     /// Write `buffer` to the file specified by `fd`. If `buffer` is a normal object, it
     /// must have an own `toString` function property.
@@ -2682,738 +3493,36 @@ pub struct Arguments {
     /// The kernel ignores the position argument and always appends the data to
     /// the end of the file.
     /// @since v0.0.2
-    pub const Write = struct {
-        fd: FD,
-        buffer: StringOrBuffer,
-        // buffer_val: jsc.JSValue = jsc.JSValue.zero,
-        offset: u64 = 0,
-        length: u64 = std.math.maxInt(u64),
-        position: ReadPosition? = null,
-        encoding: Encoding = Encoding.buffer,
+    pub const Write = _ArgumentsWrite;
 
-        static fn deinit(this: *const @This()) {
-            this.buffer.deinit();
-        }
-
-        static fn deinitAndUnprotect(this: *@This()) {
-            this.buffer.deinitAndUnprotect();
-        }
-
-        static fn toThreadSafe(self: *@This()) {
-            self.buffer.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Write {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            const buffer_value = arguments.next();
-            const buffer = try StringOrBuffer.fromJS(ctx, bun.default_allocator, buffer_value ?? {
-                return ctx.throwInvalidArguments("data is required", {});
-            }) ?? {
-                return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
-            };
-            if (buffer_value.?.isString() && !buffer_value.?.isStringLiteral()) {
-                return ctx.throwInvalidArgumentTypeValue("buffer", "string or TypedArray", buffer_value.?);
-            }
-
-            let args = Write{
-                fd: fd,
-                buffer: buffer,
-                encoding: switch (buffer) {
-                    .buffer => Encoding.buffer,
-                    inline else => Encoding.utf8,
-                },
-            };
-            let _args_guard = WriteArgsGuard{ args: unsafe { &args } };
-            arguments.eat();
-
-            if (first_arg := arguments.next()) {
-                parse: {
-                    let current = first_arg;
-                    switch (buffer) {
-                        // fs.write(fd, string[, position[, encoding]], callback)
-                        else => {
-                            if (current.isNumber()) {
-                                args.position = current.to(i52);
-                                arguments.eat();
-                                if (next_cur := arguments.next()) {
-                                    current = next_cur;
-                                } else {
-                                    break :parse;
-                                }
-                            }
-
-                            if (current.isString()) {
-                                args.encoding = Encoding.assert(current, ctx, args.encoding)?;
-                                arguments.eat();
-                            }
-                        },
-                        // fs.write(fd, buffer[, offset[, length[, position]]], callback)
-                        .buffer => {
-                            if (current.isUndefinedOrNull() || current.isFunction()) break :parse;
-                            args.offset = @as(u64, @intCast(jsc.Node.validators.validateInteger(ctx, current, "offset", 0, 9007199254740991)?));
-                            arguments.eat();
-                            if (next_cur := arguments.next()) {
-                                current = next_cur;
-                            } else {
-                                break :parse;
-                            }
-
-                            if (!(current.isNumber() || current.isBigInt())) break :parse;
-                            const length = current.to(i64);
-                            const buf_len = args.buffer.buffer.slice().len;
-                            const max_offset = @min(buf_len, std.math.maxInt(i64));
-                            if (args.offset > max_offset) {
-                                return ctx.throwRangeError(
-                                    @as(f64, @floatFromInt(args.offset)),
-                                    { field_name: "offset", max: i32(max_offset) },
-                                );
-                            }
-                            const max_len = @min(buf_len - args.offset, std.math.maxInt(i32));
-                            if (length > max_len || length < 0) {
-                                return ctx.throwRangeError(
-                                    @as(f64, @floatFromInt(length)),
-                                    { field_name: "length", min: 0, max: i32(max_len) },
-                                );
-                            }
-                            args.length = @intCast(length);
-
-                            arguments.eat();
-                            if (next_cur := arguments.next()) {
-                                current = next_cur;
-                            } else {
-                                break :parse;
-                            }
-
-                            if (!(current.isNumber() || current.isBigInt())) break :parse;
-                            const position = current.to(i52);
-                            if (position >= 0) args.position = position;
-                            arguments.eat();
-                        },
-                    }
-                }
-            }
-
-            _args_guard.armed = false;
-            return args;
-        }
-    };
-
-    pub const Read = struct {
-        fd: FD,
-        buffer: Buffer,
-        offset: u64,
-        length: u64,
-        position: ReadPosition? = null,
-
-        static fn deinit(self: *const @This()) { * = self; }
-
-        fn toThreadSafe() {
-            _.buffer.buffer.value.protect();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.buffer.buffer.value.unprotect();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Read {
-            // About half of the normalization has already been done. The second half is done in the native code.
-            // fs_binding.read(fd, buffer, offset, length, position)
-
-            // fd = getValidatedFd(fd);
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            //  validateBuffer(buffer);
-            let buffer_value: jsc.JSValue = undefined;
-            if (v := arguments.nextEat()) { buffer_value = v; } else { return ctx.throwInvalidArguments("buffer is required", {}); }
-            let buffer: jsc.MarkedArrayBuffer = undefined;
-            if (b := Buffer.fromJS(ctx, buffer_value)) { buffer = b; } else { return ctx.throwInvalidArgumentTypeValue("buffer", "TypedArray", buffer_value); }
-
-            const offset_value: jsc.JSValue = arguments.nextEat() ?? .@"null";
-            // if (offset == null) {
-            //   offset = 0;
-            // } else {
-            //   validateInteger(offset, 'offset', 0);
-            // }
-            const offset: u64 = if (offset_value.isUndefinedOrNull())
-                0
-            else
-                @intCast(try jsc.Node.validators.validateInteger(ctx, offset_value, "offset", 0, jsc.MAX_SAFE_INTEGER));
-
-            // length |= 0;
-            let length_float: f64 = 0;
-            if (arg := arguments.nextEat()) {
-                length_float = try arg.toNumber(ctx);
-            }
-
-            //   if (length === 0) {
-            //     return process.nextTick(function tick() {
-            //       callback(null, 0, buffer);
-            //     });
-            //   }
-            if (length_float == 0) {
-                return { fd: fd, buffer: buffer, length: 0, offset: 0 };
-            }
-
-            const buf_len = buffer.slice().len;
-            if (buf_len == 0) {
-                return ctx.ERR(.INVALID_ARG_VALUE, "The argument 'buffer' is empty and cannot be written.", {}).throw();
-            }
-            // validateOffsetLengthRead(offset, length, buffer.byteLength);
-            if (@mod(length_float, 1) != 0) {
-                return ctx.throwRangeError(length_float, { field_name: "length", msg: "an integer" });
-            }
-            const length_int: i64 = @intFromFloat(length_float);
-            if (length_int > buf_len) {
-                return ctx.throwRangeError(
-                    length_float,
-                    { field_name: "length", max: i32(@min(buf_len, std.math.maxInt(i64))) },
-                );
-            }
-            if (@as(i64, i32(offset)) +| length_int > buf_len) {
-                return ctx.throwRangeError(
-                    length_float,
-                    { field_name: "length", max: i32(buf_len -| offset) },
-                );
-            }
-            if (length_int < 0) {
-                return ctx.throwRangeError(length_float, { field_name: "length", min: 0 });
-            }
-            const length: u64 = @intCast(length_int);
-
-            // if (position == null) {
-            //   position = -1;
-            // } else {
-            //   validatePosition(position, 'position', length);
-            // }
-            const position_value: jsc.JSValue = arguments.nextEat() ?? .@"null";
-            let position_int: i64 = -1;
-            if (position_value.isUndefinedOrNull()) {
-                position_int = -1;
-            } else if (position_value.isNumber()) {
-                position_int = try jsc.Node.validators.validateInteger(ctx, position_value, "position", -1, jsc.MAX_SAFE_INTEGER);
-            } else if (position := jsc.JSBigInt.fromJS(position_value)) {
-                // const maxPosition = 2n ** 63n - 1n - BigInt(length)
-                const max_position = std.math.maxInt(i64) - length_int;
-                if (position.order(i64, -1) == .lt || position.order(i64, max_position) == .gt) {
-                    const position_str = position.toString(ctx)?;
-                    const _pos_str_guard = BunStringGuard{ str: position_str };
-
-                    return ctx.throwRangeError(position_str, {
-                        field_name: "position",
-                        min: -1,
-                        max: i32(max_position),
-                    });
-                }
-                position_int = position.toInt64();
-            } else {
-                return ctx.throwInvalidArgumentTypeValue("position", "number or bigint", position_value);
-            }
-
-            // Bun needs `null` to tell the native function if to use pread or read
-            const position: ReadPosition? = if (position_int >= 0)
-                position_int
-            else
-                null;
-
-            return {
-                fd: fd,
-                buffer: buffer,
-                offset: offset,
-                length: length,
-                position: position,
-            };
-        }
-    };
+    pub const Read = _ArgumentsRead;
 
     /// Asynchronously reads the entire contents of a file.
     /// @param path A path to a file. If a URL is provided, it must use the `file:` protocol.
     /// If a file descriptor is provided, the underlying file will _not_ be closed automatically.
     /// @param options Either the encoding for the result, or an object that contains the encoding and an optional flag.
     /// If a flag is not provided, it defaults to `'r'`.
-    pub const ReadFile = struct {
-        path: PathOrFileDescriptor,
-        encoding: Encoding = Encoding.utf8,
+    pub const ReadFile = _ArgumentsReadFile;
 
-        offset: jsc.WebCore.Blob.SizeType = 0,
-        max_size: jsc.WebCore.Blob.SizeType? = null,
-        limit_size_for_javascript: bool = false,
-
-        flag: FileSystemFlags = FileSystemFlags.r,
-
-        signal: (*AbortSignal)? = null,
-
-        fn deinit() {
-            _.path.deinit();
-            if (signal := _.signal) {
-                signal.pendingActivityUnref();
-                signal.unref();
-            }
-        }
-
-        fn deinitAndUnprotect() {
-            _.path.deinitAndUnprotect();
-            if (signal := _.signal) {
-                signal.pendingActivityUnref();
-                signal.unref();
-            }
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!ReadFile {
-            const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
-                return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
-            };
-            let _path_guard = PathOrFDGuard{ path: path };
-
-            let encoding = Encoding.buffer;
-            let flag = FileSystemFlags.r;
-
-            let _signal_guard = AbortSignalGuard{};
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                if (arg.isString()) {
-                    encoding = Encoding.assert(arg, ctx, encoding)?;
-                } else if (arg.isObject()) {
-                    encoding = getEncoding(arg, ctx, encoding)?;
-
-                    if (flag_ := arg.getTruthy(ctx, "flag")?) {
-                        if (f := FileSystemFlags.fromJS(ctx, flag_)?) {
-                            flag = f;
-                        } else {
-                            return ctx.throwInvalidArguments("Invalid flag", {});
-                        }
-                    }
-
-                    if (value := arg.getTruthy(ctx, "signal")?) {
-                        if (signal := AbortSignal.fromJS(value)) {
-                            _signal_guard.signal = signal.ref();
-                            signal.pendingActivityRef();
-                        } else {
-                            return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
-                        }
-                    }
-                }
-            }
-
-            _path_guard.armed = false;
-            _signal_guard.armed = false;
-            return {
-                path: path,
-                encoding: encoding,
-                flag: flag,
-                limit_size_for_javascript: true,
-                signal: _signal_guard.signal,
-            };
-        }
-
-        fn aborted(): bool {
-            if (signal := _.signal) {
-                return signal.aborted();
-            }
-            return false;
-        }
-    };
-
-    pub const WriteFile = struct {
-        encoding: Encoding = Encoding.utf8,
-
-        flag: FileSystemFlags = FileSystemFlags.w,
-        mode: Mode = 0o666,
-        file: PathOrFileDescriptor,
-        flush: bool = false,
-
-        /// Encoded at the time of construction.
-        data: StringOrBuffer,
-
-        dirfd: FD,
-
-        signal: (*AbortSignal)? = null,
-
-        fn deinit() {
-            _.file.deinit();
-            _.data.deinit();
-            if (signal := _.signal) {
-                signal.pendingActivityUnref();
-                signal.unref();
-            }
-        }
-
-        fn toThreadSafe(*_) {
-            _.file.toThreadSafe();
-            _.data.toThreadSafe();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.file.deinitAndUnprotect();
-            _.data.deinitAndUnprotect();
-            if (signal := _.signal) {
-                signal.pendingActivityUnref();
-                signal.unref();
-            }
-        }
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!WriteFile {
-            const path = try PathOrFileDescriptor.fromJS(ctx, arguments, bun.default_allocator) ?? {
-                return ctx.throwInvalidArguments("path must be a string or a file descriptor", {});
-            };
-            let _path_guard = PathOrFDGuard{ path: path };
-
-            const data_value = arguments.nextEat() ?? {
-                return ctx.throwInvalidArguments("data is required", {});
-            };
-
-            let encoding = Encoding.buffer;
-            let flag = FileSystemFlags.w;
-            let mode: Mode = default_permission;
-            let _signal_guard = AbortSignalGuard{};
-
-            let flush: bool = false;
-            if (data_value.isString()) {
-                encoding = Encoding.utf8;
-            }
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                if (arg.isString()) {
-                    encoding = Encoding.assert(arg, ctx, encoding)?;
-                } else if (arg.isObject()) {
-                    encoding = getEncoding(arg, ctx, encoding)?;
-
-                    if (flag_ := arg.getTruthy(ctx, "flag")?) {
-                        if (f := FileSystemFlags.fromJS(ctx, flag_)?) {
-                            flag = f;
-                        } else {
-                            return ctx.throwInvalidArguments("Invalid flag", {});
-                        }
-                    }
-
-                    if (mode_ := arg.getTruthy(ctx, "mode")?) {
-                        if (m := jsc.Node.modeFromJS(ctx, mode_)?) { mode = m; }
-                    }
-
-                    if (value := arg.getTruthy(ctx, "signal")?) {
-                        if (signal := AbortSignal.fromJS(value)) {
-                            _signal_guard.signal = signal.ref();
-                            signal.pendingActivityRef();
-                        } else {
-                            return ctx.throwInvalidArgumentTypeValue("signal", "AbortSignal", value);
-                        }
-                    }
-
-                    if (flush_ := arg.getOptional(ctx, "flush", jsc.JSValue)?) {
-                        if (flush_.isBoolean() || flush_.isUndefinedOrNull()) {
-                            flush = flush_ == .true;
-                        } else {
-                            return ctx.throwInvalidArgumentTypeValue("flush", "boolean", flush_);
-                        }
-                    }
-                }
-            }
-
-            // String objects not allowed (typeof new String("hi") === "object")
-            // https://github.com/nodejs/node/blob/6f946c95b9da75c70e868637de8161bc8d048379/lib/internal/fs/utils.js#L916
-            const allow_string_object = false;
-            // the pattern in node_fs.zig is to call toThreadSafe after Arguments.*.fromJS
-            const is_async = false;
-            const data = try StringOrBuffer.fromJSWithEncodingMaybeAsync(ctx, bun.default_allocator, data_value, encoding, is_async, allow_string_object) ?? {
-                return ctx.ERR(.INVALID_ARG_TYPE, "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView", {}).throw();
-            };
-
-            _path_guard.armed = false;
-            _signal_guard.armed = false;
-            return {
-                file: path,
-                encoding: encoding,
-                flag: flag,
-                mode: mode,
-                data: data,
-                dirfd: bun.FD.cwd(),
-                signal: _signal_guard.signal,
-                flush: flush,
-            };
-        }
-
-        fn aborted(): bool {
-            if (signal := _.signal) {
-                return signal.aborted();
-            }
-            return false;
-        }
-    };
+    pub const WriteFile = _ArgumentsWriteFile;
 
     pub const AppendFile = WriteFile;
 
-    pub const OpenDir = struct {
-        path: PathLike,
-        encoding: Encoding = Encoding.utf8,
+    pub const OpenDir = _ArgumentsOpenDir;
 
-        /// Number of directory entries that are buffered internally when reading from the directory. Higher values lead to better performance but higher memory usage. Default: 32
-        buffer_size: c_int = 32,
+    pub const Exists = _ArgumentsExists;
 
-        fn deinit() {
-            _.path.deinit();
-        }
+    pub const Access = _ArgumentsAccess;
 
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!OpenDir {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
+    pub const FdataSync = _ArgumentsFdataSync;
 
-            let encoding = Encoding.buffer;
-            let buffer_size: c_int = 32;
+    pub const CopyFile = _ArgumentsCopyFile;
 
-            if (arg := arguments.next()) {
-                arguments.eat();
-                if (arg.isString()) {
-                    encoding = Encoding.assert(arg, ctx, encoding) catch encoding;
-                } else if (arg.isObject()) {
-                    if (encoding_ := getEncoding(arg, ctx)) {
-                        encoding = encoding_;
-                    }
+    pub const Cp = _ArgumentsCp;
 
-                    if (buffer_size_ := arg.get(ctx, "bufferSize")?) {
-                        buffer_size = buffer_size_.toInt32();
-                        if (buffer_size < 0) {
-                            return ctx.throwInvalidArguments("bufferSize must be > 0", {});
-                        }
-                    }
-                }
-            }
+    pub const WriteEv = _ArgumentsWriteEv;
 
-            _path_guard.armed = false;
-            return OpenDir{
-                path: path,
-                encoding: encoding,
-                buffer_size: buffer_size,
-            };
-        }
-    };
-
-    pub const Exists = struct {
-        path: PathLike?,
-
-        fn deinit() {
-            if (path := _.path) {
-                path.deinit();
-            }
-        }
-
-        fn toThreadSafe(*_) {
-            if (*path := _.path) {
-                path.toThreadSafe();
-            }
-        }
-
-        fn deinitAndUnprotect(*_) {
-            if (*path := _.path) {
-                path.deinitAndUnprotect();
-            }
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Exists {
-            return Exists{
-                path: try PathLike.fromJS(ctx, arguments),
-            };
-        }
-    };
-
-    pub const Access = struct {
-        path: PathLike,
-        mode: FileSystemFlags = FileSystemFlags.r,
-
-        fn deinit() {
-            _.path.deinit();
-        }
-
-        fn toThreadSafe(*_) {
-            _.path.toThreadSafe();
-        }
-
-        fn deinitAndUnprotect(*_) {
-            _.path.deinitAndUnprotect();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Access {
-            const path = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("path must be a string or TypedArray", {});
-            };
-            let _path_guard = PathLikeGuard{ path: path };
-
-            let mode = FileSystemFlags.r;
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                mode = FileSystemFlags.fromJSNumberOnly(ctx, arg, .access)?;
-            }
-
-            _path_guard.armed = false;
-            return Access{
-                path: path,
-                mode: mode,
-            };
-        }
-    };
-
-    pub const FdataSync = struct {
-        fd: FD,
-
-        static fn deinit(self: *const @This()) { * = self; }
-        static fn toThreadSafe(self: *const @This()) {
-            * = self;
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!FdataSync {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            return FdataSync{ fd: fd };
-        }
-    };
-
-    pub const CopyFile = struct {
-        src: PathLike,
-        dest: PathLike,
-        mode: constants.Copyfile,
-
-        fn deinit() {
-            _.src.deinit();
-            _.dest.deinit();
-        }
-
-        fn toThreadSafe(*_) {
-            _.src.toThreadSafe();
-            _.dest.toThreadSafe();
-        }
-
-        fn deinitAndUnprotect() {
-            _.src.deinitAndUnprotect();
-            _.dest.deinitAndUnprotect();
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!CopyFile {
-            const src = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("src must be a string or TypedArray", {});
-            };
-            let _src_guard = PathLikeGuard{ path: src };
-
-            const dest = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("dest must be a string or TypedArray", {});
-            };
-            let _dest_guard = PathLikeGuard{ path: dest };
-
-            let mode: constants.Copyfile = @enumFromInt(0);
-            if (arg := arguments.next()) {
-                arguments.eat();
-                mode = @enumFromInt(@intFromEnum(try FileSystemFlags.fromJSNumberOnly(ctx, arg, .copy_file)));
-            }
-
-            _src_guard.armed = false;
-            _dest_guard.armed = false;
-            return CopyFile{
-                src: src,
-                dest: dest,
-                mode: mode,
-            };
-        }
-    };
-
-    pub const Cp = struct {
-        src: PathLike,
-        dest: PathLike,
-        flags: Flags,
-
-        const Flags = struct {
-            mode: constants.Copyfile,
-            recursive: bool,
-            errorOnExist: bool,
-            force: bool,
-            deinit_paths: bool = true,
-        };
-
-        fn deinit() {
-            if (_.flags.deinit_paths) {
-                _.src.deinit();
-                _.dest.deinit();
-            }
-        }
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Cp {
-            const src = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("src must be a string or TypedArray", {});
-            };
-            let _src_guard = PathLikeGuard{ path: src };
-
-            const dest = try PathLike.fromJS(ctx, arguments) ?? {
-                return ctx.throwInvalidArguments("dest must be a string or TypedArray", {});
-            };
-            let _dest_guard = PathLikeGuard{ path: dest };
-
-            let recursive: bool = false;
-            let errorOnExist: bool = false;
-            let force: bool = true;
-            let mode: i32 = 0;
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                recursive = arg.toBoolean();
-            }
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                errorOnExist = arg.toBoolean();
-            }
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                force = arg.toBoolean();
-            }
-
-            if (arg := arguments.next()) {
-                arguments.eat();
-                if (arg.isNumber()) {
-                    mode = arg.coerce(i32, ctx)?;
-                }
-            }
-
-            _src_guard.armed = false;
-            _dest_guard.armed = false;
-            return Cp{
-                src: src,
-                dest: dest,
-                flags: {
-                    mode: @enumFromInt(mode),
-                    recursive: recursive,
-                    errorOnExist: errorOnExist,
-                    force: force,
-                },
-            };
-        }
-    };
-
-    pub const WriteEv = struct {
-        fd: FD,
-        buffers: []const ArrayBuffer,
-        position: ReadPosition,
-    };
-
-    pub const ReadEv = struct {
-        fd: FD,
-        buffers: []ArrayBuffer,
-        position: ReadPosition,
-    };
+    pub const ReadEv = _ArgumentsReadEv;
 
     pub const UnwatchFile = void;
 
@@ -3421,24 +3530,10 @@ pub struct Arguments {
 
     pub const WatchFile = StatWatcher.Arguments;
 
-    pub const Fsync = struct {
-        fd: FD,
-
-        static fn deinit(self: *const @This()) { * = self; }
-        static fn toThreadSafe(_: *const @This()) {}
-
-        static fn fromJS(ctx: *jsc.JSGlobalObject, arguments: *ArgumentsSlice): bun.JSError!Fsync {
-            const fd_value: jsc.JSValue = arguments.nextEat() ?? .js_undefined;
-            const fd = try bun.FD.fromJSValidated(fd_value, ctx) ?? {
-                return throwInvalidFdError(ctx, fd_value);
-            };
-
-            return Fsync{ fd: fd };
-        }
-    };
+    pub const Fsync = _ArgumentsFsync;
 }
 
-pub const StatOrNotFound = union(enum) {
+pub union(enum) StatOrNotFound {
     stats: bun.jsc.Node.Stats,
     not_found: void,
 
@@ -3457,7 +3552,7 @@ pub const StatOrNotFound = union(enum) {
     }
 }
 
-pub const StringOrUndefined = union(enum) {
+pub union(enum) StringOrUndefined {
     string: bun.String,
     none: void,
 
@@ -3474,6 +3569,120 @@ struct Null {
     fn toJS(_: @This(), _: *jsc.JSGlobalObject): jsc.JSValue {
         return .@"null";
     }
+}
+
+pub struct _ReturnRead {
+    bytes_read: u52,
+
+    fn toJS(_: *jsc.JSGlobalObject): jsc.JSValue {
+        return jsc.JSValue.jsNumberFromUint64(_.bytes_read);
+    }
+}
+
+pub struct _ReturnReadPromise {
+    bytes_read: u52,
+    buffer_val: jsc.JSValue = jsc.JSValue.zero,
+    const fields = {
+        bytesRead: jsc.ZigString.init("bytesRead"),
+        buffer: jsc.ZigString.init("buffer"),
+    };
+    fn toJS(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        const _buf_guard = JSValueUnprotectGuard{ val: _.buffer_val };
+
+        return jsc.JSValue.createObject2(
+            ctx,
+            &fields.bytesRead,
+            &fields.buffer,
+            jsc.JSValue.jsNumberFromUint64(@as(u52, i32(@min(std.math.maxInt(u52), _.bytes_read)))),
+            _.buffer_val,
+        );
+    }
+}
+
+pub struct _ReturnWritePromise {
+    bytes_written: u52,
+    buffer: StringOrBuffer,
+    buffer_val: jsc.JSValue = jsc.JSValue.zero,
+    const fields = {
+        bytesWritten: jsc.ZigString.init("bytesWritten"),
+        buffer: jsc.ZigString.init("buffer"),
+    };
+
+    // Excited for the issue that's like "cannot read file bigger than 2 GB"
+    fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!bun.jsc.JSValue {
+        const _buf_guard = JSValueUnprotectGuard{ val: _.buffer_val };
+
+        return jsc.JSValue.createObject2(
+            globalObject,
+            &fields.bytesWritten,
+            &fields.buffer,
+            jsc.JSValue.jsNumberFromUint64(@as(u52, i32(@min(std.math.maxInt(u52), _.bytes_written)))),
+            if (_.buffer == .buffer)
+                _.buffer_val
+            else
+                _.buffer.toJS(globalObject),
+        );
+    }
+}
+
+pub struct _ReturnWrite {
+    bytes_written: u52,
+    const fields = {
+        bytesWritten: jsc.ZigString.init("bytesWritten"),
+    };
+
+    // Excited for the issue that's like "cannot read file bigger than 2 GB"
+    fn toJS(_: *jsc.JSGlobalObject): jsc.JSValue {
+        return jsc.JSValue.jsNumberFromUint64(_.bytes_written);
+    }
+}
+
+pub enum _ReturnReaddirTag {
+    with_file_types,
+    buffers,
+    files,
+}
+
+pub union(Tag) _ReturnReaddir {
+    with_file_types: []bun.jsc.Node.Dirent,
+    buffers: []Buffer,
+    files: []const bun.String,
+
+    pub const Tag = _ReturnReaddirTag;
+
+    fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        switch (_) {
+            .with_file_types => {
+                const _slice_guard = DefaultAllocDirentSliceGuard{ slice: _.with_file_types };
+                let array = jsc.JSValue.createEmptyArray(globalObject, _.with_file_types.len)?;
+                let previous_jsstring: (*jsc.JSString)? = null;
+                let idx: u32 = 0;
+                for (*item of _.with_file_types) {
+                    const res = item.toJSNewlyCreated(globalObject, &previous_jsstring)?;
+                    array.putIndex(globalObject, idx, res)?;
+                    idx += 1;
+                }
+                return array;
+            },
+            .buffers => {
+                const _slice_guard = DefaultAllocBufferSliceGuard{ slice: _.buffers };
+                const BufferSlice = @TypeOf(_.buffers);
+                return jsc.JSValue.fromAny(globalObject, BufferSlice, _.buffers);
+            },
+            .files => {
+                // automatically freed
+                const StringSlice = @TypeOf(_.files);
+                return jsc.JSValue.fromAny(globalObject, StringSlice, _.files);
+            },
+        }
+    }
+}
+
+pub union(enum) _ReturnReadFileWithOptions {
+    string: string,
+    transcoded_string: bun.String,
+    buffer: Buffer,
+    null_terminated: [:0]const u8,
 }
 
 struct Return {
@@ -3502,113 +3711,13 @@ struct Return {
     pub const WriteFile = void;
     pub const Readv = Read;
     pub const StatFS = bun.jsc.Node.StatFS;
-    pub const Read = struct {
-        bytes_read: u52,
-
-        fn toJS(_: *jsc.JSGlobalObject): jsc.JSValue {
-            return jsc.JSValue.jsNumberFromUint64(_.bytes_read);
-        }
-    };
-    pub const ReadPromise = struct {
-        bytes_read: u52,
-        buffer_val: jsc.JSValue = jsc.JSValue.zero,
-        const fields = {
-            bytesRead: jsc.ZigString.init("bytesRead"),
-            buffer: jsc.ZigString.init("buffer"),
-        };
-        fn toJS(ctx: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-            const _buf_guard = JSValueUnprotectGuard{ val: _.buffer_val };
-
-            return jsc.JSValue.createObject2(
-                ctx,
-                &fields.bytesRead,
-                &fields.buffer,
-                jsc.JSValue.jsNumberFromUint64(@as(u52, i32(@min(std.math.maxInt(u52), _.bytes_read)))),
-                _.buffer_val,
-            );
-        }
-    };
-    pub const WritePromise = struct {
-        bytes_written: u52,
-        buffer: StringOrBuffer,
-        buffer_val: jsc.JSValue = jsc.JSValue.zero,
-        const fields = {
-            bytesWritten: jsc.ZigString.init("bytesWritten"),
-            buffer: jsc.ZigString.init("buffer"),
-        };
-
-        // Excited for the issue that's like "cannot read file bigger than 2 GB"
-        fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!bun.jsc.JSValue {
-            const _buf_guard = JSValueUnprotectGuard{ val: _.buffer_val };
-
-            return jsc.JSValue.createObject2(
-                globalObject,
-                &fields.bytesWritten,
-                &fields.buffer,
-                jsc.JSValue.jsNumberFromUint64(@as(u52, i32(@min(std.math.maxInt(u52), _.bytes_written)))),
-                if (_.buffer == .buffer)
-                    _.buffer_val
-                else
-                    _.buffer.toJS(globalObject),
-            );
-        }
-    };
-    pub const Write = struct {
-        bytes_written: u52,
-        const fields = {
-            bytesWritten: jsc.ZigString.init("bytesWritten"),
-        };
-
-        // Excited for the issue that's like "cannot read file bigger than 2 GB"
-        fn toJS(_: *jsc.JSGlobalObject): jsc.JSValue {
-            return jsc.JSValue.jsNumberFromUint64(_.bytes_written);
-        }
-    };
-    pub const Readdir = union(Tag) {
-        with_file_types: []bun.jsc.Node.Dirent,
-        buffers: []Buffer,
-        files: []const bun.String,
-
-        pub const Tag = enum {
-            with_file_types,
-            buffers,
-            files,
-        };
-
-        fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-            switch (_) {
-                .with_file_types => {
-                    const _slice_guard = DefaultAllocDirentSliceGuard{ slice: _.with_file_types };
-                    let array = jsc.JSValue.createEmptyArray(globalObject, _.with_file_types.len)?;
-                    let previous_jsstring: (*jsc.JSString)? = null;
-                    let idx: u32 = 0;
-                    for (*item of _.with_file_types) {
-                        const res = item.toJSNewlyCreated(globalObject, &previous_jsstring)?;
-                        array.putIndex(globalObject, idx, res)?;
-                        idx += 1;
-                    }
-                    return array;
-                },
-                .buffers => {
-                    const _slice_guard = DefaultAllocBufferSliceGuard{ slice: _.buffers };
-                    const BufferSlice = @TypeOf(_.buffers);
-                    return jsc.JSValue.fromAny(globalObject, BufferSlice, _.buffers);
-                },
-                .files => {
-                    // automatically freed
-                    const StringSlice = @TypeOf(_.files);
-                    return jsc.JSValue.fromAny(globalObject, StringSlice, _.files);
-                },
-            }
-        }
-    };
+    pub const Read = _ReturnRead;
+    pub const ReadPromise = _ReturnReadPromise;
+    pub const WritePromise = _ReturnWritePromise;
+    pub const Write = _ReturnWrite;
+    pub const Readdir = _ReturnReaddir;
     pub const ReadFile = StringOrBuffer;
-    pub const ReadFileWithOptions = union(enum) {
-        string: string,
-        transcoded_string: bun.String,
-        buffer: Buffer,
-        null_terminated: [:0]const u8,
-    };
+    pub const ReadFileWithOptions = _ReturnReadFileWithOptions;
     pub const Readlink = StringOrBuffer;
     pub const Realpath = StringOrBuffer;
     pub const RealpathNative = Realpath;
@@ -3630,6 +3739,11 @@ struct Return {
 /// Bun's implementation of the Node.js "fs" module
 /// https://nodejs.org/api/fs.html
 /// https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/node/fs.d.ts
+pub enum _NodeFSStringType {
+    default,
+    null_terminated,
+}
+
 pub struct NodeFS {
     /// Buffer to store a temporary file path that might appear in a returned error message.
     ///
@@ -3647,7 +3761,7 @@ pub struct NodeFS {
         else
             args.path.osPathKernel32(&_.sync_error_buf);
         return switch (Syscall.access(path, args.mode.asInt())) {
-            .err => |e| .{ err: e.withPath(args.path.slice()) },
+            .err e => .{ err: e.withPath(args.path.slice()) },
             .result => .{ result: {} },
         };
     }
@@ -3656,31 +3770,31 @@ pub struct NodeFS {
         let data = args.data.slice();
 
         switch (args.file) {
-            .fd => |fd| {
+            .fd fd => {
                 while (data.len > 0) {
                     const written = switch (Syscall.write(fd, data)) {
-                        .result => |result| result,
-                        .err => |e| return { err: e },
+                        .result result => result,
+                        .err e => return { err: e },
                     };
                     data = data[written..];
                 }
 
                 return .success;
             },
-            .path => |path_| {
+            .path path_ => {
                 const path = path_.sliceZ(&_.sync_error_buf);
 
                 const fd = switch (Syscall.open(path, @intFromEnum(FileSystemFlags.a), args.mode)) {
-                    .result => |result| result,
-                    .err => |e| return { err: e },
+                    .result result => result,
+                    .err e => return { err: e },
                 };
 
                 const _fd_guard = FDGuard{ fd: fd };
 
                 while (data.len > 0) {
                     const written = switch (Syscall.write(fd, data)) {
-                        .result => |result| result,
-                        .err => |e| return { err: e },
+                        .result result => result,
+                        .err e => return { err: e },
                     };
                     data = data[written..];
                 }
@@ -3731,8 +3845,8 @@ pub struct NodeFS {
         let hit_eof = false;
         toplevel: while (remain > 0) {
             const amt = switch (Syscall.read(src_fd, buf[0..@min(buf.len, remain)])) {
-                .result => |result| result,
-                .err => |e| return .{ err: if (src.len > 0) e.withPath(src) else e },
+                .result result => result,
+                .err e => return .{ err: if (src.len > 0) e.withPath(src) else e },
             };
             // 0 == EOF
             if (amt == 0) {
@@ -3745,8 +3859,8 @@ pub struct NodeFS {
             let slice = buf[0..amt];
             while (slice.len > 0) {
                 const written = switch (Syscall.write(dest_fd, slice)) {
-                    .result => |result| result,
-                    .err => |e| return .{ err: if (dest.len > 0) e.withPath(dest) else e },
+                    .result result => result,
+                    .err e => return .{ err: if (dest.len > 0) e.withPath(dest) else e },
                 };
                 if (written == 0) {
                     hit_eof = true;
@@ -3758,8 +3872,8 @@ pub struct NodeFS {
         if (!hit_eof) {
             outer: while (true) {
                 const amt = switch (Syscall.read(src_fd, buf)) {
-                    .result => |result| result,
-                    .err => |e| return .{ err: if (src.len > 0) e.withPath(src) else e },
+                    .result result => result,
+                    .err e => return .{ err: if (src.len > 0) e.withPath(src) else e },
                 };
                 // we don't know the size
                 // so we just go forever until we get an EOF
@@ -3771,8 +3885,8 @@ pub struct NodeFS {
                 let slice = buf[0..amt];
                 while (slice.len > 0) {
                     const written = switch (Syscall.write(dest_fd, slice)) {
-                        .result => |result| result,
-                        .err => |e| return .{ err: if (dest.len > 0) e.withPath(dest) else e },
+                        .result result => result,
+                        .err e => return .{ err: if (dest.len > 0) e.withPath(dest) else e },
                     };
                     slice = slice[written..];
                     if (written == 0) break :outer;
@@ -3793,7 +3907,7 @@ pub struct NodeFS {
                 .err => {
                     return copyFileUsingReadWriteLoop(src, dest, src_fd, dest_fd, stat_size, wrote);
                 },
-                .result => |amount| amount,
+                .result amount => amount,
             };
 
             wrote.* += amt;
@@ -3808,7 +3922,7 @@ pub struct NodeFS {
     fn copyFile(*_, args: Arguments.CopyFile, _: Flavor): Maybe(Return.CopyFile) {
         return switch (copyFileInner(_, args)) {
             .result => .success,
-            .err => |e| .{ err: .{
+            .err e => .{ err: .{
                 errno: e.errno,
                 syscall: .copyfile,
                 path: args.src.slice(),
@@ -3837,8 +3951,8 @@ pub struct NodeFS {
                 return ret.errnoSysP(c.clonefile(src, dest, 0), .copyfile, src) ?? ret.success;
             } else {
                 const stat_ = switch (Syscall.stat(src)) {
-                    .result => |result| result,
-                    .err => |e| return .{ err: e.withPath(src) },
+                    .result result => result,
+                    .err e => return .{ err: e.withPath(src) },
                 };
 
                 if (!posix.S.ISREG(stat_.mode)) {
@@ -3862,8 +3976,8 @@ pub struct NodeFS {
                     }
                 } else {
                     const src_fd = switch (Syscall.open(src, bun.O.RDONLY, 0o644)) {
-                        .result => |result| result,
-                        .err => |e| return .{ err: e.withPath(args.src.slice()) },
+                        .result result => result,
+                        .err e => return .{ err: e.withPath(args.src.slice()) },
                     };
                     const _src_fd_guard = FDGuard{ fd: src_fd };
 
@@ -3874,8 +3988,8 @@ pub struct NodeFS {
                     }
 
                     const dest_fd = switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                        .result => |result| result,
-                        .err => |e| return .{ err: e.withPath(args.dest.slice()) },
+                        .result result => result,
+                        .err e => return .{ err: e.withPath(args.dest.slice()) },
                     };
                     const _dest_fd_guard = DestFdSyscallGuard{ fd: dest_fd, wrote: unsafe { &wrote }, mode: stat_.mode };
 
@@ -3905,14 +4019,14 @@ pub struct NodeFS {
             }
 
             const src_fd = switch (Syscall.open(src, bun.O.RDONLY, 0)) {
-                .result => |result| result,
-                .err => |e| return .{ err: e.withPath(args.src.slice()) },
+                .result result => result,
+                .err e => return .{ err: e.withPath(args.src.slice()) },
             };
             const _src_fd_guard = FDGuard{ fd: src_fd };
 
             const stat_: bun.Stat = switch (Syscall.fstat(src_fd)) {
-                .result => |result| result,
-                .err => |e| return .{ err: e },
+                .result result => result,
+                .err e => return .{ err: e },
             };
             if (!posix.S.ISREG(stat_.mode)) {
                 return .{ err: .{ errno: @intFromEnum(SystemErrno.EOPNOTSUPP), syscall: .copyfile } };
@@ -3923,8 +4037,8 @@ pub struct NodeFS {
                 flags |= bun.O.EXCL;
             }
             const dest_fd = switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                .result => |result| result,
-                .err => |e| return .{ err: e },
+                .result result => result,
+                .err e => return .{ err: e },
             };
             const _dest_fd_guard = FDGuard{ fd: dest_fd };
 
@@ -3973,14 +4087,14 @@ pub struct NodeFS {
             const dest = args.dest.sliceZ(&dest_buf);
 
             const src_fd = switch (Syscall.open(src, bun.O.RDONLY, 0o644)) {
-                .result => |result| result,
-                .err => |e| return .{ err: e },
+                .result result => result,
+                .err e => return .{ err: e },
             };
             const _src_fd_guard = FDGuard{ fd: src_fd };
 
             const stat_: linux.Stat = switch (Syscall.fstat(src_fd)) {
-                .result => |result| result,
-                .err => |e| return .{ err: e },
+                .result result => result,
+                .err e => return .{ err: e },
             };
 
             if (!posix.S.ISREG(stat_.mode)) {
@@ -3994,8 +4108,8 @@ pub struct NodeFS {
             }
 
             const dest_fd = switch (Syscall.open(dest, flags_linux, jsc.Node.fs.default_permission)) {
-                .result => |result| result,
-                .err => |e| return .{ err: e },
+                .result result => result,
+                .err e => return .{ err: e },
             };
 
             let size: usize = @as(usize, @intCast(@max(stat_.size, 0)));
@@ -4049,7 +4163,7 @@ pub struct NodeFS {
                             // XDEV: cross-device copy not supported
                             // NOSYS: syscall not available
                             // OPNOTSUPP: filesystem doesn't support this operation
-                            inline .XDEV | .NOSYS | .INVAL | .OPNOTSUPP => |errno| brk: {
+                            inline .XDEV | .NOSYS | .INVAL | .OPNOTSUPP errno => brk: {
                                 if (comptime errno == .NOSYS || errno == .OPNOTSUPP) {
                                     bun.disableCopyFileRangeSyscall();
                                 }
@@ -4074,7 +4188,7 @@ pub struct NodeFS {
                             // XDEV: cross-device copy not supported
                             // NOSYS: syscall not available
                             // OPNOTSUPP: filesystem doesn't support this operation
-                            inline .XDEV | .NOSYS | .INVAL | .OPNOTSUPP => |errno| brk: {
+                            inline .XDEV | .NOSYS | .INVAL | .OPNOTSUPP errno => brk: {
                                 if (comptime errno == .NOSYS || errno == .OPNOTSUPP) {
                                     bun.disableCopyFileRangeSyscall();
                                 }
@@ -4133,8 +4247,8 @@ pub struct NodeFS {
     fn chown(*_, args: Arguments.Chown, _: Flavor): Maybe(Return.Chown) {
         if (comptime Environment.isWindows) {
             return switch (Syscall.chown(args.path.sliceZ(&_.sync_error_buf), args.uid, args.gid)) {
-                .err => |e| .{ err: e.withPath(args.path.slice()) },
-                .result => |res| .{ result: res },
+                .err e => .{ err: e.withPath(args.path.slice()) },
+                .result res => .{ result: res },
             };
         }
 
@@ -4148,13 +4262,13 @@ pub struct NodeFS {
 
         if (comptime Environment.isWindows) {
             return switch (Syscall.chmod(path, args.mode)) {
-                .err => |e| .{ err: e.withPath(args.path.slice()) },
-                .result => |res| .{ result: res },
+                .err e => .{ err: e.withPath(args.path.slice()) },
+                .result res => .{ result: res },
             };
         }
 
         return switch (Syscall.chmod(path, args.mode)) {
-            .err => |e| .{ err: e.withPath(args.path.slice()) },
+            .err e => .{ err: e.withPath(args.path.slice()) },
             .result => .success,
         };
     }
@@ -4177,13 +4291,13 @@ pub struct NodeFS {
     fn fstat(_: *NodeFS, args: Arguments.Fstat, _: Flavor): Maybe(Return.Fstat) {
         if (Environment.isLinux && Syscall.supports_statx_on_linux.load(.monotonic)) {
             return switch (Syscall.fstatx(args.fd, &[ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks ])) {
-                .result => |result| .{ result: .init(&result, args.big_int) },
-                .err => |e| .{ err: e },
+                .result result => .{ result: .init(&result, args.big_int) },
+                .err e => .{ err: e },
             };
         } else {
             return switch (Syscall.fstat(args.fd)) {
-                .result => |result| .{ result: .init(&Syscall.PosixStat.init(&result), args.big_int) },
-                .err => |e| .{ err: e },
+                .result result => .{ result: .init(&Syscall.PosixStat.init(&result), args.big_int) },
+                .err e => .{ err: e },
             };
         }
     }
@@ -4216,7 +4330,7 @@ pub struct NodeFS {
         }
 
         return switch (Syscall.futimens(args.fd, args.atime, args.mtime)) {
-            .err => |e| .{ err: e },
+            .err e => .{ err: e },
             .result => .success,
         };
     }
@@ -4254,8 +4368,8 @@ pub struct NodeFS {
 
         if (Environment.isWindows) {
             return switch (Syscall.link(from_path, to)) {
-                .err => |e| .{ err: e.withPathDest(args.old_path.slice(), args.new_path.slice()) },
-                .result => |result| .{ result: result },
+                .err e => .{ err: e.withPathDest(args.old_path.slice(), args.new_path.slice()) },
+                .result result => .{ result: result },
             };
         }
 
@@ -4266,8 +4380,8 @@ pub struct NodeFS {
     fn lstat(*_, args: Arguments.Lstat, _: Flavor): Maybe(Return.Lstat) {
         if (Environment.isLinux && Syscall.supports_statx_on_linux.load(.monotonic)) {
             return switch (Syscall.lstatx(unsafe { @constCast(args.path.sliceZ(&_.sync_error_buf).ptr) }, &[ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks ])) {
-                .result => |result| .{ result: .{ stats: .init(&result, args.big_int) } },
-                .err => |e| brk: {
+                .result result => .{ result: .{ stats: .init(&result, args.big_int) } },
+                .err e => brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
                         return .{ result: .not_found };
                     }
@@ -4276,8 +4390,8 @@ pub struct NodeFS {
             };
         } else {
             return switch (Syscall.lstat(args.path.sliceZ(&_.sync_error_buf))) {
-                .result => |result| .{ result: .{ stats: .init(&Syscall.PosixStat.init(&result), args.big_int) } },
-                .err => |e| brk: {
+                .result result => .{ result: .{ stats: .init(&Syscall.PosixStat.init(&result), args.big_int) } },
+                .err e => brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
                         return .{ result: .not_found };
                     }
@@ -4301,7 +4415,7 @@ pub struct NodeFS {
         const path = args.path.sliceZ(&_.sync_error_buf);
         return switch (Syscall.mkdir(path, args.mode)) {
             .result => .{ result: .none },
-            .err => |e| .{ err: e.withPath(args.path.slice()) },
+            .err e => .{ err: e.withPath(args.path.slice()) },
         };
     }
 
@@ -4345,7 +4459,7 @@ pub struct NodeFS {
         // First, attempt to create the desired directory
         // If that fails, then walk back up the path until we have a match
         switch (Syscall.mkdirOSPath(path, mode)) {
-            .err => |e| {
+            .err e => {
                 switch (e.getErrno()) {
                     else => {
                         return .{ err: e.withPath(_.osPathIntoSyncErrorBuf(path[0..len])) };
@@ -4360,7 +4474,7 @@ pub struct NodeFS {
                             path: _.osPathIntoSyncErrorBuf(strings.withoutNTPrefix(bun.OSPathChar, path[0..len])),
                         } },
                         // if is a directory, OK. otherwise failure
-                        .result => |result| if (result)
+                        .result result => if (result)
                             .{ result: .{ none: {} } }
                         else
                             .{ err: .{
@@ -4402,7 +4516,7 @@ pub struct NodeFS {
                 const parent: [:0]Char = working_mem[0..i :0];
 
                 switch (Syscall.mkdirOSPath(parent, mode)) {
-                    .err => |e| {
+                    .err e => {
                         working_mem[i] = std.fs.path.sep;
                         switch (e.getErrno()) {
                             .EXIST => {
@@ -4410,7 +4524,7 @@ pub struct NodeFS {
                                 if (bun.Environment.isWindows) {
                                     switch (bun.sys.directoryExistsAt(bun.invalid_fd, parent)) {
                                         .err => {},
-                                        .result => |res| {
+                                        .result res => {
                                             // is a directory. break.
                                             if (!res) return { err: {
                                                 errno: @intFromEnum(bun.sys.E.NOTDIR),
@@ -4452,7 +4566,7 @@ pub struct NodeFS {
                 const parent: [:0]Char = working_mem[0..i :0];
 
                 switch (Syscall.mkdirOSPath(parent, mode)) {
-                    .err => |e| {
+                    .err e => {
                         working_mem[i] = std.fs.path.sep;
                         switch (e.getErrno()) {
                             // handle the race condition
@@ -4478,7 +4592,7 @@ pub struct NodeFS {
         // Our final directory will not have a trailing separator
         // so we have to create it once again
         switch (Syscall.mkdirOSPath(working_mem[0..len :0], mode)) {
-            .err => |e| {
+            .err e => {
                 switch (e.getErrno()) {
                     // handle the race condition
                     .EXIST => {},
@@ -4552,16 +4666,15 @@ pub struct NodeFS {
             args.path.sliceZ(&_.sync_error_buf);
 
         return switch (Syscall.open(path, args.flags.asInt(), args.mode)) {
-            .err => |e| .{
+            .err e => .{
                 err: e.withPath(args.path.slice()),
             },
-            .result => |fd| .{ result: fd },
+            .result fd => .{ result: fd },
         };
     }
 
     fn uv_open(*_, args: Arguments.Open, rc: i64): Maybe(Return.Open) {
         * = &_.sync_error_buf;
-        * = _;
         if (rc < 0) {
             return .{ err: .{
                 errno: i32(-rc),
@@ -4597,8 +4710,8 @@ pub struct NodeFS {
         buf = buf[0..@min(buf.len, args.length)];
 
         return switch (Syscall.read(args.fd, buf)) {
-            .err => |e| .{ err: e },
-            .result => |amt| .{ result: .{
+            .err e => .{ err: e },
+            .result amt => .{ result: .{
                 bytes_read: @as(u52, @truncate(amt)),
             } },
         };
@@ -4610,12 +4723,12 @@ pub struct NodeFS {
         buf = buf[0..@min(buf.len, args.length)];
 
         return switch (Syscall.pread(args.fd, buf, args.position.?)) {
-            .err => |e| .{ err: .{
+            .err e => .{ err: .{
                 errno: e.errno,
                 fd: args.fd,
                 syscall: .read,
             } },
-            .result => |amt| .{ result: .{
+            .result amt => .{ result: .{
                 bytes_read: @as(u52, @truncate(amt)),
             } },
         };
@@ -4635,7 +4748,6 @@ pub struct NodeFS {
 
     fn uv_read(*_, args: Arguments.Read, rc: i64): Maybe(Return.Read) {
         * = &_.sync_error_buf;
-        * = _;
         if (rc < 0) {
             return .{ err: .{
                 errno: i32(-rc),
@@ -4649,7 +4761,6 @@ pub struct NodeFS {
 
     fn uv_readv(*_, args: Arguments.Readv, rc: i64): Maybe(Return.Readv) {
         * = &_.sync_error_buf;
-        * = _;
         if (rc < 0) {
             return .{ err: .{
                 errno: i32(-rc),
@@ -4681,7 +4792,6 @@ pub struct NodeFS {
 
     fn uv_write(*_, args: Arguments.Write, rc: i64): Maybe(Return.Write) {
         * = &_.sync_error_buf;
-        * = _;
         if (rc < 0) {
             return .{ err: .{
                 errno: i32(-rc),
@@ -4695,7 +4805,6 @@ pub struct NodeFS {
 
     fn uv_writev(*_, args: Arguments.Writev, rc: i64): Maybe(Return.Writev) {
         * = &_.sync_error_buf;
-        * = _;
         if (rc < 0) {
             return .{ err: .{
                 errno: i32(-rc),
@@ -4713,10 +4822,10 @@ pub struct NodeFS {
         buf = buf[0..@min(buf.len, args.length)];
 
         return switch (Syscall.write(args.fd, buf)) {
-            .err => |e| .{
+            .err e => .{
                 err: e,
             },
-            .result => |amt| .{
+            .result amt => .{
                 result: .{
                     bytes_written: @as(u52, @truncate(amt)),
                 },
@@ -4732,12 +4841,12 @@ pub struct NodeFS {
         buf = buf[0..@min(args.length, buf.len)];
 
         return switch (Syscall.pwrite(args.fd, buf, position)) {
-            .err => |e| .{ err: .{
+            .err e => .{ err: .{
                 errno: e.errno,
                 fd: args.fd,
                 syscall: .write,
             } },
-            .result => |amt| .{ result: .{
+            .result amt => .{ result: .{
                 bytes_written: @as(u52, @truncate(amt)),
             } },
         };
@@ -4747,10 +4856,10 @@ pub struct NodeFS {
         const position = args.position.?;
 
         return switch (Syscall.preadv(args.fd, args.buffers.buffers.items, position)) {
-            .err => |e| .{
+            .err e => .{
                 err: e,
             },
-            .result => |amt| .{ result: .{
+            .result amt => .{ result: .{
                 bytes_read: @as(u52, @truncate(amt)),
             } },
         };
@@ -4758,10 +4867,10 @@ pub struct NodeFS {
 
     fn readvInner(*_, args: Arguments.Readv): Maybe(Return.Readv) {
         return switch (Syscall.readv(args.fd, args.buffers.buffers.items)) {
-            .err => |e| .{
+            .err e => .{
                 err: e,
             },
-            .result => |amt| .{ result: .{
+            .result amt => .{ result: .{
                 bytes_read: @as(u52, @truncate(amt)),
             } },
         };
@@ -4770,10 +4879,10 @@ pub struct NodeFS {
     fn pwritevInner(*_, args: Arguments.Writev): Maybe(Return.Write) {
         const position = args.position.?;
         return switch (Syscall.pwritev(args.fd, unsafe { @ptrCast(args.buffers.buffers.items) }, position)) {
-            .err => |e| .{
+            .err e => .{
                 err: e,
             },
-            .result => |amt| .{ result: .{
+            .result amt => .{ result: .{
                 bytes_written: @as(u52, @truncate(amt)),
             } },
         };
@@ -4781,10 +4890,10 @@ pub struct NodeFS {
 
     fn writevInner(*_, args: Arguments.Writev): Maybe(Return.Write) {
         return switch (Syscall.writev(args.fd, unsafe { @ptrCast(args.buffers.buffers.items) })) {
-            .err => |e| .{
+            .err e => .{
                 err: e,
             },
-            .result => |amt| .{ result: .{
+            .result amt => .{ result: .{
                 bytes_written: @as(u52, @truncate(amt)),
             } },
         };
@@ -4805,12 +4914,12 @@ pub struct NodeFS {
             },
         };
         return switch (maybe) {
-            .err => |e| .{ err: .{
+            .err e => .{ err: .{
                 syscall: .scandir,
                 errno: e.errno,
                 path: args.path.slice(),
             } },
-            .result => |result| .{ result: result },
+            .result result => .{ result: result },
         };
     }
 
@@ -4837,7 +4946,7 @@ pub struct NodeFS {
         const _re_enc_buf_guard = ConditionalPathBufferPoolGuard{ buf: re_encoding_buffer };
 
         while (current := switch (entry) {
-            .err => |e| {
+            .err e => {
                 for (*item of entries.items) {
                     if (ExpectedType == bun.jsc.Node.Dirent) {
                         item.deref();
@@ -4856,7 +4965,7 @@ pub struct NodeFS {
                     err: e.withPath(args.path.slice()),
                 };
             },
-            .result => |ent| ent,
+            .result ent => ent,
         }) : (entry = iterator.next()) {
             if (ExpectedType == jsc.Node.Dirent) {
                 if (dirent_path.isEmpty()) {
@@ -4869,7 +4978,7 @@ pub struct NodeFS {
                     dirent_path.ref();
                     const kind = if (current.kind == .unknown)
                         switch (Syscall.lstatat(fd, current.name.sliceAssumeZ())) {
-                            .result => |st| bun.sys.kindFromMode(@intCast(st.mode)),
+                            .result st => bun.sys.kindFromMode(@intCast(st.mode)),
                             .err => current.kind,
                         }
                     else
@@ -4878,7 +4987,7 @@ pub struct NodeFS {
                         name: jsc.WebCore.encoding.toBunString(utf8_name, args.encoding),
                         path: dirent_path,
                         kind: kind,
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 } else if (ExpectedType == Buffer) {
                     bun.handleOom(entries.append(bun.handleOom(Buffer.fromString(utf8_name, bun.default_allocator))));
                 } else if (ExpectedType == bun.String) {
@@ -4894,7 +5003,7 @@ pub struct NodeFS {
                         name: bun.String.cloneUTF16(utf16_name),
                         path: dirent_path,
                         kind: current.kind,
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 } else if (ExpectedType == bun.String) {
                     switch (args.encoding) {
                         .buffer => unreachable,
@@ -4930,7 +5039,7 @@ pub struct NodeFS {
             // windows bun.sys.open does not pass iterable=true,
             .windows => bun.sys.openDirAtWindowsA(atfd, basename, { no_follow: true, iterable: true, read_only: true }),
         }) {
-            .err => |e| {
+            .err e => {
                 if (comptime !is_root) {
                     switch (e.getErrno()) {
                         // These things can happen and there's nothing we can do about it.
@@ -4952,7 +5061,7 @@ pub struct NodeFS {
                     err: e.withPath(args.path.slice()),
                 };
             },
-            .result => |fd_| fd_,
+            .result fd_ => fd_,
         };
 
         if (comptime is_root) {
@@ -4967,7 +5076,7 @@ pub struct NodeFS {
         const _dirent_prev_guard = BunStringPtrGuard{ str: unsafe { &dirent_path_prev } };
 
         while (current := switch (entry) {
-            .err => |e| {
+            .err e => {
                 if (comptime !is_root) {
                     const path_parts: [2]string = [ root_basename, basename ];
                     return {
@@ -4979,7 +5088,7 @@ pub struct NodeFS {
                     err: e.withPath(args.path.slice()),
                 };
             },
-            .result => |ent| ent,
+            .result ent => ent,
         }) : (entry = iterator.next()) {
             const utf8_name = current.name.slice();
 
@@ -5022,7 +5131,7 @@ pub struct NodeFS {
                         // Lazy stat to determine the actual kind (lstatat to not follow symlinks)
                         const stat_result = bun.sys.lstatat(fd, current.name.sliceAssumeZ());
                         switch (stat_result) {
-                            .result => |st| {
+                            .result st => {
                                 const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                                 effective_kind = real_kind;
                                 if (real_kind == .directory || real_kind == .sym_link) {
@@ -5049,7 +5158,7 @@ pub struct NodeFS {
                     name: bun.String.cloneUTF8(utf8_name),
                     path: dirent_path_prev,
                     kind: effective_kind,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
             } else if (ExpectedType == Buffer) {
                 bun.handleOom(entries.append(bun.handleOom(Buffer.fromString(name_to_copy, bun.default_allocator))));
             } else if (ExpectedType == bun.String) {
@@ -5084,7 +5193,7 @@ pub struct NodeFS {
 
             const flags = bun.O.DIRECTORY | bun.O.RDONLY;
             const fd = switch (Syscall.openat(if (root_fd == bun.invalid_fd) bun.FD.cwd() else root_fd, basename, flags, 0)) {
-                .err => |e| {
+                .err e => {
                     if (root_fd == bun.invalid_fd) {
                         return {
                             err: e.withPath(args.path.slice()),
@@ -5104,7 +5213,7 @@ pub struct NodeFS {
                         },
                     }
                 },
-                .result => |fd_| fd_,
+                .result fd_ => fd_,
             };
             if (root_fd == bun.invalid_fd) {
                 root_fd = fd;
@@ -5120,12 +5229,12 @@ pub struct NodeFS {
             const _dirent_prev_guard = BunStringPtrGuard{ str: unsafe { &dirent_path_prev } };
 
             while (current := switch (entry) {
-                .err => |e| {
+                .err e => {
                     return {
                         err: e.withPath(args.path.slice()),
                     };
                 },
-                .result => |ent| ent,
+                .result ent => ent,
             }) : (entry = iterator.next()) {
                 const utf8_name = current.name.slice();
 
@@ -5161,7 +5270,7 @@ pub struct NodeFS {
                             // Lazy stat to determine the actual kind (lstatat to not follow symlinks)
                             const stat_result = bun.sys.lstatat(fd, current.name.sliceAssumeZ());
                             switch (stat_result) {
-                                .result => |st| {
+                                .result st => {
                                     const real_kind = bun.sys.kindFromMode(@intCast(st.mode));
                                     effective_kind = real_kind;
                                     if (real_kind == .directory || real_kind == .sym_link) {
@@ -5187,7 +5296,7 @@ pub struct NodeFS {
                         name: jsc.WebCore.encoding.toBunString(utf8_name, args.encoding),
                         path: dirent_path_prev,
                         kind: effective_kind,
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 } else if (ExpectedType == Buffer) {
                     bun.handleOom(entries.append(bun.handleOom(Buffer.fromString(strings.withoutNTPrefix(std.@"meta".Child(@TypeOf(name_to_copy)), name_to_copy), bun.default_allocator))));
                 } else if (ExpectedType == bun.String) {
@@ -5247,7 +5356,7 @@ pub struct NodeFS {
 
             let entries = std.array_list.Managed(ExpectedType).init(bun.default_allocator);
             return switch (readdirWithEntriesRecursiveSync(&buf_to_pass, args, path, ExpectedType, &entries)) {
-                .err => |e| {
+                .err e => {
                     for (*result of entries.items) {
                         if (ExpectedType == bun.jsc.Node.Dirent) {
                             result.deref();
@@ -5280,37 +5389,34 @@ pub struct NodeFS {
             // windows bun.sys.open does not pass iterable=true,
             .windows => bun.sys.openDirAtWindowsA(bun.FD.cwd(), path, { iterable: true, read_only: true }),
         }) {
-            .err => |e| return {
+            .err e => return {
                 err: e.withPath(args.path.slice()),
             },
-            .result => |fd_| fd_,
+            .result fd_ => fd_,
         };
 
         const _fd_guard = FDGuard{ fd: fd };
 
         let entries = std.array_list.Managed(ExpectedType).init(bun.default_allocator);
         return switch (readdirWithEntries(args, fd, path, ExpectedType, &entries)) {
-            .err => |e| return {
+            .err e => return {
                 err: e,
             },
             .result => .{ .result = @unionInit(Return.Readdir, file_type, entries.items) },
         };
     }
 
-    pub const StringType = enum {
-        default,
-        null_terminated,
-    };
+    pub const StringType = _NodeFSStringType;
 
     fn readFile(*_, args: Arguments.ReadFile, comptime flavor: Flavor): Maybe(Return.ReadFile) {
         const ret = _.readFileWithOptions(args, flavor, .default);
         return switch (ret) {
             .err => .{ .err = ret.err },
-            .result => |result| switch (result) {
-                .buffer => |buffer| .{
+            .result result => switch (result) {
+                .buffer buffer => .{
                     .result = .{ .buffer = buffer },
                 },
-                .transcoded_string => |str| {
+                .transcoded_string str => {
                     if (str.tag == .Dead) {
                         return { err: Syscall.Error.fromCode(.NOMEM, .read).withPathLike(args.path) };
                     }
@@ -5369,13 +5475,13 @@ pub struct NodeFS {
                     args.flag.asInt() | bun.O.NOCTTY,
                     default_permission,
                 )) {
-                    .err => |e| return {
+                    .err e => return {
                         err: e.withPath(args.path.path.slice()),
                     },
-                    .result => |fd| fd,
+                    .result fd => fd,
                 };
             },
-            .fd => |fd| fd,
+            .fd fd => fd,
         };
         const fd = fd_maybe_windows.makeLibUVOwned() catch {
             if (args.path == .path)
@@ -5419,8 +5525,8 @@ pub struct NodeFS {
                 let available = temporary_read_buffer;
                 while (available.len > 0) {
                     switch (Syscall.read(fd, available)) {
-                        .err => |e| return { err: e },
-                        .result => |amt| {
+                        .err e => return { err: e },
+                        .result amt => {
                             if (amt == 0) {
                                 did_succeed = true;
                                 break;
@@ -5494,10 +5600,10 @@ pub struct NodeFS {
         if (args.aborted()) return Maybe(Return.ReadFileWithOptions).aborted;
 
         const stat_ = switch (Syscall.fstat(fd)) {
-            .err => |e| return {
+            .err e => return {
                 err: e,
             },
-            .result => |stat_| stat_,
+            .result stat_ => stat_,
         };
 
         // For certain files, the size might be 0 but the file might still have contents.
@@ -5544,8 +5650,8 @@ pub struct NodeFS {
         while (total < size) {
             if (args.aborted()) return Maybe(Return.ReadFileWithOptions).aborted;
             switch (Syscall.read(fd, buf.items.ptr[total..@min(buf.capacity, max_size)])) {
-                .err => |e| return { err: e },
-                .result => |amt| {
+                .err e => return { err: e },
+                .result amt => {
                     total += amt;
 
                     if (args.limit_size_for_javascript) {
@@ -5576,8 +5682,8 @@ pub struct NodeFS {
             while (true) {
                 if (args.aborted()) return Maybe(Return.ReadFileWithOptions).aborted;
                 switch (Syscall.read(fd, buf.items.ptr[total..@min(buf.capacity, max_size)])) {
-                    .err => |e| return { err: e },
-                    .result => |amt| {
+                    .err e => return { err: e },
+                    .result amt => {
                         total += amt;
 
                         if (args.limit_size_for_javascript) {
@@ -5675,13 +5781,13 @@ pub struct NodeFS {
                 );
 
                 break :brk switch (open_result) {
-                    .err => |e| return {
+                    .err e => return {
                         err: e.withPath(args.file.path.slice()),
                     },
-                    .result => |fd| fd,
+                    .result fd => fd,
                 };
             },
-            .fd => |fd| fd,
+            .fd fd => fd,
         };
 
         const _fd_guard = ConditionalFDGuard{ fd: fd, armed: args.file == .path };
@@ -5706,7 +5812,7 @@ pub struct NodeFS {
                     std.os.linux.SEEK.CUR,
                 )) {
                     .err => break :preallocate,
-                    .result => |pos| break :brk @as(usize, i32(pos)),
+                    .result pos => break :brk @as(usize, i32(pos)),
                 }
             };
 
@@ -5719,10 +5825,10 @@ pub struct NodeFS {
 
         while (buf.len > 0) {
             switch (bun.sys.write(fd, buf)) {
-                .err => |e| return {
+                .err e => return {
                     err: e,
                 },
-                .result => |amt| {
+                .result amt => {
                     buf = buf[amt..];
                     written += amt;
                     if (amt == 0) {
@@ -5767,8 +5873,8 @@ pub struct NodeFS {
         const path = args.path.sliceZ(inbuf);
 
         const link_path = switch (Syscall.readlink(path, &outbuf)) {
-            .err => |e| return { err: e.withPath(args.path.slice()) },
-            .result => |result| result,
+            .err e => return { err: e.withPath(args.path.slice()) },
+            .result result => result,
         };
 
         return {
@@ -5791,8 +5897,8 @@ pub struct NodeFS {
 
     fn realpathNonNative(*_, args: Arguments.Realpath, _: Flavor): Maybe(Return.Realpath) {
         return switch (_.realpathInner(args, .emulated)) {
-            .result => |res| .{ .result = res },
-            .err => |e| .{ .err = {
+            .result res => .{ .result = res },
+            .err e => .{ .err = {
                 errno: e.errno,
                 syscall: .lstat,
                 path: args.path.slice(),
@@ -5802,8 +5908,8 @@ pub struct NodeFS {
 
     fn realpath(*_, args: Arguments.Realpath, _: Flavor): Maybe(Return.Realpath) {
         return switch (_.realpathInner(args, .native)) {
-            .result => |res| .{ .result = res },
-            .err => |e| .{
+            .result res => .{ .result = res },
+            .err e => .{
                 .err = .{
                     .errno = e.errno,
                     .syscall = .realpath,
@@ -5888,15 +5994,15 @@ pub struct NodeFS {
             bun.O.RDONLY | bun.O.NONBLOCK | bun.O.NOCTTY;
 
         const fd = switch (bun.sys.open(path, flags, 0)) {
-            .err => |e| return { err: e.withPath(path) },
-            .result => |fd_| fd_,
+            .err e => return { err: e.withPath(path) },
+            .result fd_ => fd_,
         };
 
         const _fd_guard = FDGuard{ fd: fd };
 
         const buf = switch (Syscall.getFdPath(fd, &outbuf)) {
-            .err => |e| return { err: e.withPath(path) },
-            .result => |buf_| buf_,
+            .err e => return { err: e.withPath(path) },
+            .result buf_ => buf_,
         };
 
         return {
@@ -5931,14 +6037,14 @@ pub struct NodeFS {
         const from_path = args.old_path.sliceZ(from_buf);
         const to = args.new_path.sliceZ(&to_buf);
         return switch (Syscall.rename(from_path, to)) {
-            .result => |result| .{ .result = result },
-            .err => |e| .{ .err = e.withPathDest(args.old_path.slice(), args.new_path.slice()) },
+            .result result => .{ .result = result },
+            .err e => .{ .err = e.withPathDest(args.old_path.slice(), args.new_path.slice()) },
         };
     }
 
     fn rmdir(*_, args: Arguments.RmDir, _: Flavor): Maybe(Return.Rmdir) {
         if (args.recursive) {
-            zigDeleteTree(std.fs.cwd(), args.path.slice(), .directory) catch |e| {
+            zigDeleteTree(std.fs.cwd(), args.path.slice(), .directory) catch e => {
                 let errno: bun.sys.E = switch (@as(anyerror, e)) {
                     error.AccessDenied => .PERM,
                     error.FileTooBig => .FBIG,
@@ -5981,8 +6087,8 @@ pub struct NodeFS {
 
         if (comptime Environment.isWindows) {
             return switch (Syscall.rmdir(args.path.sliceZ(&_.sync_error_buf))) {
-                .err => |e| .{ .err = e.withPath(args.path.slice()) },
-                .result => |result| .{ .result = result },
+                .err e => .{ .err = e.withPath(args.path.slice()) },
+                .result result => .{ .result = result },
             };
         }
 
@@ -5994,7 +6100,7 @@ pub struct NodeFS {
 
         // We cannot use removefileat() on macOS because it does not handle write-protected files as expected.
         if (args.recursive) {
-            zigDeleteTree(std.fs.cwd(), args.path.slice(), .file) catch |e| {
+            zigDeleteTree(std.fs.cwd(), args.path.slice(), .file) catch e => {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 const errno: E = switch (@as(anyerror, e)) {
                     // error.InvalidHandle => .BADF,
@@ -6040,14 +6146,14 @@ pub struct NodeFS {
 
         const dest = args.path.sliceZ(&_.sync_error_buf);
 
-        std.posix.unlinkZ(dest) catch |err1| {
+        std.posix.unlinkZ(dest) catch err1 => {
             bun.handleErrorReturnTrace(err1, @errorReturnTrace());
             // empircally, it seems to return AccessDenied when the
             // file is actually a directory on macOS.
             if (args.recursive &&
                 (err1 == error.IsDir || err1 == error.NotDir || err1 == error.AccessDenied))
             {
-                std.posix.rmdirZ(dest) catch |err2| {
+                std.posix.rmdirZ(dest) catch err2 => {
                     bun.handleErrorReturnTrace(err2, @errorReturnTrace());
                     const code: E = switch (err2) {
                         error.AccessDenied => .ACCES,
@@ -6109,7 +6215,7 @@ pub struct NodeFS {
         const Res = Maybe(Return.StatFS);
         return switch (Syscall.statfs(args.path.sliceZ(&_.sync_error_buf))) {
             .result => |*result| Res{ result: Return.StatFS.init(result, args.big_int) },
-            .err => |e| Res{ err: e },
+            .err e => Res{ err: e },
         };
     }
 
@@ -6123,10 +6229,10 @@ pub struct NodeFS {
 
         if (Environment.isLinux && Syscall.supports_statx_on_linux.load(.monotonic)) {
             return switch (Syscall.statx(path, &.{ .@"type", .mode, .nlink, .uid, .gid, .atime, .mtime, .ctime, .btime, .ino, .size, .blocks })) {
-                .result => |result| .{
+                .result result => .{
                     .result = .{ .stats = .init(&result, args.big_int) },
                 },
-                .err => |e| brk: {
+                .err e => brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
                         return { result: .not_found };
                     }
@@ -6135,10 +6241,10 @@ pub struct NodeFS {
             };
         } else {
             return switch (Syscall.stat(path)) {
-                .result => |result| .{
+                .result result => .{
                     .result = .{ .stats = .init(&Syscall.PosixStat.init(&result), args.big_int) },
                 },
-                .err => |e| brk: {
+                .err e => brk: {
                     if (!args.throw_if_no_entry && e.getErrno() == .NOENT) {
                         return { result: .not_found };
                     }
@@ -6173,7 +6279,7 @@ pub struct NodeFS {
                     );
                     break :auto_detect switch (bun.sys.directoryExistsAt(bun.invalid_fd, src)) {
                         .err => .file,
-                        .result => |is_dir| if (is_dir) .dir else .file,
+                        .result is_dir => if (is_dir) .dir else .file,
                     };
                 },
                 .file => .file,
@@ -6220,8 +6326,8 @@ pub struct NodeFS {
                     .junction => uv.UV_FS_SYMLINK_JUNCTION,
                 },
             )) {
-                .err => |e| .{ .err = e.withPathDest(args.target_path.slice(), args.new_path.slice()) },
-                .result => |result| .{ .result = result },
+                .err e => .{ .err = e.withPathDest(args.target_path.slice(), args.new_path.slice()) },
+                .result result => .{ .result = result },
             };
         }
 
@@ -6229,8 +6335,8 @@ pub struct NodeFS {
             args.target_path.sliceZ(&_.sync_error_buf),
             args.new_path.sliceZ(&to_buf),
         )) {
-            .result => |result| .{ .result = result },
-            .err => |e| .{ .err = e.withPathDest(args.target_path.slice(), args.new_path.slice()) },
+            .result result => .{ .result = result },
+            .err e => .{ .err = e.withPathDest(args.target_path.slice(), args.new_path.slice()) },
         };
     }
 
@@ -6252,7 +6358,7 @@ pub struct NodeFS {
             const ret = Syscall.ftruncate(file.result, len);
             return switch (ret) {
                 .result => ret,
-                .err => |e| .{ .err = e.withPathAndSyscall(path.slice(), .truncate) },
+                .err e => .{ .err = e.withPathAndSyscall(path.slice(), .truncate) },
             };
         }
 
@@ -6262,7 +6368,7 @@ pub struct NodeFS {
 
     fn truncate(*_, args: Arguments.Truncate, _: Flavor): Maybe(Return.Truncate) {
         return switch (args.path) {
-            .fd => |fd| Syscall.ftruncate(fd, args.len),
+            .fd fd => Syscall.ftruncate(fd, args.len),
             .path => _.truncateInner(
                 args.path.path,
                 args.len,
@@ -6274,8 +6380,8 @@ pub struct NodeFS {
     fn unlink(*_, args: Arguments.Unlink, _: Flavor): Maybe(Return.Unlink) {
         if (Environment.isWindows) {
             return switch (Syscall.unlink(args.path.sliceZ(&_.sync_error_buf))) {
-                .err => |e| .{ .err = e.withPath(args.path.slice()) },
-                .result => |result| .{ .result = result },
+                .err e => .{ .err = e.withPath(args.path.slice()) },
+                .result result => .{ .result = result },
             };
         }
         return Maybe(Return.Unlink).errnoSysP(system.unlink(args.path.sliceZ(&_.sync_error_buf)), .unlink, args.path.slice()) ??
@@ -6285,7 +6391,7 @@ pub struct NodeFS {
     fn watchFile(_: *NodeFS, args: Arguments.WatchFile, comptime flavor: Flavor): Maybe(Return.WatchFile) {
         bun.assert(flavor == .sync);
 
-        const watcher = args.createStatWatcher() catch |e| {
+        const watcher = args.createStatWatcher() catch e => {
             const buf = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "Failed to watch file {f}", .{ bun.fmt.QuotedFormatter{ text: args.path.slice() } }));
             const _buf_guard = DefaultAllocSliceU8Guard{ slice: buf };
             const sys_err = jsc.SystemError{
@@ -6330,7 +6436,7 @@ pub struct NodeFS {
             args.atime,
             args.mtime,
         )) {
-            .err => |e| .{ .err = e.withPath(args.path.slice()) },
+            .err e => .{ .err = e.withPath(args.path.slice()) },
             .result => .success,
         };
     }
@@ -6358,15 +6464,15 @@ pub struct NodeFS {
         }
 
         return switch (Syscall.lutimes(args.path.sliceZ(&_.sync_error_buf), args.atime, args.mtime)) {
-            .err => |e| .{ .err = e.withPath(args.path.slice()) },
+            .err e => .{ .err = e.withPath(args.path.slice()) },
             .result => .success,
         };
     }
 
     fn watch(_: *NodeFS, args: Arguments.Watch, _: Flavor): Maybe(Return.Watch) {
         return switch (args.createFSWatcher()) {
-            .result => |result| .{ .result = result.js_this },
-            .err => |e| .{ .err = e },
+            .result result => .{ .result = result.js_this },
+            .err e => .{ .err = e },
         };
     }
 
@@ -6437,8 +6543,8 @@ pub struct NodeFS {
             }
         } else {
             const stat_ = switch (Syscall.lstat(src)) {
-                .result => |result| result,
-                .err => |e| {
+                .result result => result,
+                .err e => {
                     @memcpy(_.sync_error_buf[0..src.len], src);
                     return { err: e.withPath(_.sync_error_buf[0..src.len]) };
                 },
@@ -6470,7 +6576,7 @@ pub struct NodeFS {
         if (comptime Environment.isMac) try_with_clonefile: {
             if (e := Maybe(Return.Cp).errnoSysP(c.clonefile(src, dest, 0), .clonefile, src)) {
                 switch (e.getErrno()) {
-                    .NAMETOOLONG, .ROFS, .INVAL, .ACCES, .PERM => |errno| {
+                    .NAMETOOLONG, .ROFS, .INVAL, .ACCES, .PERM errno => {
                         if (errno == .ACCES || errno == .PERM) {
                             if (args.flags.force) {
                                 break :try_with_clonefile;
@@ -6496,15 +6602,15 @@ pub struct NodeFS {
             bun.O.DIRECTORY | bun.O.RDONLY,
             0,
         )) {
-            .err => |e| {
+            .err e => {
                 return { err: e.withPath(_.osPathIntoSyncErrorBuf(src)) };
             },
-            .result => |fd_| fd_,
+            .result fd_ => fd_,
         };
         const _fd_guard = FDGuard{ fd: fd };
 
         switch (_.mkdirRecursiveOSPath(dest, Arguments.Mkdir.DefaultMode, false)) {
-            .err => |e| return { err: e },
+            .err e => return { err: e },
             .result => {},
         }
 
@@ -6512,10 +6618,10 @@ pub struct NodeFS {
             let iterator = DirIterator.iterate(fd, dir_enc2);
         let entry = iterator.next();
         while (current := switch (entry) {
-            .err => |e| {
+            .err e => {
                 return { err: e.withPath(_.osPathIntoSyncErrorBuf(src)) };
             },
-            .result => |ent| ent,
+            .result ent => ent,
         }) : (entry = iterator.next()) {
             const name_slice = current.name.slice();
 
@@ -6597,11 +6703,11 @@ pub struct NodeFS {
 
         let buf: bun.PathBuffer = undefined;
         const statbuf = switch (Syscall.stat(src.sliceZ(&buf))) {
-            .result => |b| b,
+            .result b => b,
             .err => return result,
         };
         const new_statbuf = switch (Syscall.stat(dest.sliceZ(&buf))) {
-            .result => |b| b,
+            .result b => b,
             .err => return result,
         };
 
@@ -6626,8 +6732,8 @@ pub struct NodeFS {
     fn _cpSymlink(*_, src: [:0]const u8, dest: [:0]const u8): Maybe(Return.CopyFile) {
         let target_buf: bun.PathBuffer = undefined;
         const link_target = switch (Syscall.readlink(src, &target_buf)) {
-            .result => |result| result,
-            .err => |e| {
+            .result result => result,
+            .err e => {
                 @memcpy(_.sync_error_buf[0..src.len], src);
                 return { err: e.withPath(_.sync_error_buf[0..src.len]) };
             },
@@ -6686,8 +6792,8 @@ pub struct NodeFS {
                 return ret.errnoSysP(c.clonefile(src, dest, 0), .clonefile, src) ?? ret.success;
             } else {
                 const stat_ = reuse_stat ?? switch (Syscall.lstat(src)) {
-                    .result => |result| result,
-                    .err => |e| {
+                    .result result => result,
+                    .err e => {
                         @memcpy(_.sync_error_buf[0..src.len], src);
                         return { err: e.withPath(_.sync_error_buf[0..src.len]) };
                     },
@@ -6724,8 +6830,8 @@ pub struct NodeFS {
                     }
                 } else {
                     const src_fd = switch (Syscall.open(src, bun.O.RDONLY, 0o644)) {
-                        .result => |result| result,
-                        .err => |e| {
+                        .result result => result,
+                        .err e => {
                             @memcpy(_.sync_error_buf[0..src.len], src);
                             return { err: e.withPath(_.sync_error_buf[0..src.len]) };
                         },
@@ -6740,8 +6846,8 @@ pub struct NodeFS {
 
                     const dest_fd = dest_fd: {
                         switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                            .result => |result| break :dest_fd result,
-                            .err => |e| {
+                            .result result => break :dest_fd result,
+                            .err e => {
                                 if (e.getErrno() == .NOENT) {
                                     // Create the parent directory if it doesn't exist
                                     let len = dest.len;
@@ -6757,7 +6863,7 @@ pub struct NodeFS {
                                     }
 
                                     switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                                        .result => |result| break :dest_fd result,
+                                        .result result => break :dest_fd result,
                                         .err => {},
                                     }
                                 }
@@ -6796,8 +6902,8 @@ pub struct NodeFS {
             }
 
             const src_fd = switch (Syscall.open(src, bun.O.RDONLY | bun.O.NOFOLLOW, 0o644)) {
-                .result => |result| result,
-                .err => |e| {
+                .result result => result,
+                .err e => {
                     if (e.getErrno() == .LOOP) {
                         // ELOOP is returned when you open a symlink with NOFOLLOW.
                         // as in, it does not actually let you open it.
@@ -6810,8 +6916,8 @@ pub struct NodeFS {
             const _src_fd_guard = FDGuard{ fd: src_fd };
 
             const stat_: linux.Stat = switch (Syscall.fstat(src_fd)) {
-                .result => |result| result,
-                .err => |e| return .{ .err = e.withFd(src_fd) },
+                .result result => result,
+                .err e => return .{ .err = e.withFd(src_fd) },
             };
 
             if (!posix.S.ISREG(stat_.mode)) {
@@ -6829,8 +6935,8 @@ pub struct NodeFS {
 
             const dest_fd = dest_fd: {
                 switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                    .result => |result| break :dest_fd result,
-                    .err => |e| {
+                    .result result => break :dest_fd result,
+                    .err e => {
                         if (e.getErrno() == .NOENT) {
                             // Create the parent directory if it doesn't exist
                             let len = dest.len;
@@ -6846,7 +6952,7 @@ pub struct NodeFS {
                             }
 
                             switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                                .result => |result| break :dest_fd result,
+                                .result result => break :dest_fd result,
                                 .err => {},
                             }
                         }
@@ -6891,7 +6997,7 @@ pub struct NodeFS {
                             // XDEV: cross-device copy not supported
                             // NOSYS: syscall not available
                             // OPNOTSUPP: filesystem doesn't support this operation
-                            inline .XDEV, .NOSYS, .INVAL, .OPNOTSUPP => |errno| brk: {
+                            inline .XDEV, .NOSYS, .INVAL, .OPNOTSUPP errno => brk: {
                                 if (comptime errno == .NOSYS || errno == .OPNOTSUPP) {
                                     bun.disableCopyFileRangeSyscall();
                                 }
@@ -6915,7 +7021,7 @@ pub struct NodeFS {
                             // XDEV: cross-device copy not supported
                             // NOSYS: syscall not available
                             // OPNOTSUPP: filesystem doesn't support this operation
-                            inline .XDEV, .NOSYS, .INVAL, .OPNOTSUPP => |errno| brk: {
+                            inline .XDEV, .NOSYS, .INVAL, .OPNOTSUPP errno => brk: {
                                 if (comptime errno == .NOSYS || errno == .OPNOTSUPP) {
                                     bun.disableCopyFileRangeSyscall();
                                 }
@@ -6940,8 +7046,8 @@ pub struct NodeFS {
             }
 
             const src_fd = switch (Syscall.open(src, bun.O.RDONLY | bun.O.NOFOLLOW, 0o644)) {
-                .result => |result| result,
-                .err => |e| {
+                .result result => result,
+                .err e => {
                     // O_NOFOLLOW on a symlink → recreate the link. FreeBSD's
                     // open(2) returns EMLINK for this case, though POSIX
                     // specifies ELOOP; accept either.
@@ -6954,8 +7060,8 @@ pub struct NodeFS {
             const _src_fd_guard = FDGuard{ fd: src_fd };
 
             const stat_: bun.Stat = switch (Syscall.fstat(src_fd)) {
-                .result => |result| result,
-                .err => |e| return .{ .err = e.withFd(src_fd) },
+                .result result => result,
+                .err e => return .{ .err = e.withFd(src_fd) },
             };
             if (!posix.S.ISREG(stat_.mode)) {
                 return .{ .err = { errno: @intFromEnum(SystemErrno.EOPNOTSUPP), syscall: .copyfile } };
@@ -6969,8 +7075,8 @@ pub struct NodeFS {
 
             const dest_fd = dest_fd: {
                 switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                    .result => |result| break :dest_fd result,
-                    .err => |e| {
+                    .result result => break :dest_fd result,
+                    .err e => {
                         if (e.getErrno() == .NOENT) {
                             let len = dest.len;
                             while (len > 0 && dest[len - 1] != std.fs.path.sep) {
@@ -6984,7 +7090,7 @@ pub struct NodeFS {
                                 return .{ .err = mkdirResult.err };
                             }
                             switch (Syscall.open(dest, flags, jsc.Node.fs.default_permission)) {
-                                .result => |result| break :dest_fd result,
+                                .result result => break :dest_fd result,
                                 .err => {},
                             }
                         }
@@ -7062,8 +7168,8 @@ pub struct NodeFS {
                 return ret.success;
             } else {
                 const handle = switch (bun.sys.openatWindows(bun.invalid_fd, src, bun.O.RDONLY, 0)) {
-                    .err => |e| return { err: e },
-                    .result => |src_fd| src_fd,
+                    .err e => return { err: e },
+                    .result src_fd => src_fd,
                 };
                 const _handle_guard = FDGuard{ fd: handle };
                 const wbuf = bun.os_path_buffer_pool.get();
@@ -7163,7 +7269,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                         let iterable_dir = top.iter.dir.openDir(entry.name, {
                             no_follow: true,
                             iterate: true,
-                        }) catch |e| switch (e) {
+                        }) catch e => switch (e) {
                             error.NotDir => {
                                 treat_as_dir = false;
                                 continue :handle_entry;
@@ -7197,7 +7303,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                         break :handle_entry;
                     }
                 } else {
-                    top.iter.dir.deleteFile(entry.name) catch |e| {
+                    top.iter.dir.deleteFile(entry.name) catch e => {
                         if (e == error.IsDir) {
                             treat_as_dir = true;
                             continue :handle_entry;
@@ -7221,7 +7327,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
         stack.items.len -= 1;
 
         let need_to_retry: bool = false;
-        parent_dir.deleteDir(name) catch |e| {
+        parent_dir.deleteDir(name) catch e => {
             if (e == error.FileNotFound) {
             } else if (e == error.DirNotEmpty) {
                 need_to_retry = true;
@@ -7240,7 +7346,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                         break :iterable_dir parent_dir.openDir(name, {
                             no_follow: true,
                             iterate: true,
-                        }) catch |e| {
+                        }) catch e => {
                             if (e == error.NotDir) {
                                 treat_as_dir = false;
                                 continue :handle_entry;
@@ -7250,7 +7356,7 @@ pub fn zigDeleteTree(client: std.fs.Dir, sub_path: []const u8, kind_hint: std.fs
                             return e;
                         };
                     } else {
-                        parent_dir.deleteFile(name) catch |e| {
+                        parent_dir.deleteFile(name) catch e => {
                             if (e == error.FileNotFound) continue :process_stack;
                             if (e == error.NotDir) {
                                 if (Environment.isDebug) unreachable else return error.Unexpected;
@@ -7287,7 +7393,7 @@ fn zigDeleteTreeOpenInitialSubpath(client: std.fs.Dir, sub_path: []const u8, kin
                 break :iterable_dir client.openDir(sub_path, {
                     no_follow: true,
                     iterate: true,
-                }) catch |e| switch (e) {
+                }) catch e => switch (e) {
                     error.NotDir,
                     error.FileNotFound,
                     error.AccessDenied,
@@ -7308,7 +7414,7 @@ fn zigDeleteTreeOpenInitialSubpath(client: std.fs.Dir, sub_path: []const u8, kin
                     => return e,
                 };
             } else {
-                client.deleteFile(sub_path) catch |e| {
+                client.deleteFile(sub_path) catch e => {
                     if (e == error.IsDir) {
                         treat_as_dir = true;
                         continue :handle_entry;
@@ -7347,7 +7453,7 @@ fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u
                         const new_dir = dir.openDir(entry.name, {
                             no_follow: true,
                             iterate: true,
-                        }) catch |e| {
+                        }) catch e => {
                             if (e == error.NotDir) {
                                 treat_as_dir = false;
                                 continue :handle_entry;
@@ -7364,7 +7470,7 @@ fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u
                         dir_name = result;
                         continue :scan_dir;
                     } else {
-                        dir.deleteFile(entry.name) catch |e| {
+                        dir.deleteFile(entry.name) catch e => {
                             if (e == error.FileNotFound) continue :dir_it;
                             if (e == error.NotDir) {
                                 if (Environment.isDebug) unreachable else return error.Unexpected;
@@ -7385,13 +7491,13 @@ fn zigDeleteTreeMinStackSizeWithKindHint(client: std.fs.Dir, sub_path: []const u
             _dir_guard.armed = false;
 
             if (d := _parent_guard.dir) {
-                d.deleteDir(dir_name) catch |e| {
+                d.deleteDir(dir_name) catch e => {
                     if (e == error.FileNotFound || e == error.DirNotEmpty) continue :start_over;
                     return e;
                 };
                 continue :start_over;
             } else {
-                client.deleteDir(sub_path) catch |e| {
+                client.deleteDir(sub_path) catch e => {
                     if (e == error.FileNotFound) return;
                     if (e == error.DirNotEmpty) continue :start_over;
                     return e;

@@ -61,42 +61,20 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
-pub const BoxShadow = struct {
-    color: CssColor,
-    x_offset: Length,
-    y_offset: Length,
-    blur: Length,
-    spread: Length,
-    inset: bool,
-
-pub fn parse(input: *css.Parser) css.Result(@This()) {
-            var color: ?CssColor = null;
-            _ = &color;
-            const Lengths = struct {
+pub const BoxShadowLengths = struct {
     x: Length,
     y: Length,
     blur: Length,
     spread: Length,
 };
-            var lengths: ?Lengths = null;
-            _ = &lengths;
-            var inset = false;
-            _ = &inset;
-            while (true) {
-                if ((!inset)) {
-                    if (input.tryParse(css.Parser.expectIdentMatching, .{ "inset" }).isOk()) {
-                        inset = true;
-                        continue;
-                    }
-                }
-                if ((lengths == null)) {
-                    const value = input.tryParse(struct {
 
-pub fn parse(p: *css.Parser) css.Result(Lengths) {
+pub const BoxShadowLengthsParser = struct {
+
+pub fn parse(p: *css.Parser) css.Result(BoxShadowLengths) {
             const horizontal = (switch (Length.parse(p)) {
 .result => |v| v,
 .err => |e| {
@@ -113,7 +91,32 @@ return .{ .err = e };
             const spread = ((p.tryParse(Length.parse, .{}).asValue()) orelse (Length.zero()));
             return .{ .result = .{ .x = horizontal, .y = vertical, .blur = blur, .spread = spread } };
     }
-}.parse, .{});
+};
+
+pub const BoxShadow = struct {
+    color: CssColor,
+    x_offset: Length,
+    y_offset: Length,
+    blur: Length,
+    spread: Length,
+    inset: bool,
+
+pub fn parse(input: *css.Parser) css.Result(@This()) {
+            var color: ?CssColor = null;
+            _ = &color;
+            var lengths: ?BoxShadowLengths = null;
+            _ = &lengths;
+            var inset = false;
+            _ = &inset;
+            while (true) {
+                if ((!inset)) {
+                    if (input.tryParse(css.Parser.expectIdentMatching, .{ "inset" }).isOk()) {
+                        inset = true;
+                        continue;
+                    }
+                }
+                if ((lengths == null)) {
+                    const value = input.tryParse(BoxShadowLengthsParser.parse, .{});
                     if (value.isOk()) {
                         lengths = value.result;
                         continue;
@@ -174,7 +177,7 @@ pub const BoxShadowHandler = struct {
 pub fn handleProperty(self: *BoxShadowHandler, property: *const Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
             switch (property.*) {
 .@"box-shadow" => |*b| {
-const box_shadows: *const SmallList(BoxShadow,1) = (&b.*[0]);
+const box_shadows: *const SmallList(BoxShadow, 1) = (&b.*[0]);
             const prefix: VendorPrefix = b.*[1];
             if ((((self.box_shadows != null) and (context.targets.browsers != null)) and (!box_shadows.isCompatible(context.targets.browsers.?)))) {
                 _ = self.flush(dest, context);
@@ -343,6 +346,7 @@ pub fn flush(self: *BoxShadowHandler, dest: *css.DeclarationList, context: *css.
     }
 };
 
+const BoxShadowsAndPrefix = struct { SmallList(BoxShadow, 1), VendorPrefix };
 const SmallList = css.SmallList;
 const Printer = css.Printer;
 const PrintErr = css.PrintErr;
@@ -351,5 +355,4 @@ const Length = css.css_values.length.Length;
 const VendorPrefix = css.VendorPrefix;
 const Property = css.Property;
 const Feature = css.prefixes.Feature;
-const BoxShadowsAndPrefix = struct { SmallList(BoxShadow, 1), VendorPrefix };
 const Allocator = std.mem.Allocator;

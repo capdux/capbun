@@ -81,6 +81,27 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const BufferData = struct {
+    size: usize,
+    name: []const u8,
+    @"type": type,
+    alignment: usize,
+};
+
+pub const BufferSortContext = struct {
+    data: []BufferData,
+
+pub fn swap(self: BufferSortContext, lhs: usize, rhs: usize) void {
+            const tmp = self.data[@as(usize, @intCast(lhs))];
+            self.data[cp_cast_int(usize, lhs)] = self.data[@as(usize, @intCast(rhs))];
+            self.data[cp_cast_int(usize, rhs)] = tmp;
+    }
+
+pub fn lessThan(self: BufferSortContext, lhs: usize, rhs: usize) bool {
+            return (self.data[@as(usize, @intCast(lhs))].alignment > self.data[@as(usize, @intCast(rhs))].alignment);
+    }
+};
+
 pub const Buffers = @This();
 
 trees: Tree.List = .{},
@@ -352,25 +373,6 @@ const StringBuffer = Lockfile.StringBuffer;
 const Tree = Lockfile.Tree;
 const assertNoUninitializedPadding = Lockfile.assertNoUninitializedPadding;
 const ExternalDepList = std.ArrayListUnmanaged(Dependency.External);
-const BufferData = struct {
-    size: usize,
-    name: []const u8,
-    @"type": type,
-    alignment: usize,
-};
-const BufferSortContext = struct {
-    data: []BufferData,
-
-pub fn swap(ctx: BufferSortContext, lhs: usize, rhs: usize) void {
-            const tmp = ctx.data[@as(usize, @intCast(lhs))];
-            ctx.data[cp_cast_int(usize, lhs)] = ctx.data[@as(usize, @intCast(rhs))];
-            ctx.data[cp_cast_int(usize, rhs)] = tmp;
-    }
-
-pub fn lessThan(ctx: BufferSortContext, lhs: usize, rhs: usize) bool {
-            return (ctx.data[@as(usize, @intCast(lhs))].alignment > ctx.data[@as(usize, @intCast(rhs))].alignment);
-    }
-};
 const sizes = blk: {
     const fields = std.@"meta".fields(Lockfile.Buffers);
     _ = &fields;
@@ -403,7 +405,7 @@ const sizes = blk: {
             const elem = data[@as(usize, @intCast(i))];
             _ = &elem;
             sizes_bytes[cp_cast_int(usize, i)] = elem.size;
-            names[cp_cast_int(usize, i)] = (if (@typeInfo(@TypeOf(elem)) == .@"enum" or @typeInfo(@TypeOf(elem)) == .@"union") @tagName(elem) else elem.name);
+            names[cp_cast_int(usize, i)] = elem.name;
             types[cp_cast_int(usize, i)] = elem.@"type";
         }
     }

@@ -61,10 +61,28 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const util = @import("./util.zig");
 pub const bun = @import("bun");
+pub const SubprocClosedKind = enum {
+    stdin,
+    stdout,
+    stderr,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const StdioKind = enum {
     stdin,
     stdout,
@@ -426,6 +444,383 @@ pub fn deinit(self: *SubprocCapturedWriter) void {
     }
 };
 
+pub const SubprocWritable = union(enum) {
+    pipe: *jsc.WebCore.FileSink,
+    fd: bun.FD,
+    buffer: *ShellSubprocess.StaticPipeWriter,
+    memfd: bun.FD,
+    inherit: void,
+    ignore: void,
+
+pub fn hasPendingActivity(self: SubprocWritable) bool {
+            return (switch (self.*) {
+.pipe => true,
+.buffer => true,
+else => false,
+});
+    }
+
+pub fn ref(self: *SubprocWritable) void {
+            switch (self.*) {
+.pipe => {
+_ = self.pipe.updateRef(true);
+},
+.buffer => {
+_ = self.buffer.updateRef(true);
+},
+else => {
+
+},
+}
+    }
+
+pub fn unref(self: *SubprocWritable) void {
+            switch (self.*) {
+.pipe => {
+_ = self.pipe.updateRef(false);
+},
+.buffer => {
+_ = self.buffer.updateRef(false);
+},
+else => {
+
+},
+}
+    }
+
+pub fn onClose(self: *SubprocWritable, _: ?bun.sys.Error) void {
+            switch (self.*) {
+.buffer => {
+_ = self.buffer.deref();
+},
+.pipe => {
+_ = self.pipe.deref();
+},
+else => {
+
+},
+}
+            self.* = .ignore;
+    }
+
+pub fn onReady(_: *SubprocWritable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
+    }
+
+pub fn onStart(_: *SubprocWritable) void {
+    }
+
+pub fn init(stdio: Stdio, event_loop: jsc.EventLoopHandle, subprocess: *ShellSubprocess, result: StdioResult) !SubprocWritable {
+            _ = assertStdioResult(result);
+            if (Environment.isWindows) {
+                switch (stdio) {
+.pipe, .readable_stream => {
+if ((result == .buffer)) {
+                    const pipe = jsc.WebCore.FileSink.createWithPipe(event_loop, result.buffer);
+                    switch (pipe.writer.startWithCurrentPipe()) {
+.result => {
+
+},
+.err => |e| {
+_ = &e;
+                    _ = pipe.deref();
+                    return error.UnexpectedCreatingStdin;
+},
+}
+                    return SubprocWritable{ .pipe = pipe };
+                }
+                return .inherit;
+},
+.blob => |blob| {
+return SubprocWritable{ .buffer = ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, .{ .blob = blob }) };
+},
+.array_buffer => |array_buffer| {
+return SubprocWritable{ .buffer = ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, .{ .array_buffer = array_buffer }) };
+},
+.fd => |fd| {
+return SubprocWritable{ .fd = fd };
+},
+.dup2 => |dup2| {
+return SubprocWritable{ .fd = dup2.to.toFd() };
+},
+.inherit => {
+return .inherit;
+},
+.memfd, .path, .ignore => {
+return SubprocWritable{ .ignore = undefined };
+},
+.ipc, .capture => {
+return SubprocWritable{ .ignore = undefined };
+},
+}
+            }
+            switch (stdio) {
+.dup2 => {
+_ = @panic("Unimplemented stdin dup2");
+},
+.pipe => {
+_ = @panic("Unimplemented stdin pipe");
+},
+.blob => |blob| {
+return SubprocWritable{ .buffer = ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, .{ .blob = blob }) };
+},
+.array_buffer => |array_buffer| {
+return SubprocWritable{ .buffer = ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, .{ .array_buffer = array_buffer }) };
+},
+.memfd => |memfd| {
+_ = assert((memfd != bun.invalid_fd));
+            return SubprocWritable{ .memfd = memfd };
+},
+.fd => {
+return SubprocWritable{ .fd = result.? };
+},
+.inherit => {
+return .inherit;
+},
+.path, .ignore => {
+return SubprocWritable{ .ignore = undefined };
+},
+.ipc, .capture => {
+return SubprocWritable{ .ignore = undefined };
+},
+.readable_stream => {
+_ = @panic("Unimplemented stdin readable_stream");
+},
+}
+    }
+
+pub fn toJS(self: *SubprocWritable, globalThis: *jsc.JSGlobalObject, subprocess: *ShellSubprocess) JSValue {
+            return (switch (self.*) {
+.fd => |fd| JSValue.jsNumber(fd),
+.memfd, .ignore => .js_undefined,
+.buffer, .inherit => .js_undefined,
+.pipe => |pipe| {
+{
+                self.* = .ignore;
+                if ((subprocess.process.hasExited() and (!subprocess.flags.has_stdin_destructor_called))) {
+                    _ = pipe.onAttachedProcessExit((&subprocess.process.status));
+                    return pipe.toJS(globalThis);
+                } else {
+                    subprocess.flags.has_stdin_destructor_called = false;
+                    subprocess.weak_file_sink_stdin_ptr = pipe;
+                    return pipe.toJSWithDestructor(globalThis, jsc.WebCore.sink_destructor.Ptr.init(subprocess));
+                }
+            }
+},
+});
+    }
+
+pub fn finalize(self: *SubprocWritable) void {
+            const subprocess: *ShellSubprocess = @fieldParentPtr("stdin", self);
+            if ((subprocess.this_jsvalue != .zero)) {
+                if (jsc.Codegen.JSSubprocess.stdinGetCached(subprocess.this_jsvalue)) |existing_value| {
+                    _ = &existing_value;
+                    _ = jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_value, 0);
+                }
+            }
+            return (switch (self.*) {
+.pipe => |pipe| {
+{
+                _ = pipe.deref();
+                self.* = .ignore;
+            }
+},
+.buffer => {
+{
+                _ = self.buffer.updateRef(false);
+                _ = self.buffer.deref();
+            }
+},
+.memfd => |fd| {
+{
+                _ = fd.close();
+                self.* = .ignore;
+            }
+},
+.ignore => {
+{
+            }
+},
+.fd, .inherit => {
+{
+            }
+},
+});
+    }
+
+pub fn close(self: *SubprocWritable) void {
+            switch (self.*) {
+.pipe => |pipe| {
+_ = pipe.end(null);
+},
+inline .memfd, .fd => |fd| {
+_ = fd.close();
+            self.* = .ignore;
+},
+.buffer => {
+_ = self.buffer.close();
+},
+.ignore => {
+
+},
+.inherit => {
+
+},
+}
+    }
+};
+
+pub const SubprocReadable = union(enum) {
+    fd: bun.FD,
+    memfd: bun.FD,
+    pipe: *PipeReader,
+    inherit: void,
+    ignore: void,
+    closed: void,
+    buffer: []u8,
+
+pub fn ref(self: *SubprocReadable) void {
+            switch (self.*) {
+.pipe => {
+_ = self.pipe.updateRef(true);
+},
+else => {
+
+},
+}
+    }
+
+pub fn unref(self: *SubprocReadable) void {
+            switch (self.*) {
+.pipe => {
+_ = self.pipe.updateRef(false);
+},
+else => {
+
+},
+}
+    }
+
+pub fn toSlice(self: *SubprocReadable) ?[]const u8 {
+            switch (self.*) {
+.fd => {
+return null;
+},
+.pipe => {
+var buf = self.pipe.reader.buffer();
+            _ = &buf;
+            self.pipe.buffer.fifo.close_on_empty_read = true;
+            _ = self.pipe.readAll();
+            const bytes = buf.items[0..];
+            if ((bytes.len > 0)) {
+                return bytes;
+            }
+            return "";
+},
+.buffer => |buf| {
+_ = buf;
+},
+.memfd => {
+_ = @panic("TODO");
+},
+else => {
+return null;
+},
+}
+    }
+
+pub fn init(out_type: bun.shell.Subprocess.OutKind, stdio: Stdio, shellio: ?*sh.IOWriter, event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, allocator: std.mem.Allocator, max_size: u32, is_sync: bool) SubprocReadable {
+            _ = &allocator;
+            _ = &max_size;
+            _ = &is_sync;
+            _ = assertStdioResult(result);
+            if (Environment.isWindows) {
+                return (switch (stdio) {
+.inherit => SubprocReadable{ .inherit = undefined },
+.ipc, .dup2, .ignore => SubprocReadable{ .ignore = undefined },
+.path => SubprocReadable{ .ignore = undefined },
+.fd => |fd| SubprocReadable{ .fd = fd },
+.blob => SubprocReadable{ .ignore = undefined },
+.memfd => SubprocReadable{ .ignore = undefined },
+.pipe => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
+.array_buffer => {
+{
+                    const readable = SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
+                    readable.pipe.buffered_output = .{ .array_buffer = .{ .buf = stdio.array_buffer, .i = 0 } };
+                    return readable;
+                }
+},
+.capture => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
+.readable_stream => SubprocReadable{ .ignore = .{} },
+});
+            }
+            return (switch (stdio) {
+.inherit => SubprocReadable{ .inherit = undefined },
+.ipc, .dup2, .ignore => SubprocReadable{ .ignore = undefined },
+.path => SubprocReadable{ .ignore = undefined },
+.fd => SubprocReadable{ .fd = result.? },
+.blob => SubprocReadable{ .ignore = undefined },
+.memfd => SubprocReadable{ .memfd = stdio.memfd },
+.pipe => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
+.array_buffer => {
+{
+                const readable = SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
+                readable.pipe.buffered_output = .{ .array_buffer = .{ .buf = stdio.array_buffer, .i = 0 } };
+                return readable;
+            }
+},
+.capture => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
+.readable_stream => SubprocReadable{ .ignore = undefined },
+});
+    }
+
+pub fn close(self: *SubprocReadable) void {
+            switch (self.*) {
+.memfd => |fd| {
+self.* = .closed;
+            _ = fd.close();
+},
+.fd => {
+self.* = .closed;
+},
+.pipe => {
+_ = self.pipe.close();
+},
+else => {
+
+},
+}
+    }
+
+pub fn finalize(self: *SubprocReadable) void {
+            switch (self.*) {
+.memfd => |fd| {
+self.* = .closed;
+            _ = fd.close();
+},
+.fd => {
+self.* = .closed;
+},
+.pipe => |pipe| {
+var _detach_guard = DetachGuard(PipeReader){ .ptr = pipe };
+            _ = &_detach_guard;
+            var ___detach_guard_moved = false; _ = &___detach_guard_moved;
+            defer if (!___detach_guard_moved) { ___detach_guard_moved = true; const __T = @TypeOf(_detach_guard); if (@typeInfo(__T) == .optional) { if (_detach_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _detach_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _detach_guard; _drop_val.__cp_deinit(); } };
+            self.* = .closed;
+},
+else => {
+
+},
+}
+    }
+};
+
+pub const SubprocFlags = packed struct(u8) {
+    is_sync: bool = false,
+    killed: bool = false,
+    waiting_for_onexit: bool = false,
+    _: u5 = 0,
+};
+
 pub const ShellSubprocess = struct {
     cmd_parent: *ShellCmd,
     process: *Process,
@@ -433,7 +828,7 @@ pub const ShellSubprocess = struct {
     stdout: Readable = undefined,
     stderr: Readable = undefined,
     event_loop: jsc.EventLoopHandle,
-    closed: std.enums.EnumSet(enum { stdin, stdout, stderr, }) = .{},
+    closed: std.enums.EnumSet(SubprocClosedKind) = .{},
     this_jsvalue: jsc.JSValue = .zero,
     flags: Flags = .{},
 
@@ -759,401 +1154,24 @@ pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Stat
             }
     }
     const Subprocess = @This();
-    pub const default_max_buffer_size = ((1024 * 1024) * 4);
-    pub const Process = bun.spawn.Process;
+    const default_max_buffer_size = ((1024 * 1024) * 4);
+    const Process = bun.spawn.Process;
     pub const OutKind = util.OutKind;
-    const Writable = union(enum) {
-        pipe: *jsc.WebCore.FileSink,
-        fd: bun.FD,
-        buffer: *StaticPipeWriter,
-        memfd: bun.FD,
-        inherit: void,
-        ignore: void,
-    
-    pub fn hasPendingActivity(self: @This()) bool {
-                return (switch (self.*) {
-    .pipe => true,
-    .buffer => true,
-    else => false,
-    });
-        }
-    
-    pub fn ref(self: *@This()) void {
-                switch (self.*) {
-    .pipe => {
-    _ = self.pipe.updateRef(true);
-    },
-    .buffer => {
-    _ = self.buffer.updateRef(true);
-    },
-    else => {
-    
-    },
-    }
-        }
-    
-    pub fn unref(self: *@This()) void {
-                switch (self.*) {
-    .pipe => {
-    _ = self.pipe.updateRef(false);
-    },
-    .buffer => {
-    _ = self.buffer.updateRef(false);
-    },
-    else => {
-    
-    },
-    }
-        }
-    
-    pub fn onClose(self: *@This(), _: ?bun.sys.Error) void {
-                switch (self.*) {
-    .buffer => {
-    _ = self.buffer.deref();
-    },
-    .pipe => {
-    _ = self.pipe.deref();
-    },
-    else => {
-    
-    },
-    }
-                self.* = .ignore;
-        }
-    
-    pub fn onReady(_: *Writable, _: ?jsc.WebCore.Blob.SizeType, _: ?jsc.WebCore.Blob.SizeType) void {
-        }
-    
-    pub fn onStart(_: *Writable) void {
-        }
-    
-    pub fn init(stdio: Stdio, event_loop: jsc.EventLoopHandle, subprocess: *Subprocess, result: StdioResult) !Writable {
-                _ = assertStdioResult(result);
-                if (Environment.isWindows) {
-                    switch (stdio) {
-    .pipe, .readable_stream => {
-    if ((result == .buffer)) {
-                        const pipe = jsc.WebCore.FileSink.createWithPipe(event_loop, result.buffer);
-                        switch (pipe.writer.startWithCurrentPipe()) {
-    .result => {
-    
-    },
-    .err => |e| {
-    _ = &e;
-                        _ = pipe.deref();
-                        return error.UnexpectedCreatingStdin;
-    },
-    }
-                        return Writable{ .pipe = pipe };
-                    }
-                    return .inherit;
-    },
-    .blob => |blob| {
-    return Writable{ .buffer = StaticPipeWriter.create(event_loop, subprocess, result, .{ .blob = blob }) };
-    },
-    .array_buffer => |array_buffer| {
-    return Writable{ .buffer = StaticPipeWriter.create(event_loop, subprocess, result, .{ .array_buffer = array_buffer }) };
-    },
-    .fd => |fd| {
-    return Writable{ .fd = fd };
-    },
-    .dup2 => |dup2| {
-    return Writable{ .fd = dup2.to.toFd() };
-    },
-    .inherit => {
-    return .inherit;
-    },
-    .memfd, .path, .ignore => {
-    return Writable{ .ignore = undefined };
-    },
-    .ipc, .capture => {
-    return Writable{ .ignore = undefined };
-    },
-    }
-                }
-                switch (stdio) {
-    .dup2 => {
-    _ = @panic("Unimplemented stdin dup2");
-    },
-    .pipe => {
-    _ = @panic("Unimplemented stdin pipe");
-    },
-    .blob => |blob| {
-    return Writable{ .buffer = StaticPipeWriter.create(event_loop, subprocess, result, .{ .blob = blob }) };
-    },
-    .array_buffer => |array_buffer| {
-    return Writable{ .buffer = StaticPipeWriter.create(event_loop, subprocess, result, .{ .array_buffer = array_buffer }) };
-    },
-    .memfd => |memfd| {
-    _ = assert((memfd != bun.invalid_fd));
-                return Writable{ .memfd = memfd };
-    },
-    .fd => {
-    return Writable{ .fd = result.? };
-    },
-    .inherit => {
-    return .inherit;
-    },
-    .path, .ignore => {
-    return Writable{ .ignore = undefined };
-    },
-    .ipc, .capture => {
-    return Writable{ .ignore = undefined };
-    },
-    .readable_stream => {
-    _ = @panic("Unimplemented stdin readable_stream");
-    },
-    }
-        }
-    
-    pub fn toJS(self: *@This(), globalThis: *jsc.JSGlobalObject, subprocess: *Subprocess) JSValue {
-                return (switch (self.*) {
-    .fd => |fd| JSValue.jsNumber(fd),
-    .memfd, .ignore => .js_undefined,
-    .buffer, .inherit => .js_undefined,
-    .pipe => |pipe| {
-    {
-                    self.* = .ignore;
-                    if ((subprocess.process.hasExited() and (!subprocess.flags.has_stdin_destructor_called))) {
-                        _ = pipe.onAttachedProcessExit((&subprocess.process.status));
-                        return pipe.toJS(globalThis);
-                    } else {
-                        subprocess.flags.has_stdin_destructor_called = false;
-                        subprocess.weak_file_sink_stdin_ptr = pipe;
-                        return pipe.toJSWithDestructor(globalThis, jsc.WebCore.sink_destructor.Ptr.init(subprocess));
-                    }
-                }
-    },
-    });
-        }
-    
-    pub fn finalize(self: *@This()) void {
-                const subprocess: *Subprocess = @fieldParentPtr("stdin", self);
-                if ((subprocess.this_jsvalue != .zero)) {
-                    if (jsc.Codegen.JSSubprocess.stdinGetCached(subprocess.this_jsvalue)) |existing_value| {
-                        _ = &existing_value;
-                        _ = jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_value, 0);
-                    }
-                }
-                return (switch (self.*) {
-    .pipe => |pipe| {
-    {
-                    _ = pipe.deref();
-                    self.* = .ignore;
-                }
-    },
-    .buffer => {
-    {
-                    _ = self.buffer.updateRef(false);
-                    _ = self.buffer.deref();
-                }
-    },
-    .memfd => |fd| {
-    {
-                    _ = fd.close();
-                    self.* = .ignore;
-                }
-    },
-    .ignore => {
-    {
-                }
-    },
-    .fd, .inherit => {
-    {
-                }
-    },
-    });
-        }
-    
-    pub fn close(self: *@This()) void {
-                switch (self.*) {
-    .pipe => |pipe| {
-    _ = pipe.end(null);
-    },
-    inline .memfd, .fd => |fd| {
-    _ = fd.close();
-                self.* = .ignore;
-    },
-    .buffer => {
-    _ = self.buffer.close();
-    },
-    .ignore => {
-    
-    },
-    .inherit => {
-    
-    },
-    }
-        }
-    };
-    pub const Readable = union(enum) {
-        fd: bun.FD,
-        memfd: bun.FD,
-        pipe: *PipeReader,
-        inherit: void,
-        ignore: void,
-        closed: void,
-        buffer: []u8,
-    
-    pub fn ref(self: *@This()) void {
-                switch (self.*) {
-    .pipe => {
-    _ = self.pipe.updateRef(true);
-    },
-    else => {
-    
-    },
-    }
-        }
-    
-    pub fn unref(self: *@This()) void {
-                switch (self.*) {
-    .pipe => {
-    _ = self.pipe.updateRef(false);
-    },
-    else => {
-    
-    },
-    }
-        }
-    
-    pub fn toSlice(self: *@This()) ?[]const u8 {
-                switch (self.*) {
-    .fd => {
-    return null;
-    },
-    .pipe => {
-    var buf = self.pipe.reader.buffer();
-                _ = &buf;
-                self.pipe.buffer.fifo.close_on_empty_read = true;
-                _ = self.pipe.readAll();
-                const bytes = buf.items[0..];
-                if ((bytes.len > 0)) {
-                    return bytes;
-                }
-                return "";
-    },
-    .buffer => |buf| {
-    _ = buf;
-    },
-    .memfd => {
-    _ = @panic("TODO");
-    },
-    else => {
-    return null;
-    },
-    }
-        }
-    
-    pub fn init(out_type: bun.shell.Subprocess.OutKind, stdio: Stdio, shellio: ?*sh.IOWriter, event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, allocator: std.mem.Allocator, max_size: u32, is_sync: bool) Readable {
-                _ = &allocator;
-                _ = &max_size;
-                _ = &is_sync;
-                _ = assertStdioResult(result);
-                if (Environment.isWindows) {
-                    return (switch (stdio) {
-    .inherit => Readable{ .inherit = undefined },
-    .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
-    .path => Readable{ .ignore = undefined },
-    .fd => |fd| Readable{ .fd = fd },
-    .blob => Readable{ .ignore = undefined },
-    .memfd => Readable{ .ignore = undefined },
-    .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
-    .array_buffer => {
-    {
-                        const readable = Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
-                        readable.pipe.buffered_output = .{ .array_buffer = .{ .buf = stdio.array_buffer, .i = 0 } };
-                        return readable;
-                    }
-    },
-    .capture => Readable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
-    .readable_stream => Readable{ .ignore = .{} },
-    });
-                }
-                return (switch (stdio) {
-    .inherit => Readable{ .inherit = undefined },
-    .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
-    .path => Readable{ .ignore = undefined },
-    .fd => Readable{ .fd = result.? },
-    .blob => Readable{ .ignore = undefined },
-    .memfd => Readable{ .memfd = stdio.memfd },
-    .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
-    .array_buffer => {
-    {
-                    const readable = Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
-                    readable.pipe.buffered_output = .{ .array_buffer = .{ .buf = stdio.array_buffer, .i = 0 } };
-                    return readable;
-                }
-    },
-    .capture => Readable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
-    .readable_stream => Readable{ .ignore = undefined },
-    });
-        }
-    
-    pub fn close(self: *@This()) void {
-                switch (self.*) {
-    .memfd => |fd| {
-    self.* = .closed;
-                _ = fd.close();
-    },
-    .fd => {
-    self.* = .closed;
-    },
-    .pipe => {
-    _ = self.pipe.close();
-    },
-    else => {
-    
-    },
-    }
-        }
-    
-    pub fn finalize(self: *@This()) void {
-                switch (self.*) {
-    .memfd => |fd| {
-    self.* = .closed;
-                _ = fd.close();
-    },
-    .fd => {
-    self.* = .closed;
-    },
-    .pipe => |pipe| {
-    var _detach_guard = DetachGuard(PipeReader){ .ptr = pipe };
-                _ = &_detach_guard;
-                var ___detach_guard_moved = false; _ = &___detach_guard_moved;
-                defer if (!___detach_guard_moved) { ___detach_guard_moved = true; const __T = @TypeOf(_detach_guard); if (@typeInfo(__T) == .optional) { if (_detach_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _detach_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _detach_guard; _drop_val.__cp_deinit(); } };
-                self.* = .closed;
-    },
-    else => {
-    
-    },
-    }
-        }
-    };
-    pub const Flags = packed struct(u8) {
-            is_sync: bool = false,
-            killed: bool = false,
-            waiting_for_onexit: bool = false,
-            _: u5 = 0,
-        };
-    pub const SignalCode = bun.SignalCode;
+    const Writable = SubprocWritable;
+    pub const Readable = SubprocReadable;
+    const Flags = SubprocFlags;
+    const SignalCode = bun.SignalCode;
     pub const StaticPipeWriter = jsc.Subprocess.NewStaticPipeWriter(ShellSubprocess);
     pub const SpawnArgs = SubprocSpawnArgs;
     pub const WatchFd = bun.FD;
 };
 
-pub const OptFD = ?bun.FD;
-pub const EnvStrZ = ?[*:0]const u8;
-const SelfPtr = *ShellSubprocess;
-pub const Stdio = util.Stdio;
-const StdioResult = (if (Environment.isWindows) bun.spawn.WindowsSpawnResult.StdioResult else OptFD);
-const ShellCmd = bun.shell.Interpreter.Cmd;
-const log = Output.scoped(.SHELL_SUBPROC, .visible);
 pub const PipeReaderState = union(enum) {
     pending: void,
     done: []u8,
     err: ?jsc.SystemError,
 };
+
 pub const PipeReader = struct {
     reader: IOReader = undefined,
     process: ?*ShellSubprocess = null,
@@ -1165,7 +1183,7 @@ pub const PipeReader = struct {
     buffered_output: BufferedOutput = .{ .bytelist = .{} },
     ref_count: RefCount,
 
-pub fn detach(self: *@This()) void {
+pub fn detach(self: *PipeReader) void {
             {
                 _ = log("PipeReader(0x{x}, {s}) detach()", .{ @intFromPtr(self), @tagName(self.out_type) });
             }
@@ -1173,7 +1191,7 @@ pub fn detach(self: *@This()) void {
             _ = self.deref();
     }
 
-pub fn isDone(self: *@This()) bool {
+pub fn isDone(self: *PipeReader) bool {
             {
                 _ = log("PipeReader(0x{x}, {s}) isDone() state={s} captured_writer_done={}", .{ @intFromPtr(self), @tagName(self.out_type), @tagName(self.state), self.captured_writer.isDone(0) });
             }
@@ -1183,7 +1201,7 @@ pub fn isDone(self: *@This()) bool {
             return self.captured_writer.isDone(0);
     }
 
-pub fn onCapturedWriterDone(self: *@This()) void {
+pub fn onCapturedWriterDone(self: *PipeReader) void {
             var done_yield = self.trySignalDoneToCmd();
             _ = &done_yield;
             _ = done_yield.run();
@@ -1211,13 +1229,13 @@ pub fn create(event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result
             return pipe_reader;
     }
 
-pub fn readAll(self: *@This()) void {
+pub fn readAll(self: *PipeReader) void {
             if ((self.state == .pending)) {
                 _ = self.reader.read();
             }
     }
 
-pub fn start(self: *@This(), process: *ShellSubprocess, event_loop: jsc.EventLoopHandle) bun.sys.Maybe(void) {
+pub fn start(self: *PipeReader, process: *ShellSubprocess, event_loop: jsc.EventLoopHandle) bun.sys.Maybe(void) {
             self.process = process;
             self.event_loop = event_loop;
             if (Environment.isWindows) {
@@ -1267,7 +1285,7 @@ else => {
             return should_continue;
     }
 
-pub fn onReaderDone(self: *@This()) void {
+pub fn onReaderDone(self: *PipeReader) void {
             {
                 _ = log("onReaderDone(0x{x}, {s})", .{ @intFromPtr(self), @tagName(self.out_type) });
             }
@@ -1291,7 +1309,7 @@ pub fn onReaderDone(self: *@This()) void {
             }
     }
 
-pub fn trySignalDoneToCmd(self: *@This()) Yield {
+pub fn trySignalDoneToCmd(self: *PipeReader) Yield {
             if ((!self.isDone())) {
                 return .suspended;
             }
@@ -1343,15 +1361,15 @@ pub fn kind(reader: *const PipeReader, process: *const ShellSubprocess) StdioKin
             _ = @panic("We should be either stdout or stderr");
     }
 
-pub fn takeBuffer(self: *@This()) std.array_list.Managed(u8) {
+pub fn takeBuffer(self: *PipeReader) std.array_list.Managed(u8) {
             return self.reader.takeBuffer();
     }
 
-pub fn slice(self: *@This()) []const u8 {
+pub fn slice(self: *PipeReader) []const u8 {
             return self.buffered_output.slice();
     }
 
-pub fn toOwnedSlice(self: *@This()) []u8 {
+pub fn toOwnedSlice(self: *PipeReader) []u8 {
             if ((self.state == .done)) {
                 return self.state.done;
             }
@@ -1365,17 +1383,17 @@ pub fn toOwnedSlice(self: *@This()) []u8 {
             return out.items;
     }
 
-pub fn updateRef(self: *@This(), add: bool) void {
+pub fn updateRef(self: *PipeReader, add: bool) void {
             _ = self.reader.updateRef(add);
     }
 
-pub fn watch(self: *@This()) void {
+pub fn watch(self: *PipeReader) void {
             if ((!self.reader.isDone())) {
                 _ = self.reader.watch();
             }
     }
 
-pub fn toReadableStream(self: *@This(), globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+pub fn toReadableStream(self: *PipeReader, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
             var _deinit_guard = DeinitGuard(PipeReader){ .ptr = self };
             _ = &_deinit_guard;
             var ___deinit_guard_moved = false; _ = &___deinit_guard_moved;
@@ -1399,7 +1417,7 @@ _ = &e;
 }
     }
 
-pub fn toBuffer(self: *@This(), globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+pub fn toBuffer(self: *PipeReader, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
             switch (self.state) {
 .done => |bytes| {
 defer {
@@ -1413,7 +1431,7 @@ return .js_undefined;
 }
     }
 
-pub fn onReaderError(self: *@This(), e: bun.sys.Error) void {
+pub fn onReaderError(self: *PipeReader, e: bun.sys.Error) void {
             {
                 _ = log("PipeReader(0x{x}) onReaderError {f}", .{ @intFromPtr(self), e });
             }
@@ -1436,7 +1454,7 @@ pub fn onReaderError(self: *@This(), e: bun.sys.Error) void {
             }
     }
 
-pub fn close(self: *@This()) void {
+pub fn close(self: *PipeReader) void {
             switch (self.state) {
 .pending => {
 _ = self.reader.close();
@@ -1450,11 +1468,11 @@ _ = self.reader.close();
 }
     }
 
-pub fn eventLoop(self: *@This()) jsc.EventLoopHandle {
+pub fn eventLoop(self: *PipeReader) jsc.EventLoopHandle {
             return self.event_loop;
     }
 
-pub fn loop(self: *@This()) *bun.Async.Loop {
+pub fn loop(self: *PipeReader) *bun.Async.Loop {
             if (comptime bun.Environment.isWindows) {
                 return self.event_loop.loop().uv_loop;
             } else {
@@ -1462,7 +1480,7 @@ pub fn loop(self: *@This()) *bun.Async.Loop {
             }
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *PipeReader) void {
             {
                 _ = log("PipeReader(0x{x}, {s}) deinit()", .{ @intFromPtr(self), @tagName(self.out_type) });
             }
@@ -1490,14 +1508,22 @@ pub fn deinit(self: *@This()) void {
             _ = bun.destroy(self);
     }
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-    pub const ref = RefCount.ref;
-    pub const deref = RefCount.deref;
+    const ref = RefCount.ref;
+    const deref = RefCount.deref;
     const BufferedOutput = SubprocBufferedOutput;
     pub const CapturedWriter = SubprocCapturedWriter;
-    pub const IOReader = bun.io.BufferedReader;
-    pub const Poll = IOReader;
+    const IOReader = bun.io.BufferedReader;
+    const Poll = IOReader;
     pub const toJS = toReadableStream;
 };
+
+pub const OptFD = ?bun.FD;
+pub const EnvStrZ = ?[*:0]const u8;
+const SelfPtr = *ShellSubprocess;
+pub const Stdio = util.Stdio;
+const StdioResult = (if (Environment.isWindows) bun.spawn.WindowsSpawnResult.StdioResult else OptFD);
+const ShellCmd = bun.shell.Interpreter.Cmd;
+const log = Output.scoped(.SHELL_SUBPROC, .visible);
 const Allocator = std.mem.Allocator;
 const Environment = bun.Environment;
 const Output = bun.Output;

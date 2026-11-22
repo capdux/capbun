@@ -9,7 +9,9 @@
     }
 
     static fn run(comptime T: type, ctx: *T, func: @c fn (ctx: *T, args: *MarkedArgumentBuffer): void) {
-        MarkedArgumentBuffer__run(@ptrCast(ctx), @ptrCast(func));
+        unsafe {
+            MarkedArgumentBuffer__run(@ptrCast(ctx), @ptrCast(func));
+        }
     }
 
     static fn wrap(comptime function: fn (globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *MarkedArgumentBuffer): bun.JSError!jsc.JSValue): jsc.JSHostFnZig {
@@ -19,8 +21,9 @@
                     result: bun.JSError!jsc.JSValue,
                     globalThis: *jsc.JSGlobalObject,
                     callframe: *jsc.CallFrame,
-                    pub fn run(this: *@This(), marked_argument_buffer: *MarkedArgumentBuffer) callconv(.c) void {
-                        this.result = function(this.globalThis, this.callframe, marked_argument_buffer);
+                    @callconv("c")
+                    fn run(*_, marked_argument_buffer: *MarkedArgumentBuffer) {
+                        _.result = function(_.globalThis, _.callframe, marked_argument_buffer);
                     }
                 };
 

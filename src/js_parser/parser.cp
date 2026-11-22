@@ -21,7 +21,7 @@ pub enum SkipTypeParameterResult {
     definitely_type_parameters,
 }
 
-pub const TypeParameterFlag = packed struct(u8) {
+@packed(u8) pub struct TypeParameterFlag {
     /// TypeScript 4.7
     allow_in_out_variance_annotations: bool = false,
 
@@ -32,7 +32,7 @@ pub const TypeParameterFlag = packed struct(u8) {
     allow_empty_type_parameters: bool = false,
 
     _: u5 = 0,
-};
+}
 
 const create_element_names: [1]string = ["createElement"];
 const empty_import_names: [0]string = undefined;
@@ -167,11 +167,16 @@ struct MacroRefData {
 
 const MacroRefs = std.AutoArrayHashMap(Ref, MacroRefData);
 
-pub const Substitution = union(enum) {
+pub union(enum) Substitution {
     success: Expr,
     failure: Expr,
     continue_: Expr,
-};
+}
+
+pub enum _RelocateVarsMode {
+    normal,
+    for_in_or_for_of,
+}
 
 // If we are currently in a hoisted child of the module scope, relocate these
 // declarations to the top level and return an equivalent assignment statement.
@@ -184,7 +189,7 @@ pub const Substitution = union(enum) {
 // to nothing is unsafe
 // Because "foo" was defined. And now it's not.
 pub struct RelocateVars {
-    pub const Mode = enum { normal, for_in_or_for_of };
+    pub const Mode = _RelocateVarsMode;
 
     stmt: Stmt? = null,
     ok: bool = false,
@@ -209,13 +214,13 @@ pub fn ExpressionTransposer(
 
         context: *Context,
 
-        pub fn init(c: *Context): This {
+        static fn init(c: *Context): This {
             return { context: c };
         }
 
-        pub fn maybeTransposeIf(*_, arg: Expr, state: StateType): Expr {
+        fn maybeTransposeIf(*_, arg: Expr, state: StateType): Expr {
             switch (arg.data) {
-                .e_if => |ex| {
+                .e_if ex => {
                     return Expr.init(E.If, {
                         yes: _.maybeTransposeIf(ex.yes, state),
                         no: _.maybeTransposeIf(ex.no, state),
@@ -228,7 +233,7 @@ pub fn ExpressionTransposer(
             }
         }
 
-        pub fn transposeKnownToBeIf(*_, arg: Expr, state: StateType): Expr {
+        fn transposeKnownToBeIf(*_, arg: Expr, state: StateType): Expr {
             return Expr.init(E.If, {
                 yes: _.maybeTransposeIf(arg.data.e_if.yes, state),
                 no: _.maybeTransposeIf(arg.data.e_if.no, state),
@@ -257,29 +262,36 @@ pub struct TransposeState {
     import_options: Expr = Expr.empty,
 }
 
-pub struct JSXTag {
-    pub const TagType = enum { fragment, tag };
-    pub const Data = union(TagType) {
-        fragment: u8,
-        tag: Expr,
+pub enum _JSXTagType {
+    fragment,
+    tag,
+}
 
-        static fn asExpr(d: *const Data): ExprNodeIndex? {
-            switch (d.*) {
-                .tag => |tag| {
-                    return tag;
-                },
-                else => {
-                    return null;
-                },
-            }
+pub union(_JSXTagType) _JSXTagData {
+    fragment: u8,
+    tag: Expr,
+
+    fn asExpr(): ExprNodeIndex? {
+        switch (_) {
+            .tag tag => {
+                return tag;
+            },
+            else => {
+                return null;
+            },
         }
-    };
+    }
+}
+
+pub struct JSXTag {
+    pub const TagType = _JSXTagType;
+    pub const Data = _JSXTagData;
     data: Data,
     range: logger.Range,
     /// Empty string for fragments.
     name: string,
 
-    static fn parse(comptime P: type, p: *P): anyerror!JSXTag {
+    static fn parse(comptime P: type, p: *P): JSXTag! {
         const loc = p.lexer.loc();
 
         // A missing tag is a fragment
@@ -362,7 +374,10 @@ pub struct ExprOrLetStmt {
     decls: []G.Decl = [],
 }
 
-pub const FunctionKind = enum { stmt, expr };
+pub enum FunctionKind {
+    stmt,
+    expr,
+}
 
 pub enum AsyncPrefixExpression: u2 {
     none,
@@ -381,13 +396,13 @@ pub enum AsyncPrefixExpression: u2 {
     }
 }
 
-pub const IdentifierOpts = packed struct(u8) {
+@packed(u8) pub struct IdentifierOpts {
     assign_target: js_ast.AssignTarget = js_ast.AssignTarget.none,
     is_delete_target: bool = false,
     was_originally_identifier: bool = false,
     is_call_target: bool = false,
     _padding: u3 = 0,
-};
+}
 
 pub fn statementCaresAboutScope(stmt: Stmt): bool {
     if (stmt.data == .s_local) {
@@ -631,11 +646,11 @@ pub struct ParenExprOpts {
     force_arrow_fn: bool = false,
 }
 
-pub const AwaitOrYield = enum(u3) {
+pub enum AwaitOrYield: u3 {
     allow_ident,
     allow_expr,
     forbid_all,
-};
+}
 
 /// This is function-specific information used during parsing. It is saved and
 /// restored on the call stack around code that parses nested functions and
@@ -792,9 +807,20 @@ pub struct PropertyOpts {
     has_class_decorators: bool = false,
 }
 
+pub struct _ScanPassResultParsePassSymbolUse {
+    ref: Ref,
+    used: bool = false,
+    import_record_index: u32,
+}
+
+pub struct _ScanPassResultNamespaceCounter {
+    count: u16,
+    import_record_index: u32,
+}
+
 pub struct ScanPassResult {
-    pub const ParsePassSymbolUse = struct { ref: Ref, used: bool = false, import_record_index: u32 };
-    pub const NamespaceCounter = struct { count: u16, import_record_index: u32 };
+    pub const ParsePassSymbolUse = _ScanPassResultParsePassSymbolUse;
+    pub const NamespaceCounter = _ScanPassResultNamespaceCounter;
     pub const ParsePassSymbolUsageMap = bun.StringArrayHashMap(ParsePassSymbolUse);
     import_records: ListManaged(ImportRecord),
     named_imports: js_ast.Ast.NamedImports,
@@ -812,15 +838,19 @@ pub struct ScanPassResult {
         };
     }
 
-    static fn reset(scan_pass: *ScanPassResult) {
-        scan_pass.named_imports.clearRetainingCapacity();
-        scan_pass.import_records.clearRetainingCapacity();
-        scan_pass.used_symbols.clearRetainingCapacity();
-        scan_pass.approximate_newline_count = 0;
+    fn reset(*_) {
+        _.named_imports.clearRetainingCapacity();
+        _.import_records.clearRetainingCapacity();
+        _.used_symbols.clearRetainingCapacity();
+        _.approximate_newline_count = 0;
     }
 }
 
-pub const FindLabelSymbolResult = struct { ref: Ref, is_loop: bool, found: bool = false };
+pub struct FindLabelSymbolResult {
+    ref: Ref,
+    is_loop: bool,
+    found: bool = false,
+}
 
 pub struct FindSymbolResult {
     ref: Ref,
@@ -841,7 +871,12 @@ pub struct DeferredTsDecorators {
     scope_index: usize,
 }
 
-const LexicalDecl = enum(u8) { forbid, allow_all, allow_fn_inside_if, allow_fn_inside_label };
+enum LexicalDecl: u8 {
+    forbid,
+    allow_all,
+    allow_fn_inside_if,
+    allow_fn_inside_label,
+}
 
 pub struct ParseClassOptions {
     ts_decorators: []Expr = [],
@@ -1139,6 +1174,12 @@ pub enum WrapMode {
 /// from including the link to the refresh runtime, our notation of $RefreshReg$ is just
 /// pointing at `Refresh.register`, which means when we call it, the second argument has
 /// to be a string containing the filepath, not just the component name.
+pub struct _ReactRefreshHookContext {
+    hasher: std.hash.Wyhash,
+    signature_cb: Ref,
+    user_hooks: std.AutoArrayHashMapUnmanaged(Ref, Expr),
+}
+
 pub struct ReactRefresh {
     // Set if this JSX/TSX file uses the refresh runtime. If so,
     // we must insert an import statement to it.
@@ -1184,17 +1225,13 @@ pub struct ReactRefresh {
     /// signature function.
     latest_signature_ref: Ref = Ref.None,
 
-    pub const HookContext = struct {
-        hasher: std.hash.Wyhash,
-        signature_cb: Ref,
-        user_hooks: std.AutoArrayHashMapUnmanaged(Ref, Expr),
-    };
+    pub const HookContext = _ReactRefreshHookContext;
 
     // https://github.com/facebook/react/blob/d1afcb43fd506297109c32ff462f6f659f9110ae/packages/react-refresh/src/ReactFreshBabelPlugin.js#L42
     static fn isComponentishName(id: []const u8): bool {
         if (id.len == 0) return false;
         return switch (id[0]) {
-            'A'...'Z' => true,
+            'A'..='Z' => true,
             else => false,
         };
     }

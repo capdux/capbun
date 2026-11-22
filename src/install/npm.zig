@@ -72,6 +72,14 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const DotEnv = @import("../dotenv/env_loader.zig");
@@ -83,6 +91,169 @@ pub const pool_mod = @import("../collections/pool.zig");
 pub const url_mod = @import("../url/url.zig");
 pub const install_mod = @import("./install.zig");
 pub const npm_jsc_mod = @import("../install_jsc/npm_jsc.zig");
+pub const PackageVersionResponseTag = enum {
+    cached,
+    fresh,
+    not_found,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const OperatingSystem = enum(u16) {
+    none = 0,
+    all = all_value,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isMatch(self: OperatingSystem, target: OperatingSystem) bool {
+            return ((@intFromEnum(self) & @intFromEnum(target)) != 0);
+    }
+
+pub inline fn has(self: OperatingSystem, other: u16) bool {
+            return ((@intFromEnum(self) & other) != 0);
+    }
+
+pub fn negatable(self: OperatingSystem) Negatable(OperatingSystem) {
+            return .{ .added = self, .removed = .none };
+    }
+    
+    pub const aix: u16 = 2;
+    
+    pub const darwin: u16 = 4;
+    
+    pub const freebsd: u16 = 8;
+    
+    pub const linux: u16 = 16;
+    
+    pub const openbsd: u16 = 32;
+    
+    pub const sunos: u16 = 64;
+    
+    pub const win32: u16 = 128;
+    
+    pub const android: u16 = 256;
+    
+    pub const all_value: u16 = (((((((aix | darwin) | freebsd) | linux) | openbsd) | sunos) | win32) | android);
+    
+    pub const current: OperatingSystem = (switch (Environment.os) {
+    .linux => @enumFromInt((if (Environment.isAndroid) android else linux)),
+    .mac => @enumFromInt(darwin),
+    .windows => @enumFromInt(win32),
+    .freebsd => @enumFromInt(freebsd),
+    .wasm => @compileError(("Unsupported operating system: " ++ @tagName(Environment.os))),
+    });
+    
+    pub const NameMap = bun.ComptimeStringMap(u16, .{ .{ "aix", aix }, .{ "darwin", darwin }, .{ "freebsd", freebsd }, .{ "linux", linux }, .{ "openbsd", openbsd }, .{ "sunos", sunos }, .{ "win32", win32 }, .{ "android", android } });
+    
+    pub const current_name = (switch (Environment.os) {
+    .linux => "linux",
+    .mac => "darwin",
+    .windows => "win32",
+    .freebsd => "freebsd",
+    .wasm => @compileError(("Unsupported operating system: " ++ @tagName(current))),
+    });
+    
+    pub const jsFunctionOperatingSystemIsMatch = npm_jsc_mod.operatingSystemIsMatch;
+};
+
+pub const Libc = enum(u8) {
+    none = 0,
+    all = all_value,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn has(self: Libc, other: u8) bool {
+            return ((@intFromEnum(self) & other) != 0);
+    }
+
+pub fn isMatch(self: Libc, target: Libc) bool {
+            return ((@intFromEnum(self) & @intFromEnum(target)) != 0);
+    }
+
+pub fn negatable(self: Libc) Negatable(Libc) {
+            return .{ .added = self, .removed = .none };
+    }
+    
+    pub const glibc: u8 = 2;
+    
+    pub const musl: u8 = 4;
+    
+    pub const all_value: u8 = (glibc | musl);
+    
+    pub const NameMap = bun.ComptimeStringMap(u8, .{ .{ "glibc", glibc }, .{ "musl", musl } });
+    
+    pub const current: Libc = @intFromEnum(glibc);
+    
+    pub const jsFunctionLibcIsMatch = npm_jsc_mod.libcIsMatch;
+};
+
+pub const Architecture = enum(u16) {
+    none = 0,
+    all = all_value,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn has(self: Architecture, other: u16) bool {
+            return ((@intFromEnum(self) & other) != 0);
+    }
+
+pub fn isMatch(self: Architecture, target: Architecture) bool {
+            return ((@intFromEnum(self) & @intFromEnum(target)) != 0);
+    }
+
+pub fn negatable(self: Architecture) Negatable(Architecture) {
+            return .{ .added = self, .removed = .none };
+    }
+    
+    pub const arm: u16 = 2;
+    
+    pub const arm64: u16 = 4;
+    
+    pub const ia32: u16 = 8;
+    
+    pub const mips: u16 = 16;
+    
+    pub const mipsel: u16 = 32;
+    
+    pub const ppc: u16 = 64;
+    
+    pub const ppc64: u16 = 128;
+    
+    pub const s390: u16 = 256;
+    
+    pub const s390x: u16 = 512;
+    
+    pub const x32: u16 = 1024;
+    
+    pub const x64: u16 = 2048;
+    
+    pub const all_value: u16 = ((((((((((arm | arm64) | ia32) | mips) | mipsel) | ppc) | ppc64) | s390) | s390x) | x32) | x64);
+    
+    pub const current: Architecture = (switch (Environment.arch) {
+    .arm64 => @enumFromInt(arm64),
+    .x64 => @enumFromInt(x64),
+    .wasm => @compileError(("Specify architecture: " ++ Environment.arch)),
+    });
+    
+    pub const current_name = (switch (Environment.arch) {
+    .arm64 => "arm64",
+    .x64 => "x64",
+    .wasm => @compileError(("Unsupported architecture: " ++ @tagName(current))),
+    });
+    
+    pub const NameMap = bun.ComptimeStringMap(u16, .{ .{ "arm", arm }, .{ "arm64", arm64 }, .{ "ia32", ia32 }, .{ "mips", mips }, .{ "mipsel", mipsel }, .{ "ppc", ppc }, .{ "ppc64", ppc64 }, .{ "s390", s390 }, .{ "s390x", s390x }, .{ "x32", x32 }, .{ "x64", x64 } });
+    
+    pub const jsFunctionArchitectureIsMatch = npm_jsc_mod.architectureIsMatch;
+};
+
 pub const PackageManifestFindVersionErr = enum {
     not_found,
     too_recent,
@@ -273,162 +444,165 @@ else => {
     pub const default_url = "https://registry.npmjs.org/";
     pub const default_url_hash = bun.Wyhash11.hash(0, strings.withoutTrailingSlash(default_url));
     pub const BodyPool = ObjectPool(MutableString, MutableString.init2048, true, 8);
-    pub const Scope = struct {
-        name: []const u8 = "",
-        auth: []const u8 = "",
-        url: URL,
-        url_hash: u64,
-        token: []const u8 = "",
-        user: []const u8 = "",
-    
-    pub fn hash(str: []const u8) u64 {
-                return String.Builder.stringHash(str);
-        }
-    
-    pub fn getName(name: []const u8) []const u8 {
-                if (((name.len == 0) or (name[0] != 64))) {
-                    return name;
-                }
-                if (strings.indexOfChar(name, 47)) |i| {
-                    _ = &i;
-                    return name[1..i];
-                }
-                return name[1..];
-        }
-    
-    pub fn fromAPI(name: []const u8, registry_: api.NpmRegistry, allocator: std.mem.Allocator, env: *DotEnv.Loader) OOM!Scope {
-                var registry = registry_;
-                _ = &registry;
-                if (strings.startsWithChar(registry_.url, 36)) {
-                    if (env.get(strings.trim(registry_.url[1..], "/"))) |replaced_url| {
-                        _ = &replaced_url;
-                        if ((replaced_url.len > 1)) {
-                            registry.url = replaced_url;
-                        }
+    pub const Scope = RegistryScope;
+    pub const Map = std.HashMapUnmanaged(u64, RegistryScope, IdentityContext(u64), 80);
+    const Pico = bun.picohttp;
+};
+
+pub const PackageVersionResponse = union(PackageVersionResponseTag) {
+    cached: PackageManifest,
+    fresh: PackageManifest,
+    not_found: void,
+};
+
+pub const RegistryScope = struct {
+    name: []const u8 = "",
+    auth: []const u8 = "",
+    url: URL,
+    url_hash: u64,
+    token: []const u8 = "",
+    user: []const u8 = "",
+
+pub fn hash(str: []const u8) u64 {
+            return String.Builder.stringHash(str);
+    }
+
+pub fn getName(name: []const u8) []const u8 {
+            if (((name.len == 0) or (name[0] != 64))) {
+                return name;
+            }
+            if (strings.indexOfChar(name, 47)) |i| {
+                _ = &i;
+                return name[1..i];
+            }
+            return name[1..];
+    }
+
+pub fn fromAPI(name: []const u8, registry_: api.NpmRegistry, allocator: std.mem.Allocator, env: *DotEnv.Loader) OOM!RegistryScope {
+            var registry = registry_;
+            _ = &registry;
+            if (strings.startsWithChar(registry_.url, 36)) {
+                if (env.get(strings.trim(registry_.url[1..], "/"))) |replaced_url| {
+                    _ = &replaced_url;
+                    if ((replaced_url.len > 1)) {
+                        registry.url = replaced_url;
                     }
                 }
-                var url = URL.parse(registry.url);
-                _ = &url;
-                var auth: []const u8 = "";
-                _ = &auth;
-                var user: []u8 = "";
-                _ = &user;
-                var needs_normalize = false;
-                _ = &needs_normalize;
-                if ((registry.token.len == 0)) {
-                    _ = outer: {
-                    if ((registry.password.len == 0)) {
-                        var pathname = url.pathname;
-                        _ = &pathname;
-                        defer {
-                        {
-                            url.pathname = pathname;
-                            url.path = pathname;
+            }
+            var url = URL.parse(registry.url);
+            _ = &url;
+            var auth: []const u8 = "";
+            _ = &auth;
+            var user: []u8 = "";
+            _ = &user;
+            var needs_normalize = false;
+            _ = &needs_normalize;
+            if ((registry.token.len == 0)) {
+                _ = outer: {
+                if ((registry.password.len == 0)) {
+                    var pathname: []const u8 = url.pathname;
+                    _ = &pathname;
+                    defer {
+                    {
+                        url.pathname = pathname;
+                        url.path = pathname;
+                    }
+                    }
+                    var needs_to_check_slash = true;
+                    _ = &needs_to_check_slash;
+                    while (strings.lastIndexOfChar(pathname, 58)) |colon| {
+                        var segment = pathname[(colon + 1)..];
+                        _ = &segment;
+                        pathname = pathname[0..colon];
+                        needs_to_check_slash = false;
+                        needs_normalize = true;
+                        if (((pathname.len > 1) and (pathname[@as(usize, @intCast((pathname.len - 1)))] == 47))) {
+                            pathname = pathname[0..(pathname.len - 1)];
                         }
+                        const eql_i = ((strings.indexOfChar(segment, 61)) orelse continue);
+                        const value: []const u8 = segment[(eql_i + 1)..];
+                        segment = segment[0..eql_i];
+                        if (strings.eqlComptime(segment, "_authToken")) {
+                            registry.token = value;
+                            break :outer;
                         }
-                        var needs_to_check_slash = true;
-                        _ = &needs_to_check_slash;
-                        while (strings.lastIndexOfChar(pathname, 58)) |colon| {
-                            var segment = pathname[(colon + 1)..];
-                            _ = &segment;
-                            pathname = pathname[0..colon];
-                            needs_to_check_slash = false;
-                            needs_normalize = true;
-                            if (((pathname.len > 1) and (pathname[@as(usize, @intCast((pathname.len - 1)))] == 47))) {
-                                pathname = pathname[0..(pathname.len - 1)];
-                            }
-                            const eql_i = ((strings.indexOfChar(segment, 61)) orelse continue);
-                            const value = segment[(eql_i + 1)..];
-                            segment = segment[0..eql_i];
-                            if (strings.eqlComptime(segment, "_authToken")) {
-                                registry.token = value;
-                                break :outer;
-                            }
-                            if (strings.eqlComptime(segment, "_auth")) {
-                                auth = value;
-                                break :outer;
-                            }
-                            if (strings.eqlComptime(segment, "username")) {
-                                registry.username = value;
-                                continue;
-                            }
-                            if (strings.eqlComptime(segment, "_password")) {
-                                registry.password = value;
-                                continue;
-                            }
+                        if (strings.eqlComptime(segment, "_auth")) {
+                            auth = value;
+                            break :outer;
                         }
-                        if (needs_to_check_slash) {
-                            if (strings.lastIndexOfChar(pathname, 47)) |last_slash| {
-                                _ = &last_slash;
-                                var remain = pathname[(last_slash + 1)..];
-                                _ = &remain;
-                                if (strings.indexOfChar(remain, 61)) |eql_i| {
-                                    _ = &eql_i;
-                                    const segment = remain[0..eql_i];
-                                    const value = remain[(eql_i + 1)..];
-                                    if (strings.eqlComptime(segment, "_authToken")) {
-                                        registry.token = value;
-                                        pathname = pathname[0..(last_slash + 1)];
-                                        needs_normalize = true;
-                                        break :outer;
-                                    }
-                                    if (strings.eqlComptime(segment, "_auth")) {
-                                        auth = value;
-                                        pathname = pathname[0..(last_slash + 1)];
-                                        needs_normalize = true;
-                                        break :outer;
-                                    }
-                                    if (strings.eqlComptime(segment, "username")) {
-                                        registry.username = value;
-                                        pathname = pathname[0..(last_slash + 1)];
-                                        needs_normalize = true;
-                                        break :outer;
-                                    }
-                                    if (strings.eqlComptime(segment, "_password")) {
-                                        registry.password = value;
-                                        pathname = pathname[0..(last_slash + 1)];
-                                        needs_normalize = true;
-                                        break :outer;
-                                    }
+                        if (strings.eqlComptime(segment, "username")) {
+                            registry.username = value;
+                            continue;
+                        }
+                        if (strings.eqlComptime(segment, "_password")) {
+                            registry.password = value;
+                            continue;
+                        }
+                    }
+                    if (needs_to_check_slash) {
+                        if (strings.lastIndexOfChar(pathname, 47)) |last_slash| {
+                            _ = &last_slash;
+                            var remain = pathname[(last_slash + 1)..];
+                            _ = &remain;
+                            if (strings.indexOfChar(remain, 61)) |eql_i| {
+                                _ = &eql_i;
+                                const segment = remain[0..eql_i];
+                                const value = remain[(eql_i + 1)..];
+                                if (strings.eqlComptime(segment, "_authToken")) {
+                                    registry.token = value;
+                                    pathname = pathname[0..(last_slash + 1)];
+                                    needs_normalize = true;
+                                    break :outer;
+                                }
+                                if (strings.eqlComptime(segment, "_auth")) {
+                                    auth = value;
+                                    pathname = pathname[0..(last_slash + 1)];
+                                    needs_normalize = true;
+                                    break :outer;
+                                }
+                                if (strings.eqlComptime(segment, "username")) {
+                                    registry.username = value;
+                                    pathname = pathname[0..(last_slash + 1)];
+                                    needs_normalize = true;
+                                    break :outer;
+                                }
+                                if (strings.eqlComptime(segment, "_password")) {
+                                    registry.password = value;
+                                    pathname = pathname[0..(last_slash + 1)];
+                                    needs_normalize = true;
+                                    break :outer;
                                 }
                             }
                         }
                     }
-                    registry.username = env.getAuto(registry.username);
-                    registry.password = env.getAuto(registry.password);
-                    if ((((registry.username.len > 0) and (registry.password.len > 0)) and (auth.len == 0))) {
-                        var output_buf = try allocator.alloc(u8, (((registry.username.len + registry.password.len) + 1) + std.base64.standard.Encoder.calcSize(((registry.username.len + registry.password.len) + 1))));
-                        _ = &output_buf;
-                        user = output_buf[0..((registry.username.len + registry.password.len) + 1)];
-                        _ = @memcpy(user[0..registry.username.len], registry.username);
-                        user[cp_cast_int(usize, registry.username.len)] = 58;
-                        _ = @memcpy(user[(registry.username.len + 1)..][0..registry.password.len], registry.password);
-                        output_buf = output_buf[user.len..];
-                        auth = std.base64.standard.Encoder.encode(output_buf, user);
-                        break :outer;
-                    }
-    };
                 }
-                registry.token = env.getAuto(registry.token);
-                if (needs_normalize) {
-                    url = URL.parse(try std.fmt.allocPrint(allocator, "{s}://{f}/{s}/", .{ url.displayProtocol(), url.displayHost(), strings.trim(url.pathname, "/") }));
+                registry.username = env.getAuto(registry.username);
+                registry.password = env.getAuto(registry.password);
+                if ((((registry.username.len > 0) and (registry.password.len > 0)) and (auth.len == 0))) {
+                    var output_buf = try allocator.alloc(u8, (((registry.username.len + registry.password.len) + 1) + std.base64.standard.Encoder.calcSize(((registry.username.len + registry.password.len) + 1))));
+                    _ = &output_buf;
+                    user = output_buf[0..((registry.username.len + registry.password.len) + 1)];
+                    _ = @memcpy(user[0..registry.username.len], registry.username);
+                    user[cp_cast_int(usize, registry.username.len)] = 58;
+                    _ = @memcpy(user[(registry.username.len + 1)..][0..registry.password.len], registry.password);
+                    output_buf = output_buf[user.len..];
+                    auth = std.base64.standard.Encoder.encode(output_buf, user);
+                    break :outer;
                 }
-                const url_hash = hash(strings.withoutTrailingSlash(url.href));
-                return Scope{ .name = name, .url = url, .url_hash = url_hash, .token = registry.token, .auth = auth, .user = user };
-        }
-    };
-    pub const Map = std.HashMapUnmanaged(u64, Scope, IdentityContext(u64), 80);
-    const PackageVersionResponse = union(Tag) {
-        cached: PackageManifest,
-        fresh: PackageManifest,
-        not_found: void,
-        pub const Tag = enum {
-                    cached,
-                    fresh,
-                    not_found,
-                };
-    };
-    const Pico = bun.picohttp;
+};
+            }
+            registry.token = env.getAuto(registry.token);
+            if (needs_normalize) {
+                url = URL.parse(try std.fmt.allocPrint(allocator, "{s}://{f}/{s}/", .{ url.displayProtocol(), url.displayHost(), strings.trim(url.pathname, "/") }));
+            }
+            const url_hash = hash(strings.withoutTrailingSlash(url.href));
+            return RegistryScope{ .name = name, .url = url, .url_hash = url_hash, .token = registry.token, .auth = auth, .user = user };
+    }
+};
+
+const DistTagMap = extern struct {
+    tags: ExternalStringList = ExternalStringList{  },
+    versions: VersionSlice = VersionSlice{  },
 };
 
 const ExternVersionMap = extern struct {
@@ -572,6 +746,45 @@ pub fn toJson(field: T, writer: anytype) std.Io.Writer.Error!void {
     };
 }
 
+pub const PackageVersion = extern struct {
+    integrity: Integrity = Integrity{  },
+    dependencies: ExternalStringMap = ExternalStringMap{  },
+    optional_dependencies: ExternalStringMap = ExternalStringMap{  },
+    peer_dependencies: ExternalStringMap = ExternalStringMap{  },
+    dev_dependencies: ExternalStringMap = ExternalStringMap{  },
+    bundled_dependencies: ExternalPackageNameHashList = ExternalPackageNameHashList{  },
+    bin: Bin = Bin{  },
+    engines: ExternalStringMap = ExternalStringMap{  },
+    non_optional_peer_dependencies_start: u32 = 0,
+    man_dir: ExternalString = ExternalString{  },
+    tarball_url: ExternalString = ExternalString{  },
+    unpacked_size: u32 = 0,
+    file_count: u32 = 0,
+    os: OperatingSystem = OperatingSystem.all,
+    cpu: Architecture = Architecture.all,
+    libc: Libc = Libc.none,
+    has_install_script: bool = false,
+    publish_timestamp_ms: f64 = 0,
+
+pub fn allDependenciesBundled(self: PackageVersion) bool {
+            return self.bundled_dependencies.isInvalid();
+    }
+};
+
+pub const NpmPackage = extern struct {
+    last_modified: String = String{  },
+    etag: String = String{  },
+    modified: String = String{  },
+    public_max_age: u32 = 0,
+    name: ExternalString = ExternalString{  },
+    releases: ExternVersionMap = ExternVersionMap{  },
+    prereleases: ExternVersionMap = ExternVersionMap{  },
+    dist_tags: DistTagMap = DistTagMap{  },
+    versions_buf: VersionSlice = VersionSlice{  },
+    string_lists_buf: ExternalStringList = ExternalStringList{  },
+    has_extended_manifest: bool = false,
+};
+
 pub const PackageManifestFindResult = struct {
     version: Semver.Version,
     package: *const PackageVersion,
@@ -620,7 +833,7 @@ pub const PackageManifest = struct {
     bundled_deps_buf: []const PackageNameHash = &.{},
 
 pub inline fn name(self: *const PackageManifest) []const u8 {
-            return (if (@typeInfo(@TypeOf(self.pkg)) == .@"enum" or @typeInfo(@TypeOf(self.pkg)) == .@"union") @tagName(self.pkg) else self.pkg.name).slice(self.string_buf);
+            return self.pkg.name.slice(self.string_buf);
     }
 
 pub fn byteLength(self: PackageManifest, scope: *const Registry.Scope) usize {
@@ -1149,7 +1362,6 @@ else => {
 }
                     }
                     inline for (dependency_groups) |pair| {
-                        _ = &pair;
                         if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asProperty(pair.prop)) |versioned_deps| {
                             _ = &versioned_deps;
                             if ((versioned_deps.expr.data == .e_object)) {
@@ -1278,7 +1490,7 @@ else => {
                 _ = @memset(ptr[0..string_builder.cap], 0);
                 string_buf = ptr[0..string_builder.cap];
             }
-            (if (@typeInfo(@TypeOf(result.pkg)) == .@"enum" or @typeInfo(@TypeOf(result.pkg)) == .@"union") @tagName(result.pkg) else result.pkg.name) = string_builder.append(ExternalString, expected_name);
+            result.pkg.name = string_builder.append(ExternalString, expected_name);
             _ = get_versions: {
             if (json.asProperty("versions")) |versions_q| {
                 _ = &versions_q;
@@ -1513,7 +1725,6 @@ else => {
                     var non_optional_peer_dependency_offset: usize = 0;
                     _ = &non_optional_peer_dependency_offset;
                     inline for (dependency_groups) |pair| {
-                        _ = &pair;
                         const items = items: {
                         if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asProperty((comptime pair.prop))) |versioned_deps| {
                             _ = &versioned_deps;
@@ -1612,7 +1823,7 @@ else => {
                                     if ((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?.asProperty("peerDependenciesMeta")) |@"meta"| {
                                         _ = &@"meta";
                                         if ((@"meta".expr.data == .e_object)) {
-                                            outer: for (@"meta".expr.data.e_object.properties.slice()) |meta_prop| {
+                                            outer: for (cp_iter_slice(@"meta".expr.data.e_object.properties.slice())) |meta_prop| {
                                                 _ = &meta_prop;
                                                 const optional = (((if (@typeInfo(@TypeOf(meta_prop)) == .@"enum") @intFromEnum(meta_prop) else meta_prop.value).?.asProperty("optional")) orelse continue);
                                                 if (((optional.expr.data != .e_boolean) or (!(if (@typeInfo(@TypeOf(optional.expr.data.e_boolean)) == .@"enum") @intFromEnum(optional.expr.data.e_boolean) else optional.expr.data.e_boolean.value)))) {
@@ -1803,77 +2014,29 @@ else => {
 else => (blk_catch_7: { break :blk_catch_7 ((std.math.divCeil(usize, std.math.log2_int_ceil(usize, max_versions_count), 8)) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 0; }); }),
 });
             switch (how_many_bytes_to_store_indices) {
-inline 1...8 => |int_bytes| {
-const Int = std.@"meta".Int(.unsigned, (int_bytes * 8));
-            const ExternVersionSorter = struct {
-    string_bytes: []const u8,
-    all_versions: []const Semver.Version,
-    all_versioned_packages: []const PackageVersion,
-
-pub fn isLessThan(self: @This(), left: Int, right: Int) bool {
-            return (self.all_versions[@as(usize, @intCast(left))].order(self.all_versions[@as(usize, @intCast(right))], self.string_bytes, self.string_bytes) == .lt);
-    }
-};
-            var all_indices = try bun.default_allocator.alloc(Int, max_versions_count);
-            _ = &all_indices;
-            var _guard_indices = FreeGuard([]Int){ .allocator = bun.default_allocator, .slice = all_indices };
-            _ = &_guard_indices;
-            var ___guard_indices_moved = false; _ = &___guard_indices_moved;
-            defer if (!___guard_indices_moved) { ___guard_indices_moved = true; const __T = @TypeOf(_guard_indices); if (@typeInfo(__T) == .optional) { if (_guard_indices) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_indices.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_indices; _drop_val.__cp_deinit(); } };
-            const releases_list = .{ (&result.pkg.releases), (&result.pkg.prereleases) };
-            var all_cloned_versions = try bun.default_allocator.alloc(Semver.Version, max_versions_count);
-            _ = &all_cloned_versions;
-            var _guard_versions = FreeGuard([]Semver.Version){ .allocator = bun.default_allocator, .slice = all_cloned_versions };
-            _ = &_guard_versions;
-            var ___guard_versions_moved = false; _ = &___guard_versions_moved;
-            defer if (!___guard_versions_moved) { ___guard_versions_moved = true; const __T = @TypeOf(_guard_versions); if (@typeInfo(__T) == .optional) { if (_guard_versions) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_versions.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_versions; _drop_val.__cp_deinit(); } };
-            var all_cloned_packages = try bun.default_allocator.alloc(PackageVersion, max_versions_count);
-            _ = &all_cloned_packages;
-            var _guard_packages = FreeGuard([]PackageVersion){ .allocator = bun.default_allocator, .slice = all_cloned_packages };
-            _ = &_guard_packages;
-            var ___guard_packages_moved = false; _ = &___guard_packages_moved;
-            defer if (!___guard_packages_moved) { ___guard_packages_moved = true; const __T = @TypeOf(_guard_packages); if (@typeInfo(__T) == .optional) { if (_guard_packages) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_packages.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_packages; _drop_val.__cp_deinit(); } };
-            inline for (0..2) |release_i| {
-                var release = releases_list[@as(usize, @intCast(release_i))];
-                _ = &release;
-                var indices = all_indices[0..release.keys.len];
-                _ = &indices;
-                const cloned_packages = all_cloned_packages[0..release.keys.len];
-                const cloned_versions = all_cloned_versions[0..release.keys.len];
-                var versioned_packages_ = (blk: {
-                break :blk @constCast(release.values.get(versioned_packages));
-
-});
-                _ = &versioned_packages_;
-                var semver_versions_ = (blk: {
-                break :blk @constCast(release.keys.get(all_semver_versions));
-
-});
-                _ = &semver_versions_;
-                _ = @memcpy(cloned_packages, versioned_packages_);
-                _ = @memcpy(cloned_versions, semver_versions_);
-                var idx: usize = 0;
-                _ = &idx;
-                while ((idx < indices.len)) : (idx = (idx + 1)) {
-                    indices[cp_cast_int(usize, idx)] = @truncate(idx);
-                }
-                const sorter = ExternVersionSorter{ .string_bytes = string_buf, .all_versions = semver_versions_, .all_versioned_packages = versioned_packages_ };
-                _ = std.sort.pdq(Int, indices, sorter, ExternVersionSorter.isLessThan);
-                idx = 0;
-                while ((idx < indices.len)) : (idx = (idx + 1)) {
-                    const i = indices[@as(usize, @intCast(idx))];
-                    versioned_packages_[cp_cast_int(usize, idx)] = cloned_packages[@as(usize, @intCast(i))];
-                    semver_versions_[cp_cast_int(usize, idx)] = cloned_versions[@as(usize, @intCast(i))];
-                }
-                if (comptime Environment.allow_assert) {
-                    if ((cloned_versions.len > 1)) {
-                        const first = semver_versions_[0];
-                        const second = semver_versions_[1];
-                        const order = second.order(first, string_buf, string_buf);
-                        _ = bun.assertWithLocation((order == .gt), @src());
-                    }
-                }
-            }
+1 => {
+_ = try sortExternVersions(1, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+2 => {
+_ = try sortExternVersions(2, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+3 => {
+_ = try sortExternVersions(3, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+4 => {
+_ = try sortExternVersions(4, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+5 => {
+_ = try sortExternVersions(5, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+6 => {
+_ = try sortExternVersions(6, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+7 => {
+_ = try sortExternVersions(7, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
+},
+8 => {
+_ = try sortExternVersions(8, max_versions_count, (&result.pkg.releases), (&result.pkg.prereleases), string_buf, versioned_packages, all_semver_versions);
 },
 else => {
 _ = bun.assertWithLocation((max_versions_count == 0), @src());
@@ -2242,248 +2405,14 @@ _ = bun.assertWithLocation((max_versions_count == 0), @src());
 };
 
 const OptSemverVersion = ?Semver.Version;
+const PkgId = struct { []const u8, []const u8 };
 const ByteFixedStream = std.io.FixedBufferStream(string);
 const string = []const u8;
 const WhoamiError = (OOM || error{
     NeedAuth,
     ProbablyInvalidAuth,
 });
-const PkgId = struct { string, string };
-const DistTagMap = extern struct {
-    tags: ExternalStringList = ExternalStringList{},
-    versions: VersionSlice = VersionSlice{},
-};
 const PackageVersionList = ExternalSlice(PackageVersion);
-pub const OperatingSystem = enum(u16) {
-    none = 0,
-    all = all_value,
-
-    _,
-
-    pub const aix: u16 = 1 << 1;
-    pub const darwin: u16 = 1 << 2;
-    pub const freebsd: u16 = 1 << 3;
-    pub const linux: u16 = 1 << 4;
-    pub const openbsd: u16 = 1 << 5;
-    pub const sunos: u16 = 1 << 6;
-    pub const win32: u16 = 1 << 7;
-    pub const android: u16 = 1 << 8;
-
-    pub const all_value: u16 = aix | darwin | freebsd | linux | openbsd | sunos | win32 | android;
-
-    pub const current: OperatingSystem = switch (Environment.os) {
-        .linux => @enumFromInt(if (Environment.isAndroid) android else linux),
-        .mac => @enumFromInt(darwin),
-        .windows => @enumFromInt(win32),
-        .freebsd => @enumFromInt(freebsd),
-        .wasm => @compileError("Unsupported operating system: " ++ @tagName(Environment.os)),
-    };
-
-    pub fn isMatch(val: OperatingSystem, target: OperatingSystem) bool {
-        return (@intFromEnum(val) & @intFromEnum(target)) != 0;
-    }
-
-    pub inline fn has(val: OperatingSystem, other: u16) bool {
-        return (@intFromEnum(val) & other) != 0;
-    }
-
-    pub const NameMap = bun.ComptimeStringMap(u16, .{
-        .{ "aix", aix },
-        .{ "darwin", darwin },
-        .{ "freebsd", freebsd },
-        .{ "linux", linux },
-        .{ "openbsd", openbsd },
-        .{ "sunos", sunos },
-        .{ "win32", win32 },
-        .{ "android", android },
-    });
-
-    pub const current_name = switch (Environment.os) {
-        .linux => "linux",
-        .mac => "darwin",
-        .windows => "win32",
-        .freebsd => "freebsd",
-        .wasm => @compileError("Unsupported operating system: " ++ @tagName(current)),
-    };
-
-    pub fn negatable(val: OperatingSystem) Negatable(OperatingSystem) {
-        return .{ .added = val, .removed = .none };
-    }
-
-    pub const jsFunctionOperatingSystemIsMatch = npm_jsc_mod.operatingSystemIsMatch;
-};
-pub const Libc = enum(u8) {
-    none = 0,
-    all = all_value,
-    _,
-
-    pub const glibc: u8 = 1 << 1;
-    pub const musl: u8 = 1 << 2;
-
-    pub const all_value: u8 = glibc | musl;
-
-    pub const NameMap = bun.ComptimeStringMap(u8, .{
-        .{ "glibc", glibc },
-        .{ "musl", musl },
-    });
-
-    pub inline fn has(val: Libc, other: u8) bool {
-        return (@intFromEnum(val) & other) != 0;
-    }
-
-    pub fn isMatch(val: Libc, target: Libc) bool {
-        return (@intFromEnum(val) & @intFromEnum(target)) != 0;
-    }
-
-    pub fn negatable(val: Libc) Negatable(Libc) {
-        return .{ .added = val, .removed = .none };
-    }
-
-    // TODO:
-    pub const current: Libc = @intFromEnum(glibc);
-
-    pub const jsFunctionLibcIsMatch = npm_jsc_mod.libcIsMatch;
-};
-pub const Architecture = enum(u16) {
-    none = 0,
-    all = all_value,
-    _,
-
-    pub const arm: u16 = 1 << 1;
-    pub const arm64: u16 = 1 << 2;
-    pub const ia32: u16 = 1 << 3;
-    pub const mips: u16 = 1 << 4;
-    pub const mipsel: u16 = 1 << 5;
-    pub const ppc: u16 = 1 << 6;
-    pub const ppc64: u16 = 1 << 7;
-    pub const s390: u16 = 1 << 8;
-    pub const s390x: u16 = 1 << 9;
-    pub const x32: u16 = 1 << 10;
-    pub const x64: u16 = 1 << 11;
-
-    pub const all_value: u16 = arm | arm64 | ia32 | mips | mipsel | ppc | ppc64 | s390 | s390x | x32 | x64;
-
-    pub const current: Architecture = switch (Environment.arch) {
-        .arm64 => @enumFromInt(arm64),
-        .x64 => @enumFromInt(x64),
-        .wasm => @compileError("Specify architecture: " ++ Environment.arch),
-    };
-
-    pub const current_name = switch (Environment.arch) {
-        .arm64 => "arm64",
-        .x64 => "x64",
-        .wasm => @compileError("Unsupported architecture: " ++ @tagName(current)),
-    };
-
-    pub const NameMap = bun.ComptimeStringMap(u16, .{
-        .{ "arm", arm },
-        .{ "arm64", arm64 },
-        .{ "ia32", ia32 },
-        .{ "mips", mips },
-        .{ "mipsel", mipsel },
-        .{ "ppc", ppc },
-        .{ "ppc64", ppc64 },
-        .{ "s390", s390 },
-        .{ "s390x", s390x },
-        .{ "x32", x32 },
-        .{ "x64", x64 },
-    });
-
-    pub inline fn has(val: Architecture, other: u16) bool {
-        return (@intFromEnum(val) & other) != 0;
-    }
-
-    pub fn isMatch(val: Architecture, target: Architecture) bool {
-        return @intFromEnum(val) & @intFromEnum(target) != 0;
-    }
-
-    pub fn negatable(val: Architecture) Negatable(Architecture) {
-        return .{ .added = val, .removed = .none };
-    }
-
-    pub const jsFunctionArchitectureIsMatch = npm_jsc_mod.architectureIsMatch;
-};
-pub const PackageVersion = extern struct {
-    /// `"integrity"` field || `"shasum"` field
-    /// https://github.com/npm/registry/blob/master/docs/responses/package-metadata.md#dist
-    // Splitting this into it's own array ends up increasing the final size a little bit.
-    integrity: Integrity = Integrity{},
-
-    /// "dependencies"` in [package.json](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#dependencies)
-    dependencies: ExternalStringMap = ExternalStringMap{},
-
-    /// `"optionalDependencies"` in [package.json](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#optionaldependencies)
-    optional_dependencies: ExternalStringMap = ExternalStringMap{},
-
-    /// `"peerDependencies"` in [package.json](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#peerdependencies)
-    /// if `non_optional_peer_dependencies_start` is > 0, then instead of alphabetical, the first N items are optional
-    peer_dependencies: ExternalStringMap = ExternalStringMap{},
-
-    /// `"devDependencies"` in [package.json](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#devdependencies)
-    /// We deliberately choose not to populate this field.
-    /// We keep it in the data layout so that if it turns out we do need it, we can add it without invalidating everyone's history.
-    dev_dependencies: ExternalStringMap = ExternalStringMap{},
-
-    bundled_dependencies: ExternalPackageNameHashList = ExternalPackageNameHashList{},
-
-    /// `"bin"` field in [package.json](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#bin)
-    bin: Bin = Bin{},
-
-    /// `"engines"` field in package.json
-    engines: ExternalStringMap = ExternalStringMap{},
-
-    /// `"peerDependenciesMeta"` in [package.json](https://docs.npmjs.com/cli/v8/configuring-npm/package-json#peerdependenciesmeta)
-    /// if `non_optional_peer_dependencies_start` is > 0, then instead of alphabetical, the first N items of `peer_dependencies` are optional
-    non_optional_peer_dependencies_start: u32 = 0,
-
-    man_dir: ExternalString = ExternalString{},
-
-    /// can be empty!
-    /// When empty, it means that the tarball URL can be inferred
-    tarball_url: ExternalString = ExternalString{},
-
-    unpacked_size: u32 = 0,
-    file_count: u32 = 0,
-
-    /// `"os"` field in package.json
-    os: OperatingSystem = OperatingSystem.all,
-    /// `"cpu"` field in package.json
-    cpu: Architecture = Architecture.all,
-
-    /// `"libc"` field in package.json
-    libc: Libc = Libc.none,
-
-    /// `hasInstallScript` field in registry API.
-    has_install_script: bool = false,
-
-    /// Unix timestamp when this version was published (0 if unknown)
-    publish_timestamp_ms: f64 = 0,
-
-    pub fn allDependenciesBundled(val: *const PackageVersion) bool {
-        return val.bundled_dependencies.isInvalid();
-    }
-};
-pub const NpmPackage = extern struct {
-    /// HTTP response headers
-    last_modified: String = String{},
-    etag: String = String{},
-
-    /// "modified" in the JSON
-    modified: String = String{},
-    public_max_age: u32 = 0,
-
-    name: ExternalString = ExternalString{},
-
-    releases: ExternVersionMap = ExternVersionMap{},
-    prereleases: ExternVersionMap = ExternVersionMap{},
-    dist_tags: DistTagMap = DistTagMap{},
-
-    versions_buf: VersionSlice = VersionSlice{},
-    string_lists_buf: ExternalStringList = ExternalStringList{},
-
-    // Flag to indicate if we have timestamp data from extended manifest
-    has_extended_manifest: bool = false,
-};
 var tmpfile_did_warn = std.atomic.Value(bool).init(false);
 const Bin = bin_mod.Bin;
 const IdentityContext = identity_context_mod.IdentityContext;
@@ -2654,6 +2583,83 @@ pub fn responseError(allocator: std.mem.Allocator, req: *const http.AsyncHTTP, r
             }
         }
         _ = Global.crash();
+}
+
+pub fn sortExternVersions(comptime int_bytes: usize, max_versions_count: usize, releases: *ExternVersionMap, prereleases: *ExternVersionMap, string_buf: []const u8, versioned_packages: []const PackageVersion, all_semver_versions: []const Semver.Version) !void {
+        const Int = std.@"meta".Int(.unsigned, (int_bytes * 8));
+        const ExternVersionSorter = ExternVersionSorterType(Int);
+        var all_indices = try bun.default_allocator.alloc(Int, max_versions_count);
+        _ = &all_indices;
+        var _guard_indices = FreeGuard([]Int){ .allocator = bun.default_allocator, .slice = all_indices };
+        _ = &_guard_indices;
+        var ___guard_indices_moved = false; _ = &___guard_indices_moved;
+        defer if (!___guard_indices_moved) { ___guard_indices_moved = true; const __T = @TypeOf(_guard_indices); if (@typeInfo(__T) == .optional) { if (_guard_indices) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_indices.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_indices; _drop_val.__cp_deinit(); } };
+        const releases_list: [2]*ExternVersionMap = .{ releases, prereleases };
+        var all_cloned_versions = try bun.default_allocator.alloc(Semver.Version, max_versions_count);
+        _ = &all_cloned_versions;
+        var _guard_versions = FreeGuard([]Semver.Version){ .allocator = bun.default_allocator, .slice = all_cloned_versions };
+        _ = &_guard_versions;
+        var ___guard_versions_moved = false; _ = &___guard_versions_moved;
+        defer if (!___guard_versions_moved) { ___guard_versions_moved = true; const __T = @TypeOf(_guard_versions); if (@typeInfo(__T) == .optional) { if (_guard_versions) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_versions.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_versions; _drop_val.__cp_deinit(); } };
+        var all_cloned_packages = try bun.default_allocator.alloc(PackageVersion, max_versions_count);
+        _ = &all_cloned_packages;
+        var _guard_packages = FreeGuard([]PackageVersion){ .allocator = bun.default_allocator, .slice = all_cloned_packages };
+        _ = &_guard_packages;
+        var ___guard_packages_moved = false; _ = &___guard_packages_moved;
+        defer if (!___guard_packages_moved) { ___guard_packages_moved = true; const __T = @TypeOf(_guard_packages); if (@typeInfo(__T) == .optional) { if (_guard_packages) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_packages.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_packages; _drop_val.__cp_deinit(); } };
+        inline for (0..2) |release_i| {
+            var release = releases_list[@as(usize, @intCast(release_i))];
+            _ = &release;
+            var indices = all_indices[0..release.keys.len];
+            _ = &indices;
+            const cloned_packages = all_cloned_packages[0..release.keys.len];
+            const cloned_versions = all_cloned_versions[0..release.keys.len];
+            var versioned_packages_ = (blk: {
+            break :blk @constCast(release.values.get(versioned_packages));
+
+});
+            _ = &versioned_packages_;
+            var semver_versions_ = (blk: {
+            break :blk @constCast(release.keys.get(all_semver_versions));
+
+});
+            _ = &semver_versions_;
+            _ = @memcpy(cloned_packages, versioned_packages_);
+            _ = @memcpy(cloned_versions, semver_versions_);
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < indices.len)) : (idx = (idx + 1)) {
+                indices[cp_cast_int(usize, idx)] = @truncate(idx);
+            }
+            const sorter = ExternVersionSorter{ .string_bytes = string_buf, .all_versions = semver_versions_, .all_versioned_packages = versioned_packages_ };
+            _ = std.sort.pdq(Int, indices, sorter, ExternVersionSorter.isLessThan);
+            idx = 0;
+            while ((idx < indices.len)) : (idx = (idx + 1)) {
+                const i = indices[@as(usize, @intCast(idx))];
+                versioned_packages_[cp_cast_int(usize, idx)] = cloned_packages[@as(usize, @intCast(i))];
+                semver_versions_[cp_cast_int(usize, idx)] = cloned_versions[@as(usize, @intCast(i))];
+            }
+            if (comptime Environment.allow_assert) {
+                if ((cloned_versions.len > 1)) {
+                    const first = semver_versions_[0];
+                    const second = semver_versions_[1];
+                    const order = second.order(first, string_buf, string_buf);
+                    _ = bun.assertWithLocation((order == .gt), @src());
+                }
+            }
+        }
+}
+
+pub fn ExternVersionSorterType(comptime Int: type) type {
+        return struct {
+    string_bytes: []const u8,
+    all_versions: []const Semver.Version,
+    all_versioned_packages: []const PackageVersion,
+
+pub fn isLessThan(this_: @This(), left: Int, right: Int) bool {
+            return (this_.all_versions[@as(usize, @intCast(left))].order(this_.all_versions[@as(usize, @intCast(right))], this_.string_bytes, this_.string_bytes) == .lt);
+    }
+};
 }
 
 pub fn warnTmpfileOnce() void {

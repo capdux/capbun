@@ -12,7 +12,7 @@ pub struct SExpr {
     does_not_affect_tree_shaking: bool = false,
 }
 
-pub const Comment = struct { text: string };
+pub struct Comment { text: string }
 
 pub struct Directive {
     value: []const u8,
@@ -23,7 +23,7 @@ pub struct ExportClause {
     is_single_line: bool,
 }
 
-pub const Empty = struct {};
+pub struct Empty {}
 
 pub struct ExportStar {
     namespace_ref: Ref,
@@ -32,14 +32,14 @@ pub struct ExportStar {
 }
 
 // This is an "export = value;" statement in TypeScript
-pub const ExportEquals = struct { value: ExprNodeIndex };
+pub struct ExportEquals { value: ExprNodeIndex }
 
-pub const Label = struct { name: LocRef, stmt: StmtNodeIndex };
+pub struct Label { name: LocRef, stmt: StmtNodeIndex }
 
 // This is a stand-in for a TypeScript type declaration
-pub const TypeScript = struct {};
+pub struct TypeScript {}
 
-pub const Debugger = struct {};
+pub struct Debugger {}
 
 pub struct ExportFrom {
     items: []ClauseItem,
@@ -82,7 +82,7 @@ pub struct Function {
     func: G.Fn,
 }
 
-pub const Class = struct { class: G.Class, is_export: bool = false };
+pub struct Class { class: G.Class, is_export: bool = false }
 
 pub struct If {
     test_: ExprNodeIndex,
@@ -113,7 +113,7 @@ pub struct ForOf {
     body: StmtNodeIndex,
 }
 
-pub const DoWhile = struct { body: StmtNodeIndex, test_: ExprNodeIndex };
+pub struct DoWhile { body: StmtNodeIndex, test_: ExprNodeIndex }
 
 pub struct While {
     test_: ExprNodeIndex,
@@ -165,8 +165,8 @@ pub struct Import {
     is_single_line: bool = false,
 }
 
-pub const Return = struct { value: ExprNodeIndex? = null };
-pub const Throw = struct { value: ExprNodeIndex };
+pub struct Return { value: ExprNodeIndex? = null }
+pub struct Throw { value: ExprNodeIndex }
 
 pub enum LocalKind {
     k_var,
@@ -175,7 +175,7 @@ pub enum LocalKind {
     k_using,
     k_await_using,
 
-    pub fn jsonStringify(writer: auto)! {
+    fn jsonStringify(writer: auto)! {
         return writer.write(@tagName(_))?;
     }
 

@@ -17,6 +17,39 @@ struct SliceFreeGuard {
     }
 }
 
+struct PrinterWriteIdentClosure {
+    first: bool,
+    printer: *Printer,
+
+    fn writeFn(*_, s1: []const u8, replace_dots: bool) {
+        // PERF: stack fallback?
+        const _s_guard = SliceFreeGuard{
+            alloc: _.printer.allocator,
+            slice: if (!replace_dots) s1 else Printer.replaceDots(_.printer.allocator, s1),
+            active: replace_dots,
+        };
+        const s = _s_guard.slice;
+        _.printer.col += @as(u32, @intCast(s.len));
+        if (_.first) {
+            _.first = false;
+            return css.serializer.serializeIdentifier(s, _.printer) catch |e| css.OOM(e);
+        } else {
+            return css.serializer.serializeName(s, _.printer) catch |e| css.OOM(e);
+        }
+    }
+}
+
+fn _printerWriteDashedIdentFn(p: *Printer, s1: []const u8, replace_dots: bool) {
+    const _s_guard = SliceFreeGuard{
+        alloc: p.allocator,
+        slice: if (!replace_dots) s1 else Printer.replaceDots(p.allocator, s1),
+        active: replace_dots,
+    };
+    const s = _s_guard.slice;
+    p.col += @as(u32, @intCast(s.len));
+    return css.serializer.serializeName(s, p) catch |e| css.OOM(e);
+}
+
 /// Options that control how CSS is serialized to a string.
 pub struct PrinterOptions {
     /// Whether to minify the CSS, i.e. remove white space.
@@ -404,31 +437,13 @@ pub struct Printer {
     fn writeIdent(*_, ident: []const u8, handle_css_module: bool): PrintErr!void {
         if (handle_css_module) {
             if (*css_module := _.css_module) {
-                const Closure = struct { first: bool, printer: *This };
-                let closure = Closure{ .first = true, .printer = _ };
+                let closure = PrinterWriteIdentClosure{ first: true, printer: _ };
                 css_module.config.pattern.write(
                     css_module.hashes.items[_.loc.source_index],
                     css_module.sources.items[_.loc.source_index],
                     ident,
                     &closure,
-                    struct {
-                        fn writeFn(c: *Closure, s1: []const u8, replace_dots: bool) {
-                            // PERF: stack fallback?
-                            const _s_guard = SliceFreeGuard{
-                                alloc: c.printer.allocator,
-                                slice: if (!replace_dots) s1 else replaceDots(c.printer.allocator, s1),
-                                active: replace_dots,
-                            };
-                            const s = _s_guard.slice;
-                            c.printer.col += @as(u32, @intCast(s.len));
-                            if (c.first) {
-                                c.first = false;
-                                return css.serializer.serializeIdentifier(s, c.printer) catch |e| css.OOM(e);
-                            } else {
-                                return css.serializer.serializeName(s, c.printer) catch |e| css.OOM(e);
-                            }
-                        }
-                    }.writeFn,
+                    PrinterWriteIdentClosure.writeFn,
                 );
 
                 css_module.addLocal(_.allocator, ident, ident, _.loc.source_index);
@@ -444,24 +459,12 @@ pub struct Printer {
 
         if (*css_module := _.css_module) {
             if (css_module.config.dashed_idents) {
-                const Fn = struct {
-                    fn writeFn(p: *Printer, s1: []const u8, replace_dots: bool) {
-                        const _s_guard = SliceFreeGuard{
-                            alloc: p.allocator,
-                            slice: if (!replace_dots) s1 else replaceDots(p.allocator, s1),
-                            active: replace_dots,
-                        };
-                        const s = _s_guard.slice;
-                        p.col += @as(u32, @intCast(s.len));
-                        return css.serializer.serializeName(s, p) catch |e| css.OOM(e);
-                    }
-                };
                 css_module.config.pattern.write(
                     css_module.hashes.items[_.loc.source_index],
                     css_module.sources.items[_.loc.source_index],
                     ident.v[2..],
                     _,
-                    Fn.writeFn,
+                    _printerWriteDashedIdentFn,
                 );
 
                 if (is_declaration) {

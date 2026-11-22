@@ -91,10 +91,60 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const cron_parser = @import("./cron_parser.zig");
 pub const bun = @import("bun");
+pub const CronClearMode = enum {
+    reload,
+    teardown,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CronRegisterState = enum {
+    reading_crontab,
+    installing_crontab,
+    writing_plist,
+    booting_out,
+    bootstrapping,
+    done,
+    failed,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CronRemoveState = enum {
+    reading_crontab,
+    installing_crontab,
+    booting_out,
+    done,
+    failed,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const EmitMode = enum {
+    include_all,
+    exclude_weekday,
+    exclude_day,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ScheduleMonthInfo = struct {
+    cron: CronExpression,
+    months_is_wild: bool,
+};
+
 pub const EventLoopGuard = struct {
     ev: *jsc.EventLoop,
     __cp_dropped: bool = false,
@@ -688,7 +738,7 @@ pub fn startWindows(self: *CronRegisterJob) void {
             const argv: [9]?ConstCString = .{ "schtasks".ptr, "/create".ptr, "/xml".ptr, xml_path.ptr, "/tn".ptr, task_name_guard.slice.ptr, "/np".ptr, "/f".ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
-    const State = enum { reading_crontab, installing_crontab, writing_plist, booting_out, bootstrapping, done, failed };
+    const State = CronRegisterState;
     pub const loop = CronJobBase(CronRegisterJob).loop;
     pub const eventLoop = CronJobBase(CronRegisterJob).eventLoop;
     pub const onReaderDone = CronJobBase(CronRegisterJob).onReaderDone;
@@ -957,7 +1007,7 @@ pub fn startWindows(self: *CronRemoveJob) void {
             const argv: [6]?ConstCString = .{ "schtasks".ptr, "/delete".ptr, "/tn".ptr, task_name_guard.slice.ptr, "/f".ptr, null };
             _ = self.spawnCmd((&argv), .ignore, .ignore);
     }
-    const State = enum { reading_crontab, installing_crontab, booting_out, done, failed };
+    const State = CronRemoveState;
     pub const loop = CronJobBase(CronRemoveJob).loop;
     pub const eventLoop = CronJobBase(CronRemoveJob).eventLoop;
     pub const onReaderDone = CronJobBase(CronRemoveJob).onReaderDone;
@@ -1262,24 +1312,19 @@ pub fn register(globalObject: *jsc.JSGlobalObject, schedule_arg: jsc.JSValue, ca
     pub const Bun__CronJob__onPromiseReject = jsc.toJSHostFn(onPromiseReject);
 };
 
-const OptConstCString = ?ConstCString;
-pub const CronClearMode = enum { reload, teardown };
-const ScheduleMonthInfo = struct {
-    cron: CronExpression,
-    months_is_wild: bool,
-};
-const dummy_zero: [1]i32 = .{ 0 };
-threadlocal var crontab_buf: bun.PathBuffer = undefined;
-const empty_z_sentinel: [:0]const u8 = "";
-const ConstCString = @TypeOf(empty_z_sentinel.ptr);
-const EmitMode = enum { include_all, exclude_weekday, exclude_day };
-const ScheduleType = union(enum) {
+pub const ScheduleType = union(enum) {
     by_day: void,
     by_week: u8,
     by_month: ScheduleMonthInfo,
     by_month_dow: ScheduleMonthInfo,
     by_month_all_days: u16,
 };
+
+const OptConstCString = ?ConstCString;
+const dummy_zero: [1]i32 = .{ 0 };
+threadlocal var crontab_buf: bun.PathBuffer = undefined;
+const empty_z_sentinel: [:0]const u8 = "";
+const ConstCString = @TypeOf(empty_z_sentinel.ptr);
 const CronExpression = cron_parser.CronExpression;
 const jsc = bun.jsc;
 const OutputReader = bun.io.BufferedReader;

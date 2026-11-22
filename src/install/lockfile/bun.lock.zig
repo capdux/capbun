@@ -107,6 +107,34 @@ pub fn isLessThan(ctx: @This(), lhs: DependencyID, rhs: DependencyID) bool {
     }
 };
 
+pub const WorkspaceSorter = struct {
+    string_buf: []const u8,
+    res_buf: []const Resolution,
+
+pub fn isLessThan(self: WorkspaceSorter, l: PackageID, r: PackageID) bool {
+            const l_res = self.res_buf[@as(usize, @intCast(l))];
+            const r_res = self.res_buf[@as(usize, @intCast(r))];
+            return ((if (@typeInfo(@TypeOf(l_res)) == .@"enum") @intFromEnum(l_res) else l_res.value).workspace.order((&(if (@typeInfo(@TypeOf(r_res)) == .@"enum") @intFromEnum(r_res) else r_res.value).workspace), self.string_buf, self.string_buf) == .lt);
+    }
+};
+
+pub const TreeSortCtx = struct {
+
+pub fn isLessThan(_ctx: TreeSortCtx, l: Item, r: Item) bool {
+            _ = &_ctx;
+            const l_rel_path = l[1];
+            const l_depth = l[2];
+            const r_rel_path = r[1];
+            const r_depth = r[2];
+            return (switch (std.math.order(l_depth, r_depth)) {
+.lt => true,
+.gt => false,
+.eq => (strings.order(l_rel_path, r_rel_path) == .lt),
+});
+    }
+    pub const Item = struct { []const DependencyID, string, usize };
+};
+
 pub const Stringifier = struct {
 
 pub fn saveFromBinary(allocator: std.mem.Allocator, lockfile: *BinaryLockfile, load_result: *const LoadResult, options: *const PackageManager.Options, writer: *std.Io.Writer) !void {
@@ -227,17 +255,7 @@ pub fn saveFromBinary_inner(allocator: std.mem.Allocator, lockfile: *BinaryLockf
                             _ = try workspace_sort_buf.append(allocator, pkg_id);
                         }
                     }
-                    const Sorter = struct {
-    string_buf: []const u8,
-    res_buf: []const Resolution,
-
-pub fn isLessThan(self: @This(), l: PackageID, r: PackageID) bool {
-            const l_res = self.res_buf[@as(usize, @intCast(l))];
-            const r_res = self.res_buf[@as(usize, @intCast(r))];
-            return ((if (@typeInfo(@TypeOf(l_res)) == .@"enum") @intFromEnum(l_res) else l_res.value).workspace.order((&(if (@typeInfo(@TypeOf(r_res)) == .@"enum") @intFromEnum(r_res) else r_res.value).workspace), self.string_buf, self.string_buf) == .lt);
-    }
-};
-                    _ = std.sort.pdq(PackageID, workspace_sort_buf.items, Sorter{ .string_buf = buf, .res_buf = pkg_resolutions }, Sorter.isLessThan);
+                    _ = std.sort.pdq(PackageID, workspace_sort_buf.items, WorkspaceSorter{ .string_buf = buf, .res_buf = pkg_resolutions }, WorkspaceSorter.isLessThan);
                     for (workspace_sort_buf.items) |workspace_pkg_id| {
                         _ = &workspace_pkg_id;
                         const res = pkg_resolutions[@as(usize, @intCast(workspace_pkg_id))];
@@ -255,21 +273,6 @@ pub fn isLessThan(self: @This(), l: PackageID, r: PackageID) bool {
                 _ = try writer.writeByte(10);
                 _ = try decIndent(writer, indent);
                 _ = try writer.writeAll("},\n");
-                const TreeSortCtx = struct {
-
-pub fn isLessThan(_: @This(), l: Item, r: Item) bool {
-            const l_rel_path = l[1];
-            const l_depth = l[2];
-            const r_rel_path = r[1];
-            const r_depth = r[2];
-            return (switch (std.math.order(l_depth, r_depth)) {
-.lt => true,
-.gt => false,
-.eq => (strings.order(l_rel_path, r_rel_path) == .lt),
-});
-    }
-    pub const Item = struct { []const DependencyID, string, usize };
-};
                 var tree_sort_buf: std.ArrayListUnmanaged(TreeSortCtx.Item) = .{};
                 _ = &tree_sort_buf;
                 var _guard_tree_sort_buf = DeinitWithAllocGuard(std.ArrayListUnmanaged(TreeSortCtx.Item)){ .ptr = (blk: {
@@ -820,6 +823,11 @@ pub fn decIndent(writer: *std.Io.Writer, indent: *u32) !void {
     const indent_scalar = 2;
 };
 
+pub const WorkspaceDepGroup = struct {
+    name: []const u8,
+    behavior: Dependency.Behavior,
+};
+
 const string = []const u8;
 pub const Version = enum(u32) {
     v0 = 0,
@@ -828,10 +836,6 @@ pub const Version = enum(u32) {
     v1,
 
     pub const current: Version = .v1;
-};
-const WorkspaceDepGroup = struct {
-    name: []const u8,
-    behavior: Dependency.Behavior,
 };
 const workspace_dependency_groups = .{ WorkspaceDepGroup{ .name = "dependencies", .behavior = .{ .prod = true } }, WorkspaceDepGroup{ .name = "devDependencies", .behavior = .{ .dev = true } }, WorkspaceDepGroup{ .name = "optionalDependencies", .behavior = .{ .optional = true } }, WorkspaceDepGroup{ .name = "peerDependencies", .behavior = .{ .peer = true } } };
 const ParseError = (OOM || error{

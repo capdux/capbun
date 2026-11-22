@@ -8,26 +8,26 @@ const JSValue = jsc.JSValue;
 
 type ListenerCallback = *const fn (arg0: *!?, arg1: JSValue) callconv(.c) void;
 
-pub const AbortReasonImpl = union(enum) {
+pub union(enum) AbortReasonImpl {
     common: CommonAbortReason,
     js: JSValue,
 
-    pub fn toBodyValueError(globalObject: *jsc.JSGlobalObject): jsc.WebCore.Body.Value.ValueError {
+    fn toBodyValueError(globalObject: *jsc.JSGlobalObject): jsc.WebCore.Body.Value.ValueError {
         return switch (_) {
-            .common => |reason| .{ AbortReason: reason },
-            .js => |value| .{ JSValue: .create(value, globalObject) },
+            .common reason => jsc.WebCore.Body.Value.ValueError{ AbortReason: reason },
+            .js value => jsc.WebCore.Body.Value.ValueError{ JSValue: .create(value, globalObject) },
         };
     }
 
-    pub fn toJS(global: *jsc.JSGlobalObject): JSValue {
+    fn toJS(global: *jsc.JSGlobalObject): JSValue {
         return switch (_) {
-            .common => |reason| reason.toJS(global),
-            .js => |value| value,
+            .common reason => reason.toJS(global),
+            .js value => value,
         };
     }
-};
+}
 
-pub const TimeoutImpl = struct {
+pub struct TimeoutImpl {
     event_loop_timer: jsc.API.Timer.EventLoopTimer,
 
     // The `Timeout`'s lifetime is owned by the AbortSignal.
@@ -72,7 +72,7 @@ pub const TimeoutImpl = struct {
         }
     }
 
-    pub fn run(*_, vm: *jsc.VirtualMachine) {
+    fn run(*_, vm: *jsc.VirtualMachine) {
         _.event_loop_timer.state = .FIRED;
         _.cancel(vm);
 
@@ -120,7 +120,7 @@ pub const TimeoutImpl = struct {
         // context to obtain).
         _.deinit(jsc.VirtualMachine.get());
     }
-};
+}
 
 @c {
     fn WebCore__AbortSignal__aborted(arg0: *AbortSignal): bool;
@@ -144,7 +144,7 @@ pub const TimeoutImpl = struct {
     pub const AbortReason = AbortReasonImpl;
     pub const Timeout = TimeoutImpl;
 
-    pub fn listen(
+    fn listen(
         *_,
         comptime Context: type,
         ctx: *Context,
@@ -152,7 +152,7 @@ pub const TimeoutImpl = struct {
     ): *AbortSignal {
         const Wrapper = struct {
             const call = cb;
-            pub fn callback(
+            static fn callback(
                 ptr: *!?,
                 reason: JSValue,
             ) callconv(.c) void {
@@ -161,10 +161,10 @@ pub const TimeoutImpl = struct {
             }
         };
 
-        return _.addListener(@as(*!?, @ptrCast(ctx)), Wrapper.callback);
+        return _.addListener(unsafe { @as(*!?, @ptrCast(ctx)) }, Wrapper.callback);
     }
 
-    pub fn addListener(
+    fn addListener(
         *_,
         ctx: *!?,
         callback: ListenerCallback,
@@ -172,11 +172,11 @@ pub const TimeoutImpl = struct {
         return WebCore__AbortSignal__addListener(_, ctx, callback);
     }
 
-    pub fn cleanNativeBindings(*_, ctx: *!?) {
+    fn cleanNativeBindings(*_, ctx: *!?) {
         return WebCore__AbortSignal__cleanNativeBindings(_, ctx);
     }
 
-    pub fn signal(
+    fn signal(
         *_,
         globalObject: *jsc.JSGlobalObject,
         reason: CommonAbortReason,
@@ -185,63 +185,63 @@ pub const TimeoutImpl = struct {
         return WebCore__AbortSignal__signal(_, globalObject, reason);
     }
 
-    pub fn pendingActivityRef(*_) {
+    fn pendingActivityRef(*_) {
         return WebCore__AbortSignal__incrementPendingActivity(_);
     }
 
-    pub fn pendingActivityUnref(*_) {
+    fn pendingActivityUnref(*_) {
         return WebCore__AbortSignal__decrementPendingActivity(_);
     }
 
     /// This function is not threadsafe. aborted is a boolean, not an atomic!
-    pub fn aborted(*_): bool {
+    fn aborted(*_): bool {
         return WebCore__AbortSignal__aborted(_);
     }
 
     /// This function is not threadsafe. JSValue cannot safely be passed between threads.
-    pub fn abortReason(*_): JSValue {
+    fn abortReason(*_): JSValue {
         return WebCore__AbortSignal__abortReason(_);
     }
 
-    pub fn reasonIfAborted(*_, global: *jsc.JSGlobalObject): AbortReasonImpl? {
+    fn reasonIfAborted(*_, global: *jsc.JSGlobalObject): AbortReasonImpl? {
         let reason: u8 = 0;
         const js_reason = WebCore__AbortSignal__reasonIfAborted(_, global, &reason);
         if (reason > 0) {
             bun.debugAssert(js_reason.isUndefined());
-            return .{ common: @enumFromInt(reason) };
+            return AbortReasonImpl{ common: @enumFromInt(reason) };
         }
         if (js_reason == .zero) {
             return null; // not aborted
         }
-        return .{ js: js_reason };
+        return AbortReasonImpl{ js: js_reason };
     }
 
-    pub fn ref(*_): *AbortSignal {
+    fn ref(*_): *AbortSignal {
         return WebCore__AbortSignal__ref(_);
     }
 
-    pub fn unref(*_) {
+    fn unref(*_) {
         WebCore__AbortSignal__unref(_);
     }
 
-    pub fn detach(*_, ctx: *!?) {
+    fn detach(*_, ctx: *!?) {
         _.cleanNativeBindings(ctx);
         _.unref();
     }
 
-    pub fn fromJS(value: JSValue): (*AbortSignal)? {
+    static fn fromJS(value: JSValue): (*AbortSignal)? {
         return WebCore__AbortSignal__fromJS(value);
     }
 
-    pub fn toJS(*_, global: *JSGlobalObject): JSValue {
+    fn toJS(*_, global: *JSGlobalObject): JSValue {
         return WebCore__AbortSignal__toJS(_, global);
     }
 
-    pub fn create(global: *JSGlobalObject): JSValue {
+    static fn create(global: *JSGlobalObject): JSValue {
         return WebCore__AbortSignal__create(global);
     }
 
-    pub fn new(global: *JSGlobalObject): *AbortSignal {
+    static fn new(global: *JSGlobalObject): *AbortSignal {
         jsc.markBinding(@src());
         return WebCore__AbortSignal__new(global);
     }
@@ -255,7 +255,7 @@ pub const TimeoutImpl = struct {
     /// Usage: if you need to operate on the Timeout (run/cancel/deinit), hold a ref
     /// to `this` for the duration (e.g., `this.ref(); defer this.unref();`) and avoid
     /// caching the pointer across turns.
-    pub fn getTimeout(*_): (*TimeoutImpl)? {
+    fn getTimeout(*_): (*TimeoutImpl)? {
         return WebCore__AbortSignal__getTimeout(_);
     }
 }

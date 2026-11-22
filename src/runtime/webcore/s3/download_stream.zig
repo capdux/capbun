@@ -62,6 +62,9 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const S3ErrorMod = @import("../../../s3_signing/error.zig");
+pub const CredentialsMod = @import("../../../s3_signing/credentials.zig");
+pub const bun = @import("bun");
 pub const MutexGuard = struct {
     lock: *bun.Mutex,
     __cp_dropped: bool = false,
@@ -86,6 +89,14 @@ pub fn __cp_deinit(self: *ResponseGuard) void {
                 _ = self.task.deinit();
             }
     }
+};
+
+pub const TaskState = packed struct(u64) {
+    status_code: u32 = 0,
+    request_error: u16 = 0,
+    has_more: bool = true,
+    _reserved: u15 = 0,
+    pub const AtomicType = std.atomic.Value(u64);
 };
 
 pub const S3HttpDownloadStreamingTask = struct {
@@ -320,10 +331,7 @@ pub fn processHttpCallback(self: *S3HttpDownloadStreamingTask, async_http: *bun.
             _ = &state;
             _ = bun.assert(state.has_more);
             const is_done = (!result.has_more);
-            const wait_until_done = self.updateState(async_http, result, (blk: {
-            break :blk (&state);
-
-}));
+            const wait_until_done = self.updateState(async_http, result, (&state));
             const should_enqueue = ((!wait_until_done) or is_done);
             if (should_enqueue) {
                 if (result.body) |body| {
@@ -358,19 +366,12 @@ pub fn httpCallback(self: *S3HttpDownloadStreamingTask, async_http: *bun.http.As
             }
     }
     pub const new = bun.TrivialNew(S3HttpDownloadStreamingTask);
-    pub const State = packed struct(u64) {
-            pub const AtomicType = std.atomic.Value(u64);
-            status_code: u32 = 0,
-            request_error: u16 = 0,
-            has_more: bool = true,
-            _reserved: u15 = 0,
-        };
+    pub const State = TaskState;
 };
 
-const S3Error = @import("../../../s3_signing/error.zig").S3Error;
-const S3Credentials = @import("../../../s3_signing/credentials.zig").S3Credentials;
+const S3Error = S3ErrorMod.S3Error;
+const S3Credentials = CredentialsMod.S3Credentials;
 const SignResult = S3Credentials.SignResult;
-const bun = @import("bun");
 const jsc = bun.jsc;
 const strings = bun.strings;
 const log = bun.Output.scoped(.S3, .hidden);

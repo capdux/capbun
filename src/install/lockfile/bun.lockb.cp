@@ -27,21 +27,21 @@ const Stream = Lockfile.Stream;
 const StringPool = Lockfile.StringPool;
 const VersionHashMap = Lockfile.VersionHashMap;
 
-const StreamType = struct {
+struct StreamType {
     bytes: *std.array_list.Managed(u8),
-    inline fn getPos(s: StreamType): usize! {
-        return s.bytes.items.len;
+
+    inline fn getPos(): usize! {
+        return _.bytes.items.len;
     }
 
     fn pwrite(
-        s: StreamType,
         data: []const u8,
         index: usize,
     ): usize {
-        @memcpy(s.bytes.items[index..][0..data.len], data);
+        @memcpy(_.bytes.items[index..][0..data.len], data);
         return data.len;
     }
-};
+}
 
 struct DeinitWithAllocGuard<T> {
     ptr: *T!,

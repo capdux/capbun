@@ -192,16 +192,16 @@ pub const log = bun.Output.scoped(.SHELL, .visible);
 ///
 /// Functions which accept a `_: OutputNeedsIOSafeGuard` parameter can
 /// safely assume the stdout/stderr they are working with require IO.
-pub const OutputNeedsIOSafeGuard = enum(u0) { output_needs_io };
+pub enum OutputNeedsIOSafeGuard: u0 { output_needs_io }
 
 /// Similar to `OutputNeedsIOSafeGuard` but to ensure a function is
 /// called at the "top" of the call-stack relative to the interpreter's
 /// execution.
-pub const CallstackGuard = enum(u0) { __i_know_what_i_am_doing };
+pub enum CallstackGuard: u0 { __i_know_what_i_am_doing }
 
 pub const ExitCode = u16;
 
-pub const StateKind = enum(u8) {
+pub enum StateKind: u8 {
     script,
     stmt,
     assign,
@@ -213,7 +213,7 @@ pub const StateKind = enum(u8) {
     condexpr,
     @"async",
     subshell,
-};
+}
 
 /// Copy-on-write file descriptor. This is to avoid having multiple non-blocking
 /// writers to the same file descriptor, which breaks epoll/kqueue
@@ -377,6 +377,332 @@ type CStr = ([*:0]const u8);
 type OptParser = bun.shell.Parser?;
 type OptLexResult = shell.LexResult?;
 
+union(enum) _ShellExecEnvBufio {
+    owned: bun.ByteList,
+    borrowed: *bun.ByteList,
+    fn memoryCost(): usize {
+        return switch (_) {
+            .owned owned => owned.memoryCost(),
+            .borrowed borrowed => borrowed.memoryCost(),
+        };
+    }
+}
+
+enum _ShellExecEnvKind {
+    normal,
+    cmd_subst,
+    subshell,
+    pipeline,
+}
+
+pub struct _ShellExecEnv {
+    kind: Kind = .normal,
+
+    _buffered_stdout: Bufio = { owned: {} },
+    _buffered_stderr: Bufio = { owned: {} },
+
+    shell_env: EnvMap,
+    cmd_local_env: EnvMap,
+    export_env: EnvMap,
+
+    __prev_cwd: std.array_list.Managed(u8),
+    __cwd: std.array_list.Managed(u8),
+    cwd_fd: bun.FD,
+
+    async_pids: SmolList(pid_t, 4) = SmolList(pid_t, 4).zeroes,
+
+    __alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void,
+
+    const pid_t = if (bun.Environment.isPosix) std.posix.pid_t else uv.uv_pid_t;
+    const Bufio = _ShellExecEnvBufio;
+    const Kind = _ShellExecEnvKind;
+
+    fn allocator(*_): std.mem.Allocator {
+        if (comptime bun.Environment.enableAllocScopes) return _.__alloc_scope.allocator();
+        return bun.default_allocator;
+    }
+
+    fn memoryCost(): usize {
+        let size: usize = @sizeOf(_ShellExecEnv);
+        size += _.shell_env.memoryCost();
+        size += _.cmd_local_env.memoryCost();
+        size += _.export_env.memoryCost();
+        size += _.__cwd.allocatedSlice().len;
+        size += _.__prev_cwd.allocatedSlice().len;
+        size += _._buffered_stderr.memoryCost();
+        size += _._buffered_stdout.memoryCost();
+        size += _.async_pids.memoryCost();
+        return size;
+    }
+
+    fn buffered_stdout(*_): *bun.ByteList {
+        return switch (_._buffered_stdout) {
+            .owned => &_._buffered_stdout.owned,
+            .borrowed => _._buffered_stdout.borrowed,
+        };
+    }
+
+    fn buffered_stderr(*_): *bun.ByteList {
+        return switch (_._buffered_stderr) {
+            .owned => &_._buffered_stderr.owned,
+            .borrowed => _._buffered_stderr.borrowed,
+        };
+    }
+
+    inline fn cwdZ(*_): [:0]const u8 {
+        if (_.__cwd.items.len == 0) return "";
+        return _.__cwd.items[0.._.__cwd.items.len -| 1 :0];
+    }
+
+    inline fn prevCwdZ(*_): [:0]const u8 {
+        if (_.__prev_cwd.items.len == 0) return "";
+        return _.__prev_cwd.items[0.._.__prev_cwd.items.len -| 1 :0];
+    }
+
+    inline fn prevCwd(*_): []const u8 {
+        const prevcwdz = _.prevCwdZ();
+        return prevcwdz[0..prevcwdz.len];
+    }
+
+    inline fn cwd(*_): []const u8 {
+        const cwdz = _.cwdZ();
+        return cwdz[0..cwdz.len];
+    }
+
+    fn deinit(*_) {
+        _.deinitImpl(true, true);
+    }
+
+    fn deinitImpl(*_, comptime destroy_this: bool, comptime free_buffered_io: bool) {
+        log("[ShellExecEnv] deinit {x}", .{unsafe { @intFromPtr(_) }});
+
+        if (comptime free_buffered_io) {
+            if (_._buffered_stdout == .owned) {
+                _._buffered_stdout.owned.clearAndFree(bun.default_allocator);
+            }
+            if (_._buffered_stderr == .owned) {
+                _._buffered_stderr.owned.clearAndFree(bun.default_allocator);
+            }
+        }
+
+        _.shell_env.deinit();
+        _.cmd_local_env.deinit();
+        _.export_env.deinit();
+        _.__cwd.deinit();
+        _.__prev_cwd.deinit();
+        closefd(_.cwd_fd);
+
+        if (comptime destroy_this) _.allocator().destroy(_);
+    }
+
+    fn dupeForSubshell(
+        *_,
+        alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void,
+        alloc: Allocator,
+        io: Interpreter.IO,
+        kind: Kind,
+    ): Maybe(*_ShellExecEnv) {
+        const duped = bun.handleOom(alloc.create(_ShellExecEnv));
+
+        const dupedfd = switch (Syscall.dup(_.cwd_fd)) {
+            .err e => {
+                alloc.destroy(duped);
+                return { err: e };
+            },
+            .result fd => fd,
+        };
+
+        const stdout: Bufio = switch (io.stdout) {
+            .fd => brk: {
+                if (io.stdout.fd.captured != null) break :brk Bufio{ borrowed: io.stdout.fd.captured.? };
+                break :brk Bufio{ owned: {} };
+            },
+            .ignore => Bufio{ owned: {} },
+            .pipe => switch (kind) {
+                .normal, .cmd_subst => Bufio{ owned: {} },
+                .subshell, .pipeline => Bufio{ borrowed: _.buffered_stdout() },
+            },
+        };
+
+        const stderr: Bufio = switch (io.stderr) {
+            .fd => brk: {
+                if (io.stderr.fd.captured != null) break :brk Bufio{ borrowed: io.stderr.fd.captured.? };
+                break :brk Bufio{ owned: {} };
+            },
+            .ignore => Bufio{ owned: {} },
+            .pipe => switch (kind) {
+                .normal, .cmd_subst => Bufio{ owned: {} },
+                .subshell, .pipeline => Bufio{ borrowed: _.buffered_stderr() },
+            },
+        };
+
+        duped.* = {
+            kind: kind,
+            _buffered_stdout: stdout,
+            _buffered_stderr: stderr,
+            shell_env: _.shell_env.clone(),
+            cmd_local_env: EnvMap.init(alloc),
+            export_env: _.export_env.clone(),
+
+            __prev_cwd: bun.handleOom(_.__prev_cwd.clone()),
+            __cwd: bun.handleOom(_.__cwd.clone()),
+            cwd_fd: dupedfd,
+            __alloc_scope: alloc_scope,
+        };
+
+        return { result: duped };
+    }
+
+    fn assignVar(*_, interp: *Interpreter, label: EnvStr, value: EnvStr, assign_ctx: AssignCtx) {
+        * = interp;
+        switch (assign_ctx) {
+            .cmd => _.cmd_local_env.insert(label, value),
+            .shell => _.shell_env.insert(label, value),
+            .exported => _.export_env.insert(label, value),
+        }
+    }
+
+    fn changePrevCwd(*_, interp: *Interpreter): Maybe(void) {
+        return _.changeCwd(interp, _.prevCwdZ());
+    }
+
+    fn changeCwd(*_, interp: *Interpreter, new_cwd_: auto): Maybe(void) {
+        return _.changeCwdImpl(interp, new_cwd_, false);
+    }
+
+    fn changeCwdImpl(*_, _: *Interpreter, new_cwd_: auto, comptime in_init: bool): Maybe(void) {
+        if (comptime @TypeOf(new_cwd_) != [:0]const u8 && @TypeOf(new_cwd_) != []const u8) {
+            @compileError("Bad type for new_cwd " ++ @typeName(@TypeOf(new_cwd_)));
+        }
+        const is_sentinel = @TypeOf(new_cwd_) == [:0]const u8;
+        const is_abs = ResolvePath.Platform.auto.isAbsolute(new_cwd_);
+
+        const required_len = if (is_abs) new_cwd_.len else _.cwd().len + 1 + new_cwd_.len;
+        if (required_len >= ResolvePath.join_buf.len) {
+            return Maybe(void).initErr(Syscall.Error.fromCode(.NAMETOOLONG, .chdir));
+        }
+
+        const new_cwd: [:0]const u8 = brk: {
+            if (is_abs) {
+                if (is_sentinel) {
+                    @memcpy(ResolvePath.join_buf[0..new_cwd_.len], new_cwd_[0..new_cwd_.len]);
+                    ResolvePath.join_buf[new_cwd_.len] = 0;
+                    break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
+                }
+                std.mem.copyForwards(u8, &ResolvePath.join_buf, new_cwd_);
+                ResolvePath.join_buf[new_cwd_.len] = 0;
+                break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
+            }
+
+            const existing_cwd = _.cwd();
+            const parts: [2][]const u8 = [existing_cwd, new_cwd_];
+            const cwd_str = ResolvePath.joinZ(&parts, .auto);
+
+            if (bun.Environment.isWindows) {
+                const sep = '\\';
+                if (cwd_str.len > 1 && cwd_str[cwd_str.len - 1] == sep) {
+                    ResolvePath.join_buf[cwd_str.len - 1] = 0;
+                    break :brk ResolvePath.join_buf[0 .. cwd_str.len - 1 :0];
+                }
+            }
+            if (cwd_str.len > 1 && cwd_str[cwd_str.len - 1] == '/') {
+                ResolvePath.join_buf[cwd_str.len - 1] = 0;
+                break :brk ResolvePath.join_buf[0 .. cwd_str.len - 1 :0];
+            }
+
+            break :brk cwd_str;
+        };
+
+        const new_cwd_fd = switch (ShellSyscall.openat(
+            _.cwd_fd,
+            new_cwd,
+            bun.O.DIRECTORY | bun.O.RDONLY,
+            0,
+        )) {
+            .result fd => fd,
+            .err e => {
+                return Maybe(void).initErr(e);
+            },
+        };
+        * = _.cwd_fd.closeAllowingBadFileDescriptor(null);
+
+        _.__prev_cwd.clearRetainingCapacity();
+        bun.handleOom(_.__prev_cwd.appendSlice(_.__cwd.items[0..]));
+
+        _.__cwd.clearRetainingCapacity();
+        bun.handleOom(_.__cwd.appendSlice(new_cwd[0 .. new_cwd.len + 1]));
+
+        if (comptime bun.Environment.isDebug) {
+            assert(_.__cwd.items[_.__cwd.items.len -| 1] == 0);
+            assert(_.__prev_cwd.items[_.__prev_cwd.items.len -| 1] == 0);
+        }
+
+        _.cwd_fd = new_cwd_fd;
+
+        if (comptime !in_init) {
+            _.export_env.insert(EnvStr.initSlice("OLDPWD"), EnvStr.initSlice(_.prevCwd()));
+        }
+        _.export_env.insert(EnvStr.initSlice("PWD"), EnvStr.initSlice(_.cwd()));
+
+        return .success;
+    }
+
+    fn getHomedir(*_): EnvStr {
+        const env_var: EnvStr? = brk: {
+            const static_str = if (comptime bun.Environment.isWindows) EnvStr.initSlice("USERPROFILE") else EnvStr.initSlice("HOME");
+            break :brk _.shell_env.get(static_str) ?? _.export_env.get(static_str);
+        };
+        return env_var ?? EnvStr.initSlice(if (comptime bun.Environment.isAndroid) "/data/local/tmp" else "");
+    }
+
+    fn writeFailingErrorFmt(
+        *_,
+        ctx: auto,
+        enqueueCb: fn (c: @TypeOf(ctx)) void,
+        comptime fmt: []const u8,
+        args: auto,
+    ): Yield {
+        const io: *Interpreter.IO.OutKind = &@field(ctx.io, "stderr");
+        switch (io.*) {
+            .fd x => {
+                enqueueCb(ctx);
+                return x.writer.enqueueFmt(ctx, x.captured, fmt, args);
+            },
+            .pipe => {
+                const bufio: *bun.ByteList = _.buffered_stderr();
+                bun.handleOom(bufio.appendFmt(bun.default_allocator, fmt, args));
+                return ctx.parent.childDone(ctx, 1);
+            },
+            .ignore => {
+                const childptr = IOWriterChildPtr.init(ctx);
+                const count = std.fmt.count(fmt, args);
+                return { on_io_writer_chunk: {
+                    child: childptr.asAnyOpaque(),
+                    e: null,
+                    written: count,
+                } };
+            },
+        }
+    }
+}
+
+union(enum) _ShellErrorCtx {
+    syscall: Syscall.Error,
+    other: Interpreter.ShellErrorKind,
+
+    fn toJS(globalThis: *JSGlobalObject): JSValue {
+        return switch (_) {
+            .syscall e => e.toJS(globalThis),
+            .other e => bun.jsc.ZigString.fromBytes(@errorName(e)).toJS(globalThis),
+        };
+    }
+}
+
+struct _ExpansionOpts {
+    for_spawn: bool = true,
+    single: bool = false,
+}
+
 pub struct Interpreter {
     pub const js = jsc.Codegen.JSShellInterpreter;
     pub const toJS = js.toJS;
@@ -472,369 +798,7 @@ pub struct Interpreter {
         Script,
     });
 
-    /// During execution, the shell has an "environment" or "context". This
-    /// contains important details like environment variables, cwd, etc. Every
-    /// state node is given a `*ShellExecEnv` which is stored in its header (see
-    /// `states/Base.zig`).
-    ///
-    /// Certain state nodes like subshells, pipelines, and cmd substitutions
-    /// will duplicate their `*ShellExecEnv` so that they can make modifications
-    /// without affecting their parent `ShellExecEnv`. This is done in the
-    /// `.dupeForSubshell` function.
-    ///
-    /// For example:
-    ///
-    /// ```bash
-    /// echo $(FOO=bar; echo $FOO); echo $FOO
-    /// ```
-    ///
-    /// The $FOO variable is set inside the command substitution but not outside.
-    ///
-    /// Note that stdin/stdout/stderr is also considered to be part of the
-    /// environment/context, but we keep that in a separate struct called `IO`. We do
-    /// this because stdin/stdout/stderr changes a lot and we don't want to copy
-    /// this `ShellExecEnv` struct too much.
-    ///
-    /// More info here: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_12
-    pub const ShellExecEnv = struct {
-        kind: Kind = .normal,
-
-        /// This is the buffered stdout/stderr that captures the entire
-        /// output of the script and is given to JS.
-        ///
-        /// Accross the entire script execution, this is usually the same.
-        ///
-        /// It changes when a cmd substitution is run.
-        ///
-        /// These MUST use the `bun.default_allocator` Allocator
-        _buffered_stdout: Bufio = { owned: {} },
-        _buffered_stderr: Bufio = { owned: {} },
-
-        /// TODO Performance optimization: make these env maps copy-on-write
-        /// Shell env for expansion by the shell
-        shell_env: EnvMap,
-        /// Local environment variables to be given to a subprocess
-        cmd_local_env: EnvMap,
-        /// Exported environment variables available to all subprocesses. This includes system ones.
-        export_env: EnvMap,
-
-        /// The current working directory of the shell.
-        /// Use an array list so we don't have to keep reallocating
-        /// Always has zero-sentinel
-        __prev_cwd: std.array_list.Managed(u8),
-        __cwd: std.array_list.Managed(u8),
-        cwd_fd: bun.FD,
-
-        async_pids: SmolList(pid_t, 4) = SmolList(pid_t, 4).zeroes,
-
-        __alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void,
-
-        const pid_t = if (bun.Environment.isPosix) std.posix.pid_t else uv.uv_pid_t;
-
-        const Bufio = union(enum) {
-            owned: bun.ByteList,
-            borrowed: *bun.ByteList,
-            static fn memoryCost(this: *const @This()): usize {
-                return switch (this.*) {
-                    .owned => |*owned| owned.memoryCost(),
-                    .borrowed => |borrowed| borrowed.memoryCost(),
-                };
-            }
-        };
-
-        const Kind = enum {
-            normal,
-            cmd_subst,
-            subshell,
-            pipeline,
-        };
-
-        fn allocator(*_): std.mem.Allocator {
-            if (comptime bun.Environment.enableAllocScopes) return _.__alloc_scope.allocator();
-            return bun.default_allocator;
-        }
-
-        fn memoryCost(): usize {
-            let size: usize = @sizeOf(ShellExecEnv);
-            size += _.shell_env.memoryCost();
-            size += _.cmd_local_env.memoryCost();
-            size += _.export_env.memoryCost();
-            size += _.__cwd.allocatedSlice().len;
-            size += _.__prev_cwd.allocatedSlice().len;
-            size += _._buffered_stderr.memoryCost();
-            size += _._buffered_stdout.memoryCost();
-            size += _.async_pids.memoryCost();
-            return size;
-        }
-
-        fn buffered_stdout(*_): *bun.ByteList {
-            return switch (_._buffered_stdout) {
-                .owned => &_._buffered_stdout.owned,
-                .borrowed => _._buffered_stdout.borrowed,
-            };
-        }
-
-        fn buffered_stderr(*_): *bun.ByteList {
-            return switch (_._buffered_stderr) {
-                .owned => &_._buffered_stderr.owned,
-                .borrowed => _._buffered_stderr.borrowed,
-            };
-        }
-
-        pub inline fn cwdZ(*_): [:0]const u8 {
-            if (_.__cwd.items.len == 0) return "";
-            return _.__cwd.items[0.._.__cwd.items.len -| 1 :0];
-        }
-
-        pub inline fn prevCwdZ(*_): [:0]const u8 {
-            if (_.__prev_cwd.items.len == 0) return "";
-            return _.__prev_cwd.items[0.._.__prev_cwd.items.len -| 1 :0];
-        }
-
-        pub inline fn prevCwd(*_): []const u8 {
-            const prevcwdz = _.prevCwdZ();
-            return prevcwdz[0..prevcwdz.len];
-        }
-
-        pub inline fn cwd(*_): []const u8 {
-            const cwdz = _.cwdZ();
-            return cwdz[0..cwdz.len];
-        }
-
-        fn deinit(*_) {
-            _.deinitImpl(true, true);
-        }
-
-        /// Doesn't deref `this.io`
-        ///
-        /// If called by interpreter we have to:
-        /// 1. not free this *ShellExecEnv, because its on a field on the interpreter
-        /// 2. don't free buffered_stdout and buffered_stderr, because that is used for output
-        fn deinitImpl(*_, comptime destroy_this: bool, comptime free_buffered_io: bool) {
-            log("[ShellExecEnv] deinit {x}", .{unsafe { @intFromPtr(_) }});
-
-            if (comptime free_buffered_io) {
-                if (_._buffered_stdout == .owned) {
-                    _._buffered_stdout.owned.clearAndFree(bun.default_allocator);
-                }
-                if (_._buffered_stderr == .owned) {
-                    _._buffered_stderr.owned.clearAndFree(bun.default_allocator);
-                }
-            }
-
-            _.shell_env.deinit();
-            _.cmd_local_env.deinit();
-            _.export_env.deinit();
-            _.__cwd.deinit();
-            _.__prev_cwd.deinit();
-            closefd(_.cwd_fd);
-
-            if (comptime destroy_this) _.allocator().destroy(_);
-        }
-
-        fn dupeForSubshell(
-            *_,
-            alloc_scope: if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void,
-            alloc: Allocator,
-            io: IO,
-            kind: Kind,
-        ): Maybe(*ShellExecEnv) {
-            const duped = bun.handleOom(alloc.create(ShellExecEnv));
-
-            const dupedfd = switch (Syscall.dup(_.cwd_fd)) {
-                .err => |e| {
-                    alloc.destroy(duped);
-                    return { err: e };
-                },
-                .result => |fd| fd,
-            };
-
-            const stdout: Bufio = switch (io.stdout) {
-                .fd => brk: {
-                    if (io.stdout.fd.captured != null) break :brk Bufio{ borrowed: io.stdout.fd.captured.? };
-                    break :brk Bufio{ owned: {} };
-                },
-                .ignore => Bufio{ owned: {} },
-                .pipe => switch (kind) {
-                    .normal, .cmd_subst => Bufio{ owned: {} },
-                    .subshell, .pipeline => Bufio{ borrowed: _.buffered_stdout() },
-                },
-            };
-
-            const stderr: Bufio = switch (io.stderr) {
-                .fd => brk: {
-                    if (io.stderr.fd.captured != null) break :brk Bufio{ borrowed: io.stderr.fd.captured.? };
-                    break :brk Bufio{ owned: {} };
-                },
-                .ignore => Bufio{ owned: {} },
-                .pipe => switch (kind) {
-                    .normal, .cmd_subst => Bufio{ owned: {} },
-                    .subshell, .pipeline => Bufio{ borrowed: _.buffered_stderr() },
-                },
-            };
-
-            duped.* = {
-                kind: kind,
-                _buffered_stdout: stdout,
-                _buffered_stderr: stderr,
-                shell_env: _.shell_env.clone(),
-                cmd_local_env: EnvMap.init(alloc),
-                export_env: _.export_env.clone(),
-
-                __prev_cwd: bun.handleOom(_.__prev_cwd.clone()),
-                __cwd: bun.handleOom(_.__cwd.clone()),
-                // TODO probably need to use os.dup here
-                cwd_fd: dupedfd,
-                __alloc_scope: alloc_scope,
-            };
-
-            return { result: duped };
-        }
-
-        /// NOTE: This will `.ref()` value, so you should `defer value.deref()` it before handing it to this function.
-        fn assignVar(*_, interp: *ThisInterpreter, label: EnvStr, value: EnvStr, assign_ctx: AssignCtx) {
-            * = interp; // autofix
-            switch (assign_ctx) {
-                .cmd => _.cmd_local_env.insert(label, value),
-                .shell => _.shell_env.insert(label, value),
-                .exported => _.export_env.insert(label, value),
-            }
-        }
-
-        fn changePrevCwd(*_, interp: *ThisInterpreter): Maybe(void) {
-            return _.changeCwd(interp, _.prevCwdZ());
-        }
-
-        fn changeCwd(*_, interp: *ThisInterpreter, new_cwd_: auto): Maybe(void) {
-            return _.changeCwdImpl(interp, new_cwd_, false);
-        }
-
-        fn changeCwdImpl(*_, _: *ThisInterpreter, new_cwd_: auto, comptime in_init: bool): Maybe(void) {
-            if (comptime @TypeOf(new_cwd_) != [:0]const u8 && @TypeOf(new_cwd_) != []const u8) {
-                @compileError("Bad type for new_cwd " ++ @typeName(@TypeOf(new_cwd_)));
-            }
-            const is_sentinel = @TypeOf(new_cwd_) == [:0]const u8;
-            const is_abs = ResolvePath.Platform.auto.isAbsolute(new_cwd_);
-
-            // Both branches below write into the 4096-byte threadlocal
-            // `ResolvePath.join_buf` with no bounds check: the absolute branch
-            // `@memcpy`s `new_cwd_` directly, and the relative branch normalizes
-            // `cwd + "/" + new_cwd_` into it via `joinZ`. In ReleaseFast (where
-            // slice bounds are elided) an oversized input overflows adjacent TLS
-            // and segfaults. Normalization never grows the path, so bounding the
-            // un-normalized length is sufficient (and matches POSIX `chdir`, which
-            // returns ENAMETOOLONG on argument length, not canonicalized length).
-            const required_len = if (is_abs) new_cwd_.len else _.cwd().len + 1 + new_cwd_.len;
-            if (required_len >= ResolvePath.join_buf.len) {
-                return Maybe(void).initErr(Syscall.Error.fromCode(.NAMETOOLONG, .chdir));
-            }
-
-            const new_cwd: [:0]const u8 = brk: {
-                if (is_abs) {
-                    if (is_sentinel) {
-                        @memcpy(ResolvePath.join_buf[0..new_cwd_.len], new_cwd_[0..new_cwd_.len]);
-                        ResolvePath.join_buf[new_cwd_.len] = 0;
-                        break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
-                    }
-                    std.mem.copyForwards(u8, &ResolvePath.join_buf, new_cwd_);
-                    ResolvePath.join_buf[new_cwd_.len] = 0;
-                    break :brk ResolvePath.join_buf[0..new_cwd_.len :0];
-                }
-
-                const existing_cwd = _.cwd();
-                const parts: [2][]const u8 = [existing_cwd, new_cwd_];
-                const cwd_str = ResolvePath.joinZ(&parts, .auto);
-
-                // remove trailing separator
-                if (bun.Environment.isWindows) {
-                    const sep = '\\';
-                    if (cwd_str.len > 1 && cwd_str[cwd_str.len - 1] == sep) {
-                        ResolvePath.join_buf[cwd_str.len - 1] = 0;
-                        break :brk ResolvePath.join_buf[0 .. cwd_str.len - 1 :0];
-                    }
-                }
-                if (cwd_str.len > 1 && cwd_str[cwd_str.len - 1] == '/') {
-                    ResolvePath.join_buf[cwd_str.len - 1] = 0;
-                    break :brk ResolvePath.join_buf[0 .. cwd_str.len - 1 :0];
-                }
-
-                break :brk cwd_str;
-            };
-
-            const new_cwd_fd = switch (ShellSyscall.openat(
-                _.cwd_fd,
-                new_cwd,
-                bun.O.DIRECTORY | bun.O.RDONLY,
-                0,
-            )) {
-                .result => |fd| fd,
-                .err => |e| {
-                    return Maybe(void).initErr(e);
-                },
-            };
-            * = _.cwd_fd.closeAllowingBadFileDescriptor(null);
-
-            _.__prev_cwd.clearRetainingCapacity();
-            bun.handleOom(_.__prev_cwd.appendSlice(_.__cwd.items[0..]));
-
-            _.__cwd.clearRetainingCapacity();
-            bun.handleOom(_.__cwd.appendSlice(new_cwd[0 .. new_cwd.len + 1]));
-
-            if (comptime bun.Environment.isDebug) {
-                assert(_.__cwd.items[_.__cwd.items.len -| 1] == 0);
-                assert(_.__prev_cwd.items[_.__prev_cwd.items.len -| 1] == 0);
-            }
-
-            _.cwd_fd = new_cwd_fd;
-
-            if (comptime !in_init) {
-                _.export_env.insert(EnvStr.initSlice("OLDPWD"), EnvStr.initSlice(_.prevCwd()));
-            }
-            _.export_env.insert(EnvStr.initSlice("PWD"), EnvStr.initSlice(_.cwd()));
-
-            return .success;
-        }
-
-        fn getHomedir(*_): EnvStr {
-            const env_var: EnvStr? = brk: {
-                const static_str = if (comptime bun.Environment.isWindows) EnvStr.initSlice("USERPROFILE") else EnvStr.initSlice("HOME");
-                break :brk _.shell_env.get(static_str) ?? _.export_env.get(static_str);
-            };
-            return env_var ?? EnvStr.initSlice(if (comptime bun.Environment.isAndroid) "/data/local/tmp" else "");
-        }
-
-        fn writeFailingErrorFmt(
-            *_,
-            ctx: auto,
-            enqueueCb: fn (c: @TypeOf(ctx)) void,
-            comptime fmt: []const u8,
-            args: auto,
-        ): Yield {
-            const io: *IO.OutKind = &@field(ctx.io, "stderr");
-            switch (io.*) {
-                .fd => |x| {
-                    enqueueCb(ctx);
-                    return x.writer.enqueueFmt(ctx, x.captured, fmt, args);
-                },
-                .pipe => {
-                    const bufio: *bun.ByteList = _.buffered_stderr();
-                    bun.handleOom(bufio.appendFmt(bun.default_allocator, fmt, args));
-                    return ctx.parent.childDone(ctx, 1);
-                },
-                // FIXME: This is not correct? This would just make the entire shell hang I think?
-                .ignore => {
-                    const childptr = IOWriterChildPtr.init(ctx);
-                    // TODO: is this necessary
-                    const count = std.fmt.count(fmt, args);
-                    return { on_io_writer_chunk: {
-                        child: childptr.asAnyOpaque(),
-                        e: null,
-                        written: count,
-                    } };
-                },
-            }
-        }
-    };
+    pub const ShellExecEnv = _ShellExecEnv;
 
     const ThisInterpreter = @This();
 
@@ -843,17 +807,7 @@ pub struct Interpreter {
         Syscall,
     };
 
-    const ShellErrorCtx = union(enum) {
-        syscall: Syscall.Error,
-        other: ShellErrorKind,
-
-        fn toJS(globalThis: *JSGlobalObject): JSValue {
-            return switch (_) {
-                .syscall => |e| e.toJS(globalThis),
-                .other => |e| bun.jsc.ZigString.fromBytes(@errorName(e)).toJS(globalThis),
-            };
-        }
-    };
+    const ShellErrorCtx = _ShellErrorCtx;
 
     fn #computeEstimatedSizeForGC(): usize {
         let size: usize = @sizeOf(ThisInterpreter);
@@ -1483,7 +1437,7 @@ pub struct Interpreter {
         _.allocator.destroy(_);
     }
 
-    pub fn deinitFromExec(*_) {
+    fn deinitFromExec(*_) {
         log("deinit interpreter", {});
 
         _.this_jsvalue = .zero;
@@ -1607,10 +1561,7 @@ pub struct Interpreter {
         return _.vm_args_utf8.items[idx].slice();
     }
 
-    const ExpansionOpts = struct {
-        for_spawn: bool = true,
-        single: bool = false,
-    };
+    const ExpansionOpts = _ExpansionOpts;
 
     pub const Builtin = @import("./Builtin.zig");
 
@@ -1792,34 +1743,38 @@ pub fn closefd(fd: bun.FD) {
     }
 }
 
+struct _CmdEnvIterEntry {
+    key: _CmdEnvIterKey,
+    value: _CmdEnvIterValue,
+}
+
+struct _CmdEnvIterValue {
+    val: [:0]const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        writer.writeAll(_.val)?;
+    }
+}
+
+struct _CmdEnvIterKey {
+    val: []const u8,
+
+    fn format(writer: *std.Io.Writer)! {
+        writer.writeAll(_.val)?;
+    }
+
+    fn eqlComptime(comptime str: []const u8): bool {
+        return bun.strings.eqlComptime(_.val, str);
+    }
+}
+
 struct CmdEnvIter {
     env: *const bun.StringArrayHashMap(StringZ),
     iter: bun.StringArrayHashMap(StringZ).Iterator,
 
-    const Entry = struct {
-        key: Key,
-        value: Value,
-    };
-
-    const Value = struct {
-        val: [:0]const u8,
-
-        fn format(writer: *std.Io.Writer)! {
-            writer.writeAll(_.val)?;
-        }
-    };
-
-    const Key = struct {
-        val: []const u8,
-
-        fn format(writer: *std.Io.Writer)! {
-            writer.writeAll(_.val)?;
-        }
-
-        fn eqlComptime(comptime str: []const u8): bool {
-            return bun.strings.eqlComptime(_.val, str);
-        }
-    };
+    const Entry = _CmdEnvIterEntry;
+    const Value = _CmdEnvIterValue;
+    const Key = _CmdEnvIterKey;
 
     static fn fromEnv(env: *const bun.StringArrayHashMap(StringZ)): CmdEnvIter {
         const iter = env.iterator();
@@ -2138,12 +2093,12 @@ pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
 }
 
 /// All owned memory is assumed to be allocated with `bun.default_allocator`
-pub const OutputSrc = union(enum) {
+pub union(enum) OutputSrc {
     arrlist: std.ArrayListUnmanaged(u8),
     owned_buf: []const u8,
     borrowed_buf: []const u8,
 
-    pub fn slice(*_): []const u8 {
+    fn slice(*_): []const u8 {
         return switch (_.*) {
             .arrlist => _.arrlist.items[0..],
             .owned_buf => _.owned_buf,
@@ -2151,7 +2106,7 @@ pub const OutputSrc = union(enum) {
         };
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         switch (_.*) {
             .arrlist => {
                 _.arrlist.deinit(bun.default_allocator);
@@ -2162,19 +2117,19 @@ pub const OutputSrc = union(enum) {
             .borrowed_buf => {},
         }
     }
-};
+}
 
 /// Custom parse error for invalid options
-pub const ParseError = union(enum) {
+pub union(enum) ParseError {
     illegal_option: []const u8,
     unsupported: []const u8,
-    show_usage,
-};
+    show_usage: void,
+}
 pub fn unsupportedFlag(comptime name: []const u8): []const u8 {
     return "unsupported option, please open a GitHub issue -- " ++ name ++ "\n";
 }
 pub type FlagArgs = ([]const CStr)?;
-pub const ParseFlagResult = union(enum) { continue_parsing, done, illegal_option: []const u8, unsupported: []const u8, show_usage };
+pub union(enum) ParseFlagResult { continue_parsing: void, done: void, illegal_option: []const u8, unsupported: []const u8, show_usage: void }
 pub fn FlagParser(comptime Opts: type): type {
     return struct {
         pub const Result = @import("../bun_core/result.zig").Result;

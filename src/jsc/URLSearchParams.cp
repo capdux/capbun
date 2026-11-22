@@ -9,17 +9,17 @@
 }
 
 @opaque pub struct URLSearchParams {
-    pub fn create(globalObject: *JSGlobalObject, init: ZigString): JSValue {
+    static fn create(globalObject: *JSGlobalObject, init: ZigString): JSValue {
         jsc.markBinding(@src());
         return URLSearchParams__create(globalObject, &init);
     }
 
-    pub fn fromJS(value: JSValue): (*URLSearchParams)? {
+    static fn fromJS(value: JSValue): (*URLSearchParams)? {
         jsc.markBinding(@src());
         return URLSearchParams__fromJS(value);
     }
 
-    pub fn toString(
+    fn toString(
         *_,
         comptime Ctx: type,
         ctx: *Ctx,
@@ -29,7 +29,7 @@
         const Wrap = struct {
             const cb_ = callback;
             @callconv("c")
-            pub fn cb(c: *!, str: *const ZigString) {
+            static fn cb(c: *!, str: *const ZigString) {
                 cb_(
                     bun.cast(*Ctx, c),
                     str.*,

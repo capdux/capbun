@@ -29,30 +29,30 @@ pub const BindgenI64 = BindgenTrivial(i64);
 pub const BindgenF64 = BindgenTrivial(f64);
 pub const BindgenRawAny = BindgenTrivial(jsc.JSValue);
 
-pub const BindgenStrongAny = struct {
+pub struct BindgenStrongAny {
     pub const ZigType = jsc.Strong;
-    pub const ExternType = ?*jsc.Strong.Impl;
+    pub const ExternType = (*jsc.Strong.Impl)?;
     pub const OptionalZigType = ZigType.Optional;
     pub const OptionalExternType = ExternType;
 
-    pub fn convertFromExtern(extern_value: ExternType): ZigType {
+    static fn convertFromExtern(extern_value: ExternType): ZigType {
         return .{ @"impl": extern_value.? };
     }
 
-    pub fn convertOptionalFromExtern(extern_value: OptionalExternType): OptionalZigType {
+    static fn convertOptionalFromExtern(extern_value: OptionalExternType): OptionalZigType {
         return .{ @"impl": extern_value };
     }
-};
+}
 
 /// This represents both `IDLNull` and `IDLMonostateUndefined`.
-pub const BindgenNull = struct {
+pub struct BindgenNull {
     pub const ZigType = void;
     pub const ExternType = u8;
 
-    pub fn convertFromExtern(extern_value: ExternType): ZigType {
+    static fn convertFromExtern(extern_value: ExternType): ZigType {
         * = extern_value;
     }
-};
+}
 
 pub fn BindgenOptional(comptime Child: type): type {
     return struct {
@@ -79,20 +79,20 @@ pub fn BindgenOptional(comptime Child: type): type {
     };
 }
 
-pub const BindgenString = struct {
+pub struct BindgenString {
     pub const ZigType = bun.string.WTFString;
-    pub const ExternType = ?bun.string.WTFStringImpl;
+    pub const ExternType = bun.string.WTFStringImpl?;
     pub const OptionalZigType = ZigType.Optional;
     pub const OptionalExternType = ExternType;
 
-    pub fn convertFromExtern(extern_value: ExternType): ZigType {
+    static fn convertFromExtern(extern_value: ExternType): ZigType {
         return .adopt(extern_value.?);
     }
 
-    pub fn convertOptionalFromExtern(extern_value: OptionalExternType): OptionalZigType {
+    static fn convertOptionalFromExtern(extern_value: OptionalExternType): OptionalZigType {
         return .adopt(extern_value);
     }
-};
+}
 
 pub fn BindgenUnion(comptime children: []const type): type {
     let tagged_field_types: [type; children.len] = undefined;
@@ -248,7 +248,7 @@ fn ExternArrayList(comptime Child: type): type {
 fn BindgenExternalShared(comptime T: type): type {
     return struct {
         pub const ZigType = bun.ptr.ExternalShared(T);
-        pub const ExternType = ?*T;
+        pub const ExternType = (*T)?;
         pub const OptionalZigType = ZigType.Optional;
         pub const OptionalExternType = ExternType;
 

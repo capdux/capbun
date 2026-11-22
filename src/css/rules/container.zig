@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -136,32 +136,12 @@ pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This()
     }
 };
 
-pub const ContainerConditionOperation = struct {
-    operator: css.media_query.Operator,
-    conditions: ArrayList(ContainerCondition),
-
-pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this_ptr, allocator);
-    }
-};
-
-const Result = css.Result;
-const Printer = css.Printer;
-const PrintErr = css.PrintErr;
-const Location = css.css_rules.Location;
-const CustomIdent = css.css_values.ident.CustomIdent;
-const CustomIdentFns = css.css_values.ident.CustomIdentFns;
-const QueryFeature = css.media_query.QueryFeature;
-const QueryConditionFlags = css.media_query.QueryConditionFlags;
-const Operator = css.media_query.Operator;
-pub const ContainerNameFns = ContainerName;
-pub const ContainerSizeFeature = QueryFeature(ContainerSizeFeatureId);
 pub const StyleQuery = union(enum) {
     feature: css.Property,
     not: *StyleQuery,
     operation: StyleQueryOperation,
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: StyleQuery, dest: *Printer) PrintErr!void {
             switch (self) {
 .feature => |f| {
 _ = try f.toCss(dest, false);
@@ -207,7 +187,7 @@ pub fn createOperation(operator: Operator, conditions: ArrayList(StyleQuery)) St
             return .{ .operation = .{ .operator = operator, .conditions = conditions } };
     }
 
-pub fn needsParens(self: @This(), parent_operator: ?Operator, _: *const css.Targets) bool {
+pub fn needsParens(self: StyleQuery, parent_operator: ?Operator, _: *const css.Targets) bool {
             return (switch (self) {
 .not => true,
 .operation => |op| (op.operator == parent_operator),
@@ -219,10 +199,40 @@ pub fn parseStyleQuery(input: *css.Parser) Result(@This()) {
             return .{ .err = input.newErrorForNextToken() };
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
 };
+
+pub const ContainerConditionOperation = struct {
+    operator: css.media_query.Operator,
+    conditions: ArrayList(ContainerCondition),
+
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
+    }
+};
+
+pub const ContainerConditionStyleQueryFns = struct {
+
+pub inline fn adaptedParseQueryCondition(i: *css.Parser, flags: QueryConditionFlags) Result(StyleQuery) {
+            return css.media_query.parseQueryCondition(StyleQuery, i, flags);
+    }
+
+pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(ContainerCondition) {
+            if (i.tryParse(adaptedParseQueryCondition, .{ QueryConditionFlags{ .allow_or = true } }).asValue()) |res| {
+                _ = &res;
+                return .{ .result = .{ .style = res } };
+            }
+            return .{ .result = .{ .style = (switch (StyleQuery.parseFeature(i)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+}) } };
+    }
+};
+
 pub const ContainerCondition = union(enum) {
     feature: ContainerSizeFeature,
     not: *ContainerCondition,
@@ -233,7 +243,7 @@ pub fn parse(input: *css.Parser) Result(ContainerCondition) {
             return css.media_query.parseQueryCondition(ContainerCondition, input, QueryConditionFlags{ .allow_or = true, .allow_style = true });
     }
 
-pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: ContainerCondition, dest: *Printer) PrintErr!void {
             switch (self) {
 .feature => |f| {
 _ = try f.toCss(dest);
@@ -272,29 +282,10 @@ pub fn createOperation(operator: Operator, conditions: ArrayList(ContainerCondit
     }
 
 pub fn parseStyleQuery(input: *css.Parser) Result(ContainerCondition) {
-            const Fns = struct {
-
-pub inline fn adaptedParseQueryCondition(i: *css.Parser, flags: QueryConditionFlags) Result(StyleQuery) {
-            return css.media_query.parseQueryCondition(StyleQuery, i, flags);
+            return input.parseNestedBlock(ContainerCondition, @as(void, undefined), ContainerConditionStyleQueryFns.parseNestedBlockFn);
     }
 
-pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(ContainerCondition) {
-            if (i.tryParse(@This().adaptedParseQueryCondition, .{ QueryConditionFlags{ .allow_or = true } }).asValue()) |res| {
-                _ = &res;
-                return .{ .result = .{ .style = res } };
-            }
-            return .{ .result = .{ .style = (switch (StyleQuery.parseFeature(i)) {
-.result => |vv| vv,
-.err => |e| {
-return .{ .err = e };
-},
-}) } };
-    }
-};
-            return input.parseNestedBlock(ContainerCondition, @as(void, undefined), Fns.parseNestedBlockFn);
-    }
-
-pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {
+pub fn needsParens(self: ContainerCondition, parent_operator: ?Operator, targets: *const css.Targets) bool {
             return (switch (self) {
 .not => true,
 .operation => |op| (op.operator == parent_operator),
@@ -303,11 +294,23 @@ pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const cs
 });
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(this_ptr: *const @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), this_ptr, allocator);
     }
     const This = @This();
 };
+
+const Result = css.Result;
+const Printer = css.Printer;
+const PrintErr = css.PrintErr;
+const Location = css.css_rules.Location;
+const CustomIdent = css.css_values.ident.CustomIdent;
+const CustomIdentFns = css.css_values.ident.CustomIdentFns;
+const QueryFeature = css.media_query.QueryFeature;
+const QueryConditionFlags = css.media_query.QueryConditionFlags;
+const Operator = css.media_query.Operator;
+pub const ContainerNameFns = ContainerName;
+pub const ContainerSizeFeature = QueryFeature(ContainerSizeFeatureId);
 const ArrayList = std.ArrayListUnmanaged;
 
 pub fn ContainerRule(comptime R: type) type {

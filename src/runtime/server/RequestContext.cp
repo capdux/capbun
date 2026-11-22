@@ -1,3 +1,5 @@
+import bun from "bun";
+
 /// Q: Why is this needed?
 /// A: The dev server needs to attach its own callback when the request is
 ///    aborted.
@@ -89,15 +91,15 @@ pub struct StreamResultDeinitGuard<T> {
     }
 }
 
-pub const AdditionalOnAbortCallback = struct {
-    cb: *const fn (this: *!) void,
+pub struct AdditionalOnAbortCallback {
+    cb: *const fn (this: *!),
     data: *!,
-    deref_fn: *const fn (this: *!) void,
+    deref_fn: *const fn (this: *!),
 
-    pub fn deref(this: AdditionalOnAbortCallback) void {
-        this.deref_fn(this.data);
+    pub fn deref() {
+        _.deref_fn(_.data);
     }
-};
+}
 
 pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, comptime ThisServer: type, comptime http3: bool): type {
     return struct {
@@ -2684,12 +2686,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 // Retained only for `renderMetadata` to compute Content-Range / Content-Length
 // for file-blob bodies; the actual fd/socket bookkeeping lives in
 // `FileResponseStream` now.
-const SendfileContext = struct {
+struct SendfileContext {
     remain: Blob.SizeType = 0,
     offset: Blob.SizeType = 0,
     /// When non-zero, the Content-Range total (`/{total}` instead of `/*`).
     total: Blob.SizeType = 0,
-};
+}
 
 fn NewFlags(comptime debug_mode: bool): type {
     return packed struct(u16) {
@@ -2765,10 +2767,8 @@ const welcome_page_html_gz = @embedFile("../api/welcome-page.html.gz");
 
 const ctxLog = Output.scoped(.RequestContext, .visible);
 
-const std = @import("std");
 const Fallback = @import("../../js_parser/runtime.zig").Fallback;
 
-const bun = @import("bun");
 const Environment = bun.Environment;
 const JSError = bun.JSError;
 const Output = bun.Output;

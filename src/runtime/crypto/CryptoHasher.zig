@@ -62,6 +62,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Hashers = @import("../../sha_hmac/sha.zig");
@@ -98,6 +106,111 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const CryptoHasherExtern = struct {
+
+pub fn getByName(global: *JSGlobalObject, name_bytes: [*:0]const u8, name_len: usize) callconv(.c) ?*CryptoHasher {
+            const name = (blk: {
+            break :blk name_bytes[0..name_len];
+
+});
+            if (CryptoHasherZig.init(name)) |inner| {
+                _ = &inner;
+                return CryptoHasher.new(.{ .@"zig" = inner });
+            }
+            const algorithm = ((EVP.Algorithm.map.get(name)) orelse {
+            return null;
+});
+            switch (algorithm) {
+.ripemd160, .blake2b256, .blake2b512, .@"sha512-224" => {
+if (algorithm.md()) |md| {
+                _ = &md;
+                return CryptoHasher.new(.{ .evp = EVP.init(algorithm, md, global.bunVM().rareData().boringEngine()) });
+            }
+},
+else => {
+return null;
+},
+}
+            return null;
+    }
+
+pub fn getFromOther(global: *JSGlobalObject, other_handle: *CryptoHasher) callconv(.c) ?*CryptoHasher {
+            switch (other_handle.*) {
+.@"zig" => {
+const hasher = CryptoHasher.new(.{ .@"zig" = other_handle.@"zig".copy() });
+            return hasher;
+},
+.evp => {
+return CryptoHasher.new(.{ .evp = (blk_catch_0: { break :blk_catch_0 ((other_handle.evp.copy(global.bunVM().rareData().boringEngine())) catch |__ce_0| { _ = &__ce_0; return null; }); }) });
+},
+else => {
+return null;
+},
+}
+    }
+
+pub fn destroy(handle: *CryptoHasher) callconv(.c) void {
+            _ = handle.release();
+    }
+
+pub fn update(handle: *CryptoHasher, input_bytes: [*]const u8, input_len: usize) callconv(.c) bool {
+            const input = (blk: {
+            break :blk input_bytes[0..input_len];
+
+});
+            switch (handle.*) {
+.@"zig" => {
+_ = handle.@"zig".update(input);
+            return true;
+},
+.evp => {
+_ = handle.evp.update(input);
+            return true;
+},
+else => {
+return false;
+},
+}
+    }
+
+pub fn digest(handle: *CryptoHasher, global: *JSGlobalObject, buf: [*]u8, buf_len: usize) callconv(.c) u32 {
+            const digest_buf = (blk: {
+            break :blk buf[0..buf_len];
+
+});
+            switch (handle.*) {
+.@"zig" => {
+const res = handle.@"zig".finalWithLen(digest_buf, buf_len);
+            return @intCast(res.len);
+},
+.evp => {
+const res = handle.evp.final(global.bunVM().rareData().boringEngine(), digest_buf);
+            return @intCast(res.len);
+},
+else => {
+return 0;
+},
+}
+    }
+
+pub fn getDigestSize(handle: *CryptoHasher) callconv(.c) u32 {
+            return (switch (handle.*) {
+.@"zig" => handle.@"zig".digest_length,
+.evp => handle.evp.size(),
+else => 0,
+});
+    }
+
+pub fn @"export"() void {
+            _ = @export((&CryptoHasherExtern.getByName), .{ .name = "Bun__CryptoHasherExtern__getByName" });
+            _ = @export((&CryptoHasherExtern.getFromOther), .{ .name = "Bun__CryptoHasherExtern__getFromOther" });
+            _ = @export((&CryptoHasherExtern.destroy), .{ .name = "Bun__CryptoHasherExtern__destroy" });
+            _ = @export((&CryptoHasherExtern.update), .{ .name = "Bun__CryptoHasherExtern__update" });
+            _ = @export((&CryptoHasherExtern.digest), .{ .name = "Bun__CryptoHasherExtern__digest" });
+            _ = @export((&CryptoHasherExtern.getDigestSize), .{ .name = "Bun__CryptoHasherExtern__getDigestSize" });
+    }
+};
 
 pub const CryptoHasher = union(enum) {
     hmac: ?*HMAC,
@@ -389,7 +502,7 @@ pub fn copy(self: *CryptoHasher, globalObject: *jsc.JSGlobalObject, _: *jsc.Call
 .hmac => brk: {
             if (self.hmac) |hmac| {
                 _ = &hmac;
-                break :brk .{ .hmac = (blk_catch_0: { break :blk_catch_0 ((hmac.copy()) catch |__ce_0| { _ = &__ce_0; const e_val = createCryptoError(globalObject, CryptoHasher.getSSLErr());
+                break :brk .{ .hmac = (blk_catch_1: { break :blk_catch_1 ((hmac.copy()) catch |__ce_1| { _ = &__ce_1; const e_val = createCryptoError(globalObject, CryptoHasher.getSSLErr());
                 _ = CryptoHasher.clearSSLErr();
                 return globalObject.throwValue(e_val); }); }) };
             } else {
@@ -437,7 +550,7 @@ pub fn digestToBytes(self: *CryptoHasher, globalThis: *JSGlobalObject, output: ?
                 if ((bytes.len < BoringSSL.EVP_MAX_MD_SIZE)) {
                     return globalThis.throwInvalidArguments((comptime std.fmt.comptimePrint("TypedArray must be at least {d} bytes", .{ BoringSSL.EVP_MAX_MD_SIZE })), .{});
                 }
-                _ = (blk_catch_1: { break :blk_catch_1 ((self.final(globalThis, bytes[0..bytes.len])) catch |__ce_1| { _ = &__ce_1; return .zero; }); });
+                _ = (blk_catch_2: { break :blk_catch_2 ((self.final(globalThis, bytes[0..bytes.len])) catch |__ce_2| { _ = &__ce_2; return .zero; }); });
                 if (globalThis.hasException()) {
                     return error.JSError;
                 }
@@ -445,7 +558,7 @@ pub fn digestToBytes(self: *CryptoHasher, globalThis: *JSGlobalObject, output: ?
             } else {
                 var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
                 _ = &output_digest_buf;
-                const result = (blk_catch_2: { break :blk_catch_2 ((self.final(globalThis, (&output_digest_buf))) catch |__ce_2| { _ = &__ce_2; return .zero; }); });
+                const result = (blk_catch_3: { break :blk_catch_3 ((self.final(globalThis, (&output_digest_buf))) catch |__ce_3| { _ = &__ce_3; return .zero; }); });
                 if (globalThis.hasException()) {
                     return error.JSError;
                 }
@@ -456,7 +569,7 @@ pub fn digestToBytes(self: *CryptoHasher, globalThis: *JSGlobalObject, output: ?
 pub fn digestToEncoding(self: *CryptoHasher, globalThis: *JSGlobalObject, encoding: jsc.Node.Encoding) bun.JSError!jsc.JSValue {
             var output_digest_buf: EVP.Digest = std.mem.zeroes(EVP.Digest);
             _ = &output_digest_buf;
-            const out = (blk_catch_3: { break :blk_catch_3 ((self.final(globalThis, (&output_digest_buf))) catch |__ce_3| { _ = &__ce_3; return .zero; }); });
+            const out = (blk_catch_4: { break :blk_catch_4 ((self.final(globalThis, (&output_digest_buf))) catch |__ce_4| { _ = &__ce_4; return .zero; }); });
             if (globalThis.hasException()) {
                 return error.JSError;
             }
@@ -516,107 +629,7 @@ pub fn deinit(self: *CryptoHasher) void {
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
     pub const new = bun.TrivialNew(@This());
-    pub const Extern = struct {
-    
-    pub fn getByName(global: *JSGlobalObject, name_bytes: [*:0]const u8, name_len: usize) callconv(.c) ?*CryptoHasher {
-                const name = (blk: {
-                break :blk name_bytes[0..name_len];
-    
-    });
-                if (CryptoHasherZig.init(name)) |inner| {
-                    _ = &inner;
-                    return CryptoHasher.new(.{ .@"zig" = inner });
-                }
-                const algorithm = ((EVP.Algorithm.map.get(name)) orelse {
-                return null;
-    });
-                switch (algorithm) {
-    .ripemd160, .blake2b256, .blake2b512, .@"sha512-224" => {
-    if (algorithm.md()) |md| {
-                    _ = &md;
-                    return CryptoHasher.new(.{ .evp = EVP.init(algorithm, md, global.bunVM().rareData().boringEngine()) });
-                }
-    },
-    else => {
-    return null;
-    },
-    }
-                return null;
-        }
-    
-    pub fn getFromOther(global: *JSGlobalObject, other_handle: *CryptoHasher) callconv(.c) ?*CryptoHasher {
-                switch (other_handle.*) {
-    .@"zig" => {
-    const hasher = CryptoHasher.new(.{ .@"zig" = other_handle.@"zig".copy() });
-                return hasher;
-    },
-    .evp => {
-    return CryptoHasher.new(.{ .evp = (blk_catch_0: { break :blk_catch_0 ((other_handle.evp.copy(global.bunVM().rareData().boringEngine())) catch |__ce_0| { _ = &__ce_0; return null; }); }) });
-    },
-    else => {
-    return null;
-    },
-    }
-        }
-    
-    pub fn destroy(handle: *CryptoHasher) callconv(.c) void {
-                _ = handle.release();
-        }
-    
-    pub fn update(handle: *CryptoHasher, input_bytes: [*]const u8, input_len: usize) callconv(.c) bool {
-                const input = (blk: {
-                break :blk input_bytes[0..input_len];
-    
-    });
-                switch (handle.*) {
-    .@"zig" => {
-    _ = handle.@"zig".update(input);
-                return true;
-    },
-    .evp => {
-    _ = handle.evp.update(input);
-                return true;
-    },
-    else => {
-    return false;
-    },
-    }
-        }
-    
-    pub fn digest(handle: *CryptoHasher, global: *JSGlobalObject, buf: [*]u8, buf_len: usize) callconv(.c) u32 {
-                const digest_buf = buf[0..buf_len];
-                switch (handle.*) {
-    .@"zig" => {
-    const res = handle.@"zig".finalWithLen(digest_buf, buf_len);
-                return @intCast(res.len);
-    },
-    .evp => {
-    const res = handle.evp.final(global.bunVM().rareData().boringEngine(), digest_buf);
-                return @intCast(res.len);
-    },
-    else => {
-    return 0;
-    },
-    }
-        }
-    
-    pub fn getDigestSize(handle: *CryptoHasher) callconv(.c) u32 {
-                return (switch (handle.*) {
-    .@"zig" => handle.@"zig".digest_length,
-    .evp => handle.evp.size(),
-    else => 0,
-    });
-        }
-    
-    pub fn @"export"() void {
-                _ = @export((&CryptoHasher.Extern.getByName), .{ .name = "Bun__CryptoHasherExtern__getByName" });
-                _ = @export((&CryptoHasher.Extern.getFromOther), .{ .name = "Bun__CryptoHasherExtern__getFromOther" });
-                _ = @export((&CryptoHasher.Extern.destroy), .{ .name = "Bun__CryptoHasherExtern__destroy" });
-                _ = @export((&CryptoHasher.Extern.update), .{ .name = "Bun__CryptoHasherExtern__update" });
-                _ = @export((&CryptoHasher.Extern.digest), .{ .name = "Bun__CryptoHasherExtern__digest" });
-                _ = @export((&CryptoHasher.Extern.getDigestSize), .{ .name = "Bun__CryptoHasherExtern__getDigestSize" });
-        }
-    };
+    pub const Extern = CryptoHasherExtern;
     pub const digest = jsc.host_fn.wrapInstanceMethod(CryptoHasher, "digest_", false);
     pub const hash = jsc.host_fn.wrapStaticMethod(CryptoHasher, "hash_", false);
 };
@@ -626,21 +639,7 @@ pub const AlgoEntry = struct {
     T: type,
 };
 
-const default_allocator = bun.default_allocator;
-const strings = bun.strings;
-const BoringSSL = bun.BoringSSL.c;
-const jsc = bun.jsc;
-const CallFrame = jsc.CallFrame;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const VirtualMachine = jsc.VirtualMachine;
-const ZigString = jsc.ZigString;
-const host_fn = bun.jsc.host_fn;
-const Crypto = jsc.API.Bun.Crypto;
-const EVP = Crypto.EVP;
-const HMAC = Crypto.HMAC;
-const createCryptoError = Crypto.createCryptoError;
-const CryptoHasherZig = struct {
+pub const CryptoHasherZig = struct {
     algorithm: EVP.Algorithm,
     state: *anyopaque,
     digest_length: u8,
@@ -657,7 +656,6 @@ pub fn digestLength(comptime Algorithm: type) comptime_int {
 
 pub fn hashByName(globalThis: *JSGlobalObject, algorithm: ZigString, input: jsc.Node.BlobOrStringOrBuffer, output: ?jsc.Node.StringOrBuffer) bun.JSError!?jsc.JSValue {
             inline for (CryptoHasherZig.algo_map) |item| {
-                _ = &item;
                 if (bun.strings.eqlComptime(algorithm.slice(), (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name))) {
                     return try hashByNameInner(globalThis, item.T, input, output);
                 }
@@ -759,7 +757,6 @@ pub fn hashByNameInnerToBytes(globalThis: *JSGlobalObject, comptime Algorithm: t
 
 pub fn constructor(algorithm: ZigString) ?*CryptoHasher {
             inline for (CryptoHasherZig.algo_map) |item| {
-                _ = &item;
                 if (bun.strings.eqlComptime(algorithm.slice(), (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name))) {
                     return CryptoHasher.new(.{ .zig = .{ .algorithm = @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)), .state = bun.new(item.T, item.T.init(.{})), .digest_length = digestLength(item.T) } });
                 }
@@ -769,18 +766,16 @@ pub fn constructor(algorithm: ZigString) ?*CryptoHasher {
 
 pub fn init(algorithm: []const u8) ?CryptoHasherZig {
             inline for (CryptoHasherZig.algo_map) |item| {
-                _ = &item;
                 if (bun.strings.eqlComptime(algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name))) {
-                    const handle: CryptoHasherZig = .{ .algorithm = @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)), .state = bun.new(item.T, item.T.init(.{})), .digest_length = digestLength(item.T) };
+                    const handle = CryptoHasherZig{ .algorithm = @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)), .state = bun.new(item.T, item.T.init(.{})), .digest_length = digestLength(item.T) };
                     return handle;
                 }
             }
             return null;
     }
 
-pub fn update(self: *@This(), bytes: []const u8) void {
+pub fn update(self: *CryptoHasherZig, bytes: []const u8) void {
             inline for (CryptoHasherZig.algo_map) |item| {
-                _ = &item;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
                     return (blk: {
                     break :blk item.T.update(@ptrCast(@alignCast(self.state)), bytes);
@@ -791,9 +786,8 @@ pub fn update(self: *@This(), bytes: []const u8) void {
             _ = @panic("unreachable");
     }
 
-pub fn copy(self: *const @This()) CryptoHasherZig {
+pub fn copy(self: CryptoHasherZig) CryptoHasherZig {
             inline for (CryptoHasherZig.algo_map) |item| {
-                _ = &item;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
                     return .{ .algorithm = self.algorithm, .state = (blk: {
                     break :blk bun.dupe(item.T, @ptrCast(@alignCast(self.state)));
@@ -804,9 +798,8 @@ pub fn copy(self: *const @This()) CryptoHasherZig {
             _ = @panic("unreachable");
     }
 
-pub fn finalWithLen(self: *@This(), output_digest_slice: []u8, res_len: usize) []u8 {
+pub fn finalWithLen(self: *CryptoHasherZig, output_digest_slice: []u8, res_len: usize) []u8 {
             inline for (CryptoHasherZig.algo_map) |pair| {
-                _ = &pair;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(pair)) == .@"enum" or @typeInfo(@TypeOf(pair)) == .@"union") @tagName(pair) else pair.name)))) {
                     {
                         _ = pair.T.final(@ptrCast(@alignCast(self.state)), @ptrCast(output_digest_slice));
@@ -819,13 +812,12 @@ pub fn finalWithLen(self: *@This(), output_digest_slice: []u8, res_len: usize) [
             _ = @panic("unreachable");
     }
 
-pub fn final(self: *@This(), output_digest_slice: []u8) []u8 {
+pub fn final(self: *CryptoHasherZig, output_digest_slice: []u8) []u8 {
             return self.finalWithLen(output_digest_slice, self.digest_length);
     }
 
-pub fn release(self: *@This()) void {
+pub fn release(self: *CryptoHasherZig) void {
             inline for (CryptoHasherZig.algo_map) |item| {
-                _ = &item;
                 if ((self.algorithm == @field(EVP.Algorithm, (if (@typeInfo(@TypeOf(item)) == .@"enum" or @typeInfo(@TypeOf(item)) == .@"union") @tagName(item) else item.name)))) {
                     return bun.destroy(@as(*item.T, @ptrCast(@alignCast(self.state))));
                 }
@@ -833,7 +825,7 @@ pub fn release(self: *@This()) void {
             _ = @panic("unreachable");
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *CryptoHasherZig) void {
             _ = self.release();
     }
     const algo_map = [_]AlgoEntry{
@@ -846,6 +838,21 @@ pub fn deinit(self: *@This()) void {
             .{ .name = "blake2s256", .T = std.crypto.hash.blake2.Blake2s256 },
         };
 };
+
+const default_allocator = bun.default_allocator;
+const strings = bun.strings;
+const BoringSSL = bun.BoringSSL.c;
+const jsc = bun.jsc;
+const CallFrame = jsc.CallFrame;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const VirtualMachine = jsc.VirtualMachine;
+const ZigString = jsc.ZigString;
+const host_fn = bun.jsc.host_fn;
+const Crypto = jsc.API.Bun.Crypto;
+const EVP = Crypto.EVP;
+const HMAC = Crypto.HMAC;
+const createCryptoError = Crypto.createCryptoError;
 pub const MD4 = StaticCryptoHasher(Hashers.MD4, "MD4");
 pub const MD5 = StaticCryptoHasher(Hashers.MD5, "MD5");
 pub const SHA1 = StaticCryptoHasher(Hashers.SHA1, "SHA1");

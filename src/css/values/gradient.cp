@@ -24,8 +24,48 @@ pub struct DeinitAllocGuard<T> {
 const Percentage = css.css_values.percentage.Percentage;
 const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 
+struct GradientParseClosure {
+    location: css.SourceLocation,
+    func: []const u8,
+}
+
+struct WebKitColorStopClosure {
+    loc: css.SourceLocation,
+    function: []const u8,
+}
+
+pub struct LineDirectionCorner {
+    /// A horizontal position keyword, e.g. `left` or `right`.
+    horizontal: HorizontalPositionKeyword,
+    /// A vertical position keyword, e.g. `top` or `bottom`.
+    vertical: VerticalPositionKeyword,
+
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
+    }
+
+    fn eql(other: *const @This()): bool {
+        return css.implementEql(@This(), &_, other);
+    }
+}
+
+pub struct EllipseSize {
+    /// The x-radius of the ellipse.
+    x: LengthPercentage,
+    /// The y-radius of the ellipse.
+    y: LengthPercentage,
+
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
+    }
+
+    fn eql(other: *const @This()): bool {
+        return css.implementEql(@This(), &_, other);
+    }
+}
+
 /// A CSS [`<gradient>`](https://www.w3.org/TR/css-images-3/#gradients) value.
-pub const Gradient = union(enum) {
+pub union(enum) Gradient {
     /// A `linear-gradient()`, and its vendor prefix.
     linear: LinearGradient,
     /// A `repeating-linear-gradient()`, and its vendor prefix.
@@ -41,16 +81,15 @@ pub const Gradient = union(enum) {
     /// A legacy `-webkit-gradient()`.
     @"webkit-gradient": WebKitGradient,
 
-    pub fn parse(input: *css.Parser): Result(Gradient) {
+    static fn parse(input: *css.Parser): Result(Gradient) {
         const location = input.currentSourceLocation();
         const func = switch (input.expectFunction()) {
             .result => |vv| vv,
             .err => |e| return .{ .err = e },
         };
-        const Closure = struct { location: css.SourceLocation, func: []const u8 };
-        return input.parseNestedBlock(Gradient, Closure{ .location = location, .func = func }, struct {
+        return input.parseNestedBlock(Gradient, GradientParseClosure{ location: location, func: func }, struct {
             fn parse(
-                closure: Closure,
+                closure: GradientParseClosure,
                 input_: *css.Parser,
             ): Result(Gradient) {
                 const Map = comptime bun.ComptimeEnumMap(enum {
@@ -197,14 +236,14 @@ pub const Gradient = union(enum) {
         }.parse);
     }
 
-    pub fn toCss(dest: *Printer): PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         let f: []const u8 = undefined;
         let prefix: css.VendorPrefix? = null;
         switch (_) {
-            .linear => |g| { f = "linear-gradient("; prefix = g.vendor_prefix; },
-            .repeating_linear => |g| { f = "repeating-linear-gradient("; prefix = g.vendor_prefix; },
-            .radial => |g| { f = "radial-gradient("; prefix = g.vendor_prefix; },
-            .repeating_radial => |g| { f = "repeating-radial-gradient("; prefix = g.vendor_prefix; },
+            .linear g => { f = "linear-gradient("; prefix = g.vendor_prefix; },
+            .repeating_linear g => { f = "repeating-linear-gradient("; prefix = g.vendor_prefix; },
+            .radial g => { f = "radial-gradient("; prefix = g.vendor_prefix; },
+            .repeating_radial g => { f = "repeating-radial-gradient("; prefix = g.vendor_prefix; },
             .conic => { f = "conic-gradient("; },
             .repeating_conic => { f = "repeating-conic-gradient("; },
             .@"webkit-gradient" => { f = "-webkit-gradient("; },
@@ -217,17 +256,32 @@ pub const Gradient = union(enum) {
         dest.writeStr(f)?;
 
         switch (_) {
-            .linear, .repeating_linear => |*linear| {
-                linear.toCss(dest, linear.vendor_prefix != css.VendorPrefix{ .none = true })?;
+            .linear, .repeating_linear => {
+                const linear = switch (_) {
+                    .linear => &_.linear,
+                    .repeating_linear => &_.repeating_linear,
+                    else => unreachable,
+                };
+                linear.toCss(dest, linear.vendor_prefix != css.VendorPrefix{ none: true })?;
             },
-            .radial, .repeating_radial => |*radial| {
+            .radial, .repeating_radial => {
+                const radial = switch (_) {
+                    .radial => &_.radial,
+                    .repeating_radial => &_.repeating_radial,
+                    else => unreachable,
+                };
                 radial.toCss(dest)?;
             },
-            .conic, .repeating_conic => |*conic| {
+            .conic, .repeating_conic => {
+                const conic = switch (_) {
+                    .conic => &_.conic,
+                    .repeating_conic => &_.repeating_conic,
+                    else => unreachable,
+                };
                 conic.toCss(dest)?;
             },
-            .@"webkit-gradient" => |*g| {
-                g.toCss(dest)?;
+            .@"webkit-gradient" => {
+                _.@"webkit-gradient".toCss(dest)?;
             },
         }
 
@@ -237,118 +291,117 @@ pub const Gradient = union(enum) {
     /// Attempts to convert the gradient to the legacy `-webkit-gradient()` syntax.
     ///
     /// Returns an error in case the conversion is not possible.
-    pub fn getLegacyWebkit(this: *const @This(), allocator: Allocator): Gradient? {
-        return Gradient{ .@"webkit-gradient" = WebKitGradient.fromStandard(this, allocator) ?? return null };
+    fn getLegacyWebkit(allocator: Allocator): Gradient? {
+        if (wg := WebKitGradient.fromStandard(&_, allocator)) {
+            return Gradient{ @"webkit-gradient": wg };
+        } else return null;
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(other: *const Gradient): bool {
+    fn eql(other: *const Gradient): bool {
         return css.implementEql(Gradient, &_, other);
-        // if (this.* == .linear and other.* == .linear) {
-        //     return this.linear.eql(&other.linear);
-        // } else if (this.* == .repeating_linear and other.* == .repeating_linear) {
-        //     return this.repeating_linear.eql(&other.repeating_linear);
-        // } else if (this.* == .radial and other.* == .radial) {
-        //     return this.radial.eql(&other.radial);
-        // } else if (this.* == .repeating_radial and other.* == .repeating_radial) {
-        //     return this.repeating_radial.eql(&other.repeating_radial);
-        // } else if (this.* == .conic and other.* == .conic) {
-        //     return this.conic.eql(&other.conic);
-        // } else if (this.* == .repeating_conic and other.* == .repeating_conic) {
-        //     return this.repeating_conic.eql(&other.repeating_conic);
-        // } else if (this.* == .@"webkit-gradient" and other.* == .@"webkit-gradient") {
-        //     return this.@"webkit-gradient".eql(&other.@"webkit-gradient");
-        // }
-        // ret
     }
 
     /// Returns the vendor prefix of the gradient.
-    pub fn getVendorPrefix(this: *const @This()): VendorPrefix {
-        return switch (this.*) {
-            .linear => |linear| linear.vendor_prefix,
-            .repeating_linear => |linear| linear.vendor_prefix,
-            .radial => |radial| radial.vendor_prefix,
-            .repeating_radial => |radial| radial.vendor_prefix,
-            .@"webkit-gradient" => VendorPrefix{ .webkit = true },
-            else => VendorPrefix{ .none = true },
+    fn getVendorPrefix(): VendorPrefix {
+        return switch (_) {
+            .linear linear => linear.vendor_prefix,
+            .repeating_linear linear => linear.vendor_prefix,
+            .radial radial => radial.vendor_prefix,
+            .repeating_radial radial => radial.vendor_prefix,
+            .@"webkit-gradient" => VendorPrefix{ webkit: true },
+            else => VendorPrefix{ none: true },
         };
     }
 
-    /// Returns the vendor prefixes needed for the given browser targets.
-    pub fn getNecessaryPrefixes(this: *const @This(), targets: css.targets.Targets): css.VendorPrefix {
-        const getPrefixes = struct {
-            fn call(tgts: css.targets.Targets, feature: css.prefixes.Feature, prefix: VendorPrefix): VendorPrefix {
-                return tgts.prefixes(prefix, feature);
-            }
-        }.call;
+    static fn getPrefixes(tgts: css.targets.Targets, feature: css.prefixes.Feature, prefix: VendorPrefix): VendorPrefix {
+        return tgts.prefixes(prefix, feature);
+    }
 
-        return switch (this.*) {
-            .linear => |linear| getPrefixes(targets, .linear_gradient, linear.vendor_prefix),
-            .repeating_linear => |linear| getPrefixes(targets, .repeating_linear_gradient, linear.vendor_prefix),
-            .radial => |radial| getPrefixes(targets, .radial_gradient, radial.vendor_prefix),
-            .repeating_radial => |radial| getPrefixes(targets, .repeating_radial_gradient, radial.vendor_prefix),
-            else => VendorPrefix{ .none = true },
+    /// Returns the vendor prefixes needed for the given browser targets.
+    fn getNecessaryPrefixes(targets: css.targets.Targets): css.VendorPrefix {
+        return switch (_) {
+            .linear linear => getPrefixes(targets, .linear_gradient, linear.vendor_prefix),
+            .repeating_linear linear => getPrefixes(targets, .repeating_linear_gradient, linear.vendor_prefix),
+            .radial radial => getPrefixes(targets, .radial_gradient, radial.vendor_prefix),
+            .repeating_radial radial => getPrefixes(targets, .repeating_radial_gradient, radial.vendor_prefix),
+            else => VendorPrefix{ none: true },
         };
     }
 
     /// Returns a copy of the gradient with the given vendor prefix.
-    pub fn getPrefixed(this: *const @This(), allocator: Allocator, prefix: css.VendorPrefix): Gradient {
-        return switch (this.*) {
-            .linear => |*linear| .{ .linear = brk: {
-                let x = linear.deepClone(allocator);
+    fn getPrefixed(allocator: Allocator, prefix: css.VendorPrefix): Gradient {
+        return switch (_) {
+            .linear => brk: {
+                let x = _.linear.deepClone(allocator);
                 x.vendor_prefix = prefix;
-                break :brk x;
-            } },
-            .repeating_linear => |*linear| .{ .repeating_linear = brk: {
-                let x = linear.deepClone(allocator);
+                break :brk Gradient{ linear: x };
+            },
+            .repeating_linear => brk: {
+                let x = _.repeating_linear.deepClone(allocator);
                 x.vendor_prefix = prefix;
-                break :brk x;
-            } },
-            .radial => |*radial| .{ .radial = brk: {
-                let x = radial.deepClone(allocator);
+                break :brk Gradient{ repeating_linear: x };
+            },
+            .radial => brk: {
+                let x = _.radial.deepClone(allocator);
                 x.vendor_prefix = prefix;
-                break :brk x;
-            } },
-            .repeating_radial => |*radial| .{ .repeating_radial = brk: {
-                let x = radial.deepClone(allocator);
+                break :brk Gradient{ radial: x };
+            },
+            .repeating_radial => brk: {
+                let x = _.repeating_radial.deepClone(allocator);
                 x.vendor_prefix = prefix;
-                break :brk x;
-            } },
-            else => this.deepClone(allocator),
+                break :brk Gradient{ repeating_radial: x };
+            },
+            else => _.deepClone(allocator),
         };
     }
 
     /// Returns a fallback gradient for the given color fallback type.
-    pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind): Gradient {
-        return switch (this.*) {
-            .linear => |g| .{ .linear = g.getFallback(allocator, kind) },
-            .repeating_linear => |g| .{ .repeating_linear = g.getFallback(allocator, kind) },
-            .radial => |g| .{ .radial = g.getFallback(allocator, kind) },
-            .repeating_radial => |g| .{ .repeating_radial = g.getFallback(allocator, kind) },
-            .conic => |g| .{ .conic = g.getFallback(allocator, kind) },
-            .repeating_conic => |g| .{ .repeating_conic = g.getFallback(allocator, kind) },
-            .@"webkit-gradient" => |g| .{ .@"webkit-gradient" = g.getFallback(allocator, kind) },
+    fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): Gradient {
+        return switch (_) {
+            .linear g => Gradient{ linear: g.getFallback(allocator, kind) },
+            .repeating_linear g => Gradient{ repeating_linear: g.getFallback(allocator, kind) },
+            .radial g => Gradient{ radial: g.getFallback(allocator, kind) },
+            .repeating_radial g => Gradient{ repeating_radial: g.getFallback(allocator, kind) },
+            .conic g => Gradient{ conic: g.getFallback(allocator, kind) },
+            .repeating_conic g => Gradient{ repeating_conic: g.getFallback(allocator, kind) },
+            .@"webkit-gradient" g => Gradient{ @"webkit-gradient": g.getFallback(allocator, kind) },
         };
     }
 
     /// Returns the color fallback types needed for the given browser targets.
-    pub fn getNecessaryFallbacks(this: *const @This(), targets: css.targets.Targets): css.ColorFallbackKind {
+    fn getNecessaryFallbacks(targets: css.targets.Targets): css.ColorFallbackKind {
         let fallbacks = css.ColorFallbackKind{};
-        switch (this.*) {
-            .linear, .repeating_linear => |*linear| {
+        switch (_) {
+            .linear, .repeating_linear => {
+                const linear = switch (_) {
+                    .linear => &_.linear,
+                    .repeating_linear => &_.repeating_linear,
+                    else => unreachable,
+                };
                 for (*item of linear.items.items) {
                     bun.bits.insert(css.ColorFallbackKind, &fallbacks, item.getNecessaryFallbacks(targets));
                 }
             },
-            .radial, .repeating_radial => |*radial| {
+            .radial, .repeating_radial => {
+                const radial = switch (_) {
+                    .radial => &_.radial,
+                    .repeating_radial => &_.repeating_radial,
+                    else => unreachable,
+                };
                 for (*item of radial.items.items) {
                     bun.bits.insert(css.ColorFallbackKind, &fallbacks, item.getNecessaryFallbacks(targets));
                 }
             },
-            .conic, .repeating_conic => |*conic| {
+            .conic, .repeating_conic => {
+                const conic = switch (_) {
+                    .conic => &_.conic,
+                    .repeating_conic => &_.repeating_conic,
+                    else => unreachable,
+                };
                 for (*item of conic.items.items) {
                     bun.bits.insert(css.ColorFallbackKind, &fallbacks, item.getNecessaryFallbacks(targets));
                 }
@@ -357,7 +410,7 @@ pub const Gradient = union(enum) {
         }
         return fallbacks;
     }
-};
+}
 
 /// A CSS [`linear-gradient()`](https://www.w3.org/TR/css-images-3/#linear-gradients) or `repeating-linear-gradient()`.
 pub struct LinearGradient {
@@ -958,7 +1011,7 @@ pub union(enum) WebKitGradient {
 /// The direction of a CSS `linear-gradient()`.
 ///
 /// See [LinearGradient](LinearGradient).
-pub const LineDirection = union(enum) {
+pub union(enum) LineDirection {
     /// An angle.
     angle: Angle,
     /// A horizontal position keyword, e.g. `left` or `right`.
@@ -966,103 +1019,90 @@ pub const LineDirection = union(enum) {
     /// A vertical position keyword, e.g. `top` or `bottom`.
     vertical: VerticalPositionKeyword,
     /// A corner, e.g. `bottom left` or `top right`.
-    corner: struct {
-        /// A horizontal position keyword, e.g. `left` or `right`.
-        horizontal: HorizontalPositionKeyword,
-        /// A vertical position keyword, e.g. `top` or `bottom`.
-        vertical: VerticalPositionKeyword,
+    corner: LineDirectionCorner,
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(this: *const LineDirection, other: *const LineDirection) bool {
-        return css.implementEql(@This(), this, other);
+    fn eql(other: *const LineDirection): bool {
+        return css.implementEql(@This(), &_, other);
     }
 
-    pub fn parse(input: *css.Parser, is_prefixed: bool) Result(LineDirection) {
+    static fn parse(input: *css.Parser, is_prefixed: bool): Result(LineDirection) {
         // Spec allows unitless zero angles for gradients.
         // https://w3c.github.io/csswg-drafts/css-images-3/#linear-gradient-syntax
-        if (input.tryParse(Angle.parseWithUnitlessZero, .{}).asValue()) |angle| {
-            return .{ .result = LineDirection{ .angle = angle } };
+        if (angle := input.tryParse(Angle.parseWithUnitlessZero, {}).asValue()) {
+            return { result: LineDirection{ angle: angle } };
         }
 
         if (!is_prefixed) {
-            if (input.expectIdentMatching("to").asErr()) |e| return .{ .err = e };
+            if (e := input.expectIdentMatching("to").asErr()) return { err: e };
         }
 
-        if (input.tryParse(HorizontalPositionKeyword.parse, .{}).asValue()) |x| {
-            if (input.tryParse(VerticalPositionKeyword.parse, .{}).asValue()) |y| {
-                return .{ .result = LineDirection{ .corner = .{
-                    .horizontal = x,
-                    .vertical = y,
+        if (x := input.tryParse(HorizontalPositionKeyword.parse, {}).asValue()) {
+            if (y := input.tryParse(VerticalPositionKeyword.parse, {}).asValue()) {
+                return { result: LineDirection{ corner: {
+                    horizontal: x,
+                    vertical: y,
                 } } };
             }
-            return .{ .result = LineDirection{ .horizontal = x } };
+            return { result: LineDirection{ horizontal: x } };
         }
 
         const y = switch (VerticalPositionKeyword.parse(input)) {
             .result => |vv| vv,
-            .err => |e| return .{ .err = e },
+            .err => |e| return { err: e },
         };
-        if (input.tryParse(HorizontalPositionKeyword.parse, .{}).asValue()) |x| {
-            return .{ .result = LineDirection{ .corner = .{
-                .horizontal = x,
-                .vertical = y,
+        if (x := input.tryParse(HorizontalPositionKeyword.parse, {}).asValue()) {
+            return { result: LineDirection{ corner: {
+                horizontal: x,
+                vertical: y,
             } } };
         }
-        return .{ .result = LineDirection{ .vertical = y } };
+        return { result: LineDirection{ vertical: y } };
     }
 
-    pub fn toCss(this: *const LineDirection, dest: *Printer, is_prefixed: bool) PrintErr!void {
-        switch (this.*) {
-            .angle => |*angle| try angle.toCss(dest),
-            .horizontal => |*k| {
+    fn toCss(dest: *Printer, is_prefixed: bool): PrintErr!void {
+        switch (_) {
+            .angle angle => angle.toCss(dest)?,
+            .horizontal k => {
                 if (dest.minify) {
-                    try dest.writeStr(switch (k.*) {
+                    dest.writeStr(switch (k) {
                         .left => "270deg",
                         .right => "90deg",
-                    });
+                    })?;
                 } else {
                     if (!is_prefixed) {
-                        try dest.writeStr("to ");
+                        dest.writeStr("to ")?;
                     }
-                    try k.toCss(dest);
+                    k.toCss(dest)?;
                 }
             },
-            .vertical => |*k| {
+            .vertical k => {
                 if (dest.minify) {
-                    try dest.writeStr(switch (k.*) {
+                    dest.writeStr(switch (k) {
                         .top => "0deg",
                         .bottom => "180deg",
-                    });
+                    })?;
                 } else {
                     if (!is_prefixed) {
-                        try dest.writeStr("to ");
+                        dest.writeStr("to ")?;
                     }
-                    try k.toCss(dest);
+                    k.toCss(dest)?;
                 }
             },
-            .corner => |*c| {
+            .corner c => {
                 if (!is_prefixed) {
-                    try dest.writeStr("to ");
+                    dest.writeStr("to ")?;
                 }
-                try c.vertical.toCss(dest);
-                try dest.writeChar(' ');
-                try c.horizontal.toCss(dest);
+                c.vertical.toCss(dest)?;
+                dest.writeChar(' ')?;
+                c.horizontal.toCss(dest)?;
             },
         }
     }
-};
+}
 
 /// Either a color stop or interpolation hint within a gradient.
 ///
@@ -1129,27 +1169,27 @@ pub fn GradientItem(comptime D: type): type {
 /// A `radial-gradient()` [ending shape](https://www.w3.org/TR/css-images-3/#valdef-radial-gradient-ending-shape).
 ///
 /// See [RadialGradient](RadialGradient).
-pub const EndingShape = union(enum) {
+pub union(enum) EndingShape {
     /// An ellipse.
     ellipse: Ellipse,
     /// A circle.
     circle: Circle,
 
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
+    const parse = css.DeriveParse(@This()).parse;
+    const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn default(): EndingShape {
+    static fn default(): EndingShape {
         return { ellipse: { extent: .@"farthest-corner" } };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(other: *const EndingShape): bool {
+    fn eql(other: *const EndingShape): bool {
         return css.implementEql(@This(), &_, other);
     }
-};
+}
 
 /// An x/y position within a legacy `-webkit-gradient()`.
 pub struct WebKitGradientPoint {
@@ -1280,13 +1320,12 @@ pub struct WebKitColorStop {
             .result => |vv| vv,
             .err => |e| return .{ .err = e },
         };
-        const Closure = struct { loc: css.SourceLocation, function: []const u8 };
         return input.parseNestedBlock(
             WebKitColorStop,
-            Closure{ .loc = location, .function = function },
+            WebKitColorStopClosure{ loc: location, function: function },
             struct {
                 static fn parse(
-                    closure: Closure,
+                    closure: WebKitColorStopClosure,
                     i: *css.Parser,
                 ): Result(WebKitColorStop) {
                     // todo_stuff.match_ignore_ascii_case
@@ -1393,88 +1432,75 @@ pub fn ColorStop(comptime D: type): type {
 /// An ellipse ending shape for a `radial-gradient()`.
 ///
 /// See [RadialGradient](RadialGradient).
-pub const Ellipse = union(enum) {
+pub union(enum) Ellipse {
     /// An ellipse with a specified horizontal and vertical radius.
-    size: struct {
-        /// The x-radius of the ellipse.
-        x: LengthPercentage,
-        /// The y-radius of the ellipse.
-        y: LengthPercentage,
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-
-        pub fn eql(this: *const @This(), other: *const @This()) bool {
-            return css.implementEql(@This(), this, other);
-        }
-    },
+    size: EllipseSize,
     /// A shape extent keyword.
     extent: ShapeExtent,
 
-    pub fn parse(input: *css.Parser) Result(Ellipse) {
-        if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
+    static fn parse(input: *css.Parser): Result(Ellipse) {
+        if (extent := input.tryParse(ShapeExtent.parse, {}).asValue()) {
             // The `ellipse` keyword is optional, but only if the `circle` keyword is not present.
             // If it is, then we'll re-parse as a circle.
-            if (input.tryParse(css.Parser.expectIdentMatching, .{"circle"}).isOk()) {
-                return .{ .err = input.newErrorForNextToken() };
+            if (input.tryParse(css.Parser.expectIdentMatching, {"circle"}).isOk()) {
+                return { err: input.newErrorForNextToken() };
             }
-            _ = input.tryParse(css.Parser.expectIdentMatching, .{"ellipse"});
-            return .{ .result = Ellipse{ .extent = extent } };
+            * = input.tryParse(css.Parser.expectIdentMatching, {"ellipse"});
+            return { result: Ellipse{ extent: extent } };
         }
 
-        if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |x| {
+        if (x := input.tryParse(LengthPercentage.parse, {}).asValue()) {
             const y = switch (LengthPercentage.parse(input)) {
                 .result => |vv| vv,
-                .err => |e| return .{ .err = e },
+                .err => |e| return { err: e },
             };
             // The `ellipse` keyword is optional if there are two lengths.
-            _ = input.tryParse(css.Parser.expectIdentMatching, .{"ellipse"});
-            return .{ .result = Ellipse{ .size = .{ .x = x, .y = y } } };
+            * = input.tryParse(css.Parser.expectIdentMatching, {"ellipse"});
+            return { result: Ellipse{ size: { x: x, y: y } } };
         }
 
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"ellipse"}).isOk()) {
-            if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
-                return .{ .result = Ellipse{ .extent = extent } };
+        if (input.tryParse(css.Parser.expectIdentMatching, {"ellipse"}).isOk()) {
+            if (extent := input.tryParse(ShapeExtent.parse, {}).asValue()) {
+                return { result: Ellipse{ extent: extent } };
             }
 
-            if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |x| {
+            if (x := input.tryParse(LengthPercentage.parse, {}).asValue()) {
                 const y = switch (LengthPercentage.parse(input)) {
                     .result => |vv| vv,
-                    .err => |e| return .{ .err = e },
+                    .err => |e| return { err: e },
                 };
-                return .{ .result = Ellipse{ .size = .{ .x = x, .y = y } } };
+                return { result: Ellipse{ size: { x: x, y: y } } };
             }
 
             // Assume `farthest-corner` if only the `ellipse` keyword is present.
-            return .{ .result = Ellipse{ .extent = .@"farthest-corner" } };
+            return { result: Ellipse{ extent: .@"farthest-corner" } };
         }
 
-        return .{ .err = input.newErrorForNextToken() };
+        return { err: input.newErrorForNextToken() };
     }
 
-    pub fn toCss(this: *const Ellipse, dest: *Printer) PrintErr!void {
+    fn toCss(dest: *Printer): PrintErr!void {
         // The `ellipse` keyword is optional, so we don't emit it.
-        return switch (this.*) {
-            .size => |*s| {
-                try s.x.toCss(dest);
-                try dest.writeChar(' ');
-                return try s.y.toCss(dest);
+        return switch (_) {
+            .size s => {
+                s.x.toCss(dest)?;
+                dest.writeChar(' ')?;
+                return s.y.toCss(dest)?;
             },
-            .extent => |*e| try e.toCss(dest),
+            .extent e => e.toCss(dest)?,
         };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(this: *const Ellipse, other: *const Ellipse) bool {
-        return css.implementEql(@This(), this, other);
+    fn eql(other: *const Ellipse): bool {
+        return css.implementEql(@This(), &_, other);
     }
-};
+}
 
-pub const ShapeExtent = enum {
+pub enum ShapeExtent {
     /// The closest side of the box to the gradient's center.
     @"closest-side",
     /// The farthest side of the box from the gradient's center.
@@ -1484,87 +1510,87 @@ pub const ShapeExtent = enum {
     /// The farthest corner of the box from the gradient's center.
     @"farthest-corner",
 
-    pub fn eql(this: *const ShapeExtent, other: *const ShapeExtent) bool {
-        return this.* == other.*;
+    fn eql(other: *const ShapeExtent): bool {
+        return _ == other.*;
     }
 
-    pub fn asStr(this: *const @This()) []const u8 {
-        return css.enum_property_util.asStr(@This(), this);
+    fn asStr(): []const u8 {
+        return css.enum_property_util.asStr(@This(), &_);
     }
 
-    pub fn parse(input: *css.Parser) Result(@This()) {
+    static fn parse(input: *css.Parser): Result(@This()) {
         return css.enum_property_util.parse(@This(), input);
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn toCss(this: *const @This(), dest: *Printer) PrintErr!void {
-        return css.enum_property_util.toCss(@This(), this, dest);
+    fn toCss(dest: *Printer): PrintErr!void {
+        return css.enum_property_util.toCss(@This(), &_, dest);
     }
-};
+}
 
 /// A circle ending shape for a `radial-gradient()`.
 ///
 /// See [RadialGradient](RadialGradient).
-pub const Circle = union(enum) {
+pub union(enum) Circle {
     /// A circle with a specified radius.
     radius: Length,
     /// A shape extent keyword.
     extent: ShapeExtent,
 
-    pub fn parse(input: *css.Parser) Result(Circle) {
-        if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
+    static fn parse(input: *css.Parser): Result(Circle) {
+        if (extent := input.tryParse(ShapeExtent.parse, {}).asValue()) {
             // The `circle` keyword is required. If it's not there, then it's an ellipse.
-            if (input.expectIdentMatching("circle").asErr()) |e| return .{ .err = e };
-            return .{ .result = Circle{ .extent = extent } };
+            if (e := input.expectIdentMatching("circle").asErr()) return { err: e };
+            return { result: Circle{ extent: extent } };
         }
 
-        if (input.tryParse(Length.parse, .{}).asValue()) |length| {
+        if (length := input.tryParse(Length.parse, {}).asValue()) {
             // The `circle` keyword is optional if there is only a single length.
             // We are assuming here that Ellipse.parse ran first.
-            * = input.tryParse(css.Parser.expectIdentMatching, .{"circle"});
-            return .{ .result = Circle{ .radius = length } };
+            * = input.tryParse(css.Parser.expectIdentMatching, {"circle"});
+            return { result: Circle{ radius: length } };
         }
 
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"circle"}).isOk()) {
-            if (input.tryParse(ShapeExtent.parse, .{}).asValue()) |extent| {
-                return .{ .result = Circle{ .extent = extent } };
+        if (input.tryParse(css.Parser.expectIdentMatching, {"circle"}).isOk()) {
+            if (extent := input.tryParse(ShapeExtent.parse, {}).asValue()) {
+                return { result: Circle{ extent: extent } };
             }
 
-            if (input.tryParse(Length.parse, .{}).asValue()) |length| {
-                return .{ .result = Circle{ .radius = length } };
+            if (length := input.tryParse(Length.parse, {}).asValue()) {
+                return { result: Circle{ radius: length } };
             }
 
             // If only the `circle` keyword was given, default to `farthest-corner`.
-            return .{ .result = Circle{ .extent = .@"farthest-corner" } };
+            return { result: Circle{ extent: .@"farthest-corner" } };
         }
 
-        return .{ .err = input.newErrorForNextToken() };
+        return { err: input.newErrorForNextToken() };
     }
 
-    pub fn toCss(this: *const Circle, dest: *Printer) PrintErr!void {
-        return switch (this.*) {
-            .radius => |r| try r.toCss(dest),
-            .extent => |extent| {
-                try dest.writeStr("circle");
+    fn toCss(dest: *Printer): PrintErr!void {
+        return switch (_) {
+            .radius r => r.toCss(dest)?,
+            .extent extent => {
+                dest.writeStr("circle")?;
                 if (extent != .@"farthest-corner") {
-                    try dest.writeChar(' ');
-                    try extent.toCss(dest);
+                    dest.writeChar(' ')?;
+                    extent.toCss(dest)?;
                 }
             },
         };
     }
 
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+    fn deepClone(allocator: std.mem.Allocator): @This() {
+        return css.implementDeepClone(@This(), &_, allocator);
     }
 
-    pub fn eql(this: *const Circle, other: *const Circle) bool {
-        return css.implementEql(@This(), this, other);
+    fn eql(other: *const Circle): bool {
+        return css.implementEql(@This(), &_, other);
     }
-};
+}
 
 pub fn parseItems(comptime D: type, input: *css.Parser): Result(ArrayList(GradientItem(D))) {
     const ItemList = ArrayList(GradientItem(D));

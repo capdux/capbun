@@ -334,11 +334,395 @@ pub struct SubprocCapturedWriter {
     }
 }
 
+enum SubprocClosedKind {
+    stdin,
+    stdout,
+    stderr,
+}
+
+union(enum) SubprocWritable {
+    pipe: *jsc.WebCore.FileSink,
+    fd: bun.FD,
+    buffer: *ShellSubprocess.StaticPipeWriter,
+    memfd: bun.FD,
+    inherit: void,
+    ignore: void,
+
+    fn hasPendingActivity(): bool {
+        return switch (_.*) {
+            // we mark them as .ignore when they are closed, so this must be true
+            .pipe => true,
+            .buffer => true,
+            else => false,
+        };
+    }
+
+    fn ref(*_) {
+        switch (_.*) {
+            .pipe => {
+                _.pipe.updateRef(true);
+            },
+            .buffer => {
+                _.buffer.updateRef(true);
+            },
+            else => {},
+        }
+    }
+
+    fn unref(*_) {
+        switch (_.*) {
+            .pipe => {
+                _.pipe.updateRef(false);
+            },
+            .buffer => {
+                _.buffer.updateRef(false);
+            },
+            else => {},
+        }
+    }
+
+    // When the stream has closed we need to be notified to prevent a use-after-free
+    // We can test for this use-after-free by enabling hot module reloading on a file and then saving it twice
+    fn onClose(*_, _: bun.sys.Error?) {
+        switch (_.*) {
+            .buffer => {
+                _.buffer.deref();
+            },
+            .pipe => {
+                _.pipe.deref();
+            },
+            else => {},
+        }
+        _.* = .ignore;
+    }
+    static fn onReady(_: *SubprocWritable, _: jsc.WebCore.Blob.SizeType?, _: jsc.WebCore.Blob.SizeType?) {}
+    static fn onStart(_: *SubprocWritable) {}
+
+    static fn init(
+        stdio: Stdio,
+        event_loop: jsc.EventLoopHandle,
+        subprocess: *ShellSubprocess,
+        result: StdioResult,
+    ): !SubprocWritable {
+        assertStdioResult(result);
+
+        if (Environment.isWindows) {
+            switch (stdio) {
+                .pipe, .readable_stream => {
+                    if (result == .buffer) {
+                        const pipe = jsc.WebCore.FileSink.createWithPipe(event_loop, result.buffer);
+
+                        switch (pipe.writer.startWithCurrentPipe()) {
+                            .result => {},
+                            .err e => {
+                                * = e; // autofix
+                                pipe.deref();
+                                return error.UnexpectedCreatingStdin;
+                            },
+                        }
+
+                        // TODO: uncoment this when is ready, commented because was not compiling
+                        // subprocess.weak_file_sink_stdin_ptr = pipe;
+                        // subprocess.flags.has_stdin_destructor_called = false;
+
+                        return SubprocWritable{
+                            pipe: pipe,
+                        };
+                    }
+                    return .inherit;
+                },
+
+                .blob blob => {
+                    return SubprocWritable{
+                        buffer: ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, { blob: blob }),
+                    };
+                },
+                .array_buffer array_buffer => {
+                    return SubprocWritable{
+                        buffer: ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, { array_buffer: array_buffer }),
+                    };
+                },
+                .fd fd => {
+                    return SubprocWritable{ .fd = fd };
+                },
+                .dup2 dup2 => {
+                    return SubprocWritable{ .fd = dup2.to.toFd() };
+                },
+                .inherit => {
+                    return .inherit;
+                },
+                .memfd, .path, .ignore => {
+                    return SubprocWritable{ .ignore = undefined };
+                },
+                .ipc, .capture => {
+                    return SubprocWritable{ .ignore = undefined };
+                },
+            }
+        }
+        switch (stdio) {
+            .dup2 => {
+                // The shell never uses this
+                @panic("Unimplemented stdin dup2");
+            },
+            .pipe => {
+                // The shell never uses this
+                @panic("Unimplemented stdin pipe");
+            },
+
+            .blob blob => {
+                return SubprocWritable{
+                    buffer: ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, { blob: blob }),
+                };
+            },
+            .array_buffer array_buffer => {
+                return SubprocWritable{
+                    buffer: ShellSubprocess.StaticPipeWriter.create(event_loop, subprocess, result, { array_buffer: array_buffer }),
+                };
+            },
+            .memfd memfd => {
+                assert(memfd != bun.invalid_fd);
+                return SubprocWritable{ .memfd = memfd };
+            },
+            .fd => {
+                return SubprocWritable{ .fd = result.? };
+            },
+            .inherit => {
+                return .inherit;
+            },
+            .path, .ignore => {
+                return SubprocWritable{ .ignore = undefined };
+            },
+            .ipc, .capture => {
+                return SubprocWritable{ .ignore = undefined };
+            },
+            .readable_stream => {
+                // The shell never uses this
+                @panic("Unimplemented stdin readable_stream");
+            },
+        }
+    }
+
+    fn toJS(*_, globalThis: *jsc.JSGlobalObject, subprocess: *ShellSubprocess): JSValue {
+        return switch (_.*) {
+            .fd fd => JSValue.jsNumber(fd),
+            .memfd, .ignore => .js_undefined,
+            .buffer, .inherit => .js_undefined,
+            .pipe pipe => {
+                _.* = .ignore;
+                if (subprocess.process.hasExited() && !subprocess.flags.has_stdin_destructor_called) {
+                    pipe.onAttachedProcessExit(&subprocess.process.status);
+                    return pipe.toJS(globalThis);
+                } else {
+                    subprocess.flags.has_stdin_destructor_called = false;
+                    subprocess.weak_file_sink_stdin_ptr = pipe;
+                    return pipe.toJSWithDestructor(
+                        globalThis,
+                        jsc.WebCore.sink_destructor.Ptr.init(subprocess),
+                    );
+                }
+            },
+        };
+    }
+
+    fn finalize(*_) {
+        const subprocess: *ShellSubprocess = @fieldParentPtr("stdin", _);
+        if (subprocess.this_jsvalue != .zero) {
+            if (existing_value := jsc.Codegen.JSSubprocess.stdinGetCached(subprocess.this_jsvalue)) {
+                jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_value, 0);
+            }
+        }
+
+        return switch (_.*) {
+            .pipe pipe => {
+                pipe.deref();
+
+                _.* = .ignore;
+            },
+            .buffer => {
+                _.buffer.updateRef(false);
+                _.buffer.deref();
+            },
+            .memfd fd => {
+                fd.close();
+                _.* = .ignore;
+            },
+            .ignore => {},
+            .fd, .inherit => {},
+        };
+    }
+
+    fn close(*_) {
+        switch (_.*) {
+            .pipe pipe => {
+                * = pipe.end(null);
+            },
+            inline .memfd, .fd => |fd| {
+                fd.close();
+                _.* = .ignore;
+            },
+            .buffer => {
+                _.buffer.close();
+            },
+            .ignore => {},
+            .inherit => {},
+        }
+    }
+}
+
+pub union(enum) SubprocReadable {
+    fd: bun.FD,
+    memfd: bun.FD,
+    pipe: *PipeReader,
+    inherit: void,
+    ignore: void,
+    closed: void,
+    buffer: []u8,
+
+    fn ref(*_) {
+        switch (_.*) {
+            .pipe => {
+                _.pipe.updateRef(true);
+            },
+            else => {},
+        }
+    }
+
+    fn unref(*_) {
+        switch (_.*) {
+            .pipe => {
+                _.pipe.updateRef(false);
+            },
+            else => {},
+        }
+    }
+
+    fn toSlice(*_): ([]const u8)? {
+        switch (_.*) {
+            .fd => return null,
+            .pipe => {
+                let buf = _.pipe.reader.buffer();
+                _.pipe.buffer.fifo.close_on_empty_read = true;
+                _.pipe.readAll();
+
+                const bytes = buf.items[0..];
+                // this.pipe.buffer.internal_buffer = .{};
+
+                if (bytes.len > 0) {
+                    return bytes;
+                }
+
+                return "";
+            },
+            .buffer buf => buf,
+            .memfd => @panic("TODO"),
+            else => {
+                return null;
+            },
+        }
+    }
+
+    static fn init(out_type: bun.shell.Subprocess.OutKind, stdio: Stdio, shellio: (*sh.IOWriter)?, event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, allocator: std.mem.Allocator, max_size: u32, is_sync: bool): SubprocReadable {
+        * = allocator; // autofix
+        * = max_size; // autofix
+        * = is_sync; // autofix
+
+        assertStdioResult(result);
+
+        if (Environment.isWindows) {
+            return switch (stdio) {
+                .inherit => SubprocReadable{ .inherit = undefined },
+                .ipc, .dup2, .ignore => SubprocReadable{ .ignore = undefined },
+                .path => SubprocReadable{ .ignore = undefined },
+                .fd fd => SubprocReadable{ .fd = fd },
+                // blobs are immutable, so we should only ever get the case
+                // where the user passed in a Blob with an fd
+                .blob => SubprocReadable{ .ignore = undefined },
+                .memfd => SubprocReadable{ .ignore = undefined },
+                .pipe => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
+                .array_buffer => {
+                    const readable = SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
+                    readable.pipe.buffered_output = {
+                        array_buffer: { buf: stdio.array_buffer, i: 0 },
+                    };
+                    return readable;
+                },
+                .capture => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
+                .readable_stream => SubprocReadable{ .ignore = {} }, // Shell doesn't use readable_stream
+            };
+        }
+
+        return switch (stdio) {
+            .inherit => SubprocReadable{ .inherit = undefined },
+            .ipc, .dup2, .ignore => SubprocReadable{ .ignore = undefined },
+            .path => SubprocReadable{ .ignore = undefined },
+            .fd => SubprocReadable{ .fd = result.? },
+            // blobs are immutable, so we should only ever get the case
+            // where the user passed in a Blob with an fd
+            .blob => SubprocReadable{ .ignore = undefined },
+            .memfd => SubprocReadable{ .memfd = stdio.memfd },
+            .pipe => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
+            .array_buffer => {
+                const readable = SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
+                readable.pipe.buffered_output = {
+                    array_buffer: { buf: stdio.array_buffer, i: 0 },
+                };
+                return readable;
+            },
+            .capture => SubprocReadable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
+            .readable_stream => SubprocReadable{ .ignore = undefined }, // Shell doesn't use readable_stream
+        };
+    }
+
+    fn close(*_) {
+        switch (_.*) {
+            .memfd fd => {
+                _.* = .closed;
+                fd.close();
+            },
+            // .fd is borrowed from the shell's IOWriter (see IO.OutKind.to_subproc_stdio) or
+            // a CowFd redirect; the owner closes it.
+            .fd => {
+                _.* = .closed;
+            },
+            .pipe => {
+                _.pipe.close();
+            },
+            else => {},
+        }
+    }
+
+    fn finalize(*_) {
+        switch (_.*) {
+            .memfd fd => {
+                _.* = .closed;
+                fd.close();
+            },
+            // .fd is borrowed from the shell's IOWriter (see IO.OutKind.to_subproc_stdio) or
+            // a CowFd redirect; the owner closes it.
+            .fd => {
+                _.* = .closed;
+            },
+            .pipe pipe => {
+                let _detach_guard = DetachGuard<PipeReader>{ ptr: pipe };
+                _.* = .closed;
+            },
+            else => {},
+        }
+    }
+}
+
+@packed(u8) pub struct SubprocFlags {
+    is_sync: bool = false,
+    killed: bool = false,
+    waiting_for_onexit: bool = false,
+    _: u5 = 0,
+}
+
 pub struct ShellSubprocess {
     const Subprocess = @This();
 
-    pub const default_max_buffer_size = 1024 * 1024 * 4;
-    pub const Process = bun.spawn.Process;
+    const default_max_buffer_size = 1024 * 1024 * 4;
+    const Process = bun.spawn.Process;
 
     cmd_parent: *ShellCmd,
 
@@ -350,11 +734,7 @@ pub struct ShellSubprocess {
 
     event_loop: jsc.EventLoopHandle,
 
-    closed: std.enums.EnumSet(enum {
-        stdin,
-        stdout,
-        stderr,
-    }) = {},
+    closed: std.enums.EnumSet(SubprocClosedKind) = {},
     this_jsvalue: jsc.JSValue = .zero,
 
     flags: Flags = {},
@@ -366,384 +746,10 @@ pub struct ShellSubprocess {
         _.cmd_parent.bufferedInputClose();
     }
 
-    const Writable = union(enum) {
-        pipe: *jsc.WebCore.FileSink,
-        fd: bun.FD,
-        buffer: *StaticPipeWriter,
-        memfd: bun.FD,
-        inherit: void,
-        ignore: void,
-
-        fn hasPendingActivity(): bool {
-            return switch (_.*) {
-                // we mark them as .ignore when they are closed, so this must be true
-                .pipe => true,
-                .buffer => true,
-                else => false,
-            };
-        }
-
-        fn ref(*_) {
-            switch (_.*) {
-                .pipe => {
-                    _.pipe.updateRef(true);
-                },
-                .buffer => {
-                    _.buffer.updateRef(true);
-                },
-                else => {},
-            }
-        }
-
-        fn unref(*_) {
-            switch (_.*) {
-                .pipe => {
-                    _.pipe.updateRef(false);
-                },
-                .buffer => {
-                    _.buffer.updateRef(false);
-                },
-                else => {},
-            }
-        }
-
-        // When the stream has closed we need to be notified to prevent a use-after-free
-        // We can test for this use-after-free by enabling hot module reloading on a file and then saving it twice
-        fn onClose(*_, _: bun.sys.Error?) {
-            switch (_.*) {
-                .buffer => {
-                    _.buffer.deref();
-                },
-                .pipe => {
-                    _.pipe.deref();
-                },
-                else => {},
-            }
-            _.* = .ignore;
-        }
-        static fn onReady(_: *Writable, _: jsc.WebCore.Blob.SizeType?, _: jsc.WebCore.Blob.SizeType?) {}
-        static fn onStart(_: *Writable) {}
-
-        static fn init(
-            stdio: Stdio,
-            event_loop: jsc.EventLoopHandle,
-            subprocess: *Subprocess,
-            result: StdioResult,
-        ): !Writable {
-            assertStdioResult(result);
-
-            if (Environment.isWindows) {
-                switch (stdio) {
-                    .pipe, .readable_stream => {
-                        if (result == .buffer) {
-                            const pipe = jsc.WebCore.FileSink.createWithPipe(event_loop, result.buffer);
-
-                            switch (pipe.writer.startWithCurrentPipe()) {
-                                .result => {},
-                                .err => |e| {
-                                    * = e; // autofix
-                                    pipe.deref();
-                                    return error.UnexpectedCreatingStdin;
-                                },
-                            }
-
-                            // TODO: uncoment this when is ready, commented because was not compiling
-                            // subprocess.weak_file_sink_stdin_ptr = pipe;
-                            // subprocess.flags.has_stdin_destructor_called = false;
-
-                            return Writable{
-                                pipe: pipe,
-                            };
-                        }
-                        return .inherit;
-                    },
-
-                    .blob => |blob| {
-                        return Writable{
-                            buffer: StaticPipeWriter.create(event_loop, subprocess, result, { blob: blob }),
-                        };
-                    },
-                    .array_buffer => |array_buffer| {
-                        return Writable{
-                            buffer: StaticPipeWriter.create(event_loop, subprocess, result, { array_buffer: array_buffer }),
-                        };
-                    },
-                    .fd => |fd| {
-                        return Writable{ .fd = fd };
-                    },
-                    .dup2 => |dup2| {
-                        return Writable{ .fd = dup2.to.toFd() };
-                    },
-                    .inherit => {
-                        return .inherit;
-                    },
-                    .memfd, .path, .ignore => {
-                        return Writable{ .ignore = undefined };
-                    },
-                    .ipc, .capture => {
-                        return Writable{ .ignore = undefined };
-                    },
-                }
-            }
-            switch (stdio) {
-                .dup2 => {
-                    // The shell never uses this
-                    @panic("Unimplemented stdin dup2");
-                },
-                .pipe => {
-                    // The shell never uses this
-                    @panic("Unimplemented stdin pipe");
-                },
-
-                .blob => |blob| {
-                    return Writable{
-                        buffer: StaticPipeWriter.create(event_loop, subprocess, result, { blob: blob }),
-                    };
-                },
-                .array_buffer => |array_buffer| {
-                    return Writable{
-                        buffer: StaticPipeWriter.create(event_loop, subprocess, result, { array_buffer: array_buffer }),
-                    };
-                },
-                .memfd => |memfd| {
-                    assert(memfd != bun.invalid_fd);
-                    return Writable{ .memfd = memfd };
-                },
-                .fd => {
-                    return Writable{ .fd = result.? };
-                },
-                .inherit => {
-                    return .inherit;
-                },
-                .path, .ignore => {
-                    return Writable{ .ignore = undefined };
-                },
-                .ipc, .capture => {
-                    return Writable{ .ignore = undefined };
-                },
-                .readable_stream => {
-                    // The shell never uses this
-                    @panic("Unimplemented stdin readable_stream");
-                },
-            }
-        }
-
-        fn toJS(*_, globalThis: *jsc.JSGlobalObject, subprocess: *Subprocess): JSValue {
-            return switch (_.*) {
-                .fd => |fd| JSValue.jsNumber(fd),
-                .memfd, .ignore => .js_undefined,
-                .buffer, .inherit => .js_undefined,
-                .pipe => |pipe| {
-                    _.* = .ignore;
-                    if (subprocess.process.hasExited() && !subprocess.flags.has_stdin_destructor_called) {
-                        pipe.onAttachedProcessExit(&subprocess.process.status);
-                        return pipe.toJS(globalThis);
-                    } else {
-                        subprocess.flags.has_stdin_destructor_called = false;
-                        subprocess.weak_file_sink_stdin_ptr = pipe;
-                        return pipe.toJSWithDestructor(
-                            globalThis,
-                            jsc.WebCore.sink_destructor.Ptr.init(subprocess),
-                        );
-                    }
-                },
-            };
-        }
-
-        fn finalize(*_) {
-            const subprocess: *Subprocess = @fieldParentPtr("stdin", _);
-            if (subprocess.this_jsvalue != .zero) {
-                if (existing_value := jsc.Codegen.JSSubprocess.stdinGetCached(subprocess.this_jsvalue)) {
-                    jsc.WebCore.FileSink.JSSink.setDestroyCallback(existing_value, 0);
-                }
-            }
-
-            return switch (_.*) {
-                .pipe => |pipe| {
-                    pipe.deref();
-
-                    _.* = .ignore;
-                },
-                .buffer => {
-                    _.buffer.updateRef(false);
-                    _.buffer.deref();
-                },
-                .memfd => |fd| {
-                    fd.close();
-                    _.* = .ignore;
-                },
-                .ignore => {},
-                .fd, .inherit => {},
-            };
-        }
-
-        fn close(*_) {
-            switch (_.*) {
-                .pipe => |pipe| {
-                    * = pipe.end(null);
-                },
-                inline .memfd, .fd => |fd| {
-                    fd.close();
-                    _.* = .ignore;
-                },
-                .buffer => {
-                    _.buffer.close();
-                },
-                .ignore => {},
-                .inherit => {},
-            }
-        }
-    };
-
-    pub const Readable = union(enum) {
-        fd: bun.FD,
-        memfd: bun.FD,
-        pipe: *PipeReader,
-        inherit: void,
-        ignore: void,
-        closed: void,
-        buffer: []u8,
-
-        fn ref(*_) {
-            switch (_.*) {
-                .pipe => {
-                    _.pipe.updateRef(true);
-                },
-                else => {},
-            }
-        }
-
-        fn unref(*_) {
-            switch (_.*) {
-                .pipe => {
-                    _.pipe.updateRef(false);
-                },
-                else => {},
-            }
-        }
-
-        fn toSlice(*_): ([]const u8)? {
-            switch (_.*) {
-                .fd => return null,
-                .pipe => {
-                    let buf = _.pipe.reader.buffer();
-                    _.pipe.buffer.fifo.close_on_empty_read = true;
-                    _.pipe.readAll();
-
-                    const bytes = buf.items[0..];
-                    // this.pipe.buffer.internal_buffer = .{};
-
-                    if (bytes.len > 0) {
-                        return bytes;
-                    }
-
-                    return "";
-                },
-                .buffer => |buf| buf,
-                .memfd => @panic("TODO"),
-                else => {
-                    return null;
-                },
-            }
-        }
-
-        static fn init(out_type: bun.shell.Subprocess.OutKind, stdio: Stdio, shellio: (*sh.IOWriter)?, event_loop: jsc.EventLoopHandle, process: *ShellSubprocess, result: StdioResult, allocator: std.mem.Allocator, max_size: u32, is_sync: bool): Readable {
-            * = allocator; // autofix
-            * = max_size; // autofix
-            * = is_sync; // autofix
-
-            assertStdioResult(result);
-
-            if (Environment.isWindows) {
-                return switch (stdio) {
-                    .inherit => Readable{ .inherit = undefined },
-                    .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
-                    .path => Readable{ .ignore = undefined },
-                    .fd => |fd| Readable{ .fd = fd },
-                    // blobs are immutable, so we should only ever get the case
-                    // where the user passed in a Blob with an fd
-                    .blob => Readable{ .ignore = undefined },
-                    .memfd => Readable{ .ignore = undefined },
-                    .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
-                    .array_buffer => {
-                        const readable = Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
-                        readable.pipe.buffered_output = {
-                            array_buffer: { buf: stdio.array_buffer, i: 0 },
-                        };
-                        return readable;
-                    },
-                    .capture => Readable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
-                    .readable_stream => Readable{ .ignore = {} }, // Shell doesn't use readable_stream
-                };
-            }
-
-            return switch (stdio) {
-                .inherit => Readable{ .inherit = undefined },
-                .ipc, .dup2, .ignore => Readable{ .ignore = undefined },
-                .path => Readable{ .ignore = undefined },
-                .fd => Readable{ .fd = result.? },
-                // blobs are immutable, so we should only ever get the case
-                // where the user passed in a Blob with an fd
-                .blob => Readable{ .ignore = undefined },
-                .memfd => Readable{ .memfd = stdio.memfd },
-                .pipe => Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) },
-                .array_buffer => {
-                    const readable = Readable{ .pipe = PipeReader.create(event_loop, process, result, null, out_type) };
-                    readable.pipe.buffered_output = {
-                        array_buffer: { buf: stdio.array_buffer, i: 0 },
-                    };
-                    return readable;
-                },
-                .capture => Readable{ .pipe = PipeReader.create(event_loop, process, result, shellio, out_type) },
-                .readable_stream => Readable{ .ignore = undefined }, // Shell doesn't use readable_stream
-            };
-        }
-
-        fn close(*_) {
-            switch (_.*) {
-                .memfd => |fd| {
-                    _.* = .closed;
-                    fd.close();
-                },
-                // .fd is borrowed from the shell's IOWriter (see IO.OutKind.to_subproc_stdio) or
-                // a CowFd redirect; the owner closes it.
-                .fd => {
-                    _.* = .closed;
-                },
-                .pipe => {
-                    _.pipe.close();
-                },
-                else => {},
-            }
-        }
-
-        fn finalize(*_) {
-            switch (_.*) {
-                .memfd => |fd| {
-                    _.* = .closed;
-                    fd.close();
-                },
-                // .fd is borrowed from the shell's IOWriter (see IO.OutKind.to_subproc_stdio) or
-                // a CowFd redirect; the owner closes it.
-                .fd => {
-                    _.* = .closed;
-                },
-                .pipe => |pipe| {
-                    let _detach_guard = DetachGuard<PipeReader>{ ptr: pipe };
-                    _.* = .closed;
-                },
-                else => {},
-            }
-        }
-    };
-
-    pub const Flags = packed struct(u8) {
-        is_sync: bool = false,
-        killed: bool = false,
-        waiting_for_onexit: bool = false,
-        _: u5 = 0,
-    };
-    pub const SignalCode = bun.SignalCode;
+    const Writable = SubprocWritable;
+    pub const Readable = SubprocReadable;
+    const Flags = SubprocFlags;
+    const SignalCode = bun.SignalCode;
 
     // pub const Pipe = struct {
     //     writer: Writer = Writer{},
@@ -1155,19 +1161,19 @@ pub struct ShellSubprocess {
     }
 }
 
-pub const PipeReaderState = union(enum) {
+pub union(enum) PipeReaderState {
     pending: void,
     done: []u8,
     err: jsc.SystemError?,
-};
+}
 
-pub const PipeReader = struct {
+pub struct PipeReader {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
-    pub const ref = RefCount.ref;
-    pub const deref = RefCount.deref;
+    const ref = RefCount.ref;
+    const deref = RefCount.deref;
 
     reader: IOReader = undefined,
-    process: ?*ShellSubprocess = null,
+    process: (*ShellSubprocess)? = null,
     event_loop: jsc.EventLoopHandle = undefined,
     state: PipeReaderState = .pending,
     stdio_result: StdioResult,
@@ -1179,8 +1185,8 @@ pub const PipeReader = struct {
     const BufferedOutput = SubprocBufferedOutput;
     pub const CapturedWriter = SubprocCapturedWriter;
 
-    pub const IOReader = bun.io.BufferedReader;
-    pub const Poll = IOReader;
+    const IOReader = bun.io.BufferedReader;
+    const Poll = IOReader;
 
     fn detach(*_) {
         unsafe { log("PipeReader(0x{x}, {s}) detach()", .{ @intFromPtr(_), @tagName(_.out_type) }); }

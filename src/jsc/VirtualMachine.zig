@@ -96,6 +96,25 @@ pub const bun = @import("bun");
 pub const install_mod = @import("../install/install.zig");
 pub const url_mod = @import("../url/url.zig");
 pub const node_cluster_binding = @import("../runtime/node/node_cluster_binding.zig");
+pub const GCLevel = enum(u3) {
+    none = 0,
+    mild = 1,
+    aggressive = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const PrintErrorMode = enum {
+    js,
+    zig_exception,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const EntryPointResult = struct {
     value: jsc.Strong.Optional = .empty,
     cjs_set_value: bool = false,
@@ -704,6 +723,22 @@ pub fn load(self: *MacroEntryPointLoader) void {
     }
 };
 
+pub const RemapCacheState = union(enum) {
+    none: void,
+    ism: SourceMap.InternalSourceMap,
+    absent: void,
+};
+
+pub const IPCWaiting = struct {
+    fd: bun.FD,
+    mode: IPC.Mode,
+};
+
+pub const IPCInstanceUnion = union(enum) {
+    waiting: IPCWaiting,
+    initialized: *IPCInstance,
+};
+
 pub const IPCInstance = struct {
     globalThis: *JSGlobalObject,
     group: if (Environment.isPosix) *uws.SocketGroup else void,
@@ -820,11 +855,6 @@ pub export var Bun__defaultRemainingRunsUntilSkipReleaseAccess: c_int = 10;
 pub var synthetic_allocation_limit: usize = std.math.maxInt(u32);
 pub var string_allocation_limit: usize = std.math.maxInt(u32);
 pub threadlocal var is_bundler_thread_for_bytecode_cache: bool = false;
-pub const GCLevel = enum(u3) {
-    none = 0,
-    mild = 1,
-    aggressive = 2,
-};
 pub threadlocal var is_main_thread_vm: bool = false;
 pub const MacroMap = std.AutoArrayHashMap(i32, jsc.C.JSObjectRef);
 pub const origin_relative_epoch = (946684800 * std.time.ns_per_s);
@@ -835,19 +865,6 @@ const specifier_cache_resolver_bufs = bun.ThreadlocalBuffers(struct {
 });
 pub const main_file_name: []const u8 = "bun:main";
 pub const ExceptionList = std.array_list.Managed(api.JsException);
-const RemapCacheState = union(enum) {
-    none,
-    ism: SourceMap.InternalSourceMap,
-    absent,
-};
-const PrintErrorMode = enum { js, zig_exception };
-pub const IPCInstanceUnion = union(enum) {
-    waiting: struct {
-        fd: bun.FD,
-        mode: IPC.Mode,
-    },
-    initialized: *IPCInstance,
-};
 const PackageManager = install_mod.PackageManager;
 const URL = url_mod.URL;
 const Allocator = std.mem.Allocator;

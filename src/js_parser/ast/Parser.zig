@@ -61,12 +61,89 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const _runtime = @import("../runtime.zig");
 pub const defines = @import("../../bundler/defines.zig");
 pub const importRecord = @import("../../options_types/import_record.zig");
 pub const bun = @import("bun");
+pub const ParserOptions = struct {
+    jsx: options.JSX.Pragma,
+    ts: bool = false,
+    keep_names: bool = true,
+    ignore_dce_annotations: bool = false,
+    preserve_unused_imports_ts: bool = false,
+    use_define_for_class_fields: bool = false,
+    suppress_warnings_about_weird_code: bool = true,
+    filepath_hash_for_hmr: u32 = 0,
+    features: RuntimeFeatures = .{},
+    tree_shaking: bool = false,
+    bundle: bool = false,
+    code_splitting: bool = false,
+    package_version: []const u8 = "",
+    macro_context: *MacroContextType() = undefined,
+    warn_about_unbundled_modules: bool = true,
+    allow_unresolved: *const options.AllowUnresolved = (&options.AllowUnresolved.default),
+    module_type: options.ModuleType = .unknown,
+    output_format: options.Format = .esm,
+    transform_only: bool = false,
+    import_meta_main_value: ?bool = null,
+    lower_import_meta_main_for_node_js: bool = false,
+    framework: ?*bun.bake.Framework = null,
+    repl_mode: bool = false,
+
+pub fn hashForRuntimeTranspiler(self: ParserOptions, hasher: *std.hash.Wyhash, did_use_jsx: bool) void {
+            _ = bun.assert((!self.bundle));
+            if (did_use_jsx) {
+                if (self.jsx.parse) {
+                    _ = self.jsx.hashForRuntimeTranspiler(hasher);
+                    const jsx_optimizations: [2]bool = .{ false, false };
+                    _ = hasher.update(std.mem.asBytes((&jsx_optimizations)));
+                } else {
+                    _ = hasher.update("NO_JSX");
+                }
+            }
+            if (self.ts) {
+                _ = hasher.update("TS");
+            } else {
+                _ = hasher.update("NO_TS");
+            }
+            if (self.ignore_dce_annotations) {
+                _ = hasher.update("no_dce");
+            }
+            _ = self.features.hashForRuntimeTranspiler(hasher);
+    }
+
+pub fn runtimeMergeAdjacentExpressionStatements(self: ParserOptions) bool {
+            return self.bundle;
+    }
+
+pub fn init(jsx: options.JSX.Pragma, loader: options.Loader) ParserOptions {
+            var opts = ParserOptions{ .ts = loader.isTypeScript(), .jsx = jsx };
+            _ = &opts;
+            opts.jsx.parse = loader.isJSX();
+            return opts;
+    }
+};
+
+pub const StmtAndPart = struct {
+    stmt: Stmt,
+    part_idx: usize,
+};
+
+pub const PragmaState = packed struct {
+    seen_cjs: bool = false,
+    seen_bytecode: bool = false,
+};
+
 pub const Parser = struct {
     options: Options,
     lexer: js_lexer.Lexer,
@@ -75,7 +152,7 @@ pub const Parser = struct {
     define: *Define,
     allocator: Allocator,
 
-pub fn scanImports(self: *Parser, scan_pass: *ScanPassResult) anyerror!void {
+pub fn scanImports(self: *Parser, scan_pass: *ScanPassResult) !void {
             if ((self.options.ts and self.options.jsx.parse)) {
                 return try self._scanImports(TSXImportScanner, scan_pass);
             } else {
@@ -91,7 +168,7 @@ pub fn scanImports(self: *Parser, scan_pass: *ScanPassResult) anyerror!void {
             }
     }
 
-pub fn _scanImports(self: *Parser, comptime ParserType: type, scan_pass: *ScanPassResult) anyerror!void {
+pub fn _scanImports(self: *Parser, comptime ParserType: type, scan_pass: *ScanPassResult) !void {
             var p: ParserType = undefined;
             _ = &p;
             _ = try ParserType.init(self.allocator, self.log, self.source, self.define, self.lexer, self.options, (&p));
@@ -201,7 +278,7 @@ pub fn parse(self: *Parser) !js_ast.Result {
             }
     }
 
-pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaque, *TSXParser, []js_ast.Part) anyerror!void) anyerror!void {
+pub fn analyze(self: *Parser, context: *anyopaque, callback: *const fn (*anyopaque, *TSXParser, []js_ast.Part) anyerror!void) !void {
             var p: TSXParser = undefined;
             _ = &p;
             _ = try TSXParser.init(self.allocator, self.log, self.source, self.define, self.lexer, self.options, (&p));
@@ -548,10 +625,6 @@ var sliced = try ListManaged(Stmt).initCapacity(p.allocator, 1);
                 }
             }
             if ((((parts.items.len < 4) and (parts.items.len > 0)) and p.options.features.unwrap_commonjs_to_esm)) {
-                const StmtAndPart = struct {
-    stmt: Stmt,
-    part_idx: usize,
-};
                 const stmt_and_part: ?StmtAndPart = brk: {
                 var found: ?StmtAndPart = null;
                 _ = &found;
@@ -1013,7 +1086,7 @@ pub fn hasBunPragma(self: Parser, has_hashbang: bool) ?js_ast.Result.AlreadyBund
                 return null;
             }
             cursor = (cursor + BUN_PRAGMA.len);
-            var state: PragmaState = .{};
+            var state = PragmaState{  };
             _ = &state;
             while ((cursor < end)) : (cursor = (cursor + 1)) {
                 switch (contents[@as(usize, @intCast(cursor))]) {
@@ -1050,70 +1123,12 @@ else => {
                 return (if (state.seen_bytecode) .bytecode else .bun);
             }
     }
-    pub const Options = struct {
-        jsx: options.JSX.Pragma,
-        ts: bool = false,
-        keep_names: bool = true,
-        ignore_dce_annotations: bool = false,
-        preserve_unused_imports_ts: bool = false,
-        use_define_for_class_fields: bool = false,
-        suppress_warnings_about_weird_code: bool = true,
-        filepath_hash_for_hmr: u32 = 0,
-        features: RuntimeFeatures = .{},
-        tree_shaking: bool = false,
-        bundle: bool = false,
-        code_splitting: bool = false,
-        package_version: []const u8 = "",
-        macro_context: *MacroContextType() = undefined,
-        warn_about_unbundled_modules: bool = true,
-        allow_unresolved: *const options.AllowUnresolved = (&options.AllowUnresolved.default),
-        module_type: options.ModuleType = .unknown,
-        output_format: options.Format = .esm,
-        transform_only: bool = false,
-        import_meta_main_value: ?bool = null,
-        lower_import_meta_main_for_node_js: bool = false,
-        framework: ?*bun.bake.Framework = null,
-        repl_mode: bool = false,
-    
-    pub fn hashForRuntimeTranspiler(self: @This(), hasher: *std.hash.Wyhash, did_use_jsx: bool) void {
-                _ = bun.assert((!self.bundle));
-                if (did_use_jsx) {
-                    if (self.jsx.parse) {
-                        _ = self.jsx.hashForRuntimeTranspiler(hasher);
-                        const jsx_optimizations: [2]bool = .{ false, false };
-                        _ = hasher.update(std.mem.asBytes((&jsx_optimizations)));
-                    } else {
-                        _ = hasher.update("NO_JSX");
-                    }
-                }
-                if (self.ts) {
-                    _ = hasher.update("TS");
-                } else {
-                    _ = hasher.update("NO_TS");
-                }
-                if (self.ignore_dce_annotations) {
-                    _ = hasher.update("no_dce");
-                }
-                _ = self.features.hashForRuntimeTranspiler(hasher);
-        }
-    
-    pub fn runtimeMergeAdjacentExpressionStatements(self: @This()) bool {
-                return self.bundle;
-        }
-    
-    pub fn init(jsx: options.JSX.Pragma, loader: options.Loader) Options {
-                var opts = Options{ .ts = loader.isTypeScript(), .jsx = jsx };
-                _ = &opts;
-                opts.jsx.parse = loader.isJSX();
-                return opts;
-        }
-    };
-    const PragmaState = packed struct { seen_cjs: bool = false, seen_bytecode: bool = false };
+    pub const Options = ParserOptions;
 };
 
 pub const FakeWriter = struct {
 
-pub fn writeAll(fw: FakeWriter, data: []const u8) anyerror!usize {
+pub fn writeAll(fw: FakeWriter, data: []const u8) !usize {
             _ = &fw;
             if ((data.len == 0)) {
                 return 0;

@@ -32,6 +32,7 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
@@ -44,11 +45,627 @@ fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @Type
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
 fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const FDStdio = enum(u8) {
+    std_in = 0,
+    std_out = 1,
+    std_err = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn fd(self: FDStdio) FD {
+            return (switch (self) {
+.std_in => .stdin(),
+.std_out => .stdout(),
+.std_err => .stderr(),
+});
+    }
+
+pub fn fromInt(value: i32) ?FDStdio {
+            if (((value < 0) or (value > 2))) {
+                return null;
+            }
+            return @enumFromInt(value);
+    }
+
+pub fn toInt(self: FDStdio) i32 {
+            return @intFromEnum(self);
+    }
+};
+
+pub const FDOptional = enum(backing_int) {
+    none = @bitCast(FD.invalid),
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn init(maybe: ?FD) FDOptional {
+            return (if (maybe) |fd| fd.toOptional() else .none);
+    }
+
+pub fn close(self: FDOptional) void {
+            if (self.unwrap()) |fd| {
+                _ = &fd;
+                _ = fd.close();
+            }
+    }
+
+pub fn unwrap(self: FDOptional) ?FD {
+            return (if ((self == .none)) null else @bitCast(@intFromEnum(self)));
+    }
+
+pub fn take(self: *FDOptional) ?FD {
+            defer {
+            self.* = .none;
+            }
+            return self.unwrap();
+    }
+};
+
 pub const SystemFdQuotaExceededError = error{
     SystemFdQuotaExceeded,
+};
+
+pub const FDHashMapPrehashed = struct {
+    value: u64,
+    input: FD,
+
+pub fn hash(self: FDHashMapPrehashed, fd: FD) u64 {
+            if ((fd == self.input)) {
+                return self.value;
+            }
+            return fd;
+    }
+
+pub fn eql(a: FD, b: FD) bool {
+            return (a == b);
+    }
+};
+
+pub const FDHashMapContext = struct {
+
+pub fn hash(fd: FD) u64 {
+            return @as(if ((backing_int == u64)) u64 else u32, @bitCast(fd));
+    }
+
+pub fn eql(a: FD, b: FD) bool {
+            return (a == b);
+    }
+
+pub fn pre(input: FD) FDHashMapPrehashed {
+            return FDHashMapPrehashed{ .value = (FDHashMapContext{  }).hash(input), .input = input };
+    }
+    pub const Prehashed = FDHashMapPrehashed;
+};
+
+pub const FDDecodeWindows = union(enum) {
+    windows: HANDLE,
+    uv: uv_file,
+};
+
+pub const FD = packed struct(backing_int) {
+    value: FDValue,
+    kind: FDKind,
+
+pub fn fromNative(value: fd_t) FD {
+            if ((os == .windows)) {
+                _ = bun.assert(((blk: {
+                break :blk @intFromPtr(value);
+
+}) <= std.math.maxInt(u63)));
+            }
+            return .{ .kind = .system, .value = .{ .as_system = handleToNumber(value) } };
+    }
+
+pub fn fromUV(value: uv_file) FD {
+            if ((@inComptime() and (!((0 <= value) and (value <= 2))))) {
+                _ = @compileError(std.fmt.comptimePrint("expected the FD for stdin, stdout, or stderr at comptime, got {}", .{ value }));
+            }
+            return (if (is_posix) (switch (value) {
+0 => comptime_stdin,
+1 => comptime_stdout,
+2 => comptime_stderr,
+else => .{ .kind = .system, .value = .{ .as_system = value } },
+}) else .{ .kind = .uv, .value = .{ .as_uv = value } });
+    }
+
+pub fn cwd() FD {
+            return .fromNative(std.fs.cwd().fd);
+    }
+
+pub fn stdin() FD {
+            if ((os != .windows)) {
+                return .fromUV(0);
+            }
+            const in_comptime = @inComptime();
+            _ = (comptime assert((!in_comptime)));
+            return windows_cached_stdin;
+    }
+
+pub fn stdout() FD {
+            if ((os != .windows)) {
+                return .fromUV(1);
+            }
+            const in_comptime = @inComptime();
+            _ = (comptime assert((!in_comptime)));
+            return windows_cached_stdout;
+    }
+
+pub fn stderr() FD {
+            if ((os != .windows)) {
+                return .fromUV(2);
+            }
+            const in_comptime = @inComptime();
+            _ = (comptime assert((!in_comptime)));
+            return windows_cached_stderr;
+    }
+
+pub fn fromStdFile(file: std.fs.File) FD {
+            return .fromNative(file.handle);
+    }
+
+pub fn fromStdDir(dir: std.fs.Dir) FD {
+            return .fromNative(dir.fd);
+    }
+
+pub fn stdFile(self: FD) std.fs.File {
+            return .{ .handle = self.native() };
+    }
+
+pub fn stdDir(self: FD) std.fs.Dir {
+            return .{ .fd = self.native() };
+    }
+
+pub fn decodeWindows(self: FD) DecodeWindows {
+            return (switch (self.kind) {
+.system => .{ .windows = numberToHandle(self.value.as_system) },
+.uv => .{ .uv = self.value.as_uv },
+});
+    }
+
+pub fn isValid(self: FD) bool {
+            return (switch (os) {
+else => (self.value.as_system != invalid_value),
+.windows => (switch (self.kind) {
+.system => (self.value.as_system != invalid_value),
+.uv => true,
+}),
+});
+    }
+
+pub fn unwrapValid(self: FD) ?FD {
+            return (if (self.isValid()) self else null);
+    }
+
+pub fn native(self: FD) fd_t {
+            return (switch (os) {
+else => self.value.as_system,
+.windows => (switch (self.decodeWindows()) {
+.windows => |handle| handle,
+.uv => |file_number| uv_get_osfhandle(file_number),
+}),
+});
+    }
+
+pub fn uv(self: FD) uv_file {
+            return (switch (os) {
+else => self.value.as_system,
+.windows => (switch (self.decodeWindows()) {
+.windows => |handle| {
+{
+                if ((self == windows_cached_stdin)) {
+                    return 0;
+                }
+                if ((self == windows_cached_stdout)) {
+                    return 1;
+                }
+                if ((self == windows_cached_stderr)) {
+                    return 2;
+                }
+                if (isStdioHandle(std.os.windows.STD_INPUT_HANDLE, handle)) {
+                    return 0;
+                }
+                if (isStdioHandle(std.os.windows.STD_OUTPUT_HANDLE, handle)) {
+                    return 1;
+                }
+                if (isStdioHandle(std.os.windows.STD_ERROR_HANDLE, handle)) {
+                    return 2;
+                }
+                _ = std.debug.panic("Cast bun.FD.uv({f}) makes closing impossible!\n\nThe supplier of fd FD should call 'FD.makeLibUVOwned',\nprobably where open() was called.", .{ self });
+            }
+},
+.uv => self.value.as_uv,
+}),
+});
+    }
+
+pub fn asSocketFd(self: FD) std.posix.socket_t {
+            return (switch (os) {
+.windows => (blk: {
+            break :blk @ptrCast(self.native());
+
+}),
+else => self.native(),
+});
+    }
+
+pub fn makeLibUVOwned(self: FD) !FD {
+            if (allow_assert) {
+                _ = bun.assert(self.isValid());
+            }
+            return (switch (os) {
+else => self,
+.windows => (switch (self.kind) {
+.system => fd: {
+            break :fd FD.fromUV(try uv_open_osfhandle(numberToHandle(self.value.as_system)));
+},
+.uv => self,
+}),
+});
+    }
+
+pub fn makeLibUVOwnedForSyscall(maybe_windows_fd: bun.FD, comptime syscall_tag: bun.sys.Tag, comptime error_case: enum { close_on_fail, leak_fd_on_fail }) bun.sys.Maybe(bun.FD) {
+            if ((os != .windows)) {
+                return .{ .result = maybe_windows_fd };
+            }
+            const res = (blk_catch_0: { break :blk_catch_0 ((maybe_windows_fd.makeLibUVOwned()) catch |e| { _ = &e; if ((e == error.SystemFdQuotaExceeded)) {
+                if ((error_case == .close_on_fail)) {
+                    _ = maybe_windows_fd.close();
+                }
+                return .{ .err = .{ .errno = @intFromEnum(bun.sys.E.MFILE), .syscall = syscall_tag } };
+            }
+            unreachable; }); });
+            return .{ .result = res };
+    }
+
+pub fn close(self: FD) void {
+            const e = self.closeAllowingBadFileDescriptor(@returnAddress());
+            _ = bun.debugAssert((e == null));
+    }
+
+pub fn closeAllowingBadFileDescriptor(self: FD, return_address: ?usize) ?bun.sys.Error {
+            if ((self.stdioTag() != null)) {
+                _ = log("close({f}) SKIPPED", .{ self });
+                return null;
+            }
+            return self.closeAllowingStandardIo(((return_address) orelse (@returnAddress())));
+    }
+
+pub fn closeAllowingStandardIo(self: FD, return_address: ?usize) ?bun.sys.Error {
+            if (allow_assert) {
+                _ = bun.assert(self.isValid());
+            }
+            var buf: if (Environment.isDebug) [1050]u8 else void = undefined;
+            _ = &buf;
+            const fd_fmt = (if (Environment.isDebug) (blk_catch_1: { break :blk_catch_1 ((std.fmt.bufPrint((&buf), "{f}", .{ self })) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 buf[0..]; }); }) else null);
+            const result: ?bun.sys.Error = (switch (os) {
+.linux, .freebsd => result: {
+            _ = bun.assert((self.native() >= 0));
+            break :result (switch (bun.sys.getErrno(bun.sys.syscall.close(self.native()))) {
+.BADF => .{ .errno = @intFromEnum(E.BADF), .syscall = .close, .fd = self },
+else => null,
+});
+},
+.mac => result: {
+            _ = bun.assert((self.native() >= 0));
+            break :result (switch (bun.sys.getErrno(bun.sys.syscall.@"close$NOCANCEL"(self.native()))) {
+.BADF => .{ .errno = @intFromEnum(E.BADF), .syscall = .close, .fd = self },
+else => null,
+});
+},
+.windows => (switch (self.decodeWindows()) {
+.uv => |file_number| result: {
+            var req: libuv.fs_t = libuv.fs_t.uninitialized;
+            _ = &req;
+            defer {
+            _ = req.deinit();
+            }
+            const rc = libuv.uv_fs_close(libuv.Loop.get(), (&req), file_number, null);
+            break :result (if (rc.errno()) |errno| .{ .errno = errno, .syscall = .close, .fd = self, .from_libuv = true } else null);
+},
+.windows => |handle| result: {
+            const rc = bun.c.NtClose(handle);
+            break :result (if ((rc == .SUCCESS)) null else bun.sys.Error{ .errno = (if (bun.windows.Win32Error.fromNTStatus(rc).toSystemErrno()) |errno| @intFromEnum(errno) else 1), .syscall = .CloseHandle, .fd = self });
+},
+}),
+.wasm => @compileError("FD.close() not implemented for fd platform"),
+});
+            if (Environment.isDebug) {
+                if (result) |e| {
+                    _ = &e;
+                    if ((e.errno == @intFromEnum(E.BADF))) {
+                        _ = bun.Output.debugWarn("close({s}) = EBADF. This is an indication of a file descriptor UAF", .{ fd_fmt });
+                        _ = bun.crash_handler.dumpCurrentStackTrace(((return_address) orelse (@returnAddress())), .{ .frame_count = 4, .stop_at_jsc_llint = true });
+                    } else {
+                        _ = log("close({s}) = {f}", .{ fd_fmt, e });
+                    }
+                } else {
+                    _ = log("close({s})", .{ fd_fmt });
+                }
+            }
+            return result;
+    }
+
+pub fn stdioTag(self: FD) ?Stdio {
+            return (if ((os == .windows)) (switch (self.decodeWindows()) {
+.windows => |handle| {
+{
+                const process = std.os.windows.peb().ProcessParameters;
+                if ((handle == process.hStdInput)) {
+                    return .std_in;
+                } else {
+                    if ((handle == process.hStdOutput)) {
+                        return .std_out;
+                    } else {
+                        if ((handle == process.hStdError)) {
+                            return .std_err;
+                        }
+                    }
+                }
+                return null;
+            }
+},
+.uv => |file_number| (switch (file_number) {
+0 => .std_in,
+1 => .std_out,
+2 => .std_err,
+else => null,
+}),
+}) else (switch (self.value.as_system) {
+0 => .std_in,
+1 => .std_out,
+2 => .std_err,
+else => null,
+}));
+    }
+
+pub fn format(self: FD, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            if ((!self.isValid())) {
+                _ = try writer.writeAll("[invalid_fd]");
+                return;
+            }
+            switch (os) {
+else => {
+const fd_native = self.native();
+            _ = try writer.print("{d}", .{ fd_native });
+            if ((Environment.isDebug and (fd_native >= 3))) {
+                _ = print_with_path: {
+                var path_buf: bun.PathBuffer = undefined;
+                _ = &path_buf;
+                const path = (blk_catch_2: { break :blk_catch_2 ((std.os.getFdPath(fd_native, (&path_buf))) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+                    _ = try writer.writeAll("[BADF]");
+                } else {
+                    _ = try writer.print("[unknown: error.{s}]", .{ @errorName(e) });
+                }
+                break :print_with_path; }); });
+                break :print_with_path try writer.print("[{s}]", .{ path });
+
+};
+            }
+},
+.windows => {
+switch (self.decodeWindows()) {
+.windows => |handle| {
+if (Environment.isDebug) {
+                const peb = std.os.windows.peb();
+                if ((handle == peb.ProcessParameters.hStdInput)) {
+                    return try writer.print("{d}[stdin handle]", .{ self.value.as_system });
+                } else {
+                    if ((handle == peb.ProcessParameters.hStdOutput)) {
+                        return try writer.print("{d}[stdout handle]", .{ self.value.as_system });
+                    } else {
+                        if ((handle == peb.ProcessParameters.hStdError)) {
+                            return try writer.print("{d}[stderr handle]", .{ self.value.as_system });
+                        } else {
+                            if ((handle == peb.ProcessParameters.CurrentDirectory.Handle)) {
+                                return try writer.print("{d}[cwd handle]", .{ self.value.as_system });
+                            } else {
+                                _ = print_with_path: {
+                                var fd_path: bun.WPathBuffer = undefined;
+                                _ = &fd_path;
+                                const path = (blk_catch_3: { break :blk_catch_3 ((std.os.windows.GetFinalPathNameByHandle(handle, .{ .volume_name = .Nt }, (&fd_path))) catch |__ce_3| { _ = &__ce_3; break :print_with_path; }); });
+                                return try writer.print("{d}[{f}]", .{ self.value.as_system, bun.fmt.utf16(path) });
+};
+                            }
+                        }
+                    }
+                }
+            }
+            _ = try writer.print("{d}[handle]", .{ self.value.as_system });
+},
+.uv => |file_number| {
+_ = try writer.print("{d}[libuv]", .{ file_number });
+},
+}
+},
+}
+    }
+
+pub fn toOptional(self: FD) Optional {
+            return @enumFromInt(@as(backing_int, @bitCast(self)));
+    }
+
+pub fn makePath(self: FD, comptime T: type, subpath: []const T) !void {
+            return (if (T == u8) bun.makePath(self.stdDir(), subpath) else if (T == u16) bun.makePathW(self.stdDir(), subpath) else @compileError("unexpected type"));
+    }
+
+pub fn deleteTree(self: FD, subpath: []const u8) !void {
+            _ = try self.stdDir().deleteTree(subpath);
+    }
+
+pub fn quietWriter(self: FD) bun.sys.File.QuietWriter {
+            return .{ .context = .{ .handle = self } };
+    }
+    pub const Kind = FDKind;
+    pub const Value = FDValue;
+    pub const invalid: FD = .{ .kind = .system, .value = .{ .as_system = invalid_value } };
+    const invalid_value = std.math.minInt(@FieldType(Value, "as_system"));
+    pub const fromSystem = fromNative;
+    pub const cast = native;
+    pub const fromJS = @import("../sys_jsc/fd_jsc.zig").fromJS;
+    pub const fromJSValidated = @import("../sys_jsc/fd_jsc.zig").fromJSValidated;
+    pub const toJS = @import("../sys_jsc/fd_jsc.zig").toJS;
+    pub const toJSWithoutMakingLibUVOwned = @import("../sys_jsc/fd_jsc.zig").toJSWithoutMakingLibUVOwned;
+    pub const Stdio = FDStdio;
+    pub const HashMapContext = FDHashMapContext;
+    pub const DecodeWindows = FDDecodeWindows;
+    pub const Optional = FDOptional;
+    pub const chmod = bun.sys.fchmod;
+    pub const chmodat = bun.sys.fchmodat;
+    pub const chown = bun.sys.fchown;
+    pub const directoryExistsAt = bun.sys.directoryExistsAt;
+    pub const dup = bun.sys.dup;
+    pub const dupWithFlags = bun.sys.dupWithFlags;
+    pub const existsAt = bun.sys.existsAt;
+    pub const existsAtType = bun.sys.existsAtType;
+    pub const fcntl = bun.sys.fcntl;
+    pub const getFcntlFlags = bun.sys.getFcntlFlags;
+    pub const getFileSize = bun.sys.getFileSize;
+    pub const linkat = bun.sys.linkat;
+    pub const linkatTmpfile = bun.sys.linkatTmpfile;
+    pub const lseek = bun.sys.lseek;
+    pub const mkdirat = bun.sys.mkdirat;
+    pub const mkdiratA = bun.sys.mkdiratA;
+    pub const mkdiratW = bun.sys.mkdiratW;
+    pub const mkdiratZ = bun.sys.mkdiratZ;
+    pub const openat = bun.sys.openat;
+    pub const pread = bun.sys.pread;
+    pub const preadv = bun.sys.preadv;
+    pub const pwrite = bun.sys.pwrite;
+    pub const pwritev = bun.sys.pwritev;
+    pub const read = bun.sys.read;
+    pub const readNonblocking = bun.sys.readNonblocking;
+    pub const readlinkat = bun.sys.readlinkat;
+    pub const readv = bun.sys.readv;
+    pub const recv = bun.sys.recv;
+    pub const recvNonBlock = bun.sys.recvNonBlock;
+    pub const renameat = bun.sys.renameat;
+    pub const renameat2 = bun.sys.renameat2;
+    pub const send = bun.sys.send;
+    pub const sendNonBlock = bun.sys.sendNonBlock;
+    pub const sendfile = bun.sys.sendfile;
+    pub const stat = bun.sys.fstat;
+    pub const statat = bun.sys.fstatat;
+    pub const symlinkat = bun.sys.symlinkat;
+    pub const truncate = bun.sys.ftruncate;
+    pub const unlinkat = bun.sys.unlinkat;
+    pub const updateNonblocking = bun.sys.updateNonblocking;
+    pub const write = bun.sys.write;
+    pub const writeNonblocking = bun.sys.writeNonblocking;
+    pub const writev = bun.sys.writev;
+    pub const getFdPath = bun.getFdPath;
+    pub const getFdPathW = bun.getFdPathW;
+    pub const getFdPathZ = bun.getFdPathZ;
+    comptime {
+                if (os == .windows) {
+                    // The conversion from FD to fd_t should be an integer truncate
+                    bun.assert(@as(FD, @bitCast(@as(u64, 512))).value.as_system == 512);
+                }
+            }
+};
+
+pub const MovableIfWindowsFd = union(enum) {
+    _inner: if (bun.Environment.isWindows) ?FD else FD,
+
+pub fn init(fd: FD) MovableIfWindowsFd {
+            return .{ ._inner = fd };
+    }
+
+pub fn get(self: MovableIfWindowsFd) ?FD {
+            return self._inner;
+    }
+
+pub fn getPosix(self: MovableIfWindowsFd) FD {
+            if (comptime bun.Environment.isWindows) {
+                _ = @compileError("MovableIfWindowsFd.getPosix is not available on Windows");
+            }
+            return self._inner;
+    }
+
+pub fn close(self: *MovableIfWindowsFd) void {
+            if (comptime bun.Environment.isPosix) {
+                _ = self._inner.close();
+                self._inner = FD.invalid;
+                return;
+            }
+            if (self._inner) |fd| {
+                _ = &fd;
+                _ = fd.close();
+                self._inner = null;
+            }
+    }
+
+pub fn isValid(self: MovableIfWindowsFd) bool {
+            if (comptime bun.Environment.isPosix) {
+                return self._inner.isValid();
+            }
+            return ((self._inner != null) and self._inner.?.isValid());
+    }
+
+pub fn isOwned(self: MovableIfWindowsFd) bool {
+            if (comptime bun.Environment.isPosix) {
+                return true;
+            }
+            return (self._inner != null);
+    }
+
+pub fn take(self: *MovableIfWindowsFd) ?FD {
+            if (comptime bun.Environment.isPosix) {
+                _ = @compileError("MovableIfWindowsFd.take is not available on Posix");
+            }
+            const result = self._inner;
+            self._inner = null;
+            return result;
+    }
+
+pub fn format(self: MovableIfWindowsFd, writer: *std.Io.Writer) !void {
+            if (comptime bun.Environment.isPosix) {
+                _ = try writer.print("{f}", .{ (self.get()).? });
+                return;
+            }
+            if (self._inner) |fd| {
+                _ = &fd;
+                _ = try writer.print("{f}", .{ fd });
+                return;
+            }
+            _ = try writer.print("[moved]", .{});
+    }
+};
+
+pub const libuv_private = struct {
+
+pub extern "c" fn uv_get_osfhandle(fd: c_int) callconv(.c) fd_t;
+
+pub extern "c" fn uv_open_osfhandle(os_fd: fd_t) callconv(.c) c_int;
 };
 
 const Environment = bun.Environment;
@@ -65,617 +682,8 @@ const fd_t = std.posix.fd_t;
 const backing_int = (if (is_posix) c_int else u64);
 const WindowsHandleNumber = u63;
 const HandleNumber = (if (is_posix) c_int else WindowsHandleNumber);
-pub const FD = packed struct(backing_int) {
-        value: Value,
-        kind: Kind,
-        pub const Kind = if (is_posix)
-            enum(u0) { system }
-        else
-            enum(u1) { system = 0, uv = 1 };
-        pub const Value = if (is_posix)
-            packed union { as_system: fd_t }
-        else
-            packed union { as_system: WindowsHandleNumber, as_uv: uv_file };
-
-        /// An invalid file descriptor.
-        /// Avoid in new code. Prefer `bun.FD.Optional` and `.none` instead.
-        pub const invalid: FD = .{ .kind = .system, .value = .{ .as_system = invalid_value } };
-        const invalid_value = std.math.minInt(@FieldType(Value, "as_system"));
-
-        // NOTE: there is no universal anytype init function. please annotate at each
-        // call site the source of the file descriptor you are initializing. with
-        // heavy decl literal usage, it can be confusing if you just see `.from()`,
-        // especially since numerical values have very subtle differences on Windows.
-
-        /// Initialize using the native system handle
-        pub fn fromNative(value: fd_t) FD {
-            if (os == .windows) {
-                // the current process fd is max usize
-                // https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess
-                bun.assert(@intFromPtr(value) <= std.math.maxInt(u63));
-            }
-            return .{ .kind = .system, .value = .{ .as_system = handleToNumber(value) } };
-        }
-        pub const fromSystem = fromNative;
-
-        /// Initialize using the c-runtime / libuv file descriptor
-        pub fn fromUV(value: uv_file) FD {
-            if (@inComptime() and !(0 <= value and value <= 2))
-                @compileError(std.fmt.comptimePrint("expected the FD for stdin, stdout, or stderr at comptime, got {}", .{value}));
-            return if (is_posix)
-                switch (value) {
-                    // workaround for https://github.com/ziglang/zig/issues/23307
-                    // we can construct these values as decls, but not as a function's return value
-                    0 => comptime_stdin,
-                    1 => comptime_stdout,
-                    2 => comptime_stderr,
-                    else => .{ .kind = .system, .value = .{ .as_system = value } },
-                }
-            else
-                .{ .kind = .uv, .value = .{ .as_uv = value } };
-        }
-
-        pub fn cwd() FD {
-            return .fromNative(std.fs.cwd().fd);
-        }
-
-        pub fn stdin() FD {
-            if (os != .windows) return .fromUV(0);
-            const in_comptime = @inComptime();
-            comptime assert(!in_comptime); // windows std handles are not known at build time
-            return windows_cached_stdin;
-        }
-
-        pub fn stdout() FD {
-            if (os != .windows) return .fromUV(1);
-            const in_comptime = @inComptime();
-            comptime assert(!in_comptime); // windows std handles are not known at build time
-            return windows_cached_stdout;
-        }
-
-        pub fn stderr() FD {
-            if (os != .windows) return .fromUV(2);
-            const in_comptime = @inComptime();
-            comptime assert(!in_comptime); // windows std handles are not known at build time
-            return windows_cached_stderr;
-        }
-
-        pub fn fromStdFile(file: std.fs.File) FD {
-            return .fromNative(file.handle);
-        }
-
-        pub fn fromStdDir(dir: std.fs.Dir) FD {
-            return .fromNative(dir.fd);
-        }
-
-        pub fn stdFile(fd: FD) std.fs.File {
-            return .{ .handle = fd.native() };
-        }
-
-        pub fn stdDir(fd: FD) std.fs.Dir {
-            return .{ .fd = fd.native() };
-        }
-
-        /// Perform different logic for each kind of windows file descriptor
-        pub fn decodeWindows(fd: FD) DecodeWindows {
-            return switch (fd.kind) {
-                .system => .{ .windows = numberToHandle(fd.value.as_system) },
-                .uv => .{ .uv = fd.value.as_uv },
-            };
-        }
-
-        pub fn isValid(fd: FD) bool {
-            return switch (os) {
-                else => fd.value.as_system != invalid_value,
-                .windows => switch (fd.kind) {
-                    .system => fd.value.as_system != invalid_value,
-                    .uv => true,
-                },
-            };
-        }
-        pub fn unwrapValid(fd: FD) ?FD {
-            return if (fd.isValid()) fd else null;
-        }
-
-        /// When calling fd function, you may not be able to close the returned fd.
-        /// To close the fd, you have to call `.close()` on the `bun.FD`.
-        pub fn native(fd: FD) fd_t {
-            // Do not assert that the fd is valid, as there are many syscalls where
-            // we deliberately pass an invalid file descriptor.
-            return switch (os) {
-                else => fd.value.as_system,
-                .windows => switch (fd.decodeWindows()) {
-                    .windows => |handle| handle,
-                    .uv => |file_number| uv_get_osfhandle(file_number),
-                },
-            };
-        }
-        /// Deprecated: renamed to `native` because it is unclear what `cast` would cast to.
-        pub const cast = native;
-
-        /// When calling fd function, you should consider the FD struct to now be
-        /// invalid. Calling `.close()` on the FD at that point may not work.
-        pub fn uv(fd: FD) uv_file {
-            return switch (os) {
-                else => fd.value.as_system,
-                .windows => switch (fd.decodeWindows()) {
-                    .windows => |handle| {
-                        // `.stdin()`/`.stdout()`/`.stderr()` hand out the cached
-                        // `windows_cached_std{in,out,err}` (snapshotted at startup),
-                        // so round-trip against those first. Comparing only against
-                        // the live `GetStdHandle` result panics if the process std
-                        // handle was swapped after startup via `SetStdHandle`,
-                        // `AllocConsole`, `AttachConsole`, etc.
-                        if (fd == windows_cached_stdin) return 0;
-                        if (fd == windows_cached_stdout) return 1;
-                        if (fd == windows_cached_stderr) return 2;
-                        if (isStdioHandle(std.os.windows.STD_INPUT_HANDLE, handle)) return 0;
-                        if (isStdioHandle(std.os.windows.STD_OUTPUT_HANDLE, handle)) return 1;
-                        if (isStdioHandle(std.os.windows.STD_ERROR_HANDLE, handle)) return 2;
-                        std.debug.panic(
-                            "Cast bun.FD.uv({f}) makes closing impossible!\n\nThe supplier of fd FD should call 'FD.makeLibUVOwned',\nprobably where open() was called.",
-                            .{fd},
-                        );
-                    },
-                    .uv => fd.value.as_uv,
-                },
-            };
-        }
-
-        pub fn asSocketFd(fd: FD) std.posix.socket_t {
-            return switch (os) {
-                .windows => @ptrCast(fd.native()),
-                else => fd.native(),
-            };
-        }
-
-        /// Assumes given a valid file descriptor
-        /// If error, the handle has not been closed
-        pub fn makeLibUVOwned(fd: FD) !FD {
-            if (allow_assert) bun.assert(fd.isValid());
-            return switch (os) {
-                else => fd,
-                .windows => switch (fd.kind) {
-                    .system => fd: {
-                        break :fd FD.fromUV(try uv_open_osfhandle(numberToHandle(fd.value.as_system)));
-                    },
-                    .uv => fd,
-                },
-            };
-        }
-        pub fn makeLibUVOwnedForSyscall(
-            maybe_windows_fd: bun.FD,
-            comptime syscall_tag: bun.sys.Tag,
-            comptime error_case: enum { close_on_fail, leak_fd_on_fail },
-        ) bun.sys.Maybe(bun.FD) {
-            if (os != .windows) {
-                return .{ .result = maybe_windows_fd };
-            }
-            return .{ .result = maybe_windows_fd.makeLibUVOwned() catch |err| switch (err) {
-                error.SystemFdQuotaExceeded => {
-                    if (error_case == .close_on_fail) {
-                        maybe_windows_fd.close();
-                    }
-                    return .{ .err = .{
-                        .errno = @intFromEnum(bun.sys.E.MFILE),
-                        .syscall = syscall_tag,
-                    } };
-                },
-            } };
-        }
-
-        /// fd function will NOT CLOSE stdin/stdout/stderr.
-        /// Expects a VALID file descriptor object.
-        ///
-        /// Do not use fd on JS-provided file descriptors (e.g. in
-        /// `fs.closeSync`). For those cases, the developer may provide a faulty
-        /// value, and we must forward EBADF to them. For internal situations, we
-        /// should never hit EBADF since it means we could have replaced the file
-        /// descriptor, closing something completely unrelated; fd would cause
-        /// weird behavior as you see EBADF errors in unrelated places.
-        ///
-        /// One day, we can add code to track file descriptor allocations and frees.
-        /// In debug, fd assertion failure can print where the FD was actually
-        /// closed.
-        pub fn close(fd: FD) void {
-            const err = fd.closeAllowingBadFileDescriptor(@returnAddress());
-            bun.debugAssert(err == null); // use after close!
-        }
-
-        /// fd function will NOT CLOSE stdin/stdout/stderr.
-        ///
-        /// Use fd API to implement `node:fs` close.
-        /// Prefer asserting that EBADF does not happen with `.close()`
-        pub fn closeAllowingBadFileDescriptor(fd: FD, return_address: ?usize) ?bun.sys.Error {
-            if (fd.stdioTag() != null) {
-                log("close({f}) SKIPPED", .{fd});
-                return null;
-            }
-            return fd.closeAllowingStandardIo(return_address orelse @returnAddress());
-        }
-
-        /// fd allows you to close standard io. It also returns the error.
-        /// Consider fd the raw close method.
-        pub fn closeAllowingStandardIo(fd: FD, return_address: ?usize) ?bun.sys.Error {
-            if (allow_assert) bun.assert(fd.isValid()); // probably a UAF
-
-            // Format the file descriptor for logging BEFORE closing it.
-            // Otherwise the file descriptor is always invalid after closing it.
-            var buf: if (Environment.isDebug) [1050]u8 else void = undefined;
-            const fd_fmt = if (Environment.isDebug) std.fmt.bufPrint(&buf, "{f}", .{fd}) catch buf[0..];
-
-            const result: ?bun.sys.Error = switch (os) {
-                .linux, .freebsd => result: {
-                    bun.assert(fd.native() >= 0);
-                    break :result switch (bun.sys.getErrno(bun.sys.syscall.close(fd.native()))) {
-                        .BADF => .{ .errno = @intFromEnum(E.BADF), .syscall = .close, .fd = fd },
-                        else => null,
-                    };
-                },
-                .mac => result: {
-                    bun.assert(fd.native() >= 0);
-                    break :result switch (bun.sys.getErrno(bun.sys.syscall.@"close$NOCANCEL"(fd.native()))) {
-                        .BADF => .{ .errno = @intFromEnum(E.BADF), .syscall = .close, .fd = fd },
-                        else => null,
-                    };
-                },
-                .windows => switch (fd.decodeWindows()) {
-                    .uv => |file_number| result: {
-                        var req: libuv.fs_t = libuv.fs_t.uninitialized;
-                        defer req.deinit();
-                        const rc = libuv.uv_fs_close(libuv.Loop.get(), &req, file_number, null);
-                        break :result if (rc.errno()) |errno|
-                            .{ .errno = errno, .syscall = .close, .fd = fd, .from_libuv = true }
-                        else
-                            null;
-                    },
-                    .windows => |handle| result: {
-                        break :result switch (bun.c.NtClose(handle)) {
-                            .SUCCESS => null,
-                            else => |rc| bun.sys.Error{
-                                .errno = if (bun.windows.Win32Error.fromNTStatus(rc).toSystemErrno()) |errno| @intFromEnum(errno) else 1,
-                                .syscall = .CloseHandle,
-                                .fd = fd,
-                            },
-                        };
-                    },
-                },
-                .wasm => @compileError("FD.close() not implemented for fd platform"),
-            };
-            if (Environment.isDebug) {
-                if (result) |err| {
-                    if (err.errno == @intFromEnum(E.BADF)) {
-                        bun.Output.debugWarn("close({s}) = EBADF. This is an indication of a file descriptor UAF", .{fd_fmt});
-                        bun.crash_handler.dumpCurrentStackTrace(return_address orelse @returnAddress(), .{ .frame_count = 4, .stop_at_jsc_llint = true });
-                    } else {
-                        log("close({s}) = {f}", .{ fd_fmt, err });
-                    }
-                } else {
-                    log("close({s})", .{fd_fmt});
-                }
-            }
-            return result;
-        }
-
-        pub const fromJS = @import("../sys_jsc/fd_jsc.zig").fromJS;
-        pub const fromJSValidated = @import("../sys_jsc/fd_jsc.zig").fromJSValidated;
-        pub const toJS = @import("../sys_jsc/fd_jsc.zig").toJS;
-        pub const toJSWithoutMakingLibUVOwned = @import("../sys_jsc/fd_jsc.zig").toJSWithoutMakingLibUVOwned;
-
-        pub const Stdio = enum(u8) {
-            std_in = 0,
-            std_out = 1,
-            std_err = 2,
-            pub fn fd(tag: Stdio) FD {
-                return switch (tag) {
-                    .std_in => .stdin(),
-                    .std_out => .stdout(),
-                    .std_err => .stderr(),
-                };
-            }
-            pub fn fromInt(value: i32) ?Stdio {
-                if (value < 0 or value > 2) return null;
-                return @enumFromInt(value);
-            }
-            pub fn toInt(tag: Stdio) i32 {
-                return @intFromEnum(tag);
-            }
-        };
-        pub fn stdioTag(fd: FD) ?Stdio {
-            return if (os == .windows) switch (fd.decodeWindows()) {
-                .windows => |handle| {
-                    const process = std.os.windows.peb().ProcessParameters;
-                    if (handle == process.hStdInput) {
-                        return .std_in;
-                    } else if (handle == process.hStdOutput) {
-                        return .std_out;
-                    } else if (handle == process.hStdError) {
-                        return .std_err;
-                    }
-                    return null;
-                },
-                .uv => |file_number| switch (file_number) {
-                    0 => .std_in,
-                    1 => .std_out,
-                    2 => .std_err,
-                    else => null,
-                },
-            } else switch (fd.value.as_system) {
-                0 => .std_in,
-                1 => .std_out,
-                2 => .std_err,
-                else => null,
-            };
-        }
-
-        pub const HashMapContext = struct {
-            pub fn hash(_: @This(), fd: FD) u64 {
-                // a file descriptor is i32 on linux, u64 on windows
-                // the goal here is to do zero work and widen the 32 bit type to 64
-                return @as(if (backing_int == u64) u64 else u32, @bitCast(fd));
-            }
-
-            pub fn eql(_: @This(), a: FD, b: FD) bool {
-                return a == b;
-            }
-
-            pub fn pre(input: FD) Prehashed {
-                return Prehashed{
-                    .value = hash(.{}, input),
-                    .input = input,
-                };
-            }
-
-            pub const Prehashed = struct {
-                value: u64,
-                input: FD,
-
-                pub fn hash(ctx: @This(), fd: FD) u64 {
-                    if (fd == ctx.input) return ctx.value;
-                    return fd;
-                }
-
-                pub fn eql(_: @This(), a: FD, b: FD) bool {
-                    return a == b;
-                }
-            };
-        };
-
-        pub fn format(fd: FD, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-            if (!fd.isValid()) {
-                try writer.writeAll("[invalid_fd]");
-                return;
-            }
-
-            switch (os) {
-                else => {
-                    const fd_native = fd.native();
-                    try writer.print("{d}", .{fd_native});
-                    if (Environment.isDebug and fd_native >= 3) print_with_path: {
-                        var path_buf: bun.PathBuffer = undefined;
-                        // NOTE: Bun's `fd.getFdPath`, while supporting some
-                        // situations the standard library does not, hits EINVAL
-                        // instead of gracefully handling invalid file descriptors.
-                        // It is assumed that debug builds are ran on systems that
-                        // support the standard library functions (since they would
-                        // likely have run the Zig compiler, and it's not the end of
-                        // the world if this fails.
-                        const path = std.os.getFdPath(fd_native, &path_buf) catch |err| switch (err) {
-                            error.FileNotFound => {
-                                try writer.writeAll("[BADF]");
-                                break :print_with_path;
-                            },
-                            else => |e| {
-                                try writer.print("[unknown: error.{s}]", .{@errorName(e)});
-                                break :print_with_path;
-                            },
-                        };
-                        try writer.print("[{s}]", .{path});
-                    }
-                },
-                .windows => switch (fd.decodeWindows()) {
-                    .windows => |handle| {
-                        if (Environment.isDebug) {
-                            const peb = std.os.windows.peb();
-                            if (handle == peb.ProcessParameters.hStdInput) {
-                                return try writer.print("{d}[stdin handle]", .{fd.value.as_system});
-                            } else if (handle == peb.ProcessParameters.hStdOutput) {
-                                return try writer.print("{d}[stdout handle]", .{fd.value.as_system});
-                            } else if (handle == peb.ProcessParameters.hStdError) {
-                                return try writer.print("{d}[stderr handle]", .{fd.value.as_system});
-                            } else if (handle == peb.ProcessParameters.CurrentDirectory.Handle) {
-                                return try writer.print("{d}[cwd handle]", .{fd.value.as_system});
-                            } else print_with_path: {
-                                var fd_path: bun.WPathBuffer = undefined;
-                                const path = std.os.windows.GetFinalPathNameByHandle(handle, .{ .volume_name = .Nt }, &fd_path) catch break :print_with_path;
-                                return try writer.print("{d}[{f}]", .{
-                                    fd.value.as_system,
-                                    bun.fmt.utf16(path),
-                                });
-                            }
-                        }
-                        try writer.print("{d}[handle]", .{fd.value.as_system});
-                    },
-                    .uv => |file_number| try writer.print("{d}[libuv]", .{file_number}),
-                },
-            }
-        }
-
-        pub const DecodeWindows = union(enum) {
-            windows: HANDLE,
-            uv: uv_file,
-        };
-
-        /// Note that currently FD can encode the invalid file descriptor value.
-        /// Obviously, prefer fd instead of that.
-        pub const Optional = enum(backing_int) {
-            none = @bitCast(invalid),
-            _,
-            pub fn init(maybe: ?FD) Optional {
-                return if (maybe) |fd| fd.toOptional() else .none;
-            }
-            pub fn close(optional: Optional) void {
-                if (optional.unwrap()) |fd|
-                    fd.close();
-            }
-            pub fn unwrap(optional: Optional) ?FD {
-                return if (optional == .none) null else @bitCast(@intFromEnum(optional));
-            }
-            pub fn take(optional: *Optional) ?FD {
-                defer optional.* = .none;
-                return optional.unwrap();
-            }
-        };
-        /// Properly converts FD.invalid into FD.Optional.none
-        pub fn toOptional(fd: FD) Optional {
-            return @enumFromInt(@as(backing_int, @bitCast(fd)));
-        }
-
-        pub fn makePath(dir: FD, comptime T: type, subpath: []const T) !void {
-            return switch (T) {
-                u8 => bun.makePath(dir.stdDir(), subpath),
-                u16 => bun.makePathW(dir.stdDir(), subpath),
-                else => @compileError("unexpected type"),
-            };
-        }
-
-        // TODO: make our own version of deleteTree
-        pub fn deleteTree(dir: FD, subpath: []const u8) !void {
-            try dir.stdDir().deleteTree(subpath);
-        }
-
-        // The following functions are from bun.sys but with the 'f' prefix dropped
-        // where it is relevant. These functions all take FD as the first argument,
-        // so that makes them Zig methods, even when declared in a separate file.
-        pub const chmod = bun.sys.fchmod;
-        pub const chmodat = bun.sys.fchmodat;
-        pub const chown = bun.sys.fchown;
-        pub const directoryExistsAt = bun.sys.directoryExistsAt;
-        pub const dup = bun.sys.dup;
-        pub const dupWithFlags = bun.sys.dupWithFlags;
-        pub const existsAt = bun.sys.existsAt;
-        pub const existsAtType = bun.sys.existsAtType;
-        pub const fcntl = bun.sys.fcntl;
-        pub const getFcntlFlags = bun.sys.getFcntlFlags;
-        pub const getFileSize = bun.sys.getFileSize;
-        pub const linkat = bun.sys.linkat;
-        pub const linkatTmpfile = bun.sys.linkatTmpfile;
-        pub const lseek = bun.sys.lseek;
-        pub const mkdirat = bun.sys.mkdirat;
-        pub const mkdiratA = bun.sys.mkdiratA;
-        pub const mkdiratW = bun.sys.mkdiratW;
-        pub const mkdiratZ = bun.sys.mkdiratZ;
-        pub const openat = bun.sys.openat;
-        pub const pread = bun.sys.pread;
-        pub const preadv = bun.sys.preadv;
-        pub const pwrite = bun.sys.pwrite;
-        pub const pwritev = bun.sys.pwritev;
-        pub const read = bun.sys.read;
-        pub const readNonblocking = bun.sys.readNonblocking;
-        pub const readlinkat = bun.sys.readlinkat;
-        pub const readv = bun.sys.readv;
-        pub const recv = bun.sys.recv;
-        pub const recvNonBlock = bun.sys.recvNonBlock;
-        pub const renameat = bun.sys.renameat;
-        pub const renameat2 = bun.sys.renameat2;
-        pub const send = bun.sys.send;
-        pub const sendNonBlock = bun.sys.sendNonBlock;
-        pub const sendfile = bun.sys.sendfile;
-        pub const stat = bun.sys.fstat;
-        pub const statat = bun.sys.fstatat;
-        pub const symlinkat = bun.sys.symlinkat;
-        pub const truncate = bun.sys.ftruncate;
-        pub const unlinkat = bun.sys.unlinkat;
-        pub const updateNonblocking = bun.sys.updateNonblocking;
-        pub const write = bun.sys.write;
-        pub const writeNonblocking = bun.sys.writeNonblocking;
-        pub const writev = bun.sys.writev;
-
-        pub const getFdPath = bun.getFdPath;
-        pub const getFdPathW = bun.getFdPathW;
-        pub const getFdPathZ = bun.getFdPathZ;
-
-        // TODO: move these methods defined in bun.sys.File to bun.sys. follow
-        // similar pattern as above. then delete bun.sys.File
-        pub fn quietWriter(fd: FD) bun.sys.File.QuietWriter {
-            return .{ .context = .{ .handle = fd } };
-        }
-
-        comptime {
-            if (os == .windows) {
-                // The conversion from FD to fd_t should be an integer truncate
-                bun.assert(@as(FD, @bitCast(@as(u64, 512))).value.as_system == 512);
-            }
-        }
-    };
-pub const MovableIfWindowsFd = union(enum) {
-    _inner: if (bun.Environment.isWindows) ?FD else FD,
-
-pub fn init(fd: FD) Self {
-            return .{ ._inner = fd };
-    }
-
-pub fn get(self: *const @This()) ?FD {
-            return self._inner;
-    }
-
-pub fn getPosix(self: *const @This()) FD {
-            if (comptime bun.Environment.isWindows) {
-                _ = @compileError("MovableIfWindowsFd.getPosix is not available on Windows");
-            }
-            return self._inner;
-    }
-
-pub fn close(self: *@This()) void {
-            if (comptime bun.Environment.isPosix) {
-                _ = self._inner.close();
-                self._inner = FD.invalid;
-                return;
-            }
-            if (self._inner) |fd| {
-                _ = &fd;
-                _ = fd.close();
-                self._inner = null;
-            }
-    }
-
-pub fn isValid(self: *const @This()) bool {
-            if (comptime bun.Environment.isPosix) {
-                return self._inner.isValid();
-            }
-            return ((self._inner != null) and self._inner.?.isValid());
-    }
-
-pub fn isOwned(self: *const @This()) bool {
-            if (comptime bun.Environment.isPosix) {
-                return true;
-            }
-            return (self._inner != null);
-    }
-
-pub fn take(self: *@This()) ?FD {
-            if (comptime bun.Environment.isPosix) {
-                _ = @compileError("MovableIfWindowsFd.take is not available on Posix");
-            }
-            const result = self._inner;
-            self._inner = null;
-            return result;
-    }
-
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
-            if (comptime bun.Environment.isPosix) {
-                _ = try writer.print("{f}", .{ (self.get()).? });
-                return;
-            }
-            if (self._inner) |fd| {
-                _ = &fd;
-                _ = try writer.print("{f}", .{ fd });
-                return;
-            }
-            _ = try writer.print("[moved]", .{});
-    }
-    const Self = @This();
-};
+const FDKind = (if (is_posix) enum(u0) { system } else enum(u1) { system = 0, uv = 1 });
+const FDValue = (if (is_posix) packed union { as_system: fd_t } else packed union { as_system: WindowsHandleNumber, as_uv: uv_file });
 pub var windows_cached_fd_set: if (Environment.isDebug) bool else void = (if (Environment.isDebug) false else null);
 pub var windows_cached_stdin: FD = undefined;
 pub var windows_cached_stdout: FD = undefined;
@@ -683,15 +691,9 @@ pub var windows_cached_stderr: FD = undefined;
 const comptime_stdin: FD = (if ((os != .windows)) .{ .kind = .system, .value = .{ .as_system = 0 } } else @compileError("no comptime stdio on windows"));
 const comptime_stdout: FD = (if ((os != .windows)) .{ .kind = .system, .value = .{ .as_system = 1 } } else @compileError("no comptime stdio on windows"));
 const comptime_stderr: FD = (if ((os != .windows)) .{ .kind = .system, .value = .{ .as_system = 2 } } else @compileError("no comptime stdio on windows"));
-const libuv_private = struct {
-
-pub extern "c" fn uv_get_osfhandle(fd: c_int) callconv(.c) fd_t;
-
-pub extern "c" fn uv_open_osfhandle(os_fd: fd_t) callconv(.c) c_int;
-};
 
 pub fn isStdioHandle(id: std.os.windows.DWORD, handle: HANDLE) bool {
-        const h = (blk_catch_0: { break :blk_catch_0 ((std.os.windows.GetStdHandle(id)) catch |__ce_0| { _ = &__ce_0; return false; }); });
+        const h = (blk_catch_4: { break :blk_catch_4 ((std.os.windows.GetStdHandle(id)) catch |__ce_4| { _ = &__ce_4; return false; }); });
         return (handle == h);
 }
 

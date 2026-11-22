@@ -118,22 +118,23 @@ pub fn Bun__Process__send_(globalObject: *JSGlobalObject, callFrame: *jsc.CallFr
     jsc_vm.autoGarbageCollect();
 }
 
+struct _HandledPromiseContext {
+    globalThis: *jsc.JSGlobalObject,
+    promise: jsc.JSValue,
+    fn callback(*_) {
+        * = _.globalThis.bunVM().handledPromise(_.globalThis, _.promise);
+        _.promise.unprotect();
+        bun.default_allocator.destroy(_);
+    }
+}
+
 @export @c fn Bun__handleHandledPromise(global: *JSGlobalObject, promise: *jsc.JSPromise) {
-    const Context = struct {
-        globalThis: *jsc.JSGlobalObject,
-        promise: jsc.JSValue,
-        pub fn callback(context: *@This()) {
-            * = context.globalThis.bunVM().handledPromise(context.globalThis, context.promise);
-            context.promise.unprotect();
-            bun.default_allocator.destroy(context);
-        }
-    };
     jsc.markBinding(@src());
     const promise_js = promise.toJS();
     promise_js.protect();
-    const context = bun.handleOom(bun.default_allocator.create(Context));
+    const context = bun.handleOom(bun.default_allocator.create(_HandledPromiseContext));
     context.* = { globalThis: global, promise: promise_js };
-    global.bunVM().eventLoop().enqueueTask(jsc.ManagedTask.New(Context, Context.callback).init(context));
+    global.bunVM().eventLoop().enqueueTask(jsc.ManagedTask.New(_HandledPromiseContext, _HandledPromiseContext.callback).init(context));
 }
 
 @export @c fn Bun__onDidAppendPlugin(jsc_vm: *VirtualMachine, globalObject: *JSGlobalObject) {

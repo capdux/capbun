@@ -84,11 +84,11 @@ const List = std.ArrayListUnmanaged;
 pub fn SkipTypescript(comptime parser_feature__typescript: bool, comptime parser_feature__jsx: JSXTransformType, comptime parser_feature__scan_only: bool) type {
         return struct {
 
-pub fn skipTypescriptReturnType(p: *P) anyerror!void {
+pub fn skipTypescriptReturnType(p: *P) !void {
             _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), false, undefined);
     }
 
-pub fn skipTypescriptReturnTypeWithMetadata(p: *P) anyerror!TypeScript.Metadata {
+pub fn skipTypescriptReturnTypeWithMetadata(p: *P) !TypeScript.Metadata {
             var result = TypeScript.Metadata.default;
             _ = &result;
             _ = try p.skipTypeScriptTypeWithOpts(.lowest, TypeScript.SkipTypeOptions.Bitset.initOne(.is_return_type), true, (&result));
@@ -100,7 +100,7 @@ pub fn skipTypeScriptType(p: *P, level: js_ast.Op.Level) anyerror!void {
             _ = try p.skipTypeScriptTypeWithOpts(level, TypeScript.SkipTypeOptions.empty, false, undefined);
     }
 
-pub fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level) anyerror!TypeScript.Metadata {
+pub fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level) !TypeScript.Metadata {
             _ = p.markTypeScriptOnly();
             var result = TypeScript.Metadata.default;
             _ = &result;
@@ -108,7 +108,7 @@ pub fn skipTypeScriptTypeWithMetadata(p: *P, level: js_ast.Op.Level) anyerror!Ty
             return result;
     }
 
-pub fn skipTypeScriptBinding(p: *P) anyerror!void {
+pub fn skipTypeScriptBinding(p: *P) !void {
             _ = p.markTypeScriptOnly();
             switch (p.lexer.token) {
 .t_identifier, .t_this => {
@@ -177,7 +177,7 @@ return error.Backtrack;
 }
     }
 
-pub fn skipTypescriptFnArgs(p: *P) anyerror!void {
+pub fn skipTypescriptFnArgs(p: *P) !void {
             _ = p.markTypeScriptOnly();
             _ = try p.lexer.expect(.t_open_paren);
             while ((p.lexer.token != .t_close_paren)) {
@@ -775,7 +775,7 @@ if ((!p.lexer.has_newline_before)) {
             _ = try p.lexer.expect(.t_close_brace);
     }
 
-pub fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag) anyerror!SkipTypeParameterResult {
+pub fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag) !SkipTypeParameterResult {
             _ = p.markTypeScriptOnly();
             if ((p.lexer.token != .t_less_than)) {
                 return SkipTypeParameterResult.did_not_skip_anything;
@@ -859,7 +859,7 @@ pub fn skipTypeScriptTypeParameters(p: *P, flags: TypeParameterFlag) anyerror!Sk
             return result;
     }
 
-pub fn skipTypeScriptTypeStmt(p: *P, opts: *ParseStatementOptions) anyerror!void {
+pub fn skipTypeScriptTypeStmt(p: *P, opts: *ParseStatementOptions) !void {
             if (opts.is_export) {
                 switch (p.lexer.token) {
 .t_open_brace => {
@@ -899,7 +899,7 @@ else => {
             _ = try p.lexer.expectOrInsertSemicolon();
     }
 
-pub fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions) anyerror!void {
+pub fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions) !void {
             const name = p.lexer.identifier;
             _ = try p.lexer.expect(.t_identifier);
             if (opts.is_module_scope) {
@@ -929,7 +929,7 @@ pub fn skipTypeScriptInterfaceStmt(p: *P, opts: *ParseStatementOptions) anyerror
             _ = try p.skipTypeScriptObjectType();
     }
 
-pub fn skipTypeScriptTypeArguments(p: *P, comptime isInsideJSXElement: bool) anyerror!bool {
+pub fn skipTypeScriptTypeArguments(p: *P, comptime isInsideJSXElement: bool) !bool {
             _ = p.markTypeScriptOnly();
             switch (p.lexer.token) {
 .t_less_than, .t_less_than_equals, .t_less_than_less_than, .t_less_than_less_than_equals => {
@@ -1069,7 +1069,7 @@ pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: Type
                 }
         }
     
-    pub fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) anyerror!SkipTypeParameterResult {
+    pub fn skipTypeScriptTypeParametersThenOpenParenWithBacktracking(p: *P) !SkipTypeParameterResult {
                 const result = try p.skipTypeScriptTypeParameters(.{ .allow_const_modifier = true });
                 if ((p.lexer.token != .t_open_paren)) {
                     return error.Backtrack;
@@ -1077,7 +1077,7 @@ pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: Type
                 return result;
         }
     
-    pub fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) anyerror!bool {
+    pub fn skipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: TypeScript.SkipTypeOptions.Bitset) !bool {
                 _ = try p.lexer.expect(.t_extends);
                 _ = try p.skipTypeScriptTypeWithOpts(.prefix, TypeScript.SkipTypeOptions.Bitset.initOne(.disallow_conditional_types), false, undefined);
                 if (((!flags.contains(.disallow_conditional_types)) and (p.lexer.token == .t_question))) {
@@ -1086,13 +1086,13 @@ pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: Type
                 return true;
         }
     
-    pub fn skipTypeScriptArrowArgsWithBacktracking(p: *P) anyerror!bool {
+    pub fn skipTypeScriptArrowArgsWithBacktracking(p: *P) !bool {
                 _ = try p.skipTypescriptFnArgs();
                 _ = (blk_catch_4: { break :blk_catch_4 ((p.lexer.expect(.t_equals_greater_than)) catch |__ce_4| { _ = &__ce_4; return error.Backtrack; }); });
                 return true;
         }
     
-    pub fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P) anyerror!bool {
+    pub fn skipTypeScriptTypeArgumentsWithBacktracking(p: *P) !bool {
                 if (try p.skipTypeScriptTypeArguments(false)) {
                     if ((!TypeScript.canFollowTypeArgumentsInExpression(p))) {
                         return error.Backtrack;
@@ -1101,7 +1101,7 @@ pub fn trySkipTypeScriptConstraintOfInferTypeWithBacktracking(p: *P, flags: Type
                 return true;
         }
     
-    pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) anyerror!void {
+    pub fn skipTypeScriptArrowReturnTypeWithBacktracking(p: *P) !void {
                 _ = try p.lexer.expect(.t_colon);
                 _ = try p.skipTypescriptReturnType();
                 if ((p.lexer.token != .t_equals_greater_than)) {

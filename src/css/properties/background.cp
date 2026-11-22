@@ -634,7 +634,7 @@ pub struct AspectRatio {
     }
 }
 
-const ClipsAndPrefix = struct { css.SmallList(BackgroundClip, 1), VendorPrefix };
+type ClipsAndPrefix = [css.SmallList(BackgroundClip, 1), VendorPrefix];
 
 pub struct BackgroundHandler {
     color: CssColor? = null,
@@ -852,16 +852,15 @@ pub struct BackgroundHandler {
         }
     }
 
+    inline fn push(*_, alloc: Allocator, d: *css.DeclarationList, comptime property_field_name: []const u8, val: auto) {
+        bun.handleOom(d.append(alloc, @unionInit(Property, property_field_name, val)));
+        const prop = @field(BackgroundProperty, property_field_name);
+        bun.bits.insert(BackgroundProperty, &_.flushed_properties, prop);
+    }
+
     fn flush(*_, allocator: Allocator, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) {
         if (!_.has_any) return;
         _.has_any = false;
-        const push = struct {
-            static fn push(handler: *BackgroundHandler, alloc: Allocator, d: *css.DeclarationList, comptime property_field_name: []const u8, val: auto) {
-                bun.handleOom(d.append(alloc, @unionInit(Property, property_field_name, val)));
-                const prop = @field(BackgroundProperty, property_field_name);
-                bun.bits.insert(BackgroundProperty, &handler.flushed_properties, prop);
-            }
-        }.push;
 
         let maybe_color_guard = OptValDeinitWithAllocGuard<CssColor>{ val: bun.take(&_.color), alloc: allocator };
         let maybe_images_guard = OptValDeinitWithAllocGuard<css.SmallList(Image, 1)>{ val: bun.take(&_.images), alloc: allocator };
@@ -938,11 +937,11 @@ pub struct BackgroundHandler {
 
                 if (_.flushed_properties.isEmpty()) {
                     for (fallback of backgrounds.getFallbacks(allocator, context.targets).slice()) {
-                        push(_, allocator, dest, "background", fallback);
+                        _.push(allocator, dest, "background", fallback);
                     }
                 }
 
-                push(_, allocator, dest, "background", backgrounds);
+                _.push(allocator, dest, "background", backgrounds);
 
                 if (clip := clip_property) {
                     bun.handleOom(dest.append(allocator, clip));
@@ -958,10 +957,10 @@ pub struct BackgroundHandler {
             let color: CssColor = color_const;
             if (!_.flushed_properties.color) {
                 for (fallback of color.getFallbacks(allocator, context.targets).slice()) {
-                    push(_, allocator, dest, "background-color", fallback);
+                    _.push(allocator, dest, "background-color", fallback);
                 }
             }
-            push(_, allocator, dest, "background-color", color);
+            _.push(allocator, dest, "background-color", color);
         }
 
         if (images_ := bun.take(&maybe_images_guard.val)) {
@@ -969,10 +968,10 @@ pub struct BackgroundHandler {
             if (!_.flushed_properties.image) {
                 let fallbacks = images.getFallbacks(allocator, context.targets);
                 for (fallback of fallbacks.slice()) {
-                    push(_, allocator, dest, "background-image", fallback);
+                    _.push(allocator, dest, "background-image", fallback);
                 }
             }
-            push(_, allocator, dest, "background-image", images);
+            _.push(allocator, dest, "background-image", images);
         }
 
         if (maybe_x_positions_guard.val != null && maybe_y_positions_guard.val != null && maybe_x_positions_guard.val.?.len() == maybe_y_positions_guard.val.?.len()) {
@@ -985,30 +984,30 @@ pub struct BackgroundHandler {
             }
             maybe_x_positions_guard.val.?.clearRetainingCapacity();
             maybe_y_positions_guard.val.?.clearRetainingCapacity();
-            push(_, allocator, dest, "background-position", positions);
+            _.push(allocator, dest, "background-position", positions);
         } else {
             if (x := bun.take(&maybe_x_positions_guard.val)) {
-                push(_, allocator, dest, "background-position-x", x);
+                _.push(allocator, dest, "background-position-x", x);
             }
             if (y := bun.take(&maybe_y_positions_guard.val)) {
-                push(_, allocator, dest, "background-position-y", y);
+                _.push(allocator, dest, "background-position-y", y);
             }
         }
 
         if (rep := bun.take(&maybe_repeats_guard.val)) {
-            push(_, allocator, dest, "background-repeat", rep);
+            _.push(allocator, dest, "background-repeat", rep);
         }
 
         if (rep := bun.take(&maybe_sizes_guard.val)) {
-            push(this, allocator, dest, "background-size", rep);
+            _.push(allocator, dest, "background-size", rep);
         }
 
         if (rep := bun.take(&maybe_attachments_guard.val)) {
-            push(this, allocator, dest, "background-attachment", rep);
+            _.push(allocator, dest, "background-attachment", rep);
         }
 
         if (rep := bun.take(&maybe_origins_guard.val)) {
-            push(this, allocator, dest, "background-origin", rep);
+            _.push(allocator, dest, "background-origin", rep);
         }
 
         if (c := bun.take(&maybe_clips_guard.val)) {

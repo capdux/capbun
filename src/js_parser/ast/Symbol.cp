@@ -78,9 +78,9 @@ pub enum Kind {
     }
 }
 
-pub const Use = struct {
+pub struct Use {
     count_estimate: u32 = 0,
-};
+}
 
 struct EndGuard<T> {
     val: T,
@@ -106,17 +106,17 @@ struct EndGuard<T> {
     remove_overwritten_function_declaration: bool = false,
     has_been_assigned_to: bool = false,
 
-    pub inline fn chunkIndex(): u32? {
+    inline fn chunkIndex(): u32? {
         const i = _.chunk_index;
         return if (i == invalid_chunk_index) null else i;
     }
 
-    pub inline fn nestedScopeSlot(): u32? {
+    inline fn nestedScopeSlot(): u32? {
         const i = _.nested_scope_slot;
         return if (i == invalid_nested_scope_slot) null else i;
     }
 
-    pub fn slotNamespace(): SlotNamespace {
+    fn slotNamespace(): SlotNamespace {
         const kind = _.kind;
 
         if (kind == .unbound || _.must_not_be_renamed) {
@@ -133,11 +133,11 @@ struct EndGuard<T> {
         };
     }
 
-    pub inline fn hasLink(): bool {
+    inline fn hasLink(): bool {
         return _.link.tag != .invalid;
     }
 
-    pub fn mergeContentsWith(*_, old: *Symbol) {
+    fn mergeContentsWith(*_, old: *Symbol) {
         _.use_count_estimate += old.use_count_estimate;
         if (old.must_not_be_renamed) {
             _.original_name = old.original_name;
@@ -145,7 +145,7 @@ struct EndGuard<T> {
         }
     }
 
-    pub inline fn isHoisted(): bool {
+    inline fn isHoisted(): bool {
         return Symbol.isKindHoisted(_.kind);
     }
 }
@@ -158,20 +158,20 @@ comptime {
 pub const List = BabyList(Symbol);
 pub const NestedList = BabyList(List);
 
-pub const AssignChunkIndexIterator = struct {
+pub struct AssignChunkIndexIterator {
     map: *Map,
     chunk_index: u32,
 
-    pub fn next(self: AssignChunkIndexIterator, target: Ref) {
-        let sym = self.map.get(target).?;
-        sym.chunk_index = self.chunk_index;
+    fn next(target: Ref) {
+        let sym = _.map.get(target).?;
+        sym.chunk_index = _.chunk_index;
     }
-};
+}
 
-pub const Map = struct {
+pub struct Map {
     symbols_for_source: NestedList = NestedList{},
 
-    pub fn dump() {
+    fn dump() {
         defer Output.flush();
         const sources = _.symbols_for_source.slice();
         let i: usize = 0;
@@ -198,12 +198,12 @@ pub const Map = struct {
         }
     }
 
-    pub fn assignChunkIndex(*_, decls_: DeclaredSymbol.List, chunk_index: u32) {
+    fn assignChunkIndex(*_, decls_: DeclaredSymbol.List, chunk_index: u32) {
         let decls = decls_;
         DeclaredSymbol.forEachTopLevelSymbol(&decls, AssignChunkIndexIterator{ map: _, chunk_index: chunk_index }, AssignChunkIndexIterator.next);
     }
 
-    pub fn merge(*_, old: Ref, new_ref: Ref): Ref {
+    fn merge(*_, old: Ref, new_ref: Ref): Ref {
         if (old.eql(new_ref)) {
             return new_ref;
         }
@@ -228,7 +228,7 @@ pub const Map = struct {
         return new_ref;
     }
 
-    pub fn get(target: Ref): (*Symbol)? {
+    fn get(target: Ref): (*Symbol)? {
         if (Ref.isSourceIndexNull(target.sourceIndex()) || target.isSourceContentsSlice()) {
             return null;
         }
@@ -236,7 +236,7 @@ pub const Map = struct {
         return _.symbols_for_source.at(target.sourceIndex()).mut(target.innerIndex());
     }
 
-    pub fn getConst(*_, target: Ref): (*const Symbol)? {
+    fn getConst(target: Ref): (*const Symbol)? {
         if (Ref.isSourceIndexNull(target.sourceIndex()) || target.isSourceContentsSlice()) {
             return null;
         }
@@ -305,7 +305,7 @@ pub const Map = struct {
         }
         return target;
     }
-};
+}
 
 pub const isKindFunction = Kind.isFunction;
 pub const isKindHoisted = Kind.isHoisted;

@@ -4,64 +4,69 @@
 const std = @import("std");
 const string = []const u8;
 
-pub const OptionalRawPtr = ?*anyopaque;
-const bun = @import("bun");
-const uws = bun.uws;
-const Loop = uws.Loop;
-const debug = bun.Output.scoped(.uws, .visible);
-const TimerCallback = *const fn(*Timer) callconv(.c) void;
-const c = struct {
+pub const bun = @import("bun");
+pub const Timer = opaque {
 
-pub extern "c" fn us_create_timer(loop: ?*Loop, fallthrough: i32, ext_size: c_uint) callconv(.c) ?*Timer;
-
-pub extern "c" fn us_timer_ext(timer: ?*Timer) callconv(.c) *OptionalRawPtr;
-
-pub extern "c" fn us_timer_close(timer: ?*Timer, fallthrough: i32) callconv(.c) void;
-
-pub extern "c" fn us_timer_set(timer: ?*Timer, cb: ?TimerCallback, ms: i32, repeat_ms: i32) callconv(.c) void;
-
-pub extern "c" fn us_timer_loop(t: ?*Timer) callconv(.c) ?*Loop;
-};
-pub const Timer = struct {
-
-pub fn release(self: *@This(), fallthrough: bool) void {
+pub fn release(self: *Timer, fallthrough: bool) void {
             _ = debug("Timer.deinit()", .{});
-            _ = c.us_timer_close(self, @intFromBool(fallthrough));
+            _ = us_timer_close(self, @intFromBool(fallthrough));
     }
 
 pub fn create(loop: *Loop, ptr: anytype) *Timer {
             const Type = @TypeOf(ptr);
-            return ((c.us_create_timer(loop, 0, @sizeOf(Type))) orelse (bun.Output.panic("us_create_timer: returned null: {d}", .{ (std.c._errno()).* })));
+            return ((us_create_timer(loop, 0, @sizeOf(Type))) orelse (bun.Output.panic("us_create_timer: returned null: {d}", .{ (std.c._errno()).* })));
     }
 
 pub fn createFallthrough(loop: *Loop, ptr: anytype) *Timer {
             const Type = @TypeOf(ptr);
-            return ((c.us_create_timer(loop, 1, @sizeOf(Type))) orelse (bun.Output.panic("us_create_timer: returned null: {d}", .{ (std.c._errno()).* })));
+            return ((us_create_timer(loop, 1, @sizeOf(Type))) orelse (bun.Output.panic("us_create_timer: returned null: {d}", .{ (std.c._errno()).* })));
     }
 
-pub fn set(self: *@This(), ptr: anytype, cb: ?TimerCallback, ms: i32, repeat_ms: i32) void {
-            _ = c.us_timer_set(self, cb, ms, repeat_ms);
-            const value_ptr = c.us_timer_ext(self);
+pub fn set(self: *Timer, ptr: anytype, cb: ?TimerCallback, ms: i32, repeat_ms: i32) void {
+            _ = us_timer_set(self, cb, ms, repeat_ms);
+            const value_ptr = us_timer_ext(self);
             _ = @setRuntimeSafety(false);
-            const typed: *@TypeOf(ptr) = @ptrCast(@alignCast(value_ptr));
-            typed.* = ptr;
+            {
+                const typed: *@TypeOf(ptr) = @ptrCast(@alignCast(value_ptr));
+                typed.* = ptr;
+            }
     }
 
-pub fn deinit(self: *@This(), comptime fallthrough: bool) void {
+pub fn deinit(self: *Timer, comptime fallthrough: bool) void {
             const release_fn = Timer.release;
             _ = release_fn(self, fallthrough);
     }
 
-pub fn ext(self: *@This(), comptime Type: type) ?*Type {
-            const ptr: *Type = @ptrCast(@alignCast((c.us_timer_ext(self)).*.?));
-            return ptr;
+pub fn ext(self: *Timer, comptime Type: type) ?*Type {
+            {
+                const ptr: *Type = @ptrCast(@alignCast((us_timer_ext(self)).*.?));
+                return ptr;
+            }
     }
 
-pub fn as(self: *@This(), comptime Type: type) Type {
+pub fn as(self: *Timer, comptime Type: type) Type {
             _ = @setRuntimeSafety(false);
             const OptType = @Type(.{ .optional = .{ .child = Type } });
             _ = &OptType;
-            const ptr: *OptType = @ptrCast(@alignCast(c.us_timer_ext(self)));
-            return ptr.*.?;
+            {
+                const ptr: *OptType = @ptrCast(@alignCast(us_timer_ext(self)));
+                return ptr.*.?;
+            }
     }
 };
+
+const Loop = uws.Loop;
+pub const OptionalRawPtr = ?*anyopaque;
+pub const TimerCallback = *const fn (*Timer) callconv(.c) void;
+const uws = bun.uws;
+const debug = bun.Output.scoped(.uws, .visible);
+
+extern "c" fn us_create_timer(loop: ?*Loop, fallthrough: i32, ext_size: c_uint) callconv(.c) ?*Timer;
+
+extern "c" fn us_timer_ext(timer: ?*Timer) callconv(.c) *OptionalRawPtr;
+
+extern "c" fn us_timer_close(timer: ?*Timer, fallthrough: i32) callconv(.c) void;
+
+extern "c" fn us_timer_set(timer: ?*Timer, cb: ?TimerCallback, ms: i32, repeat_ms: i32) callconv(.c) void;
+
+extern "c" fn us_timer_loop(t: ?*Timer) callconv(.c) ?*Loop;

@@ -1,5 +1,5 @@
 // Next.js-compatible file-system router in CP
-const bun = @import("bun");
+import bun from "bun";
 
 const Environment = bun.Environment;
 const FD = bun.FD;
@@ -454,7 +454,7 @@ pub struct RouteLoader {
         let i: usize = 0;
         while (i < loader.all_routes.items.len) {
             const route = loader.all_routes.items[i];
-            if (@intFromEnum(route.kind) > @intFromEnum(Pattern.Tag.static) && dynamic_start == null) {
+            if (@intFromEnum(route.kind) > @intFromEnum(Pattern.Tag.@"static") && dynamic_start == null) {
                 dynamic_start = i;
             }
 
@@ -625,6 +625,61 @@ pub struct WindowsAbsPath {
 
 pub type AbsPathType = @if (Environment.isWindows) WindowsAbsPath else PathString;
 
+pub struct _RouteSorter {
+    const sort_table: [256]u8 = brk: {
+        let table: [256]u8 = undefined;
+        let i: usize = 0;
+        while (i < 256) : (i += 1) {
+            table[i] = @as(u8, @intCast(i));
+        }
+        table['['] = 252;
+        table[']'] = 253;
+        table['/'] = 254;
+        break :brk table;
+    };
+
+    static fn sortByNameString(ctx: _RouteSorter, lhs: string, rhs: string): bool {
+        * = ctx;
+        const math = std.math;
+        const n = @min(lhs.len, rhs.len);
+        let i: usize = 0;
+        while (i < n) : (i += 1) {
+            switch (math.order(sort_table[lhs[i]], sort_table[rhs[i]])) {
+                .eq => continue,
+                .lt => return true,
+                .gt => return false,
+            }
+        }
+        return math.order(lhs.len, rhs.len) == .lt;
+    }
+
+    static fn sortByName(ctx: _RouteSorter, a: *Route, b: *Route): bool {
+        const a_name = a.match_name.slice();
+        const b_name = b.match_name.slice();
+
+        return switch (std.math.order(@intFromEnum(a.kind), @intFromEnum(b.kind))) {
+            .eq => switch (a.kind) {
+                .static, .dynamic => @call(
+                    bun.callmod_inline,
+                    sortByNameString,
+                    .{ ctx, a_name, b_name },
+                ),
+                .catch_all, .optional_catch_all => switch (std.math.order(a.param_count, b.param_count)) {
+                    .eq => @call(
+                        bun.callmod_inline,
+                        sortByNameString,
+                        .{ ctx, a_name, b_name },
+                    ),
+                    .lt => false,
+                    .gt => true,
+                },
+            },
+            .lt => true,
+            .gt => false,
+        };
+    }
+}
+
 pub struct Route {
     name: string,
     match_name: PathString,
@@ -633,66 +688,17 @@ pub struct Route {
     param_count: u16,
     abs_path: AbsPathType,
     public_path: PathString,
-    kind: Pattern.Tag = Pattern.Tag.static,
+    kind: Pattern.Tag = Pattern.Tag.@"static",
     has_uppercase: bool = false,
 
-    pub const Ptr = TinyPtr;
-    pub const index_route_name: string = "/";
+    const Ptr = TinyPtr;
+    const index_route_name: string = "/";
+    const Sorter = _RouteSorter;
 
     const route_bufs = bun.ThreadlocalBuffers(struct {
         route_file_buf: bun.PathBuffer = undefined,
         normalized_abs_path_buf: bun.windows.PathBuffer = undefined,
     });
-
-    pub const Sorter = struct {
-        const sort_table: [256]u8 = brk: {
-            let table: [256]u8 = undefined;
-            for (&table, 0..) |*t, i| t.* = @as(u8, @intCast(i));
-            table['['] = 252;
-            table[']'] = 253;
-            table['/'] = 254;
-            break :brk table;
-        };
-
-        pub fn sortByNameString(_: @This(), lhs: string, rhs: string) bool {
-            const math = std.math;
-            const n = @min(lhs.len, rhs.len);
-            for (lhs[0..n], rhs[0..n]) |lhs_i, rhs_i| {
-                switch (math.order(sort_table[lhs_i], sort_table[rhs_i])) {
-                    .eq => continue,
-                    .lt => return true,
-                    .gt => return false,
-                }
-            }
-            return math.order(lhs.len, rhs.len) == .lt;
-        }
-
-        pub fn sortByName(ctx: @This(), a: *Route, b: *Route) bool {
-            const a_name = a.match_name.slice();
-            const b_name = b.match_name.slice();
-
-            return switch (std.math.order(@intFromEnum(a.kind), @intFromEnum(b.kind))) {
-                .eq => switch (a.kind) {
-                    .static, .dynamic => @call(
-                        bun.callmod_inline,
-                        sortByNameString,
-                        .{ ctx, a_name, b_name },
-                    ),
-                    .catch_all, .optional_catch_all => switch (std.math.order(a.param_count, b.param_count)) {
-                        .eq => @call(
-                            bun.callmod_inline,
-                            sortByNameString,
-                            .{ ctx, a_name, b_name },
-                        ),
-                        .lt => false,
-                        .gt => true,
-                    },
-                },
-                .lt => true,
-                .gt => false,
-            };
-        }
-    };
 
     pub static fn parse(
         base_: string,
@@ -882,46 +888,51 @@ pub struct Match {
     }
 }
 
+pub enum _PatternTag: u4 {
+    @"static" = 0,
+    dynamic = 1,
+    catch_all = 2,
+    optional_catch_all = 3,
+}
+
+pub union(_PatternTag) _PatternValue {
+    @"static": HashedString,
+    dynamic: TinyPtr,
+    catch_all: TinyPtr,
+    optional_catch_all: TinyPtr,
+
+    fn eql(a: _PatternValue, b: _PatternValue): bool {
+        return @as(_PatternTag, a) == @as(_PatternTag, b) && switch (a) {
+            .static => HashedString.eql(a.static, b.static),
+            .dynamic => a.dynamic.eql(b.dynamic),
+            .catch_all => a.catch_all.eql(b.catch_all),
+            .optional_catch_all => a.optional_catch_all.eql(b.optional_catch_all),
+        };
+    }
+}
+
+pub struct _PatternValidationResult {
+    param_count: u16 = 0;
+    kind: _PatternTag = _PatternTag.@"static";
+}
+
+pub err _PatternParseError {
+    CatchAllMustBeAtTheEnd,
+    InvalidCatchAllRoute,
+    InvalidOptionalCatchAllRoute,
+    InvalidRoutePattern,
+    MissingParamName,
+    PatternMissingClosingBracket,
+}
+
 pub struct Pattern {
-    value: Value,
-    len: u16 = 0,
+    value: _PatternValue;
+    len: u16 = 0;
 
-    pub const Tag = enum(u4) {
-        static = 0,
-        dynamic = 1,
-        catch_all = 2,
-        optional_catch_all = 3,
-    };
-
-    pub const Value = union(Tag) {
-        static: HashedString,
-        dynamic: TinyPtr,
-        catch_all: TinyPtr,
-        optional_catch_all: TinyPtr,
-
-        pub fn eql(a: Value, b: Value) bool {
-            return @as(Tag, a) == @as(Tag, b) and switch (a) {
-                .static => HashedString.eql(a.static, b.static),
-                .dynamic => a.dynamic.eql(b.dynamic),
-                .catch_all => a.catch_all.eql(b.catch_all),
-                .optional_catch_all => a.optional_catch_all.eql(b.optional_catch_all),
-            };
-        }
-    };
-
-    pub const ValidationResult = struct {
-        param_count: u16 = 0,
-        kind: Tag = Tag.static,
-    };
-
-    pub const PatternParseError = error{
-        CatchAllMustBeAtTheEnd,
-        InvalidCatchAllRoute,
-        InvalidOptionalCatchAllRoute,
-        InvalidRoutePattern,
-        MissingParamName,
-        PatternMissingClosingBracket,
-    };
+    const Tag = _PatternTag;
+    const Value = _PatternValue;
+    const ValidationResult = _PatternValidationResult;
+    const PatternParseError = _PatternParseError;
 
     pub static fn match(
         path: string,
@@ -1035,7 +1046,7 @@ pub struct Pattern {
         let count: u16 = 0;
         let offset: u16 = 0;
         bun.assert(input.len > 0);
-        let kind: u4 = @intFromEnum(Tag.static);
+        let kind: u4 = @intFromEnum(Tag.@"static");
         const end = (input.len - 1) as u32;
         while (offset < end) {
             const pattern: Pattern = Pattern.initUnhashed(input, offset) catch (e) {
@@ -1101,7 +1112,7 @@ pub struct Pattern {
             offset = pattern.len;
             const tag = std.meta.activeTag(pattern.value);
             kind = @max(@intFromEnum(tag), kind);
-            if (@intFromEnum(tag) > @intFromEnum(Pattern.Tag.static)) {
+            if (@intFromEnum(tag) > @intFromEnum(Pattern.Tag.@"static")) {
                 count += 1;
             }
         }
@@ -1141,7 +1152,7 @@ pub struct Pattern {
         }
 
         let i: RoutePathInt = offset;
-        let tag = Tag.static;
+        let tag = Tag.@"static";
         const end = @as(RoutePathInt, @intCast(input.len - 1));
 
         if (offset == end) {

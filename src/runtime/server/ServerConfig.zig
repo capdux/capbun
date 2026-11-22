@@ -62,9 +62,27 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _DevelopmentOption = enum {
+    development,
+    production,
+    development_without_hmr,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isHMREnabled(self: _DevelopmentOption) bool {
+            return (self == .development);
+    }
+
+pub fn isDevelopment(self: _DevelopmentOption) bool {
+            return ((self == .development) or (self == .development_without_hmr));
+    }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -220,6 +238,127 @@ pub fn __cp_deinit(self: *SslErrGuard) void {
     }
 };
 
+pub const _AddressTcp = struct {
+    port: u16 = 0,
+    hostname: ?[*:0]const u8 = null,
+};
+
+pub const Address = union(enum) {
+    tcp: _AddressTcp,
+    unix: [:0]const u8,
+
+pub fn deinit(self: *Address, allocator: std.mem.Allocator) void {
+            switch (self.*) {
+.tcp => |tcp| {
+if (tcp.hostname) |host| {
+                _ = &host;
+                _ = allocator.free(bun.sliceTo(host, 0));
+            }
+},
+.unix => |addr| {
+_ = allocator.free(addr);
+},
+}
+            self.* = .{ .tcp = .{} };
+    }
+
+pub fn release(self: *Address, allocator: std.mem.Allocator) void {
+            _ = self.deinit(allocator);
+    }
+};
+
+pub const _RouteDeclarationMethod = union(enum) {
+    any: void,
+    specific: HTTP.Method,
+};
+
+pub const _RouteDeclaration = struct {
+    path: [:0]const u8 = "",
+    method: _RouteDeclarationMethod = .@"any",
+
+pub fn release(self: *_RouteDeclaration) void {
+            if ((self.path.len > 0)) {
+                _ = bun.default_allocator.free(self.path);
+            }
+    }
+
+pub fn deinit(self: *_RouteDeclaration) void {
+            _ = self.release();
+    }
+};
+
+pub const _StaticRouteEntry = struct {
+    path: []const u8,
+    route: AnyRoute,
+    method: HTTP.Method.Optional = .@"any",
+
+pub fn memoryCost(self: _StaticRouteEntry) usize {
+            return (self.path.len + self.route.memoryCost());
+    }
+
+pub fn clone(self: _StaticRouteEntry) !_StaticRouteEntry {
+            _ = self.route.ref();
+            return .{ .path = try bun.default_allocator.dupe(u8, self.path), .route = self.route, .method = self.method };
+    }
+
+pub fn release(self: *_StaticRouteEntry) void {
+            _ = bun.default_allocator.free(self.path);
+            self.path = "";
+            _ = self.route.deref();
+            self.* = undefined;
+    }
+
+pub fn deinit(self: *_StaticRouteEntry) void {
+            _ = self.release();
+    }
+
+pub fn isLessThan(_: void, lhs: _StaticRouteEntry, rhs: _StaticRouteEntry) bool {
+            return strings.cmpStringsDesc(undefined, lhs.path, rhs.path);
+    }
+};
+
+pub const _StaticRoutesHashContext = struct {
+
+pub fn hash(route: *_StaticRouteEntry) u64 {
+            var hasher = std.hash.Wyhash.init(0);
+            _ = &hasher;
+            switch (route.method) {
+.@"any" => {
+_ = hasher.update("ANY");
+},
+.method => |*set| {
+var iter = set.iterator();
+            _ = &iter;
+            while (iter.next()) |method| {
+                _ = hasher.update(@tagName(method));
+            }
+},
+}
+            _ = hasher.update(route.path);
+            return hasher.final();
+    }
+};
+
+pub const _FromJSOptions = struct {
+    allow_bake_config: bool = true,
+    is_fetch_required: bool = true,
+    has_user_routes: bool = false,
+};
+
+pub const UserRouteBuilder = struct {
+    route: _RouteDeclaration,
+    callback: jsc.Strong.Optional = .empty,
+
+pub fn release(self: *UserRouteBuilder) void {
+            _ = self.route.deinit();
+            _ = self.callback.deinit();
+    }
+
+pub fn deinit(self: *UserRouteBuilder) void {
+            _ = self.release();
+    }
+};
+
 pub const ServerConfig = @This();
 
 address: Address = .{ .tcp = .{} },
@@ -250,11 +389,11 @@ negative_routes: std.array_list.Managed(StringZ) = std.array_list.Managed(String
 user_routes_to_build: std.array_list.Managed(UserRouteBuilder) = std.array_list.Managed(UserRouteBuilder).init(bun.default_allocator),
 bake: ?bun.bake.UserOptions = null,
 
-pub fn isDevelopment(self: *const ServerConfig) bool {
+pub fn isDevelopment(self: ServerConfig) bool {
         return self.development.isDevelopment();
 }
 
-pub fn memoryCost(self: *const ServerConfig) usize {
+pub fn memoryCost(self: ServerConfig) usize {
         var cost: usize = 0;
         _ = &cost;
         for (self.static_routes.items) |*entry| {
@@ -271,27 +410,6 @@ pub fn memoryCost(self: *const ServerConfig) usize {
 }
 
 pub fn normalizeStaticRoutesList(self: *ServerConfig) !void {
-        const Context = struct {
-
-pub fn hash(route: *StaticRouteEntry) u64 {
-            var hasher = std.hash.Wyhash.init(0);
-            _ = &hasher;
-            switch (route.method) {
-.@"any" => {
-_ = hasher.update("ANY");
-},
-.method => |*set| {
-var iter = set.iterator();
-            _ = &iter;
-            while (iter.next()) |method| {
-                _ = hasher.update(@tagName(method));
-            }
-},
-}
-            _ = hasher.update(route.path);
-            return hasher.final();
-    }
-};
         var static_routes_dedupe_list = std.array_list.Managed(u64).init(bun.default_allocator);
         _ = &static_routes_dedupe_list;
         _ = try static_routes_dedupe_list.ensureTotalCapacity(@truncate(self.static_routes.items.len));
@@ -309,7 +427,7 @@ var iter = set.iterator();
             _ = &index;
             while (true) {
                 const route = (&list.items[@as(usize, @intCast(index))]);
-                const hash = Context.hash(route);
+                const hash = _StaticRoutesHashContext.hash(route);
                 if ((std.mem.indexOfScalar(u64, static_routes_dedupe_list.items, hash) != null)) {
                     var item = list.orderedRemove(index);
                     _ = &item;
@@ -344,18 +462,7 @@ pub fn appendStaticRoute(self: *ServerConfig, path: []const u8, route: AnyRoute,
 
 pub fn applyStaticRoute(server: AnyServer, comptime ssl: bool, app: *uws.NewApp(ssl), comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) void {
         entry.server = server;
-        const handler_wrap = struct {
-
-pub fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
-            const any_resp: uws.AnyResponse = (if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp });
-            _ = route.onRequest(.{ .h1 = req }, any_resp);
-    }
-
-pub fn HEAD(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
-            const any_resp: uws.AnyResponse = (if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp });
-            _ = route.onHEADRequest(.{ .h1 = req }, any_resp);
-    }
-};
+        const handler_wrap = _HandlerWrap(ssl, T);
         _ = app.head(path, entry, handler_wrap.HEAD);
         switch (method) {
 .@"any" => {
@@ -373,16 +480,7 @@ var iter = m.iterator();
 
 pub fn applyStaticRouteH3(server: AnyServer, app: *uws.H3.App, comptime T: type, entry: T, path: []const u8, method: HTTP.Method.Optional) void {
         entry.server = server;
-        const handler_wrap = struct {
-
-pub fn handler(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
-            _ = route.onRequest(.{ .h3 = req }, .{ .H3 = resp });
-    }
-
-pub fn HEAD(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
-            _ = route.onHEADRequest(.{ .h3 = req }, .{ .H3 = resp });
-    }
-};
+        const handler_wrap = _H3HandlerWrap(T);
         _ = app.head(path, entry, handler_wrap.HEAD);
         switch (method) {
 .@"any" => {
@@ -465,7 +563,7 @@ _ = (blk_catch_3: { break :blk_catch_3 ((writer.print("unix:{s}", .{ bun.sliceTo
         return arraylist.items;
 }
 
-pub fn getUsocketsOptions(self: *const ServerConfig) i32 {
+pub fn getUsocketsOptions(self: ServerConfig) i32 {
         var out: i32 = (if (self.reuse_port) (uws.LIBUS_LISTEN_REUSE_PORT | uws.LIBUS_LISTEN_REUSE_ADDR) else uws.LIBUS_LISTEN_EXCLUSIVE_PORT);
         _ = &out;
         if (self.ipv6_only) {
@@ -1130,83 +1228,10 @@ else => {
         }
         return;
 }
-pub const DevelopmentOption = enum {
-    development,
-    production,
-    development_without_hmr,
-
-    pub fn isHMREnabled(this: DevelopmentOption) bool {
-        return this == .development;
-    }
-
-    pub fn isDevelopment(this: DevelopmentOption) bool {
-        return this == .development or this == .development_without_hmr;
-    }
-};
-pub const RouteDeclaration = struct {
-    path: [:0]const u8 = "",
-    method: union(enum) {
-        any: void,
-        specific: HTTP.Method,
-    } = .@"any",
-
-pub fn release(self: *@This()) void {
-            if ((self.path.len > 0)) {
-                _ = bun.default_allocator.free(self.path);
-            }
-    }
-
-pub fn deinit(self: *@This()) void {
-            _ = self.release();
-    }
-};
-pub const StaticRouteEntry = struct {
-    path: []const u8,
-    route: AnyRoute,
-    method: HTTP.Method.Optional = .@"any",
-
-pub fn memoryCost(self: *const @This()) usize {
-            return (self.path.len + self.route.memoryCost());
-    }
-
-pub fn clone(self: @This()) !StaticRouteEntry {
-            _ = self.route.ref();
-            return .{ .path = try bun.default_allocator.dupe(u8, self.path), .route = self.route, .method = self.method };
-    }
-
-pub fn release(self: *@This()) void {
-            _ = bun.default_allocator.free(self.path);
-            self.path = "";
-            _ = self.route.deref();
-            self.* = undefined;
-    }
-
-pub fn deinit(self: *@This()) void {
-            _ = self.release();
-    }
-
-pub fn isLessThan(_: void, lhs: StaticRouteEntry, rhs: StaticRouteEntry) bool {
-            return strings.cmpStringsDesc(undefined, lhs.path, rhs.path);
-    }
-};
-pub const FromJSOptions = struct {
-    allow_bake_config: bool = true,
-    is_fetch_required: bool = true,
-    has_user_routes: bool = false,
-};
-const UserRouteBuilder = struct {
-    route: ServerConfig.RouteDeclaration,
-    callback: jsc.Strong.Optional = .empty,
-
-pub fn release(self: *@This()) void {
-            _ = self.route.deinit();
-            _ = self.callback.deinit();
-    }
-
-pub fn deinit(self: *@This()) void {
-            _ = self.release();
-    }
-};
+pub const DevelopmentOption = _DevelopmentOption;
+pub const RouteDeclaration = _RouteDeclaration;
+pub const StaticRouteEntry = _StaticRouteEntry;
+pub const FromJSOptions = _FromJSOptions;
 pub const StringZ = [:0]const u8;
 const HTTP = bun.http;
 const JSError = bun.JSError;
@@ -1220,29 +1245,31 @@ const AnyServer = jsc.API.AnyServer;
 const WebSocketServerContext = @import("./WebSocketServerContext.zig");
 const HTMLBundle = @import("./HTMLBundle.zig");
 pub const SSLConfig = @import("../socket/SSLConfig.zig");
-pub const Address = union(enum) {
-    tcp: struct {
-        port: u16 = 0,
-        hostname: ?[*:0]const u8 = null,
-    },
-    unix: [:0]const u8,
 
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-            switch (self.*) {
-.tcp => |tcp| {
-if (tcp.hostname) |host| {
-                _ = &host;
-                _ = allocator.free(bun.sliceTo(host, 0));
-            }
-},
-.unix => |addr| {
-_ = allocator.free(addr);
-},
-}
-            self.* = .{ .tcp = .{} };
+pub fn _HandlerWrap(comptime ssl: bool, comptime T: type) type {
+        return struct {
+
+pub fn handler(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
+            const any_resp: uws.AnyResponse = (if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp });
+            _ = route.onRequest(.{ .h1 = req }, any_resp);
     }
 
-pub fn release(self: *@This(), allocator: std.mem.Allocator) void {
-            _ = self.deinit(allocator);
+pub fn HEAD(route: T, req: *uws.Request, resp: *uws.NewApp(ssl).Response) void {
+            const any_resp: uws.AnyResponse = (if (comptime ssl) .{ .SSL = resp } else .{ .TCP = resp });
+            _ = route.onHEADRequest(.{ .h1 = req }, any_resp);
     }
 };
+}
+
+pub fn _H3HandlerWrap(comptime T: type) type {
+        return struct {
+
+pub fn handler(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
+            _ = route.onRequest(.{ .h3 = req }, .{ .H3 = resp });
+    }
+
+pub fn HEAD(route: T, req: *uws.H3.Request, resp: *uws.H3.Response) void {
+            _ = route.onHEADRequest(.{ .h3 = req }, .{ .H3 = resp });
+    }
+};
+}

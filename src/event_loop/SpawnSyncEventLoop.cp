@@ -3,22 +3,22 @@ const jsc = bun.jsc;
 const uws = bun.uws;
 const libuv = bun.windows.libuv;
 
-const Handler = struct {
+struct Handler {
     @callconv("c")
-    pub static fn wakeup(loop: *uws.Loop) {
+    static fn wakeup(loop: *uws.Loop) {
         * = loop;
     }
 
     @callconv("c")
-    pub static fn pre(loop: *uws.Loop) {
+    static fn pre(loop: *uws.Loop) {
         * = loop;
     }
 
     @callconv("c")
-    pub static fn post(loop: *uws.Loop) {
+    static fn post(loop: *uws.Loop) {
         * = loop;
     }
-};
+}
 
 pub enum TickState { timeout, completed }
 
@@ -29,7 +29,7 @@ pub enum TickState { timeout, completed }
     uv_timer: if (bun.Environment.isWindows) (*bun.windows.libuv.Timer)? else void = if (bun.Environment.isWindows) null else {},
     did_timeout: bool = false,
 
-    pub fn init(*_, vm: *jsc.VirtualMachine) {
+    fn init(*_, vm: *jsc.VirtualMachine) {
         const loop = uws.Loop.create(Handler);
 
         _.* = .{
@@ -53,13 +53,15 @@ pub enum TickState { timeout, completed }
         bun.default_allocator.destroy(timer);
     }
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         if (comptime bun.Environment.isWindows) {
             if (timer := _.uv_timer) {
                 timer.stop();
                 timer.unref();
                 _.uv_timer = null;
-                libuv.uv_close(@ptrCast(@alignCast(timer)), @ptrCast(&onCloseUVTimer));
+                unsafe {
+                    libuv.uv_close(@ptrCast(@alignCast(timer)), @ptrCast(&onCloseUVTimer));
+                }
             }
         }
 
@@ -67,7 +69,7 @@ pub enum TickState { timeout, completed }
         _.uws_loop.deinit();
     }
 
-    pub fn prepare(*_, vm: *jsc.VirtualMachine) {
+    fn prepare(*_, vm: *jsc.VirtualMachine) {
         _.event_loop.global = vm.global;
         _.did_timeout = false;
         _.event_loop.virtual_machine = vm;
@@ -76,7 +78,7 @@ pub enum TickState { timeout, completed }
         vm.event_loop_handle = if (bun.Environment.isPosix) _.uws_loop else _.uws_loop.uv_loop;
     }
 
-    pub fn cleanup(*_, vm: *jsc.VirtualMachine, prev_event_loop: *jsc.EventLoop) {
+    fn cleanup(*_, vm: *jsc.VirtualMachine, prev_event_loop: *jsc.EventLoop) {
         vm.event_loop_handle = _.original_event_loop_handle;
         vm.event_loop = prev_event_loop;
 
@@ -88,15 +90,17 @@ pub enum TickState { timeout, completed }
         }
     }
 
-    pub fn handle(): jsc.EventLoopHandle {
+    fn handle(): jsc.EventLoopHandle {
         return jsc.EventLoopHandle.init(&_.event_loop);
     }
 
     @callconv("c")
     static fn onUVTimer(timer_: *bun.windows.libuv.Timer) {
-        const loop: *SpawnSyncEventLoop = @ptrCast(@alignCast(timer_.data));
-        loop.did_timeout = true;
-        loop.uws_loop.uv_loop.stop();
+        unsafe {
+            const loop: *SpawnSyncEventLoop = @ptrCast(@alignCast(timer_.data));
+            loop.did_timeout = true;
+            loop.uws_loop.uv_loop.stop();
+        }
     }
 
     fn prepareTimerOnWindows(*_, ts: *const bun.timespec) {
@@ -107,7 +111,7 @@ pub enum TickState { timeout, completed }
             timer.data = _;
             return;
         }
-        const uv_timer: *bun.windows.libuv.Timer = bun.default_allocator.create(bun.windows.libuv.Timer) catch |e| bun.handleOom(e);
+        const uv_timer: *bun.windows.libuv.Timer = bun.default_allocator.create(bun.windows.libuv.Timer) catch e => bun.handleOom(e);
         uv_timer.* = std.mem.zeroes(bun.windows.libuv.Timer);
         uv_timer.init(_.uws_loop.uv_loop);
         uv_timer.start(ts.msUnsigned(), 0, &onUVTimer);
@@ -116,7 +120,7 @@ pub enum TickState { timeout, completed }
         _.uv_timer = uv_timer;
     }
 
-    pub fn tickWithTimeout(*_, timeout: (*const bun.timespec)?): TickState {
+    fn tickWithTimeout(*_, timeout: (*const bun.timespec)?): TickState {
         let dur_val: bun.timespec = undefined;
         let duration: (*const bun.timespec)? = null;
         if (ts := timeout) {
@@ -157,7 +161,7 @@ pub enum TickState { timeout, completed }
         return .completed;
     }
 
-    pub fn isActive(): bool {
+    fn isActive(): bool {
         return _.uws_loop.isActive();
     }
 }

@@ -98,6 +98,18 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const WalkerEntry = struct {
+    dir: FD,
+    basename: OSPathSliceZ,
+    path: OSPathSliceZ,
+    kind: std.fs.Dir.Entry.Kind,
+};
+
+pub const StackItem = struct {
+    iter: WrappedIterator,
+    dirname_len: usize,
+};
+
 pub const Walker = @This();
 
 stack: std.array_list.Managed(StackItem),
@@ -201,7 +213,7 @@ pub fn walk(dir: FD, allocator: Allocator, skip_filenames: []const OSPathSlice, 
         _ = &name_buffer_guard;
         var __name_buffer_guard_moved = false; _ = &__name_buffer_guard_moved;
         defer if (!__name_buffer_guard_moved) { __name_buffer_guard_moved = true; const __T = @TypeOf(name_buffer_guard); if (@typeInfo(__T) == .optional) { if (name_buffer_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { name_buffer_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = name_buffer_guard; _drop_val.__cp_deinit(); } };
-        var stack_guard = DeinitGuard(std.array_list.Managed(Walker.StackItem)){ .val = std.array_list.Managed(Walker.StackItem).init(allocator) };
+        var stack_guard = DeinitGuard(std.array_list.Managed(StackItem)){ .val = std.array_list.Managed(StackItem).init(allocator) };
         _ = &stack_guard;
         var __stack_guard_moved = false; _ = &__stack_guard_moved;
         defer if (!__stack_guard_moved) { __stack_guard_moved = true; const __T = @TypeOf(stack_guard); if (@typeInfo(__T) == .optional) { if (stack_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { stack_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = stack_guard; _drop_val.__cp_deinit(); } };
@@ -225,24 +237,11 @@ pub fn walk(dir: FD, allocator: Allocator, skip_filenames: []const OSPathSlice, 
             skip_dirnames_[cp_cast_int(usize, mut_i)] = bun.hashWithSeed(seed, std.mem.sliceAsBytes(name));
             mut_i = (mut_i + 1);
         }
-        _ = try stack_guard.val.append(Walker.StackItem{ .iter = DirIterator.iterate(dir, iter_kind), .dirname_len = 0 });
+        _ = try stack_guard.val.append(StackItem{ .iter = DirIterator.iterate(dir, iter_kind), .dirname_len = 0 });
         _ = name_buffer_guard.disarm();
         _ = stack_guard.disarm();
         return Walker{ .stack = stack_guard.val, .name_buffer = name_buffer_guard.val, .skip_all = skip_names, .seed = seed, .skip_filenames = skip_filenames_, .skip_dirnames = skip_dirnames_ };
 }
-const NameBufferList = std.array_list.Managed(bun.OSPathChar);
-const iter_kind = if (Environment.isWindows) .u16 else .u8;
-const WrappedIterator = DirIterator.NewWrappedIterator(iter_kind);
-pub const WalkerEntry = struct {
-    dir: FD,
-    basename: OSPathSliceZ,
-    path: OSPathSliceZ,
-    kind: std.fs.Dir.Entry.Kind,
-};
-const StackItem = struct {
-    iter: WrappedIterator,
-    dirname_len: usize,
-};
 const Allocator = std.mem.Allocator;
 const path = std.fs.path;
 const DirIterator = bun.DirIterator;
@@ -251,3 +250,6 @@ const FD = bun.FD;
 const OOM = bun.OOM;
 const OSPathSlice = bun.OSPathSlice;
 const OSPathSliceZ = bun.OSPathSliceZ;
+const NameBufferList = std.array_list.Managed(bun.OSPathChar);
+const iter_kind = (if (Environment.isWindows) DirIterator.PathType.u16 else DirIterator.PathType.u8);
+const WrappedIterator = DirIterator.NewWrappedIterator(iter_kind);

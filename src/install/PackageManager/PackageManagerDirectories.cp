@@ -1,6 +1,9 @@
 pub const CacheDirectoryAndAbsPath = struct { FD, bun.AbsPath(.{}) };
 pub const GlobalLinkDirAndPath = struct { std.fs.Dir, []const u8 };
-pub const CacheDirAndSubpath = struct { cache_dir: std.fs.Dir, cache_dir_subpath: stringZ };
+pub struct CacheDirAndSubpath {
+    cache_dir: std.fs.Dir,
+    cache_dir_subpath: stringZ,
+}
 
 pub inline fn getCacheDirectory(client: *PackageManager): std.fs.Dir {
     return client.cache_directory_ ?? brk: {
@@ -558,7 +561,7 @@ pub fn computeCacheDirAndSubpath(
                 @memcpy(remain[0..folder.len], folder);
                 remain = remain[folder.len..];
                 remain[0] = 0;
-                const len = @intFromPtr(remain.ptr) - @intFromPtr(ptr);
+                const len = unsafe { @intFromPtr(remain.ptr) - @intFromPtr(ptr) };
                 cache_dir_subpath = folder_path_buf[0..len :0];
                 cache_dir = directory;
             }
@@ -733,17 +736,19 @@ pub fn writeYarnLock(client: *PackageManager)! {
     tmpfile.promoteToCWD(tmpname, "yarn.lock")?;
 }
 
-struct CacheVersion {
-    pub const current = 1;
-    pub const Formatter = struct {
-        version_number: usize? = null,
+pub struct CacheVersionFormatter {
+    version_number: usize? = null,
 
-        static fn format(self: *const @This(), writer: *std.Io.Writer)! {
-            if (version := self.version_number) {
-                writer.print("@@@{d}", .{version})?;
-            }
+    fn format(writer: *std.Io.Writer)! {
+        if (version := _.version_number) {
+            writer.print("@@@{d}", .{version})?;
         }
-    };
+    }
+}
+
+struct CacheVersion {
+    const current = 1;
+    const Formatter = CacheVersionFormatter;
 }
 
 struct PatchHashFmt {

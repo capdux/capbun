@@ -78,6 +78,15 @@ pub const lowerDecorators_mod = @import("./lowerDecorators.zig");
 pub const defines_mod = @import("../../bundler/defines.zig");
 pub const repl_transforms = @import("./repl_transforms.zig");
 pub const bun = @import("bun");
+pub const ReactRefreshExportKind = enum {
+    named,
+    default,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: ?*T,
@@ -134,27 +143,60 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const _RecentlyVisitedTSNamespaceExpressionData = union(enum) {
+    ref: Ref,
+    ptr: *E.Dot,
+};
+
+pub const RecentlyVisitedTSNamespace = struct {
+    expr: Expr.Data = Expr.empty.data,
+    map: ?*js_ast.TSNamespaceMemberMap = null,
+    pub const ExpressionData = _RecentlyVisitedTSNamespaceExpressionData;
+};
+
+pub const ReactRefreshImportClause = struct {
+    name: []const u8,
+    enabled: bool,
+    ref: Ref,
+};
+
 pub const ParserFeatures = struct {
     typescript: bool = false,
     jsx: JSXTransformType = .none,
     scan_only: bool = false,
 };
 
+pub const TSNamespacePair = struct {
+    map: js_ast.TSNamespaceMemberMap,
+    scope: js_ast.TSNamespaceScope,
+};
+
+pub const ScopeVisitor = struct {
+
+pub fn visit(symbols: []const js_ast.Symbol, char_freq: *js_ast.CharFreq, scope: *js_ast.Scope) void {
+            var iter = scope.members.iterator();
+            _ = &iter;
+            while (iter.next()) |entry| {
+                const symbol = (&symbols[@as(usize, @intCast(entry.value_ptr.ref.innerIndex()))]);
+                if ((symbol.slotNamespace() != .must_not_be_renamed)) {
+                    _ = char_freq.scan(symbol.original_name, (0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))));
+                }
+            }
+            if (scope.label_ref) |sym_ref| {
+                _ = &sym_ref;
+                const symbol = (&symbols[@as(usize, @intCast(sym_ref.innerIndex()))]);
+                if ((symbol.slotNamespace() != .must_not_be_renamed)) {
+                    _ = char_freq.scan(symbol.original_name, ((0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))) - 1));
+                }
+            }
+            for (cp_iter_slice(scope.children.slice())) |child| {
+                _ = &child;
+                _ = visit(symbols, char_freq, child);
+            }
+    }
+};
+
 const string = []const u8;
-const RecentlyVisitedTSNamespace = struct {
-    expr: Expr.Data = Expr.empty.data,
-    map: ?*js_ast.TSNamespaceMemberMap = null,
-    const ExpressionData = union(enum) {
-        ref: Ref,
-        ptr: *E.Dot,
-    };
-};
-const ReactRefreshImportClause = struct {
-    name: []const u8,
-    enabled: bool,
-    ref: Ref,
-};
-const ReactRefreshExportKind = enum { named, default };
 const import_meta_hot_accept_err = "Dependencies to `import.meta.hot.accept` must be statically analyzable module specifiers matching direct imports.";
 var e_missing_data: E.Missing = .{};
 var s_missing: S.Empty = .{};
@@ -799,30 +841,6 @@ pub fn computeCharacterFrequency(p: *P) ?js_ast.CharFreq {
                 _ = &record;
                 _ = freq.scan(record.path.text, -1);
             }
-            const ScopeVisitor = struct {
-
-pub fn visit(symbols: []const js_ast.Symbol, char_freq: *js_ast.CharFreq, scope: *js_ast.Scope) void {
-            var iter = scope.members.iterator();
-            _ = &iter;
-            while (iter.next()) |entry| {
-                const symbol: *const Symbol = (&symbols[@as(usize, @intCast(entry.value_ptr.ref.innerIndex()))]);
-                if ((symbol.slotNamespace() != .must_not_be_renamed)) {
-                    _ = char_freq.scan(symbol.original_name, (0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))));
-                }
-            }
-            if (scope.label_ref) |sym_ref| {
-                _ = &sym_ref;
-                const symbol = (&symbols[@as(usize, @intCast(sym_ref.innerIndex()))]);
-                if ((symbol.slotNamespace() != .must_not_be_renamed)) {
-                    _ = char_freq.scan(symbol.original_name, ((0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))) - 1));
-                }
-            }
-            for (cp_iter_slice(scope.children.slice())) |child| {
-                _ = &child;
-                _ = visit(symbols, char_freq, child);
-            }
-    }
-};
             _ = ScopeVisitor.visit(p.symbols.items, (&freq), p.module_scope);
             return freq;
     }
@@ -1088,7 +1106,7 @@ pub fn generateImportStmtForBakeResponse(p: *P, parts: *ListManaged(js_ast.Part)
             _ = ((parts.append(js_ast.Part{ .stmts = stmts, .declared_symbols = declared_symbols, .import_record_indices = bun.BabyList(u32).fromOwnedSlice(import_records), .tag = .runtime })) catch unreachable);
     }
 
-pub fn generateImportStmt(p: *P, import_path: []const u8, imports: anytype, parts: *ListManaged(js_ast.Part), symbols: anytype, additional_stmt: ?Stmt, comptime prefix: []const u8, comptime is_internal: bool) anyerror!void {
+pub fn generateImportStmt(p: *P, import_path: []const u8, imports: anytype, parts: *ListManaged(js_ast.Part), symbols: anytype, additional_stmt: ?Stmt, comptime prefix: []const u8, comptime is_internal: bool) !void {
             const allocator = p.allocator;
             const import_record_i = p.addImportRecordByRange(.stmt, logger.Range.None, import_path);
             var import_record: *ImportRecord = (&p.import_records.items[@as(usize, @intCast(import_record_i))]);
@@ -1167,14 +1185,14 @@ pub fn generateReactRefreshImportHmr(p: *P, parts: *ListManaged(js_ast.Part), im
                 _ = &entry;
                 if (entry.enabled) {
                     if (hot_module_reloading) {
-                        _ = items.appendAssumeCapacity(B.Property{ .key = p.newExpr(E.String{ .data = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name) }, logger.Loc.Empty), .value = p.b(B.Identifier{ .ref = entry.ref }, logger.Loc.Empty) });
+                        _ = items.appendAssumeCapacity(B.Property{ .key = p.newExpr(E.String{ .data = entry.name }, logger.Loc.Empty), .value = p.b(B.Identifier{ .ref = entry.ref }, logger.Loc.Empty) });
                     } else {
-                        _ = items.appendAssumeCapacity(js_ast.ClauseItem{ .alias = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .original_name = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .alias_loc = logger.Loc{  }, .name = LocRef{ .ref = entry.ref, .loc = logger.Loc{  } } });
+                        _ = items.appendAssumeCapacity(js_ast.ClauseItem{ .alias = entry.name, .original_name = entry.name, .alias_loc = logger.Loc{  }, .name = LocRef{ .ref = entry.ref, .loc = logger.Loc{  } } });
                     }
                     _ = declared_symbols.appendAssumeCapacity(.{ .ref = entry.ref, .is_top_level = true });
                     _ = try p.module_scope.generated.append(allocator, entry.ref);
                     _ = try p.is_import_item.put(allocator, entry.ref, undefined);
-                    _ = try p.named_imports.put(allocator, entry.ref, .{ .alias = (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name), .alias_loc = logger.Loc.Empty, .namespace_ref = namespace_ref, .import_record_index = import_record_index });
+                    _ = try p.named_imports.put(allocator, entry.ref, .{ .alias = entry.name, .alias_loc = logger.Loc.Empty, .namespace_ref = namespace_ref, .import_record_index = import_record_index });
                 }
             }
             stmts[cp_cast_int(usize, 0)] = p.s((if (hot_module_reloading) S.Local{ .kind = .k_const, .decls = try Decl.List.fromSlice(p.allocator, (&.{ .{ .binding = p.b(B.Object{ .properties = items.items }, logger.Loc.Empty), .value = p.newExpr(E.RequireString{ .import_record_index = import_record_index }, logger.Loc.Empty) } })) } else S.Import{ .namespace_ref = namespace_ref, .items = items.items, .import_record_index = import_record_index, .is_single_line = false }), logger.Loc.Empty);
@@ -1664,7 +1682,7 @@ else => {
             return .{ .failure = expr };
     }
 
-pub fn prepareForVisitPass(p: *P) anyerror!void {
+pub fn prepareForVisitPass(p: *P) !void {
             {
                 var i: usize = 0;
                 _ = &i;
@@ -1934,7 +1952,7 @@ pub inline fn nextScopeInOrderForVisitPass(p: *P) ScopeOrder {
             return head;
     }
 
-pub fn pushScopeForVisitPass(p: *P, kind: js_ast.Scope.Kind, loc: logger.Loc) anyerror!void {
+pub fn pushScopeForVisitPass(p: *P, kind: js_ast.Scope.Kind, loc: logger.Loc) !void {
             const order = p.nextScopeInOrderForVisitPass();
             if (((bun.Environment.allow_assert and (order.loc.start != loc.start)) or (order.scope.kind != kind))) {
                 p.log.level = .verbose;
@@ -2091,7 +2109,7 @@ else => {
             return ExprBindingTuple{ .binding = bind, .expr = initializer };
     }
 
-pub fn forbidLexicalDecl(p: *const P, loc: logger.Loc) anyerror!void {
+pub fn forbidLexicalDecl(p: *const P, loc: logger.Loc) !void {
             _ = try p.log.addError(p.source, loc, "Cannot use a declaration in a single-statement context");
     }
 
@@ -2440,7 +2458,7 @@ for (obj.items) |prop| {
 }
     }
 
-pub fn forbidInitializers(p: *P, decls: []G.Decl, comptime loop_type: []const u8, is_var: bool) anyerror!void {
+pub fn forbidInitializers(p: *P, decls: []G.Decl, comptime loop_type: []const u8, is_var: bool) !void {
             switch (decls.len) {
 0 => {
 
@@ -2460,7 +2478,7 @@ _ = try p.log.addError(p.source, decls[0].binding.loc, (comptime std.fmt.comptim
 }
     }
 
-pub fn requireInitializers(p: *P, comptime kind: S.Local.Kind, decls: []G.Decl) anyerror!void {
+pub fn requireInitializers(p: *P, comptime kind: S.Local.Kind, decls: []G.Decl) !void {
             const what = (switch (kind) {
 .k_await_using, .k_using => "declaration",
 .k_const => "constant",
@@ -2510,11 +2528,7 @@ pub fn getOrCreateExportedNamespaceMembers(p: *P, name: []const u8, is_export: b
                 _ = &existing;
                 return bun.create(p.allocator, js_ast.TSNamespaceScope, .{ .exported_members = existing, .is_enum_scope = is_enum_scope, .arg_ref = Ref.None });
             }
-            const Pair = struct {
-    map: js_ast.TSNamespaceMemberMap,
-    scope: js_ast.TSNamespaceScope,
-};
-            var pair = bun.handleOom(p.allocator.create(Pair));
+            var pair = bun.handleOom(p.allocator.create(TSNamespacePair));
             _ = &pair;
             pair.map = .{};
             pair.scope = .{ .exported_members = (&pair.map), .is_enum_scope = is_enum_scope, .arg_ref = Ref.None };
@@ -2527,7 +2541,7 @@ pub fn checkForNonBMPCodePoint(p: *P, loc: logger.Loc, name: []const u8) void {
             _ = &name;
     }
 
-pub fn markStrictModeFeature(p: *P, feature: StrictModeFeature, r: logger.Range, detail: []const u8) anyerror!void {
+pub fn markStrictModeFeature(p: *P, feature: StrictModeFeature, r: logger.Range, detail: []const u8) !void {
             const can_be_transformed = (feature == StrictModeFeature.for_in_var_init);
             const text = (switch (feature) {
 .with_statement => "With statements",
@@ -2681,7 +2695,7 @@ pub fn validateFunctionName(p: *P, func: G.Fn, kind: FunctionKind) void {
             }
     }
 
-pub fn declareBinding(p: *P, kind: Symbol.Kind, binding: *BindingNodeIndex, opts: *ParseStatementOptions) anyerror!void {
+pub fn declareBinding(p: *P, kind: Symbol.Kind, binding: *BindingNodeIndex, opts: *ParseStatementOptions) !void {
             switch (binding.data) {
 .b_missing => {
 
@@ -2833,7 +2847,7 @@ else => false,
 });
     }
 
-pub fn appendPart(p: *P, parts: *ListManaged(js_ast.Part), stmts: []Stmt) anyerror!void {
+pub fn appendPart(p: *P, parts: *ListManaged(js_ast.Part), stmts: []Stmt) !void {
             _ = p.symbol_uses.clearRetainingCapacity();
             _ = p.declared_symbols.clearRetainingCapacity();
             _ = p.scopes_for_current_part.clearRetainingCapacity();
@@ -3512,7 +3526,7 @@ pub fn markExportedDeclsInsideNamespace(p: *P, ns_ref: Ref, decls: []G.Decl) voi
             }
     }
 
-pub fn appendIfBodyPreservingScope(p: *P, stmts: *ListManaged(Stmt), body: Stmt) anyerror!void {
+pub fn appendIfBodyPreservingScope(p: *P, stmts: *ListManaged(Stmt), body: Stmt) !void {
             switch (body.data) {
 .s_block => |block| {
 var keep_block = false;
@@ -3567,7 +3581,7 @@ for (cp_iter_slice(obj.properties)) |item| {
 }
     }
 
-pub fn generateClosureForTypeScriptNamespaceOrEnum(p: *P, stmts: *ListManaged(Stmt), stmt_loc: logger.Loc, is_export: bool, name_loc: logger.Loc, original_name_ref: Ref, arg_ref: Ref, stmts_inside_closure: []Stmt, all_values_are_pure: bool) anyerror!void {
+pub fn generateClosureForTypeScriptNamespaceOrEnum(p: *P, stmts: *ListManaged(Stmt), stmt_loc: logger.Loc, is_export: bool, name_loc: logger.Loc, original_name_ref: Ref, arg_ref: Ref, stmts_inside_closure: []Stmt, all_values_are_pure: bool) !void {
             var name_ref = original_name_ref;
             _ = &name_ref;
             var symbol: Symbol = p.symbols.items[@as(usize, @intCast(name_ref.innerIndex()))];
@@ -4147,7 +4161,7 @@ pub fn callRuntime(p: *P, loc: logger.Loc, comptime name: []const u8, args: []Ex
             return p.newExpr(E.Call{ .target = p.runtimeIdentifier(loc, name), .args = ExprNodeList.fromOwnedSlice(args) }, loc);
     }
 
-pub fn extractDeclsForBinding(binding: Binding, decls: *ListManaged(G.Decl)) anyerror!void {
+pub fn extractDeclsForBinding(binding: Binding, decls: *ListManaged(G.Decl)) !void {
             switch (binding.data) {
 .b_missing => {
 
@@ -4690,7 +4704,7 @@ return true;
             return false;
     }
 
-pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source, define: *Define, lexer: js_lexer.Lexer, opts: Parser.Options, p: *P) anyerror!void {
+pub fn init(allocator: Allocator, log: *logger.Log, source: *const logger.Source, define: *Define, lexer: js_lexer.Lexer, opts: Parser.Options, p: *P) !void {
             var scope_order = try ScopeOrderList.initCapacity(allocator, 1);
             _ = &scope_order;
             const scope = try allocator.create(Scope);

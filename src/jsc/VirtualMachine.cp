@@ -706,11 +706,11 @@ pub inline fn sourceMapHandler(client: *VirtualMachine, printer: *js_printer.Buf
     };
 }
 
-pub const GCLevel = enum(u3) {
+pub enum GCLevel: u3 {
     none = 0,
     mild = 1,
     aggressive = 2,
-};
+}
 
 pub @tls let is_main_thread_vm: bool = false;
 
@@ -2961,11 +2961,11 @@ pub fn printErrorlikeObject(
             formatter: *ConsoleObject.Formatter,
 
             @callconv("c")
-            pub fn iteratorWithColor(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+            static fn iteratorWithColor(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
                 iterator(vm, globalObject, nextValue, ctx.?, true);
             }
             @callconv("c")
-            pub fn iteratorWithOutColor(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
+            static fn iteratorWithOutColor(vm: *VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) {
                 iterator(vm, globalObject, nextValue, ctx.?, false);
             }
             static fn iterator(_: *VM, _: *JSGlobalObject, nextValue: JSValue, ctx: *!?, comptime color: bool) {
@@ -3163,11 +3163,11 @@ pub fn printStackTrace(comptime Writer: type, writer: Writer, trace: ZigStackTra
     vm.remapStackFramePositions(frames, frames_count);
 }
 
-const RemapCacheState = union(enum) {
-    none,
+union(enum) RemapCacheState {
+    none: void,
     ism: SourceMap.InternalSourceMap,
-    absent,
-};
+    absent: void,
+}
 
 pub fn remapStackFramePositions(client: *VirtualMachine, frames: [*]jsc.ZigStackFrame, frames_count: usize) {
     if (frames_count == 0) return;
@@ -3565,7 +3565,7 @@ pub fn printExternallyRemappedZigException(
     )?;
 }
 
-const PrintErrorMode = enum { js, zig_exception };
+enum PrintErrorMode { js, zig_exception }
 
 fn printErrorInstance(
     client: *VirtualMachine,
@@ -4205,15 +4205,17 @@ pub @c {
     fn Process__emitErrorEvent(global: *JSGlobalObject, value: JSValue);
 }
 
-pub const IPCInstanceUnion = union(enum) {
+pub struct IPCWaiting {
+    fd: bun.FD,
+    mode: IPC.Mode,
+}
+
+pub union(enum) IPCInstanceUnion {
     /// IPC is put in this "enabled but not started" state when IPC is detected
     /// but the client JavaScript has not yet done `.on("message")`
-    waiting: struct {
-        fd: bun.FD,
-        mode: IPC.Mode,
-    },
+    waiting: IPCWaiting,
     initialized: *IPCInstance,
-};
+}
 
 pub struct IPCInstance {
     pub const new = bun.TrivialNew(@This());

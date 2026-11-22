@@ -66,9 +66,19 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const CallUnwrap = enum(u2) {
+    never,
+    if_unused,
+    if_unused_and_toString_safe,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ObjectSetError = error{
     OutOfMemory,
     Clobber,
@@ -118,6 +128,13 @@ pub const NameOfSymbol = struct {
     has_property_key_comment: bool = false,
 };
 
+pub const ArraySorter = struct {
+
+pub fn isLessThan(ctx: void, lhs: Expr, rhs: Expr) bool {
+            return strings.cmpStringsAsc(ctx, lhs.data.e_string.data, rhs.data.e_string.data);
+    }
+};
+
 pub const Array = struct {
     items: ExprNodeList = ExprNodeList{  },
     comma_after_spread: ?logger.Loc = null,
@@ -130,7 +147,7 @@ pub fn push(self: *Array, allocator: std.mem.Allocator, item: Expr) !void {
             _ = try self.items.append(allocator, item);
     }
 
-pub inline fn slice(self: Array) []Expr {
+pub inline fn slice(self: *const Array) []Expr {
             return self.items.slice();
     }
 
@@ -183,45 +200,17 @@ pub fn alphabetizeStrings(self: *Array) void {
     const Sorter = ArraySorter;
 };
 
+pub const UnaryFlags = packed struct(u8) {
+    was_originally_typeof_identifier: bool = false,
+    was_originally_delete_of_identifier_or_property_access: bool = false,
+    _: u6 = 0,
+};
+
 pub const Unary = struct {
     op: Op.Code,
     value: ExprNodeIndex,
-    flags: Unary.Flags = .{},
-    pub const Flags = packed struct(u8) {
-            /// The expression "typeof (0, x)" must not become "typeof x" if "x"
-            /// is unbound because that could suppress a ReferenceError from "x".
-            ///
-            /// Also if we know a typeof operator was originally an identifier, then
-            /// we know that this typeof operator always has no side effects (even if
-            /// we consider the identifier by itself to have a side effect).
-            ///
-            /// Note that there *is* actually a case where "typeof x" can throw an error:
-            /// when "x" is being referenced inside of its TDZ (temporal dead zone). TDZ
-            /// checks are not yet handled correctly by Bun, so this possibility is
-            /// currently ignored.
-            was_originally_typeof_identifier: bool = false,
-    
-            /// Similarly the expression "delete (0, x)" must not become "delete x"
-            /// because that syntax is invalid in strict mode. We also need to make sure
-            /// we don't accidentally change the return value:
-            ///
-            ///   Returns false:
-            ///     "var a; delete (a)"
-            ///     "var a = Object.freeze({b: 1}); delete (a.b)"
-            ///     "var a = Object.freeze({b: 1}); delete (a?.b)"
-            ///     "var a = Object.freeze({b: 1}); delete (a['b'])"
-            ///     "var a = Object.freeze({b: 1}); delete (a?.['b'])"
-            ///
-            ///   Returns true:
-            ///     "var a; delete (0, a)"
-            ///     "var a = Object.freeze({b: 1}); delete (true && a.b)"
-            ///     "var a = Object.freeze({b: 1}); delete (false || a?.b)"
-            ///     "var a = Object.freeze({b: 1}); delete (null ?? a?.['b'])"
-            ///
-            ///     "var a = Object.freeze({b: 1}); delete (true ? a['b'] : a['b'])"
-            was_originally_delete_of_identifier_or_property_access: bool = false,
-            _: u6 = 0,
-        };
+    flags: UnaryFlags = .{},
+    const Flags = UnaryFlags;
 };
 
 pub const Binary = struct {
@@ -235,6 +224,18 @@ pub const Boolean = struct {
     pub const toJS = @import("../../js_parser_jsc/expr_jsc.zig").boolToJS;
 };
 
+pub const Super = struct {
+};
+
+pub const Null = struct {
+};
+
+pub const This = struct {
+};
+
+pub const Undefined = struct {
+};
+
 pub const New = struct {
     target: ExprNodeIndex,
     args: ExprNodeList = ExprNodeList{  },
@@ -246,8 +247,21 @@ pub const NewTarget = struct {
     range: logger.Range,
 };
 
+pub const ImportMeta = struct {
+};
+
 pub const ImportMetaMain = struct {
     inverted: bool = false,
+};
+
+pub const Special = union(enum) {
+    module_exports: void,
+    hot_enabled: void,
+    hot_disabled: void,
+    hot_data: void,
+    hot_accept: void,
+    hot_accept_visited: void,
+    resolved_specifier_string: ImportRecord.Index,
 };
 
 pub const Call = struct {
@@ -294,6 +308,10 @@ pub const Arrow = struct {
     has_rest_arg: bool = false,
     prefer_expr: bool = false,
     pub const noop_return_undefined: Arrow = Arrow{ .args = &.{}, .body = G.FnBody{ .loc = .Empty, .stmts = &.{} } };
+};
+
+pub const Function = struct {
+    func: G.Fn,
 };
 
 pub const Identifier = struct {
@@ -358,7 +376,7 @@ pub fn jsonStringify(writer: anytype) !void {
 pub const Number = struct {
     value: f64,
 
-pub fn toString(self: Number, allocator: std.mem.Allocator) ?[]const u8 {
+pub fn toString(self: *const Number, allocator: std.mem.Allocator) ?[]const u8 {
             return Number.toStringFromF64(self.value, allocator);
     }
 
@@ -447,6 +465,17 @@ pub fn append(self: *ObjectRope, expr: Expr, allocator: std.mem.Allocator) OOM!*
 pub const ObjectRopeQuery = struct {
     expr: Expr,
     rope: *const ObjectRope,
+};
+
+pub const ObjectPackageJSONSort = struct {
+    const Fields = PackageJSONFields;
+};
+
+pub const ObjectSorter = struct {
+
+pub fn isLessThan(ctx: void, lhs: G.Property, rhs: G.Property) bool {
+            return strings.cmpStringsAsc(ctx, lhs.key.?.data.e_string.data, rhs.key.?.data.e_string.data);
+    }
 };
 
 pub const Object = struct {
@@ -667,6 +696,10 @@ pub fn packageJSONSort(self: *Object) void {
     pub const SetError = ObjectSetError;
 };
 
+pub const Spread = struct {
+    value: ExprNodeIndex,
+};
+
 pub const String = struct {
     data: []const u8 = "",
     prefer_template: bool = false,
@@ -751,12 +784,12 @@ pub fn initReEncodeUTF8(utf8: []const u8, allocator: std.mem.Allocator) String {
             return (if (bun.strings.isAllASCII(utf8)) init(utf8) else init(bun.handleOom(bun.strings.toUTF16AllocForReal(allocator, utf8, false, false))));
     }
 
-pub fn slice8(self: String) []const u8 {
+pub fn slice8(self: *const String) []const u8 {
             _ = bun.assert((!self.is_utf16));
             return self.data;
     }
 
-pub fn slice16(self: String) []const u16 {
+pub fn slice16(self: *const String) []const u16 {
             _ = bun.assert(self.is_utf16);
             return (blk: {
             break :blk @as([*]const u16, @ptrCast(@alignCast(self.data.ptr)))[0..self.data.len];
@@ -815,7 +848,7 @@ pub fn clone(self: String, allocator: std.mem.Allocator) !String {
             return String{ .data = try allocator.dupe(u8, self.data), .prefer_template = self.prefer_template, .is_utf16 = (!self.isUTF8()) };
     }
 
-pub fn cloneSliceIfNecessary(self: String, allocator: std.mem.Allocator) ![]const u8 {
+pub fn cloneSliceIfNecessary(self: *const String, allocator: std.mem.Allocator) ![]const u8 {
             if (self.isUTF8()) {
                 return allocator.dupe(u8, ((self.string(allocator)) catch unreachable));
             }
@@ -921,7 +954,7 @@ pub fn hasPrefixComptime(self: String, comptime value: anytype) bool {
             return (if (self.isUTF8()) strings.eqlComptime(self.data[0..value.len], value) else strings.eqlComptimeUTF16(self.slice16()[0..value.len], value));
     }
 
-pub fn string(self: String, allocator: std.mem.Allocator) OOM![]const u8 {
+pub fn string(self: *const String, allocator: std.mem.Allocator) OOM![]const u8 {
             if (self.isUTF8()) {
                 return self.data;
             } else {
@@ -929,7 +962,7 @@ pub fn string(self: String, allocator: std.mem.Allocator) OOM![]const u8 {
             }
     }
 
-pub fn stringZ(self: String, allocator: std.mem.Allocator) OOM![:0]const u8 {
+pub fn stringZ(self: *const String, allocator: std.mem.Allocator) OOM![:0]const u8 {
             if (self.isUTF8()) {
                 return allocator.dupeZ(u8, self.data);
             } else {
@@ -937,7 +970,7 @@ pub fn stringZ(self: String, allocator: std.mem.Allocator) OOM![:0]const u8 {
             }
     }
 
-pub fn stringCloned(self: String, allocator: std.mem.Allocator) OOM![]const u8 {
+pub fn stringCloned(self: *const String, allocator: std.mem.Allocator) OOM![]const u8 {
             if (self.isUTF8()) {
                 return allocator.dupe(u8, self.data);
             } else {
@@ -1127,7 +1160,7 @@ pub const RegExp = struct {
     value: []const u8,
     flags_offset: ?u16 = null,
 
-pub fn pattern(self: RegExp) []const u8 {
+pub fn pattern(self: *const RegExp) []const u8 {
             if (self.flags_offset) |i_| {
                 _ = &i_;
                 var i = i_;
@@ -1140,7 +1173,7 @@ pub fn pattern(self: RegExp) []const u8 {
             return std.mem.trim(u8, self.value, "/");
     }
 
-pub fn flags(self: RegExp) []const u8 {
+pub fn flags(self: *const RegExp) []const u8 {
             if (self.flags_offset) |i| {
                 _ = &i;
                 return self.value[i..];
@@ -1247,59 +1280,6 @@ const string = []const u8;
 const stringZ = [:0]const u8;
 const U16Slice = []const u16;
 const U16MutSlice = []u16;
-const ArraySorter = struct {
-
-pub fn isLessThan(ctx: void, lhs: Expr, rhs: Expr) bool {
-            return strings.cmpStringsAsc(ctx, lhs.data.e_string.data, rhs.data.e_string.data);
-    }
-};
-pub const Super = struct {
-};
-pub const Null = struct {
-};
-pub const This = struct {
-};
-pub const Undefined = struct {
-};
-pub const ImportMeta = struct {
-};
-pub const Special = union(enum) {
-    /// emits `exports` or `module.exports` depending on `commonjs_named_exports_deoptimized`
-    module_exports,
-    /// `import.meta.hot`
-    hot_enabled,
-    /// Acts as .e_undefined, but allows property accesses to the rest of the HMR API.
-    hot_disabled,
-    /// `import.meta.hot.data` when HMR is enabled. Not reachable when it is disabled.
-    hot_data,
-    /// `import.meta.hot.accept` when HMR is enabled. Truthy.
-    hot_accept,
-    /// Converted from `hot_accept` in P.zig's handleImportMetaHotAcceptCall
-    /// when passed strings. Printed as `hmr.acceptSpecifiers`
-    hot_accept_visited,
-    /// Prints the resolved specifier string for an import record.
-    resolved_specifier_string: ImportRecord.Index,
-};
-pub const CallUnwrap = enum(u2) {
-    never,
-    if_unused,
-    if_unused_and_toString_safe,
-};
-pub const Function = struct {
-    func: G.Fn,
-};
-const ObjectPackageJSONSort = struct {
-    const Fields = PackageJSONFields;
-};
-const ObjectSorter = struct {
-
-pub fn isLessThan(ctx: void, lhs: G.Property, rhs: G.Property) bool {
-            return strings.cmpStringsAsc(ctx, lhs.key.?.data.e_string.data, rhs.key.?.data.e_string.data);
-    }
-};
-pub const Spread = struct {
-    value: ExprNodeIndex,
-};
 pub const Class = G.Class;
 const ComptimeStringMap = bun.ComptimeStringMap;
 const Environment = bun.Environment;

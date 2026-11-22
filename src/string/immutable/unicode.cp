@@ -38,6 +38,14 @@ pub struct DeinitWithAllocGuard<T> {
     }
 };
 
+pub fn _CodePointCursor(comptime CodePointType_: type, comptime zeroValue: comptime_int): type {
+    return struct {
+        i: u32 = 0,
+        c: CodePointType_ = zeroValue,
+        width: u3_fast = 0,
+    };
+}
+
 pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: comptime_int): type {
     return struct {
         const Iterator = @This();
@@ -51,18 +59,14 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
 
         pub const ZeroValue = zeroValue;
 
-        pub const Cursor = struct {
-            i: u32 = 0,
-            c: CodePointType = zeroValue,
-            width: u3_fast = 0,
-        };
+        pub const Cursor = _CodePointCursor(CodePointType, zeroValue);
 
-        pub fn init(str: string): Iterator {
-            return Iterator{ .bytes = str, .i = 0, .c = zeroValue };
+        static fn init(str: string): Iterator {
+            return Iterator{ bytes: str, i: 0, c: zeroValue };
         }
 
-        pub fn initOffset(str: string, i: usize): Iterator {
-            return Iterator{ .bytes = str, .i = i, .c = zeroValue };
+        static fn initOffset(str: string, i: usize): Iterator {
+            return Iterator{ bytes: str, i: i, c: zeroValue };
         }
 
         const SkipResult = enum {
@@ -1034,13 +1038,21 @@ pub enum BOM {
 
     static fn getHeader(bom: BOM): []const u8 {
         return switch (bom) {
-            inline else => |t| comptime &@field(BOM, @tagName(t) ++ "_bytes"),
+            .utf8 => &BOM.utf8_bytes,
+            .utf16_le => &BOM.utf16_le_bytes,
+            .utf16_be => &BOM.utf16_be_bytes,
+            .utf32_le => &BOM.utf32_le_bytes,
+            .utf32_be => &BOM.utf32_be_bytes,
         };
     }
 
     static fn length(bom: BOM): usize {
         return switch (bom) {
-            inline else => |t| comptime (&@field(BOM, @tagName(t) ++ "_bytes")).len,
+            .utf8 => BOM.utf8_bytes.len,
+            .utf16_le => BOM.utf16_le_bytes.len,
+            .utf16_be => BOM.utf16_be_bytes.len,
+            .utf32_le => BOM.utf32_le_bytes.len,
+            .utf32_be => BOM.utf32_be_bytes.len,
         };
     }
 

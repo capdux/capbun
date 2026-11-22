@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,12 +60,37 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const State = @import("./Response.zig").State;
 const WriteResult = @import("./Response.zig").WriteResult;
 const BunSocketContextOptions = @import("./SocketContext.zig").BunSocketContextOptions;
+pub const _h3_cb_sigs = struct {
+
+pub fn handler(_: *Response, _: *Request, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn listen(_: ?*ListenSocket, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn header(_: [*c]const u8, _: usize, _: [*c]const u8, _: usize, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn writable(_: *Response, _: u64, _: OpaquePtr) callconv(.c) bool {
+            return false;
+    }
+
+pub fn void_h(_: *Response, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn data(_: *Response, _: [*c]const u8, _: usize, _: bool, _: OpaquePtr) callconv(.c) void {
+    }
+
+pub fn cork(_: OpaquePtr) callconv(.c) void {
+    }
+};
+
 pub const ListenConfig = extern struct {
     port: u16,
     host: ?[*:0]const u8 = null,
@@ -83,8 +108,7 @@ pub fn getLocalPort(self: *ListenSocket) i32 {
     }
 
 pub fn getLocalAddress(self: *ListenSocket, buf: []u8) ?[]const u8 {
-            var n = uws_h3_listen_socket_local_address(self, buf.ptr, (if (comptime @typeInfo(@TypeOf(buf.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buf.len)) else cp_cast_int(i32, buf.len)));
-            _ = &n;
+            const n = uws_h3_listen_socket_local_address(self, buf.ptr, (if (comptime @typeInfo(@TypeOf(buf.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(buf.len)) else cp_cast_int(i32, buf.len)));
             if ((n <= 0)) {
                 return null;
             }
@@ -94,8 +118,7 @@ pub fn getLocalAddress(self: *ListenSocket, buf: []u8) ?[]const u8 {
 
 pub const Request = opaque {
 
-pub fn isAncient(self: *const Request) bool {
-        _ = self;
+pub fn isAncient() bool {
             return false;
     }
 
@@ -110,42 +133,42 @@ pub fn setYield(self: *Request, y: bool) void {
 pub fn url(self: *Request) []const u8 {
             var p: [*]const u8 = undefined;
             _ = &p;
-            var len = uws_h3_req_get_url(self, (&p));
-            _ = &len;
-            return p[0..len];
+            const len = uws_h3_req_get_url(self, (&p));
+            {
+                return p[0..len];
+            }
     }
 
 pub fn method(self: *Request) []const u8 {
             var p: [*]const u8 = undefined;
             _ = &p;
-            var len = uws_h3_req_get_method(self, (&p));
-            _ = &len;
-            return p[0..len];
+            const len = uws_h3_req_get_method(self, (&p));
+            {
+                return p[0..len];
+            }
     }
 
 pub fn header(self: *Request, name: []const u8) ?[]const u8 {
             var p: [*]const u8 = undefined;
             _ = &p;
-            var n = uws_h3_req_get_header(self, name.ptr, name.len, (&p));
-            _ = &n;
-            return (if ((n == 0)) null else p[0..n]);
+            const n = uws_h3_req_get_header(self, name.ptr, name.len, (&p));
+            {
+                return (if ((n == 0)) null else p[0..n]);
+            }
     }
 
 pub fn dateForHeader(self: *Request, name: []const u8) !?u64 {
-            var value = self.header(name);
-            _ = &value;
-            if ((value == null)) {
-                return null;
-            }
-            var s = bun.String.init(value.?);
-            _ = &s;
-            defer {
-            _ = s.deref();
-            }
-            var ms = try s.parseDate(bun.jsc.VirtualMachine.get().global);
-            _ = &ms;
-            if ((((!std.math.isNan(ms)) and std.math.isFinite(ms)) and (ms >= 0.0))) {
-                return @intFromFloat(ms);
+            if (self.header(name)) |val| {
+                _ = &val;
+                var s = bun.String.init(val);
+                _ = &s;
+                defer {
+                _ = s.deref();
+                }
+                const ms = try s.parseDate(bun.jsc.VirtualMachine.get().global);
+                if ((((!std.math.isNan(ms)) and std.math.isFinite(ms)) and (ms >= 0.0))) {
+                    return @intFromFloat(ms);
+                }
             }
             return null;
     }
@@ -153,28 +176,33 @@ pub fn dateForHeader(self: *Request, name: []const u8) !?u64 {
 pub fn query(self: *Request, name: []const u8) []const u8 {
             var p: [*]const u8 = undefined;
             _ = &p;
-            var len = uws_h3_req_get_query(self, name.ptr, name.len, (&p));
-            _ = &len;
-            return p[0..len];
+            const len = uws_h3_req_get_query(self, name.ptr, name.len, (&p));
+            {
+                return p[0..len];
+            }
     }
 
 pub fn parameter(self: *Request, idx: u16) []const u8 {
             var p: [*]const u8 = undefined;
             _ = &p;
-            var len = uws_h3_req_get_parameter(self, idx, (&p));
-            _ = &len;
-            return p[0..len];
+            const len = uws_h3_req_get_parameter(self, idx, (&p));
+            {
+                return p[0..len];
+            }
     }
 
 pub fn forEachHeader(self: *Request, ctx: anytype, comptime cb: anytype) void {
-            var Wrap = struct {
+            const Wrap = struct {
 
 pub fn each(n: [*c]const u8, nl: usize, v: [*c]const u8, vl: usize, ud: ?*anyopaque) callconv(.c) void {
-            _ = cb(@ptrCast(@alignCast(ud)), n[0..nl], v[0..vl]);
+            {
+                _ = cb(@ptrCast(@alignCast(ud)), n[0..nl], v[0..vl]);
+            }
     }
 };
-            _ = &Wrap;
-            _ = uws_h3_req_for_each_header(self, Wrap.each, @ptrCast(ctx));
+            {
+                _ = uws_h3_req_for_each_header(self, Wrap.each, @ptrCast(ctx));
+            }
     }
 };
 
@@ -274,25 +302,25 @@ pub fn shouldCloseConnection(self: *Response) bool {
             return self.state().isHttpConnectionClose();
     }
 
-pub fn isCorked(self: *const Response) bool {
+pub fn isCorked(self: *Response) bool {
         _ = self;
             return false;
     }
 
-pub fn uncork(self: *const Response) void {
+pub fn uncork(self: *Response) void {
         _ = self;
     }
 
-pub fn isConnectRequest(self: *const Response) bool {
+pub fn isConnectRequest(self: *Response) bool {
         _ = self;
             return false;
     }
 
-pub fn prepareForSendfile(self: *const Response) void {
+pub fn prepareForSendfile(self: *Response) void {
         _ = self;
     }
 
-pub fn markNeedsMore(self: *const Response) void {
+pub fn markNeedsMore(self: *Response) void {
         _ = self;
     }
 
@@ -305,12 +333,13 @@ pub fn getRemoteSocketInfo(self: *Response) ?bun.uws.SocketAddress {
             _ = &addr;
             var ip_ptr: [*]const u8 = undefined;
             _ = &ip_ptr;
-            var len = uws_h3_res_get_remote_address_info(self, (&ip_ptr), (&addr.port), (&addr.is_ipv6));
-            _ = &len;
+            const len = uws_h3_res_get_remote_address_info(self, (&ip_ptr), (&addr.port), (&addr.is_ipv6));
             if ((len == 0)) {
                 return null;
             }
-            addr.ip = ip_ptr[0..len];
+            {
+                addr.ip = ip_ptr[0..len];
+            }
             return addr;
     }
 
@@ -322,10 +351,14 @@ pub fn onWritable(self: *Response, ud: anytype, comptime handler: anytype) void 
             const W = struct {
 
 pub fn cb(r: *Response, off: u64, p: ?*anyopaque) callconv(.c) bool {
-            return handler(@ptrCast(@alignCast(p)), off, r);
+            {
+                return handler(@ptrCast(@alignCast(p)), off, r);
+            }
     }
 };
-            _ = uws_h3_res_on_writable(self, W.cb, @ptrCast(ud));
+            {
+                _ = uws_h3_res_on_writable(self, W.cb, @ptrCast(ud));
+            }
     }
 
 pub fn clearOnWritable(self: *Response) void {
@@ -336,10 +369,14 @@ pub fn onAborted(self: *Response, ud: anytype, comptime handler: anytype) void {
             const W = struct {
 
 pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(p)), r);
+            {
+                _ = handler(@ptrCast(@alignCast(p)), r);
+            }
     }
 };
-            _ = uws_h3_res_on_aborted(self, W.cb, @ptrCast(ud));
+            {
+                _ = uws_h3_res_on_aborted(self, W.cb, @ptrCast(ud));
+            }
     }
 
 pub fn clearAborted(self: *Response) void {
@@ -350,10 +387,14 @@ pub fn onTimeout(self: *Response, ud: anytype, comptime handler: anytype) void {
             const W = struct {
 
 pub fn cb(r: *Response, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(p)), r);
+            {
+                _ = handler(@ptrCast(@alignCast(p)), r);
+            }
     }
 };
-            _ = uws_h3_res_on_timeout(self, W.cb, @ptrCast(ud));
+            {
+                _ = uws_h3_res_on_timeout(self, W.cb, @ptrCast(ud));
+            }
     }
 
 pub fn clearTimeout(self: *Response) void {
@@ -364,10 +405,15 @@ pub fn onData(self: *Response, ud: anytype, comptime handler: anytype) void {
             const W = struct {
 
 pub fn cb(r: *Response, ptr: [*c]const u8, len: usize, last: bool, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(p)), r, (if ((len > 0)) ptr[0..len] else ""), last);
+            {
+                const slice: []const u8 = (if ((len > 0)) ptr[0..len] else "");
+                _ = handler(@ptrCast(@alignCast(p)), r, slice, last);
+            }
     }
 };
-            _ = uws_h3_res_on_data(self, W.cb, @ptrCast(ud));
+            {
+                _ = uws_h3_res_on_data(self, W.cb, @ptrCast(ud));
+            }
     }
 
 pub fn clearOnData(self: *Response) void {
@@ -384,10 +430,14 @@ pub fn runCorkedWithType(self: *Response, ud: anytype, comptime handler: anytype
             const W = struct {
 
 pub fn cb(p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(p)));
+            {
+                _ = handler(@ptrCast(@alignCast(p)));
+            }
     }
 };
-            _ = uws_h3_res_cork(self, @ptrCast(ud), W.cb);
+            {
+                _ = uws_h3_res_cork(self, @ptrCast(ud), W.cb);
+            }
     }
 };
 
@@ -419,10 +469,14 @@ pub fn route(self: *App, comptime f: anytype, pattern: []const u8, ud: anytype, 
             const W = struct {
 
 pub fn cb(res: *Response, req: *Request, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(p)), req, res);
+            {
+                _ = handler(@ptrCast(@alignCast(p)), req, res);
+            }
     }
 };
-            _ = f(self, pattern.ptr, pattern.len, W.cb, @ptrCast(ud));
+            {
+                _ = f(self, pattern.ptr, pattern.len, W.cb, @ptrCast(ud));
+            }
     }
 
 pub fn get(self: *App, p: []const u8, ud: anytype, comptime h: anytype) void {
@@ -496,10 +550,14 @@ pub fn listenWithConfig(self: *App, ud: anytype, comptime handler: anytype, conf
             const W = struct {
 
 pub fn cb(ls: ?*ListenSocket, p: ?*anyopaque) callconv(.c) void {
-            _ = handler(@ptrCast(@alignCast(p)), ls);
+            {
+                _ = handler(@ptrCast(@alignCast(p)), ls);
+            }
     }
 };
-            _ = uws_h3_app_listen_with_config(self, config.host, config.port, config.options, W.cb, @ptrCast(ud));
+            {
+                _ = uws_h3_app_listen_with_config(self, config.host, config.port, config.options, W.cb, @ptrCast(ud));
+            }
     }
 };
 
@@ -509,30 +567,6 @@ pub const ListenHandler = ?ListenHandlerFn;
 pub const WritableHandler = ?WritableHandlerFn;
 pub const VoidHandler = ?VoidHandlerFn;
 pub const DataHandler = ?DataHandlerFn;
-const _h3_cb_sigs = struct {
-
-pub fn handler(_: *Response, _: *Request, _: OpaquePtr) callconv(.c) void {
-    }
-
-pub fn listen(_: ?*ListenSocket, _: OpaquePtr) callconv(.c) void {
-    }
-
-pub fn header(_: [*c]const u8, _: usize, _: [*c]const u8, _: usize, _: OpaquePtr) callconv(.c) void {
-    }
-
-pub fn writable(_: *Response, _: u64, _: OpaquePtr) callconv(.c) bool {
-            return false;
-    }
-
-pub fn void_h(_: *Response, _: OpaquePtr) callconv(.c) void {
-    }
-
-pub fn data(_: *Response, _: [*c]const u8, _: usize, _: bool, _: OpaquePtr) callconv(.c) void {
-    }
-
-pub fn cork(_: OpaquePtr) callconv(.c) void {
-    }
-};
 pub const HandlerFn = *const @TypeOf(_h3_cb_sigs.handler);
 pub const ListenHandlerFn = *const @TypeOf(_h3_cb_sigs.listen);
 pub const HeaderCb = *const @TypeOf(_h3_cb_sigs.header);

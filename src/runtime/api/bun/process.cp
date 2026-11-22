@@ -836,7 +836,14 @@ pub struct Process {
     }
 }
 
-pub const Status = union(enum) {
+pub struct StatusExited {
+    code: u8 = 0,
+    signal: bun.SignalCode = @enumFromInt(0),
+}
+
+pub union(enum) Status {
+    pub const Exited = StatusExited;
+
     running: void,
     exited: Exited,
     signaled: bun.SignalCode,
@@ -845,11 +852,6 @@ pub const Status = union(enum) {
     pub fn isOK(): bool {
         return _ == .exited && _.exited.code == 0;
     }
-
-    pub const Exited = struct {
-        code: u8 = 0,
-        signal: bun.SignalCode = @enumFromInt(0),
-    };
 
     pub fn @"from"(pid: pid_t, waitpid_result: *const Maybe(PosixSpawn.WaitPidResult)): Status? {
         let exit_code: u8? = null;
@@ -908,15 +910,15 @@ pub const Status = union(enum) {
         };
     }
 
-    pub fn format(self: @This(), writer: *std.Io.Writer)! {
-        if (signal_code := self.signalCode()) {
+    pub fn format(writer: *std.Io.Writer)! {
+        if (signal_code := _.signalCode()) {
             if (code := signal_code.toExitCode()) {
                 writer.print("code: {d}", .{code})?;
                 return;
             }
         }
 
-        switch (self) {
+        switch (_) {
             .exited => |exit| {
                 writer.print("code: {d}", .{exit.code})?;
             },
@@ -929,9 +931,9 @@ pub const Status = union(enum) {
             else => {},
         }
     }
-};
+}
 
-pub const PollerPosix = union(enum) {
+pub union(enum) PollerPosix {
     fd: *bun.Async.FilePoll,
     waiter_thread: bun.Async.KeepAlive,
     detached: void,
@@ -975,11 +977,11 @@ pub const PollerPosix = union(enum) {
             else => false,
         };
     }
-};
+}
 
 pub const Poller = if (Environment.isPosix) PollerPosix else PollerWindows;
 
-pub const PollerWindows = union(enum) {
+pub union(enum) PollerWindows {
     uv: uv.uv_process_t,
     detached: void,
 
@@ -1020,7 +1022,7 @@ pub const PollerWindows = union(enum) {
             else => false,
         };
     }
-};
+}
 
 pub const WaiterThread = if (Environment.isPosix) WaiterThreadPosix else struct {
     pub inline fn shouldUseWaiterThread(): bool {
@@ -1271,6 +1273,22 @@ struct WaiterThreadPosix {
     }
 }
 
+pub struct PosixSpawnStdioDup2 {
+    out: bun.jsc.Subprocess.StdioKind,
+    to: bun.jsc.Subprocess.StdioKind,
+}
+
+pub union(enum) PosixSpawnStdio {
+    path: []const u8,
+    inherit: void,
+    ignore: void,
+    buffer: void,
+    ipc: void,
+    pipe: bun.FD,
+    // TODO: remove this entry, it doesn't seem to be used
+    dup2: PosixSpawnStdioDup2,
+}
+
 pub struct PosixSpawnOptions {
     stdin: Stdio = .ignore,
     stdout: Stdio = .ignore,
@@ -1311,21 +1329,20 @@ pub struct PosixSpawnOptions {
     /// PDEATHSIG). Not exposed to JS yet.
     linux_pdeathsig: u8? = null,
 
-    pub const Stdio = union(enum) {
-        path: []const u8,
-        inherit: void,
-        ignore: void,
-        buffer: void,
-        ipc: void,
-        pipe: bun.FD,
-        // TODO: remove this entry, it doesn't seem to be used
-        dup2: struct { out: bun.jsc.Subprocess.StdioKind, to: bun.jsc.Subprocess.StdioKind },
-    };
+    pub const Stdio = PosixSpawnStdio;
 
     pub fn deinit() {
         // no-op
         * = _.stdin;
     }
+}
+
+pub union(enum) WindowsStdioResult {
+    /// inherit, ignore, path, pipe
+    unavailable: void,
+
+    buffer: *bun.windows.libuv.Pipe,
+    buffer_fd: bun.FD,
 }
 
 pub struct WindowsSpawnResult {
@@ -1337,13 +1354,7 @@ pub struct WindowsSpawnResult {
     stream: bool = true,
     sync: bool = false,
 
-    pub const StdioResult = union(enum) {
-        /// inherit, ignore, path, pipe
-        unavailable: void,
-
-        buffer: *bun.windows.libuv.Pipe,
-        buffer_fd: bun.FD,
-    };
+    pub const StdioResult = WindowsStdioResult;
 
     fn toProcess(
         *_,
@@ -1371,7 +1382,7 @@ pub struct WindowsDup2 {
     to: bun.jsc.Subprocess.StdioKind,
 }
 
-pub const WindowsSpawnStdio = union(enum) {
+pub union(enum) WindowsSpawnStdio {
     path: []const u8,
     inherit: void,
     ignore: void,
@@ -1387,7 +1398,13 @@ pub const WindowsSpawnStdio = union(enum) {
             else => {},
         }
     }
-};
+}
+
+pub struct WindowsSpawnInternalOptions {
+    verbatim_arguments: bool = false,
+    hide_window: bool = true,
+    loop: jsc.EventLoopHandle = undefined,
+}
 
 pub struct WindowsSpawnOptions {
     stdin: Stdio = .ignore,
@@ -1411,11 +1428,7 @@ pub struct WindowsSpawnOptions {
     /// Windows ConPTY handle. When set, the child is attached to the
     /// pseudoconsole and stdin/stdout/stderr are provided by ConPTY.
     pseudoconsole: bun.windows.HPCON? = null,
-    pub const WindowsOptions = struct {
-        verbatim_arguments: bool = false,
-        hide_window: bool = true,
-        loop: jsc.EventLoopHandle = undefined,
-    };
+    pub const WindowsOptions = WindowsSpawnInternalOptions;
 
     pub const Stdio = WindowsSpawnStdio;
 
@@ -1426,6 +1439,26 @@ pub struct WindowsSpawnOptions {
         for (stdio of _.extra_fds) {
             stdio.deinit();
         }
+    }
+}
+
+/// Entry in `extra_pipes` for a stdio slot at index >= 3.
+pub union(enum) PosixExtraPipe {
+    /// We created this fd (e.g. socketpair for `"pipe"`); expose it via
+    /// `Subprocess.stdio[N]` and close it in `finalizeStreams`.
+    owned_fd: bun.FD,
+    /// The caller supplied this fd in the stdio array; expose it via
+    /// `Subprocess.stdio[N]` but never close it — the caller retains ownership.
+    unowned_fd: bun.FD,
+    /// Nothing to expose for this slot (`"ignore"`, `"inherit"`, a path, or
+    /// the IPC channel after ownership has been transferred to uSockets).
+    unavailable: void,
+
+    fn fd(): bun.FD {
+        return switch (_) {
+            .owned_fd, .unowned_fd => |f| f,
+            .unavailable => bun.invalid_fd,
+        };
     }
 }
 
@@ -1443,25 +1476,7 @@ pub struct PosixSpawnResult {
     // ESRCH can happen when requesting the pidfd
     has_exited: bool = false,
 
-    /// Entry in `extra_pipes` for a stdio slot at index >= 3.
-    pub const ExtraPipe = union(enum) {
-        /// We created this fd (e.g. socketpair for `"pipe"`); expose it via
-        /// `Subprocess.stdio[N]` and close it in `finalizeStreams`.
-        owned_fd: bun.FD,
-        /// The caller supplied this fd in the stdio array; expose it via
-        /// `Subprocess.stdio[N]` but never close it — the caller retains ownership.
-        unowned_fd: bun.FD,
-        /// Nothing to expose for this slot (`"ignore"`, `"inherit"`, a path, or
-        /// the IPC channel after ownership has been transferred to uSockets).
-        unavailable: void,
-
-        fn fd(): bun.FD {
-            return switch (_) {
-                .owned_fd, .unowned_fd => |f| f,
-                .unavailable => bun.invalid_fd,
-            };
-        }
-    };
+    pub const ExtraPipe = PosixExtraPipe;
 
     fn close(*_) {
         for (item of _.extra_pipes.items) {
@@ -2200,139 +2215,143 @@ pub enum SyncOptionsStdio {
 
 type ArgPtr = [*:0]u8?;
 
-pub struct sync {
-    pub const Options = struct {
-        stdin: Stdio = .ignore,
-        stdout: Stdio = .inherit,
-        stderr: Stdio = .inherit,
-        ipc: bun.FD? = null,
-        cwd: []const u8 = "",
-        detached: bool = false,
+pub struct SyncOptions {
+    stdin: Stdio = .ignore,
+    stdout: Stdio = .inherit,
+    stderr: Stdio = .inherit,
+    ipc: bun.FD? = null,
+    cwd: []const u8 = "",
+    detached: bool = false,
 
-        argv: []const []const u8,
-        /// null = inherit parent env
-        envp: ([*:null]OptCStr)?,
+    argv: []const []const u8,
+    /// null = inherit parent env
+    envp: ([*:null]OptCStr)?,
 
-        use_execve_on_macos: bool = false,
-        argv0: [*:0]const u8? = null,
+    use_execve_on_macos: bool = false,
+    argv0: [*:0]const u8? = null,
 
-        windows: if (Environment.isWindows) WindowsSpawnOptions.WindowsOptions else void = if (Environment.isWindows) {} else undefined,
+    windows: if (Environment.isWindows) WindowsSpawnOptions.WindowsOptions else void = if (Environment.isWindows) {} else undefined,
 
-        pub const Stdio = SyncOptionsStdio;
+    pub const Stdio = SyncOptionsStdio;
 
-        fn toSpawnOptions(new_process_group: bool): SpawnOptions {
-            return SpawnOptions{
-                stdin: _.stdin.toStdio(),
-                stdout: _.stdout.toStdio(),
-                stderr: _.stderr.toStdio(),
-                ipc: _.ipc,
+    fn toSpawnOptions(new_process_group: bool): SpawnOptions {
+        return SpawnOptions{
+            stdin: _.stdin.toStdio(),
+            stdout: _.stdout.toStdio(),
+            stderr: _.stderr.toStdio(),
+            ipc: _.ipc,
 
-                cwd: _.cwd,
-                detached: _.detached,
-                use_execve_on_macos: _.use_execve_on_macos,
-                stream: false,
-                argv0: _.argv0,
-                new_process_group: new_process_group,
-                windows: if (Environment.isWindows) _.windows else undefined,
-            };
+            cwd: _.cwd,
+            detached: _.detached,
+            use_execve_on_macos: _.use_execve_on_macos,
+            stream: false,
+            argv0: _.argv0,
+            new_process_group: new_process_group,
+            windows: if (Environment.isWindows) _.windows else undefined,
+        };
+    }
+}
+
+pub struct SyncResult {
+    status: Status,
+    stdout: std.array_list.Managed(u8) = { items: [], allocator: bun.default_allocator, capacity: 0 },
+    stderr: std.array_list.Managed(u8) = { items: [], allocator: bun.default_allocator, capacity: 0 },
+
+    fn isOK(): bool {
+        return _.status.isOK();
+    }
+
+    fn deinit() {
+        _.stderr.deinit();
+        _.stdout.deinit();
+    }
+}
+
+enum SyncOutFd { stdout, stderr }
+
+struct SyncWindowsProcess {
+    pub const new = bun.TrivialNew(@This());
+    pub const deinit = bun.TrivialDeinit(@This());
+    const OutFd = SyncOutFd;
+
+    stderr: []const []u8 = [],
+    stdout: []const []u8 = [],
+    e: bun.sys.E = .SUCCESS,
+    waiting_count: u8 = 1,
+    process: *Process,
+    status: Status? = null,
+
+    fn onProcessExit(*_, status: Status, _: *const Rusage) {
+        _.status = status;
+        _.waiting_count -= 1;
+        _.process.detach();
+        _.process.deref();
+    }
+
+    fn onReaderDone(*_, tag: OutFd, chunks: []const []u8, e: bun.sys.E) {
+        switch (tag) {
+            .stderr => {
+                _.stderr = chunks;
+            },
+            .stdout => {
+                _.stdout = chunks;
+            },
         }
-    };
-
-    pub const Result = struct {
-        status: Status,
-        stdout: std.array_list.Managed(u8) = { items: [], allocator: bun.default_allocator, capacity: 0 },
-        stderr: std.array_list.Managed(u8) = { items: [], allocator: bun.default_allocator, capacity: 0 },
-
-        fn isOK(): bool {
-            return _.status.isOK();
-        }
-
-        fn deinit() {
-            _.stderr.deinit();
-            _.stdout.deinit();
-        }
-    };
-
-    const SyncWindowsPipeReader = struct {
-        chunks: std.array_list.Managed([]u8) = { items: [], allocator: bun.default_allocator, capacity: 0 },
-        pipe: *uv.Pipe,
-
-        e: bun.sys.E = .SUCCESS,
-        context: *SyncWindowsProcess,
-        onDoneCallback: *const fn (*SyncWindowsProcess, tag: SyncWindowsProcess.OutFd, chunks: []const []u8, e: bun.sys.E) void = &SyncWindowsProcess.onReaderDone,
-        tag: SyncWindowsProcess.OutFd,
-
-        pub const new = bun.TrivialNew(@This());
-
-        static fn onAlloc(_: *SyncWindowsPipeReader, suggested_size: usize): []u8 {
-            return bun.handleOom(bun.default_allocator.alloc(u8, suggested_size));
-        }
-
-        fn onRead(*_, data: []const u8) {
-            bun.handleOom(_.chunks.append(unsafe { @constCast(data) }));
-        }
-
-        fn onError(*_, e: bun.sys.E) {
+        if (e != .SUCCESS) {
             _.e = e;
-            _.pipe.close(onClose);
         }
 
-        @callconv("c")
-        static fn onClose(pipe: *uv.Pipe) {
-            const reader: *SyncWindowsPipeReader = pipe.getData(SyncWindowsPipeReader) ?? @panic("Expected SyncWindowsPipeReader to have data");
-            const context = reader.context;
-            const chunks = reader.chunks.items;
-            const e = if (reader.e == .CANCELED) .SUCCESS else reader.e;
-            const tag = reader.tag;
-            const onDoneCallback = reader.onDoneCallback;
-            bun.default_allocator.destroy(reader.pipe);
-            bun.default_allocator.destroy(reader);
-            onDoneCallback(context, tag, chunks, e);
-        }
+        _.waiting_count -= 1;
+    }
+}
 
-        fn start(*_): Maybe(void) {
-            _.pipe.setData(_);
-            _.pipe.ref();
-            return _.pipe.readStart(_, onAlloc, onError, onRead);
-        }
-    };
+struct SyncWindowsPipeReader {
+    chunks: std.array_list.Managed([]u8) = { items: [], allocator: bun.default_allocator, capacity: 0 },
+    pipe: *uv.Pipe,
 
-    const SyncWindowsProcess = struct {
-        pub const new = bun.TrivialNew(@This());
-        pub const deinit = bun.TrivialDeinit(@This());
+    e: bun.sys.E = .SUCCESS,
+    context: *SyncWindowsProcess,
+    onDoneCallback: *const fn (*SyncWindowsProcess, tag: SyncWindowsProcess.OutFd, chunks: []const []u8, e: bun.sys.E) = &SyncWindowsProcess.onReaderDone,
+    tag: SyncWindowsProcess.OutFd,
 
-        const OutFd = enum { stdout, stderr };
+    pub const new = bun.TrivialNew(@This());
 
-        stderr: []const []u8 = [],
-        stdout: []const []u8 = [],
-        e: bun.sys.E = .SUCCESS,
-        waiting_count: u8 = 1,
-        process: *Process,
-        status: Status? = null,
+    static fn onAlloc(_: *SyncWindowsPipeReader, suggested_size: usize): []u8 {
+        return bun.handleOom(bun.default_allocator.alloc(u8, suggested_size));
+    }
 
-        fn onProcessExit(*_, status: Status, _: *const Rusage) {
-            _.status = status;
-            _.waiting_count -= 1;
-            _.process.detach();
-            _.process.deref();
-        }
+    fn onRead(*_, data: []const u8) {
+        bun.handleOom(_.chunks.append(unsafe { @constCast(data) }));
+    }
 
-        fn onReaderDone(*_, tag: OutFd, chunks: []const []u8, e: bun.sys.E) {
-            switch (tag) {
-                .stderr => {
-                    _.stderr = chunks;
-                },
-                .stdout => {
-                    _.stdout = chunks;
-                },
-            }
-            if (e != .SUCCESS) {
-                _.e = e;
-            }
+    fn onError(*_, e: bun.sys.E) {
+        _.e = e;
+        _.pipe.close(onClose);
+    }
 
-            _.waiting_count -= 1;
-        }
-    };
+    @callconv("c")
+    static fn onClose(pipe: *uv.Pipe) {
+        const reader: *SyncWindowsPipeReader = pipe.getData(SyncWindowsPipeReader) ?? @panic("Expected SyncWindowsPipeReader to have data");
+        const context = reader.context;
+        const chunks = reader.chunks.items;
+        const e = if (reader.e == .CANCELED) .SUCCESS else reader.e;
+        const tag = reader.tag;
+        const onDoneCallback = reader.onDoneCallback;
+        bun.default_allocator.destroy(reader.pipe);
+        bun.default_allocator.destroy(reader);
+        onDoneCallback(context, tag, chunks, e);
+    }
+
+    fn start(*_): Maybe(void) {
+        _.pipe.setData(_);
+        _.pipe.ref();
+        return _.pipe.readStart(_, onAlloc, onError, onRead);
+    }
+}
+
+pub struct sync {
+    pub const Options = SyncOptions;
+    pub const Result = SyncResult;
 
     static fn flattenOwnedChunks(total_allocator: std.mem.Allocator, chunks_allocator: std.mem.Allocator, chunks: []const []u8): ![]u8 {
         let total_size: usize = 0;

@@ -17,29 +17,34 @@ fn _JSHostFnZig(globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! b
 }
 pub const JSHostFnZig = @TypeOf(_JSHostFnZig);
 
-pub fn JSHostFnZigWithContext(comptime ContextType: type): type {
-    const S = struct {
-        pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue ! bun.JSError {
-            * = ctx;
-            * = globalThis;
-            * = callframe;
+fn _ZigWithContext(comptime ContextType: type): type {
+    return struct {
+        pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
+            _ = ctx;
+            _ = globalThis;
+            _ = callframe;
             return .zero;
         }
     };
-    return @TypeOf(S.f);
+}
+
+fn _FnTypeWithContext(comptime ContextType: type): type {
+    return struct {
+        pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) JSValue {
+            _ = ctx;
+            _ = globalThis;
+            _ = callframe;
+            return .zero;
+        }
+    };
+}
+
+pub fn JSHostFnZigWithContext(comptime ContextType: type): type {
+    return @TypeOf(_ZigWithContext(ContextType).f);
 }
 
 pub fn JSHostFunctionTypeWithContext(comptime ContextType: type): type {
-    const S = struct {
-        @callconv(jsc.conv)
-        pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame): JSValue {
-            * = ctx;
-            * = globalThis;
-            * = callframe;
-            return .zero;
-        }
-    };
-    return @TypeOf(S.f);
+    return @TypeOf(_FnTypeWithContext(ContextType).f);
 }
 
 pub fn toJSHostFn(comptime functionToWrap: JSHostFnZig): JSHostFn {
@@ -290,8 +295,8 @@ pub fn wrap4v(comptime func: auto): @TypeOf(Wrap4vStruct(func).wrapped) {
     return Wrap4vStruct(func).wrapped;
 }
 
-const private_ffi = struct {
-    pub extern fn Bun__CreateFFIFunctionWithDataValue(
+@c {
+    fn Bun__CreateFFIFunctionWithDataValue(
         globalObject: *JSGlobalObject,
         symbolName: (*const ZigString)?,
         argCount: u32,
@@ -299,7 +304,7 @@ const private_ffi = struct {
         data: *!,
     ): JSValue;
 
-    pub extern fn Bun__CreateFFIFunctionValue(
+    fn Bun__CreateFFIFunctionValue(
         globalObject: *JSGlobalObject,
         symbolName: (*const ZigString)?,
         argCount: u32,
@@ -308,9 +313,9 @@ const private_ffi = struct {
         inputFunctionPtr: *!?,
     ): JSValue;
 
-    pub extern fn Bun__FFIFunction_getDataPtr(function: JSValue): *!?;
-    pub extern fn Bun__FFIFunction_setDataPtr(function: JSValue, data: *!?);
-};
+    fn Bun__FFIFunction_getDataPtr(function: JSValue): *!?;
+    fn Bun__FFIFunction_setDataPtr(function: JSValue, data: *!?);
+}
 
 pub fn NewRuntimeFunction(
     globalObject: *JSGlobalObject,
@@ -321,17 +326,17 @@ pub fn NewRuntimeFunction(
     inputFunctionPtr: *!?,
 ): JSValue {
     jsc.markBinding(@src());
-    return private_ffi.Bun__CreateFFIFunctionValue(globalObject, symbolName, argCount, functionPointer, add_ptr_property, inputFunctionPtr);
+    return Bun__CreateFFIFunctionValue(globalObject, symbolName, argCount, functionPointer, add_ptr_property, inputFunctionPtr);
 }
 
 pub fn getFunctionData(function: JSValue): *!? {
     jsc.markBinding(@src());
-    return private_ffi.Bun__FFIFunction_getDataPtr(function);
+    return Bun__FFIFunction_getDataPtr(function);
 }
 
 pub fn setFunctionData(function: JSValue, value: *!?) {
     jsc.markBinding(@src());
-    return private_ffi.Bun__FFIFunction_setDataPtr(function, value);
+    return Bun__FFIFunction_setDataPtr(function, value);
 }
 
 pub fn NewFunctionWithData(
@@ -342,7 +347,7 @@ pub fn NewFunctionWithData(
     data: *!,
 ): JSValue {
     jsc.markBinding(@src());
-    return private_ffi.Bun__CreateFFIFunctionWithDataValue(
+    return Bun__CreateFFIFunctionWithDataValue(
         globalObject,
         symbolName,
         argCount,
@@ -498,7 +503,7 @@ pub fn DOMCall(
         const PutFnType = fn (globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) callconv(.c) void;
         const put_fn = @extern(PutFnType, .{ .name = className ++ "__" ++ functionName ++ "__put" });
 
-        pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
+        pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): void {
             put_fn(globalObject, value);
         }
 

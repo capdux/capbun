@@ -213,15 +213,15 @@ pub fn decode(bytes: []const u8, max_pixels: u64, hint: DecodeHint): Error!Decod
         // BMP/GIF have static decoders so Linux (and `backend == .bun`) work;
         // the system backend is tried first because ImageIO/WIC handle the
         // long tail (RLE BMP, animated GIF disposal, etc.) we don't.
-        .heic, .avif, .tiff => decodeViaSystem(bytes, max_pixels) catch |e| {
+        .heic, .avif, .tiff => decodeViaSystem(bytes, max_pixels) catch e => {
             if (e == error.BackendUnavailable) return error.UnsupportedOnPlatform;
             return e;
         },
-        .bmp => decodeViaSystem(bytes, max_pixels) catch |e| {
+        .bmp => decodeViaSystem(bytes, max_pixels) catch e => {
             if (e == error.BackendUnavailable) return bmp.decode(bytes, max_pixels);
             return e;
         },
-        .gif => decodeViaSystem(bytes, max_pixels) catch |e| {
+        .gif => decodeViaSystem(bytes, max_pixels) catch e => {
             if (e == error.BackendUnavailable) return gif.decode(bytes, max_pixels);
             return e;
         },
@@ -252,9 +252,9 @@ struct Tj3Guard<T> {
 }
 
 struct DefaultAllocSliceGuard<T> {
-    slice: ([]T)?,
-    ~init() {
-        if (s := _.slice) bun.default_allocator.free(s);
+    slice: []T,
+    ~errinit() {
+        bun.default_allocator.free(_.slice);
     }
 }
 
@@ -404,7 +404,7 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: EncodeOptions): E
         .heic, .avif => blk: {
             if (b := system_backend) {
                 if (useSystem()) {
-                    const encoded = b.encode(rgba, width, height, opts) catch |e| {
+                    const encoded = b.encode(rgba, width, height, opts) catch e => {
                         if (e == error.BackendUnavailable) return error.UnsupportedOnPlatform;
                         return e;
                     };
@@ -422,7 +422,7 @@ pub fn encode(rgba: []const u8, width: u32, height: u32, opts: EncodeOptions): E
 
 // ───────────────────────────── highway kernels ──────────────────────────────
 
-pub const Filter = enum(i32) {
+pub enum Filter: i32 {
     box = 0,
     bilinear = 1,
     lanczos3 = 2,
@@ -448,7 +448,7 @@ pub const Filter = enum(i32) {
         .{ "mks2013", .mks2013 },
         .{ "mks2021", .mks2021 },
     });
-};
+}
 
 extern fn bun_image_resize_scratch_size(src_w: i32, src_h: i32, dst_w: i32, dst_h: i32, filter: i32): usize ;
 extern fn bun_image_resize_rgba8(
@@ -474,7 +474,7 @@ pub fn modulate(rgba: []u8, brightness: f32, saturation: f32) {
 
 pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter): Error![]u8 {
     if (b := system_backend) if (@hasDecl(b, "scale")) if (useSystem()) {
-        if (out := b.scale(src, sw, sh, dw, dh, f) catch |e| switch (e) {
+        if (out := b.scale(src, sw, sh, dw, dh, f) catch e => switch (e) {
             error.BackendUnavailable => null,
             else => return e,
         }) return out;
@@ -486,12 +486,11 @@ pub fn resize(src: []const u8, sw: u32, sh: u32, dw: u32, dh: u32, f: Filter): E
     const out_sz: usize = @as(usize, dw) * dh * 4;
     const scratch_sz = bun_image_resize_scratch_size(@intCast(sw), @intCast(sh), @intCast(dw), @intCast(dh), @intFromEnum(f));
     const block = bun.default_allocator.alloc(u8, out_sz + scratch_sz)?;
-    let block_guard = DefaultAllocSliceGuard<u8>{ slice: block };
+    const block_guard = DefaultAllocSliceGuard<u8>{ slice: block };
     if (bun_image_resize_rgba8(src.ptr, @intCast(sw), @intCast(sh), block.ptr, @intCast(dw), @intCast(dh), @intFromEnum(f), unsafe { block.ptr + out_sz }) != 0)
         return error.OutOfMemory;
     // Drop the scratch tail; mimalloc's shrink is in-place when the new size
     // fits the same block, so this is free.
-    block_guard.slice = null;
     return bun.handleOom(bun.default_allocator.realloc(block, out_sz));
 }
 
@@ -499,7 +498,7 @@ pub fn rotate(src: []const u8, w: u32, h: u32, degrees: u32): Error!Decoded {
     const dw: u32 = if (degrees == 90 || degrees == 270) h else w;
     const dh: u32 = if (degrees == 90 || degrees == 270) w else h;
     if (b := system_backend) if (@hasDecl(b, "rotate")) if (useSystem()) {
-        if (out := b.rotate(src, w, h, degrees / 90) catch |e| switch (e) {
+        if (out := b.rotate(src, w, h, degrees / 90) catch e => switch (e) {
             error.BackendUnavailable => null,
             else => return e,
         }) return { rgba: out, width: dw, height: dh };
@@ -511,7 +510,7 @@ pub fn rotate(src: []const u8, w: u32, h: u32, degrees: u32): Error!Decoded {
 
 pub fn flip(src: []const u8, w: u32, h: u32, horizontal: bool): Error![]u8 {
     if (b := system_backend) if (@hasDecl(b, "flip")) if (useSystem()) {
-        if (out := b.flip(src, w, h, horizontal) catch |e| switch (e) {
+        if (out := b.flip(src, w, h, horizontal) catch e => switch (e) {
             error.BackendUnavailable => null,
             else => return e,
         }) return out;

@@ -72,10 +72,31 @@ pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) 
 pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
 pub const DirInfo = @import("../resolver/dir_info.zig");
 pub const Options = @import("../bundler/options.zig");
 pub const URLPath = @import("../http_types/URLPath.zig");
 pub const Fs = @import("../resolver/fs.zig");
+pub const _PatternTag = enum(u4) {
+    @"static" = 0,
+    dynamic = 1,
+    catch_all = 2,
+    optional_catch_all = 3,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _PatternParseError = error{
+    CatchAllMustBeAtTheEnd,
+    InvalidCatchAllRoute,
+    InvalidOptionalCatchAllRoute,
+    InvalidRoutePattern,
+    MissingParamName,
+    PatternMissingClosingBracket,
+};
+
 pub const Param = struct {
     name: []const u8,
     value: []const u8,
@@ -411,7 +432,7 @@ pub fn loadAll(allocator: std.mem.Allocator, config: Options.RouteConfig, log: *
             _ = &i;
             while ((i < loader.all_routes.items.len)) {
                 const route = loader.all_routes.items[@as(usize, @intCast(i))];
-                if (((@intFromEnum(route.kind) > @intFromEnum(Pattern.Tag.static)) and (dynamic_start == null))) {
+                if (((@intFromEnum(route.kind) > @intFromEnum(Pattern.Tag.@"static")) and (dynamic_start == null))) {
                     dynamic_start = i;
                 }
                 if ((route.full_hash == index_route_hash)) {
@@ -558,6 +579,61 @@ pub fn isEmpty(self: WindowsAbsPath) bool {
     }
 };
 
+pub const _RouteSorter = struct {
+
+pub fn sortByNameString(ctx: _RouteSorter, lhs: []const u8, rhs: []const u8) bool {
+            _ = &ctx;
+            const math = std.math;
+            const n = @min(lhs.len, rhs.len);
+            var i: usize = 0;
+            _ = &i;
+            while ((i < n)) : (i = (i + 1)) {
+                switch (math.order(sort_table[@as(usize, @intCast(lhs[@as(usize, @intCast(i))]))], sort_table[@as(usize, @intCast(rhs[@as(usize, @intCast(i))]))])) {
+.eq => {
+_ = continue;
+},
+.lt => {
+return true;
+},
+.gt => {
+return false;
+},
+}
+            }
+            return (math.order(lhs.len, rhs.len) == .lt);
+    }
+
+pub fn sortByName(ctx: _RouteSorter, a: *Route, b: *Route) bool {
+            const a_name = a.match_name.slice();
+            const b_name = b.match_name.slice();
+            return (switch (std.math.order(@intFromEnum(a.kind), @intFromEnum(b.kind))) {
+.eq => (switch (a.kind) {
+.static, .dynamic => @call(bun.callmod_inline, sortByNameString, .{ ctx, a_name, b_name }),
+.catch_all, .optional_catch_all => (switch (std.math.order(a.param_count, b.param_count)) {
+.eq => @call(bun.callmod_inline, sortByNameString, .{ ctx, a_name, b_name }),
+.lt => false,
+.gt => true,
+}),
+}),
+.lt => true,
+.gt => false,
+});
+    }
+    const sort_table: [256]u8 = brk: {
+            var table: [256]u8 = undefined;
+            _ = &table;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < 256)) : (i = (i + 1)) {
+                table[cp_cast_int(usize, i)] = @as(u8, @intCast(i));
+            }
+            table[cp_cast_int(usize, 91)] = 252;
+            table[cp_cast_int(usize, 93)] = 253;
+            table[cp_cast_int(usize, 47)] = 254;
+            break :brk table;
+    };
+};
+
 pub const Route = struct {
     name: []const u8,
     match_name: PathString,
@@ -566,7 +642,7 @@ pub const Route = struct {
     param_count: u16,
     abs_path: AbsPathType,
     public_path: PathString,
-    kind: Pattern.Tag = Pattern.Tag.static,
+    kind: Pattern.Tag = Pattern.Tag.@"static",
     has_uppercase: bool = false,
 
 pub fn parse(base_: []const u8, extname: []const u8, entry: *Fs.FileSystem.Entry, log: *Logger.Log, allocator: std.mem.Allocator, public_dir_: []const u8, routes_dirname_len: u16) ?Route {
@@ -701,66 +777,13 @@ pub fn parse(base_: []const u8, extname: []const u8, entry: *Fs.FileSystem.Entry
             }
             return Route{ .name = name, .basename = entry.base(), .public_path = PathString.init(public_path), .match_name = PathString.init(match_name), .full_hash = full_hash, .param_count = validation_result.param_count, .kind = validation_result.kind, .abs_path = (if (comptime Environment.isWindows) WindowsAbsPath{ .path = abs_path } else abs_path), .has_uppercase = has_uppercase };
     }
-    pub const Ptr = TinyPtr;
-    pub const index_route_name: []const u8 = "/";
+    const Ptr = TinyPtr;
+    const index_route_name: []const u8 = "/";
+    const Sorter = _RouteSorter;
     const route_bufs = bun.ThreadlocalBuffers(struct {
         route_file_buf: bun.PathBuffer = undefined,
         normalized_abs_path_buf: bun.windows.PathBuffer = undefined,
     });
-    pub const Sorter = struct {
-    
-    pub fn sortByNameString(self: @This(), lhs: []const u8, rhs: []const u8) bool {
-            _ = self;
-                const math = std.math;
-                const n = @min(lhs.len, rhs.len);
-                for (lhs[0..n], rhs[0..n]) |lhs_i, rhs_i| {
-                    _ = &lhs_i;
-                    _ = &rhs_i;
-                    switch (math.order(sort_table[@as(usize, @intCast(lhs_i))], sort_table[@as(usize, @intCast(rhs_i))])) {
-    .eq => {
-    _ = continue;
-    },
-    .lt => {
-    return true;
-    },
-    .gt => {
-    return false;
-    },
-    }
-                }
-                return (math.order(lhs.len, rhs.len) == .lt);
-        }
-    
-    pub fn sortByName(ctx: @This(), a: *Route, b: *Route) bool {
-                const a_name = a.match_name.slice();
-                const b_name = b.match_name.slice();
-                return (switch (std.math.order(@intFromEnum(a.kind), @intFromEnum(b.kind))) {
-    .eq => (switch (a.kind) {
-    .static, .dynamic => @call(bun.callmod_inline, sortByNameString, .{ ctx, a_name, b_name }),
-    .catch_all, .optional_catch_all => (switch (std.math.order(a.param_count, b.param_count)) {
-    .eq => @call(bun.callmod_inline, sortByNameString, .{ ctx, a_name, b_name }),
-    .lt => false,
-    .gt => true,
-    }),
-    }),
-    .lt => true,
-    .gt => false,
-    });
-        }
-        const sort_table: [256]u8 = brk: {
-                var table: [256]u8 = undefined;
-                _ = &table;
-                for (&table, 0..) |*t, i| {
-                    _ = &t;
-                    _ = &i;
-                    t.* = @as(u8, @intCast(i));
-                }
-                table[cp_cast_int(usize, 91)] = 252;
-                table[cp_cast_int(usize, 93)] = 253;
-                table[cp_cast_int(usize, 47)] = 254;
-                break :brk table;
-        };
-    };
 };
 
 pub const Match = struct {
@@ -798,8 +821,29 @@ pub fn pathnameWithoutLeadingSlash(self: *const Match) []const u8 {
     }
 };
 
+pub const _PatternValue = union(_PatternTag) {
+    @"static": HashedString,
+    dynamic: TinyPtr,
+    catch_all: TinyPtr,
+    optional_catch_all: TinyPtr,
+
+pub fn eql(a: _PatternValue, b: _PatternValue) bool {
+            return ((@as(_PatternTag, @enumFromInt(a)) == @as(_PatternTag, @enumFromInt(b))) and (switch (a) {
+.static => HashedString.eql(a.static, b.static),
+.dynamic => a.dynamic.eql(b.dynamic),
+.catch_all => a.catch_all.eql(b.catch_all),
+.optional_catch_all => a.optional_catch_all.eql(b.optional_catch_all),
+}));
+    }
+};
+
+pub const _PatternValidationResult = struct {
+    param_count: u16 = 0,
+    kind: _PatternTag = _PatternTag.@"static",
+};
+
 pub const Pattern = struct {
-    value: Value,
+    value: _PatternValue,
     len: u16 = 0,
 
 pub fn match(path: []const u8, name: []const u8, match_name: []const u8, allocator: std.mem.Allocator, comptime ParamsListType: type, params: ParamsListType, comptime allow_optional_catch_all: bool) bool {
@@ -888,7 +932,7 @@ pub fn validate(input: []const u8, allocator: std.mem.Allocator, log: *Logger.Lo
             var offset: u16 = 0;
             _ = &offset;
             _ = bun.assert((input.len > 0));
-            var kind: u4 = @intFromEnum(Tag.static);
+            var kind: u4 = @intFromEnum(Tag.@"static");
             _ = &kind;
             const end = (if (comptime @typeInfo(@TypeOf((input.len - 1))) == .@"enum") cp_cast_int(u32, @intFromEnum((input.len - 1))) else cp_cast_int(u32, (input.len - 1)));
             while ((offset < end)) {
@@ -898,7 +942,7 @@ pub fn validate(input: []const u8, allocator: std.mem.Allocator, log: *Logger.Lo
                 offset = pattern.len;
                 const tag = std.meta.activeTag(pattern.value);
                 kind = @max(@intFromEnum(tag), kind);
-                if ((@intFromEnum(tag) > @intFromEnum(Pattern.Tag.static))) {
+                if ((@intFromEnum(tag) > @intFromEnum(Pattern.Tag.@"static"))) {
                     count = (count + 1);
                 }
             }
@@ -933,7 +977,7 @@ pub fn initMaybeHash(input: []const u8, offset_: RoutePathInt, comptime do_hash:
             }
             var i: RoutePathInt = offset;
             _ = &i;
-            var tag = Tag.static;
+            var tag = Tag.@"static";
             _ = &tag;
             const end = @as(RoutePathInt, @intCast((input.len - 1)));
             if ((offset == end)) {
@@ -1024,39 +1068,10 @@ else => {
             }
             return Pattern{ .len = i, .value = .{ .static = HashedString.init(input[offset..i]) } };
     }
-    pub const Tag = enum(u4) {
-            static = 0,
-            dynamic = 1,
-            catch_all = 2,
-            optional_catch_all = 3,
-        };
-    pub const Value = union(Tag) {
-        static: HashedString,
-        dynamic: TinyPtr,
-        catch_all: TinyPtr,
-        optional_catch_all: TinyPtr,
-    
-    pub fn eql(a: Value, b: Value) bool {
-                return (((if (comptime @typeInfo(Tag) == .@"enum") @as(Tag, @enumFromInt(a)) else @as(Tag, a)) == (if (comptime @typeInfo(Tag) == .@"enum") @as(Tag, @enumFromInt(b)) else @as(Tag, b))) and (switch (a) {
-    .static => HashedString.eql(a.static, b.static),
-    .dynamic => a.dynamic.eql(b.dynamic),
-    .catch_all => a.catch_all.eql(b.catch_all),
-    .optional_catch_all => a.optional_catch_all.eql(b.optional_catch_all),
-    }));
-        }
-    };
-    pub const ValidationResult = struct {
-        param_count: u16 = 0,
-        kind: Tag = Tag.static,
-    };
-    pub const PatternParseError = error{
-            CatchAllMustBeAtTheEnd,
-            InvalidCatchAllRoute,
-            InvalidOptionalCatchAllRoute,
-            InvalidRoutePattern,
-            MissingParamName,
-            PatternMissingClosingBracket,
-        };
+    const Tag = _PatternTag;
+    const Value = _PatternValue;
+    const ValidationResult = _PatternValidationResult;
+    const PatternParseError = _PatternParseError;
 };
 
 pub const PathString = bun.PathString;
@@ -1065,7 +1080,6 @@ pub const RoutePathInt = u16;
 pub const ParamListPtr = *Param.List;
 pub const MatchContextTypePtr = *MatchContextType;
 pub const AbsPathType = if (Environment.isWindows) WindowsAbsPath else PathString;
-const bun = @import("bun");
 const Environment = bun.Environment;
 const FD = bun.FD;
 const HashedString = bun.HashedString;

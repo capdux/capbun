@@ -121,129 +121,154 @@ pub fn __cp_deinit(self: *CloseClipboardGuard) void {
     }
 };
 
+const GUID = extern struct {
+    d1: u32,
+    d2: u16,
+    d3: u16,
+    d4: [8]u8,
+};
+
+const IUnknownVTable = extern struct {
+    QueryInterface: *const fn (*IUnknown, *const GUID, ?**anyopaque) HRESULT,
+    AddRef: *const fn (*IUnknown) u32,
+    Release: *const fn (*IUnknown) u32,
+};
+
+const IUnknown = extern struct {
+    vt: *const IUnknownVTable,
+};
+
+const IStreamVTable = extern struct {
+    unk: IUnknownVTable,
+    Read: *const void,
+    Write: *const void,
+    Seek: *const fn (*IStream, i64, u32, ?*u64) HRESULT,
+};
+
+const IStream = extern struct {
+    vt: *const IStreamVTable,
+    const VTable = IStreamVTable;
+};
+
+const IWICImagingFactoryVTable = extern struct {
+    unk: IUnknownVTable,
+    CreateDecoderFromFilename: *const void,
+    CreateDecoderFromStream: *const fn (*IWICImagingFactory, *IUnknown, ?*const GUID, u32, *?*IWICBitmapDecoder) HRESULT,
+    CreateDecoderFromFileHandle: *const void,
+    CreateComponentInfo: *const void,
+    CreateDecoder: *const void,
+    CreateEncoder: *const fn (*IWICImagingFactory, *const GUID, ?*const GUID, *?*IWICBitmapEncoder) HRESULT,
+    CreatePalette: *const void,
+    CreateFormatConverter: *const void,
+    CreateBitmapScaler: *const void,
+    CreateBitmapClipper: *const void,
+    CreateBitmapFlipRotator: *const void,
+    CreateStream: *const fn (*IWICImagingFactory, *?*IWICStream) HRESULT,
+    CreateColorContext: *const void,
+    CreateColorTransformer: *const void,
+    CreateBitmap: *const void,
+    CreateBitmapFromSource: *const void,
+    CreateBitmapFromSourceRect: *const void,
+    CreateBitmapFromMemory: *const fn (*IWICImagingFactory, u32, u32, *const GUID, u32, u32, [*]const u8, *?*IWICBitmapSource) HRESULT,
+};
+
+const IWICImagingFactory = extern struct {
+    vt: *const IWICImagingFactoryVTable,
+    const VTable = IWICImagingFactoryVTable;
+};
+
+const IWICStreamVTable = extern struct {
+    unk: IUnknownVTable,
+    seq: [2]*const void,
+    istream: [9]*const void,
+    InitializeFromIStream: *const void,
+    InitializeFromFilename: *const void,
+    InitializeFromMemory: *const fn (*IWICStream, [*]const u8, u32) HRESULT,
+    InitializeFromIStreamRegion: *const void,
+};
+
+const IWICStream = extern struct {
+    vt: *const IWICStreamVTable,
+    const VTable = IWICStreamVTable;
+};
+
+const IWICBitmapDecoderVTable = extern struct {
+    unk: IUnknownVTable,
+    QueryCapability: *const void,
+    Initialize: *const void,
+    GetContainerFormat: *const void,
+    GetDecoderInfo: *const void,
+    CopyPalette: *const void,
+    GetMetadataQueryReader: *const void,
+    GetPreview: *const void,
+    GetColorContexts: *const void,
+    GetThumbnail: *const void,
+    GetFrameCount: *const void,
+    GetFrame: *const fn (*IWICBitmapDecoder, u32, *?*IWICBitmapSource) HRESULT,
+};
+
+const IWICBitmapDecoder = extern struct {
+    vt: *const IWICBitmapDecoderVTable,
+    const VTable = IWICBitmapDecoderVTable;
+};
+
+const IWICBitmapSourceVTable = extern struct {
+    unk: IUnknownVTable,
+    GetSize: *const fn (*IWICBitmapSource, *u32, *u32) HRESULT,
+    GetPixelFormat: *const void,
+    GetResolution: *const void,
+    CopyPalette: *const void,
+    CopyPixels: *const fn (*IWICBitmapSource, ?*const void, u32, u32, [*]u8) HRESULT,
+};
+
+const IWICBitmapSource = extern struct {
+    vt: *const IWICBitmapSourceVTable,
+    const VTable = IWICBitmapSourceVTable;
+};
+
+const IWICBitmapEncoderVTable = extern struct {
+    unk: IUnknownVTable,
+    Initialize: *const fn (*IWICBitmapEncoder, *IUnknown, u32) HRESULT,
+    GetContainerFormat: *const void,
+    GetEncoderInfo: *const void,
+    SetColorContexts: *const void,
+    SetPalette: *const void,
+    SetThumbnail: *const void,
+    SetPreview: *const void,
+    CreateNewFrame: *const fn (*IWICBitmapEncoder, *?*IWICBitmapFrameEncode, *?*IUnknown) HRESULT,
+    Commit: *const fn (*IWICBitmapEncoder) HRESULT,
+};
+
+const IWICBitmapEncoder = extern struct {
+    vt: *const IWICBitmapEncoderVTable,
+    const VTable = IWICBitmapEncoderVTable;
+};
+
+const IWICBitmapFrameEncodeVTable = extern struct {
+    unk: IUnknownVTable,
+    Initialize: *const fn (*IWICBitmapFrameEncode, ?*IUnknown) HRESULT,
+    SetSize: *const fn (*IWICBitmapFrameEncode, u32, u32) HRESULT,
+    SetResolution: *const void,
+    SetPixelFormat: *const fn (*IWICBitmapFrameEncode, *GUID) HRESULT,
+    SetColorContexts: *const void,
+    SetPalette: *const void,
+    SetThumbnail: *const void,
+    WritePixels: *const fn (*IWICBitmapFrameEncode, u32, u32, u32, [*]const u8) HRESULT,
+    WriteSource: *const fn (*IWICBitmapFrameEncode, *IWICBitmapSource, ?*const void) HRESULT,
+    Commit: *const fn (*IWICBitmapFrameEncode) HRESULT,
+};
+
+const IWICBitmapFrameEncode = extern struct {
+    vt: *const IWICBitmapFrameEncodeVTable,
+    const VTable = IWICBitmapFrameEncodeVTable;
+};
+
 const WICConvertBitmapSourceFn = *const fn (*const GUID, *IWICBitmapSource, *?*IWICBitmapSource) callconv(.c) HRESULT;
 pub const BackendError = (codecs.Error || error{BackendUnavailable});
 const HRESULT = i32;
-const GUID = extern struct { d1: u32, d2: u16, d3: u16, d4: [8]u8 };
-const IUnknownVTable = extern struct {
-    QueryInterface: *const fn(*IUnknown, *const GUID, *?*anyopaque) callconv(.winapi) HRESULT,
-    AddRef: *const fn(*IUnknown) callconv(.winapi) u32,
-    Release: *const fn(*IUnknown) callconv(.winapi) u32,
-};
-const IUnknown = extern struct { vt: *const IUnknownVTable };
 const WICHeifCompressionHEVC: u8 = 2;
 const WICHeifCompressionAV1: u8 = 3;
-const IStream = extern struct {
-    vt: *const VTable,
-    // IStream : ISequentialStream(Read,Write) : IUnknown.
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        Read: *const void,
-        Write: *const void,
-        Seek: *const fn(*IStream, dlibMove: i64, dwOrigin: u32, plibNewPosition: ?*u64) callconv(.winapi) HRESULT,
-        // SetSize..Clone unused.
-    };
-};
 const STREAM_SEEK_CUR: u32 = 1;
-const IWICImagingFactory = extern struct {
-    vt: *const VTable,
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        CreateDecoderFromFilename: *const void,
-        CreateDecoderFromStream: *const fn(*IWICImagingFactory, *IUnknown, ?*const GUID, u32, *?*IWICBitmapDecoder) callconv(.winapi) HRESULT,
-        CreateDecoderFromFileHandle: *const void,
-        CreateComponentInfo: *const void,
-        CreateDecoder: *const void,
-        CreateEncoder: *const fn(*IWICImagingFactory, *const GUID, ?*const GUID, *?*IWICBitmapEncoder) callconv(.winapi) HRESULT,
-        CreatePalette: *const void,
-        CreateFormatConverter: *const void,
-        CreateBitmapScaler: *const void,
-        CreateBitmapClipper: *const void,
-        CreateBitmapFlipRotator: *const void,
-        CreateStream: *const fn(*IWICImagingFactory, *?*IWICStream) callconv(.winapi) HRESULT,
-        CreateColorContext: *const void,
-        CreateColorTransformer: *const void,
-        CreateBitmap: *const void,
-        CreateBitmapFromSource: *const void,
-        CreateBitmapFromSourceRect: *const void,
-        CreateBitmapFromMemory: *const fn(*IWICImagingFactory, u32, u32, *const GUID, u32, u32, [*]const u8, *?*IWICBitmapSource) callconv(.winapi) HRESULT,
-        // …remaining slots unused.
-    };
-};
-const IWICStream = extern struct {
-    vt: *const VTable,
-    // IWICStream : IStream(9) : ISequentialStream(2) : IUnknown(3).
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        seq: [2]*const void, // Read, Write
-        istream: [9]*const void, // Seek..Clone
-        InitializeFromIStream: *const void,
-        InitializeFromFilename: *const void,
-        InitializeFromMemory: *const fn(*IWICStream, [*]const u8, u32) callconv(.winapi) HRESULT,
-        InitializeFromIStreamRegion: *const void,
-    };
-};
-const IWICBitmapDecoder = extern struct {
-    vt: *const VTable,
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        QueryCapability: *const void,
-        Initialize: *const void,
-        GetContainerFormat: *const void,
-        GetDecoderInfo: *const void,
-        CopyPalette: *const void,
-        GetMetadataQueryReader: *const void,
-        GetPreview: *const void,
-        GetColorContexts: *const void,
-        GetThumbnail: *const void,
-        GetFrameCount: *const void,
-        GetFrame: *const fn(*IWICBitmapDecoder, u32, *?*IWICBitmapSource) callconv(.winapi) HRESULT,
-    };
-};
-const IWICBitmapSource = extern struct {
-    vt: *const VTable,
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        GetSize: *const fn(*IWICBitmapSource, *u32, *u32) callconv(.winapi) HRESULT,
-        GetPixelFormat: *const void,
-        GetResolution: *const void,
-        CopyPalette: *const void,
-        CopyPixels: *const fn(*IWICBitmapSource, ?*const void, u32, u32, [*]u8) callconv(.winapi) HRESULT,
-    };
-};
-const IWICBitmapEncoder = extern struct {
-    vt: *const VTable,
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        Initialize: *const fn(*IWICBitmapEncoder, *IUnknown, u32) callconv(.winapi) HRESULT,
-        GetContainerFormat: *const void,
-        GetEncoderInfo: *const void,
-        SetColorContexts: *const void,
-        SetPalette: *const void,
-        SetThumbnail: *const void,
-        SetPreview: *const void,
-        CreateNewFrame: *const fn(*IWICBitmapEncoder, *?*IWICBitmapFrameEncode, *?*IUnknown) callconv(.winapi) HRESULT,
-        Commit: *const fn(*IWICBitmapEncoder) callconv(.winapi) HRESULT,
-        // GetMetadataQueryWriter unused.
-    };
-};
-const IWICBitmapFrameEncode = extern struct {
-    vt: *const VTable,
-    const VTable = extern struct {
-        unk: IUnknownVTable,
-        Initialize: *const fn(*IWICBitmapFrameEncode, ?*IUnknown) callconv(.winapi) HRESULT,
-        SetSize: *const fn(*IWICBitmapFrameEncode, u32, u32) callconv(.winapi) HRESULT,
-        SetResolution: *const void,
-        SetPixelFormat: *const fn(*IWICBitmapFrameEncode, *GUID) callconv(.winapi) HRESULT,
-        SetColorContexts: *const void,
-        SetPalette: *const void,
-        SetThumbnail: *const void,
-        WritePixels: *const fn(*IWICBitmapFrameEncode, u32, u32, u32, [*]const u8) callconv(.winapi) HRESULT,
-        WriteSource: *const fn(*IWICBitmapFrameEncode, *IWICBitmapSource, ?*const void) callconv(.winapi) HRESULT,
-        Commit: *const fn(*IWICBitmapFrameEncode) callconv(.winapi) HRESULT,
-        // GetMetadataQueryWriter unused.
-    };
-};
 const CLSID_WICImagingFactory: GUID = .{ .d1 = 3402297954, .d2 = 37744, .d3 = 17941, .d4 = .{ 161, 59, 159, 85, 57, 218, 76, 10 } };
 const IID_IWICImagingFactory: GUID = .{ .d1 = 3965634729, .d2 = 50069, .d3 = 17172, .d4 = .{ 156, 119, 84, 215, 169, 53, 255, 112 } };
 const GUID_WICPixelFormat32bppRGBA: GUID = .{ .d1 = 4123503917, .d2 = 27277, .d3 = 17373, .d4 = .{ 167, 168, 162, 153, 53, 38, 26, 233 } };

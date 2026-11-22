@@ -13,7 +13,7 @@ pub fn Trampolines(comptime H: type): type {
     const E = if (has_ext) H.Ext else void;
 
     return struct {
-        inline fn call(s: *us_socket_t, comptime f: anytype, extra: anytype) {
+        inline fn call(s: *us_socket_t, comptime f: auto, extra: auto) {
             if (comptime has_ext) {
                 @call(.auto, f, .{s.ext(@typeInfo(E).pointer.child)} ++ .{s} ++ extra);
             } else {
@@ -21,59 +21,64 @@ pub fn Trampolines(comptime H: type): type {
             }
         }
 
-        pub fn on_open(s: *us_socket_t, is_client: c_int, ip: [*c]u8, ip_len: c_int) callconv(.c) ?*us_socket_t {
-            const ip_slice: []const u8 = if (@intFromPtr(ip) != 0) ip[0..@intCast(ip_len)] else "";
+        static fn on_open(s: *us_socket_t, is_client: c_int, ip: [*c]u8, ip_len: c_int) callconv(.c): (*us_socket_t)? {
+            let ip_slice: []const u8 = "";
+            unsafe {
+                if (@intFromPtr(ip) != 0) ip_slice = ip[0..@intCast(ip_len)];
+            }
             call(s, H.onOpen, .{ is_client != 0, ip_slice });
             return s;
         }
 
-        pub fn on_data(s: *us_socket_t, data: [*c]u8, len: c_int) callconv(.c) ?*us_socket_t {
-            call(s, H.onData, .{data[0..@intCast(len)]});
+        static fn on_data(s: *us_socket_t, data: [*c]u8, len: c_int) callconv(.c): (*us_socket_t)? {
+            unsafe {
+                call(s, H.onData, .{data[0..@intCast(len)]});
+            }
             return s;
         }
 
-        pub fn on_fd(s: *us_socket_t, fd: c_int) callconv(.c) ?*us_socket_t {
+        static fn on_fd(s: *us_socket_t, fd: c_int) callconv(.c): (*us_socket_t)? {
             call(s, H.onFd, .{fd});
             return s;
         }
 
-        pub fn on_writable(s: *us_socket_t) callconv(.c) ?*us_socket_t {
+        static fn on_writable(s: *us_socket_t) callconv(.c): (*us_socket_t)? {
             call(s, H.onWritable, .{});
             return s;
         }
 
-        pub fn on_close(s: *us_socket_t, code: c_int, reason: *!?) callconv(.c) ?*us_socket_t {
+        static fn on_close(s: *us_socket_t, code: c_int, reason: *!?) callconv(.c): (*us_socket_t)? {
             call(s, H.onClose, .{ @as(i32, code), reason });
             return s;
         }
 
-        pub fn on_timeout(s: *us_socket_t) callconv(.c) ?*us_socket_t {
+        static fn on_timeout(s: *us_socket_t) callconv(.c): (*us_socket_t)? {
             call(s, H.onTimeout, .{});
             return s;
         }
 
-        pub fn on_long_timeout(s: *us_socket_t) callconv(.c) ?*us_socket_t {
+        static fn on_long_timeout(s: *us_socket_t) callconv(.c): (*us_socket_t)? {
             call(s, H.onLongTimeout, .{});
             return s;
         }
 
-        pub fn on_end(s: *us_socket_t) callconv(.c) ?*us_socket_t {
+        static fn on_end(s: *us_socket_t) callconv(.c): (*us_socket_t)? {
             call(s, H.onEnd, .{});
             return s;
         }
 
-        pub fn on_connect_error(s: *us_socket_t, code: c_int) callconv(.c) ?*us_socket_t {
+        static fn on_connect_error(s: *us_socket_t, code: c_int) callconv(.c): (*us_socket_t)? {
             call(s, H.onConnectError, .{@as(i32, code)});
             return s;
         }
 
-        pub fn on_connecting_error(cs: *ConnectingSocket, code: c_int) callconv(.c) ?*ConnectingSocket {
+        static fn on_connecting_error(cs: *ConnectingSocket, code: c_int) callconv(.c): (*ConnectingSocket)? {
             H.onConnectingError(cs, code);
             return cs;
         }
 
-        pub fn on_handshake(s: *us_socket_t, ok: c_int, err: bun.uws.us_bun_verify_error_t, _: *!?) callconv(.c) void {
-            call(s, H.onHandshake, .{ ok != 0, err });
+        static fn on_handshake(s: *us_socket_t, ok: c_int, verify_err: bun.uws.us_bun_verify_error_t, _: *!?) callconv(.c) {
+            call(s, H.onHandshake, .{ ok != 0, verify_err });
         }
     };
 }

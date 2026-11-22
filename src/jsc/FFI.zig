@@ -26,13 +26,11 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     return val >> shift;
 }
 pub const bun = @import("bun");
-pub const JSCell = ?*void;
-pub const JSContext = ?*void;
-pub const @"bool" = bool;
 const struct_unnamed_1 = extern struct {
     payload: i32,
     tag: i32,
 };
+
 pub const union_EncodedJSValue = extern union {
     asInt64: i64,
     ptr: [*c]JSCell,
@@ -41,10 +39,14 @@ pub const union_EncodedJSValue = extern union {
     asDouble: f64,
     asJSValue: jsc.JSValue,
 };
+
+pub const JSCell = ?*void;
+pub const JSContext = ?*void;
+pub const @"bool" = bool;
 pub const EncodedJSValue = union_EncodedJSValue;
-pub var ValueUndefined: EncodedJSValue = EncodedJSValue{ .asInt64 = @as(i64, @bitCast((if (@typeInfo(c_longlong) == .@"enum") @as(c_longlong, @enumFromInt(((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8))))) else @as(c_longlong, ((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8))))))) };
+pub export var ValueUndefined: EncodedJSValue = EncodedJSValue{ .asInt64 = @as(i64, @bitCast((if (@typeInfo(c_longlong) == .@"enum") @as(c_longlong, @enumFromInt(((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8))))) else @as(c_longlong, ((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(8)) else @as(c_int, 8))))))) };
 pub const TrueI64 = @as(i64, @bitCast((if (@typeInfo(c_longlong) == .@"enum") @as(c_longlong, @enumFromInt((((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(4)) else @as(c_int, 4))) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1))))) else @as(c_longlong, (((if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(2)) else @as(c_int, 2)) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(4)) else @as(c_int, 4))) | (if (@typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(1)) else @as(c_int, 1)))))));
-pub var ValueTrue: EncodedJSValue = EncodedJSValue{ .asInt64 = TrueI64 };
+pub export var ValueTrue: EncodedJSValue = EncodedJSValue{ .asInt64 = TrueI64 };
 const NUMBER_TAG_U64 = cp_shl((if (@typeInfo(c_ulonglong) == .@"enum") @as(c_ulonglong, @enumFromInt(65534)) else @as(c_ulonglong, 65534)), (if (@typeInfo(c_ulonglong) == .@"enum") @as(c_ulonglong, @enumFromInt(48)) else @as(c_ulonglong, 48)));
 pub const UINT64_TO_JSVALUE_SLOW = jsc.JSValue.fromUInt64NoTruncate;
 pub const INT64_TO_JSVALUE_SLOW = jsc.JSValue.fromInt64NoTruncate;
@@ -507,7 +509,10 @@ pub inline fn UINT64_TO_JSVALUE(arg_globalObject: ?*anyopaque, arg_val: u64) Enc
         if ((val < @as(c_ulonglong, @bitCast((if (comptime @typeInfo(c_longlong) == .@"enum") @as(c_longlong, @enumFromInt((if (comptime @typeInfo(c_long) == .@"enum") @as(c_long, @enumFromInt(9007199254740991)) else @as(c_long, 9007199254740991)))) else @as(c_longlong, (if (comptime @typeInfo(c_long) == .@"enum") @as(c_long, @enumFromInt(9007199254740991)) else @as(c_long, 9007199254740991)))))))) {
             return DOUBLE_TO_JSVALUE(@as(f64, @floatFromInt(val)));
         }
-        const global: *jsc.JSGlobalObject = @ptrCast(globalObject.?);
+        const global: *jsc.JSGlobalObject = (blk: {
+        break :blk @ptrCast(globalObject.?);
+
+});
         return UINT64_TO_JSVALUE_SLOW(global, val).asEncoded();
 }
 
@@ -520,7 +525,10 @@ pub inline fn INT64_TO_JSVALUE(arg_globalObject: ?*anyopaque, arg_val: i64) Enco
         if (((val >= @as(c_longlong, @bitCast((if (comptime @typeInfo(c_longlong) == .@"enum") @as(c_longlong, @enumFromInt((0 - (if (comptime @typeInfo(c_long) == .@"enum") @as(c_long, @enumFromInt(9007199254740991)) else @as(c_long, 9007199254740991))))) else @as(c_longlong, (0 - (if (comptime @typeInfo(c_long) == .@"enum") @as(c_long, @enumFromInt(9007199254740991)) else @as(c_long, 9007199254740991)))))))) and (val <= @as(c_longlong, @bitCast((if (comptime @typeInfo(c_longlong) == .@"enum") @as(c_longlong, @enumFromInt((if (comptime @typeInfo(c_long) == .@"enum") @as(c_long, @enumFromInt(9007199254740991)) else @as(c_long, 9007199254740991)))) else @as(c_longlong, (if (comptime @typeInfo(c_long) == .@"enum") @as(c_long, @enumFromInt(9007199254740991)) else @as(c_long, 9007199254740991))))))))) {
             return DOUBLE_TO_JSVALUE(@as(f64, @floatFromInt(val)));
         }
-        const global: *jsc.JSGlobalObject = @ptrCast(globalObject.?);
+        const global: *jsc.JSGlobalObject = (blk: {
+        break :blk @ptrCast(globalObject.?);
+
+});
         return INT64_TO_JSVALUE_SLOW(global, val).asEncoded();
 }
 

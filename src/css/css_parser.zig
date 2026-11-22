@@ -86,6 +86,14 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -445,46 +453,148 @@ pub fn deepClone(self: *const DefaultAtRule, _: std.mem.Allocator) @This() {
     }
 };
 
+pub const _DefaultAtRuleParser_CustomAtRuleParser = struct {
+
+pub fn parsePrelude(_: *DefaultAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
+            return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
+
+pub fn parseBlock(_: *DefaultAtRuleParser, _: Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(AtRule) {
+            return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
+    }
+
+pub fn ruleWithoutBlock(_: *DefaultAtRuleParser, _: Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(AtRule, void) {
+            return .{ .err = undefined };
+    }
+
+pub fn onImportRule(_: *DefaultAtRuleParser, _: *ImportRule, _: u32, _: u32) void {
+    }
+
+pub fn onLayerRule(_: *DefaultAtRuleParser, _: *const bun.css.SmallList(LayerName, 1)) void {
+    }
+
+pub fn enclosingLayerLength(_: *DefaultAtRuleParser) u32 {
+            return 0;
+    }
+
+pub fn setEnclosingLayer(_: *DefaultAtRuleParser, _: LayerName) void {
+    }
+
+pub fn pushToEnclosingLayer(_: *DefaultAtRuleParser, _: LayerName) void {
+    }
+
+pub fn resetEnclosingLayer(_: *DefaultAtRuleParser, _: u32) void {
+    }
+
+pub fn bumpAnonLayerCount(_: *DefaultAtRuleParser, _: i32) void {
+    }
+    pub const Prelude = void;
+    pub const AtRule = DefaultAtRule;
+};
+
 pub const DefaultAtRuleParser = struct {
     const This = @This();
-    pub const CustomAtRuleParser = struct {
-    
-    pub fn parsePrelude(_: *This, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
-                return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
-    
-    pub fn parseBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
-                return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
-        }
-    
-    pub fn ruleWithoutBlock(_: *This, _: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule, void) {
-                return .{ .err = undefined };
-        }
-    
-    pub fn onImportRule(_: *This, _: *ImportRule, _: u32, _: u32) void {
-        }
-    
-    pub fn onLayerRule(_: *This, _: *const bun.css.SmallList(LayerName, 1)) void {
-        }
-    
-    pub fn enclosingLayerLength(_: *This) u32 {
-                return 0;
-        }
-    
-    pub fn setEnclosingLayer(_: *This, _: LayerName) void {
-        }
-    
-    pub fn pushToEnclosingLayer(_: *This, _: LayerName) void {
-        }
-    
-    pub fn resetEnclosingLayer(_: *This, _: u32) void {
-        }
-    
-    pub fn bumpAnonLayerCount(_: *This, _: i32) void {
-        }
-        pub const Prelude = void;
-        pub const AtRule = DefaultAtRule;
-    };
+    pub const CustomAtRuleParser = _DefaultAtRuleParser_CustomAtRuleParser;
+};
+
+pub const _BundlerAtRuleParser_CustomAtRuleParser = struct {
+
+pub fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
+            if (comptime ENABLE_TAILWIND_PARSING) {
+                const PreludeNames = enum {
+                tailwind,
+            };
+                const Map = (comptime bun.ComptimeEnumMap(PreludeNames));
+                if (Map.getASCIIICaseInsensitive(name)) |prelude| {
+                    _ = &prelude;
+                    return (switch (prelude) {
+.tailwind => {
+{
+                        const loc_ = input.currentSourceLocation();
+                        const loc = css_rules.Location{ .source_index = b.options.source_index, .line = loc_.line, .column = loc_.column };
+                        const style_name = (switch (css_rules.tailwind.TailwindStyleName.parse(input)) {
+.result => |v| v,
+.err => {
+return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+},
+});
+                        return .{ .result = .{ .tailwind = .{ .style_name = style_name, .loc = loc } } };
+                    }
+},
+});
+                }
+            }
+            return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
+    }
+
+pub fn parseBlock(_: *BundlerAtRuleParser, _: Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(AtRule) {
+            return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
+    }
+
+pub fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(AtRule, void) {
+            if (comptime ENABLE_TAILWIND_PARSING) {
+                return (switch (prelude) {
+.tailwind => |v| {
+return .{ .result = v };
+},
+});
+            }
+            return .{ .err = undefined };
+    }
+
+pub fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) void {
+            const import_record_index = b.import_records.len;
+            import_rule.import_record_idx = import_record_index;
+            _ = (blk_catch_0: { break :blk_catch_0 ((b.import_records.append(b.allocator, ImportRecord{ .path = bun.fs.Path.init(import_rule.url), .kind = (if ((import_rule.supports != null)) .at_conditional else .at), .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast((end_position - start_position)) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+    }
+
+pub fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) void {
+            if ((b.anon_layer_count > 0)) {
+                return;
+            }
+            _ = bun.handleOom(b.layer_names.ensureUnusedCapacity(b.allocator, layers.len()));
+            for (cp_mut_slice(&layers.slice())) |*layer| {
+                _ = &layer;
+                if ((b.enclosing_layer.v.len() > 0)) {
+                    var cloned: LayerName = .{ .v = .{} };
+                    _ = &cloned;
+                    _ = cloned.v.ensureTotalCapacity(b.allocator, (b.enclosing_layer.v.len() + (layer.*).v.len()));
+                    _ = cloned.v.appendSliceAssumeCapacity(b.enclosing_layer.v.slice());
+                    _ = cloned.v.appendSliceAssumeCapacity((layer.*).v.slice());
+                    _ = bun.handleOom(b.layer_names.append(b.allocator, cloned));
+                } else {
+                    _ = bun.handleOom(b.layer_names.append(b.allocator, (layer.*).deepClone(b.allocator)));
+                }
+            }
+    }
+
+pub fn enclosingLayerLength(b: *BundlerAtRuleParser) u32 {
+            return b.enclosing_layer.v.len();
+    }
+
+pub fn setEnclosingLayer(b: *BundlerAtRuleParser, layer: LayerName) void {
+            b.enclosing_layer = layer;
+    }
+
+pub fn pushToEnclosingLayer(b: *BundlerAtRuleParser, name: LayerName) void {
+            _ = b.enclosing_layer.v.appendSlice(b.allocator, name.v.slice());
+    }
+
+pub fn resetEnclosingLayer(b: *BundlerAtRuleParser, len: u32) void {
+            _ = b.enclosing_layer.v.setLen(len);
+    }
+
+pub fn bumpAnonLayerCount(b: *BundlerAtRuleParser, amount: i32) void {
+            if ((amount > 0)) {
+                b.anon_layer_count = (b.anon_layer_count + (if (comptime @typeInfo(@TypeOf(amount)) == .@"enum") cp_cast_int(u32, @intFromEnum(amount)) else cp_cast_int(u32, amount)));
+            } else {
+                b.anon_layer_count = (b.anon_layer_count - (if (comptime @typeInfo(@TypeOf(@abs(amount))) == .@"enum") cp_cast_int(u32, @intFromEnum(@abs(amount))) else cp_cast_int(u32, @abs(amount))));
+            }
+    }
+    pub const Prelude = (if (ENABLE_TAILWIND_PARSING) union(enum) {
+        tailwind: TailwindAtRule,
+    } else void);
+    pub const AtRule = (if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule);
 };
 
 pub const BundlerAtRuleParser = struct {
@@ -495,105 +605,7 @@ pub const BundlerAtRuleParser = struct {
     anon_layer_count: u32 = 0,
     enclosing_layer: LayerName = .{},
     const This = @This();
-    pub const CustomAtRuleParser = struct {
-    
-    pub fn parsePrelude(b: *BundlerAtRuleParser, name: []const u8, input: *Parser, _: *const ParserOptions) Result(Prelude) {
-                if (comptime ENABLE_TAILWIND_PARSING) {
-                    const PreludeNames = enum {
-                        tailwind,
-                    };
-                    const Map = (comptime bun.ComptimeEnumMap(PreludeNames));
-                    if (Map.getASCIIICaseInsensitive(name)) |prelude| {
-                        _ = &prelude;
-                        return (switch (prelude) {
-    .tailwind => {
-    {
-                            const loc_ = input.currentSourceLocation();
-                            const loc = css_rules.Location{ .source_index = b.options.source_index, .line = loc_.line, .column = loc_.column };
-                            const style_name = (switch (css_rules.tailwind.TailwindStyleName.parse(input)) {
-    .result => |v| v,
-    .err => {
-    return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
-    },
-    });
-                            return .{ .result = .{ .tailwind = .{ .style_name = style_name, .loc = loc } } };
-                        }
-    },
-    });
-                    }
-                }
-                return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
-        }
-    
-    pub fn parseBlock(_: *BundlerAtRuleParser, _: CustomAtRuleParser.Prelude, _: *const ParserState, input: *Parser, _: *const ParserOptions, _: bool) Result(CustomAtRuleParser.AtRule) {
-                return .{ .err = input.newError(BasicParseErrorKind.at_rule_body_invalid) };
-        }
-    
-    pub fn ruleWithoutBlock(_: *BundlerAtRuleParser, prelude: CustomAtRuleParser.Prelude, _: *const ParserState, _: *const ParserOptions, _: bool) Maybe(CustomAtRuleParser.AtRule, void) {
-                if (comptime ENABLE_TAILWIND_PARSING) {
-                    return (switch (prelude) {
-    .tailwind => |v| {
-    return .{ .result = v };
-    },
-    });
-                }
-                return .{ .err = undefined };
-        }
-    
-    pub fn onImportRule(b: *BundlerAtRuleParser, import_rule: *ImportRule, start_position: u32, end_position: u32) void {
-                const import_record_index = b.import_records.len;
-                import_rule.import_record_idx = import_record_index;
-                _ = (blk_catch_0: { break :blk_catch_0 ((b.import_records.append(b.allocator, ImportRecord{ .path = bun.fs.Path.init(import_rule.url), .kind = (if ((import_rule.supports != null)) .at_conditional else .at), .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(start_position) }, .len = @intCast((end_position - start_position)) } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
-        }
-    
-    pub fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) void {
-                if ((b.anon_layer_count > 0)) {
-                    return;
-                }
-                _ = bun.handleOom(b.layer_names.ensureUnusedCapacity(b.allocator, layers.len()));
-                for (layers.slice()) |*layer| {
-                    _ = &layer;
-                    if ((b.enclosing_layer.v.len() > 0)) {
-                        var cloned: LayerName = .{ .v = .{} };
-                        _ = &cloned;
-                        _ = cloned.v.ensureTotalCapacity(b.allocator, (b.enclosing_layer.v.len() + layer.v.len()));
-                        _ = cloned.v.appendSliceAssumeCapacity(b.enclosing_layer.v.slice());
-                        _ = cloned.v.appendSliceAssumeCapacity(layer.v.slice());
-                        _ = bun.handleOom(b.layer_names.append(b.allocator, cloned));
-                    } else {
-                        _ = bun.handleOom(b.layer_names.append(b.allocator, layer.deepClone(b.allocator)));
-                    }
-                }
-        }
-    
-    pub fn enclosingLayerLength(b: *This) u32 {
-                return b.enclosing_layer.v.len();
-        }
-    
-    pub fn setEnclosingLayer(b: *This, layer: LayerName) void {
-                b.enclosing_layer = layer;
-        }
-    
-    pub fn pushToEnclosingLayer(b: *This, name: LayerName) void {
-                _ = b.enclosing_layer.v.appendSlice(b.allocator, name.v.slice());
-        }
-    
-    pub fn resetEnclosingLayer(b: *This, len: u32) void {
-                _ = b.enclosing_layer.v.setLen(len);
-        }
-    
-    pub fn bumpAnonLayerCount(b: *This, amount: i32) void {
-                if ((amount > 0)) {
-                    b.anon_layer_count = (b.anon_layer_count + (if (comptime @typeInfo(@TypeOf(amount)) == .@"enum") cp_cast_int(u32, @intFromEnum(amount)) else cp_cast_int(u32, amount)));
-                } else {
-                    b.anon_layer_count = (b.anon_layer_count - (if (comptime @typeInfo(@TypeOf(@abs(amount))) == .@"enum") cp_cast_int(u32, @intFromEnum(@abs(amount))) else cp_cast_int(u32, @abs(amount))));
-                }
-        }
-        pub const Prelude = (if (ENABLE_TAILWIND_PARSING) union(enum) {
-            tailwind: TailwindAtRule,
-        } else void);
-        pub const AtRule = (if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule);
-    };
+    pub const CustomAtRuleParser = _BundlerAtRuleParser_CustomAtRuleParser;
 };
 
 pub const ImportPreludeLayer = struct {
@@ -677,6 +689,45 @@ pub const ParserExtra = struct {
     symbols: SymbolList = .{},
     local_scope: LocalScope = .{},
     source_index: SrcIndex,
+};
+
+pub const _CssRefTag = packed struct(u6) {
+    class: bool = false,
+    id: bool = false,
+    animation: bool = false,
+    keyframes: bool = false,
+    container: bool = false,
+    counter_style: bool = false,
+
+pub fn canBeComposed(self: _CssRefTag) bool {
+            return self.class;
+    }
+    pub const ID = _CssRefTag{ .id = true };
+    pub const CLASS = _CssRefTag{ .class = true };
+};
+
+pub const CssRef = packed struct(u32) {
+    inner_index: u26 = 0,
+    tag: _CssRefTag,
+
+pub fn canBeComposed(self: CssRef) bool {
+            return self.tag.canBeComposed();
+    }
+
+pub fn sourceIndex(self: CssRef, source_index: u32) u32 {
+            const self_val = self;
+            _ = &self_val;
+            return source_index;
+    }
+
+pub fn innerIndex(self: CssRef) u32 {
+            return self.inner_index;
+    }
+
+pub fn toRealRef(self: CssRef, source_index: u32) bun.bundle_v2.Ref {
+            return .{ .inner_index = self.inner_index, .source_index = @intCast(source_index), .tag = .symbol };
+    }
+    pub const Tag = _CssRefTag;
 };
 
 pub const LocalEntry = struct {
@@ -787,6 +838,13 @@ pub fn warnFmtWithNote(self: ParserOptions, comptime text: []const u8, args: any
 pub fn default(allocator: std.mem.Allocator, log: ?*Log) ParserOptions {
             return ParserOptions{ .filename = "", .css_modules = null, .source_index = 0, .error_recovery = false, .logger = log, .flags = ParserFlags{  }, .allocator = allocator };
     }
+};
+
+pub const ParserFlags = packed struct(u8) {
+    nesting: bool = false,
+    custom_media: bool = false,
+    deep_selector_combinator: bool = false,
+    __unused: u5 = 0,
 };
 
 pub const ParserOpts = packed struct(u8) {
@@ -2234,7 +2292,10 @@ if (self.hasNewlineAt(1)) {
                     break;
                 }
                 _ = self.advance(1);
-                _ = self.consumeEscapeAndWrite((&value_bytes));
+                var esc_buf: [4]u8 = undefined;
+                _ = &esc_buf;
+                const esc_len = self.encodeEscape((&esc_buf));
+                _ = value_bytes.append(self.allocator, esc_buf[0..esc_len]);
 },
 0 => {
 _ = self.advance(1);
@@ -2330,7 +2391,10 @@ _ = self.advance(1);
 _ = self.consumeNewline();
 },
 else => {
-_ = self.consumeEscapeAndWrite((&string_bytes));
+var esc_buf: [4]u8 = undefined;
+                    _ = &esc_buf;
+                    const esc_len = self.encodeEscape((&esc_buf));
+                    _ = string_bytes.append(self.allocator, esc_buf[0..esc_len]);
 },
 }
                 }
@@ -2429,7 +2493,7 @@ pub fn consumeUnquotedUrlInternal(self: *Tokenizer) Token {
 ' ', 9, 10, 13, FORM_FEED_BYTE => {
 var value: CopyOnWriteStr = .{ .borrowed = self.sliceFrom(start_pos) };
                 _ = &value;
-                return self.consumeUrlEnd(start_pos, (&value));
+                return self.consumeUrlEnd(start_pos, value);
 },
 ')' => {
 const value = self.sliceFrom(start_pos);
@@ -2459,7 +2523,7 @@ _ = self.advance(1);
                 const b = self.nextByteUnchecked();
                 switch (b) {
 ' ', 9, 10, 13, FORM_FEED_BYTE => {
-return self.consumeUrlEnd(start_pos, (&string_bytes));
+return self.consumeUrlEnd(start_pos, string_bytes);
 },
 ')' => {
 _ = self.advance(1);
@@ -2474,7 +2538,10 @@ _ = self.advance(1);
                 if (self.hasNewlineAt(0)) {
                     return self.consumeBadUrl(start_pos);
                 }
-                _ = self.consumeEscapeAndWrite((&string_bytes));
+                var esc_buf: [4]u8 = undefined;
+                _ = &esc_buf;
+                const esc_len = self.encodeEscape((&esc_buf));
+                _ = string_bytes.append(self.allocator, esc_buf[0..esc_len]);
 },
 0 => {
 _ = self.advance(1);
@@ -2497,7 +2564,7 @@ _ = self.advance(1);
             return .{ .unquoted_url = string_bytes.toSlice() };
     }
 
-pub fn consumeUrlEnd(self: *Tokenizer, start_pos: usize, str: *CopyOnWriteStr) Token {
+pub fn consumeUrlEnd(self: *Tokenizer, start_pos: usize, str: CopyOnWriteStr) Token {
             while ((!self.isEof())) {
                 switch (self.nextByteUnchecked()) {
 ')' => {
@@ -2547,12 +2614,9 @@ _ = self.consumeKnownByte(b);
             return .{ .bad_url = self.sliceFrom(start_pos) };
     }
 
-pub fn consumeEscapeAndWrite(self: *Tokenizer, bytes: *CopyOnWriteStr) void {
+pub fn encodeEscape(self: *Tokenizer, buf: *[4]u8) usize {
             const val = self.consumeEscape();
-            var utf8bytes: [4]u8 = undefined;
-            _ = &utf8bytes;
-            const len = (blk_catch_6: { break :blk_catch_6 ((std.unicode.utf8Encode(@truncate(val), utf8bytes[0..])) catch |__ce_6| { _ = &__ce_6; @panic("Invalid"); }); });
-            _ = bytes.append(self.allocator, utf8bytes[0..len]);
+            return (blk_catch_7: { break :blk_catch_7 ((std.unicode.utf8Encode(@truncate(val), buf[0..])) catch |__ce_7| { _ = &__ce_7; @panic("Invalid"); }); });
     }
 
 pub fn consumeEscape(self: *Tokenizer) u32 {
@@ -3105,30 +3169,30 @@ pub fn toCssGeneric(self: Token, writer: anytype) !void {
 
 pub fn toCss(self: Token, dest: *Printer) PrintErr!void {
             return (switch (self) {
-.ident => |value| (blk_catch_7: { break :blk_catch_7 ((serializer.serializeIdentifier(value, dest)) catch |__ce_7| { _ = &__ce_7; return dest.addFmtError(); }); }),
+.ident => |value| (blk_catch_8: { break :blk_catch_8 ((serializer.serializeIdentifier(value, dest)) catch |__ce_8| { _ = &__ce_8; return dest.addFmtError(); }); }),
 .at_keyword => |value| {
 {
                 _ = try dest.writeStr("@");
-                return (blk_catch_8: { break :blk_catch_8 ((serializer.serializeIdentifier(value, dest)) catch |__ce_8| { _ = &__ce_8; return dest.addFmtError(); }); });
+                return (blk_catch_9: { break :blk_catch_9 ((serializer.serializeIdentifier(value, dest)) catch |__ce_9| { _ = &__ce_9; return dest.addFmtError(); }); });
             }
 },
 .unrestrictedhash => |value| {
 {
                 _ = try dest.writeStr("#");
-                return (blk_catch_9: { break :blk_catch_9 ((serializer.serializeName(value, dest)) catch |__ce_9| { _ = &__ce_9; return dest.addFmtError(); }); });
+                return (blk_catch_10: { break :blk_catch_10 ((serializer.serializeName(value, dest)) catch |__ce_10| { _ = &__ce_10; return dest.addFmtError(); }); });
             }
 },
 .idhash => |value| {
 {
                 _ = try dest.writeStr("#");
-                return (blk_catch_10: { break :blk_catch_10 ((serializer.serializeIdentifier(value, dest)) catch |__ce_10| { _ = &__ce_10; return dest.addFmtError(); }); });
+                return (blk_catch_11: { break :blk_catch_11 ((serializer.serializeIdentifier(value, dest)) catch |__ce_11| { _ = &__ce_11; return dest.addFmtError(); }); });
             }
 },
-.quoted_string => |value| (blk_catch_11: { break :blk_catch_11 ((serializer.serializeString(value, dest)) catch |__ce_11| { _ = &__ce_11; return dest.addFmtError(); }); }),
+.quoted_string => |value| (blk_catch_12: { break :blk_catch_12 ((serializer.serializeString(value, dest)) catch |__ce_12| { _ = &__ce_12; return dest.addFmtError(); }); }),
 .unquoted_url => |value| {
 {
                 _ = try dest.writeStr("url(");
-                _ = (blk_catch_12: { break :blk_catch_12 ((serializer.serializeUnquotedUrl(value, dest)) catch |__ce_12| { _ = &__ce_12; return dest.addFmtError(); }); });
+                _ = (blk_catch_13: { break :blk_catch_13 ((serializer.serializeUnquotedUrl(value, dest)) catch |__ce_13| { _ = &__ce_13; return dest.addFmtError(); }); });
                 return dest.writeStr(")");
             }
 },
@@ -3138,22 +3202,22 @@ pub fn toCss(self: Token, dest: *Printer) PrintErr!void {
                 return dest.writeChar(@truncate(value));
             }
 },
-.number => |num| (blk_catch_13: { break :blk_catch_13 ((serializer.writeNumeric((if (@typeInfo(@TypeOf(num)) == .@"enum") @intFromEnum(num) else num.value), num.int_value, num.has_sign, dest)) catch |__ce_13| { _ = &__ce_13; return dest.addFmtError(); }); }),
+.number => |num| (blk_catch_14: { break :blk_catch_14 ((serializer.writeNumeric((if (@typeInfo(@TypeOf(num)) == .@"enum") @intFromEnum(num) else num.value), num.int_value, num.has_sign, dest)) catch |__ce_14| { _ = &__ce_14; return dest.addFmtError(); }); }),
 .percentage => |num| {
 {
-                _ = (blk_catch_14: { break :blk_catch_14 ((serializer.writeNumeric((num.unit_value * 100), num.int_value, num.has_sign, dest)) catch |__ce_14| { _ = &__ce_14; return dest.addFmtError(); }); });
+                _ = (blk_catch_15: { break :blk_catch_15 ((serializer.writeNumeric((num.unit_value * 100), num.int_value, num.has_sign, dest)) catch |__ce_15| { _ = &__ce_15; return dest.addFmtError(); }); });
                 return dest.writeStr("%");
             }
 },
 .dimension => |dim| {
 {
-                _ = (blk_catch_15: { break :blk_catch_15 ((serializer.writeNumeric((if (@typeInfo(@TypeOf(dim.num)) == .@"enum") @intFromEnum(dim.num) else dim.num.value), dim.num.int_value, dim.num.has_sign, dest)) catch |__ce_15| { _ = &__ce_15; return dest.addFmtError(); }); });
+                _ = (blk_catch_16: { break :blk_catch_16 ((serializer.writeNumeric((if (@typeInfo(@TypeOf(dim.num)) == .@"enum") @intFromEnum(dim.num) else dim.num.value), dim.num.int_value, dim.num.has_sign, dest)) catch |__ce_16| { _ = &__ce_16; return dest.addFmtError(); }); });
                 const unit = dim.unit;
                 if ((((std.mem.eql(u8, unit, "e") or std.mem.eql(u8, unit, "E")) or std.mem.startsWith(u8, unit, "e-")) or std.mem.startsWith(u8, unit, "E-"))) {
                     _ = try dest.writeStr("\\65 ");
-                    _ = (blk_catch_16: { break :blk_catch_16 ((serializer.serializeName(unit[1..], dest)) catch |__ce_16| { _ = &__ce_16; return dest.addFmtError(); }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((serializer.serializeName(unit[1..], dest)) catch |__ce_17| { _ = &__ce_17; return dest.addFmtError(); }); });
                 } else {
-                    _ = (blk_catch_17: { break :blk_catch_17 ((serializer.serializeIdentifier(unit, dest)) catch |__ce_17| { _ = &__ce_17; return dest.addFmtError(); }); });
+                    _ = (blk_catch_18: { break :blk_catch_18 ((serializer.serializeIdentifier(unit, dest)) catch |__ce_18| { _ = &__ce_18; return dest.addFmtError(); }); });
                 }
                 return;
             }
@@ -3178,7 +3242,7 @@ pub fn toCss(self: Token, dest: *Printer) PrintErr!void {
 .cdc => dest.writeStr("-->"),
 .function => |name| {
 {
-                _ = (blk_catch_18: { break :blk_catch_18 ((serializer.serializeIdentifier(name, dest)) catch |__ce_18| { _ = &__ce_18; return dest.addFmtError(); }); });
+                _ = (blk_catch_19: { break :blk_catch_19 ((serializer.serializeIdentifier(name, dest)) catch |__ce_19| { _ = &__ce_19; return dest.addFmtError(); }); });
                 return dest.writeStr("(");
             }
 },
@@ -3197,7 +3261,7 @@ pub fn toCss(self: Token, dest: *Printer) PrintErr!void {
                 _ = try dest.writeChar(34);
                 var writer = serializer.CssStringWriter(@TypeOf(dest)).new(dest);
                 _ = &writer;
-                return (blk_catch_19: { break :blk_catch_19 ((writer.writeStr(value)) catch |__ce_19| { _ = &__ce_19; return dest.addFmtError(); }); });
+                return (blk_catch_20: { break :blk_catch_20 ((writer.writeStr(value)) catch |__ce_20| { _ = &__ce_20; return dest.addFmtError(); }); });
             }
 },
 .close_paren => dest.writeStr(")"),
@@ -3235,6 +3299,49 @@ pub fn hash(self: *const @This(), hasher: *std.hash.Wyhash) void {
     }
 };
 
+pub const CopyOnWriteStr = union(enum) {
+    borrowed: []const u8,
+    owned: std.array_list.Managed(u8),
+
+pub fn append(self: *CopyOnWriteStr, allocator: Allocator, slice: []const u8) void {
+            switch (self.*) {
+.borrowed => {
+var list = bun.handleOom(std.array_list.Managed(u8).initCapacity(allocator, (self.borrowed.len + slice.len)));
+            _ = &list;
+            _ = list.appendSliceAssumeCapacity(self.borrowed);
+            _ = list.appendSliceAssumeCapacity(slice);
+            self.* = .{ .owned = list };
+},
+.owned => {
+_ = bun.handleOom(self.owned.appendSlice(slice));
+},
+}
+    }
+
+pub fn appendByte(self: *CopyOnWriteStr, allocator: Allocator, b: u8) void {
+            const buf: [1]u8 = .{ b };
+            _ = self.append(allocator, (&buf));
+    }
+
+pub fn toSlice(self: *const CopyOnWriteStr) []const u8 {
+            return (switch (self.*) {
+.borrowed => self.borrowed,
+.owned => self.owned.items[0..],
+});
+    }
+};
+
+pub const _ColorAngleOrNumber = union(enum) {
+    number: struct {
+        /// The numeric value parsed, as a float.
+        value: f32,
+    },
+    angle: struct {
+        /// The value as a number of degrees.
+        degrees: f32,
+    },
+};
+
 pub const color = struct {
 
 pub fn parseNamedColor(ident: []const u8) ?struct { u8, u8, u8 } {
@@ -3242,7 +3349,7 @@ pub fn parseNamedColor(ident: []const u8) ?struct { u8, u8, u8 } {
     }
 
 pub fn parseHashColor(value: []const u8) ?struct { u8, u8, u8, f32 } {
-            return (blk_catch_20: { break :blk_catch_20 ((parseHashColorImpl(value)) catch |__ce_20| { _ = &__ce_20; return null; }); });
+            return (blk_catch_21: { break :blk_catch_21 ((parseHashColorImpl(value)) catch |__ce_21| { _ = &__ce_21; return null; }); });
     }
 
 pub fn parseHashColorImpl(value: []const u8) ColorError!struct { u8, u8, u8, f32 } {
@@ -3273,55 +3380,20 @@ else => ColorError.parse,
 
 pub fn hslToRgb(hue: f32, saturation: f32, lightness: f32) struct { f32, f32, f32 } {
             _ = bun.debugAssert(((saturation >= 0.0) and (saturation <= 1.0)));
-            const Helpers = struct {
-
-pub fn hueToRgb(m1: f32, m2: f32, _h3: f32) f32 {
-            var h3 = _h3;
-            _ = &h3;
-            if ((h3 < 0.0)) {
-                h3 = (h3 + 3.0);
-            }
-            if ((h3 > 3.0)) {
-                h3 = (h3 - 3.0);
-            }
-            if (((h3 * 2.0) < 1.0)) {
-                return (m1 + (((m2 - m1) * h3) * 2.0));
-            } else {
-                if (((h3 * 2.0) < 3.0)) {
-                    return m2;
-                } else {
-                    if ((h3 < 2.0)) {
-                        return (m1 + (((m2 - m1) * (2.0 - h3)) * 2.0));
-                    } else {
-                        return m1;
-                    }
-                }
-            }
-    }
-};
             const m2 = (if ((lightness <= 0.5)) (lightness * (saturation + 1.0)) else ((lightness + saturation) - (lightness * saturation)));
             const m1 = ((lightness * 2.0) - m2);
             const hue_times_3 = (hue * 3.0);
-            const red = Helpers.hueToRgb(m1, m2, (hue_times_3 + 1.0));
-            const green = Helpers.hueToRgb(m1, m2, hue_times_3);
-            const blue = Helpers.hueToRgb(m1, m2, (hue_times_3 - 1.0));
+            const red = _colorHueToRgb(m1, m2, (hue_times_3 + 1.0));
+            const green = _colorHueToRgb(m1, m2, hue_times_3);
+            const blue = _colorHueToRgb(m1, m2, (hue_times_3 - 1.0));
             return .{ red, green, blue };
     }
     pub const OPAQUE: f32 = 1.0;
     const ColorError = error{
             parse,
         };
-    pub const AngleOrNumber = union(enum) {
-        number: struct {
-                /// The numeric value parsed, as a float.
-                value: f32,
-            },
-        angle: struct {
-                /// The value as a number of degrees.
-                degrees: f32,
-            },
-    };
-    const RGB = struct { u8, u8, u8 };
+    pub const AngleOrNumber = _ColorAngleOrNumber;
+    pub const RGB = struct { u8, u8, u8 };
     pub const named_colors = bun.ComptimeStringMap(RGB, .{ .{ "aliceblue", .{ 240, 248, 255 } }, .{ "antiquewhite", .{ 250, 235, 215 } }, .{ "aqua", .{ 0, 255, 255 } }, .{ "aquamarine", .{ 127, 255, 212 } }, .{ "azure", .{ 240, 255, 255 } }, .{ "beige", .{ 245, 245, 220 } }, .{ "bisque", .{ 255, 228, 196 } }, .{ "black", .{ 0, 0, 0 } }, .{ "blanchedalmond", .{ 255, 235, 205 } }, .{ "blue", .{ 0, 0, 255 } }, .{ "blueviolet", .{ 138, 43, 226 } }, .{ "brown", .{ 165, 42, 42 } }, .{ "burlywood", .{ 222, 184, 135 } }, .{ "cadetblue", .{ 95, 158, 160 } }, .{ "chartreuse", .{ 127, 255, 0 } }, .{ "chocolate", .{ 210, 105, 30 } }, .{ "coral", .{ 255, 127, 80 } }, .{ "cornflowerblue", .{ 100, 149, 237 } }, .{ "cornsilk", .{ 255, 248, 220 } }, .{ "crimson", .{ 220, 20, 60 } }, .{ "cyan", .{ 0, 255, 255 } }, .{ "darkblue", .{ 0, 0, 139 } }, .{ "darkcyan", .{ 0, 139, 139 } }, .{ "darkgoldenrod", .{ 184, 134, 11 } }, .{ "darkgray", .{ 169, 169, 169 } }, .{ "darkgreen", .{ 0, 100, 0 } }, .{ "darkgrey", .{ 169, 169, 169 } }, .{ "darkkhaki", .{ 189, 183, 107 } }, .{ "darkmagenta", .{ 139, 0, 139 } }, .{ "darkolivegreen", .{ 85, 107, 47 } }, .{ "darkorange", .{ 255, 140, 0 } }, .{ "darkorchid", .{ 153, 50, 204 } }, .{ "darkred", .{ 139, 0, 0 } }, .{ "darksalmon", .{ 233, 150, 122 } }, .{ "darkseagreen", .{ 143, 188, 143 } }, .{ "darkslateblue", .{ 72, 61, 139 } }, .{ "darkslategray", .{ 47, 79, 79 } }, .{ "darkslategrey", .{ 47, 79, 79 } }, .{ "darkturquoise", .{ 0, 206, 209 } }, .{ "darkviolet", .{ 148, 0, 211 } }, .{ "deeppink", .{ 255, 20, 147 } }, .{ "deepskyblue", .{ 0, 191, 255 } }, .{ "dimgray", .{ 105, 105, 105 } }, .{ "dimgrey", .{ 105, 105, 105 } }, .{ "dodgerblue", .{ 30, 144, 255 } }, .{ "firebrick", .{ 178, 34, 34 } }, .{ "floralwhite", .{ 255, 250, 240 } }, .{ "forestgreen", .{ 34, 139, 34 } }, .{ "fuchsia", .{ 255, 0, 255 } }, .{ "gainsboro", .{ 220, 220, 220 } }, .{ "ghostwhite", .{ 248, 248, 255 } }, .{ "gold", .{ 255, 215, 0 } }, .{ "goldenrod", .{ 218, 165, 32 } }, .{ "gray", .{ 128, 128, 128 } }, .{ "green", .{ 0, 128, 0 } }, .{ "greenyellow", .{ 173, 255, 47 } }, .{ "grey", .{ 128, 128, 128 } }, .{ "honeydew", .{ 240, 255, 240 } }, .{ "hotpink", .{ 255, 105, 180 } }, .{ "indianred", .{ 205, 92, 92 } }, .{ "indigo", .{ 75, 0, 130 } }, .{ "ivory", .{ 255, 255, 240 } }, .{ "khaki", .{ 240, 230, 140 } }, .{ "lavender", .{ 230, 230, 250 } }, .{ "lavenderblush", .{ 255, 240, 245 } }, .{ "lawngreen", .{ 124, 252, 0 } }, .{ "lemonchiffon", .{ 255, 250, 205 } }, .{ "lightblue", .{ 173, 216, 230 } }, .{ "lightcoral", .{ 240, 128, 128 } }, .{ "lightcyan", .{ 224, 255, 255 } }, .{ "lightgoldenrodyellow", .{ 250, 250, 210 } }, .{ "lightgray", .{ 211, 211, 211 } }, .{ "lightgreen", .{ 144, 238, 144 } }, .{ "lightgrey", .{ 211, 211, 211 } }, .{ "lightpink", .{ 255, 182, 193 } }, .{ "lightsalmon", .{ 255, 160, 122 } }, .{ "lightseagreen", .{ 32, 178, 170 } }, .{ "lightskyblue", .{ 135, 206, 250 } }, .{ "lightslategray", .{ 119, 136, 153 } }, .{ "lightslategrey", .{ 119, 136, 153 } }, .{ "lightsteelblue", .{ 176, 196, 222 } }, .{ "lightyellow", .{ 255, 255, 224 } }, .{ "lime", .{ 0, 255, 0 } }, .{ "limegreen", .{ 50, 205, 50 } }, .{ "linen", .{ 250, 240, 230 } }, .{ "magenta", .{ 255, 0, 255 } }, .{ "maroon", .{ 128, 0, 0 } }, .{ "mediumaquamarine", .{ 102, 205, 170 } }, .{ "mediumblue", .{ 0, 0, 205 } }, .{ "mediumorchid", .{ 186, 85, 211 } }, .{ "mediumpurple", .{ 147, 112, 219 } }, .{ "mediumseagreen", .{ 60, 179, 113 } }, .{ "mediumslateblue", .{ 123, 104, 238 } }, .{ "mediumspringgreen", .{ 0, 250, 154 } }, .{ "mediumturquoise", .{ 72, 209, 204 } }, .{ "mediumvioletred", .{ 199, 21, 133 } }, .{ "midnightblue", .{ 25, 25, 112 } }, .{ "mintcream", .{ 245, 255, 250 } }, .{ "mistyrose", .{ 255, 228, 225 } }, .{ "moccasin", .{ 255, 228, 181 } }, .{ "navajowhite", .{ 255, 222, 173 } }, .{ "navy", .{ 0, 0, 128 } }, .{ "oldlace", .{ 253, 245, 230 } }, .{ "olive", .{ 128, 128, 0 } }, .{ "olivedrab", .{ 107, 142, 35 } }, .{ "orange", .{ 255, 165, 0 } }, .{ "orangered", .{ 255, 69, 0 } }, .{ "orchid", .{ 218, 112, 214 } }, .{ "palegoldenrod", .{ 238, 232, 170 } }, .{ "palegreen", .{ 152, 251, 152 } }, .{ "paleturquoise", .{ 175, 238, 238 } }, .{ "palevioletred", .{ 219, 112, 147 } }, .{ "papayawhip", .{ 255, 239, 213 } }, .{ "peachpuff", .{ 255, 218, 185 } }, .{ "peru", .{ 205, 133, 63 } }, .{ "pink", .{ 255, 192, 203 } }, .{ "plum", .{ 221, 160, 221 } }, .{ "powderblue", .{ 176, 224, 230 } }, .{ "purple", .{ 128, 0, 128 } }, .{ "rebeccapurple", .{ 102, 51, 153 } }, .{ "red", .{ 255, 0, 0 } }, .{ "rosybrown", .{ 188, 143, 143 } }, .{ "royalblue", .{ 65, 105, 225 } }, .{ "saddlebrown", .{ 139, 69, 19 } }, .{ "salmon", .{ 250, 128, 114 } }, .{ "sandybrown", .{ 244, 164, 96 } }, .{ "seagreen", .{ 46, 139, 87 } }, .{ "seashell", .{ 255, 245, 238 } }, .{ "sienna", .{ 160, 82, 45 } }, .{ "silver", .{ 192, 192, 192 } }, .{ "skyblue", .{ 135, 206, 235 } }, .{ "slateblue", .{ 106, 90, 205 } }, .{ "slategray", .{ 112, 128, 144 } }, .{ "slategrey", .{ 112, 128, 144 } }, .{ "snow", .{ 255, 250, 250 } }, .{ "springgreen", .{ 0, 255, 127 } }, .{ "steelblue", .{ 70, 130, 180 } }, .{ "tan", .{ 210, 180, 140 } }, .{ "teal", .{ 0, 128, 128 } }, .{ "thistle", .{ 216, 191, 216 } }, .{ "tomato", .{ 255, 99, 71 } }, .{ "turquoise", .{ 64, 224, 208 } }, .{ "violet", .{ 238, 130, 238 } }, .{ "wheat", .{ 245, 222, 179 } }, .{ "white", .{ 255, 255, 255 } }, .{ "whitesmoke", .{ 245, 245, 245 } }, .{ "yellow", .{ 255, 255, 0 } }, .{ "yellowgreen", .{ 154, 205, 50 } } });
 };
 
@@ -3370,7 +3442,7 @@ pub fn serializeDimension(value: f32, unit: []const u8, dest: *Printer) PrintErr
                 _ = &buf;
                 var fbs = std.Io.Writer.fixed((&buf));
                 _ = &fbs;
-                _ = (blk_catch_21: { break :blk_catch_21 ((token.toCssGeneric((&fbs))) catch |__ce_21| { _ = &__ce_21; return dest.addFmtError(); }); });
+                _ = (blk_catch_22: { break :blk_catch_22 ((token.toCssGeneric((&fbs))) catch |__ce_22| { _ = &__ce_22; return dest.addFmtError(); }); });
                 const s = fbs.buffered();
                 if ((value < 0.0)) {
                     _ = try dest.writeStr("-");
@@ -3379,7 +3451,7 @@ pub fn serializeDimension(value: f32, unit: []const u8, dest: *Printer) PrintErr
                     return dest.writeStr(bun.strings.trimLeadingChar(s, 48));
                 }
             } else {
-                return (blk_catch_22: { break :blk_catch_22 ((token.toCssGeneric(dest)) catch |__ce_22| { _ = &__ce_22; return dest.addFmtError(); }); });
+                return (blk_catch_23: { break :blk_catch_23 ((token.toCssGeneric(dest)) catch |__ce_23| { _ = &__ce_23; return dest.addFmtError(); }); });
             }
     }
 
@@ -3750,47 +3822,6 @@ pub const ENABLE_TAILWIND_PARSING = false;
 pub const BundlerAtRule = (if (ENABLE_TAILWIND_PARSING) TailwindAtRule else DefaultAtRule);
 pub const CustomIdentList = css_values.ident.CustomIdentList;
 pub const Specifier = css_properties.css_modules.Specifier;
-pub const CssRef = packed struct(u32) {
-    inner_index: u26 = 0,
-
-    tag: Tag,
-
-    pub const Tag = packed struct(u6) {
-        class: bool = false,
-        id: bool = false,
-        animation: bool = false,
-        keyframes: bool = false,
-        container: bool = false,
-        counter_style: bool = false,
-
-        pub const ID = Tag{ .id = true };
-        pub const CLASS = Tag{ .class = true };
-
-        pub fn canBeComposed(self: @This()) bool {
-            return self.class;
-        }
-    };
-
-    pub fn canBeComposed(self: @This()) bool {
-        return self.tag.canBeComposed();
-    }
-
-    pub fn sourceIndex(_: @This(), source_index: u32) u32 {
-        return source_index;
-    }
-
-    pub fn innerIndex(self: @This()) u32 {
-        return self.inner_index;
-    }
-
-    pub fn toRealRef(self: @This(), source_index: u32) bun.bundle_v2.Ref {
-        return .{
-            .inner_index = self.inner_index,
-            .source_index = @intCast(source_index),
-            .tag = .symbol,
-        };
-    }
-};
 pub const LocalScope = bun.StringArrayHashMapUnmanaged(LocalEntry);
 pub const LocalsResultsMap = bun.bundle_v2.MangledProps;
 pub const LocalPropertyUsage = std.AutoArrayHashMapUnmanaged(bun.bundle_v2.Ref, PropertyUsage);
@@ -3806,15 +3837,6 @@ pub const BundlerLayerBlockRule = css_rules.layer.LayerBlockRule(BundlerAtRule);
 pub const BundlerSupportsRule = css_rules.supports.SupportsRule(BundlerAtRule);
 pub const BundlerMediaRule = css_rules.media.MediaRule(BundlerAtRule);
 pub const BundlerPrintResult = bun.css.PrintResult(BundlerAtRule);
-pub const ParserFlags = packed struct(u8) {
-    /// Whether the enable the [CSS nesting](https://www.w3.org/TR/css-nesting-1/) draft syntax.
-    nesting: bool = false,
-    /// Whether to enable the [custom media](https://drafts.csswg.org/mediaqueries-5/#custom-mq) draft syntax.
-    custom_media: bool = false,
-    /// Whether to enable the non-standard >>> and /deep/ selector combinators used by Vue and Angular.
-    deep_selector_combinator: bool = false,
-    __unused: u5 = 0,
-};
 pub const NthResult = struct { i32, i32 };
 const SeenStatus = enum {
     dont_care,
@@ -3827,37 +3849,6 @@ const REPLACEMENT_CHAR_UNICODE: [3]u8 = .{ 239, 191, 189 };
 const MAX_ONE_B: u32 = 128;
 const MAX_TWO_B: u32 = 2048;
 const MAX_THREE_B: u32 = 65536;
-const CopyOnWriteStr = union(enum) {
-    borrowed: []const u8,
-    owned: std.array_list.Managed(u8),
-
-pub fn append(self: *@This(), allocator: Allocator, slice: []const u8) void {
-            switch (self.*) {
-.borrowed => {
-var list = bun.handleOom(std.array_list.Managed(u8).initCapacity(allocator, (self.borrowed.len + slice.len)));
-            _ = &list;
-            _ = list.appendSliceAssumeCapacity(self.borrowed);
-            _ = list.appendSliceAssumeCapacity(slice);
-            self.* = .{ .owned = list };
-},
-.owned => {
-_ = bun.handleOom(self.owned.appendSlice(slice));
-},
-}
-    }
-
-pub fn appendByte(self: *@This(), allocator: Allocator, b: u8) void {
-            const buf: [1]u8 = .{ b };
-            _ = self.append(allocator, (&buf));
-    }
-
-pub fn toSlice(self: *@This()) []const u8 {
-            return (switch (self.*) {
-.borrowed => self.borrowed,
-.owned => self.owned.items[0..],
-});
-    }
-};
 pub const implementEql = generic.implementEql;
 pub const implementHash = generic.implementHash;
 pub const implementDeepClone = generic.implementDeepClone;
@@ -6106,6 +6097,30 @@ pub fn parseFn(closure: *const Closure, i: *Parser) Result(I) {
 };
 }
 
+pub fn _colorHueToRgb(m1: f32, m2: f32, _h3: f32) f32 {
+        var h3 = _h3;
+        _ = &h3;
+        if ((h3 < 0.0)) {
+            h3 = (h3 + 3.0);
+        }
+        if ((h3 > 3.0)) {
+            h3 = (h3 - 3.0);
+        }
+        if (((h3 * 2.0) < 1.0)) {
+            return (m1 + (((m2 - m1) * h3) * 2.0));
+        } else {
+            if (((h3 * 2.0) < 3.0)) {
+                return m2;
+            } else {
+                if ((h3 < 2.0)) {
+                    return (m1 + (((m2 - m1) * (2.0 - h3)) * 2.0));
+                } else {
+                    return m1;
+                }
+            }
+        }
+}
+
 pub fn parseImportant(input: *Parser) Result(void) {
         if (input.expectDelim(33).asErr()) |e| {
             _ = &e;
@@ -6191,8 +6206,8 @@ else => null,
         {
             var i: i32 = 1;
             _ = &i;
-            const __end_5 = len;
-            while (i < __end_5) : (i += 1) {
+            const __end_6 = len;
+            while (i < __end_6) : (i += 1) {
                 if ((buf[@as(usize, @intCast(i))] == 46)) {
                     _ = bun.debugAssert((_pos_dot == null));
                     _pos_dot = @intCast(i);
@@ -6250,8 +6265,8 @@ else => null,
             {
                 var i: i32 = new_coeff_end;
                 _ = &i;
-                const __end_6 = pos_dot;
-                while (i < __end_6) : (i += 1) {
+                const __end_7 = pos_dot;
+                while (i < __end_7) : (i += 1) {
                     buf[cp_cast_int(usize, i)] = 48;
                 }
             }
@@ -6281,8 +6296,8 @@ else => null,
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_7 = exp_len;
-                    while (i < __end_7) : (i += 1) {
+                    const __end_8 = exp_len;
+                    while (i < __end_8) : (i += 1) {
                         buf[cp_cast_int(usize, (new_coeff_end + i))] = buf[@as(usize, @intCast((posexp + i)))];
                     }
                 }

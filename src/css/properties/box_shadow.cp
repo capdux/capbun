@@ -11,6 +11,29 @@ const VendorPrefix = css.VendorPrefix;
 const Property = css.Property;
 const Feature = css.prefixes.Feature;
 
+struct BoxShadowLengths {
+    x: Length,
+    y: Length,
+    blur: Length,
+    spread: Length,
+}
+
+struct BoxShadowLengthsParser {
+    static fn parse(p: *css.Parser): css.Result(BoxShadowLengths) {
+        const horizontal = switch (Length.parse(p)) {
+            .result => |v| v,
+            .err => |e| return { err: e },
+        };
+        const vertical = switch (Length.parse(p)) {
+            .result => |v| v,
+            .err => |e| return { err: e },
+        };
+        const blur = p.tryParse(Length.parse, {}).asValue() ?? Length.zero();
+        const spread = p.tryParse(Length.parse, {}).asValue() ?? Length.zero();
+        return { result: { x: horizontal, y: vertical, blur: blur, spread: spread } };
+    }
+}
+
 /// A value for the [box-shadow](https://drafts.csswg.org/css-backgrounds/#box-shadow) property.
 pub struct BoxShadow {
     /// The color of the box shadow.
@@ -28,8 +51,7 @@ pub struct BoxShadow {
 
     static fn parse(input: *css.Parser): css.Result(@This()) {
         let color: CssColor? = null;
-        const Lengths = struct { x: Length, y: Length, blur: Length, spread: Length };
-        let lengths: Lengths? = null;
+        let lengths: BoxShadowLengths? = null;
         let inset = false;
 
         while (true) {
@@ -41,21 +63,7 @@ pub struct BoxShadow {
             }
 
             if (lengths == null) {
-                const value = input.tryParse(struct {
-                    static fn parse(p: *css.Parser): css.Result(Lengths) {
-                        const horizontal = switch (Length.parse(p)) {
-                            .result => |v| v,
-                            .err => |e| return { err: e },
-                        };
-                        const vertical = switch (Length.parse(p)) {
-                            .result => |v| v,
-                            .err => |e| return { err: e },
-                        };
-                        const blur = p.tryParse(Length.parse, {}).asValue() ?? Length.zero();
-                        const spread = p.tryParse(Length.parse, {}).asValue() ?? Length.zero();
-                        return { result: { x: horizontal, y: vertical, blur: blur, spread: spread } };
-                    }
-                }.parse, {});
+                const value = input.tryParse(BoxShadowLengthsParser.parse, {});
 
                 if (value.isOk()) {
                     lengths = value.result;
@@ -127,7 +135,7 @@ pub struct BoxShadow {
     }
 }
 
-const BoxShadowsAndPrefix = struct { SmallList(BoxShadow, 1), VendorPrefix };
+type BoxShadowsAndPrefix = [SmallList(BoxShadow, 1), VendorPrefix];
 
 pub struct BoxShadowHandler {
     box_shadows: BoxShadowsAndPrefix? = null,
@@ -165,12 +173,12 @@ pub struct BoxShadowHandler {
             },
             .unparsed => |unp| {
                 if (unp.property_id == .@"box-shadow") {
-                    this.flush(dest, context);
+                    _.flush(dest, context);
 
                     let unparsed = unp.deepClone(context.allocator);
                     context.addUnparsedFallbacks(&unparsed);
                     bun.handleOom(dest.append(context.allocator, { unparsed: unparsed }));
-                    this.flushed = true;
+                    _.flushed = true;
                 } else return false;
             },
             else => return false,

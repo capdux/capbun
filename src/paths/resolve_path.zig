@@ -64,6 +64,153 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
+pub const Fs = @import("../resolver/fs.zig");
+pub const ParentEqual = enum {
+    parent,
+    equal,
+    unrelated,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const Platform = enum {
+    loose,
+    windows,
+    posix,
+    nt,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isAbsolute(comptime platform: Platform, path: []const u8) bool {
+            return Platform.isAbsoluteT(platform, u8, path);
+    }
+
+pub fn isAbsoluteT(comptime platform: Platform, comptime T: type, path: []const T) bool {
+            if (((T != u8) and (T != u16))) {
+                _ = @compileError("Unsupported type given to isAbsoluteT");
+            }
+            return (switch (platform) {
+.posix => ((path.len > 0) and (path[0] == 47)),
+.nt, .windows, .loose => (if ((T == u8)) std.fs.path.isAbsoluteWindows(path) else std.fs.path.isAbsoluteWindowsWTF16(path)),
+});
+    }
+
+pub inline fn separator(comptime platform: Platform) u8 {
+            return (switch (platform) {
+.loose, .posix => std.fs.path.sep_posix,
+.nt, .windows => std.fs.path.sep_windows,
+});
+    }
+
+pub inline fn separatorString(comptime platform: Platform) []const u8 {
+            return (switch (platform) {
+.loose, .posix => std.fs.path.sep_str_posix,
+.nt, .windows => std.fs.path.sep_str_windows,
+});
+    }
+
+pub fn getSeparatorFunc(comptime platform: Platform) IsSeparatorFunc {
+            return (switch (platform) {
+.loose => isSepAny,
+.nt, .windows => isSepAny,
+.posix => isSepPosix,
+});
+    }
+
+pub fn getSeparatorFuncT(comptime platform: Platform) IsSeparatorFuncT {
+            return (switch (platform) {
+.loose => isSepAnyT,
+.nt, .windows => isSepAnyT,
+.posix => isSepPosixT,
+});
+    }
+
+pub fn getLastSeparatorFunc(comptime platform: Platform) LastSeparatorFunction {
+            return (switch (platform) {
+.loose => lastIndexOfSeparatorLoose,
+.nt, .windows => lastIndexOfSeparatorWindows,
+.posix => lastIndexOfSeparatorPosix,
+});
+    }
+
+pub fn getLastSeparatorFuncT(comptime platform: Platform) LastSeparatorFunctionT {
+            return (switch (platform) {
+.loose => lastIndexOfSeparatorLooseT,
+.nt, .windows => lastIndexOfSeparatorWindowsT,
+.posix => lastIndexOfSeparatorPosixT,
+});
+    }
+
+pub inline fn isSeparator(comptime platform: Platform, char: u8) bool {
+            return Platform.isSeparatorT(platform, u8, char);
+    }
+
+pub inline fn isSeparatorT(comptime platform: Platform, comptime T: type, char: T) bool {
+            return (switch (platform) {
+.loose => isSepAnyT(T, char),
+.nt, .windows => isSepAnyT(T, char),
+.posix => isSepPosixT(T, char),
+});
+    }
+
+pub fn trailingSeparator(comptime platform: Platform) [2]u8 {
+            return (switch (platform) {
+.nt, .windows => .{ 46, 92 },
+.posix, .loose => .{ 46, 47 },
+});
+    }
+
+pub fn leadingSeparatorIndex(comptime platform: Platform, path: anytype) ?usize {
+            switch (platform) {
+.nt, .windows => {
+if ((path.len < 1)) {
+                return null;
+            }
+            if ((path[0] == 47)) {
+                return 0;
+            }
+            if ((path[0] == 92)) {
+                return 0;
+            }
+            if ((path.len < 3)) {
+                return null;
+            }
+            if ((((path[0] >= 65) and (path[0] <= 90)) and (path[1] == 58))) {
+                if ((path[2] == 47)) {
+                    return 2;
+                }
+                if ((path[2] == 92)) {
+                    return 2;
+                }
+                return 1;
+            }
+            return null;
+},
+.posix => {
+if (((path.len > 0) and (path[0] == 47))) {
+                return 0;
+            } else {
+                return null;
+            }
+},
+.loose => {
+return ((Platform.leadingSeparatorIndex(.windows, path)) orelse (Platform.leadingSeparatorIndex(.posix, path)));
+},
+}
+    }
+    
+    pub const auto: Platform = (switch (bun.Environment.os) {
+    .windows => .windows,
+    .linux, .mac, .freebsd => .posix,
+    .wasm => .loose,
+    });
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -96,171 +243,17 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const IsSeparatorFunc = *const fn (u8) bool;
-const IsSeparatorFuncT = *const fn (comptime type, anytype) bool;
-const LastSeparatorFunction = *const fn ([]const u8) ?usize;
-const LastSeparatorFunctionT = *const fn (comptime type, anytype) ?usize;
-const SliceU8 = []const u8;
-const SliceZU8 = [:0]const u8;
-threadlocal var parser_join_input_buffer: [4096]u8 = undefined;
-threadlocal var parser_buffer: [1024]u8 = undefined;
-pub threadlocal var join_buf: [4096]u8 = undefined;
-const ParentEqual = enum {
-    parent,
-    equal,
-    unrelated,
-};
-const relative_bufs = bun.ThreadlocalBuffers(struct {
-    relative_to_common_path_buf: bun.PathBuffer = undefined,
-    relative_from_buf: bun.PathBuffer = undefined,
-    relative_to_buf: bun.PathBuffer = undefined,
-});
-pub const Platform = enum {
-    loose,
-    windows,
-    posix,
-    nt,
-
-    pub const auto: Platform = switch (bun.Environment.os) {
-        .windows => .windows,
-        .linux, .mac, .freebsd => .posix,
-        .wasm => .loose,
-    };
-
-    pub fn isAbsolute(comptime platform: Platform, path: []const u8) bool {
-        return isAbsoluteT(platform, u8, path);
-    }
-
-    pub fn isAbsoluteT(comptime platform: Platform, comptime T: type, path: []const T) bool {
-        if (T != u8 and T != u16) @compileError("Unsupported type given to isAbsoluteT");
-        return switch (platform) {
-            .posix => path.len > 0 and path[0] == '/',
-            .nt,
-            .windows,
-            .loose,
-            => if (T == u8)
-                std.fs.path.isAbsoluteWindows(path)
-            else
-                std.fs.path.isAbsoluteWindowsWTF16(path),
-        };
-    }
-
-    pub inline fn separator(comptime platform: Platform) u8 {
-        return switch (platform) {
-            .loose, .posix => std.fs.path.sep_posix,
-            .nt, .windows => std.fs.path.sep_windows,
-        };
-    }
-
-    pub inline fn separatorString(comptime platform: Platform) []const u8 {
-        return switch (platform) {
-            .loose, .posix => std.fs.path.sep_str_posix,
-            .nt, .windows => std.fs.path.sep_str_windows,
-        };
-    }
-
-    pub fn getSeparatorFunc(comptime platform: Platform) IsSeparatorFunc {
-        return switch (platform) {
-            .loose => isSepAny,
-
-            .nt, .windows => isSepAny,
-            .posix => isSepPosix,
-        };
-    }
-
-    pub fn getSeparatorFuncT(comptime platform: Platform) IsSeparatorFuncT {
-        return switch (platform) {
-            .loose => isSepAnyT,
-            .nt, .windows => isSepAnyT,
-            .posix => isSepPosixT,
-        };
-    }
-
-    pub fn getLastSeparatorFunc(comptime platform: Platform) LastSeparatorFunction {
-        return switch (platform) {
-            .loose => lastIndexOfSeparatorLoose,
-            .nt, .windows => lastIndexOfSeparatorWindows,
-            .posix => lastIndexOfSeparatorPosix,
-        };
-    }
-
-    pub fn getLastSeparatorFuncT(comptime platform: Platform) LastSeparatorFunctionT {
-        return switch (platform) {
-            .loose => lastIndexOfSeparatorLooseT,
-            .nt, .windows => lastIndexOfSeparatorWindowsT,
-            .posix => lastIndexOfSeparatorPosixT,
-        };
-    }
-
-    pub inline fn isSeparator(comptime platform: Platform, char: u8) bool {
-        return isSeparatorT(platform, u8, char);
-    }
-
-    pub inline fn isSeparatorT(comptime platform: Platform, comptime T: type, char: T) bool {
-        return switch (platform) {
-            .loose => isSepAnyT(T, char),
-            .nt, .windows => isSepAnyT(T, char),
-            .posix => isSepPosixT(T, char),
-        };
-    }
-
-    pub fn trailingSeparator(comptime platform: Platform) [2]u8 {
-        return switch (platform) {
-            .nt, .windows => [_]u8{ '.', '\\' },
-            .posix, .loose => [_]u8{ '.', '/' },
-        };
-    }
-
-    pub fn leadingSeparatorIndex(comptime platform: Platform, path: anytype) ?usize {
-        switch (platform) {
-            .nt, .windows => {
-                if (path.len < 1)
-                    return null;
-
-                if (path[0] == '/')
-                    return 0;
-
-                if (path[0] == '\\')
-                    return 0;
-
-                if (path.len < 3)
-                    return null;
-
-                if (path[0] >= 'A' and path[0] <= 'Z' and path[1] == ':') {
-                    if (path[2] == '/')
-                        return 2;
-                    if (path[2] == '\\')
-                        return 2;
-
-                    return 1;
-                }
-
-                return null;
-            },
-            .posix => {
-                if (path.len > 0 and path[0] == '/') {
-                    return 0;
-                } else {
-                    return null;
-                }
-            },
-            .loose => return leadingSeparatorIndex(.windows, path) orelse
-                leadingSeparatorIndex(.posix, path),
-        }
-    }
-};
-pub const join = joinImpl;
-const JoinScratch = struct {
+pub const JoinScratch = struct {
     sfa: std.heap.StackFallbackAllocator(bun.MAX_PATH_BYTES * 2),
     alloc: std.mem.Allocator,
     buf: []u8,
 
-pub fn init(self: *@This(), base: usize, parts: []const []const u8) []u8 {
+pub fn init(self: *JoinScratch, base: usize, parts: []const []const u8) []u8 {
             self.sfa = std.heap.stackFallback((bun.MAX_PATH_BYTES * 2), bun.default_allocator);
             self.alloc = self.sfa.get();
             var total = (base + 2);
             _ = &total;
-            for (parts) |p| {
+            for (cp_iter_slice(parts)) |p| {
                 _ = &p;
                 total = (total + (p.len + 1));
             }
@@ -268,27 +261,28 @@ pub fn init(self: *@This(), base: usize, parts: []const []const u8) []u8 {
             return self.buf;
     }
 
-pub fn deinit(self: *@This()) void {
+pub fn deinit(self: *JoinScratch) void {
             _ = self.alloc.free(self.buf);
     }
 };
+
 pub const PosixToWinNormalizer = struct {
     _raw_bytes: Buf = undefined,
 
-pub inline fn resolve(self: *@This(), source_dir: []const u8, maybe_posix_path: []const u8) []const u8 {
-            return resolveWithExternalBuf((&self._raw_bytes), source_dir, maybe_posix_path);
+pub inline fn resolve(self: *PosixToWinNormalizer, source_dir: []const u8, maybe_posix_path: []const u8) []const u8 {
+            return PosixToWinNormalizer.resolveWithExternalBuf((&self._raw_bytes), source_dir, maybe_posix_path);
     }
 
-pub inline fn resolveZ(self: *@This(), source_dir: []const u8, maybe_posix_path: [:0]const u8) [:0]const u8 {
-            return resolveWithExternalBufZ((&self._raw_bytes), source_dir, maybe_posix_path);
+pub inline fn resolveZ(self: *PosixToWinNormalizer, source_dir: []const u8, maybe_posix_path: [:0]const u8) [:0]const u8 {
+            return PosixToWinNormalizer.resolveWithExternalBufZ((&self._raw_bytes), source_dir, maybe_posix_path);
     }
 
-pub inline fn resolveCWD(self: *@This(), maybe_posix_path: []const u8) ![]const u8 {
-            return resolveCWDWithExternalBuf((&self._raw_bytes), maybe_posix_path);
+pub inline fn resolveCWD(self: *PosixToWinNormalizer, maybe_posix_path: []const u8) ![]const u8 {
+            return PosixToWinNormalizer.resolveCWDWithExternalBuf((&self._raw_bytes), maybe_posix_path);
     }
 
-pub inline fn resolveCWDZ(self: *@This(), maybe_posix_path: []const u8) ![:0]const u8 {
-            return resolveCWDWithExternalBufZ((&self._raw_bytes), maybe_posix_path);
+pub inline fn resolveCWDZ(self: *PosixToWinNormalizer, maybe_posix_path: []const u8) ![:0]const u8 {
+            return PosixToWinNormalizer.resolveCWDWithExternalBufZ((&self._raw_bytes), maybe_posix_path);
     }
 
 pub fn resolveWithExternalBuf(buf: *Buf, source_dir: []const u8, maybe_posix_path: []const u8) []const u8 {
@@ -384,10 +378,24 @@ pub fn resolveCWDWithExternalBufZ(buf: *bun.PathBuffer, maybe_posix_path: []cons
     }
     const Buf = (if (bun.Environment.isWindows) bun.PathBuffer else void);
 };
-const Fs = @import("../resolver/fs.zig");
-const bun = @import("bun");
+
+const SliceU8 = []const u8;
+const SliceZU8 = [:0]const u8;
 const assert = bun.assert;
 const strings = bun.strings;
+threadlocal var parser_join_input_buffer: [4096]u8 = undefined;
+threadlocal var parser_buffer: [1024]u8 = undefined;
+pub threadlocal var join_buf: [4096]u8 = undefined;
+const IsSeparatorFunc = *const fn (u8) bool;
+const IsSeparatorFuncT = *const fn (type, anytype) bool;
+const LastSeparatorFunction = *const fn ([]const u8) ?usize;
+const LastSeparatorFunctionT = *const fn (type, anytype) ?usize;
+const relative_bufs = bun.ThreadlocalBuffers(struct {
+    relative_to_common_path_buf: bun.PathBuffer = undefined,
+    relative_from_buf: bun.PathBuffer = undefined,
+    relative_to_buf: bun.PathBuffer = undefined,
+});
+pub const join = joinImpl;
 
 pub fn z(input: []const u8, output: *bun.PathBuffer) [:0]const u8 {
         if ((input.len > bun.MAX_PATH_BYTES)) {

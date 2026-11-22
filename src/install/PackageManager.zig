@@ -80,6 +80,57 @@ pub const DirInfo = @import("../resolver/dir_info.zig");
 pub const resolution = @import("./PackageManager/PackageManagerResolution.zig");
 pub const lifecycle = @import("./PackageManager/PackageManagerLifecycle.zig");
 pub const bun = @import("bun");
+pub const Subcommand = enum {
+    install,
+    update,
+    pm,
+    add,
+    remove,
+    link,
+    unlink,
+    patch,
+    @"patch-commit",
+    outdated,
+    pack,
+    publish,
+    audit,
+    info,
+    why,
+    scan,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn canGloballyInstallPackages(cmd: Subcommand) bool {
+            return (switch (cmd) {
+.install, .update, .add => true,
+else => false,
+});
+    }
+
+pub fn supportsWorkspaceFiltering(cmd: Subcommand) bool {
+            return (switch (cmd) {
+.outdated, .install, .update => true,
+else => false,
+});
+    }
+
+pub fn supportsJsonOutput(cmd: Subcommand) bool {
+            return (switch (cmd) {
+.audit, .pm, .info => true,
+else => false,
+});
+    }
+
+pub fn shouldChdirToRoot(cmd: Subcommand) bool {
+            return (switch (cmd) {
+.link => false,
+else => true,
+});
+    }
+};
+
 pub fn CloseGuard(comptime T: type) type {
     return struct {
         ptr: ?*T = null,
@@ -275,6 +326,12 @@ pub const PackageUpdateInfo = struct {
     original_version: ?Semver.Version,
 };
 
+pub const TrackInstalledBin = union(enum) {
+    none: void,
+    pending: void,
+    basename: []const u8,
+};
+
 pub const ScriptRunEnvironment = struct {
     root_dir_info: *DirInfo,
     transpiler: bun.Transpiler,
@@ -413,57 +470,6 @@ else => ((if (Environment.isAndroid) "#!/system/bin/sh\n" else "#!/bin/sh\n") ++
 
 const string = []const u8;
 const stringZ = [:0]const u8;
-pub const Subcommand = enum {
-    install,
-    update,
-    pm,
-    add,
-    remove,
-    link,
-    unlink,
-    patch,
-    @"patch-commit",
-    outdated,
-    pack,
-    publish,
-    audit,
-    info,
-    why,
-    scan,
-
-    pub fn canGloballyInstallPackages(cmd: Subcommand) bool {
-        return switch (cmd) {
-            .install, .update, .add => true,
-            else => false,
-        };
-    }
-
-    pub fn supportsWorkspaceFiltering(cmd: Subcommand) bool {
-        return switch (cmd) {
-            .outdated, .install, .update => true,
-            else => false,
-        };
-    }
-
-    pub fn supportsJsonOutput(cmd: Subcommand) bool {
-        return switch (cmd) {
-            .audit, .pm, .info => true,
-            else => false,
-        };
-    }
-
-    pub fn shouldChdirToRoot(cmd: Subcommand) bool {
-        return switch (cmd) {
-            .link => false,
-            else => true,
-        };
-    }
-};
-const TrackInstalledBin = union(enum) {
-    none: void,
-    pending: void,
-    basename: []const u8,
-};
 pub var verbose_install = false;
 pub const PatchTaskQueue = bun.UnboundedQueue(PatchTask, .next);
 pub const AsyncNetworkTaskQueue = bun.UnboundedQueue(NetworkTask, .next);

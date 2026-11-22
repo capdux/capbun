@@ -128,7 +128,15 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const DNSRecordType = enum(c_int) {
     A = 1,
@@ -150,6 +158,35 @@ pub const DNSRecordType = enum(c_int) {
     pub const default = DNSRecordType.A;
     
     pub const map = bun.ComptimeStringMap(DNSRecordType, .{ .{ "A", .A }, .{ "AAAA", .AAAA }, .{ "ANY", .ANY }, .{ "CAA", .CAA }, .{ "CNAME", .CNAME }, .{ "MX", .MX }, .{ "NS", .NS }, .{ "PTR", .PTR }, .{ "SOA", .SOA }, .{ "SRV", .SRV }, .{ "TXT", .TXT }, .{ "a", .A }, .{ "aaaa", .AAAA }, .{ "any", .ANY }, .{ "caa", .CAA }, .{ "cname", .CNAME }, .{ "mx", .MX }, .{ "ns", .NS }, .{ "ptr", .PTR }, .{ "soa", .SOA }, .{ "srv", .SRV }, .{ "txt", .TXT } });
+};
+
+pub const ResolverOrder = enum(u8) {
+    verbatim = 0,
+    ipv4first = 4,
+    ipv6first = 6,
+    pub fn get(__cp_s: []const u8) ?@This() { return @This().fromString(__cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return @This().fromString(__cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn toJS(self: ResolverOrder, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
+            return jsc.ZigString.init(@tagName(self)).toJS(globalThis);
+    }
+
+pub fn fromString(order: []const u8) ?ResolverOrder {
+            return ResolverOrder.map.get(order);
+    }
+
+pub fn fromStringOrDie(order: []const u8) ResolverOrder {
+            return ((ResolverOrder.fromString(order)) orelse {
+            _ = Output.prettyErrorln("<r><red>error<r><d>:<r> Invalid DNS result order.", .{});
+            _ = Global.exit(1);
+});
+    }
+    
+    pub const default: ResolverOrder = .verbatim;
+    
+    pub const map = bun.ComptimeStringMap(ResolverOrder, .{ .{ "verbatim", .verbatim }, .{ "ipv4first", .ipv4first }, .{ "ipv6first", .ipv6first }, .{ "0", .verbatim }, .{ "4", .ipv4first }, .{ "6", .ipv6first } });
 };
 
 pub fn DeinitGuard(comptime T: type) type {
@@ -513,10 +550,37 @@ pub fn lookup(dns_res: *Resolver, query: GetAddrInfo, globalThis: *jsc.JSGlobalO
     pub const Holder = LibUVBackendHolder;
 };
 
+pub const CAresCacheConfig = packed struct(u16) {
+    pending_cache: bool = false,
+    entry_cache: bool = false,
+    pos_in_pending: u5 = 0,
+    name_len: u9 = 0,
+};
+
+pub const GetHostByAddrInfoPendingCacheKey = struct {
+    hash: u64,
+    len: u16,
+    lookup: *GetHostByAddrInfoRequest = undefined,
+
+pub fn append(self: *GetHostByAddrInfoPendingCacheKey, cares_lookup: *CAresReverse) void {
+            const tail = self.lookup.tail;
+            tail.next = cares_lookup;
+            self.lookup.tail = cares_lookup;
+    }
+
+pub fn init(name: []const u8) GetHostByAddrInfoPendingCacheKey {
+            var hasher = std.hash.Wyhash.init(0);
+            _ = &hasher;
+            _ = hasher.update(name);
+            const hash = hasher.final();
+            return GetHostByAddrInfoPendingCacheKey{ .hash = hash, .len = @as(u16, @truncate(name.len)), .lookup = undefined };
+    }
+};
+
 pub const GetHostByAddrInfoRequest = struct {
     resolver_for_caching: ?*Resolver = null,
     hash: u64 = 0,
-    cache: CacheConfig = .{},
+    cache: CAresCacheConfig = .{},
     head: CAresReverse,
     tail: *CAresReverse = undefined,
 
@@ -562,31 +626,8 @@ pub fn onCaresComplete(self: *GetHostByAddrInfoRequest, err_: ?c_ares.Error, tim
     }
     const request_type = @This();
     const log = Output.scoped(@This(), .visible);
-    pub const CacheConfig = packed struct(u16) {
-            pending_cache: bool = false,
-            entry_cache: bool = false,
-            pos_in_pending: u5 = 0,
-            name_len: u9 = 0,
-        };
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *request_type = undefined,
-    
-    pub fn append(self: *@This(), cares_lookup: *CAresReverse) void {
-                const tail = self.lookup.tail;
-                tail.next = cares_lookup;
-                self.lookup.tail = cares_lookup;
-        }
-    
-    pub fn init(name: []const u8) PendingCacheKey {
-                var hasher = std.hash.Wyhash.init(0);
-                _ = &hasher;
-                _ = hasher.update(name);
-                const hash = hasher.final();
-                return PendingCacheKey{ .hash = hash, .len = @as(u16, @truncate(name.len)), .lookup = undefined };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = GetHostByAddrInfoPendingCacheKey;
 };
 
 pub const CAresNameInfo = struct {
@@ -648,10 +689,30 @@ pub fn deinit(self: *CAresNameInfo) void {
     const log = Output.scoped(.CAresNameInfo, .hidden);
 };
 
+pub const GetNameInfoPendingCacheKey = struct {
+    hash: u64,
+    len: u16,
+    lookup: *GetNameInfoRequest = undefined,
+
+pub fn append(self: *GetNameInfoPendingCacheKey, cares_lookup: *CAresNameInfo) void {
+            const tail = self.lookup.tail;
+            tail.next = cares_lookup;
+            self.lookup.tail = cares_lookup;
+    }
+
+pub fn init(name: []const u8) GetNameInfoPendingCacheKey {
+            var hasher = std.hash.Wyhash.init(0);
+            _ = &hasher;
+            _ = hasher.update(name);
+            const hash = hasher.final();
+            return GetNameInfoPendingCacheKey{ .hash = hash, .len = @as(u16, @truncate(name.len)), .lookup = undefined };
+    }
+};
+
 pub const GetNameInfoRequest = struct {
     resolver_for_caching: ?*Resolver = null,
     hash: u64 = 0,
-    cache: CacheConfig = .{},
+    cache: CAresCacheConfig = .{},
     head: CAresNameInfo,
     tail: *CAresNameInfo = undefined,
 
@@ -697,31 +758,8 @@ pub fn onCaresComplete(self: *GetNameInfoRequest, err_: ?c_ares.Error, timeout: 
     }
     const request_type = @This();
     const log = Output.scoped(@This(), .visible);
-    pub const CacheConfig = packed struct(u16) {
-            pending_cache: bool = false,
-            entry_cache: bool = false,
-            pos_in_pending: u5 = 0,
-            name_len: u9 = 0,
-        };
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *request_type = undefined,
-    
-    pub fn append(self: *@This(), cares_lookup: *CAresNameInfo) void {
-                const tail = self.lookup.tail;
-                tail.next = cares_lookup;
-                self.lookup.tail = cares_lookup;
-        }
-    
-    pub fn init(name: []const u8) PendingCacheKey {
-                var hasher = std.hash.Wyhash.init(0);
-                _ = &hasher;
-                _ = hasher.update(name);
-                const hash = hasher.final();
-                return PendingCacheKey{ .hash = hash, .len = @as(u16, @truncate(name.len)), .lookup = undefined };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = GetNameInfoPendingCacheKey;
 };
 
 pub const GetAddrInfoRequestBackendLibcWindows = struct {
@@ -798,6 +836,22 @@ pub const GetAddrInfoRequestBackend = union(enum) {
     libinfo: GetAddrInfoRequestBackendLibInfo,
     libc: GetAddrInfoRequestBackendLibc,
     pub const LibInfo = GetAddrInfoRequestBackendLibInfo;
+};
+
+pub const GetAddrInfoPendingCacheKey = struct {
+    hash: u64,
+    len: u16,
+    lookup: *GetAddrInfoRequest = undefined,
+
+pub fn append(self: *GetAddrInfoPendingCacheKey, dns_lookup: *DNSLookup) void {
+            const tail = self.lookup.tail;
+            tail.next = dns_lookup;
+            self.lookup.tail = dns_lookup;
+    }
+
+pub fn init(query: GetAddrInfo) GetAddrInfoPendingCacheKey {
+            return GetAddrInfoPendingCacheKey{ .hash = query.hash(), .len = @as(u16, @truncate((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name).len)), .lookup = undefined };
+    }
 };
 
 pub const GetAddrInfoRequest = struct {
@@ -938,27 +992,8 @@ pub fn onLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t) void {
     pub const Backend = GetAddrInfoRequestBackend;
     pub const onMachportChange = Backend.LibInfo.onMachportChange;
     pub const Task = bun.jsc.WorkTask(GetAddrInfoRequest);
-    pub const CacheConfig = packed struct(u16) {
-            pending_cache: bool = false,
-            entry_cache: bool = false,
-            pos_in_pending: u5 = 0,
-            name_len: u9 = 0,
-        };
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *GetAddrInfoRequest = undefined,
-    
-    pub fn append(self: *@This(), dns_lookup: *DNSLookup) void {
-                const tail = self.lookup.tail;
-                tail.next = dns_lookup;
-                self.lookup.tail = dns_lookup;
-        }
-    
-    pub fn init(query: GetAddrInfo) PendingCacheKey {
-                return PendingCacheKey{ .hash = query.hash(), .len = @as(u16, @truncate((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name).len)), .lookup = undefined };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = GetAddrInfoPendingCacheKey;
 };
 
 pub const CAresReverse = struct {
@@ -1138,6 +1173,11 @@ pub fn init(allocator: std.mem.Allocator, vm: *jsc.VirtualMachine) *GlobalData {
     }
 };
 
+pub const InternalResultEntry = extern struct {
+    info: std.c.addrinfo,
+    addr: std.c.sockaddr.storage,
+};
+
 pub const InternalKey = struct {
     host: ?[:0]const u8,
     port: u16 = 0,
@@ -1163,6 +1203,48 @@ pub fn toOwned(self: InternalKey) @This() {
     }
 };
 
+pub const InternalDNSRequestOwner = union(enum) {
+    socket: *bun.uws.ConnectingSocket,
+    prefetch: *bun.uws.Loop,
+    quic: *bun.http.H3.PendingConnect,
+
+pub fn notifyThreadsafe(self: InternalDNSRequestOwner, req: *InternalRequest) void {
+            switch (self) {
+.socket => |socket| {
+_ = us_internal_dns_callback_threadsafe(socket, req);
+},
+.prefetch => {
+_ = internal.freeaddrinfo(req, 0);
+},
+.quic => |pc| {
+_ = pc.onDNSResolvedThreadsafe();
+},
+}
+    }
+
+pub fn notify(self: InternalDNSRequestOwner, req: *InternalRequest) void {
+            switch (self) {
+.prefetch => {
+_ = internal.freeaddrinfo(req, 0);
+},
+.socket => {
+_ = us_internal_dns_callback(self.socket, req);
+},
+.quic => |pc| {
+_ = pc.onDNSResolved();
+},
+}
+    }
+
+pub fn loop(self: *const InternalDNSRequestOwner) *bun.uws.Loop {
+            return (switch (self.*) {
+.prefetch => self.prefetch,
+.socket => self.socket.loop(),
+.quic => |pc| pc.loop(),
+});
+    }
+};
+
 pub const InternalMacAsyncDNS = struct {
     file_poll: ?*bun.Async.FilePoll = null,
     machport: bun.mach_port = 0,
@@ -1172,6 +1254,11 @@ pub fn onMachportChange(self: *InternalMacAsyncDNS, _: *InternalRequest) void {
                 _ = internal.libinfoCallback(@intFromEnum(std.c.E.NOSYS), null, self);
             }
     }
+};
+
+pub const InternalRequestResult = extern struct {
+    info: ?[*]InternalResultEntry,
+    err: c_int,
 };
 
 pub const InternalRequest = struct {
@@ -1219,11 +1306,14 @@ pub fn deinit(self: *InternalRequest) void {
     }
     pub const new = bun.TrivialNew(@This());
     pub const Key = InternalKey;
-    pub const Result = extern struct {
-            info: ?[*]InternalResultEntry,
-            err: c_int,
-        };
+    pub const Result = InternalRequestResult;
     pub const MacAsyncDNS = InternalMacAsyncDNS;
+};
+
+pub const InternalGlobalCacheResult = union(enum) {
+    inflight: *InternalRequest,
+    resolved: *InternalRequest,
+    none: void,
 };
 
 pub const InternalGlobalCache = struct {
@@ -1313,11 +1403,7 @@ pub fn tryPush(self: *InternalGlobalCache, entry: *InternalRequest) bool {
     }
     const MAX_ENTRIES: usize = 256;
     const This = @This();
-    pub const CacheResult = union(enum) {
-            inflight: *InternalRequest,
-            resolved: *InternalRequest,
-            none,
-        };
+    pub const CacheResult = InternalGlobalCacheResult;
 };
 
 pub const internal = struct {
@@ -1769,6 +1855,17 @@ pub const ResolverDNSQuery = struct {
     name: jsc.ZigString.Slice,
     record_type: DNSRecordType,
     ttl: i32 = 0,
+};
+
+pub const ResolverCacheHit = union(enum) {
+    inflight: *GetAddrInfoRequest.PendingCacheKey,
+    @"new": *GetAddrInfoRequest.PendingCacheKey,
+    disabled: void,
+};
+
+pub const ResolverChannelResult = union(enum) {
+    err: c_ares.Error,
+    result: *c_ares.Channel,
 };
 
 pub const Resolver = struct {
@@ -2426,7 +2523,7 @@ return globalThis.throwValue(try err.toJSWithSyscallAndHostname(globalThis, "get
                 _ = cache.inflight.append(cares_reverse);
                 return cares_reverse.promise.value();
             }
-            var request = (blk_catch_26: { break :blk_catch_26 ((GetHostByAddrInfoRequest.init(cache, self, ip, globalThis, "pending_addr_cache_cares")) catch |e| { _ = &e; break :blk_catch_26 @as(*@This(), bun.handleOom(e)); }); });
+            var request = (blk_catch_26: { break :blk_catch_26 ((GetHostByAddrInfoRequest.init(cache, self, ip, globalThis, "pending_addr_cache_cares")) catch |e| { _ = &e; break :blk_catch_26 @as(*GetHostByAddrInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
             const promise = request.tail.promise.value();
             _ = channel.getHostByAddr(ip, GetHostByAddrInfoRequest, request, GetHostByAddrInfoRequest.onCaresComplete);
@@ -3076,7 +3173,7 @@ pub fn globalLookupService(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Call
                 _ = cache.inflight.append(info);
                 return info.promise.value();
             }
-            var request = (blk_catch_32: { break :blk_catch_32 ((GetNameInfoRequest.init(cache, resolver, cache_name, globalThis, "pending_nameinfo_cache_cares")) catch |e| { _ = &e; break :blk_catch_32 @as(*@This(), bun.handleOom(e)); }); });
+            var request = (blk_catch_32: { break :blk_catch_32 ((GetNameInfoRequest.init(cache, resolver, cache_name, globalThis, "pending_nameinfo_cache_cares")) catch |e| { _ = &e; break :blk_catch_32 @as(*GetNameInfoRequest, bun.handleOom(e)); }); });
             _ = &request;
             const promise = request.tail.promise.value();
             _ = name_chan.getNameInfo((blk: {
@@ -3102,36 +3199,7 @@ pub fn getRuntimeDefaultResultOrderOption(globalThis: *jsc.JSGlobalObject, _: *j
     pub const fromJSDirect = js.fromJSDirect;
     const PollsMap = std.AutoArrayHashMap(c_ares.ares_socket_t, *PollType);
     const PollType = (if (Environment.isWindows) UvDnsPoll else Async.FilePoll);
-    pub const Order = enum(u8) {
-            verbatim = 0,
-            ipv4first = 4,
-            ipv6first = 6,
-    
-            pub const default = .verbatim;
-            pub const map = bun.ComptimeStringMap(Order, .{
-                .{ "verbatim", .verbatim },
-                .{ "ipv4first", .ipv4first },
-                .{ "ipv6first", .ipv6first },
-                .{ "0", .verbatim },
-                .{ "4", .ipv4first },
-                .{ "6", .ipv6first },
-            });
-    
-            pub fn toJS(self: Order, globalThis: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-                return jsc.ZigString.init(@tagName(self)).toJS(globalThis);
-            }
-    
-            pub fn fromString(order: []const u8) ?Order {
-                return Order.map.get(order);
-            }
-    
-            pub fn fromStringOrDie(order: []const u8) Order {
-                return fromString(order) orelse ({
-                    Output.prettyErrorln("<r><red>error<r><d>:<r> Invalid DNS result order.", .{});
-                    Global.exit(1);
-                });
-            }
-        };
+    pub const Order = ResolverOrder;
     const PendingCache = bun.HiveArray(GetAddrInfoRequest.PendingCacheKey, 32);
     const SrvPendingCache = bun.HiveArray(ResolveInfoRequest(c_ares.struct_ares_srv_reply, "srv").PendingCacheKey, 32);
     const SoaPendingCache = bun.HiveArray(ResolveInfoRequest(c_ares.struct_ares_soa_reply, "soa").PendingCacheKey, 32);
@@ -3147,15 +3215,8 @@ pub fn getRuntimeDefaultResultOrderOption(globalThis: *jsc.JSGlobalObject, _: *j
     const AnyPendingCache = bun.HiveArray(ResolveInfoRequest(c_ares.struct_any_reply, "any").PendingCacheKey, 32);
     const AddrPendingCache = bun.HiveArray(GetHostByAddrInfoRequest.PendingCacheKey, 32);
     const NameInfoPendingCache = bun.HiveArray(GetNameInfoRequest.PendingCacheKey, 32);
-    pub const CacheHit = union(enum) {
-        inflight: *GetAddrInfoRequest.PendingCacheKey,
-        new: *GetAddrInfoRequest.PendingCacheKey,
-        disabled: void,
-    };
-    pub const ChannelResult = union(enum) {
-        err: c_ares.Error,
-        result: *c_ares.Channel,
-    };
+    pub const CacheHit = ResolverCacheHit;
+    pub const ChannelResult = ResolverChannelResult;
 };
 
 pub const GetAddrInfoAsyncCallback = *const fn (i32, ?*std.c.addrinfo, ?*anyopaque) callconv(.c) void;
@@ -3193,51 +3254,6 @@ var dns_cache_misses: usize = 0;
 var dns_cache_errors: usize = 0;
 var getaddrinfo_calls: usize = 0;
 const default_hints: std.c.addrinfo = .{ .addr = null, .addrlen = 0, .canonname = null, .family = std.c.AF.UNSPEC, .flags = (if (Environment.isPosix) .{ .ADDRCONFIG = true } else .{}), .next = null, .protocol = 0, .socktype = std.c.SOCK.STREAM };
-pub const InternalResultEntry = extern struct {
-    info: std.c.addrinfo,
-    addr: std.c.sockaddr.storage,
-};
-pub const InternalDNSRequestOwner = union(enum) {
-    socket: *bun.uws.ConnectingSocket,
-    prefetch: *bun.uws.Loop,
-    quic: *bun.http.H3.PendingConnect,
-
-pub fn notifyThreadsafe(self: @This(), req: *InternalRequest) void {
-            switch (self) {
-.socket => |socket| {
-_ = us_internal_dns_callback_threadsafe(socket, req);
-},
-.prefetch => {
-_ = internal.freeaddrinfo(req, 0);
-},
-.quic => |pc| {
-_ = pc.onDNSResolvedThreadsafe();
-},
-}
-    }
-
-pub fn notify(self: @This(), req: *InternalRequest) void {
-            switch (self) {
-.prefetch => {
-_ = internal.freeaddrinfo(req, 0);
-},
-.socket => {
-_ = us_internal_dns_callback(self.socket, req);
-},
-.quic => |pc| {
-_ = pc.onDNSResolved();
-},
-}
-    }
-
-pub fn loop(self: *const @This()) *bun.uws.Loop {
-            return (switch (self) {
-.prefetch => self.prefetch,
-.socket => self.socket.loop(),
-.quic => |pc| pc.loop(),
-});
-    }
-};
 var global_cache: InternalGlobalCache = InternalGlobalCache{  };
 pub const InternalDNSRequest = internal.Request;
 
@@ -3261,6 +3277,28 @@ pub fn normalizeDNSName(name: []const u8, backend: *GetAddrInfo.Backend) []const
             }
         }
         return name;
+}
+
+pub fn ResolvePendingCacheKey(comptime request_type: type, comptime cares_type: type, comptime type_name: []const u8) type {
+        return struct {
+    hash: u64,
+    len: u16,
+    lookup: *request_type = undefined,
+
+pub fn append(self: *@This(), cares_lookup: *CAresLookup(cares_type, type_name)) void {
+            const tail = self.lookup.tail;
+            tail.next = cares_lookup;
+            self.lookup.tail = cares_lookup;
+    }
+
+pub fn init(name: []const u8) @This() {
+            var hasher = std.hash.Wyhash.init(0);
+            _ = &hasher;
+            _ = hasher.update(name);
+            const h = hasher.final();
+            return @This(){ .hash = h, .len = @as(u16, @truncate(name.len)), .lookup = undefined };
+    }
+};
 }
 
 pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const u8) type {
@@ -3317,31 +3355,8 @@ pub fn onCaresComplete(self: *@This(), err_: ?c_ares.Error, timeout: i32, result
     }
     const request_type = @This();
     const log = Output.scoped(.ResolveInfoRequest, .hidden);
-    pub const CacheConfig = packed struct(u16) {
-                pending_cache: bool = false,
-                entry_cache: bool = false,
-                pos_in_pending: u5 = 0,
-                name_len: u9 = 0,
-            };
-    pub const PendingCacheKey = struct {
-        hash: u64,
-        len: u16,
-        lookup: *request_type = undefined,
-    
-    pub fn append(self: *@This(), cares_lookup: *CAresLookup(cares_type, type_name)) void {
-                const tail = self.lookup.tail;
-                tail.next = cares_lookup;
-                self.lookup.tail = cares_lookup;
-        }
-    
-    pub fn init(name: []const u8) PendingCacheKey {
-                var hasher = std.hash.Wyhash.init(0);
-                _ = &hasher;
-                _ = hasher.update(name);
-                const hash = hasher.final();
-                return PendingCacheKey{ .hash = hash, .len = @as(u16, @truncate(name.len)), .lookup = undefined };
-        }
-    };
+    pub const CacheConfig = CAresCacheConfig;
+    pub const PendingCacheKey = ResolvePendingCacheKey(@This(), cares_type, type_name);
 };
 }
 

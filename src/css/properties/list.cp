@@ -5,42 +5,44 @@ const CSSString = css.css_values.string.CSSString;
 const Image = css.css_values.image.Image;
 
 /// A value for the [list-style-type](https://www.w3.org/TR/2020/WD-css-lists-3-20201117/#text-markers) property.
-pub const ListStyleType = union(enum) {
+pub union(enum) ListStyleType {
     /// No marker.
-    none,
+    none: void,
     /// An explicit marker string.
     string: CSSString,
     /// A named counter style.
     counter_style: CounterStyle,
-};
+}
+
+pub struct CounterStyleSymbols {
+    /// The counter system.
+    system: SymbolsType,
+    /// The symbols.
+    symbols: ArrayList(Symbol),
+}
 
 /// A [counter-style](https://www.w3.org/TR/css-counter-styles-3/#typedef-counter-style) name.
-pub const CounterStyle = union(enum) {
+pub union(enum) CounterStyle {
     /// A predefined counter style name.
     predefined: PredefinedCounterStyle,
     /// A custom counter style name.
     name: CustomIdent,
     /// An inline `symbols()` definition.
-    symbols: Symbols,
+    symbols: CounterStyleSymbols,
 
-    const Symbols = struct {
-        /// The counter system.
-        system: SymbolsType,
-        /// The symbols.
-        symbols: ArrayList(Symbol),
-    };
-};
+    const Symbols = CounterStyleSymbols;
+}
 
 /// A single [symbol](https://www.w3.org/TR/css-counter-styles-3/#funcdef-symbols) as used in the
 /// `symbols()` function.
 ///
 /// See [CounterStyle](CounterStyle).
-const Symbol = union(enum) {
+union(enum) Symbol {
     /// A string.
     string: CSSString,
     /// An image.
     image: Image,
-};
+}
 
 /// A [predefined counter](https://www.w3.org/TR/css-counter-styles-3/#predefined-counters) style.
 pub const PredefinedCounterStyle = @compileError(css.todo_stuff.depth);

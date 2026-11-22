@@ -617,9 +617,7 @@ pub fn throw(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) J
     }
 
 pub fn throwPretty(self: *JSGlobalObject, comptime fmt: [:0]const u8, args: anytype) bun.JSError {
-            const instance = (switch (Output.enable_ansi_colors_stderr) {
-inline else => |enabled| self.createErrorInstance(Output.prettyFmt(fmt, enabled), args),
-});
+            const instance = (if (Output.enable_ansi_colors_stderr) self.createErrorInstance(Output.prettyFmt(fmt, true), args) else self.createErrorInstance(Output.prettyFmt(fmt, false), args));
             if ((instance == .zero)) {
                 _ = bun.assert(self.hasException());
                 return error.JSError;

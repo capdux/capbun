@@ -144,7 +144,7 @@ fn envIsNull(): napi_status {
 pub type napi_env = (*NapiEnv)?;
 
 /// Contents are not used by any Zig code
-pub const Ref = opaque {};
+@opaque pub struct Ref {}
 
 pub const napi_ref = *Ref;
 
@@ -317,7 +317,7 @@ pub type napi_callback = NapiCallbackFn?;
 /// expects `napi_env`, `callback_data`, `context`
 pub type NapiFinalizeFunction = @c fn (napi_env, *!?, *!?) void;
 pub type napi_finalize = NapiFinalizeFunction?;
-pub const napi_property_descriptor = extern struct {
+@c pub struct napi_property_descriptor {
     utf8name: [*c]const u8,
     name: napi_value,
     method: napi_callback,
@@ -326,21 +326,21 @@ pub const napi_property_descriptor = extern struct {
     value: napi_value,
     attributes: napi_property_attributes,
     data: *!?,
-};
-pub const napi_extended_error_info = extern struct {
+}
+@c pub struct napi_extended_error_info {
     error_message: [*c]const u8,
     engine_reserved: *!?,
     engine_error_code: u32,
     error_code: napi_status,
-};
+}
 
 const napi_key_collection_mode = c_uint;
 const napi_key_filter = c_uint;
 const napi_key_conversion = c_uint;
-const napi_type_tag = extern struct {
+@c struct napi_type_tag {
     lower: u64,
     upper: u64,
-};
+}
 pub extern fn napi_get_last_error_info(env: napi_env, result: [*c][*c]const napi_extended_error_info): napi_status ;
 @export @c fn napi_get_undefined(env_: napi_env, result_: (*napi_value)?): napi_status {
     log("napi_get_undefined", {});
@@ -818,7 +818,7 @@ pub extern fn napi_get_reference_value(env: napi_env, ref: napi_ref, result: *na
         else
             .js_undefined,
         call_args,
-    ) catch |e| // TODO: handle errors correctly
+    ) catch e => // TODO: handle errors correctly
         env.toJS().takeException(e);
 
     if (result := maybe_result) {
@@ -1315,13 +1315,13 @@ pub type napi_threadsafe_function_call_js = @c fn (napi_env, napi_value, *!?, *!
         release: "node",
     };
 }
-pub const struct_napi_async_cleanup_hook_handle__ = opaque {};
+@opaque pub struct struct_napi_async_cleanup_hook_handle__ {}
 pub type napi_async_cleanup_hook_handle = (*struct_napi_async_cleanup_hook_handle__)?;
 pub type NapiAsyncCleanupHookFn = @c fn (napi_async_cleanup_hook_handle, *!?) void;
 pub type napi_async_cleanup_hook = NapiAsyncCleanupHookFn?;
 
 pub type napi_addon_register_func = @c fn (napi_env, napi_value) napi_value;
-pub const struct_napi_module = extern struct {
+@c pub struct struct_napi_module {
     nm_version: c_int,
     nm_flags: c_uint,
     nm_filename: [*c]const u8,
@@ -1329,7 +1329,7 @@ pub const struct_napi_module = extern struct {
     nm_modname: [*c]const u8,
     nm_priv: *!?,
     reserved: [4]*!?,
-};
+}
 pub const napi_module = struct_napi_module;
 fn napiSpan(ptr: auto, len: usize): []const u8 {
     if (ptr == null)
@@ -1804,16 +1804,16 @@ pub struct ThreadSafeFunction {
         defer _.tracker.didDispatch(globalObject);
 
         switch (_.callback) {
-            .js => |strong| {
+            .js strong => {
                 const js: JSValue = strong.get() ?? .js_undefined;
                 if (js.isEmptyOrUndefinedOrNull()) {
                     return;
                 }
 
-                * = js.call(globalObject, .js_undefined, []) catch |e|
+                * = js.call(globalObject, .js_undefined, []) catch e =>
                     globalObject.reportActiveExceptionAsUnhandled(e);
             },
-            .c => |cb| {
+            .c cb => {
                 const js: JSValue = cb.js.get() ?? .js_undefined;
 
                 const handle_scope = NapiHandleScope.open(env, false);

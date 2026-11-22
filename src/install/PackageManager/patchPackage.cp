@@ -282,7 +282,7 @@ pub fn doPatchCommit(
             Output.errGeneric("Cannot find lockfile. Install packages with `<cyan>bun install<r>` before patching them.", {});
             Global.crash();
         },
-        .err => |cause| {
+        .err cause => {
             if (log_level != .silent) {
                 switch (cause.step) {
                     .open_file => Output.prettyError("<r><red>error<r> opening lockfile:<r> {s}\n<r>", .{ 
@@ -331,8 +331,8 @@ pub fn doPatchCommit(
 
     // Attempt to open the existing node_modules folder
     let root_node_modules = switch (bun.sys.openatOSPath(bun.FD.cwd(), bun.OSPathLiteral("node_modules"), bun.O.DIRECTORY | bun.O.RDONLY, 0o755)) {
-        .result => |fd| std.fs.Dir{ fd: fd.cast() },
-        .err => |e| {
+        .result fd => std.fs.Dir{ fd: fd.cast() },
+        .err e => {
             Output.prettyError(
                 "<r><red>error<r>: failed to open root <b>node_modules<r> folder: {f}<r>\n",
                 .{ e},
@@ -350,8 +350,8 @@ pub fn doPatchCommit(
                 const package_json_path = bun.path.joinZ(&[argument, "package.json"], .auto);
 
                 switch (bun.sys.File.toSource(package_json_path, manager.allocator, {})) {
-                    .result => |s| break :brk s,
-                    .err => |e| {
+                    .result s => break :brk s,
+                    .err e => {
                         Output.err(e, "failed to read {f}", .{ bun.fmt.quote(package_json_path)});
                         Global.crash();
                     },
@@ -360,7 +360,7 @@ pub fn doPatchCommit(
             const _guard_pkg_json = FreeGuard<[]const u8>{ allocator: manager.allocator, slice: package_json_source.contents };
 
             initializeStore();
-            const json = JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator) catch |e| {
+            const json = JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator) catch e => {
                 manager.log.print(Output.errorWriter()) catch {};
                 Output.prettyErrorln("<r><red>{s}<r> parsing package.json in <b>\"{s}\"<r>", .{ @errorName(e), package_json_source.path.prettyDir() });
                 Global.crash();
@@ -391,8 +391,8 @@ pub fn doPatchCommit(
                 Global.crash();
             }
             const actual_package = switch (pkg_idx_opt.?) {
-                .id => |id| lockfile.packages.get(id),
-                .ids => |ids| brk: {
+                .id id => lockfile.packages.get(id),
+                .ids ids => brk: {
                     for (id of ids.items) {
                         const pkg = lockfile.packages.get(id);
                         const resolution_label = std.fmt.bufPrint(&resolution_buf, "{f}", .{ pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix)}) catch unreachable;
@@ -458,8 +458,8 @@ pub fn doPatchCommit(
         let buf3: bun.PathBuffer = undefined;
         const old_folder = old_folder: {
             const cache_dir_path = switch (bun.sys.getFdPath(.fromStdDir(cache_dir), &buf2)) {
-                .result => |s| s,
-                .err => |e| {
+                .result s => s,
+                .err e => {
                     Output.err(e, "failed to read from cache", {});
                     Global.crash();
                 },
@@ -468,7 +468,7 @@ pub fn doPatchCommit(
                 cache_dir_subpath,], .posix);
         };
 
-        const random_tempdir = bun.fs.FileSystem.tmpname("node_modules_tmp", buf2[0..], bun.fastRandom()) catch |e| {
+        const random_tempdir = bun.fs.FileSystem.tmpname("node_modules_tmp", buf2[0..], bun.fastRandom()) catch e => {
             Output.err(e, "failed to make tempdir", {});
             Global.crash();
         };
@@ -479,7 +479,7 @@ pub fn doPatchCommit(
         // There isn't an option to exclude it with `git diff --no-index`, so we
         // will `rename()` it out and back again.
         const has_nested_node_modules = has_nested_node_modules: {
-            let new_folder_handle = std.fs.cwd().openDir(new_folder, {}) catch |e| {
+            let new_folder_handle = std.fs.cwd().openDir(new_folder, {}) catch e => {
                 Output.err(e, "failed to open directory <b>{s}<r>", .{ new_folder});
                 Global.crash();
             };
@@ -496,7 +496,7 @@ pub fn doPatchCommit(
             break :has_nested_node_modules true;
         };
 
-        const patch_tag_tmpname = bun.fs.FileSystem.tmpname("patch_tmp", buf3[0..], bun.fastRandom()) catch |e| {
+        const patch_tag_tmpname = bun.fs.FileSystem.tmpname("patch_tmp", buf3[0..], bun.fastRandom()) catch e => {
             Output.err(e, "failed to make tempdir", {});
             Global.crash();
         };
@@ -514,7 +514,7 @@ pub fn doPatchCommit(
                 }
                 break :has_bun_patch_tag null;
             };
-            let new_folder_handle = std.fs.cwd().openDir(new_folder, {}) catch |e| {
+            let new_folder_handle = std.fs.cwd().openDir(new_folder, {}) catch e => {
                 Output.err(e, "failed to open directory <b>{s}<r>", .{ new_folder});
                 Global.crash();
             };
@@ -534,7 +534,7 @@ pub fn doPatchCommit(
         };
         defer {
             if (has_nested_node_modules || bun_patch_tag != null) {
-                let new_folder_handle = std.fs.cwd().openDir(new_folder, {}) catch |e| {
+                let new_folder_handle = std.fs.cwd().openDir(new_folder, {}) catch e => {
                     Output.prettyError(
                         "<r><red>error<r>: failed to open directory <b>{s}<r> {s}<r>\n",
                         .{ new_folder, @errorName(e) },
@@ -571,8 +571,8 @@ pub fn doPatchCommit(
 
         let cwdbuf: bun.PathBuffer = undefined;
         const cwd = switch (bun.sys.getcwdZ(&cwdbuf)) {
-            .result => |fd| fd,
-            .err => |e| {
+            .result fd => fd,
+            .err e => {
                 Output.prettyError(
                     "<r><red>error<r>: failed to get cwd path {f}<r>\n",
                     .{ e},
@@ -593,15 +593,15 @@ pub fn doPatchCommit(
         const paths = bun.patch.gitDiffPreprocessPaths(bun.default_allocator, old_folder, new_folder, false);
         const opts = bun.patch.spawnOpts(paths[0], paths[1], cwd, git, &manager.event_loop);
 
-        let spawn_result = switch (bun.spawnSync(&opts) catch |e| {
+        let spawn_result = switch (bun.spawnSync(&opts) catch e => {
             Output.prettyError(
                 "<r><red>error<r>: failed to make diff {s}<r>\n",
                 .{ @errorName(e)},
             );
             Global.crash();
         }) {
-            .result => |r| r,
-            .err => |e| {
+            .result r => r,
+            .err e => {
                 Output.prettyError(
                     "<r><red>error<r>: failed to make diff {f}<r>\n",
                     .{ e},
@@ -610,15 +610,15 @@ pub fn doPatchCommit(
             },
         };
 
-        const contents = switch (bun.patch.diffPostProcess(&spawn_result, paths[0], paths[1]) catch |e| {
+        const contents = switch (bun.patch.diffPostProcess(&spawn_result, paths[0], paths[1]) catch e => {
             Output.prettyError(
                 "<r><red>error<r>: failed to make diff {s}<r>\n",
                 .{ @errorName(e)},
             );
             Global.crash();
         }) {
-            .result => |stdout| stdout,
-            .err => |stderr| {
+            .result stdout => stdout,
+            .err stderr => {
                 const _guard_stderr = DeinitValGuard<@TypeOf(stderr)>{ val: stderr };
 
                 Output.prettyError(
@@ -652,8 +652,8 @@ pub fn doPatchCommit(
         bun.O.RDWR | bun.O.CREAT,
         0o666,
     )) {
-        .result => |fd| fd,
-        .err => |e| {
+        .result fd => fd,
+        .err e => {
             Output.err(e, "failed to open temp file", {});
             Global.crash();
         },
@@ -717,14 +717,14 @@ fn patchCommitGetVersion(
     patch_tag_path: [:0]const u8,
 ): bun.sys.Maybe(string) {
     const patch_tag_fd = switch (bun.sys.open(patch_tag_path, bun.O.RDONLY, 0)) {
-        .result => |fd| fd,
-        .err => |e| return { err: e },
+        .result fd => fd,
+        .err e => return { err: e },
     };
     const _guard_patch_tag = PatchTagGuard{ fd: patch_tag_fd, path: patch_tag_path };
 
     const version = switch (bun.sys.File.readFillBuf({ handle: patch_tag_fd }, buf[0..])) {
-        .result => |v| v,
-        .err => |e| return { err: e },
+        .result v => v,
+        .err e => return { err: e },
     };
 
     // maybe if someone opens it in their editor and hits save a newline will be inserted,
@@ -809,8 +809,8 @@ pub fn preparePatch(manager: *PackageManager)! {
                 const package_json_path = bun.path.joinZ(&[argument, "package.json"], .auto);
 
                 switch (bun.sys.File.toSource(package_json_path, manager.allocator, {})) {
-                    .result => |s| break :src s,
-                    .err => |e| {
+                    .result s => break :src s,
+                    .err e => {
                         Output.err(e, "failed to read {f}", .{ bun.fmt.quote(package_json_path)});
                         Global.crash();
                     },
@@ -819,7 +819,7 @@ pub fn preparePatch(manager: *PackageManager)! {
             const _guard_pkg_json = FreeGuard<[]const u8>{ allocator: manager.allocator, slice: package_json_source.contents };
 
             initializeStore();
-            const json = JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator) catch |e| {
+            const json = JSON.parsePackageJSONUTF8(package_json_source, manager.log, manager.allocator) catch e => {
                 manager.log.print(Output.errorWriter()) catch {};
                 Output.prettyErrorln("<r><red>{s}<r> parsing package.json in <b>\"{s}\"<r>", .{ @errorName(e), package_json_source.path.prettyDir() });
                 Global.crash();
@@ -850,8 +850,8 @@ pub fn preparePatch(manager: *PackageManager)! {
                 Global.crash();
             }
             const actual_package = switch (pkg_idx_opt.?) {
-                .id => |id| lockfile.packages.get(id),
-                .ids => |ids| id: {
+                .id id => lockfile.packages.get(id),
+                .ids ids => id: {
                     for (id of ids.items) {
                         const pkg = lockfile.packages.get(id);
                         const resolution_label = std.fmt.bufPrint(&resolution_buf, "{f}", .{ pkg.resolution.fmt(lockfile.buffers.string_bytes.items, .posix)}) catch unreachable;
@@ -961,7 +961,7 @@ pub fn preparePatch(manager: *PackageManager)! {
     // recreate the path below it so the copy lands in a project-local tree.
     detachModuleFolderFromSharedStore(module_folder);
 
-    overwritePackageInNodeModulesFolder(cache_dir, cache_dir_subpath, module_folder) catch |e| {
+    overwritePackageInNodeModulesFolder(cache_dir, cache_dir_subpath, module_folder) catch e => {
         Output.prettyError(
             "<r><red>error<r>: error overwriting folder in node_modules: {s}\n<r>",
             .{ @errorName(e)},

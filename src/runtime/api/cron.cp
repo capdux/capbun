@@ -8,13 +8,13 @@
 /// OS-level uses crontab (Linux), launchctl + launchd plist (macOS), or
 /// schtasks (Windows). Async, event-loop-integrated via bun.spawn.
 
-pub const CronClearMode = enum { reload, teardown };
+pub enum CronClearMode { reload, teardown }
 type OptConstCString = ConstCString?;
 
-const ScheduleMonthInfo = struct {
+struct ScheduleMonthInfo {
     cron: CronExpression,
     months_is_wild: bool,
-};
+}
 
 const dummy_zero: [1]i32 = [0];
 
@@ -130,7 +130,10 @@ fn CronJobBase(comptime Self: type): type {
 // CronRegisterJob
 // ============================================================================
 
-pub struct CronRegisterJob {
+pub enum CronRegisterState { reading_crontab, installing_crontab, writing_plist, booting_out, bootstrapping, done, failed }
+
+struct CronRegisterJob {
+    const State = CronRegisterState;
     promise: jsc.JSPromise.Strong = .empty,
     global: *jsc.JSGlobalObject,
     poll: bun.Async.KeepAlive = {},
@@ -151,7 +154,7 @@ pub struct CronRegisterJob {
     err_msg: ([]const u8)? = null,
     tmp_path: [:0]const u8? = null,
 
-    const State = enum { reading_crontab, installing_crontab, writing_plist, booting_out, bootstrapping, done, failed };
+    // State: CronRegisterState
 
     pub const loop = CronJobBase(CronRegisterJob).loop;
     pub const eventLoop = CronJobBase(CronRegisterJob).eventLoop;
@@ -653,7 +656,10 @@ pub struct CronRegisterJob {
 // CronRemoveJob
 // ============================================================================
 
-pub struct CronRemoveJob {
+pub enum CronRemoveState { reading_crontab, installing_crontab, booting_out, done, failed }
+
+struct CronRemoveJob {
+    const State = CronRemoveState;
     promise: jsc.JSPromise.Strong = .empty,
     global: *jsc.JSGlobalObject,
     poll: bun.Async.KeepAlive = {},
@@ -669,7 +675,7 @@ pub struct CronRemoveJob {
     err_msg: ([]const u8)? = null,
     tmp_path: [:0]const u8? = null,
 
-    const State = enum { reading_crontab, installing_crontab, booting_out, done, failed };
+    // State: CronRemoveState
 
     pub const loop = CronJobBase(CronRemoveJob).loop;
     pub const eventLoop = CronJobBase(CronRemoveJob).eventLoop;
@@ -1566,7 +1572,7 @@ fn appendCalendarKey(result: *std.array_list.Managed(u8), key: []const u8, val: 
     result.appendSlice(line_guard.slice)?;
 }
 
-const EmitMode = enum { include_all, exclude_weekday, exclude_day };
+enum EmitMode { include_all, exclude_weekday, exclude_day }
 
 /// Emit Cartesian-product <dict> entries for the given field values.
 /// In exclude_weekday mode, day-of-week (index 4) is treated as wildcard.
@@ -1813,13 +1819,13 @@ fn appendDaysOfWeekXml(xml: *std.array_list.Managed(u8), weekdays: u8)! {
     xml.appendSlice("        </DaysOfWeek>\n")?;
 }
 
-const ScheduleType = union(enum) {
+union(enum) ScheduleType {
     by_day: void,
     by_week: u8,
     by_month: ScheduleMonthInfo,
     by_month_dow: ScheduleMonthInfo,
     by_month_all_days: u16,
-};
+}
 
 fn appendCalendarTriggerWithSchedule(xml: *std.array_list.Managed(u8), _: std.mem.Allocator, start_boundary: []const u8, sched: ScheduleType)! {
     xml.appendSlice("    <CalendarTrigger>\n")?;

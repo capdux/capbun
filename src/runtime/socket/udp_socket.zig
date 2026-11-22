@@ -62,9 +62,10 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const uws = @import("../../uws/uws.zig");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -166,9 +167,39 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const UDPSocketHandlerEntry = struct {
+    name: []const u8,
+    gc_field: []const u8,
+};
+
+pub const UDPSocketConnectConfig = struct {
+    port: u16,
+    address: bun.String,
+};
+
+pub const UDPSocketConnectInfo = struct {
+    port: u16,
+};
+
+pub const UDPSocketDestination = struct {
+    port: JSValue,
+    address: JSValue,
+};
+
+pub const SendManyCtx = struct {
+    this_ptr: *UDPSocket,
+    globalThis: *JSGlobalObject,
+    callframe: *CallFrame,
+    result: bun.JSError!JSValue,
+
+pub fn run(ctx: *@This(), payload_roots: *jsc.MarkedArgumentBuffer) callconv(.c) void {
+            ctx.result = UDPSocket.sendManyImpl(ctx.this_ptr, ctx.globalThis, ctx.callframe, payload_roots);
+    }
+};
+
 pub const UDPSocketConfig = struct {
     hostname: bun.String = .empty,
-    connect: ?ConnectConfig = null,
+    connect: ?UDPSocketConnectConfig = null,
     port: u16 = 0,
     flags: i32 = 0,
     binary_type: jsc.ArrayBuffer.BinaryType = .Buffer,
@@ -213,7 +244,7 @@ pub fn fromJS(globalThis: *JSGlobalObject, options: JSValue, thisValue: JSValue)
                 if ((!socket.isObject())) {
                     return globalThis.throwInvalidArguments("Expected \"socket\" to be an object", .{});
                 }
-                if (try options.getTruthy(globalThis, "binaryType")) |value| {
+                if (try socket.getTruthy(globalThis, "binaryType")) |value| {
                     _ = &value;
                     if ((!value.isString())) {
                         return globalThis.throwInvalidArguments("Expected \"socket.binaryType\" to be a string", .{});
@@ -272,19 +303,12 @@ pub fn release(self: *UDPSocketConfig) void {
 pub fn deinit(self: *UDPSocketConfig) void {
             _ = self.release();
     }
-    const HandlerEntry = struct {
-        name: []const u8,
-        gc_field: []const u8,
-    };
-    const handlers = [_]HandlerEntry{
+    const handlers = [_]UDPSocketHandlerEntry{
             .{ .name = "data", .gc_field = "on_data" },
             .{ .name = "drain", .gc_field = "on_drain" },
             .{ .name = "error", .gc_field = "on_error" },
         };
-    pub const ConnectConfig = struct {
-        port: u16,
-        address: bun.String,
-    };
+    pub const ConnectConfig = UDPSocketConnectConfig;
 };
 
 pub const UDPSocket = struct {
@@ -296,12 +320,12 @@ pub const UDPSocket = struct {
     jsc_ref: jsc.Ref = jsc.Ref.init(),
     poll_ref: Async.KeepAlive = Async.KeepAlive.init(),
     closed: bool = false,
-    connect_info: ?ConnectInfo = null,
+    connect_info: ?UDPSocketConnectInfo = null,
     vm: *jsc.VirtualMachine,
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.config = .{}; self_ptr.socket = null; self_ptr.this_value = JSRef.empty(); self_ptr.jsc_ref = jsc.Ref.init(); self_ptr.poll_ref = Async.KeepAlive.init(); self_ptr.closed = false; self_ptr.connect_info = null; return self_ptr; }
 
-pub fn init(self: *UDPSocket, config: UDPSocketConfig, socket: ?*uws.udp.Socket, loop: *uws.Loop, globalThis: *JSGlobalObject, this_value: JSRef, jsc_ref: jsc.Ref, poll_ref: Async.KeepAlive, closed: bool, connect_info: ?ConnectInfo, vm: *jsc.VirtualMachine) void {
+pub fn init(self: *UDPSocket, config: UDPSocketConfig, socket: ?*uws.udp.Socket, loop: *uws.Loop, globalThis: *JSGlobalObject, this_value: JSRef, jsc_ref: jsc.Ref, poll_ref: Async.KeepAlive, closed: bool, connect_info: ?UDPSocketConnectInfo, vm: *jsc.VirtualMachine) void {
         var __config_moved = false; _ = &__config_moved;
         defer if (!__config_moved) { __config_moved = true; const __T = @TypeOf(config); if (@typeInfo(__T) == .optional) { if (config) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { config.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = config; _drop_val.__cp_deinit(); } };
         var __this_value_moved = false; _ = &__this_value_moved;
@@ -335,8 +359,8 @@ pub fn udpSocket(globalThis: *JSGlobalObject, options: JSValue) bun.JSError!JSVa
             _ = thisValue.ensureStillAlive();
             _ = this_ptr.this_value.setStrong(thisValue, globalThis);
             this_ptr.config = try UDPSocketConfig.fromJS(globalThis, options, thisValue);
-            var err: i32 = 0;
-            _ = &err;
+            var err_code: i32 = 0;
+            _ = &err_code;
             var hostname_slice = this_ptr.config.hostname.toUTF8(bun.default_allocator);
             _ = &hostname_slice;
             var _guard_hostname_slice = DeinitGuard(@TypeOf(hostname_slice)){ .ptr = (&hostname_slice) };
@@ -348,14 +372,14 @@ pub fn udpSocket(globalThis: *JSGlobalObject, options: JSValue) bun.JSError!JSVa
             _ = &_guard_hostname_z;
             var ___guard_hostname_z_moved = false; _ = &___guard_hostname_z_moved;
             defer if (!___guard_hostname_z_moved) { ___guard_hostname_z_moved = true; const __T = @TypeOf(_guard_hostname_z); if (@typeInfo(__T) == .optional) { if (_guard_hostname_z) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_hostname_z.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_hostname_z; _drop_val.__cp_deinit(); } };
-            if (uws.udp.Socket.create(this_ptr.loop, onData, onDrain, onClose, onRecvError, hostname_z, this_ptr.config.port, this_ptr.config.flags, (&err), this_ptr)) |sock| {
+            if (uws.udp.Socket.create(this_ptr.loop, onData, onDrain, onClose, onRecvError, hostname_z, this_ptr.config.port, this_ptr.config.flags, (&err_code), this_ptr)) |sock| {
                 _ = &sock;
                 this_ptr.socket = sock;
             } else {
                 this_ptr.closed = true;
-                if ((err != 0)) {
-                    const code = @tagName((bun.sys.SystemErrno.init(@as(c_int, @intCast(err)))).?);
-                    const sys_err = jsc.SystemError{ .errno = err, .code = bun.String.static(code), .message = bun.handleOom(bun.String.createFormat("bind {s} {f}", .{ code, this_ptr.config.hostname })) };
+                if ((err_code != 0)) {
+                    const code = @tagName((bun.sys.SystemErrno.init(@as(c_int, @intCast(err_code)))).?);
+                    const sys_err = jsc.SystemError{ .errno = err_code, .code = bun.String.static(code), .message = bun.handleOom(bun.String.createFormat("bind {s} {f}", .{ code, this_ptr.config.hostname })) };
                     const error_value = sys_err.toErrorInstance(globalThis);
                     _ = error_value.put(globalThis, "address", try this_ptr.config.hostname.toJS(globalThis));
                     return globalThis.throwValue(error_value);
@@ -393,16 +417,16 @@ pub fn udpSocket(globalThis: *JSGlobalObject, options: JSValue) bun.JSError!JSVa
             return jsc.JSPromise.resolvedPromiseValue(globalThis, thisValue);
     }
 
-pub fn callErrorHandler(self: *UDPSocket, thisValue_: JSValue, err: JSValue) void {
+pub fn callErrorHandler(self: *UDPSocket, thisValue_: JSValue, err_val: JSValue) void {
             const thisValue = (if ((thisValue_ == .zero)) ((self.this_value.tryGet()) orelse { return; }) else thisValue_);
             const callback = ((UDPSocket.js.gc.on_error.get(thisValue)) orelse (.zero));
             const globalThis = self.globalThis;
             const vm = globalThis.bunVM();
-            if (err.isTerminationException()) {
+            if (err_val.isTerminationException()) {
                 return;
             }
             if (callback.isEmptyOrUndefinedOrNull()) {
-                _ = vm.uncaughtException(globalThis, err, false);
+                _ = vm.uncaughtException(globalThis, err_val, false);
                 return;
             }
             const event_loop = vm.eventLoop();
@@ -411,7 +435,8 @@ pub fn callErrorHandler(self: *UDPSocket, thisValue_: JSValue, err: JSValue) voi
             _ = &_guard_event_loop;
             var ___guard_event_loop_moved = false; _ = &___guard_event_loop_moved;
             defer if (!___guard_event_loop_moved) { ___guard_event_loop_moved = true; const __T = @TypeOf(_guard_event_loop); if (@typeInfo(__T) == .optional) { if (_guard_event_loop) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_event_loop.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_event_loop; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_0: { break :blk_catch_0 ((callback.call(globalThis, thisValue, (&.{ ((err.toError()) orelse (err)) }))) catch |e| { _ = &e; break :blk_catch_0 globalThis.reportActiveExceptionAsUnhandled(e); }); });
+            const err_args: [1]JSValue = .{ ((err_val.toError()) orelse (err_val)) };
+            _ = (blk_catch_0: { break :blk_catch_0 ((callback.call(globalThis, thisValue, (&err_args))) catch |e| { _ = &e; break :blk_catch_0 globalThis.reportActiveExceptionAsUnhandled(e); }); });
     }
 
 pub fn setBroadcast(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
@@ -424,9 +449,9 @@ pub fn setBroadcast(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *C
             }
             const enabled = arguments[0].toBoolean();
             const res = self.socket.?.setBroadcast(enabled);
-            if (getUSError(res, .setsockopt, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .setsockopt, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return arguments[0];
     }
@@ -441,9 +466,9 @@ pub fn setMulticastLoopback(self: *UDPSocket, globalThis: *JSGlobalObject, callf
             }
             const enabled = arguments[0].toBoolean();
             const res = self.socket.?.setMulticastLoopback(enabled);
-            if (getUSError(res, .setsockopt, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .setsockopt, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return arguments[0];
     }
@@ -478,9 +503,9 @@ pub fn setMembership(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *
             } else {
                 res = socket.setMembership((&addr), null, drop);
             }
-            if (getUSError(res, .setsockopt, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .setsockopt, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return JSValue.true;
     }
@@ -531,9 +556,9 @@ pub fn setSourceSpecificMembership(self: *UDPSocket, globalThis: *JSGlobalObject
             } else {
                 res = socket.setSourceSpecificMembership((&source_addr), (&group_addr), null, drop);
             }
-            if (getUSError(res, .setsockopt, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .setsockopt, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return JSValue.true;
     }
@@ -565,9 +590,9 @@ pub fn setMulticastInterface(self: *UDPSocket, globalThis: *JSGlobalObject, call
             }
             const socket = socket_opt.?;
             const res = socket.setMulticastInterface((&addr));
-            if (getUSError(res, .setsockopt, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .setsockopt, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return JSValue.true;
     }
@@ -595,27 +620,26 @@ pub fn setAnyTTL(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *Call
             }
             const socket = socket_opt.?;
             const res = function(socket, ttl);
-            if (getUSError(res, .setsockopt, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .setsockopt, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return JSValue.jsNumber(ttl);
     }
 
 pub fn sendMany(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
-            const Ctx = struct {
-    this_ptr: *UDPSocket,
-    globalThis: *JSGlobalObject,
-    callframe: *CallFrame,
-    result: bun.JSError!JSValue,
+            var ctx = SendManyCtx{ .this_ptr = (blk: {
+            break :blk self;
 
-pub fn run(ctx: *@This(), payload_roots: *jsc.MarkedArgumentBuffer) callconv(.c) void {
-            ctx.result = sendManyImpl(ctx.this_ptr, ctx.globalThis, ctx.callframe, payload_roots);
-    }
-};
-            var ctx: Ctx = .{ .this_ptr = self, .globalThis = globalThis, .callframe = callframe, .result = .js_undefined };
+}), .globalThis = (blk: {
+            break :blk globalThis;
+
+}), .callframe = (blk: {
+            break :blk callframe;
+
+}), .result = .js_undefined };
             _ = &ctx;
-            _ = jsc.MarkedArgumentBuffer.run(Ctx, (&ctx), (&Ctx.run));
+            _ = jsc.MarkedArgumentBuffer.run(SendManyCtx, (&ctx), (&SendManyCtx.run));
             return ctx.result;
     }
 
@@ -730,9 +754,9 @@ pub fn sendManyImpl(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *C
             break :blk send_fn(socket, @ptrCast(payloads), lens, addr_ptrs);
 
 });
-            if (getUSError(res, .send, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .send, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return JSValue.jsNumber(res);
     }
@@ -742,7 +766,7 @@ pub fn send(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame
                 return globalThis.throw("Socket is closed", .{});
             }
             const arguments = callframe.arguments_old(3);
-            var dst: ?Destination = null;
+            var dst: ?UDPSocketDestination = null;
             _ = &dst;
             if ((self.connect_info != null)) {
                 if ((arguments.len == 3)) {
@@ -803,9 +827,9 @@ pub fn send(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFrame
             break :blk send_fn(socket, @ptrCast((&payload_ptrs)), (&lens_arr), (&addr_ptrs_arr));
 
 });
-            if (getUSError(res, .send, true)) |err| {
-                _ = &err;
-                return globalThis.throwValue(try err.toJS(globalThis));
+            if (getUSError(res, .send, true)) |err_val| {
+                _ = &err_val;
+                return globalThis.throwValue(try err_val.toJS(globalThis));
             }
             return JSValue.jsBoolean((res > 0));
     }
@@ -855,22 +879,22 @@ pub fn reload(self: *UDPSocket, globalThis: *JSGlobalObject, callframe: *CallFra
             return JSValue.js_undefined;
     }
 
-pub fn getClosed(self: *UDPSocket, _: *JSGlobalObject) JSValue {
+pub fn getClosed(self: *const UDPSocket, _: *JSGlobalObject) JSValue {
             return JSValue.jsBoolean(self.closed);
     }
 
-pub fn getHostname(self: *UDPSocket, _: *JSGlobalObject) bun.JSError!JSValue {
+pub fn getHostname(self: *const UDPSocket, _: *JSGlobalObject) bun.JSError!JSValue {
             return self.config.hostname.toJS(self.globalThis);
     }
 
-pub fn getPort(self: *UDPSocket, _: *JSGlobalObject) JSValue {
+pub fn getPort(self: *const UDPSocket, _: *JSGlobalObject) JSValue {
             if (self.closed) {
                 return .js_undefined;
             }
             return JSValue.jsNumber(self.socket.?.boundPort());
     }
 
-pub fn getAddress(self: *UDPSocket, globalThis: *JSGlobalObject) JSValue {
+pub fn getAddress(self: *const UDPSocket, globalThis: *JSGlobalObject) JSValue {
             if (self.closed) {
                 return .js_undefined;
             }
@@ -884,7 +908,7 @@ pub fn getAddress(self: *UDPSocket, globalThis: *JSGlobalObject) JSValue {
             return createSockAddr(globalThis, address_bytes, @intCast(port));
     }
 
-pub fn getRemoteAddress(self: *UDPSocket, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
+pub fn getRemoteAddress(self: *const UDPSocket, globalThis: *jsc.JSGlobalObject) jsc.JSValue {
             if (self.closed) {
                 return .js_undefined;
             }
@@ -898,7 +922,7 @@ pub fn getRemoteAddress(self: *UDPSocket, globalThis: *jsc.JSGlobalObject) jsc.J
             return createSockAddr(globalThis, address_bytes, connect_info.port);
     }
 
-pub fn getBinaryType(self: *UDPSocket, globalThis: *JSGlobalObject) bun.JSError!JSValue {
+pub fn getBinaryType(self: *const UDPSocket, globalThis: *JSGlobalObject) bun.JSError!JSValue {
             return (switch (self.config.binary_type) {
 .Buffer => globalThis.commonStrings().buffer(),
 .Uint8Array => globalThis.commonStrings().uint8array(),
@@ -987,18 +1011,12 @@ pub fn jsDisconnect(globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame
             this_socket.connect_info = null;
             return JSValue.js_undefined;
     }
-    pub const ConnectInfo = struct {
-        port: u16,
-    };
+    pub const ConnectInfo = UDPSocketConnectInfo;
     pub const js = jsc.Codegen.JSUDPSocket;
     pub const toJS = js.toJS;
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
     pub const new = bun.TrivialNew(@This());
-    const Destination = struct {
-        port: JSValue,
-        address: JSValue,
-    };
 };
 
 const ConstOpaquePtr = ?*anyopaque;
@@ -1013,7 +1031,6 @@ const JSGlobalObject = jsc.JSGlobalObject;
 const JSRef = jsc.JSRef;
 const JSValue = jsc.JSValue;
 const SocketAddress = jsc.API.SocketAddress;
-const uws = @import("../../uws/uws.zig");
 const log = Output.scoped(.UdpSocket, .visible);
 const INET6_ADDRSTRLEN = (if (bun.Environment.isWindows) 65 else 46);
 
@@ -1063,7 +1080,8 @@ pub fn onDrain(socket: *uws.udp.Socket) callconv(.c) void {
         _ = &_guard_event_loop;
         var ___guard_event_loop_moved = false; _ = &___guard_event_loop_moved;
         defer if (!___guard_event_loop_moved) { ___guard_event_loop_moved = true; const __T = @TypeOf(_guard_event_loop); if (@typeInfo(__T) == .optional) { if (_guard_event_loop) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_event_loop.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_event_loop; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_2: { break :blk_catch_2 ((callback.call(this_socket.globalThis, thisValue, (&.{ thisValue }))) catch |e| { _ = &e; break :blk_catch_2 this_socket.callErrorHandler(.zero, this_socket.globalThis.takeException(e)); }); });
+        const drain_args: [1]JSValue = .{ thisValue };
+        _ = (blk_catch_2: { break :blk_catch_2 ((callback.call(this_socket.globalThis, thisValue, (&drain_args))) catch |e| { _ = &e; break :blk_catch_2 this_socket.callErrorHandler(.zero, this_socket.globalThis.takeException(e)); }); });
 }
 
 pub fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_int) callconv(.c) void {
@@ -1143,7 +1161,8 @@ pub fn onData(socket: *uws.udp.Socket, buf: *uws.udp.PacketBuffer, packets: c_in
             _ = flags.put(globalThis, jsc.ZigString.static("truncated"), .jsBoolean(truncated));
             const js_payload = (blk_catch_3: { break :blk_catch_3 ((udpSocket.config.binary_type.toJS(slice, globalThis)) catch |__ce_3| { _ = &__ce_3; return; }); });
             const js_hostname = (blk_catch_4: { break :blk_catch_4 ((hostname_string.transferToJS(globalThis)) catch |__ce_4| { _ = &__ce_4; return; }); });
-            const call_res = (blk_catch_5: { break :blk_catch_5 ((callback.call(globalThis, thisValue, (&.{ thisValue, js_payload, .jsNumber(port), js_hostname, flags }))) catch |e| { _ = &e; break :blk_catch_5 blk: {
+            const data_args: [5]JSValue = .{ thisValue, js_payload, .jsNumber(port), js_hostname, flags };
+            const call_res = (blk_catch_5: { break :blk_catch_5 ((callback.call(globalThis, thisValue, (&data_args))) catch |e| { _ = &e; break :blk_catch_5 blk: {
             _ = udpSocket.callErrorHandler(.zero, globalThis.takeException(e));
             break :blk .js_undefined;
 }; }); });

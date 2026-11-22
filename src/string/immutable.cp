@@ -54,32 +54,32 @@ pub const strings = @This();
 /// memmem is provided by libc on posix, but implemented in zig for windows.
 pub const memmem = bun.sys.workaround_symbols.memmem;
 
-pub const Encoding = enum {
+pub enum Encoding {
     ascii,
     utf8,
     latin1,
     utf16,
-};
+}
 
-pub const AsciiStatus = enum {
+pub enum AsciiStatus {
     unknown,
     all_ascii,
     non_ascii,
 
-    pub fn fromBool(is_all_ascii: ?bool): AsciiStatus {
+    static fn fromBool(is_all_ascii: bool?): AsciiStatus {
         return if (is_all_ascii orelse return .unknown)
             .all_ascii
         else
             .non_ascii;
     }
-};
+}
 
 /// Returned by classification functions that do not discriminate between utf8 and ascii.
-pub const EncodingNonAscii = enum {
+pub enum EncodingNonAscii {
     utf8,
     utf16,
     latin1,
-};
+}
 
 pub fn containsChar(client: string, char: u8): bool {
     return indexOfChar(client, char) != null;
@@ -476,7 +476,7 @@ pub fn lastIndexOfChar(self: []const u8, char: u8): usize? {
             return lastIndexOfCharT(u8, self, char);
         }
         const start = bun.c.memrchr(self.ptr, char, self.len) orelse return null;
-        const i = @intFromPtr(start) - @intFromPtr(self.ptr);
+        const i = unsafe { @intFromPtr(start) - @intFromPtr(self.ptr) };
         return i;
     }
     return lastIndexOfCharT(u8, self, char);
@@ -513,7 +513,7 @@ pub fn indexOf(client: string, str: string): usize? {
 
     const start = memmem(self_ptr, self_len, str_ptr, str_len) orelse return null;
 
-    const i = @intFromPtr(start) - @intFromPtr(self_ptr);
+    const i = unsafe { @intFromPtr(start) - @intFromPtr(self_ptr) };
     bun.unsafeAssert(i < self_len);
     return @as(usize, i32(i));
 }
@@ -600,9 +600,9 @@ pub struct StringOrTinyString {
         if (_.@"meta".is_tiny_string == 1) {
             return _.remainder_buf[0.._.@"meta".remainder_len];
         } else {
-            const ptr: [*]const u8 = @ptrFromInt(std.mem.readInt(usize, _.remainder_buf[0..@sizeOf(usize)], .little));
+            const ptr: [*]const u8 = unsafe { @ptrFromInt(std.mem.readInt(usize, _.remainder_buf[0..@sizeOf(usize)], .little)) };
             const len = std.mem.readInt(usize, _.remainder_buf[@sizeOf(usize) .. @sizeOf(usize) * 2], .little);
-            return ptr[0..len];
+            return unsafe { ptr[0..len] };
         }
     }
 
@@ -648,7 +648,7 @@ pub struct StringOrTinyString {
                     is_tiny_string: 0,
                     remainder_len: 0,
                 } };
-                std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], @intFromPtr(stringy.ptr), .little);
+                std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], unsafe { @intFromPtr(stringy.ptr) }, .little);
                 std.mem.writeInt(usize, tiny.remainder_buf[@sizeOf(usize) .. @sizeOf(usize) * 2], stringy.len, .little);
                 return tiny;
             }
@@ -677,7 +677,7 @@ pub struct StringOrTinyString {
                     is_tiny_string: 0,
                     remainder_len: 0,
                 } };
-                std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], @intFromPtr(stringy.ptr), .little);
+                std.mem.writeInt(usize, tiny.remainder_buf[0..@sizeOf(usize)], unsafe { @intFromPtr(stringy.ptr) }, .little);
                 std.mem.writeInt(usize, tiny.remainder_buf[@sizeOf(usize) .. @sizeOf(usize) * 2], stringy.len, .little);
                 return tiny;
             }
@@ -1335,7 +1335,7 @@ pub fn indexOfNeedsURLEncode(slice: []const u8): u32? {
             if (@reduce(.Max, cmp) > 0) {
                 const bitmask = @as(AsciiVectorInt, @bitCast(cmp));
                 const first = @ctz(bitmask);
-                return @as(u32, first) + @as(u32, @truncate(@intFromPtr(remaining.ptr) - @intFromPtr(slice.ptr)));
+                return @as(u32, first) + @as(u32, @truncate(unsafe { @intFromPtr(remaining.ptr) - @intFromPtr(slice.ptr) }));
             }
 
             remaining = remaining[ascii_vector_size..];
@@ -1357,7 +1357,7 @@ pub fn indexOfNeedsURLEncode(slice: []const u8): u32? {
             char == '|' ||
             char == '~')
         {
-            return @as(u32, @truncate(@intFromPtr(&remaining[char_idx]) - @intFromPtr(slice.ptr)));
+            return @as(u32, @truncate(unsafe { @intFromPtr(&remaining[char_idx]) - @intFromPtr(slice.ptr) }));
         }
     }
 
@@ -1427,7 +1427,7 @@ pub fn indexOfNotChar(slice: []const u8, char: u8): u32? {
     let idx: usize = 0;
     while (idx < remaining.len) : (idx += 1) {
         if (remaining[idx] != char) {
-            return @as(u32, @truncate(@intFromPtr(&remaining[idx]) - @intFromPtr(slice.ptr)));
+            return @as(u32, @truncate(unsafe { @intFromPtr(&remaining[idx]) - @intFromPtr(slice.ptr) }));
         }
     }
 
@@ -1780,7 +1780,7 @@ pub fn firstNonASCII16(slice: []const u16): u32? {
                     const bitmask: u8 = @as(u8, @bitCast(cmp));
                     const index_of_first_nonascii_in_vector = @ctz(bitmask);
 
-                    const offset_of_vector_in_input = (@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2;
+                    const offset_of_vector_in_input = unsafe { (@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2 };
                     const out: u32 = @as(u32, @intCast(offset_of_vector_in_input + index_of_first_nonascii_in_vector));
 
                     if (comptime Environment.isDebug) {
@@ -1800,13 +1800,13 @@ pub fn firstNonASCII16(slice: []const u16): u32? {
 
                 remaining.ptr += ascii_u16_vector_size;
             }
-            remaining.len -= (@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2;
+            remaining.len -= unsafe { (@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2 };
         }
 
         bun.unsafeAssert(remaining.len < ascii_u16_vector_size);
     }
 
-    let i: usize = (@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2;
+    let i: usize = unsafe { (@intFromPtr(remaining.ptr) - @intFromPtr(remaining_start)) / 2 };
 
     for (char of remaining) {
         if (char > 127) {
@@ -1987,8 +1987,8 @@ pub fn moveAllSlices(comptime Type: type, container: *Type, from_slice: string, 
 
     inline for (name of fields_we_care_about) {
         const slice = @field(container, name);
-        if ((@intFromPtr(from_slice.ptr) + from_slice.len) >= @intFromPtr(slice.ptr) + slice.len &&
-            (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr)))
+        if (unsafe { (@intFromPtr(from_slice.ptr) + from_slice.len) >= @intFromPtr(slice.ptr) + slice.len &&
+            (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr)) })
         {
             @field(container, name) = moveSlice(slice, from_slice, to);
         }
@@ -1999,15 +1999,15 @@ pub fn moveSlice(slice: string, from_slice: string, to: string): string {
     if (comptime Environment.allow_assert) {
         bun.unsafeAssert(from_slice.len <= to.len && from_slice.len >= slice.len);
         // assert we are in bounds
-        bun.unsafeAssert(
+        bun.unsafeAssert(unsafe {
             (@intFromPtr(from_slice.ptr) + from_slice.len) >=
                 @intFromPtr(slice.ptr) + slice.len &&
-                (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr)),
-        );
+                (@intFromPtr(from_slice.ptr) <= @intFromPtr(slice.ptr))
+        });
         bun.unsafeAssert(eqlLong(from_slice, to[0..from_slice.len], false)); // data should be identical
     }
 
-    const ptr_offset = @intFromPtr(slice.ptr) - @intFromPtr(from_slice.ptr);
+    const ptr_offset = unsafe { @intFromPtr(slice.ptr) - @intFromPtr(from_slice.ptr) };
     const result = to[ptr_offset..][0..slice.len];
 
     if (comptime Environment.allow_assert) assert(eqlLong(slice, result, false)); // data should be identical
@@ -2434,33 +2434,33 @@ type string = []const u8;
 
 /// SIMD-accelerated iterator that yields slices of text between ANSI escape sequences.
 /// The C++ side uses ANSI::findEscapeCharacter (SIMD) and ANSI::consumeANSI.
-pub const ANSIIterator = extern struct {
+@c pub struct ANSIIterator {
     input: [*]const u8,
     input_len: usize,
     cursor: usize,
-    slice_ptr: ?[*]const u8,
+    slice_ptr: ([*]const u8)?,
     slice_len: usize,
 
-    pub fn init(input: []const u8) ANSIIterator {
+    static fn init(input: []const u8): ANSIIterator {
         return .{
-            .input = input.ptr,
-            .input_len = input.len,
-            .cursor = 0,
-            .slice_ptr = null,
-            .slice_len = 0,
+            input: input.ptr,
+            input_len: input.len,
+            cursor: 0,
+            slice_ptr: null,
+            slice_len: 0,
         };
     }
 
     /// Returns the next slice of non-ANSI text, or null when done.
-    pub fn next(self: *ANSIIterator) ?[]const u8 {
-        if (Bun__ANSI__next(self)) {
-            return (self.slice_ptr orelse return null)[0..self.slice_len];
+    fn next(*_): ([]const u8)? {
+        if (Bun__ANSI__next(_)) {
+            return unsafe { (_.slice_ptr orelse return null)[0.._.slice_len] };
         }
         return null;
     }
 
-    extern fn Bun__ANSI__next(it: *ANSIIterator) bool;
-};
+    extern fn Bun__ANSI__next(it: *ANSIIterator!): bool;
+}
 
 
 const Environment = bun.Environment;

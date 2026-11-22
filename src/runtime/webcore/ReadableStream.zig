@@ -62,6 +62,19 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const Tag = enum(i32) {
+    Invalid = -1,
+    JavaScript = 0,
+    Blob = 1,
+    File = 2,
+    Direct = 3,
+    Bytes = 4,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitPtrGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -76,6 +89,15 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const Source = union(Tag) {
+    Invalid: void,
+    JavaScript: void,
+    Blob: *webcore.ByteBlobLoader,
+    File: *webcore.FileReader,
+    Direct: void,
+    Bytes: *webcore.ByteStream,
+};
 
 pub const Strong = struct {
     held: jsc.Strong.Optional = .empty,
@@ -563,228 +585,10 @@ pub fn memoryCost(src: *const ReadableStreamSourceType) usize {
     pub const arrayBufferFromJS = JSReadableStreamSource.arrayBuffer;
     pub const blobFromJS = JSReadableStreamSource.blob;
     pub const bytesFromJS = JSReadableStreamSource.bytes;
-    pub const JSReadableStreamSource = struct {
-    
-    pub fn pull(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                const this_jsvalue = callFrame.this();
-                const arguments = callFrame.arguments_old(2);
-                const view = arguments.ptr[0];
-                _ = view.ensureStillAlive();
-                src.this_jsvalue = this_jsvalue;
-                const buf_opt = view.asArrayBuffer(globalThis);
-                if ((buf_opt == null)) {
-                    return jsc.JSValue.js_undefined;
-                }
-                var buffer = buf_opt.?;
-                _ = &buffer;
-                return processResult(this_jsvalue, globalThis, arguments.ptr[1], src.onPullFromJS(buffer.slice(), view));
-        }
-    
-    pub fn start(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.globalThis = globalThis;
-                src.this_jsvalue = callFrame.this();
-                switch (src.onStartFromJS()) {
-    .empty => {
-    return JSValue.jsNumber(0);
-    },
-    .ready => {
-    return JSValue.jsNumber(16384);
-    },
-    .chunk_size => |size| {
-    return JSValue.jsNumber(size);
-    },
-    .err => |e| {
-    return globalThis.throwValue(try e.toJS(globalThis));
-    },
-    else => |rc| {
-    return rc.toJS(globalThis);
-    },
-    }
-        }
-    
-    pub fn isClosed(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-                _ = &globalObject;
-                return jsc.JSValue.jsBoolean(src.is_closed);
-        }
-    
-    pub fn processResult(this_jsvalue: jsc.JSValue, globalThis: *JSGlobalObject, flags: JSValue, result: streams.Result) bun.JSError!jsc.JSValue {
-                switch (result) {
-    .err => |e| {
-    if ((e == .Error)) {
-                    return globalThis.throwValue(try e.Error.toJS(globalThis));
-                } else {
-                    const js_err = e.JSValue;
-                    _ = js_err.ensureStillAlive();
-                    _ = js_err.unprotect();
-                    return globalThis.throwValue(js_err);
-                }
-    },
-    .pending => {
-    const out = try result.toJS(globalThis);
-                _ = js.pendingPromiseSetCached(this_jsvalue, globalThis, out);
-                return out;
-    },
-    .temporary_and_done, .owned_and_done, .into_array_and_done => {
-    const value: JSValue = .true;
-                _ = jsc.C.JSObjectSetPropertyAtIndex(globalThis, flags.asObjectRef(), 0, value.asObjectRef(), null);
-                return result.toJS(globalThis);
-    },
-    else => {
-    return result.toJS(globalThis);
-    },
-    }
-        }
-    
-    pub fn cancel(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = &globalObject;
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                _ = src.cancel();
-                return jsc.JSValue.js_undefined;
-        }
-    
-    pub fn setOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!void {
-                _ = jsc.markBinding(@src());
-                src.close_handler = JSReadableStreamSource.onClose;
-                src.globalThis = globalObject;
-                if (value.isUndefined()) {
-                    _ = src.close_jsvalue.deinit();
-                    return;
-                }
-                if ((!value.isCallable())) {
-                    return globalObject.throwInvalidArgumentType("ReadableStreamSource", "onclose", "function");
-                }
-                const cb = value.withAsyncContextIfNeeded(globalObject);
-                _ = src.close_jsvalue.set(globalObject, cb);
-        }
-    
-    pub fn setOnDrainFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!void {
-                _ = jsc.markBinding(@src());
-                src.globalThis = globalObject;
-                if (value.isUndefined()) {
-                    _ = js.onDrainCallbackSetCached(src.this_jsvalue, globalObject, .js_undefined);
-                    return;
-                }
-                if ((!value.isCallable())) {
-                    return globalObject.throwInvalidArgumentType("ReadableStreamSource", "onDrain", "function");
-                }
-                const cb = value.withAsyncContextIfNeeded(globalObject);
-                _ = js.onDrainCallbackSetCached(src.this_jsvalue, globalObject, cb);
-        }
-    
-    pub fn getOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-                _ = &globalObject;
-                _ = jsc.markBinding(@src());
-                return ((src.close_jsvalue.get()) orelse (.js_undefined));
-        }
-    
-    pub fn getOnDrainFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-                _ = &globalObject;
-                _ = jsc.markBinding(@src());
-                if (js.onDrainCallbackGetCached(src.this_jsvalue)) |val| {
-                    _ = &val;
-                    return val;
-                }
-                return jsc.JSValue.js_undefined;
-        }
-    
-    pub fn updateRef(src: *ReadableStreamSourceType, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = &globalObject;
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                const ref_or_unref = callFrame.argument(0).toBoolean();
-                _ = src.setRef(ref_or_unref);
-                return jsc.JSValue.js_undefined;
-        }
-    
-    pub fn onClose(ptr: ?*anyopaque) void {
-                _ = jsc.markBinding(@src());
-                var src = bun.cast(*ReadableStreamSourceType, ptr.?);
-                _ = &src;
-                if (src.close_jsvalue.trySwap()) |cb| {
-                    _ = &cb;
-                    _ = src.globalThis.queueMicrotask(cb, &.{});
-                }
-                _ = src.close_jsvalue.deinit();
-        }
-    
-    pub fn finalize(src: *ReadableStreamSourceType) void {
-                src.this_jsvalue = .zero;
-                _ = src.decrementCount();
-        }
-    
-    pub fn drain(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                var list = src.drain();
-                _ = &list;
-                if ((list.len > 0)) {
-                    var ab = jsc.ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
-                    _ = &ab;
-                    return ab.toJS(globalThis);
-                }
-                return jsc.JSValue.js_undefined;
-        }
-    
-    pub fn text(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                if (toBufferedValue) |to_buffered_value| {
-                    _ = &to_buffered_value;
-                    return to_buffered_value((&src.context), globalThis, .text);
-                }
-                _ = globalThis.throwTODO("This is not implemented yet");
-                return JSValue.zero;
-        }
-    
-    pub fn arrayBuffer(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                if (toBufferedValue) |to_buffered_value| {
-                    _ = &to_buffered_value;
-                    return to_buffered_value((&src.context), globalThis, .arrayBuffer);
-                }
-                _ = globalThis.throwTODO("This is not implemented yet");
-                return JSValue.zero;
-        }
-    
-    pub fn blob(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                if (toBufferedValue) |to_buffered_value| {
-                    _ = &to_buffered_value;
-                    return to_buffered_value((&src.context), globalThis, .blob);
-                }
-                _ = globalThis.throwTODO("This is not implemented yet");
-                return JSValue.zero;
-        }
-    
-    pub fn bytes(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                if (toBufferedValue) |to_buffered_value| {
-                    _ = &to_buffered_value;
-                    return to_buffered_value((&src.context), globalThis, .bytes);
-                }
-                _ = globalThis.throwTODO("This is not implemented yet");
-                return JSValue.zero;
-        }
-    
-    pub fn json(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-                _ = jsc.markBinding(@src());
-                src.this_jsvalue = callFrame.this();
-                if (toBufferedValue) |to_buffered_value| {
-                    _ = &to_buffered_value;
-                    return to_buffered_value((&src.context), globalThis, .json);
-                }
-                _ = globalThis.throwTODO("This is not implemented yet");
-                return JSValue.zero;
-        }
-    };
+    pub const JSReadableStreamSource = MakeJSReadableStreamSource(ReadableStreamSourceType, Context, js, toBufferedValue);
 };
 }
+pub const TeeResult = struct { ReadableStream, ReadableStream };
 pub const CloseHandlerFn = *const fn (?*anyopaque) void;
 const OpaqueOpt = ?*anyopaque;
 const Environment = bun.Environment;
@@ -795,37 +599,6 @@ const JSValue = jsc.JSValue;
 const webcore = bun.webcore;
 const Blob = webcore.Blob;
 const streams = webcore.streams;
-pub const TeeResult = struct { ReadableStream, ReadableStream };
-pub const Tag = enum(i32) {
-    Invalid = -1,
-
-    /// ReadableStreamDefaultController or ReadableByteStreamController
-    JavaScript = 0,
-
-    /// ReadableByteStreamController
-    /// but with a BlobLoader
-    /// we can skip the BlobLoader and just use the underlying Blob
-    Blob = 1,
-
-    /// ReadableByteStreamController
-    /// but with a FileLoader
-    /// we can skip the FileLoader and just use the underlying File
-    File = 2,
-
-    /// This is a direct readable stream
-    /// That means we can turn it into whatever we want
-    Direct = 3,
-
-    Bytes = 4,
-};
-pub const Source = union(Tag) {
-    Invalid: void,
-    JavaScript: void,
-    Blob: *webcore.ByteBlobLoader,
-    File: *webcore.FileReader,
-    Direct: void,
-    Bytes: *webcore.ByteStream,
-};
 
 extern "c" fn ReadableStream__tee(stream: JSValue, globalThis: *JSGlobalObject, out1: *jsc.JSValue, out2: *jsc.JSValue) callconv(.c) bool;
 
@@ -850,3 +623,227 @@ extern "c" fn ReadableStream__detach(stream: JSValue, globalObject: *JSGlobalObj
 extern "c" fn ReadableStream__fromBlob(globalObject: *JSGlobalObject, store: *anyopaque, offset: usize, length: usize) callconv(.c) jsc.JSValue;
 
 extern "c" fn ZigGlobalObject__createNativeReadableStream(globalObject: *JSGlobalObject, nativePtr: JSValue) callconv(.c) JSValue;
+
+pub fn MakeJSReadableStreamSource(comptime ReadableStreamSourceType: type, comptime Context: type, comptime js: type, comptime toBufferedValue: anytype) type {
+    _ = Context;
+        return struct {
+
+pub fn pull(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            const this_jsvalue = callFrame.this();
+            const arguments = callFrame.arguments_old(2);
+            const view = arguments.ptr[0];
+            _ = view.ensureStillAlive();
+            src.this_jsvalue = this_jsvalue;
+            const buf_opt = view.asArrayBuffer(globalThis);
+            if ((buf_opt == null)) {
+                return jsc.JSValue.js_undefined;
+            }
+            var buffer = buf_opt.?;
+            _ = &buffer;
+            return processResult(this_jsvalue, globalThis, arguments.ptr[1], src.onPullFromJS(buffer.slice(), view));
+    }
+
+pub fn start(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.globalThis = globalThis;
+            src.this_jsvalue = callFrame.this();
+            switch (src.onStartFromJS()) {
+.empty => {
+return JSValue.jsNumber(0);
+},
+.ready => {
+return JSValue.jsNumber(16384);
+},
+.chunk_size => |size| {
+return JSValue.jsNumber(size);
+},
+.err => |e| {
+return globalThis.throwValue(try e.toJS(globalThis));
+},
+else => |rc| {
+return rc.toJS(globalThis);
+},
+}
+    }
+
+pub fn isClosed(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+            _ = &globalObject;
+            return jsc.JSValue.jsBoolean(src.is_closed);
+    }
+
+pub fn processResult(this_jsvalue: jsc.JSValue, globalThis: *JSGlobalObject, flags: JSValue, result: streams.Result) bun.JSError!jsc.JSValue {
+            switch (result) {
+.err => |e| {
+if ((e == .Error)) {
+                return globalThis.throwValue(try e.Error.toJS(globalThis));
+            } else {
+                const js_err = e.JSValue;
+                _ = js_err.ensureStillAlive();
+                _ = js_err.unprotect();
+                return globalThis.throwValue(js_err);
+            }
+},
+.pending => {
+const out = try result.toJS(globalThis);
+            _ = js.pendingPromiseSetCached(this_jsvalue, globalThis, out);
+            return out;
+},
+.temporary_and_done, .owned_and_done, .into_array_and_done => {
+const value: JSValue = .true;
+            _ = jsc.C.JSObjectSetPropertyAtIndex(globalThis, flags.asObjectRef(), 0, value.asObjectRef(), null);
+            return result.toJS(globalThis);
+},
+else => {
+return result.toJS(globalThis);
+},
+}
+    }
+
+pub fn cancel(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = &globalObject;
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            _ = src.cancel();
+            return jsc.JSValue.js_undefined;
+    }
+
+pub fn setOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!void {
+            _ = jsc.markBinding(@src());
+            src.close_handler = @This().onClose;
+            src.globalThis = globalObject;
+            if (value.isUndefined()) {
+                _ = src.close_jsvalue.deinit();
+                return;
+            }
+            if ((!value.isCallable())) {
+                return globalObject.throwInvalidArgumentType("ReadableStreamSource", "onclose", "function");
+            }
+            const cb = value.withAsyncContextIfNeeded(globalObject);
+            _ = src.close_jsvalue.set(globalObject, cb);
+    }
+
+pub fn setOnDrainFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) bun.JSError!void {
+            _ = jsc.markBinding(@src());
+            src.globalThis = globalObject;
+            if (value.isUndefined()) {
+                _ = js.onDrainCallbackSetCached(src.this_jsvalue, globalObject, .js_undefined);
+                return;
+            }
+            if ((!value.isCallable())) {
+                return globalObject.throwInvalidArgumentType("ReadableStreamSource", "onDrain", "function");
+            }
+            const cb = value.withAsyncContextIfNeeded(globalObject);
+            _ = js.onDrainCallbackSetCached(src.this_jsvalue, globalObject, cb);
+    }
+
+pub fn getOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+            _ = &globalObject;
+            _ = jsc.markBinding(@src());
+            return ((src.close_jsvalue.get()) orelse (.js_undefined));
+    }
+
+pub fn getOnDrainFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
+            _ = &globalObject;
+            _ = jsc.markBinding(@src());
+            if (js.onDrainCallbackGetCached(src.this_jsvalue)) |val| {
+                _ = &val;
+                return val;
+            }
+            return jsc.JSValue.js_undefined;
+    }
+
+pub fn updateRef(src: *ReadableStreamSourceType, globalObject: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = &globalObject;
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            const ref_or_unref = callFrame.argument(0).toBoolean();
+            _ = src.setRef(ref_or_unref);
+            return jsc.JSValue.js_undefined;
+    }
+
+pub fn onClose(ptr: ?*anyopaque) void {
+            _ = jsc.markBinding(@src());
+            var src = bun.cast(*ReadableStreamSourceType, ptr.?);
+            _ = &src;
+            if (src.close_jsvalue.trySwap()) |cb| {
+                _ = &cb;
+                _ = src.globalThis.queueMicrotask(cb, &.{});
+            }
+            _ = src.close_jsvalue.deinit();
+    }
+
+pub fn finalize(src: *ReadableStreamSourceType) void {
+            src.this_jsvalue = .zero;
+            _ = src.decrementCount();
+    }
+
+pub fn drain(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            var list = src.drain();
+            _ = &list;
+            if ((list.len > 0)) {
+                var ab = jsc.ArrayBuffer.fromBytes(list.slice(), .Uint8Array);
+                _ = &ab;
+                return ab.toJS(globalThis);
+            }
+            return jsc.JSValue.js_undefined;
+    }
+
+pub fn text(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            if (toBufferedValue) |to_buffered_value| {
+                _ = &to_buffered_value;
+                return to_buffered_value((&src.context), globalThis, .text);
+            }
+            _ = globalThis.throwTODO("This is not implemented yet");
+            return JSValue.zero;
+    }
+
+pub fn arrayBuffer(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            if (toBufferedValue) |to_buffered_value| {
+                _ = &to_buffered_value;
+                return to_buffered_value((&src.context), globalThis, .arrayBuffer);
+            }
+            _ = globalThis.throwTODO("This is not implemented yet");
+            return JSValue.zero;
+    }
+
+pub fn blob(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            if (toBufferedValue) |to_buffered_value| {
+                _ = &to_buffered_value;
+                return to_buffered_value((&src.context), globalThis, .blob);
+            }
+            _ = globalThis.throwTODO("This is not implemented yet");
+            return JSValue.zero;
+    }
+
+pub fn bytes(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            if (toBufferedValue) |to_buffered_value| {
+                _ = &to_buffered_value;
+                return to_buffered_value((&src.context), globalThis, .bytes);
+            }
+            _ = globalThis.throwTODO("This is not implemented yet");
+            return JSValue.zero;
+    }
+
+pub fn json(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            _ = jsc.markBinding(@src());
+            src.this_jsvalue = callFrame.this();
+            if (toBufferedValue) |to_buffered_value| {
+                _ = &to_buffered_value;
+                return to_buffered_value((&src.context), globalThis, .json);
+            }
+            _ = globalThis.throwTODO("This is not implemented yet");
+            return JSValue.zero;
+    }
+};
+}

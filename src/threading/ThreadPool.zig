@@ -52,6 +52,7 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
 pub const QueueError = error{
     Empty,
     Contended,
@@ -59,6 +60,17 @@ pub const QueueError = error{
 
 pub const BufferError = error{
     Overflow,
+};
+
+pub const SyncState = enum(u2) {
+    pending = 0,
+    signaled,
+    waking,
+    shutdown,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
 pub fn FreeGuard(comptime T: type) type {
@@ -574,6 +586,82 @@ pub fn pop(self: *TopThread, thread_pool: *ThreadPool) ?NodeStole {
     }
 };
 
+pub const TopSync = packed struct(u32) {
+    idle: u14 = 0,
+    spawned: u14 = 0,
+    unused: bool = false,
+    notified: bool = false,
+    state: SyncState = .pending,
+};
+
+pub const TopConfig = struct {
+    stack_size: u32 = ThreadPool.default_thread_stack_size,
+    max_threads: u32,
+};
+
+pub const TopTask = struct {
+    node: TopNode = .{},
+    callback: *const fn (*TopTask) void,
+};
+
+pub const TopBatch = struct {
+    len: usize = 0,
+    head: ?*TopTask = null,
+    tail: ?*TopTask = null,
+
+pub fn pop(self: *TopBatch) ?*TopTask {
+            const len = @atomicLoad(usize, (&self.len), .monotonic);
+            if ((len == 0)) {
+                return null;
+            }
+            const task = self.head.?;
+            if ((blk: {
+            break :blk task.node.next;
+
+})) |node| {
+                _ = &node;
+                self.head = @fieldParentPtr("node", node);
+            } else {
+                if ((task != self.tail.?)) {
+                    _ = unreachable;
+                }
+                self.tail = null;
+                self.head = null;
+            }
+            self.len = (self.len - 1);
+            if ((len == 0)) {
+                self.tail = null;
+            }
+            return task;
+    }
+
+pub fn from(task: *TopTask) TopBatch {
+            return TopBatch{ .len = 1, .head = task, .tail = task };
+    }
+
+pub fn push(self: *TopBatch, batch: TopBatch) void {
+            if ((batch.len == 0)) {
+                return;
+            }
+            if ((self.len == 0)) {
+                self.* = batch;
+            } else {
+                if (batch.head) |h| {
+                    _ = &h;
+                    {
+                        self.tail.?.node.next = (&h.node);
+                    }
+                } else {
+                    {
+                        self.tail.?.node.next = null;
+                    }
+                }
+                self.tail = batch.tail;
+                self.len = (self.len + batch.len);
+            }
+    }
+};
+
 pub const ThreadPool = @This();
 
 sleep_on_idle_network_thread: bool = true,
@@ -663,23 +751,34 @@ pub fn scheduleImpl(self: *ThreadPool, batch: Batch, try_current: bool) void {
         if ((batch.len == 0)) {
             return;
         }
-        var list = Node.List{ .head = (&batch.head.?.node), .tail = (&batch.tail.?.node) };
+        var list = Node.List{ .head = (blk: {
+        break :blk (&batch.head.?.node);
+
+}), .tail = (blk: {
+        break :blk (&batch.tail.?.node);
+
+}) };
         _ = &list;
         if (self.is_running.load(.monotonic)) {
             _ = self.wait_group.add(batch.len);
         } else {
             _ = self.wait_group.addUnsynchronized(batch.len);
         }
-        const current = blk: {
+        const current = cur_blk: {
         if ((!try_current)) {
-            break :blk null;
+            break :cur_blk null;
         }
-        const current = ((Thread.current) orelse break :blk null);
-        break :blk (if ((current.thread_pool == self)) current else null);
+        const current = ((Thread.current) orelse break :cur_blk null);
+        break :cur_blk (if (((blk: {
+        break :blk current.thread_pool;
+
+}) == self)) current else null);
 };
         if (current) |thread| {
             _ = &thread;
-            _ = (blk_catch_6: { break :blk_catch_6 ((thread.run_buffer.push((&list))) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 thread.run_queue.push(list); }); });
+            {
+                _ = (blk_catch_6: { break :blk_catch_6 ((thread.run_buffer.push((&list))) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 thread.run_queue.push(list); }); });
+            }
         } else {
             _ = self.run_queue.push(list);
         }
@@ -835,7 +934,9 @@ pub noinline fn wait(self: *ThreadPool, _is_waking: bool) !bool {
                 } else {
                     if (Thread.current) |current| {
                         _ = &current;
-                        _ = current.drainIdleEvents();
+                        {
+                            _ = current.drainIdleEvents();
+                        }
                     }
                     _ = self.idle_event.wait();
                     sync = self.sync.load(.monotonic);
@@ -869,7 +970,9 @@ pub fn register(self: *ThreadPool, worker: *Thread) void {
         var threads = self.threads.load(.monotonic);
         _ = &threads;
         while (true) {
-            worker.next = threads;
+            {
+                worker.next = threads;
+            }
             if (self.threads.cmpxchgWeak(threads, worker, .release, .monotonic)) |next_threads| {
                 _ = &next_threads;
                 threads = next_threads;
@@ -888,10 +991,17 @@ pub fn unregister(self: *ThreadPool, maybe_thread: ?*Thread) void {
         }
         if (maybe_thread) |thread| {
             _ = &thread;
-            _ = thread.join_event.wait();
-            if (thread.next) |next_thread| {
+            {
+                _ = thread.join_event.wait();
+            }
+            if ((blk: {
+            break :blk thread.next;
+
+})) |next_thread| {
                 _ = &next_thread;
-                _ = next_thread.join_event.notify();
+                {
+                    _ = next_thread.join_event.notify();
+                }
             }
         }
 }
@@ -906,89 +1016,14 @@ pub fn join(self: *ThreadPool) void {
         _ = assert((sync.state == .shutdown));
         _ = assert((sync.spawned == 0));
         const thread = ((self.threads.load(.acquire)) orelse { return; });
-        _ = thread.join_event.notify();
+        {
+            _ = thread.join_event.notify();
+        }
 }
-const Sync = packed struct(u32) {
-    /// Tracks the number of threads not searching for Tasks
-    idle: u14 = 0,
-    /// Tracks the number of threads spawned
-    spawned: u14 = 0,
-    /// What you see is what you get
-    unused: bool = false,
-    /// Used to not miss notifications while state = waking
-    notified: bool = false,
-    /// The current state of the thread pool
-    state: enum(u2) {
-        /// A notification can be issued to wake up a sleeping as the "waking thread".
-        pending = 0,
-        /// The state was notified with a signal. A thread is woken up.
-        /// The first thread to transition to `waking` becomes the "waking thread".
-        signaled,
-        /// There is a "waking thread" among us.
-        /// No other thread should be woken up until the waking thread transitions the state.
-        waking,
-        /// The thread pool was terminated. Start decremented `spawned` so that it can be joined.
-        shutdown,
-    } = .pending,
-};
-pub const Config = struct {
-    stack_size: u32 = default_thread_stack_size,
-    max_threads: u32,
-};
-pub const Task = struct {
-    node: Node = .{},
-    callback: *const fn (*Task) void,
-};
-pub const Batch = struct {
-    len: usize = 0,
-    head: ?*Task = null,
-    tail: ?*Task = null,
-
-pub fn pop(self: *@This()) ?*Task {
-            const len = @atomicLoad(usize, (&self.len), .monotonic);
-            if ((len == 0)) {
-                return null;
-            }
-            const task = self.head.?;
-            if (task.node.next) |node| {
-                _ = &node;
-                self.head = @fieldParentPtr("node", node);
-            } else {
-                if ((task != self.tail.?)) {
-                    _ = unreachable;
-                }
-                self.tail = null;
-                self.head = null;
-            }
-            self.len = (self.len - 1);
-            if ((len == 0)) {
-                self.tail = null;
-            }
-            return task;
-    }
-
-pub fn from(task: *Task) Batch {
-            return Batch{ .len = 1, .head = task, .tail = task };
-    }
-
-pub fn push(self: *@This(), batch: Batch) void {
-            if ((batch.len == 0)) {
-                return;
-            }
-            if ((self.len == 0)) {
-                self.* = batch;
-            } else {
-                if (batch.head) |h| {
-                    _ = &h;
-                    self.tail.?.node.next = (&h.node);
-                } else {
-                    self.tail.?.node.next = null;
-                }
-                self.tail = batch.tail;
-                self.len = (self.len + batch.len);
-            }
-    }
-};
+pub const Sync = TopSync;
+pub const Config = TopConfig;
+pub const Task = TopTask;
+pub const Batch = TopBatch;
 pub const default_thread_stack_size = brk: {
     const default = ((4 * 1024) * 1024);
     _ = &default;
@@ -1006,7 +1041,6 @@ pub const Thread = TopThread;
 pub const Node = TopNode;
 const TopNodePtr = *TopNode;
 const Atomic = std.atomic.Value;
-const bun = @import("bun");
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;

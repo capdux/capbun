@@ -4,7 +4,418 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 pub const bun = @import("bun");
+pub const _EntryPeerHash = enum(u64) {
+    none = 0,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn from(int: u64) @This() {
+            return @enumFromInt(int);
+    }
+
+pub fn cast(self: _EntryPeerHash) u64 {
+            return @intFromEnum(self);
+    }
+};
+
+pub const Ids = struct {
+    dep_id: DependencyID,
+    pkg_id: PackageID,
+};
+
+pub const _StorePathFormatter = struct {
+    entry_id: _EntryId,
+    store: *const Store,
+    lockfile: *const Lockfile,
+
+pub fn format(self: _StorePathFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            const store = self.store;
+            const entries = store.entries.slice();
+            const entry_peer_hashes = entries.items(.peer_hash);
+            const entry_node_ids = entries.items(.node_id);
+            const peer_hash = entry_peer_hashes[@as(usize, @intCast(self.entry_id.get()))];
+            const node_id = entry_node_ids[@as(usize, @intCast(self.entry_id.get()))];
+            const pkg_id = store.nodes.items(.pkg_id)[@as(usize, @intCast(node_id.get()))];
+            const string_buf = self.lockfile.buffers.string_bytes.items;
+            const pkgs = self.lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_resolutions = pkgs.items(.resolution);
+            const pkg_name = pkg_names[@as(usize, @intCast(pkg_id))];
+            const pkg_res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+            switch (pkg_res.tag) {
+.root => {
+if (pkg_name.isEmpty()) {
+                _ = try writer.writeAll(std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir));
+            } else {
+                _ = try writer.print("{f}@root", .{ pkg_name.fmtStorePath(string_buf) });
+            }
+},
+.folder => {
+_ = try writer.print("{f}@file+{f}", .{ pkg_name.fmtStorePath(string_buf), (if (@typeInfo(@TypeOf(pkg_res)) == .@"enum") @intFromEnum(pkg_res) else pkg_res.value).folder.fmtStorePath(string_buf) });
+},
+else => {
+_ = try writer.print("{f}@{f}", .{ pkg_name.fmtStorePath(string_buf), pkg_res.fmtStorePath(string_buf) });
+},
+}
+            if ((peer_hash != .none)) {
+                _ = try writer.print("+{f}", .{ bun.fmt.hexIntLower(peer_hash.cast()) });
+            }
+    }
+};
+
+pub const _GlobalStorePathFormatter = struct {
+    inner: _StorePathFormatter,
+    entry_hash: u64,
+
+pub fn format(self: _GlobalStorePathFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            _ = try self.inner.format(writer);
+            _ = try writer.print("-{f}", .{ bun.fmt.hexIntLower(self.entry_hash) });
+    }
+};
+
+pub const _DependenciesItem = struct {
+    entry_id: _EntryId,
+    dep_id: DependencyID,
+};
+
+pub const _DependenciesOrderedArraySetCtx = struct {
+    string_buf: []const u8,
+    dependencies: []const Dependency,
+
+pub fn eql(self: _DependenciesOrderedArraySetCtx, l_item: _DependenciesItem, r_item: _DependenciesItem) bool {
+            if ((l_item.entry_id != r_item.entry_id)) {
+                return false;
+            }
+            const dependencies = self.dependencies;
+            const l_dep = dependencies[@as(usize, @intCast(l_item.dep_id))];
+            const r_dep = dependencies[@as(usize, @intCast(r_item.dep_id))];
+            return (l_dep.name_hash == r_dep.name_hash);
+    }
+
+pub fn order(self: _DependenciesOrderedArraySetCtx, l: _DependenciesItem, r: _DependenciesItem) std.math.Order {
+            const dependencies = self.dependencies;
+            const l_dep = dependencies[@as(usize, @intCast(l.dep_id))];
+            const r_dep = dependencies[@as(usize, @intCast(r.dep_id))];
+            if (((l.entry_id == r.entry_id) and (l_dep.name_hash == r_dep.name_hash))) {
+                return .eq;
+            }
+            if ((l.entry_id == .invalid)) {
+                if ((r.entry_id == .invalid)) {
+                    return .eq;
+                }
+                return .lt;
+            } else {
+                if ((r.entry_id == .invalid)) {
+                    if ((l.entry_id == .invalid)) {
+                        return .eq;
+                    }
+                    return .gt;
+                }
+            }
+            const string_buf = self.string_buf;
+            const l_dep_name = (if (@typeInfo(@TypeOf(l_dep)) == .@"enum" or @typeInfo(@TypeOf(l_dep)) == .@"union") @tagName(l_dep) else l_dep.name);
+            const r_dep_name = (if (@typeInfo(@TypeOf(r_dep)) == .@"enum" or @typeInfo(@TypeOf(r_dep)) == .@"union") @tagName(r_dep) else r_dep.name);
+            return l_dep_name.order((&r_dep_name), string_buf, string_buf);
+    }
+};
+
+pub const _Entry = struct {
+    node_id: _NodeId,
+    dependencies: Dependencies,
+    parents: std.ArrayListUnmanaged(Id) = .empty,
+    step: std.atomic.Value(Store.Installer.Task.Step) = .init(.link_package),
+    hoisted: bool,
+    peer_hash: PeerHash,
+    entry_hash: u64 = 0,
+    scripts: ?*Package.Scripts.List = null,
+
+pub fn fmtStorePath(entry_id: Id, store: *const Store, lockfile: *const Lockfile) _StorePathFormatter {
+            return .{ .entry_id = entry_id, .store = store, .lockfile = lockfile };
+    }
+
+pub fn fmtGlobalStorePath(entry_id: Id, store: *const Store, lockfile: *const Lockfile) _GlobalStorePathFormatter {
+            return .{ .inner = fmtStorePath(entry_id, store, lockfile), .entry_hash = store.entries.items(.entry_hash)[@as(usize, @intCast(entry_id.get()))] };
+    }
+
+pub fn debugGatherAllParents(entry_id: Id, store: *const Store) []const Id {
+            var i: usize = 0;
+            _ = &i;
+            var len: usize = 0;
+            _ = &len;
+            const entry_parents = store.entries.items(.parents);
+            var parents: std.AutoArrayHashMapUnmanaged(_EntryId, void) = .empty;
+            _ = &parents;
+            for (entry_parents[@as(usize, @intCast(entry_id.get()))].items) |parent_id| {
+                _ = &parent_id;
+                if ((parent_id == .invalid)) {
+                    continue;
+                }
+                _ = bun.handleOom(parents.put(bun.default_allocator, parent_id, @as(void, undefined)));
+            }
+            len = parents.count();
+            while ((i < len)) {
+                for (entry_parents[@as(usize, @intCast(parents.entries.items(.key)[@as(usize, @intCast(i))].get()))].items) |parent_id| {
+                    _ = &parent_id;
+                    if ((parent_id == .invalid)) {
+                        continue;
+                    }
+                    _ = bun.handleOom(parents.put(bun.default_allocator, parent_id, @as(void, undefined)));
+                    len = parents.count();
+                }
+                i = (i + 1);
+            }
+            return parents.keys();
+    }
+
+pub fn debugPrintList(list: *const List, lockfile: *Lockfile) void {
+            const string_buf = lockfile.buffers.string_bytes.items;
+            const pkgs = lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_resolutions = pkgs.items(.resolution);
+            {
+                var entry_id: i32 = 0;
+                _ = &entry_id;
+                const __end_2 = list.len;
+                while (entry_id < __end_2) : (entry_id += 1) {
+                    const entry = list.get(entry_id);
+                    const entry_pkg_name = pkg_names[@as(usize, @intCast(entry.pkg_id))].slice(string_buf);
+                    _ = Store.log("entry ({d}): '{s}@{}'\n  dep_name: {s}\n  pkg_id: {d}\n  parent_id: {}\n  \n", .{ entry_id, entry_pkg_name, pkg_resolutions[@as(usize, @intCast(entry.pkg_id))].fmt(string_buf, .posix), entry.dep_name.slice(string_buf), entry.pkg_id, entry.parent_id });
+                    _ = Store.log("  dependencies ({d}):\n", .{ entry.dependencies.items.len });
+                    for (entry.dependencies.items) |dep_entry_id| {
+                        _ = &dep_entry_id;
+                        const dep_entry = list.get(dep_entry_id.get());
+                        _ = Store.log("    {s}@{}\n", .{ pkg_names[@as(usize, @intCast(dep_entry.pkg_id))].slice(string_buf), pkg_resolutions[@as(usize, @intCast(dep_entry.pkg_id))].fmt(string_buf, .posix) });
+                    }
+                }
+            }
+    }
+    pub const PeerHash = _EntryPeerHash;
+    pub const List = bun.MultiArrayList(_Entry);
+    pub const Dependencies = OrderedArraySet(_DependenciesItem, _DependenciesOrderedArraySetCtx);
+    pub const DependenciesOrderedArraySetCtx = _DependenciesOrderedArraySetCtx;
+    pub const Id = _EntryId;
+};
+
+pub const _TransitivePeerOrderedArraySetCtx = struct {
+    string_buf: []const u8,
+    pkg_names: []const String,
+
+pub fn eql(ctx: *const _TransitivePeerOrderedArraySetCtx, l_item: _TransitivePeer, r_item: _TransitivePeer) bool {
+            _ = &ctx;
+            return (l_item.pkg_id == r_item.pkg_id);
+    }
+
+pub fn order(self: _TransitivePeerOrderedArraySetCtx, l: _TransitivePeer, r: _TransitivePeer) std.math.Order {
+            const l_pkg_id = l.pkg_id;
+            const r_pkg_id = r.pkg_id;
+            if ((l_pkg_id == r_pkg_id)) {
+                return .eq;
+            }
+            const string_buf = self.string_buf;
+            const pkg_names = self.pkg_names;
+            const l_pkg_name = pkg_names[@as(usize, @intCast(l_pkg_id))];
+            const r_pkg_name = pkg_names[@as(usize, @intCast(r_pkg_id))];
+            return l_pkg_name.order((&r_pkg_name), string_buf, string_buf);
+    }
+};
+
+pub const _TransitivePeer = struct {
+    dep_id: DependencyID,
+    pkg_id: PackageID,
+    auto_installed: bool,
+    pub const OrderedArraySetCtx = _TransitivePeerOrderedArraySetCtx;
+};
+
+pub const _Node = struct {
+    dep_id: DependencyID,
+    pkg_id: PackageID,
+    parent_id: Id,
+    dependencies: std.ArrayListUnmanaged(Ids) = .empty,
+    peers: Peers = .empty,
+    nodes: std.ArrayListUnmanaged(Id) = .empty,
+
+pub fn deinitList(list: *const List, allocator: std.mem.Allocator) void {
+            _ = list.deinit(allocator);
+    }
+
+pub fn debugPrint(self: _Node, id: Id, lockfile: *const Lockfile) void {
+            const pkgs = lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_resolutions = pkgs.items(.resolution);
+            const string_buf = lockfile.buffers.string_bytes.items;
+            const deps = lockfile.buffers.dependencies.items;
+            const dep_name = (if ((self.dep_id == invalid_dependency_id)) "root" else (if (@typeInfo(@TypeOf(deps[@as(usize, @intCast(self.dep_id))])) == .@"enum" or @typeInfo(@TypeOf(deps[@as(usize, @intCast(self.dep_id))])) == .@"union") @tagName(deps[@as(usize, @intCast(self.dep_id))]) else deps[@as(usize, @intCast(self.dep_id))].name).slice(string_buf));
+            const dep_version = (if ((self.dep_id == invalid_dependency_id)) "root" else deps[@as(usize, @intCast(self.dep_id))].version.literal.slice(string_buf));
+            _ = Store.log("node({d})\n  deps: {s}@{s}\n  res: {s}@{}\n\n", .{ id, dep_name, dep_version, pkg_names[@as(usize, @intCast(self.pkg_id))].slice(string_buf), pkg_resolutions[@as(usize, @intCast(self.pkg_id))].fmt(string_buf, .posix) });
+    }
+
+pub fn debugPrintList(list: *const List, lockfile: *Lockfile) void {
+            const string_buf = lockfile.buffers.string_bytes.items;
+            const dependencies = lockfile.buffers.dependencies.items;
+            const pkgs = lockfile.packages.slice();
+            const pkg_names = pkgs.items(.name);
+            const pkg_resolutions = pkgs.items(.resolution);
+            {
+                var node_id: i32 = 0;
+                _ = &node_id;
+                const __end_4 = list.len;
+                while (node_id < __end_4) : (node_id += 1) {
+                    const node = list.get(node_id);
+                    const node_pkg_name = pkg_names[@as(usize, @intCast(node.pkg_id))].slice(string_buf);
+                    _ = Store.log("node ({d}): '{s}'\n  dep_id: {d}\n  pkg_id: {d}\n  parent_id: {}\n\n", .{ node_id, node_pkg_name, node.dep_id, node.pkg_id, node.parent_id });
+                    _ = Store.log("  dependencies ({d}):\n", .{ node.dependencies.items.len });
+                    for (node.dependencies.items) |ids| {
+                        _ = &ids;
+                        const dep = dependencies[@as(usize, @intCast(ids.dep_id))];
+                        const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                        const pkg_name = pkg_names[@as(usize, @intCast(ids.pkg_id))].slice(string_buf);
+                        const pkg_res = pkg_resolutions[@as(usize, @intCast(ids.pkg_id))];
+                        _ = Store.log("    {s}@{} ({s}@{s})\n", .{ pkg_name, pkg_res.fmt(string_buf, .posix), dep_name, dep.version.literal.slice(string_buf) });
+                    }
+                    _ = Store.log("  nodes ({d}): ", .{ node.nodes.items.len });
+                    {
+                        var i: i32 = 0;
+                        _ = &i;
+                        const __end_6 = node.nodes.items.len;
+                        while (i < __end_6) : (i += 1) {
+                            const id = node.nodes.items[@as(usize, @intCast(i))];
+                            _ = Store.log("{d}", .{ id.get() });
+                            if ((i != (node.nodes.items.len - 1))) {
+                                _ = Store.log(",", .{});
+                            }
+                        }
+                    }
+                    _ = Store.log("\n  peers ({d}):\n", .{ node.peers.list.items.len });
+                    for (node.peers.list.items) |ids| {
+                        _ = &ids;
+                        const dep = dependencies[@as(usize, @intCast(ids.dep_id))];
+                        const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(string_buf);
+                        const pkg_name = pkg_names[@as(usize, @intCast(ids.pkg_id))].slice(string_buf);
+                        const pkg_res = pkg_resolutions[@as(usize, @intCast(ids.pkg_id))];
+                        _ = Store.log("    {s}@{} ({s}@{s})\n", .{ pkg_name, pkg_res.fmt(string_buf, .posix), dep_name, dep.version.literal.slice(string_buf) });
+                    }
+                }
+            }
+    }
+    pub const Peers = OrderedArraySet(_TransitivePeer, _TransitivePeerOrderedArraySetCtx);
+    pub const TransitivePeer = _TransitivePeer;
+    pub const List = bun.MultiArrayList(_Node);
+    pub const Id = _NodeId;
+};
+
+pub const Store = struct {
+    entries: Entry.List,
+    nodes: Node.List,
+
+pub fn isCycle(self: Store, id: Entry.Id, maybe_parent_id: Entry.Id, parent_dedupe: *std.AutoArrayHashMap(Entry.Id, void)) bool {
+            var i: usize = 0;
+            _ = &i;
+            var len: usize = 0;
+            _ = &len;
+            const entry_parents = self.entries.items(.parents);
+            for (entry_parents[@as(usize, @intCast(id.get()))].items) |parent_id| {
+                _ = &parent_id;
+                if ((parent_id == .invalid)) {
+                    continue;
+                }
+                if ((parent_id == maybe_parent_id)) {
+                    return true;
+                }
+                _ = bun.handleOom(parent_dedupe.put(parent_id, @as(void, undefined)));
+            }
+            len = parent_dedupe.count();
+            while ((i < len)) {
+                for (entry_parents[@as(usize, @intCast(parent_dedupe.keys()[@as(usize, @intCast(i))].get()))].items) |parent_id| {
+                    _ = &parent_id;
+                    if ((parent_id == .invalid)) {
+                        continue;
+                    }
+                    if ((parent_id == maybe_parent_id)) {
+                        return true;
+                    }
+                    _ = bun.handleOom(parent_dedupe.put(parent_id, @as(void, undefined)));
+                    len = parent_dedupe.count();
+                }
+                i = (i + 1);
+            }
+            return false;
+    }
+    pub const OrderedArraySet = _OrderedArraySet;
+    const log = Output.scoped(.Store, .visible);
+    pub const modules_dir_name = ".bun";
+    comptime {
+            bun.assert(NewId(Entry) != NewId(Node));
+            bun.assert(NewId(Entry) == NewId(Entry));
+        }
+    pub const Installer = @import("./Installer.zig").Installer;
+    pub const Entry = _Entry;
+    pub const Node = _Node;
+};
+
 const OOM = bun.OOM;
 const Output = bun.Output;
 const Semver = bun.Semver;
@@ -16,564 +427,114 @@ const PackageID = install.PackageID;
 const invalid_dependency_id = install.invalid_dependency_id;
 const Lockfile = install.Lockfile;
 const Package = Lockfile.Package;
-const Ids = struct {
-    dep_id: DependencyID,
-    pkg_id: PackageID,
-};
-pub const Store = struct {
-    /// Accessed from multiple threads
-    entries: Entry.List,
-    nodes: Node.List,
+pub const _EntryId = NewId(_Entry);
+pub const _NodeId = NewId(_Node);
+const _OrderedArraySet = OrderedArraySet;
 
-    const log = Output.scoped(.Store, .visible);
-
-    pub const modules_dir_name = ".bun";
-
-    fn NewId(comptime T: type) type {
+pub fn NewId(comptime T: type) type {
         return enum(u32) {
-            comptime {
-                _ = T;
-            }
-
-            root = 0,
-            invalid = max,
-            _,
-
-            const max = std.math.maxInt(u32);
-
-            pub fn from(id: u32) @This() {
-                bun.debugAssert(id != max);
-                return @enumFromInt(id);
-            }
-
-            pub fn get(id: @This()) u32 {
-                bun.debugAssert(id != .invalid);
-                return @intFromEnum(id);
-            }
-
-            pub fn tryGet(id: @This()) ?u32 {
-                return if (id == .invalid) null else @intFromEnum(id);
-            }
-
-            pub fn getOr(id: @This(), default: u32) u32 {
-                return if (id == .invalid) default else @intFromEnum(id);
-            }
-        };
-    }
-
-    comptime {
-        bun.assert(NewId(Entry) != NewId(Node));
-        bun.assert(NewId(Entry) == NewId(Entry));
-    }
-
-    pub const Installer = @import("./Installer.zig").Installer;
-
-    /// Called from multiple threads. `parent_dedupe` should not be shared between threads.
-    pub fn isCycle(this: *const Store, id: Entry.Id, maybe_parent_id: Entry.Id, parent_dedupe: *std.AutoArrayHashMap(Entry.Id, void)) bool {
-        var i: usize = 0;
-        var len: usize = 0;
-
-        const entry_parents = this.entries.items(.parents);
-
-        for (entry_parents[id.get()].items) |parent_id| {
-            if (parent_id == .invalid) {
-                continue;
-            }
-            if (parent_id == maybe_parent_id) {
-                return true;
-            }
-            bun.handleOom(parent_dedupe.put(parent_id, {}));
+        comptime {
+            _ = T;
         }
 
-        len = parent_dedupe.count();
-        while (i < len) {
-            for (entry_parents[parent_dedupe.keys()[i].get()].items) |parent_id| {
-                if (parent_id == .invalid) {
-                    continue;
-                }
-                if (parent_id == maybe_parent_id) {
-                    return true;
-                }
-                bun.handleOom(parent_dedupe.put(parent_id, {}));
-                len = parent_dedupe.count();
-            }
-            i += 1;
+        root = 0,
+        invalid = max,
+        _,
+
+        const max = std.math.maxInt(u32);
+
+        pub fn from(id: u32) @This() {
+            bun.debugAssert(id != max);
+            return @enumFromInt(id);
         }
 
-        return false;
-    }
-
-    // A unique entry in the store. As a path looks like:
-    //   './node_modules/.bun/name@version/node_modules/name'
-    // || if peers are involved:
-    //   './node_modules/.bun/name@version_peer1@version+peer2@version/node_modules/name'
-    //
-    // Entries are created for workspaces (including the root), but only in memory. If
-    // a module depends on a workspace, a symlink is created pointing outside the store
-    // directory to the workspace.
-    pub const Entry = struct {
-        // Used to get dependency name for destination path && peers
-        // for store path
-        node_id: Node.Id,
-        // parent_id: Id,
-        dependencies: Dependencies,
-        parents: std.ArrayListUnmanaged(Id) = .empty,
-        step: std.atomic.Value(Installer.Task.Step) = .init(.link_package),
-
-        // if true this entry gets symlinked to `node_modules/.bun/node_modules`
-        hoisted: bool,
-
-        peer_hash: PeerHash,
-
-        /// Content hash of (package + sorted resolved dependency global-store keys),
-        /// used to key the global virtual store at `<cache>/links/<storepath>-<entry_hash>/`.
-        /// Two projects that resolve the same package to the same dependency closure
-        /// share one global-store entry; if a transitive dep version differs, the
-        /// hash differs && a new global-store entry is created. Computed after the
-        /// store is built (see `computeEntryHashes`). 0 means "do not use global store"
-        /// (root, workspace, folder, symlink, patched).
-        entry_hash: u64 = 0,
-
-        scripts: ?*Package.Scripts.List = null,
-
-        pub const PeerHash = enum(u64) {
-            none = 0,
-            _,
-
-            pub fn from(int: u64) @This() {
-                return @enumFromInt(int);
-            }
-
-            pub fn cast(this: @This()) u64 {
-                return @intFromEnum(this);
-            }
-        };
-
-        const StorePathFormatter = struct {
-            entry_id: Id,
-            store: *const Store,
-            lockfile: *const Lockfile,
-
-            pub fn format(this: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-                const store = this.store;
-                const entries = store.entries.slice();
-                const entry_peer_hashes = entries.items(.peer_hash);
-                const entry_node_ids = entries.items(.node_id);
-
-                const peer_hash = entry_peer_hashes[this.entry_id.get()];
-                const node_id = entry_node_ids[this.entry_id.get()];
-                const pkg_id = store.nodes.items(.pkg_id)[node_id.get()];
-
-                const string_buf = this.lockfile.buffers.string_bytes.items;
-
-                const pkgs = this.lockfile.packages.slice();
-                const pkg_names = pkgs.items(.name);
-                const pkg_resolutions = pkgs.items(.resolution);
-
-                const pkg_name = pkg_names[pkg_id];
-                const pkg_res = pkg_resolutions[pkg_id];
-
-                switch (pkg_res.tag) {
-                    .root => {
-                        if (pkg_name.isEmpty()) {
-                            try writer.writeAll(std.fs.path.basename(bun.fs.FileSystem.instance.top_level_dir));
-                        } else {
-                            try writer.print("{f}@root", .{
-                                pkg_name.fmtStorePath(string_buf),
-                            });
-                        }
-                    },
-                    .folder => {
-                        try writer.print("{f}@file+{f}", .{
-                            pkg_name.fmtStorePath(string_buf),
-                            pkg_res.value.folder.fmtStorePath(string_buf),
-                        });
-                    },
-                    else => {
-                        try writer.print("{f}@{f}", .{
-                            pkg_name.fmtStorePath(string_buf),
-                            pkg_res.fmtStorePath(string_buf),
-                        });
-                    },
-                }
-
-                if (peer_hash != .none) {
-                    try writer.print("+{f}", .{
-                        bun.fmt.hexIntLower(peer_hash.cast()),
-                    });
-                }
-            }
-        };
-
-        pub fn fmtStorePath(entry_id: Id, store: *const Store, lockfile: *const Lockfile) StorePathFormatter {
-            return .{ .entry_id = entry_id, .store = store, .lockfile = lockfile };
+        pub fn get(id: @This()) u32 {
+            bun.debugAssert(id != .invalid);
+            return @intFromEnum(id);
         }
 
-        const GlobalStorePathFormatter = struct {
-            inner: StorePathFormatter,
-            entry_hash: u64,
-
-            pub fn format(this: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-                try this.inner.format(writer);
-                try writer.print("-{f}", .{bun.fmt.hexIntLower(this.entry_hash)});
-            }
-        };
-
-        /// Like `fmtStorePath` but suffixes the entry's content hash so the
-        /// resulting name is safe to use as a key in the shared global virtual
-        /// store (different dependency closures get different directory names).
-        pub fn fmtGlobalStorePath(entry_id: Id, store: *const Store, lockfile: *const Lockfile) GlobalStorePathFormatter {
-            return .{
-                .inner = fmtStorePath(entry_id, store, lockfile),
-                .entry_hash = store.entries.items(.entry_hash)[entry_id.get()],
-            };
+        pub fn tryGet(id: @This()) ?u32 {
+            return if (id == .invalid) null else @intFromEnum(id);
         }
 
-        pub fn debugGatherAllParents(entry_id: Id, store: *const Store) []const Id {
-            var i: usize = 0;
-            var len: usize = 0;
-
-            const entry_parents = store.entries.items(.parents);
-
-            var parents: std.AutoArrayHashMapUnmanaged(Entry.Id, void) = .empty;
-            // defer parents.deinit(bun.default_allocator);
-
-            for (entry_parents[entry_id.get()].items) |parent_id| {
-                if (parent_id == .invalid) {
-                    continue;
-                }
-                bun.handleOom(parents.put(bun.default_allocator, parent_id, {}));
-            }
-
-            len = parents.count();
-            while (i < len) {
-                for (entry_parents[parents.entries.items(.key)[i].get()].items) |parent_id| {
-                    if (parent_id == .invalid) {
-                        continue;
-                    }
-                    bun.handleOom(parents.put(bun.default_allocator, parent_id, {}));
-                    len = parents.count();
-                }
-                i += 1;
-            }
-
-            return parents.keys();
-        }
-
-        pub const List = bun.MultiArrayList(Entry);
-
-        const DependenciesItem = struct {
-            entry_id: Id,
-
-            // TODO: this can be removed, && instead dep_id can be retrieved through:
-            // entry_id -> node_id -> node_dep_ids
-            dep_id: DependencyID,
-        };
-        pub const Dependencies = OrderedArraySet(DependenciesItem, DependenciesOrderedArraySetCtx);
-
-        pub const DependenciesOrderedArraySetCtx = struct {
-            string_buf: string,
-            dependencies: []const Dependency,
-
-            pub fn eql(ctx: *const DependenciesOrderedArraySetCtx, l_item: DependenciesItem, r_item: DependenciesItem) bool {
-                if (l_item.entry_id != r_item.entry_id) {
-                    return false;
-                }
-
-                const dependencies = ctx.dependencies;
-                const l_dep = dependencies[l_item.dep_id];
-                const r_dep = dependencies[r_item.dep_id];
-
-                return l_dep.name_hash == r_dep.name_hash;
-            }
-
-            pub fn order(ctx: *const DependenciesOrderedArraySetCtx, l: DependenciesItem, r: DependenciesItem) std.math.Order {
-                const dependencies = ctx.dependencies;
-                const l_dep = dependencies[l.dep_id];
-                const r_dep = dependencies[r.dep_id];
-
-                if (l.entry_id == r.entry_id and l_dep.name_hash == r_dep.name_hash) {
-                    return .eq;
-                }
-
-                // TODO: y r doing
-                if (l.entry_id == .invalid) {
-                    if (r.entry_id == .invalid) {
-                        return .eq;
-                    }
-                    return .lt;
-                } else if (r.entry_id == .invalid) {
-                    if (l.entry_id == .invalid) {
-                        return .eq;
-                    }
-                    return .gt;
-                }
-
-                const string_buf = ctx.string_buf;
-                const l_dep_name = l_dep.name;
-                const r_dep_name = r_dep.name;
-
-                return l_dep_name.order(&r_dep_name, string_buf, string_buf);
-            }
-        };
-
-        pub const Id = NewId(Entry);
-
-        pub fn debugPrintList(list: *const List, lockfile: *Lockfile) void {
-            const string_buf = lockfile.buffers.string_bytes.items;
-
-            const pkgs = lockfile.packages.slice();
-            const pkg_names = pkgs.items(.name);
-            const pkg_resolutions = pkgs.items(.resolution);
-
-            for (0..list.len) |entry_id| {
-                const entry = list.get(entry_id);
-                const entry_pkg_name = pkg_names[entry.pkg_id].slice(string_buf);
-                log(
-                    "entry ({d}): '{s}@{}'\n  dep_name: {s}\n  pkg_id: {d}\n  parent_id: {}\n  \n",
-                    .{
-                        entry_id,
-                        entry_pkg_name,
-                        pkg_resolutions[entry.pkg_id].fmt(string_buf, .posix),
-                        entry.dep_name.slice(string_buf),
-                        entry.pkg_id,
-                        entry.parent_id,
-                    },
-                );
-
-                log("  dependencies ({d}):\n", .{entry.dependencies.items.len});
-                for (entry.dependencies.items) |dep_entry_id| {
-                    const dep_entry = list.get(dep_entry_id.get());
-                    log("    {s}@{}\n", .{
-                        pkg_names[dep_entry.pkg_id].slice(string_buf),
-                        pkg_resolutions[dep_entry.pkg_id].fmt(string_buf, .posix),
-                    });
-                }
-            }
+        pub fn getOr(id: @This(), default: u32) u32 {
+            return if (id == .invalid) default else @intFromEnum(id);
         }
     };
+}
 
-    pub fn OrderedArraySet(comptime T: type, comptime Ctx: type) type {
+pub fn OrderedArraySet(comptime T: type, comptime Ctx: type) type {
         return struct {
-            list: std.ArrayListUnmanaged(T) = .empty,
+    list: std.ArrayListUnmanaged(T) = .empty,
 
-            pub const empty: @This() = .{};
-
-            pub fn initCapacity(allocator: std.mem.Allocator, n: usize) OOM!@This() {
-                const list: std.ArrayListUnmanaged(T) = try .initCapacity(allocator, n);
-                return .{ .list = list };
-            }
-
-            pub fn deinit(this: *@This(), allocator: std.mem.Allocator) void {
-                this.list.deinit(allocator);
-            }
-
-            pub fn slice(this: *const @This()) []const T {
-                return this.list.items;
-            }
-
-            pub fn len(this: *const @This()) usize {
-                return this.list.items.len;
-            }
-
-            pub fn eql(l: *const @This(), r: *const @This(), ctx: *const Ctx) bool {
-                if (l.list.items.len != r.list.items.len) {
-                    return false;
-                }
-
-                for (l.list.items, r.list.items) |l_item, r_item| {
-                    if (!ctx.eql(l_item, r_item)) {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-
-            pub fn insert(this: *@This(), allocator: std.mem.Allocator, new: T, ctx: *const Ctx) OOM!void {
-                for (0..this.list.items.len) |i| {
-                    const existing = this.list.items[i];
-                    if (ctx.eql(new, existing)) {
-                        return;
-                    }
-
-                    const order = ctx.order(new, existing);
-
-                    if (order == .eq) {
-                        return;
-                    }
-
-                    if (order == .lt) {
-                        try this.list.insert(allocator, i, new);
-                        return;
-                    }
-                }
-
-                try this.list.append(allocator, new);
-            }
-
-            pub fn insertAssumeCapacity(this: *@This(), new: T, ctx: *const Ctx) void {
-                for (0..this.list.items.len) |i| {
-                    const existing = this.list.items[i];
-                    if (ctx.eql(new, existing)) {
-                        return;
-                    }
-
-                    const order = ctx.order(new, existing);
-
-                    if (order == .eq) {
-                        return;
-                    }
-
-                    if (order == .lt) {
-                        this.list.insertAssumeCapacity(i, new);
-                        return;
-                    }
-                }
-
-                this.list.appendAssumeCapacity(new);
-            }
-        };
+pub fn initCapacity(allocator: std.mem.Allocator, n: usize) OOM!@This() {
+            const list: std.ArrayListUnmanaged(T) = try .initCapacity(allocator, n);
+            return .{ .list = list };
     }
 
-    // A node used to represent the full dependency tree. Uniqueness is determined
-    // from `pkg_id` && `peers`
-    pub const Node = struct {
-        dep_id: DependencyID,
-        pkg_id: PackageID,
-        parent_id: Id,
+pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            _ = self.list.deinit(allocator);
+    }
 
-        dependencies: std.ArrayListUnmanaged(Ids) = .empty,
-        peers: Peers = .empty,
+pub fn slice(self: *const @This()) []const T {
+            return self.list.items;
+    }
 
-        // each node in this list becomes a symlink in the package's node_modules
-        nodes: std.ArrayListUnmanaged(Id) = .empty,
+pub fn len(self: *const @This()) usize {
+            return self.list.items.len;
+    }
 
-        pub const Peers = OrderedArraySet(TransitivePeer, TransitivePeer.OrderedArraySetCtx);
-
-        pub const TransitivePeer = struct {
-            dep_id: DependencyID,
-            pkg_id: PackageID,
-            auto_installed: bool,
-
-            pub const OrderedArraySetCtx = struct {
-                string_buf: string,
-                pkg_names: []const String,
-
-                pub fn eql(ctx: *const OrderedArraySetCtx, l_item: TransitivePeer, r_item: TransitivePeer) bool {
-                    _ = ctx;
-                    return l_item.pkg_id == r_item.pkg_id;
-                }
-
-                pub fn order(ctx: *const OrderedArraySetCtx, l: TransitivePeer, r: TransitivePeer) std.math.Order {
-                    const l_pkg_id = l.pkg_id;
-                    const r_pkg_id = r.pkg_id;
-                    if (l_pkg_id == r_pkg_id) {
-                        return .eq;
-                    }
-
-                    const string_buf = ctx.string_buf;
-                    const pkg_names = ctx.pkg_names;
-                    const l_pkg_name = pkg_names[l_pkg_id];
-                    const r_pkg_name = pkg_names[r_pkg_id];
-
-                    return l_pkg_name.order(&r_pkg_name, string_buf, string_buf);
-                }
-            };
-        };
-
-        pub const List = bun.MultiArrayList(Node);
-
-        pub fn deinitList(list: *const List, allocator: std.mem.Allocator) void {
-            list.deinit(allocator);
-        }
-
-        pub fn debugPrint(this: *const Node, id: Id, lockfile: *const Lockfile) void {
-            const pkgs = lockfile.packages.slice();
-            const pkg_names = pkgs.items(.name);
-            const pkg_resolutions = pkgs.items(.resolution);
-
-            const string_buf = lockfile.buffers.string_bytes.items;
-            const deps = lockfile.buffers.dependencies.items;
-
-            const dep_name = if (this.dep_id == invalid_dependency_id) "root" else deps[this.dep_id].name.slice(string_buf);
-            const dep_version = if (this.dep_id == invalid_dependency_id) "root" else deps[this.dep_id].version.literal.slice(string_buf);
-
-            log(
-                "node({d})\n  deps: {s}@{s}\n  res: {s}@{}\n\n",
-                .{
-                    id,
-                    dep_name,
-                    dep_version,
-                    pkg_names[this.pkg_id].slice(string_buf),
-                    pkg_resolutions[this.pkg_id].fmt(string_buf, .posix),
-                },
-            );
-        }
-
-        pub const Id = NewId(Node);
-
-        pub fn debugPrintList(list: *const List, lockfile: *const Lockfile) void {
-            const string_buf = lockfile.buffers.string_bytes.items;
-            const dependencies = lockfile.buffers.dependencies.items;
-
-            const pkgs = lockfile.packages.slice();
-            const pkg_names = pkgs.items(.name);
-            const pkg_resolutions = pkgs.items(.resolution);
-
-            for (0..list.len) |node_id| {
-                const node = list.get(node_id);
-                const node_pkg_name = pkg_names[node.pkg_id].slice(string_buf);
-                log(
-                    "node ({d}): '{s}'\n  dep_id: {d}\n  pkg_id: {d}\n  parent_id: {}\n\n",
-                    .{
-                        node_id,
-                        node_pkg_name,
-                        node.dep_id,
-                        node.pkg_id,
-                        node.parent_id,
-                    },
-                );
-
-                log("  dependencies ({d}):\n", .{node.dependencies.items.len});
-                for (node.dependencies.items) |ids| {
-                    const dep = dependencies[ids.dep_id];
-                    const dep_name = dep.name.slice(string_buf);
-
-                    const pkg_name = pkg_names[ids.pkg_id].slice(string_buf);
-                    const pkg_res = pkg_resolutions[ids.pkg_id];
-
-                    log("    {s}@{} ({s}@{s})\n", .{
-                        pkg_name,
-                        pkg_res.fmt(string_buf, .posix),
-                        dep_name,
-                        dep.version.literal.slice(string_buf),
-                    });
-                }
-
-                log("  nodes ({d}): ", .{node.nodes.items.len});
-                for (node.nodes.items, 0..) |id, i| {
-                    log("{d}", .{id.get()});
-                    if (i != node.nodes.items.len - 1) {
-                        log(",", .{});
-                    }
-                }
-
-                log("\n  peers ({d}):\n", .{node.peers.list.items.len});
-                for (node.peers.list.items) |ids| {
-                    const dep = dependencies[ids.dep_id];
-                    const dep_name = dep.name.slice(string_buf);
-                    const pkg_name = pkg_names[ids.pkg_id].slice(string_buf);
-                    const pkg_res = pkg_resolutions[ids.pkg_id];
-
-                    log("    {s}@{} ({s}@{s})\n", .{
-                        pkg_name,
-                        pkg_res.fmt(string_buf, .posix),
-                        dep_name,
-                        dep.version.literal.slice(string_buf),
-                    });
+pub fn eql(l: *const @This(), r: *const @This(), ctx: *const Ctx) bool {
+            if ((l.list.items.len != r.list.items.len)) {
+                return false;
+            }
+            for (l.list.items, r.list.items) |l_item, r_item| {
+                _ = &l_item;
+                _ = &r_item;
+                if ((!ctx.eql(l_item, r_item))) {
+                    return false;
                 }
             }
-        }
-    };
+            return true;
+    }
+
+pub fn insert(self: *@This(), allocator: std.mem.Allocator, new: T, ctx: *const Ctx) OOM!void {
+            for (0..self.list.items.len) |i| {
+                _ = &i;
+                const existing = self.list.items[@as(usize, @intCast(i))];
+                if (ctx.eql(new, existing)) {
+                    return;
+                }
+                const order = ctx.order(new, existing);
+                if ((order == .eq)) {
+                    return;
+                }
+                if ((order == .lt)) {
+                    _ = try self.list.insert(allocator, i, new);
+                    return;
+                }
+            }
+            _ = try self.list.append(allocator, new);
+    }
+
+pub fn insertAssumeCapacity(self: *@This(), new: T, ctx: *const Ctx) void {
+            for (0..self.list.items.len) |i| {
+                _ = &i;
+                const existing = self.list.items[@as(usize, @intCast(i))];
+                if (ctx.eql(new, existing)) {
+                    return;
+                }
+                const order = ctx.order(new, existing);
+                if ((order == .eq)) {
+                    return;
+                }
+                if ((order == .lt)) {
+                    _ = self.list.insertAssumeCapacity(i, new);
+                    return;
+                }
+            }
+            _ = self.list.appendAssumeCapacity(new);
+    }
+    pub const empty: @This() = .{};
 };
+}

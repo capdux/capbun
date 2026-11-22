@@ -109,6 +109,12 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const LifecycleScriptTimeLogEntry = struct {
+    package_name: []const u8,
+    script_id: u8,
+    duration: u64,
+};
+
 pub const LifecycleScriptTimeLog = struct {
     mutex: bun.Mutex = .{},
     list: std.ArrayListUnmanaged(Entry) = .{},
@@ -154,11 +160,7 @@ pub fn printAndDeinit(log: *LifecycleScriptTimeLog, allocator: std.mem.Allocator
             }
             _ = log.list.deinit(allocator);
     }
-    const Entry = struct {
-        package_name: []const u8,
-        script_id: u8,
-        duration: u64,
-    };
+    const Entry = LifecycleScriptTimeLogEntry;
 };
 
 const OptU64 = ?u64;
@@ -204,7 +206,8 @@ pub fn getPreinstallState(client: *PackageManager, package_id: PackageID) Preins
 }
 
 pub fn determinePreinstallState(manager: *PackageManager, pkg: Package, lockfile: *Lockfile, out_name_and_version_hash: *OptU64, out_patchfile_hash: *OptU64) PreinstallState {
-        switch (manager.getPreinstallState(pkg.@"meta".id)) {
+        const state = manager.getPreinstallState(pkg.@"meta".id);
+        switch (state) {
 .unknown => {
 if (pkg.isDisabled(manager.options.cpu, manager.options.os)) {
             _ = manager.setPreinstallState(pkg.@"meta".id, lockfile, .done);
@@ -266,8 +269,8 @@ else => "",
         _ = manager.setPreinstallState(pkg.@"meta".id, lockfile, .extract);
         return .extract;
 },
-else => |val| {
-return val;
+else => {
+return state;
 },
 }
 }
@@ -340,8 +343,8 @@ pub fn loadRootLifecycleScripts(client: *PackageManager, root_package: Package) 
         }
 }
 
-pub fn spawnPackageLifecycleScripts(self: *PackageManager, ctx: Command.Context, list: Lockfile.Package.Scripts.List, optional: bool, foreground: bool, install_ctx: ?LifecycleScriptSubprocess.InstallCtx) !void {
-        const log_level = self.options.log_level;
+pub fn spawnPackageLifecycleScripts(client: *PackageManager, ctx: Command.Context, list: Lockfile.Package.Scripts.List, optional: bool, foreground: bool, install_ctx: ?LifecycleScriptSubprocess.InstallCtx) !void {
+        const log_level = client.options.log_level;
         var any_scripts = false;
         _ = &any_scripts;
         for (list.items) |maybe_item| {
@@ -354,11 +357,11 @@ pub fn spawnPackageLifecycleScripts(self: *PackageManager, ctx: Command.Context,
         if ((!any_scripts)) {
             return;
         }
-        _ = try self.ensureTempNodeGypScript();
+        _ = try client.ensureTempNodeGypScript();
         const cwd = list.cwd;
-        var this_transpiler = try self.configureEnvForScripts(ctx, log_level);
-        _ = &this_transpiler;
-        var script_env = try this_transpiler.env.map.cloneWithAllocator(bun.default_allocator);
+        var client_transpiler = try client.configureEnvForScripts(ctx, log_level);
+        _ = &client_transpiler;
+        var script_env = try client_transpiler.env.map.cloneWithAllocator(bun.default_allocator);
         _ = &script_env;
         var script_env_guard = PtrDeinitGuard(@TypeOf(script_env.map)){ .ptr = (blk: {
         break :blk (&script_env.map);
@@ -389,18 +392,18 @@ pub fn spawnPackageLifecycleScripts(self: *PackageManager, ctx: Command.Context,
         }
         _ = try PATH.append(original_path);
         _ = try script_env.put("PATH", PATH.slice());
-        const envp = try script_env.createNullDelimitedEnvMap(self.allocator);
+        const envp = try script_env.createNullDelimitedEnvMap(client.allocator);
         const shell_bin = shell_bin: {
         if (comptime Environment.isWindows) {
             break :shell_bin null;
         }
-        if (self.env.get("PATH")) |env_path| {
+        if (client.env.get("PATH")) |env_path| {
             _ = &env_path;
             break :shell_bin bun.cli.RunCommand.findShell(env_path, cwd);
         }
         break :shell_bin null;
 };
-        _ = try LifecycleScriptSubprocess.spawnPackageScripts(self, list, envp, shell_bin, optional, log_level, foreground, install_ctx);
+        _ = try LifecycleScriptSubprocess.spawnPackageScripts(client, list, envp, shell_bin, optional, log_level, foreground, install_ctx);
 }
 
 pub fn findTrustedDependenciesFromUpdateRequests(client: *PackageManager) std.AutoArrayHashMapUnmanaged(TruncatedPackageNameHash, void) {

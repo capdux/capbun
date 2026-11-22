@@ -1,10 +1,11 @@
 // S3 HTTP streaming download task in CP
-const std = @import("std");
-const S3Error = @import("../../../s3_signing/error.zig").S3Error;
-const S3Credentials = @import("../../../s3_signing/credentials.zig").S3Credentials;
-const SignResult = S3Credentials.SignResult;
+import S3ErrorMod from "../../../s3_signing/error.zig";
+import CredentialsMod from "../../../s3_signing/credentials.zig";
+import bun from "bun";
 
-const bun = @import("bun");
+const S3Error = S3ErrorMod.S3Error;
+const S3Credentials = CredentialsMod.S3Credentials;
+const SignResult = S3Credentials.SignResult;
 const jsc = bun.jsc;
 const strings = bun.strings;
 
@@ -32,8 +33,18 @@ struct ResponseGuard {
     }
 }
 
+@packed(u64)
+pub struct TaskState {
+    pub const AtomicType = std.atomic.Value(u64);
+    status_code: u32 = 0,
+    request_error: u16 = 0,
+    has_more: bool = true,
+    _reserved: u15 = 0,
+}
+
 export class S3HttpDownloadStreamingTask {
     pub const new = bun.TrivialNew(S3HttpDownloadStreamingTask);
+    pub const State = TaskState;
 
     http: bun.http.AsyncHTTP;
     vm: *jsc.VirtualMachine;
@@ -68,44 +79,36 @@ export class S3HttpDownloadStreamingTask {
     range: ([]const u8)?;
     proxy_url: []const u8;
 
-    pub const State = packed struct(u64) {
-        pub const AtomicType = std.atomic.Value(u64);
-        status_code: u32 = 0,
-        request_error: u16 = 0,
-        has_more: bool = true,
-        _reserved: u15 = 0,
-    };
-
-    pub fn getState(_: *const S3HttpDownloadStreamingTask): State {
-        const state: State = @bitCast(this.state.load(.acquire));
+    pub fn getState(): State {
+        const state: State = @bitCast(_.state.load(.acquire));
         return state;
     }
 
-    pub fn setState(*_: *S3HttpDownloadStreamingTask, state: State) {
-        this.state.store(@bitCast(state), .monotonic);
+    pub fn setState(*_, state: State) {
+        _.state.store(@bitCast(state), .monotonic);
     }
 
     pub fn release(*_) {
-        this.poll_ref.unref(this.vm);
-        this.response_buffer.deinit();
-        this.reported_response_buffer.deinit();
-        this.headers.deinit();
-        this.sign_result.deinit();
-        this.http.clearData();
-        if (range := this.range) {
+        _.poll_ref.unref(_.vm);
+        _.response_buffer.deinit();
+        _.reported_response_buffer.deinit();
+        _.headers.deinit();
+        _.sign_result.deinit();
+        _.http.clearData();
+        if (range := _.range) {
             bun.default_allocator.free(range);
         }
-        if (this.proxy_url.len > 0) {
-            bun.default_allocator.free(this.proxy_url);
+        if (_.proxy_url.len > 0) {
+            bun.default_allocator.free(_.proxy_url);
         }
     }
 
-    pub fn deinit(*_: *S3HttpDownloadStreamingTask) {
-        this.release();
-        bun.destroy(this);
+    pub fn deinit(*_) {
+        _.release();
+        bun.destroy(_);
     }
 
-    fn reportProgress(*_: *S3HttpDownloadStreamingTask, state: State) {
+    fn reportProgress(*_, state: State) {
         const has_more = state.has_more;
         let s3_err: S3Error? = null;
         let failed = false;
@@ -131,7 +134,7 @@ export class S3HttpDownloadStreamingTask {
                         code = @errorName(req_err);
                         has_body_code = true;
                     } else {
-                        const bytes: string = this.reported_response_buffer.list.items;
+                        const bytes: string = _.reported_response_buffer.list.items;
                         if (bytes.len > 0) {
                             message = bytes;
 
@@ -157,7 +160,7 @@ export class S3HttpDownloadStreamingTask {
                 }
                 break :brk bun.MutableString{ .allocator = bun.default_allocator, .list = .{} };
             } else {
-                const buffer = this.reported_response_buffer;
+                const buffer = _.reported_response_buffer;
                 break :brk buffer;
             }
         };
@@ -166,28 +169,28 @@ export class S3HttpDownloadStreamingTask {
         log("reportProgress failed: {} has_more: {} len: {d}", .{ failed, has_more, chunk_len });
         if (failed) {
             if (!has_more) {
-                this.callback(chunk, false, s3_err, this.callback_context);
+                _.callback(chunk, false, s3_err, _.callback_context);
             }
         } else {
-            if (!has_more or chunk.list.items.len > 0) {
-                this.callback(chunk, has_more, null, this.callback_context);
-                this.reported_response_buffer.reset();
+            if (!has_more || chunk.list.items.len > 0) {
+                _.callback(chunk, has_more, null, _.callback_context);
+                _.reported_response_buffer.reset();
             }
         }
     }
 
-    pub fn onResponse(*_: *S3HttpDownloadStreamingTask) {
-        this.mutex.lock();
-        const state = this.getState();
+    pub fn onResponse(*_) {
+        _.mutex.lock();
+        const state = _.getState();
         const has_more = state.has_more;
-        const _guard = ResponseGuard{ task: unsafe { this as *S3HttpDownloadStreamingTask! }, has_more: has_more };
+        const _guard = ResponseGuard{ task: unsafe { _ as *S3HttpDownloadStreamingTask! }, has_more: has_more };
 
-        if (has_more) this.has_schedule_callback.store(false, .monotonic);
-        this.reportProgress(state);
+        if (has_more) _.has_schedule_callback.store(false, .monotonic);
+        _.reportProgress(state);
     }
 
     fn updateState(
-        *_: *S3HttpDownloadStreamingTask,
+        *_,
         async_http: *bun.http.AsyncHTTP,
         result: bun.http.HTTPClientResult,
         state: *State,
@@ -211,40 +214,40 @@ export class S3HttpDownloadStreamingTask {
                 200, 204, 206 => wait_until_done = state.request_error != 0,
                 else => wait_until_done = true,
             }
-            this.setState(state.*);
-            this.http = async_http.*;
+            _.setState(state.*);
+            _.http = async_http.*;
         }
         return wait_until_done;
     }
 
     fn processHttpCallback(
-        *_: *S3HttpDownloadStreamingTask,
+        *_,
         async_http: *bun.http.AsyncHTTP,
         result: bun.http.HTTPClientResult,
     ): bool {
-        this.mutex.lock();
-        const _guard = MutexGuard{ lock: unsafe { &this.mutex } };
+        _.mutex.lock();
+        const _guard = MutexGuard{ lock: unsafe { &_.mutex } };
 
-        let state = this.getState();
+        let state = _.getState();
         bun.assert(state.has_more);
         const is_done = !result.has_more;
-        const wait_until_done = this.updateState(async_http, result, unsafe { &state });
-        const should_enqueue = !wait_until_done or is_done;
+        const wait_until_done = _.updateState(async_http, result, *state);
+        const should_enqueue = !wait_until_done || is_done;
 
         if (should_enqueue) {
             if (body := result.body) {
-                this.response_buffer = body.*;
+                _.response_buffer = body.*;
                 if (body.list.items.len > 0) {
-                    * = bun.handleOom(this.reported_response_buffer.write(body.list.items));
+                    * = bun.handleOom(_.reported_response_buffer.write(body.list.items));
                 }
-                this.response_buffer.reset();
-                if (this.reported_response_buffer.list.items.len == 0 and !is_done) {
+                _.response_buffer.reset();
+                if (_.reported_response_buffer.list.items.len == 0 && !is_done) {
                     return false;
                 }
             } else if (!is_done) {
                 return false;
             }
-            if (has_cb := this.has_schedule_callback.cmpxchgStrong(false, true, .acquire, .monotonic)) {
+            if (has_cb := _.has_schedule_callback.cmpxchgStrong(false, true, .acquire, .monotonic)) {
                 if (has_cb) {
                     return false;
                 }
@@ -255,12 +258,12 @@ export class S3HttpDownloadStreamingTask {
     }
 
     pub fn httpCallback(
-        *_: *S3HttpDownloadStreamingTask,
+        *_,
         async_http: *bun.http.AsyncHTTP,
         result: bun.http.HTTPClientResult,
     ) {
-        if (this.processHttpCallback(async_http, result)) {
-            this.vm.eventLoop().enqueueTaskConcurrent(this.concurrent_task.from(this, .manual_deinit));
+        if (_.processHttpCallback(async_http, result)) {
+            _.vm.eventLoop().enqueueTaskConcurrent(_.concurrent_task.from(_, .manual_deinit));
         }
     }
 }

@@ -64,7 +64,41 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
+const IdentityContext = @import("../collections/identity_context.zig").IdentityContext;
+pub const lexer_mod = @import("./toml/lexer.zig");
+pub const bun = @import("bun");
+pub const HashMapPool = struct {
+
+pub fn get(allocator: std.mem.Allocator) *LinkedList.Node {
+            _ = &allocator;
+            if (toml_pool_loaded) {
+                if (toml_pool_list.popFirst()) |node| {
+                    _ = &node;
+                    {
+                        _ = node.data.clearRetainingCapacity();
+                    }
+                    return node;
+                }
+            }
+            const new_node = ((default_allocator.create(LinkedList.Node)) catch unreachable);
+            {
+                new_node.* = LinkedList.Node{ .data = HashMap.initContext(default_allocator, IdentityContext{  }) };
+            }
+            return new_node;
+    }
+
+pub fn release(node: *LinkedList.Node) void {
+            if (toml_pool_loaded) {
+                _ = toml_pool_list.prepend(node);
+                return;
+            }
+            toml_pool_list = LinkedList{ .first = node };
+            toml_pool_loaded = true;
+    }
+    const Node = LinkedList.Node;
+};
 
 pub const TOML = struct {
     lexer: Lexer,
@@ -76,15 +110,17 @@ pub fn init(allocator: std.mem.Allocator, source_: logger.Source, log: *logger.L
             return TOML{ .lexer = try Lexer.init(log, source_, allocator, redact_logs), .allocator = allocator, .log = log, .stack_check = bun.StackCheck.init() };
     }
 
-pub inline fn source(p: *const TOML) *const logger.Source {
-            return (&p.lexer.source);
+pub inline fn source(self: *const TOML) *const logger.Source {
+            return (&self.lexer.source);
     }
 
 pub fn e(self: *TOML, t: anytype, loc: logger.Loc) Expr {
         _ = self;
             const Type = @TypeOf(t);
             if ((@typeInfo(Type) == .pointer)) {
-                return Expr.init(std.meta.Child(Type), t.*, loc);
+                {
+                    return Expr.init(std.meta.Child(Type), t.*, loc);
+                }
             } else {
                 return Expr.init(Type, t, loc);
             }
@@ -131,7 +167,9 @@ pub fn parseKey(self: *TOML, allocator: std.mem.Allocator) !*Rope {
                 _ = try self.lexer.expectedString("key");
                 return error.SyntaxError;
             }
-            rope.* = .{ .head = initial_seg.?, .next = null };
+            {
+                rope.* = .{ .head = initial_seg.?, .next = null };
+            }
             while ((self.lexer.token == .t_dot)) {
                 _ = try self.lexer.next();
                 const seg_opt = try self.parseKeySegment();
@@ -179,7 +217,7 @@ _ = try self.lexer.next();
                 if ((!self.lexer.has_newline_before)) {
                     _ = try self.lexer.expectedString("line break");
                 }
-                const parent_object = (blk_catch_0: { break :blk_catch_0 ((root.data.e_object.getOrPutObject(key, self.allocator)) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
+                const parent_object = (blk_catch_1: { break :blk_catch_1 ((root.data.e_object.getOrPutObject(key, self.allocator)) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
                     _ = try self.lexer.addDefaultError("Table already defined");
                     return error.SyntaxError;
                 }
@@ -194,7 +232,7 @@ _ = try self.lexer.next();
                 if ((!self.lexer.has_newline_before)) {
                     _ = try self.lexer.expectedString("line break");
                 }
-                var array = (blk_catch_1: { break :blk_catch_1 ((root.data.e_object.getOrPutArray(key, self.allocator)) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
+                var array = (blk_catch_2: { break :blk_catch_2 ((root.data.e_object.getOrPutArray(key, self.allocator)) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
                     _ = try self.lexer.addDefaultError("Cannot overwrite table array");
                     return error.SyntaxError;
                 }
@@ -213,7 +251,7 @@ _ = try self.parseAssignment(head, key_allocator);
             }
     }
 
-pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator) anyerror!TomlVoid {
+pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator) anyerror!void {
             self.lexer.allow_double_bracket = false;
             const rope = try self.parseKey(allocator);
             const rope_end = self.lexer.start;
@@ -223,7 +261,7 @@ pub fn parseAssignment(self: *TOML, obj: *E.Object, allocator: std.mem.Allocator
             }
             _ = try self.lexer.expectAssignment();
             if ((!is_array)) {
-                _ = (blk_catch_2: { break :blk_catch_2 ((obj.setRope(rope, self.allocator, try self.parseValue())) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
+                _ = (blk_catch_3: { break :blk_catch_3 ((obj.setRope(rope, self.allocator, try self.parseValue())) catch |err_val| { _ = &err_val; if ((err_val == error.Clobber)) {
                     const loc = rope.head.loc;
                     _ = bun.assert((loc.start > 0));
                     const start: u32 = @intCast(loc.start);
@@ -359,47 +397,18 @@ pub fn parseMaybeTrailingComma(self: *TOML, closer: lexer.TokenType) !bool {
             }
             return true;
     }
-    pub const T = lexer.T;
-    const TomlVoid = void;
+    const T = lexer.T;
 };
 
-const IdentityContext = @import("../collections/identity_context.zig").IdentityContext;
 const HashMap = std.HashMap(u64, void, IdentityContext, 80);
 const LinkedList = bun.deprecated.SinglyLinkedList(HashMap);
 threadlocal var toml_pool_list: LinkedList = undefined;
 threadlocal var toml_pool_loaded: bool = false;
-const HashMapPool = struct {
-
-pub fn get(self: @This(), _: std.mem.Allocator) *LinkedList.Node {
-        _ = self;
-            if (toml_pool_loaded) {
-                if (toml_pool_list.popFirst()) |node| {
-                    _ = &node;
-                    _ = node.data.clearRetainingCapacity();
-                    return node;
-                }
-            }
-            const new_node = ((default_allocator.create(LinkedList.Node)) catch unreachable);
-            new_node.* = LinkedList.Node{ .data = HashMap.initContext(default_allocator, IdentityContext{  }) };
-            return new_node;
-    }
-
-pub fn release(node: *LinkedList.Node) void {
-            if (toml_pool_loaded) {
-                _ = toml_pool_list.prepend(node);
-                return;
-            }
-            toml_pool_list = LinkedList{ .first = node };
-            toml_pool_loaded = true;
-    }
-    pub const Node = LinkedList.Node;
-};
 const Rope = js_ast.E.Object.Rope;
-pub const lexer = @import("./toml/lexer.zig");
+pub const lexer = lexer_mod;
 pub const Lexer = lexer.Lexer;
 pub const TokenType = lexer.T;
 const expect = std.testing.expect;
-const bun = @import("bun");
 const assert = bun.assert;
 const default_allocator = bun.default_allocator;
 const logger = bun.logger;

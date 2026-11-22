@@ -86,6 +86,18 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub const Tag_ = enum(u8) {
+    value = 1,
+    number = 2,
+    sum = 4,
+    product = 8,
+    function = 16,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const CalcUnit = enum {
     abs,
     acos,
@@ -206,18 +218,6 @@ const CSSNumber = css.css_values.number.CSSNumber;
 const CSSNumberFns = css.css_values.number.CSSNumberFns;
 const eql = css.generic.eql;
 const deepClone = css.deepClone;
-const Tag_ = enum(u8) {
-    /// A literal value.
-    value = 1,
-    /// A literal number.
-    number = 2,
-    /// A sum of two calc expressions.
-    sum = 4,
-    /// A product of a number and another calc expression.
-    product = 8,
-    /// A math function, such as `calc()`, `min()`, or `max()`.
-    function = 16,
-};
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 

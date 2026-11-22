@@ -110,6 +110,82 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const SeenDeclContext = struct {
+
+pub fn hash(self: SeenDeclContext, s: SeenDeclKey) u32 {
+            const _ctx = self;
+            _ = &_ctx;
+            return (std.array_hash_map.hashString(s[1]) +% @intFromEnum(s[0]));
+    }
+
+pub fn eql(self: SeenDeclContext, a: SeenDeclKey, b: SeenDeclKey, b_idx: usize) bool {
+            const _ctx = self;
+            _ = &_ctx;
+            _ = &b_idx;
+            return SeenDeclContext.seenDeclKeyEql(a, b);
+    }
+
+pub inline fn seenDeclKeyEql(a: SeenDeclKey, that: SeenDeclKey) bool {
+            return ((@intFromEnum(a[0]) == @intFromEnum(that[0])) and bun.strings.eql(a[1], that[1]));
+    }
+};
+
+pub const SupportsParseClosure = struct {
+    expected_type: *OptI32,
+
+pub fn tryParseFn(i: *css.Parser, closure_self: *@This()) Result(SupportsCondition) {
+            const location = i.currentSourceLocation();
+            const s = (switch (i.expectIdent()) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            const found_type: i32 = found_type: {
+            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("and", s)) {
+                break :found_type 1;
+            }
+            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("or", s)) {
+                break :found_type 2;
+            }
+            return .{ .err = location.newUnexpectedTokenError(.{ .ident = s }) };
+};
+            if (closure_self.expected_type.*) |expected| {
+                _ = &expected;
+                if ((found_type != expected)) {
+                    return .{ .err = location.newUnexpectedTokenError(.{ .ident = s }) };
+                }
+            } else {
+                closure_self.expected_type.* = found_type;
+            }
+            return SupportsCondition.parseInParens(i);
+    }
+};
+
+pub const SupportsNestedBlockParser = struct {
+
+pub fn parseFn(_: void, i: *css.Parser) Result(void) {
+            return i.expectNoErrorToken();
+    }
+};
+
+pub const SupportsSelectorFn = struct {
+
+pub fn tryParseFn(i: *css.Parser) Result(SupportsCondition) {
+            const vv: void = undefined;
+            return i.parseNestedBlock(SupportsCondition, vv, SupportsSelectorFn.parseNestedBlockFn);
+    }
+
+pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(SupportsCondition) {
+            const p = i.position();
+            if (i.expectNoErrorToken().asErr()) |e| {
+                _ = &e;
+                return .{ .err = e };
+            }
+            return .{ .result = SupportsCondition{ .selector = i.sliceFrom(p) } };
+    }
+};
+
 pub const SupportsCondition = union(enum) {
     not: *SupportsCondition,
     @"and": ArrayList(SupportsCondition),
@@ -278,23 +354,7 @@ return .{ .err = e };
             switch (tok.*) {
 .function => |f| {
 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("selector", f)) {
-                const Fn = struct {
-
-pub fn tryParseFn(i: *css.Parser) Result(SupportsCondition) {
-            const vv: void = undefined;
-            return i.parseNestedBlock(SupportsCondition, vv, @This().parseNestedBlockFn);
-    }
-
-pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(SupportsCondition) {
-            const p = i.position();
-            if (i.expectNoErrorToken().asErr()) |e| {
-                _ = &e;
-                return .{ .err = e };
-            }
-            return .{ .result = SupportsCondition{ .selector = i.sliceFrom(p) } };
-    }
-};
-                const res = input.tryParse(Fn.tryParseFn, .{});
+                const res = input.tryParse(SupportsSelectorFn.tryParseFn, .{});
                 if (res.isOk()) {
                     return res;
                 }
@@ -417,62 +477,6 @@ const Location = css.css_rules.Location;
 pub const SeenDeclKey = struct {
     css.PropertyId,
     []const u8,
-};
-const SeenDeclContext = struct {
-
-pub fn hash(self: @This(), s: SeenDeclKey) u32 {
-            const _ctx = self;
-            _ = &_ctx;
-            return (std.array_hash_map.hashString(s[1]) +% @intFromEnum(s[0]));
-    }
-
-pub fn eql(self: @This(), a: SeenDeclKey, b: SeenDeclKey, b_idx: usize) bool {
-            const _ctx = self;
-            _ = &_ctx;
-            _ = &b_idx;
-            return seenDeclKeyEql(a, b);
-    }
-
-pub inline fn seenDeclKeyEql(a: SeenDeclKey, that: SeenDeclKey) bool {
-            return ((@intFromEnum(a[0]) == @intFromEnum(that[0])) and bun.strings.eql(a[1], that[1]));
-    }
-};
-const SupportsParseClosure = struct {
-    expected_type: *OptI32,
-
-pub fn tryParseFn(i: *css.Parser, closure_self: *@This()) Result(SupportsCondition) {
-            const location = i.currentSourceLocation();
-            const s = (switch (i.expectIdent()) {
-.result => |vv| vv,
-.err => |e| {
-return .{ .err = e };
-},
-});
-            const found_type: i32 = found_type: {
-            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("and", s)) {
-                break :found_type 1;
-            }
-            if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("or", s)) {
-                break :found_type 2;
-            }
-            return .{ .err = location.newUnexpectedTokenError(.{ .ident = s }) };
-};
-            if (closure_self.expected_type.*) |expected| {
-                _ = &expected;
-                if ((found_type != expected)) {
-                    return .{ .err = location.newUnexpectedTokenError(.{ .ident = s }) };
-                }
-            } else {
-                closure_self.expected_type.* = found_type;
-            }
-            return SupportsCondition.parseInParens(i);
-    }
-};
-const SupportsNestedBlockParser = struct {
-
-pub fn parseFn(_: void, i: *css.Parser) Result(void) {
-            return i.expectNoErrorToken();
-    }
 };
 const ArrayList = std.ArrayListUnmanaged;
 

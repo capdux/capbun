@@ -162,7 +162,7 @@ cached_tick_for_slow_lifecycle_script_logging: u64 = 0,
 }
 
 /// Corresponds to possible commands from the CLI.
-pub const Subcommand = enum {
+pub enum Subcommand {
     install,
     update,
     pm,
@@ -180,34 +180,34 @@ pub const Subcommand = enum {
     why,
     scan,
 
-    pub fn canGloballyInstallPackages(cmd: Subcommand) bool {
+    static fn canGloballyInstallPackages(cmd: Subcommand): bool {
         return switch (cmd) {
             .install, .update, .add => true,
             else => false,
         };
     }
 
-    pub fn supportsWorkspaceFiltering(cmd: Subcommand) bool {
+    static fn supportsWorkspaceFiltering(cmd: Subcommand): bool {
         return switch (cmd) {
             .outdated, .install, .update => true,
             else => false,
         };
     }
 
-    pub fn supportsJsonOutput(cmd: Subcommand) bool {
+    static fn supportsJsonOutput(cmd: Subcommand): bool {
         return switch (cmd) {
             .audit, .pm, .info => true,
             else => false,
         };
     }
 
-    pub fn shouldChdirToRoot(cmd: Subcommand) bool {
+    static fn shouldChdirToRoot(cmd: Subcommand): bool {
         return switch (cmd) {
             .link => false,
             else => true,
         };
     }
-};
+}
 
 pub union(enum) WorkspaceFilter {
     all: void,
@@ -280,11 +280,11 @@ pub fn crash(client: *PackageManager): noreturn {
     Global.crash();
 }
 
-const TrackInstalledBin = union(enum) {
+union(enum) TrackInstalledBin {
     none: void,
     pending: void,
     basename: []const u8,
-};
+}
 
 pub let verbose_install = false;
 

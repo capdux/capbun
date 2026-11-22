@@ -209,7 +209,7 @@ pub struct Config {
 const SegmentList = css.SmallList(Segment, 3);
 const default_segments: [3]Segment = [ .local, Segment{ literal: "_" }, .hash ];
 
-const PrefixClosure = struct {
+struct PrefixClosure {
     res: ArrayList(u8),
     allocator: Allocator,
     prefix: []const u8,
@@ -229,9 +229,9 @@ const PrefixClosure = struct {
         }
         bun.handleOom(_.res.appendSlice(_.allocator, slice));
     }
-};
+}
 
-const ToStringClosure = struct {
+struct ToStringClosure {
     res: *ArrayList(u8),
     allocator: Allocator,
 
@@ -250,7 +250,7 @@ const ToStringClosure = struct {
         bun.handleOom(_.res.appendSlice(_.allocator, slice));
         return;
     }
-};
+}
 
 /// A CSS modules class name pattern.
 pub struct Pattern {
@@ -331,19 +331,19 @@ pub struct Pattern {
 /// A segment in a CSS modules class name pattern.
 ///
 /// See [Pattern](Pattern).
-pub const Segment = union(enum) {
+pub union(enum) Segment {
     /// A literal string segment.
     literal: []const u8,
 
     /// The base file name.
-    name,
+    name: void,
 
     /// The original class name.
-    local,
+    local: void,
 
     /// A hash of the file name.
-    hash,
-};
+    hash: void,
+}
 
 /// A map of exported names to values.
 pub const CssModuleExports = std.StringArrayHashMapUnmanaged(CssModuleExport);
@@ -364,7 +364,7 @@ pub struct CssModuleExport {
 /// A referenced name within a CSS module, e.g. via the `composes` property.
 ///
 /// See [CssModuleExport](CssModuleExport).
-pub const CssModuleReference = union(enum) {
+pub union(enum) CssModuleReference {
     /// A local reference.
     local: struct {
         /// The local (compiled) name for the reference.
@@ -385,16 +385,16 @@ pub const CssModuleReference = union(enum) {
         specifier: []const u8,
     },
 
-    pub fn eql(this: *const @This(), other: *const @This()): bool {
-        if (@intFromEnum(this.*) != @intFromEnum(other.*)) return false;
+    fn eql(other: *const @This()): bool {
+        if (@intFromEnum(_) != @intFromEnum(other.*)) return false;
 
-        return switch (this.*) {
-            .local => |v| bun.strings.eql(v.name, other.local.name),
-            .global => |v| bun.strings.eql(v.name, other.global.name),
-            .dependency => |v| bun.strings.eql(v.name, other.dependency.name) and bun.strings.eql(v.specifier, other.dependency.specifier),
+        return switch (_) {
+            .local v => bun.strings.eql(v.name, other.local.name),
+            .global v => bun.strings.eql(v.name, other.global.name),
+            .dependency v => bun.strings.eql(v.name, other.dependency.name) && bun.strings.eql(v.specifier, other.dependency.specifier),
         };
     }
-};
+}
 
 // TODO: replace with bun's hash
 pub fn hash(allocator: Allocator, comptime fmt: []const u8, args: auto, at_start: bool): []const u8 {

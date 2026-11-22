@@ -86,6 +86,15 @@ pub const SecurityScannerErrorCode = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const SecurityAdvisoryLevel = enum {
+    fatal,
+    warn,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ScannerClosure = struct {
     scanner: *SecurityScanSubprocess,
 
@@ -277,6 +286,12 @@ pub fn hasAdvisories(self: SecurityScanResults) bool {
     }
 };
 
+pub const ScanAttemptResult = union(enum) {
+    success: SecurityScanResults,
+    needs_install: PackageID,
+    @"error": anyerror,
+};
+
 pub const ScannerFinder = struct {
     manager: *PackageManager,
     scanner_name: []const u8,
@@ -336,17 +351,27 @@ pub fn validateNotInWorkspaces(self: ScannerFinder) !void {
     }
 };
 
+pub const PackageCollectorQueueItem = struct {
+    pkg_id: PackageID,
+    dep_id: DependencyID,
+    pkg_path: std.ArrayList(PackageID),
+    dep_path: std.ArrayList(DependencyID),
+};
+
 pub const PackageCollector = struct {
     manager: *PackageManager,
     dedupe: std.AutoArrayHashMap(PackageID, void),
-    queue: bun.LinearFifo(QueueItem, .Dynamic),
+    queue: bun.LinearFifo(PackageCollectorQueueItem, .Dynamic),
     package_paths: std.AutoArrayHashMap(PackageID, PackagePath),
+    __cp_dropped: bool = false,
 
 pub fn init(manager: *PackageManager) PackageCollector {
             return .{ .manager = manager, .dedupe = std.AutoArrayHashMap(PackageID, void).init(bun.default_allocator), .queue = bun.LinearFifo(QueueItem, .Dynamic).init(bun.default_allocator), .package_paths = std.AutoArrayHashMap(PackageID, PackagePath).init(manager.allocator) };
     }
 
-pub fn deinit(self: *PackageCollector) void {
+pub fn __cp_deinit(self: *PackageCollector) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
             _ = self.dedupe.deinit();
             _ = self.queue.deinit();
             var iter = self.package_paths.iterator();
@@ -553,12 +578,7 @@ pub fn processQueue(self: *PackageCollector) !void {
                 }
             }
     }
-    const QueueItem = struct {
-        pkg_id: PackageID,
-        dep_id: DependencyID,
-        pkg_path: std.ArrayList(PackageID),
-        dep_path: std.ArrayList(DependencyID),
-    };
+    const QueueItem = PackageCollectorQueueItem;
 };
 
 pub const JSONBuilder = struct {
@@ -1007,12 +1027,6 @@ warn_count = (warn_count + 1);
     pub const StaticPipeWriter = jsc.Subprocess.NewStaticPipeWriter(@This());
 };
 
-pub const SecurityAdvisoryLevel = enum { fatal, warn };
-pub const ScanAttemptResult = union(enum) {
-    success: SecurityScanResults,
-    needs_install: PackageID,
-    @"error": anyerror,
-};
 const scanner_entry_source = @embedFile("./scanner-entry.ts");
 const Environment = bun.Environment;
 const Output = bun.Output;
@@ -1273,10 +1287,8 @@ pub fn attemptSecurityScanWithRetry(manager: *PackageManager, security_scanner: 
         const suppress_error_output = (manager.options.log_level != .verbose);
         var collector = PackageCollector.init(manager);
         _ = &collector;
-        var _guard_collector = DeinitGuard(PackageCollector){ .ptr = (&collector) };
-        _ = &_guard_collector;
-        var ___guard_collector_moved = false; _ = &___guard_collector_moved;
-        defer if (!___guard_collector_moved) { ___guard_collector_moved = true; const __T = @TypeOf(_guard_collector); if (@typeInfo(__T) == .optional) { if (_guard_collector) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_collector.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_collector; _drop_val.__cp_deinit(); } };
+        var __collector_moved = false; _ = &__collector_moved;
+        defer if (!__collector_moved) { __collector_moved = true; const __T = @TypeOf(collector); if (@typeInfo(__T) == .optional) { if (collector) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { collector.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = collector; _drop_val.__cp_deinit(); } };
         if (scan_all) {
             _ = try collector.collectAllPackages();
         } else {

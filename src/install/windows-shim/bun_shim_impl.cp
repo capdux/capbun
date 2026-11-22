@@ -52,8 +52,8 @@ pub struct ShebangMetadataPacked {
 }
 
 /// A copy of all ntdll declarations this program uses
-const nt = struct {
-    const Status = w.NTSTATUS;
+struct nt {
+    type Status = w.NTSTATUS;
 
     /// undocumented
     const RtlExitUserProcess = w.ntdll.RtlExitUserProcess;
@@ -64,35 +64,39 @@ const nt = struct {
     /// https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile
     const NtCreateFile = w.ntdll.NtCreateFile;
 
-    /// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntreadfile
-    extern "ntdll" fn NtReadFile(
+    type NtReadFileFn = *const fn (
         FileHandle: w.HANDLE, // [in]
-        Event: ?w.HANDLE, // [in, optional]
-        ApcRoutine: ?*void, // [in, optional]
-        ApcContext: ?w.PVOID, // [in, optional]
+        Event: w.HANDLE?, // [in, optional]
+        ApcRoutine: (*void)?, // [in, optional]
+        ApcContext: w.PVOID?, // [in, optional]
         IoStatusBlock: *w.IO_STATUS_BLOCK, // [out]
         Buffer: w.PVOID, // [out]
         Length: w.ULONG, // [in]
-        ByteOffset: ?*w.LARGE_INTEGER, // [in, optional]
-        Key: ?*w.ULONG, // [in, optional]
+        ByteOffset: (*w.LARGE_INTEGER)?, // [in, optional]
+        Key: (*w.ULONG)?, // [in, optional]
     ) callconv(.winapi) Status;
 
-    /// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntwritefile
-    extern "ntdll" fn NtWriteFile(
+    type NtWriteFileFn = *const fn (
         FileHandle: w.HANDLE, // [in]
-        Event: ?w.HANDLE, // [in, optional]
-        ApcRoutine: ?*void, // [in, optional]
-        ApcContext: ?w.PVOID, // [in, optional]
+        Event: w.HANDLE?, // [in, optional]
+        ApcRoutine: (*void)?, // [in, optional]
+        ApcContext: w.PVOID?, // [in, optional]
         IoStatusBlock: *w.IO_STATUS_BLOCK, // [out]
         Buffer: [*]const u8, // [in]
         Length: w.ULONG, // [in]
-        ByteOffset: ?*w.LARGE_INTEGER, // [in, optional]
-        Key: ?*w.ULONG, // [in, optional]
+        ByteOffset: (*w.LARGE_INTEGER)?, // [in, optional]
+        Key: (*w.ULONG)?, // [in, optional]
     ) callconv(.winapi) Status;
-};
+
+    /// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntreadfile
+    const NtReadFile = @extern(NtReadFileFn, { name: "NtReadFile", library_name: "ntdll" });
+
+    /// https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntwritefile
+    const NtWriteFile = @extern(NtWriteFileFn, { name: "NtWriteFile", library_name: "ntdll" });
+}
 
 /// A copy of all kernel32 declarations this program uses
-const k32 = struct {
+struct k32 {
     const CreateProcessW = w.kernel32.CreateProcessW;
     /// https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror
     const GetLastError = w.kernel32.GetLastError;
@@ -105,11 +109,11 @@ const k32 = struct {
     /// https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-sethandleinformation
     const SetHandleInformation = w.kernel32.SetHandleInformation;
     /// https://learn.microsoft.com/en-us/windows/console/setconsolemode
-    extern "kernel32" fn SetConsoleMode(
+    const SetConsoleMode = @extern(*const fn (
         hConsoleHandle: w.HANDLE, // [in]
         dwMode: w.DWORD, // [in]
-    ) callconv(.winapi) w.BOOL;
-};
+    ) callconv(.winapi) w.BOOL, { name: "SetConsoleMode", library_name: "kernel32" });
+}
 
 fn debug(comptime fmt: []const u8, args: anytype) {
     comptime assert(builtin.mode == .Debug);
@@ -121,12 +125,14 @@ fn debug(comptime fmt: []const u8, args: anytype) {
 }
 
 fn unicodeStringToU16(str: w.UNICODE_STRING): []u16 {
-    return str.Buffer.?[0 .. str.Length / 2];
+    unsafe {
+        return str.Buffer.?[0 .. str.Length / 2];
+    }
 }
 
 const FILE_GENERIC_READ = w.STANDARD_RIGHTS_READ | w.FILE_READ_DATA | w.FILE_READ_ATTRIBUTES | w.FILE_READ_EA | w.SYNCHRONIZE;
 
-const FailReason = enum {
+enum FailReason {
     NoDirname,
     CouldNotOpenShim,
     CouldNotReadShim,
@@ -143,8 +149,8 @@ const FailReason = enum {
     InterpreterNotFoundBun,
     ElevationRequired,
 
-    pub fn getFormatTemplate(reason: FailReason) []const u8 {
-        return switch (reason) {
+    fn getFormatTemplate(): []const u8 {
+        return switch (_) {
             .NoDirname => "could not find node_modules path",
 
             .ShimNotFound => "could not find bin metadata file",
@@ -170,44 +176,35 @@ const FailReason = enum {
         };
     }
 
-    pub fn format(reason: FailReason, writer: anytype) !void {
-        if (!is_standalone and bun.Environment.allow_assert and reason == .InvalidShimValidation) {
+    fn format(writer: auto)! {
+        if (!is_standalone && bun.Environment.allow_assert && _ == .InvalidShimValidation) {
             @panic("Internal Assertion: When encountering FailReason.InvalidShimValidation, you must not print the error, but rather fallback to running the .exe file");
         }
 
-        try writer.writeAll("error: ");
-        switch (reason) {
-            inline else => |r| {
-                if (is_standalone and r == .CouldNotDirectLaunch)
-                    // unreachable is ok because Direct Launch is not supported in standalone mode
-                    unreachable;
-
-                const template = comptime getFormatTemplate(r) ++ "\n\n";
-
-                if (comptime std.mem.indexOf(u8, template, "{s}") != null) {
-                    try writer.print(template, .{failure_reason_argument.?});
-                    if (dbg) {
-                        failure_reason_argument = null;
-                    }
-                } else {
-                    try writer.writeAll(template);
-                }
-
-                const rest = switch (r) {
-                    .InterpreterNotFoundBun =>
-                        "Please run the following command, or double check %PATH% is right.\n\n    powershell -c \"irm bun.sh/install.ps1|iex\"\n\n",
-                    else =>
-                        "Bun failed to remap this bin to its proper location within node_modules.\nThis is an indication of a corrupted node_modules directory.\n\nPlease run 'bun install --force' in the project root and try\nit again. If this message persists, please open an issue:\nhttps://github.com/oven-sh/bun/issues\n\n",
-                };
-                try writer.writeAll(rest);
-            },
+        writer.writeAll("error: ")?;
+        if (_ == .InterpreterNotFound) {
+            writer.print("interpreter executable \"{s}\" not found in %PATH%\n\n", [failure_reason_argument.?])?;
+            if (dbg) {
+                failure_reason_argument = null;
+            }
+        } else {
+            writer.writeAll(_.getFormatTemplate())?;
+            writer.writeAll("\n\n")?;
         }
+
+        const rest = switch (_) {
+            .InterpreterNotFoundBun =>
+                "Please run the following command, or double check %PATH% is right.\n\n    powershell -c \"irm bun.sh/install.ps1|iex\"\n\n",
+            else =>
+                "Bun failed to remap this bin to its proper location within node_modules.\nThis is an indication of a corrupted node_modules directory.\n\nPlease run 'bun install --force' in the project root and try\nit again. If this message persists, please open an issue:\nhttps://github.com/oven-sh/bun/issues\n\n",
+        };
+        writer.writeAll(rest)?;
     }
 
-    pub inline fn write(reason: FailReason, writer: anytype) !void {
-        return reason.format(writer);
+    inline fn write(writer: auto)! {
+        return _.format(writer);
     }
-};
+}
 
 err EmptyError {}
 
@@ -273,36 +270,38 @@ const nt_object_prefix: [4]u16 = [ '\\', '?', '?', '\\' ];
 // "The maximum length of this string is 32,767 characters, including the Unicode terminating null character."
 const buf2_u16_len = 32767 + 1;
 
-pub const LauncherMode = enum {
+type Noreturn = noreturn;
+
+pub enum LauncherMode {
     launch,
     read_without_launch,
 
     /// Return type of `launcher`
-    pub fn RetType(comptime mode: LauncherMode): type {
+    static fn RetType(comptime mode: LauncherMode): type {
         return switch (mode) {
             // See `tryStartupFromBunJS` for why this is `void` outside of standalone.
-            .launch => if (is_standalone) noreturn else void,
+            .launch => if (is_standalone) Noreturn else void,
             .read_without_launch => ReadWithoutLaunchResult,
         };
     }
 
-    pub fn FailRetType(comptime mode: LauncherMode): type {
+    static fn FailRetType(comptime mode: LauncherMode): type {
         return switch (mode) {
-            .launch => noreturn,
+            .launch => Noreturn,
             .read_without_launch => ReadWithoutLaunchResult,
         };
     }
 
-    pub noinline fn fail(comptime mode: LauncherMode, comptime reason: FailReason): mode.FailRetType() {
+    static noinline fn fail(comptime mode: LauncherMode, comptime reason: FailReason): mode.FailRetType() {
         @branchHint(.cold);
         return switch (mode) {
             .launch => failAndExitWithReason(reason),
-            .read_without_launch => ReadWithoutLaunchResult{ .err = reason },
+            .read_without_launch => ReadWithoutLaunchResult{ err: reason },
         };
     }
-};
+}
 
-fn launcher(comptime mode: LauncherMode, bun_ctx: anytype): mode.RetType() {
+unsafe fn launcher(comptime mode: LauncherMode, bun_ctx: anytype): mode.RetType() {
     // peb! w.teb is a couple instructions of inline asm
     const teb: *w.TEB = @call(callmod_inline, w.teb, {});
     const peb = teb.ProcessEnvironmentBlock;
@@ -877,7 +876,7 @@ fn launcher(comptime mode: LauncherMode, bun_ctx: anytype): mode.RetType() {
     @compileError("unreachable - above loop should not exit");
 }
 
-pub const FromBunRunContext = struct {
+pub struct FromBunRunContext {
     const CommandContext = bun.cli.Command.Context;
 
     /// Path like 'C:\Users\chloe\project\node_modules\.bin\foo.bunx'
@@ -895,7 +894,7 @@ pub const FromBunRunContext = struct {
     cli_context: CommandContext,
     /// Passed directly to CreateProcessW's lpEnvironment with CREATE_UNICODE_ENVIRONMENT
     environment: ([*]const u16)?,
-};
+}
 
 /// This is called from run_command.zig in bun.exe which allows us to skip the CreateProcessW
 /// call to create bun_shim_impl.exe. Instead we invoke the logic it has from an open file handle.
@@ -909,10 +908,12 @@ pub fn tryStartupFromBunJS(context: FromBunRunContext) {
     assert(!std.mem.startsWith(u16, context.base_path, &nt_object_prefix));
     comptime assert(!is_standalone);
     comptime assert(bun.FeatureFlags.windows_bunx_fast_path);
-    launcher(.launch, context);
+    unsafe {
+        launcher(.launch, context);
+    }
 }
 
-pub const FromBunShellContext = struct {
+pub struct FromBunShellContext {
     /// Path like 'C:\Users\chloe\project\node_modules\.bin\foo.bunx'
     base_path: []u16,
     /// Command line arguments which does NOT include the bin name:
@@ -925,13 +926,13 @@ pub const FromBunShellContext = struct {
     /// A pointer to memory needed to store the command line
     buf: *Buf,
 
-    pub const Buf = [buf2_u16_len]u16;
-};
+    type Buf = [buf2_u16_len]u16;
+}
 
-pub const ReadWithoutLaunchResult = union {
+pub union ReadWithoutLaunchResult {
     err: FailReason, // enum which has a predefined custom formatter
     command_line: []const u16,
-};
+}
 
 /// Given the path && handle to a .bunx file, do everything needed to execute it,
 /// *except* for spawning it. This is used by the Bun shell to skip spawning the
@@ -944,7 +945,9 @@ pub fn readWithoutLaunch(context: FromBunShellContext): ReadWithoutLaunchResult 
     assert(!std.mem.startsWith(u16, context.base_path, &nt_object_prefix));
     comptime assert(!is_standalone);
     comptime assert(bun.FeatureFlags.windows_bunx_fast_path);
-    return launcher(.read_without_launch, context);
+    unsafe {
+        return launcher(.read_without_launch, context);
+    }
 }
 
 /// Main function for `bun_shim_impl.exe`
@@ -953,7 +956,9 @@ pub inline fn main(): noreturn {
     comptime assert(builtin.single_threaded);
     comptime assert(!builtin.link_libc);
     comptime assert(!builtin.link_libcpp);
-    launcher(.launch, {});
+    unsafe {
+        launcher(.launch, {});
+    }
 }
 
 import builtin from "builtin";

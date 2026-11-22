@@ -76,7 +76,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Crypto = @import("../crypto/crypto.zig");
 pub const Braces = @import("../../shell_parser/braces.zig");
@@ -90,6 +90,17 @@ pub const jest_pkg = @import("../../test_runner/jest.zig");
 pub const btjs = @import("../../jsc/btjs.zig");
 pub const js_valkey = @import("../valkey_jsc/js_valkey.zig");
 pub const csrf_jsc = @import("./csrf_jsc.zig");
+pub const JSZlibLibrary = enum {
+    zlib,
+    libdeflate,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const map = bun.ComptimeEnumMap(JSZlibLibrary);
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -246,12 +257,12 @@ pub fn _LazyPropertyCallback(global: *jsc.JSGlobalObject, object: *jsc.JSObject)
     }
 
 pub fn toJSLazyPropertyCallback(comptime wrapped: anytype) LazyPropertyCallback {
-            return struct {
+            return (struct {
 
 pub fn callback(global: *jsc.JSGlobalObject, object: *jsc.JSObject) callconv(jsc.conv) JSValue {
             return bun.jsc.toJSHostCall(global, @src(), wrapped, .{ global, object });
     }
-}.callback;
+}).callback;
     }
 
 pub fn exportAll() void {
@@ -794,12 +805,95 @@ const compressor_opt = bun.libdeflate.Compressor.alloc(((level) orelse (6)));
 },
 }
     }
-    pub const Library = enum {
-            zlib,
-            libdeflate,
-    
-            pub const map = bun.ComptimeEnumMap(Library);
-        };
+    pub const Library = JSZlibLibrary;
+};
+
+pub const JSZstdJob = struct {
+    buffer: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty,
+    is_compress: bool = true,
+    level: i32 = 3,
+    task: jsc.WorkPoolTask = .{ .callback = (&runTask) },
+    promise: jsc.JSPromise.Strong = .{},
+    vm: *jsc.VirtualMachine,
+    output: []u8 = &.{},
+    error_message: ?[]const u8 = null,
+    any_task: jsc.AnyTask.AnyTask = undefined,
+    poll: Async.KeepAlive = .{},
+
+pub fn runTask(task: *jsc.WorkPoolTask) void {
+            const job: *JSZstdJob = @fieldParentPtr("task", task);
+            var _enqueue_g = ZstdTaskEnqueueGuard{ .job = job };
+            _ = &_enqueue_g;
+            var ___enqueue_g_moved = false; _ = &___enqueue_g_moved;
+            defer if (!___enqueue_g_moved) { ___enqueue_g_moved = true; const __T = @TypeOf(_enqueue_g); if (@typeInfo(__T) == .optional) { if (_enqueue_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _enqueue_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _enqueue_g; _drop_val.__cp_deinit(); } };
+            const input = job.buffer.slice();
+            const allocator = bun.default_allocator;
+            if (job.is_compress) {
+                const max_size = bun.zstd.compressBound(input.len);
+                job.output = (blk_catch_5: { break :blk_catch_5 ((allocator.alloc(u8, max_size)) catch |__ce_5| { _ = &__ce_5; job.error_message = "Out of memory";
+                return; }); });
+                job.output = (switch (bun.zstd.compress(job.output, input, job.level)) {
+.success => |size| blk: {
+                if ((size < job.output.len)) {
+                    break :blk (blk_catch_6: { break :blk_catch_6 ((allocator.realloc(job.output, size)) catch |__ce_6| { _ = &__ce_6; job.error_message = "Out of memory";
+                    return; }); });
+                }
+                break :blk job.output;
+},
+.err => |e| {
+{
+                    _ = allocator.free(job.output);
+                    job.output = &.{};
+                    job.error_message = e;
+                    return;
+                }
+},
+});
+            } else {
+                job.output = (blk_catch_7: { break :blk_catch_7 ((bun.zstd.decompressAlloc(allocator, input)) catch |__ce_7| { _ = &__ce_7; job.error_message = "Decompression failed";
+                return; }); });
+            }
+    }
+
+pub fn runFromJS(self: *JSZstdJob) bun.JSTerminated!void {
+            var _self_g = DeinitGuard(*JSZstdJob){ .val = self };
+            _ = &_self_g;
+            var ___self_g_moved = false; _ = &___self_g_moved;
+            defer if (!___self_g_moved) { ___self_g_moved = true; const __T = @TypeOf(_self_g); if (@typeInfo(__T) == .optional) { if (_self_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_g; _drop_val.__cp_deinit(); } };
+            if (self.vm.isShuttingDown()) {
+                return;
+            }
+            const globalThis = self.vm.global;
+            const promise = self.promise.swap();
+            if (self.error_message) |err_msg| {
+                _ = &err_msg;
+                _ = try promise.rejectWithAsyncStack(globalThis, globalThis.ERR(.ZSTD, "{s}", .{ err_msg }).toJS());
+                return;
+            }
+            const output_slice = self.output;
+            const buffer_value = jsc.JSValue.createBuffer(globalThis, output_slice);
+            self.output = &.{};
+            _ = try promise.resolve(globalThis, buffer_value);
+    }
+
+pub fn deinit(self: *JSZstdJob) void {
+            _ = self.poll.unref(self.vm);
+            _ = self.buffer.deinitAndUnprotect();
+            _ = self.promise.deinit();
+            _ = bun.default_allocator.free(self.output);
+            _ = bun.destroy(self);
+    }
+
+pub fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, buffer: jsc.Node.StringOrBuffer, is_compress: bool, level: i32) *JSZstdJob {
+            var job = JSZstdJob.new(.{ .buffer = buffer, .is_compress = is_compress, .level = level, .vm = vm, .any_task = undefined });
+            _ = &job;
+            job.promise = jsc.JSPromise.Strong.init(globalThis);
+            job.any_task = jsc.AnyTask.AnyTask.New(@This(), (&runFromJS)).init(job);
+            _ = job.poll.ref(vm);
+            _ = jsc.WorkPool.schedule((&job.task));
+            return job;
+    }
+    pub const new = bun.TrivialNew(@This());
 };
 
 pub const JSZstd = struct {
@@ -892,7 +986,7 @@ pub fn decompressSync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bu
             defer if (!___buf_g_moved) { ___buf_g_moved = true; const __T = @TypeOf(_buf_g); if (@typeInfo(__T) == .optional) { if (_buf_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_g; _drop_val.__cp_deinit(); } };
             const input = buffer.slice();
             const allocator = bun.default_allocator;
-            const output = (blk_catch_5: { break :blk_catch_5 ((bun.zstd.decompressAlloc(allocator, input)) catch |e| { _ = &e; return globalThis.ERR(.ZSTD, "Decompression failed: {s}", .{ @errorName(e) }).throw(); }); });
+            const output = (blk_catch_8: { break :blk_catch_8 ((bun.zstd.decompressAlloc(allocator, input)) catch |e| { _ = &e; return globalThis.ERR(.ZSTD, "Decompression failed: {s}", .{ @errorName(e) }).throw(); }); });
             return jsc.JSValue.createBuffer(globalThis, output);
     }
 
@@ -914,93 +1008,7 @@ pub fn decompress(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
             _ = &job;
             return job.promise.value();
     }
-    pub const ZstdJob = struct {
-        buffer: jsc.Node.StringOrBuffer = jsc.Node.StringOrBuffer.empty,
-        is_compress: bool = true,
-        level: i32 = 3,
-        task: jsc.WorkPoolTask = .{ .callback = (&runTask) },
-        promise: jsc.JSPromise.Strong = .{},
-        vm: *jsc.VirtualMachine,
-        output: []u8 = &.{},
-        error_message: ?[]const u8 = null,
-        any_task: jsc.AnyTask.AnyTask = undefined,
-        poll: Async.KeepAlive = .{},
-    
-    pub fn runTask(task: *jsc.WorkPoolTask) void {
-                const job: *ZstdJob = @fieldParentPtr("task", task);
-                var _enqueue_g = ZstdTaskEnqueueGuard{ .job = job };
-                _ = &_enqueue_g;
-                var ___enqueue_g_moved = false; _ = &___enqueue_g_moved;
-                defer if (!___enqueue_g_moved) { ___enqueue_g_moved = true; const __T = @TypeOf(_enqueue_g); if (@typeInfo(__T) == .optional) { if (_enqueue_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _enqueue_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _enqueue_g; _drop_val.__cp_deinit(); } };
-                const input = job.buffer.slice();
-                const allocator = bun.default_allocator;
-                if (job.is_compress) {
-                    const max_size = bun.zstd.compressBound(input.len);
-                    job.output = (blk_catch_0: { break :blk_catch_0 ((allocator.alloc(u8, max_size)) catch |__ce_0| { _ = &__ce_0; job.error_message = "Out of memory";
-                    return; }); });
-                    job.output = (switch (bun.zstd.compress(job.output, input, job.level)) {
-    .success => |size| blk: {
-                    if ((size < job.output.len)) {
-                        break :blk (blk_catch_1: { break :blk_catch_1 ((allocator.realloc(job.output, size)) catch |__ce_1| { _ = &__ce_1; job.error_message = "Out of memory";
-                        return; }); });
-                    }
-                    break :blk job.output;
-    },
-    .err => |e| {
-    {
-                        _ = allocator.free(job.output);
-                        job.output = &.{};
-                        job.error_message = e;
-                        return;
-                    }
-    },
-    });
-                } else {
-                    job.output = (blk_catch_2: { break :blk_catch_2 ((bun.zstd.decompressAlloc(allocator, input)) catch |__ce_2| { _ = &__ce_2; job.error_message = "Decompression failed";
-                    return; }); });
-                }
-        }
-    
-    pub fn runFromJS(self: *@This()) bun.JSTerminated!void {
-                var _self_g = DeinitGuard(*ZstdJob){ .val = self };
-                _ = &_self_g;
-                var ___self_g_moved = false; _ = &___self_g_moved;
-                defer if (!___self_g_moved) { ___self_g_moved = true; const __T = @TypeOf(_self_g); if (@typeInfo(__T) == .optional) { if (_self_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_g; _drop_val.__cp_deinit(); } };
-                if (self.vm.isShuttingDown()) {
-                    return;
-                }
-                const globalThis = self.vm.global;
-                const promise = self.promise.swap();
-                if (self.error_message) |err_msg| {
-                    _ = &err_msg;
-                    _ = try promise.rejectWithAsyncStack(globalThis, globalThis.ERR(.ZSTD, "{s}", .{ err_msg }).toJS());
-                    return;
-                }
-                const output_slice = self.output;
-                const buffer_value = jsc.JSValue.createBuffer(globalThis, output_slice);
-                self.output = &.{};
-                _ = try promise.resolve(globalThis, buffer_value);
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                _ = self.poll.unref(self.vm);
-                _ = self.buffer.deinitAndUnprotect();
-                _ = self.promise.deinit();
-                _ = bun.default_allocator.free(self.output);
-                _ = bun.destroy(self);
-        }
-    
-    pub fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, buffer: jsc.Node.StringOrBuffer, is_compress: bool, level: i32) *ZstdJob {
-                var job = ZstdJob.new(.{ .buffer = buffer, .is_compress = is_compress, .level = level, .vm = vm, .any_task = undefined });
-                _ = &job;
-                job.promise = jsc.JSPromise.Strong.init(globalThis);
-                job.any_task = jsc.AnyTask.AnyTask.New(@This(), (&runFromJS)).init(job);
-                _ = job.poll.ref(vm);
-                _ = jsc.WorkPool.schedule((&job.task));
-                return job;
-        }
-        pub const new = bun.TrivialNew(@This());
-    };
+    pub const ZstdJob = JSZstdJob;
 };
 
 const EnvKeySlice = []const u8;
@@ -1093,9 +1101,9 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         defer if (!__arena_g_moved) { __arena_g_moved = true; const __T = @TypeOf(arena_g); if (@typeInfo(__T) == .optional) { if (arena_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { arena_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = arena_g; _drop_val.__cp_deinit(); } };
         var lexer_output = lexer_output: {
         if (bun.strings.isAllASCII(brace_slice.slice())) {
-            break :lexer_output (blk_catch_6: { break :blk_catch_6 ((Braces.Lexer.tokenize(arena_g.val.allocator(), brace_slice.slice())) catch |e| { _ = &e; return global.throwError(e, "failed to tokenize braces"); }); });
+            break :lexer_output (blk_catch_9: { break :blk_catch_9 ((Braces.Lexer.tokenize(arena_g.val.allocator(), brace_slice.slice())) catch |e| { _ = &e; return global.throwError(e, "failed to tokenize braces"); }); });
         }
-        break :lexer_output (blk_catch_7: { break :blk_catch_7 ((Braces.NewLexer(.wtf8).tokenize(arena_g.val.allocator(), brace_slice.slice())) catch |e| { _ = &e; return global.throwError(e, "failed to tokenize braces"); }); });
+        break :lexer_output (blk_catch_10: { break :blk_catch_10 ((Braces.NewLexer(.wtf8).tokenize(arena_g.val.allocator(), brace_slice.slice())) catch |e| { _ = &e; return global.throwError(e, "failed to tokenize braces"); }); });
 };
         _ = &lexer_output;
         const expansion_count = Braces.calculateExpandedAmount(lexer_output.tokens.items[0..]);
@@ -1112,7 +1120,7 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         if (opts.parse) {
             var parser = Braces.Parser.init(lexer_output.tokens.items[0..], arena_g.val.allocator());
             _ = &parser;
-            const ast_node = (blk_catch_8: { break :blk_catch_8 ((parser.parse()) catch |e| { _ = &e; return global.throwError(e, "failed to parse braces"); }); });
+            const ast_node = (blk_catch_11: { break :blk_catch_11 ((parser.parse()) catch |e| { _ = &e; return global.throwError(e, "failed to parse braces"); }); });
             const str = bun.handleOom(std.fmt.allocPrint(global.bunVM().allocator, "{f}", .{ std.json.fmt(ast_node, .{}) }));
             var _str_g = FreeGuard(@TypeOf(str)){ .alloc = global.bunVM().allocator, .ptr = str };
             _ = &_str_g;
@@ -1135,7 +1143,7 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
                 expanded_strings[cp_cast_int(usize, i)] = std.array_list.Managed(u8).init(arena_g.val.allocator());
             }
         }
-        _ = (blk_catch_9: { break :blk_catch_9 ((Braces.expand(arena_g.val.allocator(), lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        _ = (blk_catch_12: { break :blk_catch_12 ((Braces.expand(arena_g.val.allocator(), lexer_output.tokens.items[0..], expanded_strings, lexer_output.contains_nested)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return error.OutOfMemory;
         }
         return global.throwPretty("Unexpected token while expanding braces", .{}); }); });
@@ -1257,13 +1265,13 @@ pub fn inspectTable(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
         table_printer.value_formatter.single_line = formatOptions.single_line;
         switch (formatOptions.enable_colors) {
 inline else => |colors| {
-_ = (blk_catch_10: { break :blk_catch_10 ((table_printer.printTable(Writer, writer, colors)) catch |__ce_10| { _ = &__ce_10; if ((!globalThis.hasException())) {
+_ = (blk_catch_13: { break :blk_catch_13 ((table_printer.printTable(Writer, writer, colors)) catch |__ce_13| { _ = &__ce_13; if ((!globalThis.hasException())) {
             return globalThis.throwOutOfMemory();
         }
         return JSValue.zero; }); });
 },
 }
-        _ = (blk_catch_11: { break :blk_catch_11 ((writer.flush()) catch |__ce_11| { _ = &__ce_11; return error.OutOfMemory; }); });
+        _ = (blk_catch_14: { break :blk_catch_14 ((writer.flush()) catch |__ce_14| { _ = &__ce_14; return error.OutOfMemory; }); });
         return bun.String.createUTF8ForJS(globalThis, array_g.val.written());
 }
 
@@ -1294,7 +1302,7 @@ pub fn inspect(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
         if (globalThis.hasException()) {
             return error.JSError;
         }
-        _ = (blk_catch_12: { break :blk_catch_12 ((writer.flush()) catch |__ce_12| { _ = &__ce_12; return globalThis.throwOutOfMemory(); }); });
+        _ = (blk_catch_15: { break :blk_catch_15 ((writer.flush()) catch |__ce_15| { _ = &__ce_15; return globalThis.throwOutOfMemory(); }); });
         var out = ZigString.init(array_g.val.written()).withEncoding();
         _ = &out;
         const ret = out.toJS(globalThis);
@@ -1311,8 +1319,8 @@ pub export fn Bun__inspect(globalThis: *JSGlobalObject, value: JSValue) callconv
         _ = &formatter_g;
         var __formatter_g_moved = false; _ = &__formatter_g_moved;
         defer if (!__formatter_g_moved) { __formatter_g_moved = true; const __T = @TypeOf(formatter_g); if (@typeInfo(__T) == .optional) { if (formatter_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { formatter_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = formatter_g; _drop_val.__cp_deinit(); } };
-        _ = (blk_catch_13: { break :blk_catch_13 ((writer.print("{f}", .{ value.toFmt((&formatter_g.val)) })) catch |__ce_13| { _ = &__ce_13; return .empty; }); });
-        _ = (blk_catch_14: { break :blk_catch_14 ((writer.flush()) catch |__ce_14| { _ = &__ce_14; return .empty; }); });
+        _ = (blk_catch_16: { break :blk_catch_16 ((writer.print("{f}", .{ value.toFmt((&formatter_g.val)) })) catch |__ce_16| { _ = &__ce_16; return .empty; }); });
+        _ = (blk_catch_17: { break :blk_catch_17 ((writer.flush()) catch |__ce_17| { _ = &__ce_17; return .empty; }); });
         return bun.String.cloneUTF8(array_g.val.written());
 }
 
@@ -1322,11 +1330,11 @@ pub export fn Bun__inspect_singleline(globalThis: *JSGlobalObject, value: JSValu
         var __array_g_moved = false; _ = &__array_g_moved;
         defer if (!__array_g_moved) { __array_g_moved = true; const __T = @TypeOf(array_g); if (@typeInfo(__T) == .optional) { if (array_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { array_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = array_g; _drop_val.__cp_deinit(); } };
         const writer = (&array_g.val.writer);
-        _ = (blk_catch_15: { break :blk_catch_15 ((ConsoleObject.format2(.Debug, globalThis, (&value)[0..1].ptr, 1, writer, .{ .enable_colors = false, .add_newline = false, .flush = false, .max_depth = std.math.maxInt(u16), .quote_strings = true, .ordered_properties = false, .single_line = true })) catch |__ce_15| { _ = &__ce_15; return .empty; }); });
+        _ = (blk_catch_18: { break :blk_catch_18 ((ConsoleObject.format2(.Debug, globalThis, (&value)[0..1].ptr, 1, writer, .{ .enable_colors = false, .add_newline = false, .flush = false, .max_depth = std.math.maxInt(u16), .quote_strings = true, .ordered_properties = false, .single_line = true })) catch |__ce_18| { _ = &__ce_18; return .empty; }); });
         if (globalThis.hasException()) {
             return .empty;
         }
-        _ = (blk_catch_16: { break :blk_catch_16 ((writer.flush()) catch |__ce_16| { _ = &__ce_16; return .empty; }); });
+        _ = (blk_catch_19: { break :blk_catch_19 ((writer.flush()) catch |__ce_19| { _ = &__ce_19; return .empty; }); });
         return bun.String.cloneUTF8(array_g.val.written());
 }
 
@@ -1388,7 +1396,7 @@ pub fn getMain(globalThis: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue {
             if (strings.hasSuffixComptime(vm.main, "[stdin]")) {
                 break :use_resolved_path;
             }
-            const fd = (blk_catch_18: { break :blk_catch_18 ((bun.sys.openatA((if (comptime Environment.isWindows) bun.invalid_fd else bun.FD.cwd()), vm.main, (if (comptime Environment.isLinux) bun.O.PATH else bun.O.RDONLY), 0).unwrap()) catch |__ce_18| { _ = &__ce_18; break :use_resolved_path; }); });
+            const fd = (blk_catch_21: { break :blk_catch_21 ((bun.sys.openatA((if (comptime Environment.isWindows) bun.invalid_fd else bun.FD.cwd()), vm.main, (if (comptime Environment.isLinux) bun.O.PATH else bun.O.RDONLY), 0).unwrap()) catch |__ce_21| { _ = &__ce_21; break :use_resolved_path; }); });
             var _fd_g = CloseGuard(@TypeOf(fd)){ .val = fd };
             _ = &_fd_g;
             var ___fd_g_moved = false; _ = &___fd_g_moved;
@@ -1396,12 +1404,12 @@ pub fn getMain(globalThis: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue {
             if (comptime Environment.isWindows) {
                 var wpath: bun.WPathBuffer = undefined;
                 _ = &wpath;
-                const fdpath = (blk_catch_19: { break :blk_catch_19 ((bun.getFdPathW(fd, (&wpath))) catch |__ce_19| { _ = &__ce_19; break :use_resolved_path; }); });
+                const fdpath = (blk_catch_22: { break :blk_catch_22 ((bun.getFdPathW(fd, (&wpath))) catch |__ce_22| { _ = &__ce_22; break :use_resolved_path; }); });
                 vm.main_resolved_path = bun.String.cloneUTF16(fdpath);
             } else {
                 var path: bun.PathBuffer = undefined;
                 _ = &path;
-                const fdpath = (blk_catch_20: { break :blk_catch_20 ((bun.getFdPath(fd, (&path))) catch |__ce_20| { _ = &__ce_20; break :use_resolved_path; }); });
+                const fdpath = (blk_catch_23: { break :blk_catch_23 ((bun.getFdPath(fd, (&path))) catch |__ce_23| { _ = &__ce_23; break :use_resolved_path; }); });
                 if (bun.String.tryCreateAtom(fdpath)) |atom| {
                     _ = &atom;
                     vm.main_resolved_path = atom;
@@ -1410,7 +1418,7 @@ pub fn getMain(globalThis: *jsc.JSGlobalObject) callconv(jsc.conv) jsc.JSValue {
                 }
             }
         }
-        return (blk_catch_21: { break :blk_catch_21 ((vm.main_resolved_path.toJS(globalThis)) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 .zero; }); });
+        return (blk_catch_24: { break :blk_catch_24 ((vm.main_resolved_path.toJS(globalThis)) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 .zero; }); });
 };
         return ZigString.init(vm.main).toJS(globalThis);
 }
@@ -1494,7 +1502,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
         if ((path.len == 0)) {
             return globalThis.throw("No file path specified", .{});
         }
-        _ = (blk_catch_23: { break :blk_catch_23 ((editor.open(edit.path, path, line, column, arguments_g.val.@"arena".allocator())) catch |e| { _ = &e; return globalThis.throw("Opening editor failed {s}", .{ @errorName(e) }); }); });
+        _ = (blk_catch_26: { break :blk_catch_26 ((editor.open(edit.path, path, line, column, arguments_g.val.@"arena".allocator())) catch |e| { _ = &e; return globalThis.throw("Opening editor failed {s}", .{ @errorName(e) }); }); });
         return JSValue.js_undefined;
 }
 
@@ -1506,15 +1514,15 @@ pub fn getPublicPathWithAssetPrefix(to: []const u8, dir: []const u8, origin: URL
         const relative_path = (if (strings.hasPrefix(to, dir)) strings.withoutTrailingSlash(to[dir.len..]) else VirtualMachine.get().transpiler.fs.relativePlatform(dir, to, platform));
         if (origin.isAbsolute()) {
             if ((strings.hasPrefix(relative_path, "..") or strings.hasPrefix(relative_path, "./"))) {
-                _ = (blk_catch_24: { break :blk_catch_24 ((writer.writeAll(origin.origin)) catch |__ce_24| { _ = &__ce_24; return; }); });
-                _ = (blk_catch_25: { break :blk_catch_25 ((writer.writeAll("/abs:")) catch |__ce_25| { _ = &__ce_25; return; }); });
+                _ = (blk_catch_27: { break :blk_catch_27 ((writer.writeAll(origin.origin)) catch |__ce_27| { _ = &__ce_27; return; }); });
+                _ = (blk_catch_28: { break :blk_catch_28 ((writer.writeAll("/abs:")) catch |__ce_28| { _ = &__ce_28; return; }); });
                 if (std.fs.path.isAbsolute(to)) {
-                    _ = (blk_catch_26: { break :blk_catch_26 ((writer.writeAll(to)) catch |__ce_26| { _ = &__ce_26; return; }); });
+                    _ = (blk_catch_29: { break :blk_catch_29 ((writer.writeAll(to)) catch |__ce_29| { _ = &__ce_29; return; }); });
                 } else {
-                    _ = (blk_catch_27: { break :blk_catch_27 ((writer.writeAll(VirtualMachine.get().transpiler.fs.abs((&.{ to })))) catch |__ce_27| { _ = &__ce_27; return; }); });
+                    _ = (blk_catch_30: { break :blk_catch_30 ((writer.writeAll(VirtualMachine.get().transpiler.fs.abs((&.{ to })))) catch |__ce_30| { _ = &__ce_30; return; }); });
                 }
             } else {
-                _ = (blk_catch_28: { break :blk_catch_28 ((origin.joinWrite(Writer, writer, asset_prefix, "", relative_path, "")) catch |__ce_28| { _ = &__ce_28; return; }); });
+                _ = (blk_catch_31: { break :blk_catch_31 ((origin.joinWrite(Writer, writer, asset_prefix, "", relative_path, "")) catch |__ce_31| { _ = &__ce_31; return; }); });
             }
         } else {
             _ = ((writer.writeAll(std.mem.trimLeft(u8, relative_path, "/"))) catch unreachable);
@@ -1631,29 +1639,29 @@ pub fn resolveSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
 
 pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments_old(3);
-        const value = (blk_catch_31: { break :blk_catch_31 ((doResolve(globalObject, arguments.slice())) catch |e| { _ = &e; const err_val = globalObject.takeError(e);
+        const value = (blk_catch_34: { break :blk_catch_34 ((doResolve(globalObject, arguments.slice())) catch |e| { _ = &e; const err_val = globalObject.takeError(e);
         return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, err_val); }); });
         return jsc.JSPromise.resolvedPromiseValue(globalObject, value);
 }
 
 pub export fn Bun__resolve(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool) callconv(.c) jsc.JSValue {
-        const specifier_str = (blk_catch_32: { break :blk_catch_32 ((specifier.toBunString(global)) catch |__ce_32| { _ = &__ce_32; return jsc.JSValue.zero; }); });
+        const specifier_str = (blk_catch_35: { break :blk_catch_35 ((specifier.toBunString(global)) catch |__ce_35| { _ = &__ce_35; return jsc.JSValue.zero; }); });
         var _specifier_g = DerefGuard(bun.String){ .val = specifier_str };
         _ = &_specifier_g;
         var ___specifier_g_moved = false; _ = &___specifier_g_moved;
         defer if (!___specifier_g_moved) { ___specifier_g_moved = true; const __T = @TypeOf(_specifier_g); if (@typeInfo(__T) == .optional) { if (_specifier_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _specifier_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _specifier_g; _drop_val.__cp_deinit(); } };
-        const source_str = (blk_catch_33: { break :blk_catch_33 ((source.toBunString(global)) catch |__ce_33| { _ = &__ce_33; return jsc.JSValue.zero; }); });
+        const source_str = (blk_catch_36: { break :blk_catch_36 ((source.toBunString(global)) catch |__ce_36| { _ = &__ce_36; return jsc.JSValue.zero; }); });
         var _source_g = DerefGuard(bun.String){ .val = source_str };
         _ = &_source_g;
         var ___source_g_moved = false; _ = &___source_g_moved;
         defer if (!___source_g_moved) { ___source_g_moved = true; const __T = @TypeOf(_source_g); if (@typeInfo(__T) == .optional) { if (_source_g) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _source_g.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _source_g; _drop_val.__cp_deinit(); } };
-        const value = (blk_catch_34: { break :blk_catch_34 ((doResolveWithArgs(global, specifier_str, source_str, is_esm, true, false)) catch |__ce_34| { _ = &__ce_34; const e = (global.tryTakeException()).?;
+        const value = (blk_catch_37: { break :blk_catch_37 ((doResolveWithArgs(global, specifier_str, source_str, is_esm, true, false)) catch |__ce_37| { _ = &__ce_37; const e = (global.tryTakeException()).?;
         return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(global, e); }); });
         return jsc.JSPromise.resolvedPromiseValue(global, value);
 }
 
 pub export fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, source: JSValue, is_esm: bool, is_user_require_resolve: bool) callconv(.c) jsc.JSValue {
-        const specifier_str = (blk_catch_35: { break :blk_catch_35 ((specifier.toBunString(global)) catch |__ce_35| { _ = &__ce_35; return jsc.JSValue.zero; }); });
+        const specifier_str = (blk_catch_38: { break :blk_catch_38 ((specifier.toBunString(global)) catch |__ce_38| { _ = &__ce_38; return jsc.JSValue.zero; }); });
         var _specifier_g = DerefGuard(bun.String){ .val = specifier_str };
         _ = &_specifier_g;
         var ___specifier_g_moved = false; _ = &___specifier_g_moved;
@@ -1663,7 +1671,7 @@ pub export fn Bun__resolveSync(global: *JSGlobalObject, specifier: JSValue, sour
             }
             return .zero;
         }
-        const source_str = (blk_catch_36: { break :blk_catch_36 ((source.toBunString(global)) catch |__ce_36| { _ = &__ce_36; return jsc.JSValue.zero; }); });
+        const source_str = (blk_catch_39: { break :blk_catch_39 ((source.toBunString(global)) catch |__ce_39| { _ = &__ce_39; return jsc.JSValue.zero; }); });
         var _source_g = DerefGuard(bun.String){ .val = source_str };
         _ = &_source_g;
         var ___source_g_moved = false; _ = &___source_g_moved;
@@ -1676,7 +1684,7 @@ pub export fn Bun__resolveSyncWithPaths(global: *JSGlobalObject, specifier: JSVa
         break :blk paths_ptr.?[0..paths_len];
 
 }));
-        const specifier_str = (blk_catch_37: { break :blk_catch_37 ((specifier.toBunString(global)) catch |__ce_37| { _ = &__ce_37; return jsc.JSValue.zero; }); });
+        const specifier_str = (blk_catch_40: { break :blk_catch_40 ((specifier.toBunString(global)) catch |__ce_40| { _ = &__ce_40; return jsc.JSValue.zero; }); });
         var _specifier_g = DerefGuard(bun.String){ .val = specifier_str };
         _ = &_specifier_g;
         var ___specifier_g_moved = false; _ = &___specifier_g_moved;
@@ -1686,7 +1694,7 @@ pub export fn Bun__resolveSyncWithPaths(global: *JSGlobalObject, specifier: JSVa
             }
             return .zero;
         }
-        const source_str = (blk_catch_38: { break :blk_catch_38 ((source.toBunString(global)) catch |__ce_38| { _ = &__ce_38; return jsc.JSValue.zero; }); });
+        const source_str = (blk_catch_41: { break :blk_catch_41 ((source.toBunString(global)) catch |__ce_41| { _ = &__ce_41; return jsc.JSValue.zero; }); });
         var _source_g = DerefGuard(bun.String){ .val = source_str };
         _ = &_source_g;
         var ___source_g_moved = false; _ = &___source_g_moved;
@@ -1707,7 +1715,7 @@ pub export fn Bun__resolveSyncWithStrings(global: *JSGlobalObject, specifier: *b
 }
 
 pub export fn Bun__resolveSyncWithSource(global: *JSGlobalObject, specifier: JSValue, source: *bun.String, is_esm: bool, is_user_require_resolve: bool) callconv(.c) jsc.JSValue {
-        const specifier_str = (blk_catch_39: { break :blk_catch_39 ((specifier.toBunString(global)) catch |__ce_39| { _ = &__ce_39; return jsc.JSValue.zero; }); });
+        const specifier_str = (blk_catch_42: { break :blk_catch_42 ((specifier.toBunString(global)) catch |__ce_42| { _ = &__ce_42; return jsc.JSValue.zero; }); });
         var _specifier_g = DerefGuard(bun.String){ .val = specifier_str };
         _ = &_specifier_g;
         var ___specifier_g_moved = false; _ = &___specifier_g_moved;
@@ -1853,7 +1861,7 @@ const ServerType = (comptime (if (development) (if (has_ssl_config) jsc.API.Debu
         if (vm.debugger) |*debugger| {
             _ = &debugger;
             _ = (debugger.*).http_server_agent.notifyServerStarted(jsc.API.AnyServer.@"from"(server));
-            _ = (blk_catch_40: { break :blk_catch_40 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(jsc.API.AnyServer.@"from"(server))) catch |e| { _ = &e; break :blk_catch_40 bun.handleOom(e); }); });
+            _ = (blk_catch_43: { break :blk_catch_43 (((debugger.*).http_server_agent.notifyServerRoutesUpdated(jsc.API.AnyServer.@"from"(server))) catch |e| { _ = &e; break :blk_catch_43 bun.handleOom(e); }); });
         }
         return obj;
 },
@@ -1868,7 +1876,7 @@ pub export fn Bun__escapeHTML16(globalObject: *jsc.JSGlobalObject, input_value: 
         break :blk ptr[0..len];
 
 });
-        const escaped = (blk_catch_41: { break :blk_catch_41 ((strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice)) catch |__ce_41| { _ = &__ce_41; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
+        const escaped = (blk_catch_44: { break :blk_catch_44 ((strings.escapeHTMLForUTF16Input(globalObject.bunVM().allocator, input_slice)) catch |__ce_44| { _ = &__ce_44; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
         }
         return jsc.JSValue.zero; }); });
         switch (escaped) {
@@ -1893,7 +1901,7 @@ pub export fn Bun__escapeHTML8(globalObject: *jsc.JSGlobalObject, input_value: J
         var stack_allocator = std.heap.stackFallback(256, globalObject.bunVM().allocator);
         _ = &stack_allocator;
         const allocator = (if ((input_slice.len <= 32)) stack_allocator.get() else stack_allocator.fallback_allocator);
-        const escaped = (blk_catch_42: { break :blk_catch_42 ((strings.escapeHTMLForLatin1Input(allocator, input_slice)) catch |__ce_42| { _ = &__ce_42; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
+        const escaped = (blk_catch_45: { break :blk_catch_45 ((strings.escapeHTMLForLatin1Input(allocator, input_slice)) catch |__ce_45| { _ = &__ce_45; if ((globalObject.throwValue(ZigString.init("Out of memory").toErrorInstance(globalObject)) == error.JSError)) {
         }
         return jsc.JSValue.zero; }); });
         switch (escaped) {
@@ -2067,7 +2075,7 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 }
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject) jsc.JSValue {
-        var valkey = (blk_catch_43: { break :blk_catch_43 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
+        var valkey = (blk_catch_46: { break :blk_catch_46 ((jsc.API.Valkey.createNoJsNoPubsub(globalThis, (&.{ .js_undefined }))) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;
@@ -2076,7 +2084,7 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
         _ = &valkey;
         const as_js = valkey.toJS(globalThis);
         valkey.this_value = jsc.JSRef.initWeak(as_js);
-        valkey._subscription_ctx = (blk_catch_44: { break :blk_catch_44 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
+        valkey._subscription_ctx = (blk_catch_47: { break :blk_catch_47 ((SubscriptionCtx.init(valkey)) catch |e| { _ = &e; if ((e != error.JSError)) {
             if ((globalThis.throwError(e, "Failed to create Redis client") == error.JSError)) {
             }
             return JSValue.zero;

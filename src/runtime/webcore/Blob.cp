@@ -132,6 +132,56 @@ struct ThresholdDeinitGuard<T> {
     ~init() { unsafe { if (_.end_index.* >= 1024) _.ptr.deinit(); } }
 }
 
+struct _S3UploadZeroWrapper {
+    promise: jsc.JSPromise.Strong,
+    store: *BlobStore,
+    global: *JSGlobalObject,
+
+    pub const new = bun.TrivialNew(_S3UploadZeroWrapper);
+
+    static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): bun.JSTerminated!void {
+        const w: *_S3UploadZeroWrapper = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
+        const _guard_w = DeinitGuard<_S3UploadZeroWrapper>{ ptr: w };
+        switch (result) {
+            .success => w.promise.resolve(w.global, .jsNumber(0))?,
+            .failure e => {
+                w.promise.reject(w.global, e.toJSWithAsyncStack(w.global, w.store.getPath(), w.promise.get()))?;
+            },
+        }
+    }
+
+    fn deinit(*_) {
+        _.promise.deinit();
+        _.store.deref();
+        bun.destroy(_);
+    }
+}
+
+struct _S3UploadLenWrapper {
+    store: *BlobStore,
+    promise: jsc.JSPromise.Strong,
+    global: *JSGlobalObject,
+
+    pub const new = bun.TrivialNew(_S3UploadLenWrapper);
+
+    static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): bun.JSTerminated!void {
+        const w: *_S3UploadLenWrapper = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
+        const _guard_w = DeinitGuard<_S3UploadLenWrapper>{ ptr: w };
+        switch (result) {
+            .success => w.promise.resolve(w.global, .jsNumber(w.store.data.bytes.len))?,
+            .failure e => {
+                w.promise.reject(w.global, e.toJSWithAsyncStack(w.global, w.store.getPath(), w.promise.get()))?;
+            },
+        }
+    }
+
+    fn deinit(*_) {
+        _.promise.deinit();
+        _.store.deref();
+        bun.destroy(_);
+    }
+}
+
 pub enum Retry {
     @"continue",
     fail,
@@ -389,30 +439,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
             };
             const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
 
-            const Wrapper = struct {
-                promise: jsc.JSPromise.Strong,
-                store: *BlobStore,
-                global: *JSGlobalObject,
-
-                pub const new = bun.TrivialNew(@This());
-
-                static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): void ! bun.JSTerminated {
-                    const w: *@This() = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
-                    const _guard_w = DeinitGuard<@This()>{ ptr: w };
-                    switch (result) {
-                        .success => w.promise.resolve(w.global, .jsNumber(0))?,
-                        .failure e => {
-                            w.promise.reject(w.global, e.toJSWithAsyncStack(w.global, w.store.getPath(), w.promise.get()))?;
-                        },
-                    }
-                }
-
-                fn deinit(*_) {
-                    _.promise.deinit();
-                    _.store.deref();
-                    bun.destroy(_);
-                }
-            };
+            const Wrapper = _S3UploadZeroWrapper;
 
             const promise = jsc.JSPromise.Strong.init(ctx);
             const promise_value = promise.value();
@@ -584,30 +611,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.createErrorInstance("Failed to stream bytes to s3 bucket", .{}));
                     }
                 } else {
-                    const Wrapper = struct {
-                        store: *BlobStore,
-                        promise: jsc.JSPromise.Strong,
-                        global: *JSGlobalObject,
-
-                        pub const new = bun.TrivialNew(@This());
-
-                        static fn resolve(result: S3.S3UploadResult, opaque_ctx: *!): void ! bun.JSTerminated {
-                            const w: *@This() = unsafe { @ptrCast(@alignCast(opaque_ctx)) };
-                            const _guard_w = DeinitGuard<@This()>{ ptr: w };
-                            switch (result) {
-                                .success => w.promise.resolve(w.global, .jsNumber(w.store.data.bytes.len))?,
-                                .failure e => {
-                                    w.promise.reject(w.global, e.toJSWithAsyncStack(w.global, w.store.getPath(), w.promise.get()))?;
-                                },
-                            }
-                        }
-
-                        fn deinit(*_) {
-                            _.promise.deinit();
-                            _.store.deref();
-                            bun.destroy(_);
-                        }
-                    };
+                    const Wrapper = _S3UploadLenWrapper;
                     source_store.ref();
                     const promise = jsc.JSPromise.Strong.init(ctx);
                     const promise_value = promise.value();
@@ -1106,7 +1110,7 @@ pub fn writeFileInternal(globalThis: *JSGlobalObject, path_or_blob_: *PathOrBlob
     return writeFileWithSourceDestination(globalThis, &source_blob, &destination_blob, options);
 }
 
-fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *Blob): void ! JSError {
+fn validateWritableBlob(globalThis: *JSGlobalObject, blob: *Blob): JSError!void {
     const store_opt = blob.store;
     if (store_opt == null) {
         return globalThis.throw("Cannot write to a detached Blob", .{});
@@ -1616,9 +1620,9 @@ pub union(enum) BlobAny {
     }
 }
 
-const _BlobCloneSigs = struct {
+struct _BlobCloneSigs {
     static fn write_bytes(_: *!, _: [*]const u8, _: u32) callconv(jsc.conv) { unreachable; }
-};
+}
 pub const BlobStructuredCloneWriteBytes = @TypeOf(&_BlobCloneSigs.write_bytes);
 
 pub struct BlobExternalSharedDescriptor {
@@ -1827,7 +1831,7 @@ pub struct BlobExternalSharedDescriptor {
         read_file_task.schedule();
     }
 
-    fn readBytesToHandler(*_, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject): void ! bun.JSTerminated {
+    fn readBytesToHandler(*_, comptime Handler: type, ctx: *Handler, global: *JSGlobalObject): bun.JSTerminated!void {
         if (_.needsToReadFile()) {
             const Adapter = struct {
                 static fn run(c: *Handler, r: read_file_mod.ReadFileResultType) {
@@ -1857,7 +1861,7 @@ pub struct BlobExternalSharedDescriptor {
                     Handler.onReadBytes(c, r);
                 }
 
-                static fn cb(result: bun.S3.S3DownloadResult, opaque_self: *!): void ! bun.JSTerminated {
+                static fn cb(result: bun.S3.S3DownloadResult, opaque_self: *!): bun.JSTerminated!void {
                     const t: *@This() = unsafe { @ptrCast(@alignCast(opaque_self)) };
                     switch (result) {
                         .success response => t.done(BlobReadBytesResult{ ok: response.body.list.items }),

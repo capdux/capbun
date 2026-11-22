@@ -17,10 +17,10 @@ struct DeinitPtrGuard<T> {
     }
 }
 
-pub const TeeResult = struct { ReadableStream, ReadableStream };
+pub type TeeResult = [ReadableStream, ReadableStream];
 pub type CloseHandlerFn = fn (*!?) void;
 
-pub const Tag = enum(i32) {
+pub enum Tag(i32) {
     Invalid = -1,
 
     /// ReadableStreamDefaultController or ReadableByteStreamController
@@ -41,9 +41,9 @@ pub const Tag = enum(i32) {
     Direct = 3,
 
     Bytes = 4,
-};
+}
 
-pub const Source = union(Tag) {
+pub union(Tag) Source {
     Invalid: void,
     /// ReadableStreamDefaultController or ReadableByteStreamController
     JavaScript: void,
@@ -62,7 +62,7 @@ pub const Source = union(Tag) {
     Direct: void,
 
     Bytes: *webcore.ByteStream,
-};
+}
 
 type OpaqueOpt = *!?;
 
@@ -631,7 +631,19 @@ static fn NewSource(
             return @sizeOf(@This());
         }
 
-        pub const JSReadableStreamSource = struct {
+        pub const JSReadableStreamSource = MakeJSReadableStreamSource(ReadableStreamSourceType, Context, js, toBufferedValue);
+    };
+}
+
+}
+
+fn MakeJSReadableStreamSource(
+    comptime ReadableStreamSourceType: type,
+    comptime Context: type,
+    comptime js: type,
+    comptime toBufferedValue: auto,
+): type {
+    return struct {
             pub static fn pull(src: *ReadableStreamSourceType, globalThis: *JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!jsc.JSValue {
                 jsc.markBinding(@src());
                 const this_jsvalue = callFrame.this();
@@ -708,7 +720,7 @@ static fn NewSource(
 
             pub static fn setOnCloseFromJS(src: *ReadableStreamSourceType, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue): bun.JSError!void {
                 jsc.markBinding(@src());
-                src.close_handler = JSReadableStreamSource.onClose;
+                src.close_handler = @This().onClose;
                 src.globalThis = globalObject;
 
                 if (value.isUndefined()) {
@@ -856,7 +868,4 @@ static fn NewSource(
                 return JSValue.zero;
             }
         };
-    };
-}
-
 }

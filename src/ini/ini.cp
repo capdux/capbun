@@ -50,8 +50,12 @@ enum PrepareUsage {
     value,
 }
 
+pub struct _ParserOptions {
+    bracked_array: bool = true,
+}
+
 pub struct Parser {
-        opts: Options = .{},
+        opts: _ParserOptions = .{},
         source: bun.logger.Source,
         src: []const u8,
         out: Expr,
@@ -59,11 +63,9 @@ pub struct Parser {
         @"arena": std.heap.ArenaAllocator,
         env: *bun.DotEnv.Loader,
 
-        const Options = struct {
-            bracked_array: bool = true,
-        };
+        const Options = _ParserOptions;
 
-        pub fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader): Parser {
+        static fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader): Parser {
             return .{
                 .logger = bun.logger.Log.init(allocator),
                 .src = src,
@@ -74,7 +76,7 @@ pub struct Parser {
             };
         }
 
-        pub fn deinit(*_) {
+        fn deinit(*_) {
             _.logger.deinit();
             _.@"arena".deinit();
         }
@@ -96,7 +98,7 @@ pub struct Parser {
             return true;
         }
 
-        pub fn parse(*_: *Parser, arena_allocator: Allocator): OOM!void {
+        fn parse(*_, arena_allocator: Allocator): OOM!void {
             let iter = std.mem.splitScalar(u8, _.src, '\n');
             let head: *E.Object = _.out.data.e_object;
 
@@ -623,7 +625,7 @@ pub struct Parser {
     pub struct ToStringFormatter {
         d: js_ast.Expr.Data,
 
-        pub fn format(writer: *std.Io.Writer): !void {
+        fn format(writer: *std.Io.Writer): ! {
             switch (_.d) {
                 .e_array => {
                     const last = _.d.e_array.items.len -| 1;
@@ -640,8 +642,8 @@ pub struct Parser {
                 .e_string => writer.print("{s}", .{_.d.e_string.data})?,
                 .e_null => writer.print("null", .{})?,
 
-                else => |tag| if (bun.Environment.isDebug) {
-                    Output.panic("Unexpected AST node: {s}", .{@tagName(tag)});
+                else => if (bun.Environment.isDebug) {
+                    Output.panic("Unexpected AST node: {s}", .{@tagName(_.d)});
                 },
             }
         }
@@ -652,13 +654,97 @@ pub struct Parser {
             some: T,
             none,
 
-            pub fn get(this: @This()) ?T {
-                return switch (this) {
-                    .some => this.some,
+            pub fn get(self: @This()) ?T {
+                return switch (self) {
+                    .some => self.some,
                     .none => null,
                 };
             }
         };
+    }
+
+    pub enum _ConfigOpt {
+        /// `${username}:${password}` encoded in base64
+        _auth,
+
+        /// authentication string
+        _authToken,
+
+        username,
+
+        /// this is encoded as base64 in .npmrc
+        _password,
+
+        email,
+
+        /// path to certificate file
+        certfile,
+
+        /// path to key file
+        keyfile,
+
+        fn isBase64Encoded(): bool {
+            return switch (_) {
+                ._auth, ._password => true,
+                else => false,
+            };
+        }
+    }
+
+    pub struct _ConfigItem {
+        registry_url: []const u8,
+        optname: _ConfigOpt,
+        value: []const u8,
+        loc: Loc,
+
+        pub const Opt = _ConfigOpt;
+
+        /// Duplicate ConfigIterator.Item
+        fn dupe(allocator: Allocator): _ConfigItem?!OOM {
+            return .{
+                .registry_url = allocator.dupe(u8, _.registry_url)?,
+                .optname = _.optname,
+                .value = allocator.dupe(u8, _.value)?,
+                .loc = _.loc,
+            };
+        }
+
+        /// Duplicate the value, decoding it if it is base64 encoded.
+        fn dupeValueDecoded(
+            allocator: Allocator,
+            log: *bun.logger.Log,
+            source: *const bun.logger.Source,
+        ): ([]const u8)?!OOM {
+            if (_.optname.isBase64Encoded()) {
+                if (_.value.len == 0) return "";
+                const len = bun.base64.decodeLen(_.value);
+                let slice = allocator.alloc(u8, len)?;
+                const result = bun.base64.decode(slice[0..], _.value);
+                if (result.status != .success) {
+                    log.addErrorFmtOpts(
+                        allocator,
+                        "{s} is not valid base64",
+                        .{@tagName(_.optname)},
+                        .{
+                            .source = source,
+                            .loc = _.loc,
+                        },
+                    )?;
+                    return null;
+                }
+                return allocator.dupe(u8, slice[0..result.count])?;
+            }
+            return allocator.dupe(u8, _.value)?;
+        }
+
+        fn format(writer: *std.Io.Writer): ! {
+            writer.print("//{s}:{s}={s}", .{ _.registry_url, @tagName(_.optname), _.value })?;
+        }
+
+        fn deinit(*_, allocator: Allocator) {
+            allocator.free(_.registry_url);
+            allocator.free(_.value);
+        }
     }
 
     pub struct ConfigIterator {
@@ -669,90 +755,9 @@ pub struct Parser {
 
         prop_idx: usize = 0,
 
-        pub const Item = struct {
-            registry_url: []const u8,
-            optname: Opt,
-            value: []const u8,
-            loc: Loc,
+        pub const Item = _ConfigItem;
 
-            pub const Opt = enum {
-                /// `${username}:${password}` encoded in base64
-                _auth,
-
-                /// authentication string
-                _authToken,
-
-                username,
-
-                /// this is encoded as base64 in .npmrc
-                _password,
-
-                email,
-
-                /// path to certificate file
-                certfile,
-
-                /// path to key file
-                keyfile,
-
-                pub fn isBase64Encoded(this: Opt) bool {
-                    return switch (this) {
-                        ._auth, ._password => true,
-                        else => false,
-                    };
-                }
-            };
-
-            /// Duplicate ConfigIterator.Item
-            pub fn dupe(this: *const Item, allocator: Allocator) OOM!?Item {
-                return .{
-                    .registry_url = allocator.dupe(u8, _.registry_url)?,
-                    .optname = _.optname,
-                    .value = allocator.dupe(u8, _.value)?,
-                    .loc = _.loc,
-                };
-            }
-
-            /// Duplicate the value, decoding it if it is base64 encoded.
-            pub fn dupeValueDecoded(
-                this: *const Item,
-                allocator: Allocator,
-                log: *bun.logger.Log,
-                source: *const bun.logger.Source,
-            ) OOM!?[]const u8 {
-                if (_.optname.isBase64Encoded()) {
-                    if (_.value.len == 0) return "";
-                    const len = bun.base64.decodeLen(_.value);
-                    let slice = allocator.alloc(u8, len)?;
-                    const result = bun.base64.decode(slice[0..], _.value);
-                    if (result.status != .success) {
-                        log.addErrorFmtOpts(
-                            allocator,
-                            "{s} is not valid base64",
-                            .{@tagName(_.optname)},
-                            .{
-                                .source = source,
-                                .loc = _.loc,
-                            },
-                        )?;
-                        return null;
-                    }
-                    return allocator.dupe(u8, slice[0..result.count])?;
-                }
-                return allocator.dupe(u8, _.value)?;
-            }
-
-            pub fn format(this: *const @This(), writer: *std.Io.Writer) !void {
-                writer.print("//{s}:{s}={s}", .{ _.registry_url, @tagName(_.optname), _.value })?;
-            }
-
-            pub fn deinit(*_, allocator: Allocator) {
-                allocator.free(_.registry_url);
-                allocator.free(_.value);
-            }
-        };
-
-        pub fn next(*_: *ConfigIterator): Option(Item)? {
+        fn next(*_): Option(Item)? {
             if (_.prop_idx >= _.config.properties.len) return null;
             defer _.prop_idx += 1;
 
@@ -815,6 +820,11 @@ pub struct Parser {
         .{ "hoisted", .hoisted },
     });
 
+    pub struct _ScopeItem {
+        scope: []const u8,
+        registry: bun.schema.api.NpmRegistry,
+    }
+
     pub struct ScopeIterator {
         allocator: Allocator,
         config: *E.Object,
@@ -828,9 +838,9 @@ pub struct Parser {
             no_value,
         };
 
-        const Item = struct { scope: []const u8, registry: bun.schema.api.NpmRegistry };
+        const Item = _ScopeItem;
 
-        pub fn next(*_: *ScopeIterator): OOM!Option(Item)? {
+        fn next(*_): Option(Item)?!OOM {
             if (_.prop_idx >= _.config.properties.len) return null;
             defer _.prop_idx += 1;
 
@@ -867,14 +877,14 @@ pub struct Parser {
         }
     }
 
-const _Internal = struct {
-    pub fn loadNpmrcConfig(
+struct _Internal {
+    static fn loadNpmrcConfig(
         allocator: std.mem.Allocator,
         install: *bun.schema.api.BunInstall,
         env: *bun.DotEnv.Loader,
         auto_loaded: bool,
         npmrc_paths: []const [:0]const u8,
-    ) void {
+    ) {
         let log = bun.logger.Log.init(allocator);
         const _g_log = DeinitGuard<bun.logger.Log>{ ptr: unsafe { &log } };
 
@@ -884,18 +894,16 @@ const _Internal = struct {
         let configs = std.array_list.Managed(ConfigIterator.Item).init(allocator);
         const _g_configs = ConfigsGuard{ items: unsafe { &configs }, alloc: allocator };
 
-        for (npmrc_paths) |npmrc_path| {
-            const source = &(bun.sys.File.toSource(npmrc_path, allocator, .{ .convert_bom = true }).unwrap() catch |err| {
+        for (npmrc_path of npmrc_paths) {
+            const source = &(bun.sys.File.toSource(npmrc_path, allocator, .{ .convert_bom = true }).unwrap() catch e => {
                 if (auto_loaded) continue;
-                Output.err(err, "failed to read .npmrc: \"{s}\"", .{npmrc_path});
+                Output.err(e, "failed to read .npmrc: \"{s}\"", .{npmrc_path});
                 Global.crash();
             });
             const _g_source = FreeGuard<u8>{ ptr: source.contents, alloc: allocator };
 
-            _Internal.loadNpmrc(allocator, install, env, npmrc_path, &log, source, &configs) catch |err| {
-                switch (err) {
-                    error.OutOfMemory => bun.outOfMemory(),
-                }
+            _Internal.loadNpmrc(allocator, install, env, npmrc_path, &log, source, &configs) catch e => {
+                if (e == error.OutOfMemory) bun.outOfMemory();
             };
             if (log.hasErrors()) {
                 if (log.errors == 1)
@@ -908,7 +916,7 @@ const _Internal = struct {
         }
     }
 
-    pub fn loadNpmrc(
+    static fn loadNpmrc(
         allocator: std.mem.Allocator,
         install: *bun.schema.api.BunInstall,
         env: *bun.DotEnv.Loader,
@@ -916,7 +924,7 @@ const _Internal = struct {
         log: *bun.logger.Log,
         source: *const bun.logger.Source,
         configs: *std.array_list.Managed(ConfigIterator.Item),
-    ) OOM!void {
+    ): OOM!void {
         let parser = bun.ini.Parser.init(allocator, npmrc_path, source.contents, env);
         const _g_parser = DeinitGuard<bun.ini.Parser>{ ptr: unsafe { &parser } };
         parser.parse(parser.@"arena".allocator())?;
@@ -926,8 +934,8 @@ const _Internal = struct {
         // We need to dupe all strings
         const out = parser.out;
 
-        if (out.asProperty("registry")) |query| {
-            if (query.expr.asUtf8StringLiteral()) |str| {
+        if (query := out.asProperty("registry")) {
+            if (str := query.expr.asUtf8StringLiteral()) {
                 let p = bun.schema.api.NpmRegistry.Parser{
                     .allocator = allocator,
                     .log = log,
@@ -937,24 +945,24 @@ const _Internal = struct {
             }
         }
 
-        if (out.asProperty("cache")) |query| {
-            if (query.expr.asUtf8StringLiteral()) |str| {
+        if (query := out.asProperty("cache")) {
+            if (str := query.expr.asUtf8StringLiteral()) {
                 install.cache_directory = allocator.dupe(u8, str)?;
-            } else if (query.expr.asBool()) |b| {
+            } else if (b := query.expr.asBool()) {
                 install.disable_cache = !b;
             }
         }
 
-        if (out.asProperty("dry-run")) |query| {
-            if (query.expr.asUtf8StringLiteral()) |str| {
+        if (query := out.asProperty("dry-run")) {
+            if (str := query.expr.asUtf8StringLiteral()) {
                 install.dry_run = bun.strings.eqlComptime(str, "true");
-            } else if (query.expr.asBool()) |b| {
+            } else if (b := query.expr.asBool()) {
                 install.dry_run = b;
             }
         }
 
-        if (out.asProperty("ca")) |query| {
-            if (query.expr.asUtf8StringLiteral()) |str| {
+        if (query := out.asProperty("ca")) {
+            if (str := query.expr.asUtf8StringLiteral()) {
                 install.ca = .{
                     .str = allocator.dupe(u8, str)?,
                 };
@@ -962,7 +970,7 @@ const _Internal = struct {
                 const arr = query.expr.data.e_array;
                 let list = allocator.alloc(Str, arr.items.len)?;
                 let i: usize = 0;
-                for (arr.items.slice()) |item| {
+                for (item of arr.items.slice()) {
                     const cloned = item.asStringCloned(allocator)?;
                     list[i] = cloned ?? continue;
                     i += 1;
@@ -974,15 +982,15 @@ const _Internal = struct {
             }
         }
 
-        if (out.asProperty("cafile")) |query| {
-            if (query.expr.asStringCloned(allocator)?) |cafile| {
+        if (query := out.asProperty("cafile")) {
+            if (cafile := query.expr.asStringCloned(allocator)?) {
                 install.cafile = cafile;
             }
         }
 
-        if (out.asProperty("omit")) |omit| {
+        if (omit := out.asProperty("omit")) {
             switch (omit.expr.data) {
-                .e_string => |str| {
+                .e_string str => {
                     if (str.eqlComptime("dev")) {
                         install.save_dev = false;
                     } else if (str.eqlComptime("peer")) {
@@ -991,10 +999,10 @@ const _Internal = struct {
                         install.save_optional = false;
                     }
                 },
-                .e_array => |arr| {
-                    for (arr.items.slice()) |item| {
+                .e_array arr => {
+                    for (item of arr.items.slice()) {
                         switch (item.data) {
-                            .e_string => |str| {
+                            .e_string str => {
                                 if (str.eqlComptime("dev")) {
                                     install.save_dev = false;
                                 } else if (str.eqlComptime("peer")) {
@@ -1011,9 +1019,9 @@ const _Internal = struct {
             }
         }
 
-        if (out.asProperty("include")) |omit| {
+        if (omit := out.asProperty("include")) {
             switch (omit.expr.data) {
-                .e_string => |str| {
+                .e_string str => {
                     if (str.eqlComptime("dev")) {
                         install.save_dev = true;
                     } else if (str.eqlComptime("peer")) {
@@ -1022,10 +1030,10 @@ const _Internal = struct {
                         install.save_optional = true;
                     }
                 },
-                .e_array => |arr| {
-                    for (arr.items.slice()) |item| {
+                .e_array arr => {
+                    for (item of arr.items.slice()) {
                         switch (item.data) {
-                            .e_string => |str| {
+                            .e_string str => {
                                 if (str.eqlComptime("dev")) {
                                     install.save_dev = true;
                                 } else if (str.eqlComptime("peer")) {
@@ -1042,26 +1050,26 @@ const _Internal = struct {
             }
         }
 
-        if (out.get("ignore-scripts")) |*ignore_scripts| {
-            if (ignore_scripts.asBool()) |ignore| {
+        if (*ignore_scripts := out.get("ignore-scripts")) {
+            if (ignore := ignore_scripts.asBool()) {
                 install.ignore_scripts = ignore;
             }
         }
 
-        if (out.get("link-workspace-packages")) |*link_workspace_packages| {
-            if (link_workspace_packages.asBool()) |link| {
+        if (*link_workspace_packages := out.get("link-workspace-packages")) {
+            if (link := link_workspace_packages.asBool()) {
                 install.link_workspace_packages = link;
             }
         }
 
-        if (out.get("save-exact")) |*save_exact| {
-            if (save_exact.asBool()) |exact| {
+        if (*save_exact := out.get("save-exact")) {
+            if (exact := save_exact.asBool()) {
                 install.exact = exact;
             }
         }
 
-        if (out.get("install-strategy")) |install_strategy_expr| {
-            if (install_strategy_expr.asString(allocator)) |install_strategy_str| {
+        if (install_strategy_expr := out.get("install-strategy")) {
+            if (install_strategy_str := install_strategy_expr.asString(allocator)) {
                 if (bun.strings.eqlComptime(install_strategy_str, "hoisted")) {
                     install.node_linker = .hoisted;
                 } else if (bun.strings.eqlComptime(install_strategy_str, "linked")) {
@@ -1075,34 +1083,34 @@ const _Internal = struct {
         }
 
         // yarn & pnpm option
-        if (out.get("node-linker")) |node_linker_expr| {
-            if (node_linker_expr.asString(allocator)) |node_linker_str| {
-                if (NodeLinkerMap.get(node_linker_str)) |node_linker| {
+        if (node_linker_expr := out.get("node-linker")) {
+            if (node_linker_str := node_linker_expr.asString(allocator)) {
+                if (node_linker := NodeLinkerMap.get(node_linker_str)) {
                     install.node_linker = node_linker;
                 }
             }
         }
 
-        if (out.get("public-hoist-pattern")) |public_hoist_pattern_expr| {
+        if (public_hoist_pattern_expr := out.get("public-hoist-pattern")) {
             install.public_hoist_pattern = bun.install.PnpmMatcher.fromExpr(
                 allocator,
                 public_hoist_pattern_expr,
                 log,
                 source,
-            ) catch |e| blk: {
+            ) catch e => blk: {
                 if (e == error.OutOfMemory) return error.OutOfMemory;
                 log.reset();
                 break :blk null;
             };
         }
 
-        if (out.get("hoist-pattern")) |hoist_pattern_expr| {
+        if (hoist_pattern_expr := out.get("hoist-pattern")) {
             install.hoist_pattern = bun.install.PnpmMatcher.fromExpr(
                 allocator,
                 hoist_pattern_expr,
                 log,
                 source,
-            ) catch |e| blk: {
+            ) catch e => blk: {
                 if (e == error.OutOfMemory) return error.OutOfMemory;
                 log.reset();
                 break :blk null;
@@ -1123,7 +1131,7 @@ const _Internal = struct {
 
             const scope_count = brk: {
                 let count: usize = 0;
-                while (iter.next()?) |o| {
+                while (o := iter.next()?) {
                     if (o == .some) {
                         count += 1;
                     }
@@ -1137,8 +1145,8 @@ const _Internal = struct {
             iter.prop_idx = 0;
             iter.count = false;
 
-            while (iter.next()?) |val| {
-                if (val.get()) |result| {
+            while (val := iter.next()?) {
+                if (result := val.get()) {
                     const registry = result.registry.dupe(allocator);
                     registry_map.scopes.put(
                         allocator,
@@ -1153,9 +1161,9 @@ const _Internal = struct {
         out: {
             const count = brk: {
                 let count: usize = configs.items.len;
-                for (parser.out.data.e_object.properties.slice()) |prop| {
-                    if (prop.key) |keyexpr| {
-                        if (keyexpr.asUtf8StringLiteral()) |key| {
+                for (prop of parser.out.data.e_object.properties.slice()) {
+                    if (keyexpr := prop.key) {
+                        if (key := keyexpr.asUtf8StringLiteral()) {
                             if (bun.strings.hasPrefixComptime(key, "//")) {
                                 count += 1;
                             }
@@ -1169,7 +1177,7 @@ const _Internal = struct {
             if (count == 0) break :out;
 
             const default_registry_url: bun.URL = brk: {
-                if (install.default_registry) |dr|
+                if (dr := install.default_registry)
                     break :brk bun.URL.parse(dr.url);
 
                 break :brk bun.URL.parse(Registry.default_url);
@@ -1190,9 +1198,11 @@ const _Internal = struct {
             let url_map: UrlMap = UrlMap.init(parser.@"arena".allocator());
             url_map.ensureTotalCapacity(registry_map.scopes.keys().len)?;
 
-            for (registry_map.scopes.keys(), registry_map.scopes.values()) |*k, *v| {
-                const url = bun.URL.parse(v.url);
-                url_map.put(k.*, url)?;
+            const scope_keys = registry_map.scopes.keys();
+            const scope_vals = registry_map.scopes.values();
+            for (i of 0..scope_keys.len) {
+                const url = bun.URL.parse(scope_vals[i].url);
+                url_map.put(scope_keys[i], url)?;
             }
 
             const _g_url_map = DeinitGuard<UrlMap>{ ptr: unsafe { &url_map } };
@@ -1204,8 +1214,8 @@ const _Internal = struct {
                 .allocator = allocator,
             };
 
-            while (iter.next()) |val| {
-                if (val.get()) |conf_item_| {
+            while (val := iter.next()) {
+                if (conf_item_ := val.get()) {
                     // `conf_item` will look like:
                     //
                     // - localhost:4873/
@@ -1230,11 +1240,11 @@ const _Internal = struct {
                         },
                         else => {},
                     }
-                    if (conf_item_.dupe(allocator)?) |x| configs.append(x)?;
+                    if (x := conf_item_.dupe(allocator)?) configs.append(x)?;
                 }
             }
 
-            for (configs.items) |conf_item| {
+            for (conf_item of configs.items) {
                 const conf_item_url = bun.URL.parse(conf_item.registry_url);
 
                 if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(default_registry_url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and
@@ -1255,26 +1265,28 @@ const _Internal = struct {
 
                     switch (conf_item.optname) {
                         ._authToken => {
-                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.token = x;
+                            if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.token = x;
                         },
                         .username => {
-                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.username = x;
+                            if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.username = x;
                         },
                         ._password => {
-                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.password = x;
+                            if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.password = x;
                         },
                         ._auth => {
                             _Internal.@"handle _auth"(allocator, v, &conf_item, log, source)?;
                         },
                         .email => {
-                            if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.email = x;
+                            if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.email = x;
                         },
                         .certfile, .keyfile => unreachable,
                     }
                 }
 
-                for (registry_map.scopes.keys(), registry_map.scopes.values()) |*k, *v| {
-                    const url = url_map.get(k.*) orelse unreachable;
+                for (i of 0..scope_keys.len) {
+                    const k = scope_keys[i];
+                    const v = &scope_vals[i];
+                    const url = url_map.get(k) orelse unreachable;
 
                     if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and
                         std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.pathname), bun.strings.withoutTrailingSlash(conf_item_url.pathname)))
@@ -1287,19 +1299,19 @@ const _Internal = struct {
                         // Apply config to scoped registry
                         switch (conf_item.optname) {
                             ._authToken => {
-                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.token = x;
+                                if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.token = x;
                             },
                             .username => {
-                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.username = x;
+                                if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.username = x;
                             },
                             ._password => {
-                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.password = x;
+                                if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.password = x;
                             },
                             ._auth => {
                                 _Internal.@"handle _auth"(allocator, v, &conf_item, log, source)?;
                             },
                             .email => {
-                                if (conf_item.dupeValueDecoded(allocator, log, source)?) |x| v.email = x;
+                                if (x := conf_item.dupeValueDecoded(allocator, log, source)?) v.email = x;
                             },
                             .certfile, .keyfile => unreachable,
                         }
@@ -1311,13 +1323,13 @@ const _Internal = struct {
         }
     }
 
-    fn @"handle _auth"(
+    static fn @"handle _auth"(
         allocator: Allocator,
         v: *bun.schema.api.NpmRegistry,
         conf_item: *const ConfigIterator.Item,
         log: *bun.logger.Log,
         source: *const bun.logger.Source,
-    ) OOM!void {
+    ): OOM!void {
         if (conf_item.value.len == 0) {
             log.addErrorOpts(
                 "invalid _auth value, expected base64 encoded \"<username>:<password>\", received an empty string",
@@ -1375,7 +1387,7 @@ const _Internal = struct {
         v.password = password;
         return;
     }
-};
+}
 
 pub const loadNpmrcConfig = _Internal.loadNpmrcConfig;
 pub const loadNpmrc = _Internal.loadNpmrc;

@@ -198,6 +198,66 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const _InitialRequestPayloadResult = struct {
+    has_sent_headers: bool,
+    has_sent_body: bool,
+    try_sending_more_data: bool,
+};
+
+pub const _BodySize = union(enum) {
+    total_received: usize,
+    content_length: usize,
+    unknown: void,
+};
+
+pub const _Callback = struct {
+    ctx: HttpCallbackCtx,
+    function: _CallbackFunction,
+
+pub fn run(self: _Callback, async_http: *AsyncHTTP, result: HTTPClientResult) void {
+            _ = @call(.auto, self.function, .{ self.ctx, async_http, result });
+    }
+
+pub fn New(comptime Type: type, comptime callback: anytype) type {
+            return struct {
+
+pub fn init(this_val: Type) _Callback {
+            return .{ .ctx = this_val, .function = wrapped_callback };
+    }
+
+pub fn wrapped_callback(ptr: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void {
+            const casted: Type = (blk: {
+            break :blk @ptrCast(@alignCast(ptr));
+
+});
+            _ = @call(bun.callmod_inline, callback, .{ casted, async_http, result });
+    }
+};
+    }
+    pub const Function = _CallbackFunction;
+};
+
+pub const Flags = packed struct(u32) {
+    disable_timeout: bool = false,
+    disable_keepalive: bool = false,
+    disable_decompression: bool = false,
+    did_have_handshaking_error: bool = false,
+    force_last_modified: bool = false,
+    redirected: bool = false,
+    proxy_tunneling: bool = false,
+    reject_unauthorized: bool = true,
+    is_preconnect_only: bool = false,
+    is_streaming_request_body: bool = false,
+    defer_fail_until_connecting_is_complete: bool = false,
+    upgrade_state: HTTPUpgradeState = .none,
+    protocol: Protocol = .http1_1,
+    force_http2: bool = false,
+    force_http1: bool = false,
+    force_http3: bool = false,
+    h3_retried: bool = false,
+    _: u13 = 0,
+};
+
 pub const ThreadlocalAsyncHTTP = struct {
     async_http: AsyncHTTP,
     pub const new = bun.TrivialNew(ThreadlocalAsyncHTTP);
@@ -2097,11 +2157,7 @@ else => {
             return ShouldContinue.finished;
         }
 }
-const InitialRequestPayloadResult = struct {
-    has_sent_headers: bool,
-    has_sent_body: bool,
-    try_sending_more_data: bool,
-};
+const InitialRequestPayloadResult = _InitialRequestPayloadResult;
 pub const HTTPResponseMetadata = struct {
     url: []const u8 = "",
     owned_buf: []u8 = "",
@@ -2161,37 +2217,8 @@ pub fn isAbort(self: HTTPClientResult) bool {
             }
             return false;
     }
-    pub const BodySize = union(enum) {
-        total_received: usize,
-        content_length: usize,
-        unknown: void,
-    };
-    pub const Callback = struct {
-            ctx: HttpCallbackCtx,
-            function: Function,
-    
-            pub const Function = *const fn(ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
-    
-            pub fn run(self: Callback, async_http: *AsyncHTTP, result: HTTPClientResult) void {
-                self.function(self.ctx, async_http, result);
-            }
-    
-            pub fn New(comptime Type: type, comptime callback: anytype) type {
-                return struct {
-                    pub fn init(this: Type) Callback {
-                        return Callback{
-                            .ctx = this,
-                            .function = wrapped_callback,
-                        };
-                    }
-    
-                    fn wrapped_callback(ptr: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void {
-                        const casted: Type = @ptrCast(@alignCast(ptr));
-                        @call(bun.callmod_inline, callback, .{ casted, async_http, result });
-                    }
-                };
-            }
-        };
+    pub const BodySize = _BodySize;
+    pub const Callback = _Callback;
 };
 
 pub const HttpCallbackCtx = ?*anyopaque;
@@ -2238,26 +2265,7 @@ pub var shared_response_headers_buf: [256]picohttp.Header = undefined;
 pub var temp_hostname: [8192]u8 = undefined;
 pub const end_of_chunked_http1_1_encoding_response_body = "0\r\n\r\n";
 pub const default_redirect_count = 127;
-pub const Flags = packed struct(u32) {
-    disable_timeout: bool = false,
-    disable_keepalive: bool = false,
-    disable_decompression: bool = false,
-    did_have_handshaking_error: bool = false,
-    force_last_modified: bool = false,
-    redirected: bool = false,
-    proxy_tunneling: bool = false,
-    reject_unauthorized: bool = true,
-    is_preconnect_only: bool = false,
-    is_streaming_request_body: bool = false,
-    defer_fail_until_connecting_is_complete: bool = false,
-    upgrade_state: HTTPUpgradeState = .none,
-    protocol: Protocol = .http1_1,
-    force_http2: bool = false,
-    force_http1: bool = false,
-    force_http3: bool = false,
-    h3_retried: bool = false,
-    _: u13 = 0,
-};
+pub const _CallbackFunction = *const fn(ctx: HttpCallbackCtx, async_http: *AsyncHTTP, result: HTTPClientResult) void;
 pub const SOCKET_FLAGS: u32 = (if (bun.Environment.isLinux) (std.posix.SOCK.CLOEXEC | std.posix.MSG.NOSIGNAL) else std.posix.SOCK.CLOEXEC);
 pub const OPEN_SOCKET_FLAGS = std.posix.SOCK.CLOEXEC;
 pub const extremely_verbose = false;

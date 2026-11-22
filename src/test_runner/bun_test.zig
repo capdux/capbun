@@ -68,6 +68,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const DoneCallback = @import("./DoneCallback.zig");
@@ -79,6 +87,36 @@ pub const ScopeFunctions = @import("./ScopeFunctions.zig");
 pub const Order = @import("./Order.zig");
 pub const test_command = @import("../cli/test_command.zig");
 pub const bun = @import("bun");
+pub const BunTestPhase = enum {
+    collection,
+    execution,
+    done,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const AdvanceResult = enum {
+    cont,
+    exit,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const HandleUncaughtExceptionResult = enum {
+    hide_error,
+    show_handled_error,
+    show_unhandled_error_between_tests,
+    show_unhandled_error_in_describe,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const ConcurrentMode = enum {
     inherit,
     no,
@@ -95,6 +133,37 @@ pub const ScopeMode = enum {
     todo,
     failing,
     filtered_out,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const BaseScopeOnly = enum {
+    no,
+    contains,
+    yes,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const BunTestHookTag = enum {
+    beforeAll,
+    beforeEach,
+    afterEach,
+    afterAll,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const BunTestAddedInPhase = enum {
+    preload,
+    collection,
+    execution,
     pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
@@ -195,6 +264,27 @@ pub fn __cp_errdeinit(self: *GroupErrLogGuard) void {
         self.__cp_errdropped = true;
             _ = group.log("ended in error", .{});
     }
+};
+
+pub const JsFnsSignature = union(enum) {
+    scope_functions: *const ScopeFunctions,
+    str: []const u8,
+
+pub fn format(self: JsFnsSignature, writer: *std.Io.Writer) !void {
+            switch (self) {
+.scope_functions => {
+_ = try writer.print("{f}", .{ self.scope_functions.* });
+},
+.str => {
+_ = try writer.print("{s}", .{ self.str });
+},
+}
+    }
+};
+
+pub const GetActiveCfg = struct {
+    signature: Signature,
+    allow_in_preload: bool,
 };
 
 pub const js_fns = struct {
@@ -318,6 +408,11 @@ return globalThis.throw("Cannot call {s}() after the test run has completed", .{
     pub const Signature = JsFnsSignature;
 };
 
+pub const BunTestFirstLast = struct {
+    first: bool,
+    last: bool,
+};
+
 pub const BunTestRoot = struct {
     gpa: std.mem.Allocator,
     active_file: BunTestPtr.Optional,
@@ -397,6 +492,12 @@ pub fn onBeforePrint(self: *BunTestRoot) void {
     pub const FirstLast = BunTestFirstLast;
 };
 
+pub const ExecutionEntryData = struct {
+    sequence_index: usize,
+    entry: *const anyopaque,
+    remaining_repeat_count: i64,
+};
+
 pub const CollectionData = struct {
     active_scope: *DescribeScope,
 };
@@ -407,6 +508,136 @@ pub const ExecutionData = struct {
 };
 
 pub const DoneData = struct {
+};
+
+pub const BunTestRefDataValue = union(enum) {
+    start: void,
+    collection: CollectionData,
+    execution: ExecutionData,
+    done: DoneData,
+
+pub fn group(self: *const BunTestRefDataValue, buntest: *BunTest) ?*Execution.ConcurrentGroup {
+            if ((self.* != .execution)) {
+                return null;
+            }
+            return (&buntest.execution.groups[@as(usize, @intCast(self.execution.group_index))]);
+    }
+
+pub fn sequence(self: *const BunTestRefDataValue, buntest: *BunTest) ?*Execution.ExecutionSequence {
+            if ((self.* != .execution)) {
+                return null;
+            }
+            if (self.group(buntest)) |group_item| {
+                _ = &group_item;
+                if (self.execution.entry_data) |entry_data| {
+                    _ = &entry_data;
+                    return (&group_item.sequences((&buntest.execution))[@as(usize, @intCast(entry_data.sequence_index))]);
+                }
+            }
+            return null;
+    }
+
+pub fn entry(self: *const BunTestRefDataValue, buntest: *BunTest) ?*ExecutionEntry {
+            if ((self.* != .execution)) {
+                return null;
+            }
+            if ((buntest.phase != .execution)) {
+                return null;
+            }
+            const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(self.*);
+            if ((seq_opt == null)) {
+                return null;
+            }
+            const the_sequence = seq_opt.?.sequence;
+            return the_sequence.active_entry;
+    }
+
+pub fn format(self: BunTestRefDataValue, writer: *std.Io.Writer) !void {
+            switch (self) {
+.start => {
+_ = try writer.print("start", .{});
+},
+.collection => {
+_ = try writer.print("collection: active_scope={?s}", .{ self.collection.active_scope.base.name });
+},
+.execution => {
+if (self.execution.entry_data) |entry_data| {
+                _ = &entry_data;
+                _ = try writer.print("execution: group_index={d},sequence_index={d},entry_index={x},remaining_repeat_count={d}", .{ self.execution.group_index, entry_data.sequence_index, (blk: {
+                break :blk @intFromPtr(entry_data.entry);
+
+}), entry_data.remaining_repeat_count });
+            } else {
+                _ = try writer.print("execution: group_index={d}", .{ self.execution.group_index });
+            }
+},
+.done => {
+_ = try writer.print("done", .{});
+},
+}
+    }
+};
+
+pub const BunTestRefData = struct {
+    buntest_weak: BunTestPtr.Weak,
+    phase: BunTestRefDataValue,
+    ref_count: RefCount,
+
+pub fn dupe(self: *BunTestRefData) *BunTestRefData {
+            _ = RefCount.ref(self);
+            return self;
+    }
+
+pub fn hasOneRef(self: *BunTestRefData) bool {
+            return self.ref_count.hasOneRef();
+    }
+
+pub fn #destroy(self: *BunTestRefData) void {
+            _ = group.begin(@src());
+            var _group_guard = GroupEndGuard{  };
+            _ = &_group_guard;
+            var ___group_guard_moved = false; _ = &___group_guard_moved;
+            defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
+            _ = group.log("refData: {f}", .{ self.phase });
+            var buntest_weak = self.buntest_weak;
+            _ = &buntest_weak;
+            _ = bun.destroy(self);
+            _ = buntest_weak.deinit();
+    }
+
+pub fn bunTest(self: *BunTestRefData) ?BunTestPtr {
+            return self.buntest_weak.upgrade();
+    }
+    const RefCount = bun.ptr.RefCount(BunTestRefData, "ref_count", #destroy, .{});
+    pub const deref = RefCount.deref;
+};
+
+pub const BunTestRunTestsTask = struct {
+    weak: BunTestPtr.Weak,
+    globalThis: *jsc.JSGlobalObject,
+    phase: BunTestRefDataValue,
+
+pub fn call(self: *BunTestRunTestsTask) void {
+            var _self_guard = DestroyGuard(BunTestRunTestsTask){ .ptr = self };
+            _ = &_self_guard;
+            var ___self_guard_moved = false; _ = &___self_guard_moved;
+            defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
+            var _weak_guard = DeinitGuard(BunTestPtr.Weak){ .ptr = (&self.weak) };
+            _ = &_weak_guard;
+            var ___weak_guard_moved = false; _ = &___weak_guard_moved;
+            defer if (!___weak_guard_moved) { ___weak_guard_moved = true; const __T = @TypeOf(_weak_guard); if (@typeInfo(__T) == .optional) { if (_weak_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _weak_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _weak_guard; _drop_val.__cp_deinit(); } };
+            const strong_opt = self.weak.upgrade();
+            if ((strong_opt == null)) {
+                return;
+            }
+            var strong = strong_opt.?;
+            _ = &strong;
+            var _strong_guard = DeinitGuard(BunTestPtr){ .ptr = (&strong) };
+            _ = &_strong_guard;
+            var ___strong_guard_moved = false; _ = &___strong_guard_moved;
+            defer if (!___strong_guard_moved) { ___strong_guard_moved = true; const __T = @TypeOf(_strong_guard); if (@typeInfo(__T) == .optional) { if (_strong_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _strong_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _strong_guard; _drop_val.__cp_deinit(); } };
+            _ = (blk_catch_0: { break :blk_catch_0 ((BunTest.run(strong, self.globalThis)) catch |e| { _ = &e; break :blk_catch_0 @as(void, strong.get().onUncaughtException(self.globalThis, self.globalThis.takeException(e), false, self.phase)); }); });
+    }
 };
 
 pub const BunTest = struct {
@@ -619,13 +850,13 @@ pub fn bunTestTimeoutCallback(this_strong: BunTestPtr, _: *const bun.timespec, v
 
 },
 .execution => {
-_ = (blk_catch_0: { break :blk_catch_0 ((buntest.execution.handleTimeout(vm.global)) catch |e| { _ = &e; break :blk_catch_0 buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done); }); });
+_ = (blk_catch_1: { break :blk_catch_1 ((buntest.execution.handleTimeout(vm.global)) catch |e| { _ = &e; break :blk_catch_1 buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done); }); });
 },
 .done => {
 
 },
 }
-            _ = (blk_catch_1: { break :blk_catch_1 ((BunTest.run(this_strong, vm.global)) catch |e| { _ = &e; break :blk_catch_1 @as(void, buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done)); }); });
+            _ = (blk_catch_2: { break :blk_catch_2 ((BunTest.run(this_strong, vm.global)) catch |e| { _ = &e; break :blk_catch_2 @as(void, buntest.onUncaughtException(vm.global, vm.global.takeException(e), false, .done)); }); });
     }
 
 pub fn runNextTick(weak: BunTestPtr.Weak, globalThis: *jsc.JSGlobalObject, phase: BunTestRefDataValue) void {
@@ -797,13 +1028,13 @@ pub fn runTestCallback(this_strong: BunTestPtr, globalThis: *jsc.JSGlobalObject,
             if (cfg_done_parameter) {
                 _ = group.log("callTestCallback -> appending done callback param: data {f}", .{ cfg_data });
                 done_callback = DoneCallback.createUnbound(globalThis);
-                done_arg = (blk_catch_2: { break :blk_catch_2 ((DoneCallback.bind(done_callback, globalThis)) catch |e| { _ = &e; break :blk_catch_2 blk: {
+                done_arg = (blk_catch_3: { break :blk_catch_3 ((DoneCallback.bind(done_callback, globalThis)) catch |e| { _ = &e; break :blk_catch_3 blk: {
                 _ = buntest.onUncaughtException(globalThis, globalThis.takeException(e), false, cfg_data);
                 break :blk .zero;
 }; }); });
             }
             _ = buntest.updateMinTimeout(globalThis, timeout);
-            const result: jsc.JSValue = (blk_catch_3: { break :blk_catch_3 ((vm.eventLoop().runCallbackWithResultAndForcefullyDrainMicrotasks(cfg_callback, globalThis, .js_undefined, (if ((done_arg != .zero)) (&.{ done_arg }) else &.{}))) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 blk: {
+            const result: jsc.JSValue = (blk_catch_4: { break :blk_catch_4 ((vm.eventLoop().runCallbackWithResultAndForcefullyDrainMicrotasks(cfg_callback, globalThis, .js_undefined, (if ((done_arg != .zero)) (&.{ done_arg }) else &.{}))) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 blk: {
             _ = globalThis.clearTerminationException();
             _ = buntest.onUncaughtException(globalThis, globalThis.tryTakeException(), false, cfg_data);
             _ = group.log("callTestCallback -> error", .{});
@@ -856,7 +1087,7 @@ var this_ref: *RefData = undefined;
                     } else {
                         this_ref = BunTest.@"ref"(this_strong, cfg_data);
                     }
-                    _ = (blk_catch_4: { break :blk_catch_4 ((result.then(globalThis, this_ref, bunTestThen, bunTestCatch)) catch |__ce_4| { _ = &__ce_4;  }); });
+                    _ = (blk_catch_5: { break :blk_catch_5 ((result.then(globalThis, this_ref, bunTestThen, bunTestCatch)) catch |__ce_5| { _ = &__ce_5;  }); });
                     return null;
 },
 .fulfilled => {
@@ -915,6 +1146,15 @@ pub fn onUncaughtException(self: *BunTest, globalThis: *jsc.JSGlobalObject, exce
     pub const Phase = BunTestPhase;
     pub const Bun__TestScope__Describe2__bunTestThen = jsc.toJSHostFn(bunTestThen);
     pub const Bun__TestScope__Describe2__bunTestCatch = jsc.toJSHostFn(bunTestCatch);
+};
+
+pub const StepResultWaiting = struct {
+    timeout: bun.timespec = .epoch,
+};
+
+pub const StepResult = union(enum) {
+    waiting: StepResultWaiting,
+    complete: void,
 };
 
 pub const BaseScopeCfg = struct {
@@ -1122,6 +1362,13 @@ pub fn appendHook(self: *DescribeScope, gpa: std.mem.Allocator, tag: BunTestHook
     pub const Only = BaseScopeOnly;
 };
 
+pub const ExecutionEntryCfg = struct {
+    timeout: u32,
+    has_done_parameter: bool,
+    retry_count: u32 = 0,
+    repeat_count: u32 = 0,
+};
+
 pub const ExecutionEntry = struct {
     base: BaseScope,
     callback: ?Strong,
@@ -1175,196 +1422,11 @@ pub fn destroy(self: *ExecutionEntry, gpa: std.mem.Allocator) void {
     pub const AddedInPhase = BunTestAddedInPhase;
 };
 
-const jsc = bun.jsc;
-const Strong = jsc.Strong.Deprecated;
-const group = debug.group;
-pub const JsFnsSignature = union(enum) {
-    scope_functions: *const ScopeFunctions,
-    str: []const u8,
-
-pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-            switch (self) {
-.scope_functions => {
-_ = try writer.print("{f}", .{ self.scope_functions.* });
-},
-.str => {
-_ = try writer.print("{s}", .{ self.str });
-},
-}
-    }
-};
-pub const Signature = JsFnsSignature;
-const GetActiveCfg = struct {
-    signature: Signature,
-    allow_in_preload: bool,
-};
-pub const BunTestPtr = bun.ptr.shared.WithOptions(*BunTest, .{ .allow_weak = true, .Allocator = bun.DefaultAllocator });
-pub const BunTestFirstLast = struct {
-    first: bool,
-    last: bool,
-};
-pub const BunTestPhase = enum {
-    collection,
-    execution,
-    done,
-};
-pub const AdvanceResult = enum {
-    cont,
-    exit,
-};
-pub const ExecutionEntryData = struct {
-    sequence_index: usize,
-    entry: *const anyopaque,
-    remaining_repeat_count: i64,
-};
-pub const BunTestRefDataValue = union(enum) {
-    start: void,
-    collection: CollectionData,
-    execution: ExecutionData,
-    done: DoneData,
-
-pub fn group(self: *const @This(), buntest: *BunTest) ?*Execution.ConcurrentGroup {
-            if ((self.* != .execution)) {
-                return null;
-            }
-            return (&buntest.execution.groups[@as(usize, @intCast(self.execution.group_index))]);
-    }
-
-pub fn sequence(self: *const @This(), buntest: *BunTest) ?*Execution.ExecutionSequence {
-            if ((self.* != .execution)) {
-                return null;
-            }
-            if (self.group(buntest)) |group_item| {
-                _ = &group_item;
-                if (self.execution.entry_data) |entry_data| {
-                    _ = &entry_data;
-                    return (&group_item.sequences((&buntest.execution))[@as(usize, @intCast(entry_data.sequence_index))]);
-                }
-            }
-            return null;
-    }
-
-pub fn entry(self: *const @This(), buntest: *BunTest) ?*ExecutionEntry {
-            if ((self.* != .execution)) {
-                return null;
-            }
-            if ((buntest.phase != .execution)) {
-                return null;
-            }
-            const seq_opt = buntest.execution.getCurrentAndValidExecutionSequence(self.*);
-            if ((seq_opt == null)) {
-                return null;
-            }
-            const the_sequence = seq_opt.?.sequence;
-            return the_sequence.active_entry;
-    }
-
-pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-            switch (self) {
-.start => {
-_ = try writer.print("start", .{});
-},
-.collection => {
-_ = try writer.print("collection: active_scope={?s}", .{ self.collection.active_scope.base.name });
-},
-.execution => {
-if (self.execution.entry_data) |entry_data| {
-                _ = &entry_data;
-                _ = try writer.print("execution: group_index={d},sequence_index={d},entry_index={x},remaining_repeat_count={d}", .{ self.execution.group_index, entry_data.sequence_index, @intFromPtr(entry_data.entry), entry_data.remaining_repeat_count });
-            } else {
-                _ = try writer.print("execution: group_index={d}", .{ self.execution.group_index });
-            }
-},
-.done => {
-_ = try writer.print("done", .{});
-},
-}
-    }
-};
-pub const BunTestRefData = struct {
-    buntest_weak: BunTestPtr.Weak,
-    phase: BunTestRefDataValue,
-    ref_count: RefCount,
-
-pub fn dupe(self: *@This()) *BunTestRefData {
-            _ = RefCount.ref(self);
-            return self;
-    }
-
-pub fn hasOneRef(self: *@This()) bool {
-            return self.ref_count.hasOneRef();
-    }
-
-pub fn #destroy(self: *@This()) void {
-            _ = group.begin(@src());
-            var _group_guard = GroupEndGuard{  };
-            _ = &_group_guard;
-            var ___group_guard_moved = false; _ = &___group_guard_moved;
-            defer if (!___group_guard_moved) { ___group_guard_moved = true; const __T = @TypeOf(_group_guard); if (@typeInfo(__T) == .optional) { if (_group_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _group_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _group_guard; _drop_val.__cp_deinit(); } };
-            _ = group.log("refData: {f}", .{ self.phase });
-            var buntest_weak = self.buntest_weak;
-            _ = &buntest_weak;
-            _ = bun.destroy(self);
-            _ = buntest_weak.deinit();
-    }
-
-pub fn bunTest(self: *@This()) ?BunTestPtr {
-            return self.buntest_weak.upgrade();
-    }
-    const RefCount = bun.ptr.RefCount(BunTestRefData, "ref_count", #destroy, .{});
-    pub const deref = RefCount.deref;
-};
-pub const BunTestRunTestsTask = struct {
-    weak: BunTestPtr.Weak,
-    globalThis: *jsc.JSGlobalObject,
-    phase: BunTestRefDataValue,
-
-pub fn call(self: *@This()) void {
-            var _self_guard = DestroyGuard(BunTestRunTestsTask){ .ptr = self };
-            _ = &_self_guard;
-            var ___self_guard_moved = false; _ = &___self_guard_moved;
-            defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
-            var _weak_guard = DeinitGuard(BunTestPtr.Weak){ .ptr = (&self.weak) };
-            _ = &_weak_guard;
-            var ___weak_guard_moved = false; _ = &___weak_guard_moved;
-            defer if (!___weak_guard_moved) { ___weak_guard_moved = true; const __T = @TypeOf(_weak_guard); if (@typeInfo(__T) == .optional) { if (_weak_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _weak_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _weak_guard; _drop_val.__cp_deinit(); } };
-            const strong_opt = self.weak.upgrade();
-            if ((strong_opt == null)) {
-                return;
-            }
-            var strong = strong_opt.?;
-            _ = &strong;
-            var _strong_guard = DeinitGuard(BunTestPtr){ .ptr = (&strong) };
-            _ = &_strong_guard;
-            var ___strong_guard_moved = false; _ = &___strong_guard_moved;
-            defer if (!___strong_guard_moved) { ___strong_guard_moved = true; const __T = @TypeOf(_strong_guard); if (@typeInfo(__T) == .optional) { if (_strong_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _strong_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _strong_guard; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_0: { break :blk_catch_0 ((BunTest.run(strong, self.globalThis)) catch |e| { _ = &e; break :blk_catch_0 @as(void, strong.get().onUncaughtException(self.globalThis, self.globalThis.takeException(e), false, self.phase)); }); });
-    }
-};
-pub const HandleUncaughtExceptionResult = enum { hide_error, show_handled_error, show_unhandled_error_between_tests, show_unhandled_error_in_describe };
-pub const ResultQueue = bun.LinearFifo(BunTestRefDataValue, .Dynamic);
-pub const StepResult = union(enum) {
-    waiting: struct { timeout: bun.timespec = .epoch },
-    complete,
-};
-pub const BaseScopeOnly = enum {
-    no,
-    contains,
-    yes,
-};
-pub const BunTestHookTag = enum { beforeAll, beforeEach, afterEach, afterAll };
-pub const ExecutionEntryCfg = struct {
-    timeout: u32,
-    has_done_parameter: bool,
-    retry_count: u32 = 0,
-    repeat_count: u32 = 0,
-};
-pub const BunTestAddedInPhase = enum { preload, collection, execution };
 pub const TestScheduleEntry = union(enum) {
     describe: *DescribeScope,
     test_callback: *ExecutionEntry,
 
-pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+pub fn deinit(self: *TestScheduleEntry, gpa: std.mem.Allocator) void {
             switch (self.*) {
 .describe => |describe| {
 _ = describe.destroy(gpa);
@@ -1375,19 +1437,29 @@ _ = test_scope.destroy(gpa);
 }
     }
 
-pub fn base(self: *const @This()) *BaseScope {
+pub fn base(self: *const TestScheduleEntry) *BaseScope {
             return (switch (self.*) {
 .describe => |describe| (&describe.base),
 .test_callback => |test_callback| (&test_callback.base),
 });
     }
 };
-pub const RunOneResult = union(enum) {
-    done,
-    execute: struct {
-        timeout: bun.timespec = .epoch,
-    },
+
+pub const RunOneExecuteResult = struct {
+    timeout: bun.timespec = .epoch,
 };
+
+pub const RunOneResult = union(enum) {
+    done: void,
+    execute: RunOneExecuteResult,
+};
+
+const jsc = bun.jsc;
+const Strong = jsc.Strong.Deprecated;
+const group = debug.group;
+pub const Signature = JsFnsSignature;
+pub const BunTestPtr = bun.ptr.shared.WithOptions(*BunTest, .{ .allow_weak = true, .Allocator = bun.DefaultAllocator });
+pub const ResultQueue = bun.LinearFifo(BunTestRefDataValue, .Dynamic);
 
 pub fn cloneActiveStrong() ?BunTestPtr {
         if (bun.jsc.Jest.Jest.runner) |runner| {

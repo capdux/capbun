@@ -63,6 +63,42 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const Op = enum {
+    none,
+    AND,
+    OR,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TokenTag = enum {
+    none,
+    gt,
+    gte,
+    lt,
+    lte,
+    version,
+    tilda,
+    caret,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TokenWildcard = enum {
+    none,
+    major,
+    minor,
+    patch,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn FreeGuard(comptime T: type) type {
     return struct {
         alloc: std.mem.Allocator,
@@ -77,29 +113,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-pub const Query = @This();
-
-range: Range = Range{  },
-next: ?*Query = null,
-const Allocator = std.mem.Allocator;
-const Environment = bun.Environment;
-const OOM = bun.OOM;
-const assert = bun.assert;
-const default_allocator = bun.default_allocator;
-const strings = bun.strings;
-const Range = bun.Semver.Range;
-const SlicedString = bun.Semver.SlicedString;
-const Version = bun.Semver.Version;
-pub const Op = enum {
-    none,
-    AND,
-    OR,
-};
-const Formatter = struct {
+pub const QueryFormatter = struct {
     query: *const Query,
     buffer: []const u8,
 
-pub fn format(self: @This(), writer: *std.Io.Writer) !void {
+pub fn format(self: QueryFormatter, writer: *std.Io.Writer) !void {
             const q = self.query;
             if (q.next) |ptr| {
                 _ = &ptr;
@@ -111,38 +129,57 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             _ = try writer.print("{f}", .{ q.range.fmt(self.buffer) });
     }
 };
-pub const List = struct {
+
+pub const ListFormatter = struct {
+    list: *const QueryList,
+    buffer: []const u8,
+
+pub fn format(self: ListFormatter, writer: *std.Io.Writer) !void {
+            const l = self.list;
+            if (l.next) |ptr| {
+                _ = &ptr;
+                _ = try writer.print("{f} || {f}", .{ l.head.fmt(self.buffer), ptr.fmt(self.buffer) });
+            } else {
+                _ = try writer.print("{f}", .{ l.head.fmt(self.buffer) });
+            }
+    }
+};
+
+pub const QueryList = struct {
     head: Query = Query{  },
     tail: ?*Query = null,
-    next: ?*List = null,
+    next: ?*QueryList = null,
 
-pub fn fmt(self: *const @This(), buf: []const u8) @This().Formatter {
-            return .{ .list = self, .buffer = buf };
+pub fn fmt(self: *const QueryList, buf: []const u8) ListFormatter {
+            return ListFormatter{ .list = self, .buffer = buf };
     }
 
-pub fn satisfies(list: *const List, version: Version, list_buf: []const u8, version_buf: []const u8) bool {
-            return (list.head.satisfies(version, list_buf, version_buf) or ((list.next) orelse { return false; }).satisfies(version, list_buf, version_buf));
+pub fn satisfies(self: QueryList, version: Version, list_buf: []const u8, version_buf: []const u8) bool {
+            return (self.head.satisfies(version, list_buf, version_buf) or ((self.next) orelse { return false; }).satisfies(version, list_buf, version_buf));
     }
 
-pub fn satisfiesPre(list: *const List, version: Version, list_buf: []const u8, version_buf: []const u8) bool {
+pub fn satisfiesPre(self: QueryList, version: Version, list_buf: []const u8, version_buf: []const u8) bool {
             if (comptime Environment.allow_assert) {
                 _ = assert(version.tag.hasPre());
             }
             var pre_matched = false;
             _ = &pre_matched;
-            return ((list.head.satisfiesPre(version, list_buf, version_buf, (&pre_matched)) and pre_matched) or ((list.next) orelse { return false; }).satisfiesPre(version, list_buf, version_buf));
+            return ((self.head.satisfiesPre(version, list_buf, version_buf, (&pre_matched)) and pre_matched) or ((self.next) orelse { return false; }).satisfiesPre(version, list_buf, version_buf));
     }
 
-pub fn eql(lhs: *const List, rhs: *const List) bool {
-            if ((!lhs.head.eql((&rhs.head)))) {
+pub fn eql(self: QueryList, rhs: *const QueryList) bool {
+            if ((!self.head.eql((blk: {
+            break :blk (&rhs.head);
+
+})))) {
                 return false;
             }
-            const lhs_next = ((lhs.next) orelse { return (rhs.next == null); });
+            const lhs_next = ((self.next) orelse { return (rhs.next == null); });
             const rhs_next = ((rhs.next) orelse { return false; });
             return lhs_next.eql(rhs_next);
     }
 
-pub fn andRange(self: *@This(), allocator: Allocator, range: Range) !void {
+pub fn andRange(self: *QueryList, allocator: Allocator, range: Range) !void {
             if (((!self.head.range.hasLeft()) and (!self.head.range.hasRight()))) {
                 self.head.range = range;
                 return;
@@ -151,39 +188,61 @@ pub fn andRange(self: *@This(), allocator: Allocator, range: Range) !void {
             _ = &new_tail;
             new_tail.* = Query{ .range = range };
             new_tail.range = range;
-            var last_tail = ((self.tail) orelse ((&self.head)));
+            var last_tail = ((self.tail) orelse ((blk: {
+            break :blk (&self.head);
+
+})));
             _ = &last_tail;
             last_tail.next = new_tail;
             self.tail = new_tail;
     }
-    const Formatter = struct {
-        list: *const List,
-        buffer: []const u8,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                const l = self.list;
-                if (l.next) |ptr| {
-                    _ = &ptr;
-                    _ = try writer.print("{f} || {f}", .{ l.head.fmt(self.buffer), ptr.fmt(self.buffer) });
-                } else {
-                    _ = try writer.print("{f}", .{ l.head.fmt(self.buffer) });
-                }
-        }
-    };
+    const Formatter = ListFormatter;
 };
-pub const Group = struct {
-    head: List = List{  },
-    tail: ?*List = null,
+
+pub const GroupFlags = struct {
+    pub const pre = 1;
+    pub const build = 0;
+};
+
+pub const GroupFormatter = struct {
+    group: *const QueryGroup,
+    buf: []const u8,
+
+pub fn format(self: GroupFormatter, writer: *std.Io.Writer) !void {
+            const g = self.group;
+            if ((((g.tail == null) and (g.head.tail == null)) and (!g.head.head.range.hasLeft()))) {
+                return;
+            }
+            if (((g.tail == null) and (g.head.tail == null))) {
+                _ = try writer.print("{f}", .{ g.head.fmt(self.buf) });
+                return;
+            }
+            var list = (blk: {
+            break :blk (&g.head);
+
+});
+            _ = &list;
+            while (list.next) |next| {
+                _ = try writer.print("{f} && ", .{ list.fmt(self.buf) });
+                list = next;
+            }
+            _ = try writer.print("{f}", .{ list.fmt(self.buf) });
+    }
+};
+
+pub const QueryGroup = struct {
+    head: QueryList = QueryList{  },
+    tail: ?*QueryList = null,
     allocator: Allocator,
     input: []const u8 = "",
     flags: FlagsBitSet = FlagsBitSet.initEmpty(),
 
-pub fn fmt(self: *const @This(), buf: []const u8) @This().Formatter {
-            return .{ .group = self, .buf = buf };
+pub fn fmt(self: *const QueryGroup, buf: []const u8) GroupFormatter {
+            return GroupFormatter{ .group = self, .buf = buf };
     }
 
-pub fn jsonStringify(self: *const @This(), writer: anytype) !void {
-            const temp = try std.fmt.allocPrint(bun.default_allocator, "{f}", .{ self.fmt() });
+pub fn jsonStringify(self: QueryGroup, writer: anytype) !void {
+            const temp = try std.fmt.allocPrint(bun.default_allocator, "{f}", .{ self.fmt("") });
             var _temp_guard = FreeGuard(u8){ .alloc = bun.default_allocator, .slice = temp };
             _ = &_temp_guard;
             var ___temp_guard_moved = false; _ = &___temp_guard_moved;
@@ -191,7 +250,7 @@ pub fn jsonStringify(self: *const @This(), writer: anytype) !void {
             _ = try std.json.encodeJsonString(temp, .{}, writer);
     }
 
-pub fn deinit(self: *const @This()) void {
+pub fn deinit(self: QueryGroup) void {
             var list = self.head;
             _ = &list;
             var allocator = self.allocator;
@@ -208,7 +267,7 @@ pub fn deinit(self: *const @This()) void {
             }
     }
 
-pub fn getExactVersion(self: *const @This()) ?Version {
+pub fn getExactVersion(self: QueryGroup) ?Version {
             const range = self.head.head.range;
             if ((((((self.head.next == null) and (self.head.head.next == null)) and range.hasLeft()) and (range.left.op == .eql)) and (!range.hasRight()))) {
                 if (comptime Environment.allow_assert) {
@@ -219,102 +278,91 @@ pub fn getExactVersion(self: *const @This()) ?Version {
             return null;
     }
 
-pub fn from(version: Version) Group {
-            return .{ .allocator = bun.default_allocator, .head = .{ .head = .{ .range = .{ .left = .{ .op = .eql, .version = version } } } } };
+pub fn from(version: Version) QueryGroup {
+            return QueryGroup{ .allocator = bun.default_allocator, .head = .{ .head = .{ .range = .{ .left = .{ .op = .eql, .version = version } } } } };
     }
 
-pub fn isExact(self: *const @This()) bool {
+pub fn isExact(self: QueryGroup) bool {
             return ((((self.head.next == null) and (self.head.head.next == null)) and (!self.head.head.range.hasRight())) and (self.head.head.range.left.op == .eql));
     }
 
-pub fn @"is *"(self: *const @This()) bool {
+pub fn @"is *"(self: QueryGroup) bool {
             const left = self.head.head.range.left;
             return ((((((self.head.head.range.right.op == .unset) and (left.op == .gte)) and (self.head.next == null)) and (self.head.head.next == null)) and left.version.isZero()) and (!self.flags.isSet(Flags.build)));
     }
 
-pub inline fn eql(lhs: Group, rhs: Group) bool {
-            return lhs.head.eql((&rhs.head));
+pub inline fn eql(self: QueryGroup, rhs: QueryGroup) bool {
+            return self.head.eql((blk: {
+            break :blk (&rhs.head);
+
+}));
     }
 
-pub fn toVersion(self: @This()) Version {
+pub fn toVersion(self: QueryGroup) Version {
             _ = assert((self.isExact() or (self.head.head.range.left.op == .unset)));
             return self.head.head.range.left.version;
     }
 
-pub fn orVersion(self: *@This(), version: Version) !void {
+pub fn orVersion(self: *QueryGroup, version: Version) !void {
             if (((self.tail == null) and (!self.head.head.range.hasLeft()))) {
                 self.head.head.range.left.version = version;
                 self.head.head.range.left.op = .eql;
                 return;
             }
-            var new_tail = try self.allocator.create(List);
+            var new_tail = try self.allocator.create(QueryList);
             _ = &new_tail;
-            new_tail.* = List{  };
+            new_tail.* = QueryList{  };
             new_tail.head.range.left.version = version;
             new_tail.head.range.left.op = .eql;
-            var prev_tail = ((self.tail) orelse ((&self.head)));
+            var prev_tail = ((self.tail) orelse ((blk: {
+            break :blk (&self.head);
+
+})));
             _ = &prev_tail;
             prev_tail.next = new_tail;
             self.tail = new_tail;
     }
 
-pub fn andRange(self: *@This(), range: Range) !void {
-            var tail = ((self.tail) orelse ((&self.head)));
+pub fn andRange(self: *QueryGroup, range: Range) !void {
+            var tail = ((self.tail) orelse ((blk: {
+            break :blk (&self.head);
+
+})));
             _ = &tail;
             _ = try tail.andRange(self.allocator, range);
     }
 
-pub fn orRange(self: *@This(), range: Range) !void {
+pub fn orRange(self: *QueryGroup, range: Range) !void {
             if ((((self.tail == null) and (self.head.tail == null)) and (!self.head.head.range.hasLeft()))) {
                 self.head.head.range = range;
                 return;
             }
-            var new_tail = try self.allocator.create(List);
+            var new_tail = try self.allocator.create(QueryList);
             _ = &new_tail;
-            new_tail.* = List{  };
+            new_tail.* = QueryList{  };
             new_tail.head.range = range;
-            var prev_tail = ((self.tail) orelse ((&self.head)));
+            var prev_tail = ((self.tail) orelse ((blk: {
+            break :blk (&self.head);
+
+})));
             _ = &prev_tail;
             prev_tail.next = new_tail;
             self.tail = new_tail;
     }
 
-pub inline fn satisfies(group: *const Group, version: Version, group_buf: []const u8, version_buf: []const u8) bool {
-            return (if (version.tag.hasPre()) group.head.satisfiesPre(version, group_buf, version_buf) else group.head.satisfies(version, group_buf, version_buf));
+pub inline fn satisfies(self: QueryGroup, version: Version, group_buf: []const u8, version_buf: []const u8) bool {
+            return (if (version.tag.hasPre()) self.head.satisfiesPre(version, group_buf, version_buf) else self.head.satisfies(version, group_buf, version_buf));
     }
-    pub const Flags = struct {
-        pub const pre = 1;
-        pub const build = 0;
-    };
-    const Formatter = struct {
-        group: *const Group,
-        buf: []const u8,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                const g = self.group;
-                if ((((g.tail == null) and (g.head.tail == null)) and (!g.head.head.range.hasLeft()))) {
-                    return;
-                }
-                if (((g.tail == null) and (g.head.tail == null))) {
-                    _ = try writer.print("{f}", .{ g.head.fmt(self.buf) });
-                    return;
-                }
-                var list = (&g.head);
-                _ = &list;
-                while (list.next) |next| {
-                    _ = try writer.print("{f} && ", .{ list.fmt(self.buf) });
-                    list = next;
-                }
-                _ = try writer.print("{f}", .{ list.fmt(self.buf) });
-        }
-    };
+    pub const Flags = GroupFlags;
+    const Formatter = GroupFormatter;
     pub const FlagsBitSet = bun.bit_set.IntegerBitSet(3);
 };
-pub const Token = struct {
-    tag: Tag = Tag.none,
-    wildcard: Wildcard = Wildcard.none,
 
-pub fn toRange(self: @This(), version: Version.Partial) Range {
+pub const QueryToken = struct {
+    tag: TokenTag = TokenTag.none,
+    wildcard: TokenWildcard = TokenWildcard.none,
+
+pub fn toRange(self: QueryToken, version: Version.Partial) Range {
             switch (self.tag) {
 .caret => {
 var range = Range{  };
@@ -380,32 +428,32 @@ var range = Range{  };
 _ = unreachable;
 },
 .version => {
-if ((self.wildcard != Wildcard.none)) {
+if ((self.wildcard != TokenWildcard.none)) {
                 return Range.initWildcard(version.min(), self.wildcard);
             }
-            return .{ .left = .{ .op = .eql, .version = version.min() } };
+            return Range{ .left = .{ .op = .eql, .version = version.min() } };
 },
 else => {
 
 },
 }
             return (switch (self.wildcard) {
-.major => .{ .left = .{ .op = .gte, .version = version.min() }, .right = .{ .op = .lte, .version = .{ .major = std.math.maxInt(u64), .minor = std.math.maxInt(u64), .patch = std.math.maxInt(u64) } } },
+.major => Range{ .left = .{ .op = .gte, .version = version.min() }, .right = .{ .op = .lte, .version = .{ .major = std.math.maxInt(u64), .minor = std.math.maxInt(u64), .patch = std.math.maxInt(u64) } } },
 .minor => (switch (self.tag) {
-.lte => .{ .left = .{ .op = .lte, .version = .{ .major = ((version.major) orelse (0)), .minor = std.math.maxInt(u64), .patch = std.math.maxInt(u64) } } },
-.lt => .{ .left = .{ .op = .lt, .version = .{ .major = ((version.major) orelse (0)), .minor = 0, .patch = 0 } } },
-.gt => .{ .left = .{ .op = .gt, .version = .{ .major = ((version.major) orelse (0)), .minor = std.math.maxInt(u64), .patch = std.math.maxInt(u64) } } },
-.gte => .{ .left = .{ .op = .gte, .version = .{ .major = ((version.major) orelse (0)), .minor = 0, .patch = 0 } } },
+.lte => Range{ .left = .{ .op = .lte, .version = .{ .major = ((version.major) orelse (0)), .minor = std.math.maxInt(u64), .patch = std.math.maxInt(u64) } } },
+.lt => Range{ .left = .{ .op = .lt, .version = .{ .major = ((version.major) orelse (0)), .minor = 0, .patch = 0 } } },
+.gt => Range{ .left = .{ .op = .gt, .version = .{ .major = ((version.major) orelse (0)), .minor = std.math.maxInt(u64), .patch = std.math.maxInt(u64) } } },
+.gte => Range{ .left = .{ .op = .gte, .version = .{ .major = ((version.major) orelse (0)), .minor = 0, .patch = 0 } } },
 else => unreachable,
 }),
 .patch => (switch (self.tag) {
-.lte => .{ .left = .{ .op = .lte, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = std.math.maxInt(u64) } } },
-.lt => .{ .left = .{ .op = .lt, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = 0 } } },
-.gt => .{ .left = .{ .op = .gt, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = std.math.maxInt(u64) } } },
-.gte => .{ .left = .{ .op = .gte, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = 0 } } },
+.lte => Range{ .left = .{ .op = .lte, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = std.math.maxInt(u64) } } },
+.lt => Range{ .left = .{ .op = .lt, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = 0 } } },
+.gt => Range{ .left = .{ .op = .gt, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = std.math.maxInt(u64) } } },
+.gte => Range{ .left = .{ .op = .gte, .version = .{ .major = ((version.major) orelse (0)), .minor = ((version.minor) orelse (0)), .patch = 0 } } },
 else => unreachable,
 }),
-.none => .{ .left = .{ .op = (switch (self.tag) {
+.none => Range{ .left = .{ .op = (switch (self.tag) {
 .gt => .gt,
 .gte => .gte,
 .lt => .lt,
@@ -414,56 +462,47 @@ else => unreachable,
 }), .version = version.min() } },
 });
     }
-    pub const Tag = enum {
-                none,
-                gt,
-                gte,
-                lt,
-                lte,
-                version,
-                tilda,
-                caret,
-            };
-    pub const Wildcard = enum {
-                none,
-                major,
-                minor,
-                patch,
-            };
+    pub const Tag = TokenTag;
+    pub const Wildcard = TokenWildcard;
 };
 
-pub fn fmt(self: *const Query, buf: []const u8) Formatter {
-        return .{ .query = self, .buffer = buf };
+pub const Query = @This();
+
+range: Range = Range{  },
+next: ?*Query = null,
+
+pub fn fmt(self: *const Query, buf: []const u8) QueryFormatter {
+        return QueryFormatter{ .query = self, .buffer = buf };
 }
 
-pub fn eql(lhs: *const Query, rhs: *const Query) bool {
-        if ((!lhs.range.eql(rhs.range))) {
+pub fn eql(self: Query, rhs: *const Query) bool {
+        if ((!self.range.eql(rhs.range))) {
             return false;
         }
-        const lhs_next = ((lhs.next) orelse { return (rhs.next == null); });
+        const lhs_next = ((self.next) orelse { return (rhs.next == null); });
         const rhs_next = ((rhs.next) orelse { return false; });
         return lhs_next.eql(rhs_next);
 }
 
-pub fn satisfies(query: *const Query, version: Version, query_buf: []const u8, version_buf: []const u8) bool {
-        return (query.range.satisfies(version, query_buf, version_buf) and ((query.next) orelse { return true; }).satisfies(version, query_buf, version_buf));
+pub fn satisfies(self: Query, version: Version, query_buf: []const u8, version_buf: []const u8) bool {
+        return (self.range.satisfies(version, query_buf, version_buf) and ((self.next) orelse { return true; }).satisfies(version, query_buf, version_buf));
 }
 
-pub fn satisfiesPre(query: *const Query, version: Version, query_buf: []const u8, version_buf: []const u8, pre_matched: *bool) bool {
+pub fn satisfiesPre(self: Query, version: Version, query_buf: []const u8, version_buf: []const u8, pre_matched: *bool) bool {
         if (comptime Environment.allow_assert) {
             _ = assert(version.tag.hasPre());
         }
-        return (query.range.satisfiesPre(version, query_buf, version_buf, pre_matched) and ((query.next) orelse { return true; }).satisfiesPre(version, query_buf, version_buf, pre_matched));
+        return (self.range.satisfiesPre(version, query_buf, version_buf, pre_matched) and ((self.next) orelse { return true; }).satisfiesPre(version, query_buf, version_buf, pre_matched));
 }
 
-pub fn parse(allocator: Allocator, input: []const u8, sliced: SlicedString) bun.OOM!Group {
+pub fn parse(allocator: Allocator, input: []const u8, sliced: SlicedString) bun.OOM!QueryGroup {
         var i: usize = 0;
         _ = &i;
-        var list = Group{ .allocator = allocator, .input = input };
+        var list = QueryGroup{ .allocator = allocator, .input = input };
         _ = &list;
-        var token = Token{  };
+        var token = QueryToken{  };
         _ = &token;
-        var prev_token = Token{  };
+        var prev_token = QueryToken{  };
         _ = &prev_token;
         var count: u8 = 0;
         _ = &count;
@@ -536,7 +575,7 @@ i = (i + 1);
                 i = (i + 1);
             }
             is_or = true;
-            token.tag = Token.Tag.none;
+            token.tag = TokenTag.none;
             skip_round = true;
 },
 '-' => {
@@ -554,7 +593,7 @@ i = (i + 1);
 },
 else => {
 i = (i + 1);
-            token.tag = Token.Tag.none;
+            token.tag = TokenTag.none;
             while ((((i < input.len) and (input[@as(usize, @intCast(i))] != 32)) and (input[@as(usize, @intCast(i))] != 124))) {
                 i = (i + 1);
             }
@@ -565,10 +604,10 @@ i = (i + 1);
                 const parse_result = Version.parse(sliced.sub(input[i..]));
                 const version = parse_result.version.min();
                 if (version.tag.hasBuild()) {
-                    _ = list.flags.setValue(Group.Flags.build, true);
+                    _ = list.flags.setValue(GroupFlags.build, true);
                 }
                 if (version.tag.hasPre()) {
-                    _ = list.flags.setValue(Group.Flags.pre, true);
+                    _ = list.flags.setValue(GroupFlags.pre, true);
                 }
                 token.wildcard = parse_result.wildcard;
                 i = (i + parse_result.len);
@@ -611,10 +650,10 @@ else => false,
                     var second_version = second_parsed.version.min();
                     _ = &second_version;
                     if (second_version.tag.hasBuild()) {
-                        _ = list.flags.setValue(Group.Flags.build, true);
+                        _ = list.flags.setValue(GroupFlags.build, true);
                     }
                     if (second_version.tag.hasPre()) {
-                        _ = list.flags.setValue(Group.Flags.pre, true);
+                        _ = list.flags.setValue(GroupFlags.pre, true);
                     }
                     const range: Range = brk: {
                     break :brk (switch (second_parsed.wildcard) {
@@ -680,3 +719,16 @@ _ = try list.orRange(token.toRange(parse_result.version));
         }
         return list;
 }
+const Formatter = QueryFormatter;
+pub const List = QueryList;
+pub const Group = QueryGroup;
+pub const Token = QueryToken;
+const Allocator = std.mem.Allocator;
+const Environment = bun.Environment;
+const OOM = bun.OOM;
+const assert = bun.assert;
+const default_allocator = bun.default_allocator;
+const strings = bun.strings;
+const Range = bun.Semver.Range;
+const SlicedString = bun.Semver.SlicedString;
+const Version = bun.Semver.Version;

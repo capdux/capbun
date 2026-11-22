@@ -125,7 +125,7 @@ pub struct RefCountedEnvValue {
     }
 }
 
-pub const ProxySlot = struct {
+pub struct ProxySlot {
     key: []const u8,
     ptr: *((*RefCountedEnvValue)?),
 }
@@ -582,7 +582,7 @@ pub enum StdinFdType: i32 {
         const fd = bun.FD.fromUV(2);
 
         switch (Syscall.fstat(fd)) {
-            .result => |stat| {
+            .result stat => {
                 mode = @intCast(stat.mode);
             },
             .err => {},
@@ -615,7 +615,7 @@ pub enum StdinFdType: i32 {
         const fd = bun.FD.fromUV(1);
 
         switch (Syscall.fstat(fd)) {
-            .result => |stat| {
+            .result stat => {
                 mode = @intCast(stat.mode);
             },
             .err => {},
@@ -646,7 +646,7 @@ pub enum StdinFdType: i32 {
         const fd = bun.FD.fromUV(0);
 
         switch (Syscall.fstat(fd)) {
-            .result => |stat| {
+            .result stat => {
                 mode = @intCast(stat.mode);
             },
             .err => {},
@@ -852,7 +852,7 @@ pub enum StdinFdType: i32 {
         }
     }
 
-    pub fn closeAllSocketGroups(_: *RareData, vm: *jsc.VirtualMachine) {
+    static fn closeAllSocketGroups(_: *RareData, vm: *jsc.VirtualMachine) {
         let rounds: u8 = 0;
         while (rounds < 8) : (rounds += 1) {
             if (!vm.uwsLoop().closeAllGroups()) break;

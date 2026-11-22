@@ -67,26 +67,14 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
-    const __T = @TypeOf(val);
-    if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
-    if (comptime @typeInfo(__T) == .int) {
-        const ShiftType = std.math.Log2Int(__T);
-        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
-        return val << @as(ShiftType, @truncate(u_shift));
-    }
-    return val << shift;
-}
-fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
-    const __T = @TypeOf(val);
-    if (comptime @typeInfo(__T) == .comptime_int) return val >> shift;
-    if (comptime @typeInfo(__T) == .int) {
-        const ShiftType = std.math.Log2Int(__T);
-        const u_shift: usize = if (@typeInfo(@TypeOf(shift)) == .int and @typeInfo(@TypeOf(shift)).int.signedness == .signed) @intCast(@max(0, shift)) else @intCast(shift);
-        return val >> @as(ShiftType, @truncate(u_shift));
-    }
-    return val >> shift;
-}
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const interpret = @import("./interpreter.zig");
@@ -100,6 +88,207 @@ pub const ShellError = error{
     Process,
     GlobalThisThrown,
     Spawn,
+};
+
+pub const ASTExprTag = enum {
+    assign,
+    binary,
+    pipeline,
+    cmd,
+    subshell,
+    @"if",
+    condexpr,
+    @"async",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ASTCondExprOp = enum {
+    @"-a",
+    @"-b",
+    @"-c",
+    @"-d",
+    @"-e",
+    @"-f",
+    @"-g",
+    @"-h",
+    @"-k",
+    @"-p",
+    @"-r",
+    @"-s",
+    @"-t",
+    @"-u",
+    @"-w",
+    @"-x",
+    @"-G",
+    @"-L",
+    @"-N",
+    @"-O",
+    @"-S",
+    @"-ef",
+    @"-nt",
+    @"-ot",
+    @"-o",
+    @"-v",
+    @"-R",
+    @"-z",
+    @"-n",
+    @"==",
+    @"!=",
+    @"<",
+    @">",
+    @"-eq",
+    @"-ne",
+    @"-lt",
+    @"-le",
+    @"-gt",
+    @"-ge",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isSupported(op: ASTCondExprOp) bool {
+            comptime var idx: usize = 0;
+            _ = &idx;
+            inline while ((idx < _AST_SUPPORTED_OPS.len)) : (idx = (idx + 1)) {
+                if ((_AST_SUPPORTED_OPS[@as(usize, @intCast(idx))] == op)) {
+                    return true;
+                }
+            }
+            return false;
+    }
+    
+    pub const SUPPORTED: []const ASTCondExprOp = _AST_SUPPORTED_OPS[0..];
+    
+    pub const SINGLE_ARG_OPS: []const std.builtin.Type.EnumField = brk: {
+            const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(ASTCondExprOp);
+            _ = &fields;
+            const count = count: {
+            var count: usize = 0;
+            _ = &count;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < fields.len)) : (idx = (idx + 1)) {
+                const f = fields[@as(usize, @intCast(idx))];
+                _ = &f;
+                if ((((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name)[0] == 45) and ((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name).len == 2))) {
+                    count = (count + 1);
+                }
+            }
+            break :count count;
+    };
+            _ = &count;
+            var ret: [count]std.builtin.Type.EnumField = undefined;
+            _ = &ret;
+            var len: usize = 0;
+            _ = &len;
+            var idx2: usize = 0;
+            _ = &idx2;
+            while ((idx2 < fields.len)) : (idx2 = (idx2 + 1)) {
+                const f = fields[@as(usize, @intCast(idx2))];
+                _ = &f;
+                if ((((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name)[0] == 45) and ((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name).len == 2))) {
+                    ret[cp_cast_int(usize, len)] = f;
+                    len = (len + 1);
+                }
+            }
+            const final = (ret[0..]).*;
+            _ = &final;
+            break :brk (&final);
+    };
+    
+    pub const BINARY_OPS: []const std.builtin.Type.EnumField = brk: {
+            const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(ASTCondExprOp);
+            _ = &fields;
+            const count = count: {
+            var count: usize = 0;
+            _ = &count;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < fields.len)) : (idx = (idx + 1)) {
+                const f = fields[@as(usize, @intCast(idx))];
+                _ = &f;
+                if ((!(((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name)[0] == 45) and ((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name).len == 2)))) {
+                    count = (count + 1);
+                }
+            }
+            break :count count;
+    };
+            _ = &count;
+            var ret: [count]std.builtin.Type.EnumField = undefined;
+            _ = &ret;
+            var len: usize = 0;
+            _ = &len;
+            var idx2: usize = 0;
+            _ = &idx2;
+            while ((idx2 < fields.len)) : (idx2 = (idx2 + 1)) {
+                const f = fields[@as(usize, @intCast(idx2))];
+                _ = &f;
+                if ((!(((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name)[0] == 45) and ((if (@typeInfo(@TypeOf(f)) == .@"enum" or @typeInfo(@TypeOf(f)) == .@"union") @tagName(f) else f.name).len == 2)))) {
+                    ret[cp_cast_int(usize, len)] = f;
+                    len = (len + 1);
+                }
+            }
+            const final = (ret[0..]).*;
+            _ = &final;
+            break :brk (&final);
+    };
+};
+
+pub const _ASTBinaryOp = enum {
+    And,
+    Or,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ASTCmdOrAssignsTag = enum {
+    cmd,
+    assigns,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ASTRedirectIOKind = enum {
+    stdin,
+    stdout,
+    stderr,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ASTAtomTag = enum(u8) {
+    simple,
+    compound,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const SubshellKind = enum {
+    cmd_subst,
+    normal,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn closing_tok(self: SubshellKind) TokenTag {
+            return (switch (self) {
+.cmd_subst => TokenTag.CmdSubstEnd,
+.normal => TokenTag.CloseParen,
+});
+    }
 };
 
 pub const IfClauseTok = enum {
@@ -202,6 +391,16 @@ pub const NewLexerError = error{
     CodepointTooLarge,
 };
 
+pub const StringEncoding = enum {
+    ascii,
+    wtf8,
+    utf16,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -289,6 +488,96 @@ pub fn __cp_deinit(self: *@This()) void {
         }
     };
 }
+
+pub const ShellErrInvalidArgs = struct {
+    val: []const u8 = "",
+};
+
+pub const ShellErr = union(enum) {
+    sys: jsc.SystemError,
+    custom: []const u8,
+    invalid_arguments: ShellErrInvalidArgs,
+    todo: []const u8,
+
+pub fn newSys(e: anytype) ShellErr {
+            return .{ .sys = (switch (@TypeOf(e)) {
+Syscall.Error => e.toShellSystemError(),
+jsc.SystemError => e,
+else => @compileError(("Invalid `e`: " ++ @typeName(e))),
+}) };
+    }
+
+pub fn format(self: ShellErr, writer: *std.Io.Writer) !void {
+            return (switch (self) {
+.sys => |e| writer.print("bun: {f}: {f}", .{ e.message, e.path }),
+.custom => |msg| writer.print("bun: {s}", .{ msg }),
+.invalid_arguments => |args| writer.print("bun: invalid arguments: {s}", .{ args.val }),
+.todo => |msg| writer.print("bun: TODO: {s}", .{ msg }),
+});
+    }
+
+pub fn throwJS(self: ShellErr, globalThis: *jsc.JSGlobalObject) bun.JSError {
+            var _guard_err = ShellErrThrowGuard{ .ptr = (&self) };
+            _ = &_guard_err;
+            var ___guard_err_moved = false; _ = &___guard_err_moved;
+            defer if (!___guard_err_moved) { ___guard_err_moved = true; const __T = @TypeOf(_guard_err); if (@typeInfo(__T) == .optional) { if (_guard_err) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_err.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_err; _drop_val.__cp_deinit(); } };
+            switch (self) {
+.sys => {
+const e = self.sys.toErrorInstance(globalThis);
+            return globalThis.throwValue(e);
+},
+.custom => {
+const err_value = bun.String.cloneUTF8(self.custom).toErrorInstance(globalThis);
+            return globalThis.throwValue(err_value);
+},
+.invalid_arguments => {
+return globalThis.throwInvalidArguments("{s}", .{ self.invalid_arguments.val });
+},
+.todo => {
+return globalThis.throwTODO(self.todo);
+},
+}
+    }
+
+pub fn throwMini(self: ShellErr) noreturn {
+            var _guard_err = ShellErrValGuard{ .val = self };
+            _ = &_guard_err;
+            var ___guard_err_moved = false; _ = &___guard_err_moved;
+            defer if (!___guard_err_moved) { ___guard_err_moved = true; const __T = @TypeOf(_guard_err); if (@typeInfo(__T) == .optional) { if (_guard_err) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_err.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_err; _drop_val.__cp_deinit(); } };
+            switch (self) {
+.sys => |e| {
+_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: {f}: {f}<r>", .{ e.message, e.path });
+},
+.custom => |custom| {
+_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>{s}<r>", .{ custom });
+},
+.invalid_arguments => |invalid_arguments| {
+_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: invalid arguments: {s}<r>", .{ invalid_arguments.val });
+},
+.todo => |todo| {
+_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>TODO: {s}<r>", .{ todo });
+},
+}
+            _ = bun.Global.exit(1);
+    }
+
+pub fn deinit(self: ShellErr, allocator: Allocator) void {
+            switch (self) {
+.sys => {
+_ = self.sys.deref();
+},
+.custom => {
+_ = allocator.free(self.custom);
+},
+.invalid_arguments => {
+
+},
+.todo => {
+_ = allocator.free(self.todo);
+},
+}
+    }
+};
 
 pub const GlobalJS = struct {
     globalThis: *jsc.JSGlobalObject,
@@ -424,1392 +713,558 @@ pub inline fn platformEventLoop(self: *const GlobalMini) *jsc.PlatformEventLoop 
     }
 };
 
-pub const AST = struct {
-    pub const Script = struct {
-        stmts: []Stmt,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = 0;
-                _ = &cost;
-                for (cp_mut_slice(&self.stmts)) |*stmt| {
-                    _ = &stmt;
-                    cost = (cost + (stmt.*).memoryCost());
-                }
-                return cost;
-        }
-    };
-    pub const Stmt = struct {
-        exprs: []Expr,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = 0;
-                _ = &cost;
-                for (cp_mut_slice(&self.exprs)) |*expr| {
-                    _ = &expr;
-                    cost = (cost + (expr.*).memoryCost());
-                }
-                return cost;
-        }
-    };
-    pub const Expr = union(Expr.Tag) {
-            assign: []Assign,
-            binary: *Binary,
-            pipeline: *Pipeline,
-            cmd: *Cmd,
-            subshell: *Subshell,
-            @"if": *If,
-            condexpr: *CondExpr,
-            /// Valid async (`&`) expressions:
-            /// - pipeline
-            /// - cmd
-            /// - subshell
-            /// - if
-            /// - condexpr
-            /// Note that commands in a pipeline cannot be async
-            /// TODO: Extra indirection for essentially a boolean feels bad for performance
-            /// could probably find a more efficient way to encode this information.
-            async: *Expr,
-    
-            fn memoryCost(this: *const @This()) usize {
-                return switch (this.*) {
-                    .assign => |assign| brk: {
-                        var cost: usize = 0;
-                        var idx: usize = 0;
-                        while (idx < assign.len) : (idx += 1) {
-                            cost += assign[idx].memoryCost();
-                        }
-                        break :brk cost;
-                    },
-                    .binary => |binary| binary.memoryCost(),
-                    .pipeline => |pipeline| pipeline.memoryCost(),
-                    .cmd => |cmd| cmd.memoryCost(),
-                    .subshell => |subshell| subshell.memoryCost(),
-                    .@"if" => |if_node| if_node.memoryCost(),
-                    .condexpr => |condexpr| condexpr.memoryCost(),
-                    .async => |async| async.memoryCost(),
-                };
-            }
-    
-            fn asPipelineItem(this: *@This()) ?PipelineItem {
-                return switch (this.*) {
-                    .assign => .{ .assigns = this.assign },
-                    .cmd => .{ .cmd = this.cmd },
-                    .subshell => .{ .subshell = this.subshell },
-                    .@"if" => .{ .@"if" = this.@"if" },
-                    .condexpr => .{ .condexpr = this.condexpr },
-                    else => null,
-                };
-            }
-    
-            pub const Tag = enum {
-                assign,
-                binary,
-                pipeline,
-                cmd,
-                subshell,
-                @"if",
-                condexpr,
-                async,
-            };
-        };
-    pub const CondExpr = struct {
-        op: Op,
-        args: ArgList = ArgList.zeroes,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(Op);
-                _ = &cost;
-                cost = (cost + self.args.memoryCost());
-                return cost;
-        }
-    
-    pub fn to_expr(self: @This(), alloc: Allocator) !Expr {
-                const condexpr = try alloc.create(CondExpr);
-                condexpr.* = self;
-                return .{ .condexpr = condexpr };
-        }
-        const ArgList = SmolList(Atom, 2);
-        pub const Op = enum {
-                    /// -a file
-                    ///   True if file exists.
-                    @"-a",
-        
-                    /// -b file
-                    ///   True if file exists and is a block special file.
-                    @"-b",
-        
-                    /// -c file
-                    ///   True if file exists and is a character special file.
-                    @"-c",
-        
-                    /// -d file
-                    ///   True if file exists and is a directory.
-                    @"-d",
-        
-                    /// -e file
-                    ///   True if file exists.
-                    @"-e",
-        
-                    /// -f file
-                    ///   True if file exists and is a regular file.
-                    @"-f",
-        
-                    /// -g file
-                    ///   True if file exists and its set-group-id bit is set.
-                    @"-g",
-        
-                    /// -h file
-                    ///   True if file exists and is a symbolic link.
-                    @"-h",
-        
-                    /// -k file
-                    ///   True if file exists and its "sticky" bit is set.
-                    @"-k",
-        
-                    /// -p file
-                    ///   True if file exists and is a named pipe (FIFO).
-                    @"-p",
-        
-                    /// -r file
-                    ///   True if file exists and is readable.
-                    @"-r",
-        
-                    /// -s file
-                    ///   True if file exists and has a size greater than zero.
-                    @"-s",
-        
-                    /// -t fd
-                    ///   True if file descriptor fd is open and refers to a terminal.
-                    @"-t",
-        
-                    /// -u file
-                    ///   True if file exists and its set-user-id bit is set.
-                    @"-u",
-        
-                    /// -w file
-                    ///   True if file exists and is writable.
-                    @"-w",
-        
-                    /// -x file
-                    ///   True if file exists and is executable.
-                    @"-x",
-        
-                    /// -G file
-                    ///   True if file exists and is owned by the effective group id.
-                    @"-G",
-        
-                    /// -L file
-                    ///   True if file exists and is a symbolic link.
-                    @"-L",
-        
-                    /// -N file
-                    ///   True if file exists and has been modified since it was last read.
-                    @"-N",
-        
-                    /// -O file
-                    ///   True if file exists and is owned by the effective user id.
-                    @"-O",
-        
-                    /// -S file
-                    ///   True if file exists and is a socket.
-                    @"-S",
-        
-                    /// file1 -ef file2
-                    ///   True if file1 and file2 refer to the same device and inode numbers.
-                    @"-ef",
-        
-                    /// file1 -nt file2
-                    ///   True if file1 is newer than file2, or if file1 exists and file2 does not.
-                    @"-nt",
-        
-                    /// file1 -ot file2
-                    ///   True if file1 is older than file2, or if file2 exists and file1 does not.
-                    @"-ot",
-        
-                    /// -o optname
-                    ///   True if the shell option optname is enabled.
-                    @"-o",
-        
-                    /// -v varname
-                    ///   True if the shell variable varname is set.
-                    @"-v",
-        
-                    /// -R varname
-                    ///   True if the shell variable varname is set and is a name reference.
-                    @"-R",
-        
-                    /// -z string
-                    ///   True if the length of string is zero.
-                    @"-z",
-        
-                    /// -n string
-                    ///   True if the length of string is non-zero.
-                    @"-n",
-        
-                    /// string1 == string2
-                    ///   True if the strings are equal.
-                    @"==",
-        
-                    /// string1 != string2
-                    ///   True if the strings are not equal.
-                    @"!=",
-        
-                    /// string1 < string2
-                    ///   True if string1 sorts before string2 lexicographically.
-                    @"<",
-        
-                    /// string1 > string2
-                    ///   True if string1 sorts after string2 lexicographically.
-                    @">",
-        
-                    /// arg1 OP arg2
-                    ///   OP is one of ‘-eq’, ‘-ne’, ‘-lt’, ‘-le’, ‘-gt’, or ‘-ge’.
-                    ///   These arithmetic binary operators return true if arg1 is equal to, not equal to, less than,
-                    ///   less than or equal to, greater than, or greater than or equal to arg2, respectively.
-                    @"-eq",
-                    @"-ne",
-                    @"-lt",
-                    @"-le",
-                    @"-gt",
-                    @"-ge",
-        
-                    pub const SUPPORTED: []const Op = &.{
-                        .@"-f",
-                        .@"-z",
-                        .@"-n",
-                        .@"-d",
-                        .@"-c",
-                        .@"==",
-                        .@"!=",
-                    };
-        
-                    fn isSupported(op: Op) bool {
-                        comptime var idx: usize = 0;
-                        inline while (idx < SUPPORTED.len) : (idx += 1) {
-                            if (SUPPORTED[idx] == op) return true;
-                        }
-                        return false;
-                    }
-        
-                    const SINGLE_ARG_OPS: []const std.builtin.Type.EnumField = brk: {
-                        const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(AST.CondExpr.Op);
-                        const count = count: {
-                            var count: usize = 0;
-                            var idx: usize = 0;
-                            while (idx < fields.len) : (idx += 1) {
-                                const f = fields[idx];
-                                if (f.name[0] == '-' and f.name.len == 2) {
-                                    count += 1;
-                                }
-                            }
-                            break :count count;
-                        };
-                        var ret: [count]std.builtin.Type.EnumField = undefined;
-                        var len: usize = 0;
-                        var idx2: usize = 0;
-                        while (idx2 < fields.len) : (idx2 += 1) {
-                            const f = fields[idx2];
-                            if (f.name[0] == '-' and f.name.len == 2) {
-                                ret[len] = f;
-                                len += 1;
-                            }
-                        }
-                        const final = ret[0..].*;
-                        break :brk &final;
-                    };
-        
-                    const BINARY_OPS: []const std.builtin.Type.EnumField = brk: {
-                        const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(AST.CondExpr.Op);
-                        const count = count: {
-                            var count: usize = 0;
-                            var idx: usize = 0;
-                            while (idx < fields.len) : (idx += 1) {
-                                const f = fields[idx];
-                                if (!(f.name[0] == '-' and f.name.len == 2)) {
-                                    count += 1;
-                                }
-                            }
-                            break :count count;
-                        };
-                        var ret: [count]std.builtin.Type.EnumField = undefined;
-                        var len: usize = 0;
-                        var idx2: usize = 0;
-                        while (idx2 < fields.len) : (idx2 += 1) {
-                            const f = fields[idx2];
-                            if (!(f.name[0] == '-' and f.name.len == 2)) {
-                                ret[len] = f;
-                                len += 1;
-                            }
-                        }
-                        const final = ret[0..].*;
-                        break :brk &final;
-                    };
-                };
-    };
-    pub const Subshell = struct {
-        script: Script,
-        redirect: ?Redirect = null,
-        redirect_flags: RedirectFlags = RedirectFlags{ .stdin = false },
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(Subshell);
-                _ = &cost;
-                cost = (cost + self.script.memoryCost());
-                if (self.redirect) |*redirect| {
-                    _ = &redirect;
-                    cost = (cost + (redirect.*).memoryCost());
-                }
-                return cost;
-        }
-    };
-    pub const If = struct {
-        cond: SmolList(Stmt, 1) = SmolList(Stmt, 1).zeroes,
-        then: SmolList(Stmt, 1) = SmolList(Stmt, 1).zeroes,
-        else_parts: SmolList(SmolList(Stmt, 1), 1) = SmolList(SmolList(Stmt, 1), 1).zeroes,
-    
-    pub fn to_expr(self: @This(), alloc: Allocator) !Expr {
-                const @"if" = try alloc.create(If);
-                @"if".* = self;
-                return .{ .@"if" = @"if" };
-        }
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(If);
-                _ = &cost;
-                cost = (cost + self.cond.memoryCost());
-                cost = (cost + self.then.memoryCost());
-                cost = (cost + self.else_parts.memoryCost());
-                return cost;
-        }
-    };
-    pub const Binary = struct {
-        op: Op,
-        left: Expr,
-        right: Expr,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(Binary);
-                _ = &cost;
-                cost = (cost + self.left.memoryCost());
-                cost = (cost + self.right.memoryCost());
-                return cost;
-        }
-        const Op = enum { And, Or };
-    };
-    pub const Pipeline = struct {
-        items: []PipelineItem,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = 0;
-                _ = &cost;
-                for (self.items) |*item| {
-                    _ = &item;
-                    cost = (cost + (item.*).memoryCost());
-                }
-                return cost;
-        }
-    };
-    pub const PipelineItem = union(enum) {
-        cmd: *Cmd,
-        assigns: []Assign,
-        subshell: *Subshell,
-        @"if": *If,
-        condexpr: *CondExpr,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = 0;
-                _ = &cost;
-                switch (self.*) {
-    .cmd => |cmd| {
-    cost = (cost + cmd.memoryCost());
-    },
-    .assigns => |assigns| {
-    for (cp_mut_slice(&assigns)) |*assign| {
-                    _ = &assign;
-                    cost = (cost + (assign.*).memoryCost());
-                }
-    },
-    .subshell => |subshell| {
-    cost = (cost + subshell.memoryCost());
-    },
-    .@"if" => |if_node| {
-    cost = (cost + if_node.memoryCost());
-    },
-    .condexpr => |condexpr| {
-    cost = (cost + condexpr.memoryCost());
-    },
-    }
-                return cost;
-        }
-    };
-    pub const CmdOrAssigns = union(CmdOrAssigns.Tag) {
-        cmd: Cmd,
-        assigns: []Assign,
-    
-    pub fn to_pipeline_item(self: @This(), alloc: Allocator) PipelineItem {
-                switch (self) {
-    .cmd => |cmd| {
-    const cmd_ptr = try alloc.create(Cmd);
-                cmd_ptr.* = cmd;
-                return .{ .cmd = cmd_ptr };
-    },
-    .assigns => |assigns| {
-    return .{ .assign = assigns };
-    },
-    }
-        }
-    
-    pub fn to_expr(self: @This(), alloc: Allocator) !Expr {
-                switch (self) {
-    .cmd => |cmd| {
-    const cmd_ptr = try alloc.create(Cmd);
-                cmd_ptr.* = cmd;
-                return .{ .cmd = cmd_ptr };
-    },
-    .assigns => |assigns| {
-    return .{ .assign = assigns };
-    },
-    }
-        }
-        pub const Tag = enum { cmd, assigns };
-    };
-    pub const JSBuf = struct {
-        idx: u32,
-    
-    pub fn new(idx: u32) JSBuf {
-                return .{ .idx = idx };
-        }
-    };
-    pub const JSProc = struct {
-        idx: JSValue,
-    };
-    pub const Assign = struct {
-        label: []const u8,
-        value: Atom,
-    
-    pub fn new(label: []const u8, value: Atom) Assign {
-                return .{ .label = label, .value = value };
-        }
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(Assign);
-                _ = &cost;
-                cost = (cost + self.label.len);
-                cost = (cost + self.value.memoryCost());
-                return cost;
-        }
-    };
-    pub const Cmd = struct {
-        assigns: []Assign,
-        name_and_args: []Atom,
-        redirect: RedirectFlags = RedirectFlags{ .stdin = false },
-        redirect_file: ?Redirect = null,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(Cmd);
-                _ = &cost;
-                for (cp_mut_slice(&self.assigns)) |*assign| {
-                    _ = &assign;
-                    cost = (cost + (assign.*).memoryCost());
-                }
-                for (cp_mut_slice(&self.name_and_args)) |*atom| {
-                    _ = &atom;
-                    cost = (cost + (atom.*).memoryCost());
-                }
-                if (self.redirect_file) |*redirect_file| {
-                    _ = &redirect_file;
-                    cost = (cost + (redirect_file.*).memoryCost());
-                }
-                return cost;
-        }
-    };
-    pub const RedirectFlags = packed struct(u8) {
-            stdin: bool = false,
-            stdout: bool = false,
-            stderr: bool = false,
-            append: bool = false,
-            /// 1>&2 === stdout=true and duplicate_out=true
-            /// 2>&1 === stderr=true and duplicate_out=true
-            duplicate_out: bool = false,
-            __unused: u3 = 0,
-    
-            pub inline fn isEmpty(this: @This()) bool {
-                return @as(u8, @bitCast(this)) == 0;
-            }
-    
-            pub fn redirectsElsewhere(this: @This(), io_kind: enum { stdin, stdout, stderr }) bool {
-                return switch (io_kind) {
-                    .stdin => this.stdin,
-                    .stdout => if (this.duplicate_out) !this.stdout else this.stdout,
-                    .stderr => if (this.duplicate_out) !this.stderr else this.stderr,
-                };
-            }
-    
-            pub fn @"2>&1"() RedirectFlags {
-                return .{ .stderr = true, .duplicate = true };
-            }
-    
-            pub fn @"1>&2"() RedirectFlags {
-                return .{ .stdout = true, .duplicate = true };
-            }
-    
-            pub fn toFlags(this: @This()) i32 {
-                const read_write_flags: i32 = if (this.stdin) bun.O.RDONLY else bun.O.WRONLY | bun.O.CREAT;
-                const extra: i32 = if (this.append) bun.O.APPEND else bun.O.TRUNC;
-                const final_flags: i32 = if (this.stdin) read_write_flags else extra | read_write_flags;
-                return final_flags;
-            }
-    
-            pub fn @"<"() RedirectFlags {
-                return .{ .stdin = true };
-            }
-    
-            pub fn @"<<"() RedirectFlags {
-                return .{ .stdin = true, .append = true };
-            }
-    
-            pub fn @">"() RedirectFlags {
-                return .{ .stdout = true };
-            }
-    
-            pub fn @">>"() RedirectFlags {
-                return .{ .append = true, .stdout = true };
-            }
-    
-            pub fn @"&>"() RedirectFlags {
-                return .{ .stdout = true, .stderr = true };
-            }
-    
-            pub fn @"&>>"() RedirectFlags {
-                return .{ .append = true, .stdout = true, .stderr = true };
-            }
-    
-            fn merge(a: RedirectFlags, b: RedirectFlags) RedirectFlags {
-                const anum: u8 = @bitCast(a);
-                const bnum: u8 = @bitCast(b);
-                return @bitCast(anum | bnum);
-            }
-        };
-    pub const Redirect = union(enum) {
-        atom: Atom,
-        jsbuf: JSBuf,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                return (switch (self.*) {
-    .atom => |*atom| atom.memoryCost(),
-    .jsbuf => @sizeOf(JSBuf),
-    });
-        }
-    };
-    pub const Atom = union(Atom.Tag) {
-        simple: SimpleAtom,
-        compound: CompoundAtom,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                return (switch (self.*) {
-    .simple => |*simple| simple.memoryCost(),
-    .compound => |*compound| compound.memoryCost(),
-    });
-        }
-    
-    pub fn merge(self: @This(), right: Atom, allocator: Allocator) !Atom {
-                if (((self == .simple) and (right == .simple))) {
-                    var atoms = try allocator.alloc(SimpleAtom, 2);
-                    _ = &atoms;
-                    atoms[cp_cast_int(usize, 0)] = self.simple;
-                    atoms[cp_cast_int(usize, 1)] = right.simple;
-                    return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = ((((self.simple == .brace_begin) or (self.simple == .brace_end)) or (right.simple == .brace_begin)) or (right.simple == .brace_end)), .glob_hint = ((((self.simple == .asterisk) or (self.simple == .double_asterisk)) or (right.simple == .asterisk)) or (right.simple == .double_asterisk)) } };
-                }
-                if (((self == .compound) and (right == .compound))) {
-                    var atoms = try allocator.alloc(SimpleAtom, (self.compound.atoms.len + right.compound.atoms.len));
-                    _ = &atoms;
-                    _ = @memcpy(atoms[0..self.compound.atoms.len], self.compound.atoms);
-                    _ = @memcpy(atoms[self.compound.atoms.len..(self.compound.atoms.len + right.compound.atoms.len)], right.compound.atoms);
-                    return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = (self.compound.brace_expansion_hint or right.compound.brace_expansion_hint), .glob_hint = (self.compound.glob_hint or right.compound.glob_hint) } };
-                }
-                if ((self == .simple)) {
-                    var atoms = try allocator.alloc(SimpleAtom, (1 + right.compound.atoms.len));
-                    _ = &atoms;
-                    atoms[cp_cast_int(usize, 0)] = self.simple;
-                    _ = @memcpy(atoms[1..(right.compound.atoms.len + 1)], right.compound.atoms);
-                    return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = (((self.simple == .brace_begin) or (self.simple == .brace_end)) or right.compound.brace_expansion_hint), .glob_hint = (((self.simple == .asterisk) or (self.simple == .double_asterisk)) or right.compound.glob_hint) } };
-                }
-                var atoms = try allocator.alloc(SimpleAtom, (1 + self.compound.atoms.len));
-                _ = &atoms;
-                _ = @memcpy(atoms[0..self.compound.atoms.len], self.compound.atoms);
-                atoms[cp_cast_int(usize, self.compound.atoms.len)] = right.simple;
-                return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = (((right.simple == .brace_begin) or (right.simple == .brace_end)) or self.compound.brace_expansion_hint), .glob_hint = (((right.simple == .asterisk) or (right.simple == .double_asterisk)) or self.compound.glob_hint) } };
-        }
-    
-    pub fn atomsLen(self: *const @This()) u32 {
-                return (switch (self.*) {
-    .simple => 1,
-    .compound => @intCast(self.compound.atoms.len),
-    });
-        }
-    
-    pub fn new_simple(atom: SimpleAtom) Atom {
-                return .{ .simple = atom };
-        }
-    
-    pub fn is_compound(self: *const @This()) bool {
-                switch (self.*) {
-    .compound => {
-    return true;
-    },
-    .simple => {
-    return false;
-    },
-    }
-        }
-    
-    pub fn has_expansions(self: *const @This()) bool {
-                return (self.has_glob_expansion() or self.has_brace_expansion());
-        }
-    
-    pub fn has_glob_expansion(self: *const @This()) bool {
-                return (switch (self.*) {
-    .simple => self.simple.glob_hint(),
-    .compound => self.compound.glob_hint,
-    });
-        }
-    
-    pub fn has_brace_expansion(self: *const @This()) bool {
-                return (switch (self.*) {
-    .simple => false,
-    .compound => self.compound.brace_expansion_hint,
-    });
-        }
-    
-    pub fn hasTildeExpansion(self: *const @This()) bool {
-                return (switch (self.*) {
-    .simple => (self.simple == .tilde),
-    .compound => ((self.compound.atoms.len > 0) and (self.compound.atoms[0] == .tilde)),
-    });
-        }
-        pub const Tag = enum(u8) { simple, compound };
-    };
-    pub const SimpleAtom = union(enum) {
-            Var: []const u8,
-            VarArgv: u8,
-            Text: []const u8,
-            /// An empty string from a quoted context (e.g. "", '', or ${''}). Preserved as an
-            /// explicit empty argument during expansion, unlike unquoted empty text which is dropped.
-            quoted_empty,
-            asterisk,
-            double_asterisk,
-            brace_begin,
-            brace_end,
-            comma,
-            tilde,
-            cmd_subst: struct {
-                script: Script,
-                quoted: bool = false,
-    
-                fn memoryCost(this: *const @This()) usize {
-                    var cost: usize = @sizeOf(@This());
-                    cost += this.script.memoryCost();
-                    return cost;
-                }
-            },
-    
-            fn glob_hint(this: @This()) bool {
-                return switch (this) {
-                    .Var => false,
-                    .VarArgv => false,
-                    .Text => false,
-                    .quoted_empty => false,
-                    .asterisk => true,
-                    .double_asterisk => true,
-                    .brace_begin => false,
-                    .brace_end => false,
-                    .comma => false,
-                    .cmd_subst => false,
-                    .tilde => false,
-                };
-            }
-    
-            fn memoryCost(this: *const @This()) usize {
-                return switch (this.*) {
-                    .Var => this.Var.len,
-                    .Text => this.Text.len,
-                    .cmd_subst => this.cmd_subst.memoryCost(),
-                    else => 0,
-                } + @sizeOf(SimpleAtom);
-            }
-        };
-    pub const CompoundAtom = struct {
-        atoms: []SimpleAtom,
-        brace_expansion_hint: bool = false,
-        glob_hint: bool = false,
-    
-    pub fn memoryCost(self: *const @This()) usize {
-                var cost: usize = @sizeOf(CompoundAtom);
-                _ = &cost;
-                cost = (cost + self.#atomsMemoryCost());
-                return cost;
-        }
-    
-    pub fn #atomsMemoryCost(self: *const @This()) usize {
-                var cost: usize = 0;
-                _ = &cost;
-                for (cp_mut_slice(&self.atoms)) |*atom| {
-                    _ = &atom;
-                    cost = (cost + (atom.*).memoryCost());
-                }
-                return cost;
-        }
-    };
-};
+pub const ASTScript = struct {
+    stmts: []ASTStmt,
 
-pub const LexResult = struct {
-    errors: []LexError,
-    tokens: []const Token,
-    strpool: []const u8,
-
-pub fn combineErrors(self: *const LexResult, allocator: Allocator) []const u8 {
-            const errors = self.errors;
-            const str = str: {
-            const size = size: {
-            var i: usize = 0;
-            _ = &i;
-            for (cp_iter_slice(errors)) |e| {
-                _ = &e;
-                i = (i + e.msg.len());
+pub fn memoryCost(self: ASTScript) usize {
+            var cost: usize = 0;
+            _ = &cost;
+            for (cp_iter_slice(self.stmts)) |stmt| {
+                _ = &stmt;
+                cost = (cost + stmt.memoryCost());
             }
-            break :size i;
-};
-            var buf = bun.handleOom(allocator.alloc(u8, size));
-            _ = &buf;
-            var i: usize = 0;
-            _ = &i;
-            for (cp_iter_slice(errors)) |e| {
-                _ = &e;
-                _ = @memcpy(buf[i..(i + e.msg.len())], e.msg.slice(self.strpool));
-                i = (i + e.msg.len());
-            }
-            break :str buf;
-};
-            return str;
+            return cost;
     }
 };
 
-pub const LexError = struct {
-    msg: Token.TextRange,
-};
+pub const ASTStmt = struct {
+    exprs: []ASTExpr,
 
-pub const SrcAscii = struct {
-    bytes: []const u8,
-    i: usize,
-
-pub fn init(bytes: []const u8) SrcAscii {
-            return .{ .bytes = bytes, .i = 0 };
-    }
-
-pub inline fn index(self: SrcAscii) ?IndexValue {
-            if ((self.i >= self.bytes.len)) {
-                return null;
+pub fn memoryCost(self: ASTStmt) usize {
+            var cost: usize = 0;
+            _ = &cost;
+            for (cp_iter_slice(self.exprs)) |expr| {
+                _ = &expr;
+                cost = (cost + expr.memoryCost());
             }
-            return .{ .char = @intCast(self.bytes[@as(usize, @intCast(self.i))]) };
-    }
-
-pub inline fn indexNext(self: SrcAscii) ?IndexValue {
-            if (((self.i + 1) >= self.bytes.len)) {
-                return null;
-            }
-            return .{ .char = @intCast(self.bytes[@as(usize, @intCast((self.i + 1)))]) };
-    }
-
-pub inline fn eat(self: *SrcAscii, escaped: bool) void {
-            self.i = (self.i + (1 + (if (comptime @typeInfo(@TypeOf(@intFromBool(escaped))) == .@"enum") cp_cast_int(u32, @intFromEnum(@intFromBool(escaped))) else cp_cast_int(u32, @intFromBool(escaped)))));
-    }
-    const IndexValue = packed struct(u8) {
-            char: u7,
-            escaped: bool = false,
-        };
-};
-
-pub const SrcUnicode = struct {
-    iter: CodepointIterator,
-    cursor: Cursor,
-    next_cursor: Cursor,
-
-pub fn nextCursor(iter: *const CodepointIterator, cursor: *Cursor) void {
-            if ((!iter.next(cursor))) {
-                cursor.i = @intCast((iter.bytes.len + 1));
-                cursor.width = 1;
-                cursor.c = CodepointIterator.ZeroValue;
-            }
-    }
-
-pub fn init(bytes: []const u8) SrcUnicode {
-            var iter = CodepointIterator.init(bytes);
-            _ = &iter;
-            var cursor = Cursor{  };
-            _ = &cursor;
-            _ = nextCursor((&iter), (&cursor));
-            var next_cursor: Cursor = cursor;
-            _ = &next_cursor;
-            _ = nextCursor((&iter), (&next_cursor));
-            return .{ .iter = iter, .cursor = cursor, .next_cursor = next_cursor };
-    }
-
-pub inline fn index(self: SrcUnicode) ?IndexValue {
-            if (((self.cursor.width + self.cursor.i) > self.iter.bytes.len)) {
-                return null;
-            }
-            return .{ .char = self.cursor.c, .width = self.cursor.width };
-    }
-
-pub inline fn indexNext(self: SrcUnicode) ?IndexValue {
-            if (((self.next_cursor.width + self.next_cursor.i) > self.iter.bytes.len)) {
-                return null;
-            }
-            return .{ .char = @intCast(self.next_cursor.c), .width = self.next_cursor.width };
-    }
-
-pub inline fn eat(self: *SrcUnicode, escaped: bool) void {
-            if (escaped) {
-                _ = SrcUnicode.nextCursor((&self.iter), (&self.next_cursor));
-                self.cursor = self.next_cursor;
-                _ = SrcUnicode.nextCursor((&self.iter), (&self.next_cursor));
-            } else {
-                self.cursor = self.next_cursor;
-                _ = SrcUnicode.nextCursor((&self.iter), (&self.next_cursor));
-            }
-    }
-    const Cursor = CodepointIterator.Cursor;
-    const IndexValue = struct {
-        char: u32,
-        width: u8,
-    };
-};
-
-pub const CmdEnvIter = struct {
-    env: *const bun.StringArrayHashMap(EnvStrZ),
-    iter: bun.StringArrayHashMap(EnvStrZ).Iterator,
-
-pub fn fromEnv(env: *const bun.StringArrayHashMap(EnvStrZ)) CmdEnvIter {
-            const iter = env.iterator();
-            return .{ .env = env, .iter = iter };
-    }
-
-pub fn len(self: CmdEnvIter) usize {
-            return self.env.unmanaged.entries.len;
-    }
-
-pub fn next(self: *CmdEnvIter) !?Entry {
-            const entry = ((self.iter.next()) orelse { return null; });
-            return .{ .key = .{ .val = entry.key_ptr.* }, .value = .{ .val = entry.value_ptr.* } };
-    }
-    const Entry = struct {
-        key: Key,
-        value: Value,
-    };
-    const Value = struct {
-        val: [:0]const u8,
-    
-    pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
-                _ = try writer.writeAll(self.val);
-        }
-    };
-    const Key = struct {
-        val: []const u8,
-    
-    pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
-                _ = try writer.writeAll(self.val);
-        }
-    
-    pub fn eqlComptime(self: @This(), comptime str: []const u8) bool {
-                return bun.strings.eqlComptime(self.val, str);
-        }
-    };
-};
-
-pub const Test = struct {
-    pub const TestToken = union(TokenTag) {
-            // |
-            Pipe,
-            // ||
-            DoublePipe,
-            // &
-            Ampersand,
-            // &&
-            DoubleAmpersand,
-    
-            // >
-            Redirect: AST.RedirectFlags,
-    
-            // $
-            Dollar,
-            // *
-            Asterisk,
-            DoubleAsterisk,
-            // =
-            Eq,
-            Semicolon,
-            Newline,
-    
-            BraceBegin,
-            Comma,
-            BraceEnd,
-            CmdSubstBegin,
-            CmdSubstQuoted,
-            CmdSubstEnd,
-            OpenParen,
-            CloseParen,
-    
-            Var: []const u8,
-            VarArgv: u8,
-            Text: []const u8,
-            SingleQuotedText: []const u8,
-            DoubleQuotedText: []const u8,
-            JSObjRef: u32,
-    
-            DoubleBracketOpen,
-            DoubleBracketClose,
-    
-            Delimit,
-            Eof,
-    
-            pub fn from_real(the_token: Token, buf: []const u8) TestToken {
-                switch (the_token) {
-                    .Var => |txt| return .{ .Var = buf[txt.start..txt.end] },
-                    .VarArgv => |int| return .{ .VarArgv = int },
-                    .Text => |txt| return .{ .Text = buf[txt.start..txt.end] },
-                    .SingleQuotedText => |txt| return .{ .SingleQuotedText = buf[txt.start..txt.end] },
-                    .DoubleQuotedText => |txt| return .{ .DoubleQuotedText = buf[txt.start..txt.end] },
-                    .JSObjRef => |val| return .{ .JSObjRef = val },
-                    .Pipe => return .Pipe,
-                    .DoublePipe => return .DoublePipe,
-                    .Ampersand => return .Ampersand,
-                    .DoubleAmpersand => return .DoubleAmpersand,
-                    .Redirect => |r| return .{ .Redirect = r },
-                    .Dollar => return .Dollar,
-                    .Asterisk => return .Asterisk,
-                    .DoubleAsterisk => return .DoubleAsterisk,
-                    .Eq => return .Eq,
-                    .Semicolon => return .Semicolon,
-                    .Newline => return .Newline,
-                    .BraceBegin => return .BraceBegin,
-                    .Comma => return .Comma,
-                    .BraceEnd => return .BraceEnd,
-                    .CmdSubstBegin => return .CmdSubstBegin,
-                    .CmdSubstQuoted => return .CmdSubstQuoted,
-                    .CmdSubstEnd => return .CmdSubstEnd,
-                    .OpenParen => return .OpenParen,
-                    .CloseParen => return .CloseParen,
-                    .DoubleBracketOpen => return .DoubleBracketOpen,
-                    .DoubleBracketClose => return .DoubleBracketClose,
-                    .Delimit => return .Delimit,
-                    .Eof => return .Eof,
-                }
-            }
-        };
-};
-
-pub const ShellSrcBuilder = struct {
-    globalThis: *jsc.JSGlobalObject,
-    outbuf: *std.array_list.Managed(u8),
-    jsstrs_to_escape: *std.array_list.Managed(bun.String),
-    jsstr_ref_buf: [128]u8 = undefined,
-
-pub fn init(globalThis: *jsc.JSGlobalObject, outbuf: *std.array_list.Managed(u8), jsstrs_to_escape: *std.array_list.Managed(bun.String)) ShellSrcBuilder {
-            return .{ .globalThis = globalThis, .outbuf = outbuf, .jsstrs_to_escape = jsstrs_to_escape };
-    }
-
-pub fn appendJSValueStr(self: *ShellSrcBuilder, jsval: JSValue, comptime allow_escape: bool) bun.JSError!bool {
-            const bunstr = try jsval.toBunString(self.globalThis);
-            var _guard_bunstr = DerefGuard(bun.String){ .val = bunstr };
-            _ = &_guard_bunstr;
-            var ___guard_bunstr_moved = false; _ = &___guard_bunstr_moved;
-            defer if (!___guard_bunstr_moved) { ___guard_bunstr_moved = true; const __T = @TypeOf(_guard_bunstr); if (@typeInfo(__T) == .optional) { if (_guard_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstr; _drop_val.__cp_deinit(); } };
-            if ((bunstr.indexOfAsciiChar(0) != null)) {
-                return self.globalThis.ERR(.INVALID_ARG_VALUE, "The shell argument must be a string without null bytes. Received \"{f}\"", .{ bunstr.toZigString() }).throw();
-            }
-            return try self.appendBunStr(bunstr, allow_escape);
-    }
-
-pub fn appendBunStr(self: *ShellSrcBuilder, bunstr: bun.String, comptime allow_escape: bool) bun.OOM!bool {
-            const invalid = ((bunstr.isUTF16() and (!bun.simdutf.validate.utf16le(bunstr.utf16()))) or (bunstr.isUTF8() and (!bun.simdutf.validate.utf8(bunstr.byteSlice()))));
-            if (invalid) {
-                return false;
-            }
-            if ((allow_escape and (bunstr.length() == 0))) {
-                _ = try self.appendJSStrRef(bunstr);
-                return true;
-            }
-            if (allow_escape) {
-                if (needsEscapeBunstr(bunstr)) {
-                    _ = try self.appendJSStrRef(bunstr);
-                    return true;
-                }
-            }
-            if (bunstr.isUTF16()) {
-                _ = try self.appendUTF16Impl(bunstr.utf16());
-                return true;
-            }
-            if ((bunstr.isUTF8() or bun.strings.isAllASCII(bunstr.byteSlice()))) {
-                _ = try self.appendUTF8Impl(bunstr.byteSlice());
-                return true;
-            }
-            _ = try self.appendLatin1Impl(bunstr.byteSlice());
-            return true;
-    }
-
-pub fn appendUTF8(self: *ShellSrcBuilder, utf8: []const u8, comptime allow_escape: bool) !bool {
-            const invalid = bun.simdutf.validate.utf8(utf8);
-            if ((!invalid)) {
-                return false;
-            }
-            if (allow_escape) {
-                if (needsEscapeUtf8AsciiLatin1(utf8)) {
-                    const bunstr = bun.String.cloneUTF8(utf8);
-                    var _guard_bunstr = DerefGuard(bun.String){ .val = bunstr };
-                    _ = &_guard_bunstr;
-                    var ___guard_bunstr_moved = false; _ = &___guard_bunstr_moved;
-                    defer if (!___guard_bunstr_moved) { ___guard_bunstr_moved = true; const __T = @TypeOf(_guard_bunstr); if (@typeInfo(__T) == .optional) { if (_guard_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstr; _drop_val.__cp_deinit(); } };
-                    _ = try self.appendJSStrRef(bunstr);
-                    return true;
-                }
-            }
-            _ = try self.appendUTF8Impl(utf8);
-            return true;
-    }
-
-pub fn appendUTF16Impl(self: *ShellSrcBuilder, utf16: []const u16) !void {
-            const size = bun.simdutf.simdutf__utf8_length_from_utf16le(utf16.ptr, utf16.len);
-            _ = try self.outbuf.ensureUnusedCapacity(size);
-            _ = try bun.strings.convertUTF16ToUTF8Append(self.outbuf, utf16);
-    }
-
-pub fn appendUTF8Impl(self: *ShellSrcBuilder, utf8: []const u8) !void {
-            _ = try self.outbuf.appendSlice(utf8);
-    }
-
-pub fn appendLatin1Impl(self: *ShellSrcBuilder, latin1: []const u8) !void {
-            const non_ascii_idx = ((bun.strings.firstNonASCII(latin1)) orelse (0));
-            if ((non_ascii_idx > 0)) {
-                _ = try self.appendUTF8Impl(latin1[0..non_ascii_idx]);
-            }
-            self.outbuf.* = try bun.strings.allocateLatin1IntoUTF8WithList(self.outbuf.*, self.outbuf.items.len, latin1);
-    }
-
-pub fn appendJSStrRef(self: *ShellSrcBuilder, bunstr: bun.String) !void {
-            const idx = self.jsstrs_to_escape.items.len;
-            const str = (blk_catch_0: { break :blk_catch_0 ((std.fmt.bufPrint(self.jsstr_ref_buf[0..], "{s}{d}", .{ LEX_JS_STRING_PREFIX, idx })) catch |__ce_0| { _ = &__ce_0; @panic("Impossible"); }); });
-            _ = try self.outbuf.appendSlice(str);
-            _ = bunstr.ref();
-            _ = try self.jsstrs_to_escape.append(bunstr);
+            return cost;
     }
 };
 
-pub const EscapeUtf16Result = struct {
-    is_invalid: bool = false,
-};
+pub const ASTExpr = union(ASTExprTag) {
+    assign: []ASTAssign,
+    binary: *ASTBinary,
+    pipeline: *ASTPipeline,
+    cmd: *ASTCmd,
+    subshell: *ASTSubshell,
+    @"if": *ASTIf,
+    condexpr: *ASTCondExpr,
+    @"async": *ASTExpr,
 
-pub const TestingAPIs = struct {
-
-pub fn disabledOnThisPlatform(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
-            if (comptime bun.Environment.isWindows) {
-                return jsc.JSValue.jsBoolean(false);
+pub fn memoryCost(self: ASTExpr) usize {
+            return (switch (self) {
+.assign => |assign| brk: {
+            var cost: usize = 0;
+            _ = &cost;
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < assign.len)) : (idx = (idx + 1)) {
+                cost = (cost + assign[@as(usize, @intCast(idx))].memoryCost());
             }
-            const arguments_ = callframe.arguments_old(1);
-            var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-            _ = &arguments;
-            const str_arg_opt = arguments.nextEat();
-            if ((str_arg_opt == null)) {
-                return globalThis.throw("shellInternals.disabledOnPosix: expected 1 arguments, got 0", .{});
-            }
-            const str_arg = str_arg_opt.?;
-            const bunstr = try str_arg.toBunString(globalThis);
-            var _guard_bunstr = DerefGuard(bun.String){ .val = bunstr };
-            _ = &_guard_bunstr;
-            var ___guard_bunstr_moved = false; _ = &___guard_bunstr_moved;
-            defer if (!___guard_bunstr_moved) { ___guard_bunstr_moved = true; const __T = @TypeOf(_guard_bunstr); if (@typeInfo(__T) == .optional) { if (_guard_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstr; _drop_val.__cp_deinit(); } };
-            var utf8str = bunstr.toUTF8(bun.default_allocator);
-            _ = &utf8str;
-            var _guard_utf8str = DeinitGuard(@TypeOf(utf8str)){ .ptr = (&utf8str) };
-            _ = &_guard_utf8str;
-            var ___guard_utf8str_moved = false; _ = &___guard_utf8str_moved;
-            defer if (!___guard_utf8str_moved) { ___guard_utf8str_moved = true; const __T = @TypeOf(_guard_utf8str); if (@typeInfo(__T) == .optional) { if (_guard_utf8str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_utf8str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_utf8str; _drop_val.__cp_deinit(); } };
-            inline for (Interpreter.Builtin.Kind.DISABLED_ON_POSIX) |disabled| {
-                if (bun.strings.eqlComptime(utf8str.byteSlice(), @tagName(disabled))) {
-                    return jsc.JSValue.jsBoolean(true);
-                }
-            }
-            return jsc.JSValue.jsBoolean(false);
-    }
-
-pub fn shellLexImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer) bun.JSError!jsc.JSValue {
-            const arguments_ = callframe.arguments_old(2);
-            var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-            _ = &arguments;
-            const string_args_opt = arguments.nextEat();
-            if ((string_args_opt == null)) {
-                return globalThis.throw("shell_parse: expected 2 arguments, got 0", .{});
-            }
-            const string_args = string_args_opt.?;
-            var arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-            _ = &arena_;
-            var _guard_arena = DeinitGuard(@TypeOf(arena_)){ .ptr = (&arena_) };
-            _ = &_guard_arena;
-            var ___guard_arena_moved = false; _ = &___guard_arena_moved;
-            defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
-            const template_args_js_opt = arguments.nextEat();
-            if ((template_args_js_opt == null)) {
-                return globalThis.throw("shell: expected 2 arguments, got 0", .{});
-            }
-            const template_args_js = template_args_js_opt.?;
-            var template_args = try template_args_js.arrayIterator(globalThis);
-            _ = &template_args;
-            var stack_alloc = std.heap.stackFallback((@sizeOf(bun.String) * 4), arena_.allocator());
-            _ = &stack_alloc;
-            var jsstrings = try std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4);
-            _ = &jsstrings;
-            var _guard_jsstrings = JsStringsGuard(@TypeOf(jsstrings)){ .ptr = (&jsstrings) };
-            _ = &_guard_jsstrings;
-            var ___guard_jsstrings_moved = false; _ = &___guard_jsstrings_moved;
-            defer if (!___guard_jsstrings_moved) { ___guard_jsstrings_moved = true; const __T = @TypeOf(_guard_jsstrings); if (@typeInfo(__T) == .optional) { if (_guard_jsstrings) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsstrings.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsstrings; _drop_val.__cp_deinit(); } };
-            var jsobjs = std.array_list.Managed(JSValue).init(arena_.allocator());
-            _ = &jsobjs;
-            var _guard_jsobjs = DeinitGuard(@TypeOf(jsobjs)){ .ptr = (&jsobjs) };
-            _ = &_guard_jsobjs;
-            var ___guard_jsobjs_moved = false; _ = &___guard_jsobjs_moved;
-            defer if (!___guard_jsobjs_moved) { ___guard_jsobjs_moved = true; const __T = @TypeOf(_guard_jsobjs); if (@typeInfo(__T) == .optional) { if (_guard_jsobjs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsobjs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsobjs; _drop_val.__cp_deinit(); } };
-            var script = std.array_list.Managed(u8).init(arena_.allocator());
-            _ = &script;
-            _ = try shellCmdFromJS(globalThis, string_args, (&template_args), (&jsobjs), (&jsstrings), (&script), marked_argument_buffer);
-            const jsobjs_len: u32 = @intCast(jsobjs.items.len);
-            const lex_result = brk: {
-            if (bun.strings.isAllASCII(script.items[0..])) {
-                var lexer = LexerAscii.new(arena_.allocator(), script.items[0..], jsstrings.items[0..], jsobjs_len);
-                _ = &lexer;
-                _ = (blk_catch_1: { break :blk_catch_1 ((lexer.lex()) catch |e| { _ = &e; return globalThis.throwError(e, "failed to lex shell"); }); });
-                break :brk lexer.get_result();
-            }
-            var lexer = LexerUnicode.new(arena_.allocator(), script.items[0..], jsstrings.items[0..], jsobjs_len);
-            _ = &lexer;
-            _ = (blk_catch_2: { break :blk_catch_2 ((lexer.lex()) catch |e| { _ = &e; return globalThis.throwError(e, "failed to lex shell"); }); });
-            break :brk lexer.get_result();
-};
-            if ((lex_result.errors.len > 0)) {
-                const str = lex_result.combineErrors(arena_.allocator());
-                return globalThis.throwPretty("{s}", .{ str });
-            }
-            var test_tokens = try std.array_list.Managed(Test.TestToken).initCapacity(arena_.allocator(), lex_result.tokens.len);
-            _ = &test_tokens;
-            for (cp_iter_slice(lex_result.tokens)) |tok| {
-                _ = &tok;
-                const test_tok = Test.TestToken.from_real(tok, lex_result.strpool);
-                _ = try test_tokens.append(test_tok);
-            }
-            const str = bun.handleOom(std.fmt.allocPrint(globalThis.bunVM().allocator, "{f}", .{ std.json.fmt(test_tokens.items[0..], .{}) }));
-            var _guard_str = AllocFreeGuard(@TypeOf(str)){ .allocator = globalThis.bunVM().allocator, .slice = str };
-            _ = &_guard_str;
-            var ___guard_str_moved = false; _ = &___guard_str_moved;
-            defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
-            var bun_str = bun.String.fromBytes(str);
-            _ = &bun_str;
-            return bun_str.toJS(globalThis);
-    }
-
-pub fn shellParseImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer) bun.JSError!jsc.JSValue {
-            const arguments_ = callframe.arguments_old(2);
-            var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
-            _ = &arguments;
-            const string_args_opt = arguments.nextEat();
-            if ((string_args_opt == null)) {
-                return globalThis.throw("shell_parse: expected 2 arguments, got 0", .{});
-            }
-            const string_args = string_args_opt.?;
-            var arena_ = bun.ArenaAllocator.init(bun.default_allocator);
-            _ = &arena_;
-            var _guard_arena = DeinitGuard(@TypeOf(arena_)){ .ptr = (&arena_) };
-            _ = &_guard_arena;
-            var ___guard_arena_moved = false; _ = &___guard_arena_moved;
-            defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
-            const template_args_js_opt = arguments.nextEat();
-            if ((template_args_js_opt == null)) {
-                return globalThis.throw("shell: expected 2 arguments, got 0", .{});
-            }
-            const template_args_js = template_args_js_opt.?;
-            var template_args = try template_args_js.arrayIterator(globalThis);
-            _ = &template_args;
-            var stack_alloc = std.heap.stackFallback((@sizeOf(bun.String) * 4), arena_.allocator());
-            _ = &stack_alloc;
-            var jsstrings = try std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4);
-            _ = &jsstrings;
-            var _guard_jsstrings = JsStringsGuard(@TypeOf(jsstrings)){ .ptr = (&jsstrings) };
-            _ = &_guard_jsstrings;
-            var ___guard_jsstrings_moved = false; _ = &___guard_jsstrings_moved;
-            defer if (!___guard_jsstrings_moved) { ___guard_jsstrings_moved = true; const __T = @TypeOf(_guard_jsstrings); if (@typeInfo(__T) == .optional) { if (_guard_jsstrings) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsstrings.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsstrings; _drop_val.__cp_deinit(); } };
-            var jsobjs = std.array_list.Managed(JSValue).init(arena_.allocator());
-            _ = &jsobjs;
-            var _guard_jsobjs = DeinitGuard(@TypeOf(jsobjs)){ .ptr = (&jsobjs) };
-            _ = &_guard_jsobjs;
-            var ___guard_jsobjs_moved = false; _ = &___guard_jsobjs_moved;
-            defer if (!___guard_jsobjs_moved) { ___guard_jsobjs_moved = true; const __T = @TypeOf(_guard_jsobjs); if (@typeInfo(__T) == .optional) { if (_guard_jsobjs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsobjs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsobjs; _drop_val.__cp_deinit(); } };
-            var script = std.array_list.Managed(u8).init(arena_.allocator());
-            _ = &script;
-            _ = try shellCmdFromJS(globalThis, string_args, (&template_args), (&jsobjs), (&jsstrings), (&script), marked_argument_buffer);
-            var out_parser: ?Parser = null;
-            _ = &out_parser;
-            var out_lex_result: ?LexResult = null;
-            _ = &out_lex_result;
-            const script_ast = (blk_catch_3: { break :blk_catch_3 ((Interpreter.parse(arena_.allocator(), script.items[0..], jsobjs.items[0..], jsstrings.items[0..], (&out_parser), (&out_lex_result))) catch |e| { _ = &e; if ((e == ParseError.Lex)) {
-                if (bun.Environment.allow_assert) {
-                    _ = assert((out_lex_result != null));
-                }
-                const str = out_lex_result.?.combineErrors(arena_.allocator());
-                return globalThis.throwPretty("{s}", .{ str });
-            }
-            if (out_parser) |*p| {
-                _ = &p;
-                const errstr = (p.*).combineErrors();
-                return globalThis.throwPretty("{s}", .{ errstr });
-            }
-            return globalThis.throwError(e, "failed to lex/parse shell"); }); });
-            const str = bun.handleOom(std.fmt.allocPrint(globalThis.bunVM().allocator, "{f}", .{ std.json.fmt(script_ast, .{}) }));
-            var _guard_str = AllocFreeGuard(@TypeOf(str)){ .allocator = globalThis.bunVM().allocator, .slice = str };
-            _ = &_guard_str;
-            var ___guard_str_moved = false; _ = &___guard_str_moved;
-            defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
-            return bun.String.createUTF8ForJS(globalThis, str);
-    }
-    pub const shellLex = jsc.MarkedArgumentBuffer.wrap(shellLexImpl);
-    pub const shellParse = jsc.MarkedArgumentBuffer.wrap(shellParseImpl);
-};
-
-const EnvStrZ = [:0]const u8;
-pub const EnvMap = interpret.EnvMap;
-pub const EnvStr = interpret.EnvStr;
-pub const Interpreter = interpret.Interpreter;
-pub const ParsedShellScript = interpret.ParsedShellScript;
-pub const Subprocess = subproc.ShellSubprocess;
-pub const ExitCode = interpret.ExitCode;
-pub const IOWriter = Interpreter.IOWriter;
-pub const IOReader = Interpreter.IOReader;
-pub const Yield = @import("./Yield.zig").Yield;
-pub const unreachableState = interpret.unreachableState;
-const GlobWalker = bun.glob.GlobWalker(null, true);
-pub const SUBSHELL_TODO_ERROR = "Subshells are not implemented, please open GitHub issue!";
-pub const STDIN_FD: bun.FD = .fromUV(0);
-pub const STDOUT_FD: bun.FD = .fromUV(1);
-pub const STDERR_FD: bun.FD = .fromUV(2);
-pub const POSIX_DEV_NULL: [:0]const u8 = "/dev/null";
-pub const WINDOWS_DEV_NULL: [:0]const u8 = "NUL";
-pub const ShellErr = union(enum) {
-    sys: jsc.SystemError,
-    custom: []const u8,
-    invalid_arguments: struct { val: []const u8 = "" },
-    todo: []const u8,
-
-pub fn newSys(e: anytype) @This() {
-            return .{ .sys = (switch (@TypeOf(e)) {
-Syscall.Error => e.toShellSystemError(),
-jsc.SystemError => e,
-else => @compileError(("Invalid `e`: " ++ @typeName(e))),
-}) };
-    }
-
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
-            return (switch (self.*) {
-.sys => |e| writer.print("bun: {f}: {f}", .{ e.message, e.path }),
-.custom => |msg| writer.print("bun: {s}", .{ msg }),
-.invalid_arguments => |args| writer.print("bun: invalid arguments: {s}", .{ args.val }),
-.todo => |msg| writer.print("bun: TODO: {s}", .{ msg }),
+            break :brk cost;
+},
+.binary => |binary| binary.memoryCost(),
+.pipeline => |pipeline| pipeline.memoryCost(),
+.cmd => |cmd| cmd.memoryCost(),
+.subshell => |subshell| subshell.memoryCost(),
+.@"if" => |if_node| if_node.memoryCost(),
+.condexpr => |condexpr| condexpr.memoryCost(),
+.@"async" => |a| a.memoryCost(),
 });
     }
 
-pub fn throwJS(self: *const @This(), globalThis: *jsc.JSGlobalObject) bun.JSError {
-            var _guard_err = ShellErrThrowGuard{ .ptr = self };
-            _ = &_guard_err;
-            var ___guard_err_moved = false; _ = &___guard_err_moved;
-            defer if (!___guard_err_moved) { ___guard_err_moved = true; const __T = @TypeOf(_guard_err); if (@typeInfo(__T) == .optional) { if (_guard_err) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_err.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_err; _drop_val.__cp_deinit(); } };
-            switch (self.*) {
-.sys => {
-const e = self.sys.toErrorInstance(globalThis);
-            return globalThis.throwValue(e);
-},
-.custom => {
-const err_value = bun.String.cloneUTF8(self.custom).toErrorInstance(globalThis);
-            return globalThis.throwValue(err_value);
-},
-.invalid_arguments => {
-return globalThis.throwInvalidArguments("{s}", .{ self.invalid_arguments.val });
-},
-.todo => {
-return globalThis.throwTODO(self.todo);
-},
-}
+pub fn asPipelineItem(self: ASTExpr) ?ASTPipelineItem {
+            return (switch (self) {
+.assign => .{ .assigns = self.assign },
+.cmd => .{ .cmd = self.cmd },
+.subshell => .{ .subshell = self.subshell },
+.@"if" => .{ .@"if" = self.@"if" },
+.condexpr => .{ .condexpr = self.condexpr },
+else => null,
+});
+    }
+    const Tag = ASTExprTag;
+};
+
+pub const ASTCondExpr = struct {
+    op: Op,
+    args: ArgList = ArgList.zeroes,
+
+pub fn memoryCost(self: ASTCondExpr) usize {
+            var cost: usize = @sizeOf(Op);
+            _ = &cost;
+            cost = (cost + self.args.memoryCost());
+            return cost;
     }
 
-pub fn throwMini(self: @This()) noreturn {
-            var _guard_err = ShellErrValGuard{ .val = self };
-            _ = &_guard_err;
-            var ___guard_err_moved = false; _ = &___guard_err_moved;
-            defer if (!___guard_err_moved) { ___guard_err_moved = true; const __T = @TypeOf(_guard_err); if (@typeInfo(__T) == .optional) { if (_guard_err) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_err.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_err; _drop_val.__cp_deinit(); } };
+pub fn to_expr(self: ASTCondExpr, alloc: Allocator) !ASTExpr {
+            const condexpr = try alloc.create(ASTCondExpr);
+            condexpr.* = self;
+            return .{ .condexpr = condexpr };
+    }
+    const ArgList = SmolList(ASTAtom, 2);
+    pub const Op = ASTCondExprOp;
+};
+
+pub const ASTSubshell = struct {
+    script: ASTScript,
+    redirect: ?ASTRedirect = null,
+    redirect_flags: ASTRedirectFlags = ASTRedirectFlags{ .stdin = false },
+
+pub fn memoryCost(self: ASTSubshell) usize {
+            var cost: usize = @sizeOf(ASTSubshell);
+            _ = &cost;
+            cost = (cost + self.script.memoryCost());
+            if (self.redirect) |redirect| {
+                _ = &redirect;
+                cost = (cost + redirect.memoryCost());
+            }
+            return cost;
+    }
+};
+
+pub const ASTIf = struct {
+    cond: SmolList(ASTStmt, 1) = SmolList(ASTStmt, 1).zeroes,
+    then: SmolList(ASTStmt, 1) = SmolList(ASTStmt, 1).zeroes,
+    else_parts: SmolList(SmolList(ASTStmt, 1), 1) = SmolList(SmolList(ASTStmt, 1), 1).zeroes,
+
+pub fn to_expr(self: ASTIf, alloc: Allocator) !ASTExpr {
+            const @"if" = try alloc.create(ASTIf);
+            @"if".* = self;
+            return .{ .@"if" = @"if" };
+    }
+
+pub fn memoryCost(self: ASTIf) usize {
+            var cost: usize = @sizeOf(ASTIf);
+            _ = &cost;
+            cost = (cost + self.cond.memoryCost());
+            cost = (cost + self.then.memoryCost());
+            cost = (cost + self.else_parts.memoryCost());
+            return cost;
+    }
+};
+
+pub const ASTBinary = struct {
+    op: Op,
+    left: ASTExpr,
+    right: ASTExpr,
+
+pub fn memoryCost(self: ASTBinary) usize {
+            var cost: usize = @sizeOf(ASTBinary);
+            _ = &cost;
+            cost = (cost + self.left.memoryCost());
+            cost = (cost + self.right.memoryCost());
+            return cost;
+    }
+    pub const Op = _ASTBinaryOp;
+};
+
+pub const ASTPipeline = struct {
+    items: []ASTPipelineItem,
+
+pub fn memoryCost(self: ASTPipeline) usize {
+            var cost: usize = 0;
+            _ = &cost;
+            for (self.items) |item| {
+                _ = &item;
+                cost = (cost + item.memoryCost());
+            }
+            return cost;
+    }
+};
+
+pub const ASTPipelineItem = union(enum) {
+    cmd: *ASTCmd,
+    assigns: []ASTAssign,
+    subshell: *ASTSubshell,
+    @"if": *ASTIf,
+    condexpr: *ASTCondExpr,
+
+pub fn memoryCost(self: ASTPipelineItem) usize {
+            var cost: usize = 0;
+            _ = &cost;
             switch (self) {
-.sys => |e| {
-_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: {f}: {f}<r>", .{ e.message, e.path });
+.cmd => |cmd| {
+cost = (cost + cmd.memoryCost());
 },
-.custom => |custom| {
-_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>{s}<r>", .{ custom });
+.assigns => |assigns| {
+for (cp_iter_slice(assigns)) |assign| {
+                _ = &assign;
+                cost = (cost + assign.memoryCost());
+            }
 },
-.invalid_arguments => |invalid_arguments| {
-_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>bunsh: invalid arguments: {s}<r>", .{ invalid_arguments.val });
+.subshell => |subshell| {
+cost = (cost + subshell.memoryCost());
 },
-.todo => |todo| {
-_ = bun.Output.prettyErrorln("<r><red>error<r>: Failed due to error: <b>TODO: {s}<r>", .{ todo });
+.@"if" => |if_node| {
+cost = (cost + if_node.memoryCost());
+},
+.condexpr => |condexpr| {
+cost = (cost + condexpr.memoryCost());
 },
 }
-            _ = bun.Global.exit(1);
+            return cost;
+    }
+};
+
+pub const ASTCmdOrAssigns = union(ASTCmdOrAssignsTag) {
+    cmd: ASTCmd,
+    assigns: []ASTAssign,
+
+pub fn to_pipeline_item(self: ASTCmdOrAssigns, alloc: Allocator) ASTPipelineItem {
+            switch (self) {
+.cmd => |cmd| {
+const cmd_ptr = try alloc.create(ASTCmd);
+            cmd_ptr.* = cmd;
+            return .{ .cmd = cmd_ptr };
+},
+.assigns => |assigns| {
+return .{ .assign = assigns };
+},
+}
     }
 
-pub fn deinit(self: *const @This(), allocator: Allocator) void {
+pub fn to_expr(self: ASTCmdOrAssigns, alloc: Allocator) !ASTExpr {
+            switch (self) {
+.cmd => |cmd| {
+const cmd_ptr = try alloc.create(ASTCmd);
+            cmd_ptr.* = cmd;
+            return .{ .cmd = cmd_ptr };
+},
+.assigns => |assigns| {
+return .{ .assign = assigns };
+},
+}
+    }
+    const Tag = ASTCmdOrAssignsTag;
+};
+
+pub const ASTJSBuf = struct {
+    idx: u32,
+
+pub fn new(idx: u32) ASTJSBuf {
+            return .{ .idx = idx };
+    }
+};
+
+pub const ASTJSProc = struct {
+    idx: JSValue,
+};
+
+pub const ASTAssign = struct {
+    label: []const u8,
+    value: ASTAtom,
+
+pub fn new(label: []const u8, value: ASTAtom) ASTAssign {
+            return .{ .label = label, .value = value };
+    }
+
+pub fn memoryCost(self: ASTAssign) usize {
+            var cost: usize = @sizeOf(ASTAssign);
+            _ = &cost;
+            cost = (cost + self.label.len);
+            cost = (cost + self.value.memoryCost());
+            return cost;
+    }
+};
+
+pub const ASTCmd = struct {
+    assigns: []ASTAssign,
+    name_and_args: []ASTAtom,
+    redirect: ASTRedirectFlags = ASTRedirectFlags{ .stdin = false },
+    redirect_file: ?ASTRedirect = null,
+
+pub fn memoryCost(self: ASTCmd) usize {
+            var cost: usize = @sizeOf(ASTCmd);
+            _ = &cost;
+            for (cp_iter_slice(self.assigns)) |assign| {
+                _ = &assign;
+                cost = (cost + assign.memoryCost());
+            }
+            for (cp_iter_slice(self.name_and_args)) |atom| {
+                _ = &atom;
+                cost = (cost + atom.memoryCost());
+            }
+            if (self.redirect_file) |redirect_file| {
+                _ = &redirect_file;
+                cost = (cost + redirect_file.memoryCost());
+            }
+            return cost;
+    }
+};
+
+pub const ASTRedirectFlags = packed struct(u8) {
+    stdin: bool = false,
+    stdout: bool = false,
+    stderr: bool = false,
+    append: bool = false,
+    duplicate_out: bool = false,
+    __unused: u3 = 0,
+
+pub inline fn isEmpty(self: ASTRedirectFlags) bool {
+            return (@as(u8, @bitCast(self)) == 0);
+    }
+
+pub fn redirectsElsewhere(self: ASTRedirectFlags, io_kind: ASTRedirectIOKind) bool {
+            return (switch (io_kind) {
+.stdin => self.stdin,
+.stdout => (if (self.duplicate_out) (!self.stdout) else self.stdout),
+.stderr => (if (self.duplicate_out) (!self.stderr) else self.stderr),
+});
+    }
+
+pub fn @"2>&1"() ASTRedirectFlags {
+            return .{ .stderr = true, .duplicate = true };
+    }
+
+pub fn @"1>&2"() ASTRedirectFlags {
+            return .{ .stdout = true, .duplicate = true };
+    }
+
+pub fn toFlags(self: ASTRedirectFlags) i32 {
+            const read_write_flags: i32 = (if (self.stdin) bun.O.RDONLY else (bun.O.WRONLY | bun.O.CREAT));
+            const extra: i32 = (if (self.append) bun.O.APPEND else bun.O.TRUNC);
+            const final_flags: i32 = (if (self.stdin) read_write_flags else (extra | read_write_flags));
+            return final_flags;
+    }
+
+pub fn @"<"() ASTRedirectFlags {
+            return .{ .stdin = true };
+    }
+
+pub fn @"<<"() ASTRedirectFlags {
+            return .{ .stdin = true, .append = true };
+    }
+
+pub fn @">"() ASTRedirectFlags {
+            return .{ .stdout = true };
+    }
+
+pub fn @">>"() ASTRedirectFlags {
+            return .{ .append = true, .stdout = true };
+    }
+
+pub fn @"&>"() ASTRedirectFlags {
+            return .{ .stdout = true, .stderr = true };
+    }
+
+pub fn @"&>>"() ASTRedirectFlags {
+            return .{ .append = true, .stdout = true, .stderr = true };
+    }
+
+pub fn merge(a: ASTRedirectFlags, b: ASTRedirectFlags) ASTRedirectFlags {
+            const anum: u8 = @bitCast(a);
+            const bnum: u8 = @bitCast(b);
+            return @bitCast((anum | bnum));
+    }
+};
+
+pub const ASTRedirect = union(enum) {
+    atom: ASTAtom,
+    jsbuf: ASTJSBuf,
+
+pub fn memoryCost(self: ASTRedirect) usize {
+            return (switch (self) {
+.atom => |atom| atom.memoryCost(),
+.jsbuf => @sizeOf(ASTJSBuf),
+});
+    }
+};
+
+pub const ASTAtom = union(ASTAtomTag) {
+    simple: ASTSimpleAtom,
+    compound: ASTCompoundAtom,
+
+pub fn memoryCost(self: ASTAtom) usize {
+            return (switch (self) {
+.simple => |simple| simple.memoryCost(),
+.compound => |compound| compound.memoryCost(),
+});
+    }
+
+pub fn merge(self: ASTAtom, right: ASTAtom, allocator: Allocator) !ASTAtom {
+            if (((self == .simple) and (right == .simple))) {
+                var atoms = try allocator.alloc(ASTSimpleAtom, 2);
+                _ = &atoms;
+                atoms[cp_cast_int(usize, 0)] = self.simple;
+                atoms[cp_cast_int(usize, 1)] = right.simple;
+                return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = ((((self.simple == .brace_begin) or (self.simple == .brace_end)) or (right.simple == .brace_begin)) or (right.simple == .brace_end)), .glob_hint = ((((self.simple == .asterisk) or (self.simple == .double_asterisk)) or (right.simple == .asterisk)) or (right.simple == .double_asterisk)) } };
+            }
+            if (((self == .compound) and (right == .compound))) {
+                var atoms = try allocator.alloc(ASTSimpleAtom, (self.compound.atoms.len + right.compound.atoms.len));
+                _ = &atoms;
+                _ = @memcpy(atoms[0..self.compound.atoms.len], self.compound.atoms);
+                _ = @memcpy(atoms[self.compound.atoms.len..(self.compound.atoms.len + right.compound.atoms.len)], right.compound.atoms);
+                return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = (self.compound.brace_expansion_hint or right.compound.brace_expansion_hint), .glob_hint = (self.compound.glob_hint or right.compound.glob_hint) } };
+            }
+            if ((self == .simple)) {
+                var atoms = try allocator.alloc(ASTSimpleAtom, (1 + right.compound.atoms.len));
+                _ = &atoms;
+                atoms[cp_cast_int(usize, 0)] = self.simple;
+                _ = @memcpy(atoms[1..(right.compound.atoms.len + 1)], right.compound.atoms);
+                return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = (((self.simple == .brace_begin) or (self.simple == .brace_end)) or right.compound.brace_expansion_hint), .glob_hint = (((self.simple == .asterisk) or (self.simple == .double_asterisk)) or right.compound.glob_hint) } };
+            }
+            var atoms = try allocator.alloc(ASTSimpleAtom, (1 + self.compound.atoms.len));
+            _ = &atoms;
+            _ = @memcpy(atoms[0..self.compound.atoms.len], self.compound.atoms);
+            atoms[cp_cast_int(usize, self.compound.atoms.len)] = right.simple;
+            return .{ .compound = .{ .atoms = atoms, .brace_expansion_hint = (((right.simple == .brace_begin) or (right.simple == .brace_end)) or self.compound.brace_expansion_hint), .glob_hint = (((right.simple == .asterisk) or (right.simple == .double_asterisk)) or self.compound.glob_hint) } };
+    }
+
+pub fn atomsLen(self: ASTAtom) u32 {
+            return (switch (self) {
+.simple => 1,
+.compound => @intCast(self.compound.atoms.len),
+});
+    }
+
+pub fn new_simple(atom: ASTSimpleAtom) ASTAtom {
+            return .{ .simple = atom };
+    }
+
+pub fn is_compound(self: ASTAtom) bool {
             switch (self.*) {
-.sys => {
-_ = self.sys.deref();
+.compound => {
+return true;
 },
-.custom => {
-_ = allocator.free(self.custom);
-},
-.invalid_arguments => {
-
-},
-.todo => {
-_ = allocator.free(self.todo);
+.simple => {
+return false;
 },
 }
     }
+
+pub fn has_expansions(self: ASTAtom) bool {
+            return (self.has_glob_expansion() or self.has_brace_expansion());
+    }
+
+pub fn has_glob_expansion(self: ASTAtom) bool {
+            return (switch (self) {
+.simple => self.simple.glob_hint(),
+.compound => self.compound.glob_hint,
+});
+    }
+
+pub fn has_brace_expansion(self: ASTAtom) bool {
+            return (switch (self) {
+.simple => false,
+.compound => self.compound.brace_expansion_hint,
+});
+    }
+
+pub fn hasTildeExpansion(self: ASTAtom) bool {
+            return (switch (self) {
+.simple => (self.simple == .tilde),
+.compound => ((self.compound.atoms.len > 0) and (self.compound.atoms[0] == .tilde)),
+});
+    }
+    const Tag = ASTAtomTag;
 };
-pub const ParseError = error{
-    Unsupported,
-    Expected,
-    Unexpected,
-    Unknown,
-    Lex,
-};
-pub const Pipe = [2]bun.FD;
-const log = bun.Output.scoped(.SHELL, .hidden);
-pub const SubshellKind = enum {
-    cmd_subst,
-    normal,
-    fn closing_tok(this: SubshellKind) TokenTag {
-        return switch (this) {
-            .cmd_subst => TokenTag.CmdSubstEnd,
-            .normal => TokenTag.CloseParen,
-        };
+
+pub const ASTCmdSubst = struct {
+    script: ASTScript,
+    quoted: bool = false,
+
+pub fn memoryCost(self: ASTCmdSubst) usize {
+            var cost: usize = @sizeOf(ASTCmdSubst);
+            _ = &cost;
+            cost = (cost + self.script.memoryCost());
+            return cost;
     }
 };
+
+pub const ASTSimpleAtom = union(enum) {
+    Var: []const u8,
+    VarArgv: u8,
+    Text: []const u8,
+    quoted_empty: void,
+    asterisk: void,
+    double_asterisk: void,
+    brace_begin: void,
+    brace_end: void,
+    comma: void,
+    tilde: void,
+    cmd_subst: ASTCmdSubst,
+
+pub fn glob_hint(self: ASTSimpleAtom) bool {
+            return (switch (self) {
+.Var => false,
+.VarArgv => false,
+.Text => false,
+.quoted_empty => false,
+.asterisk => true,
+.double_asterisk => true,
+.brace_begin => false,
+.brace_end => false,
+.comma => false,
+.cmd_subst => false,
+.tilde => false,
+});
+    }
+
+pub fn memoryCost(self: ASTSimpleAtom) usize {
+            return ((switch (self) {
+.Var => self.Var.len,
+.Text => self.Text.len,
+.cmd_subst => self.cmd_subst.memoryCost(),
+else => 0,
+}) + @sizeOf(ASTSimpleAtom));
+    }
+};
+
+pub const ASTCompoundAtom = struct {
+    atoms: []ASTSimpleAtom,
+    brace_expansion_hint: bool = false,
+    glob_hint: bool = false,
+
+pub fn memoryCost(self: ASTCompoundAtom) usize {
+            var cost: usize = @sizeOf(ASTCompoundAtom);
+            _ = &cost;
+            cost = (cost + self.#atomsMemoryCost());
+            return cost;
+    }
+
+pub fn #atomsMemoryCost(self: ASTCompoundAtom) usize {
+            var cost: usize = 0;
+            _ = &cost;
+            for (cp_iter_slice(self.atoms)) |atom| {
+                _ = &atom;
+                cost = (cost + atom.memoryCost());
+            }
+            return cost;
+    }
+};
+
+pub const AST = struct {
+    pub const Script = ASTScript;
+    pub const Stmt = ASTStmt;
+    pub const Expr = ASTExpr;
+    pub const CondExpr = ASTCondExpr;
+    pub const Subshell = ASTSubshell;
+    pub const If = ASTIf;
+    pub const Binary = ASTBinary;
+    pub const Pipeline = ASTPipeline;
+    const PipelineItem = ASTPipelineItem;
+    const CmdOrAssigns = ASTCmdOrAssigns;
+    const JSBuf = ASTJSBuf;
+    const JSProc = ASTJSProc;
+    pub const Assign = ASTAssign;
+    pub const Cmd = ASTCmd;
+    pub const RedirectFlags = ASTRedirectFlags;
+    const Redirect = ASTRedirect;
+    pub const Atom = ASTAtom;
+    pub const SimpleAtom = ASTSimpleAtom;
+    const CompoundAtom = ASTCompoundAtom;
+};
+
 pub const ParserError = struct {
     msg: []const u8,
 };
+
 pub const ParsedRedirect = struct {
     flags: AST.RedirectFlags = AST.RedirectFlags{ .stdin = false },
     redirect: ?AST.Redirect = null,
 };
+
 pub const Parser = struct {
     strpool: []const u8,
     tokens: []const Token,
@@ -1823,21 +1278,21 @@ pub fn new(allocator: Allocator, lex_result: LexResult, jsobjs: []JSValue) !Pars
             return .{ .strpool = lex_result.strpool, .tokens = lex_result.tokens, .alloc = allocator, .jsobjs = jsobjs, .errors = std.array_list.Managed(ParserError).init(allocator) };
     }
 
-pub fn make_subparser(self: *@This(), kind: SubshellKind) Parser {
+pub fn make_subparser(self: *Parser, kind: SubshellKind) Parser {
             const subparser: Parser = .{ .strpool = self.strpool, .tokens = self.tokens, .alloc = self.alloc, .jsobjs = self.jsobjs, .current = self.current, .errors = self.errors, .inside_subshell = kind };
             return subparser;
     }
 
-pub fn continue_from_subparser(self: *@This(), subparser: *Parser) void {
+pub fn continue_from_subparser(self: *Parser, subparser: *Parser) void {
             self.current = (if ((subparser.current >= self.tokens.len)) subparser.current else (subparser.current + 1));
             self.errors = subparser.errors;
     }
 
-pub fn parse(self: *@This()) !AST.Script {
+pub fn parse(self: *Parser) !AST.Script {
             return try self.parse_impl();
     }
 
-pub fn parse_impl(self: *@This()) !AST.Script {
+pub fn parse_impl(self: *Parser) !AST.Script {
             var stmts = ArrayList(AST.Stmt).init(self.alloc);
             _ = &stmts;
             if (((self.tokens.len == 0) or ((self.tokens.len == 1) and (self.tokens[0] == .Eof)))) {
@@ -1858,7 +1313,7 @@ pub fn parse_impl(self: *@This()) !AST.Script {
             return .{ .stmts = stmts.items[0..stmts.items.len] };
     }
 
-pub fn parse_stmt(self: *@This()) !AST.Stmt {
+pub fn parse_stmt(self: *Parser) !AST.Stmt {
             var exprs = std.array_list.Managed(AST.Expr).init(self.alloc);
             _ = &exprs;
             while ((if ((self.inside_subshell == null)) (!self.match_any_comptime((&.{ .Semicolon, .Newline, .Eof }))) else (!self.match_any((&.{ .Semicolon, .Newline, .Eof, self.inside_subshell.?.closing_tok() }))))) {
@@ -1872,11 +1327,11 @@ pub fn parse_stmt(self: *@This()) !AST.Stmt {
             return .{ .exprs = exprs.items[0..] };
     }
 
-pub fn parse_expr(self: *@This()) !AST.Expr {
+pub fn parse_expr(self: *Parser) !AST.Expr {
             return try self.parse_binary();
     }
 
-pub fn parse_binary(self: *@This()) !AST.Expr {
+pub fn parse_binary(self: *Parser) !AST.Expr {
             var left = try self.parse_pipeline();
             _ = &left;
             while (self.match_any_comptime((&.{ .DoubleAmpersand, .DoublePipe }))) {
@@ -1896,7 +1351,7 @@ else => unreachable,
             return left;
     }
 
-pub fn parse_pipeline(self: *@This()) !AST.Expr {
+pub fn parse_pipeline(self: *Parser) !AST.Expr {
             var expr = try self.parse_compound_cmd();
             _ = &expr;
             if ((self.peek() == .Pipe)) {
@@ -1937,8 +1392,8 @@ else => @compileError(("Invalid " ++ @tagName(if_clause_token))),
             return tagname;
     }
 
-pub fn expectIfClauseTextToken(self: *@This(), comptime if_clause_token: @TypeOf(.enum_literal)) Token {
-            const tagname = (comptime extractIfClauseTextToken(if_clause_token));
+pub fn expectIfClauseTextToken(self: *Parser, comptime if_clause_token: @TypeOf(.enum_literal)) Token {
+            const tagname = (comptime Parser.extractIfClauseTextToken(if_clause_token));
             if (bun.Environment.allow_assert) {
                 _ = assert((std.meta.activeTag(self.peek()) == .Text));
             }
@@ -1951,24 +1406,24 @@ pub fn expectIfClauseTextToken(self: *@This(), comptime if_clause_token: @TypeOf
             _ = @panic(("Expected: " ++ @tagName(if_clause_token)));
     }
 
-pub fn isIfClauseTextToken(self: *@This(), comptime if_clause_token: @TypeOf(.enum_literal)) bool {
+pub fn isIfClauseTextToken(self: *Parser, comptime if_clause_token: @TypeOf(.enum_literal)) bool {
             return (switch (self.peek()) {
 .Text => |range| self.isIfClauseTextTokenImpl(range, if_clause_token),
 else => false,
 });
     }
 
-pub fn isIfClauseTextTokenImpl(self: *@This(), range: Token.TextRange, comptime if_clause_token: @TypeOf(.enum_literal)) bool {
-            const tagname = (comptime extractIfClauseTextToken(if_clause_token));
+pub fn isIfClauseTextTokenImpl(self: *Parser, range: Token.TextRange, comptime if_clause_token: @TypeOf(.enum_literal)) bool {
+            const tagname = (comptime Parser.extractIfClauseTextToken(if_clause_token));
             return bun.strings.eqlComptime(self.text(range), tagname);
     }
 
-pub fn skip_newlines(self: *@This()) void {
+pub fn skip_newlines(self: *Parser) void {
             while (self.matchTok(.Newline)) {
             }
     }
 
-pub fn parse_compound_cmd(self: *@This()) anyerror!AST.Expr {
+pub fn parse_compound_cmd(self: *Parser) anyerror!AST.Expr {
             if ((self.peek() == .OpenParen)) {
                 const subshell = try self.parse_subshell();
                 if ((!subshell.redirect_flags.isEmpty())) {
@@ -1995,7 +1450,7 @@ else => {
             return simple_cmd.to_expr(self.alloc);
     }
 
-pub fn parse_subshell(self: *@This()) !AST.Subshell {
+pub fn parse_subshell(self: *Parser) !AST.Subshell {
             _ = self.expect(.OpenParen);
             var subparser = self.make_subparser(.normal);
             _ = &subparser;
@@ -2006,7 +1461,7 @@ pub fn parse_subshell(self: *@This()) !AST.Subshell {
             return .{ .script = script, .redirect = parsed_redirect.redirect, .redirect_flags = parsed_redirect.flags };
     }
 
-pub fn parse_cond_expr(self: *@This()) !AST.CondExpr {
+pub fn parse_cond_expr(self: *Parser) !AST.CondExpr {
             _ = self.expect(.DoubleBracketOpen);
             switch (self.peek()) {
 .Text => |range| {
@@ -2090,7 +1545,7 @@ else => {
             return ParseError.Unknown;
     }
 
-pub fn parse_if_body(self: *@This(), comptime until: []const IfClauseTok) !SmolList(AST.Stmt, 1) {
+pub fn parse_if_body(self: *Parser, comptime until: []const IfClauseTok) !SmolList(AST.Stmt, 1) {
             var ret: SmolList(AST.Stmt, 1) = SmolList(AST.Stmt, 1).zeroes;
             _ = &ret;
             while ((if ((self.inside_subshell == null)) ((!self.peek_any_comptime_ifclausetok(until)) and (!self.peek_any_comptime((&.{ .Eof })))) else ((!self.peek_any_ifclausetok(until)) and (!self.peek_any((&.{ self.inside_subshell.?.closing_tok(), .Eof })))))) {
@@ -2102,7 +1557,7 @@ pub fn parse_if_body(self: *@This(), comptime until: []const IfClauseTok) !SmolL
             return ret;
     }
 
-pub fn parse_if_clause(self: *@This()) !AST.If {
+pub fn parse_if_clause(self: *Parser) !AST.If {
             _ = self.expectIfClauseTextToken(.@"if");
             const cond = try self.parse_if_body((&.{ .then }));
             if ((!self.match_if_clausetok(.then))) {
@@ -2173,7 +1628,7 @@ _ = self.expectIfClauseTextToken(.fi);
 }
     }
 
-pub fn parse_simple_cmd(self: *@This()) !AST.CmdOrAssigns {
+pub fn parse_simple_cmd(self: *Parser) !AST.CmdOrAssigns {
             var assigns = std.array_list.Managed(AST.Assign).init(self.alloc);
             _ = &assigns;
             while ((if ((self.inside_subshell == null)) (!self.check_any_comptime((&.{ .Semicolon, .Newline, .Eof }))) else (!self.check_any((&.{ .Semicolon, .Newline, .Eof, self.inside_subshell.?.closing_tok() }))))) {
@@ -2217,7 +1672,7 @@ pub fn parse_simple_cmd(self: *@This()) !AST.CmdOrAssigns {
             return .{ .cmd = .{ .assigns = assigns.items[0..], .name_and_args = name_and_args.items[0..], .redirect_file = parsed_redirect.redirect, .redirect = parsed_redirect.flags } };
     }
 
-pub fn parse_redirect(self: *@This()) !ParsedRedirect {
+pub fn parse_redirect(self: *Parser) !ParsedRedirect {
             const has_redirect = self.matchTok(.Redirect);
             const redirect = (if (has_redirect) self.prev().Redirect else AST.RedirectFlags{ .stdin = false });
             const redirect_file: ?AST.Redirect = redirect_file: {
@@ -2242,7 +1697,7 @@ pub fn parse_redirect(self: *@This()) !ParsedRedirect {
             return .{ .flags = redirect, .redirect = redirect_file };
     }
 
-pub fn parse_assign(self: *@This()) !?AST.Assign {
+pub fn parse_assign(self: *Parser) !?AST.Assign {
             const old = self.current;
             _ = &old;
             switch (self.peek()) {
@@ -2303,7 +1758,7 @@ return null;
 }
     }
 
-pub fn parse_atom(self: *@This()) !?AST.Atom {
+pub fn parse_atom(self: *Parser) !?AST.Atom {
             var array_alloc = std.heap.stackFallback(@sizeOf(AST.SimpleAtom), self.alloc);
             _ = &array_alloc;
             var atoms = try std.array_list.Managed(AST.SimpleAtom).initCapacity(array_alloc.get(), 1);
@@ -2512,28 +1967,28 @@ else => AST.Atom{ .compound = .{ .atoms = atoms.items[0..atoms.items.len], .brac
 });
     }
 
-pub fn allocate(self: *const @This(), comptime T: type, val: T) !*T {
+pub fn allocate(self: *const Parser, comptime T: type, val: T) !*T {
             const heap = try self.alloc.create(T);
             heap.* = val;
             return heap;
     }
 
-pub fn text(self: *const @This(), range: Token.TextRange) []const u8 {
+pub fn text(self: *const Parser, range: Token.TextRange) []const u8 {
             return self.strpool[range.start..range.end];
     }
 
-pub fn advance(self: *@This()) Token {
+pub fn advance(self: *Parser) Token {
             if ((!self.is_at_end())) {
                 self.current = (self.current + 1);
             }
             return self.prev();
     }
 
-pub fn is_at_end(self: *@This()) bool {
+pub fn is_at_end(self: *Parser) bool {
             return ((self.peek() == .Eof) or ((self.inside_subshell != null) and (self.inside_subshell.?.closing_tok() == self.peek())));
     }
 
-pub fn expect(self: *@This(), toktag: TokenTag) Token {
+pub fn expect(self: *Parser, toktag: TokenTag) Token {
             if (bun.Environment.allow_assert) {
                 _ = assert((toktag == std.meta.activeTag(self.peek())));
             }
@@ -2543,7 +1998,7 @@ pub fn expect(self: *@This(), toktag: TokenTag) Token {
             _ = @panic("Unexpected token");
     }
 
-pub fn expect_any(self: *@This(), toktags: []const TokenTag) Token {
+pub fn expect_any(self: *Parser, toktags: []const TokenTag) Token {
             const peeked = self.peek();
             for (cp_iter_slice(toktags)) |toktag| {
                 _ = &toktag;
@@ -2554,11 +2009,11 @@ pub fn expect_any(self: *@This(), toktags: []const TokenTag) Token {
             _ = @panic("Unexpected token");
     }
 
-pub fn delimits(self: *@This(), tok: Token) bool {
+pub fn delimits(self: *Parser, tok: Token) bool {
             return ((((((tok == .Delimit) or (tok == .Semicolon)) or (tok == .Semicolon)) or (tok == .Eof)) or (tok == .Newline)) or ((self.inside_subshell != null) and (tok == self.inside_subshell.?.closing_tok())));
     }
 
-pub fn expect_delimit(self: *@This()) Token {
+pub fn expect_delimit(self: *Parser) Token {
             if (bun.Environment.allow_assert) {
                 _ = assert(self.delimits(self.peek()));
             }
@@ -2568,7 +2023,7 @@ pub fn expect_delimit(self: *@This()) Token {
             _ = @panic("Expected a delimiter token");
     }
 
-pub fn match_if_clausetok(self: *@This(), toktag: IfClauseTok) bool {
+pub fn match_if_clausetok(self: *Parser, toktag: IfClauseTok) bool {
             const tok_peek: Token = self.peek();
             if ((((tok_peek == .Text) and self.delimits(self.peek_n(1))) and bun.strings.eql(self.text(tok_peek.Text), @tagName(toktag)))) {
                 _ = self.advance();
@@ -2578,7 +2033,7 @@ pub fn match_if_clausetok(self: *@This(), toktag: IfClauseTok) bool {
             return false;
     }
 
-pub fn matchTok(self: *@This(), toktag: TokenTag) bool {
+pub fn matchTok(self: *Parser, toktag: TokenTag) bool {
             if ((std.meta.activeTag(self.peek()) == toktag)) {
                 _ = self.advance();
                 return true;
@@ -2586,7 +2041,7 @@ pub fn matchTok(self: *@This(), toktag: TokenTag) bool {
             return false;
     }
 
-pub fn match_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bool {
+pub fn match_any_comptime(self: *Parser, comptime toktags: []const TokenTag) bool {
             const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 if ((peeked == tag)) {
@@ -2597,7 +2052,7 @@ pub fn match_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bo
             return false;
     }
 
-pub fn match_any(self: *@This(), toktags: []const TokenTag) bool {
+pub fn match_any(self: *Parser, toktags: []const TokenTag) bool {
             const peeked = std.meta.activeTag(self.peek());
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
@@ -2609,7 +2064,7 @@ pub fn match_any(self: *@This(), toktags: []const TokenTag) bool {
             return false;
     }
 
-pub fn peek_any_ifclausetok(self: *@This(), toktags: []const IfClauseTok) bool {
+pub fn peek_any_ifclausetok(self: *Parser, toktags: []const IfClauseTok) bool {
             const peektok: Token = self.peek();
             const peeked = std.meta.activeTag(peektok);
             if ((peeked != .Text)) {
@@ -2625,7 +2080,7 @@ pub fn peek_any_ifclausetok(self: *@This(), toktags: []const IfClauseTok) bool {
             return false;
     }
 
-pub fn peek_any_comptime_ifclausetok(self: *@This(), comptime toktags: []const IfClauseTok) bool {
+pub fn peek_any_comptime_ifclausetok(self: *Parser, comptime toktags: []const IfClauseTok) bool {
             const peektok: Token = self.peek();
             const peeked = std.meta.activeTag(peektok);
             if ((peeked != .Text)) {
@@ -2640,7 +2095,7 @@ pub fn peek_any_comptime_ifclausetok(self: *@This(), comptime toktags: []const I
             return false;
     }
 
-pub fn peek_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bool {
+pub fn peek_any_comptime(self: *Parser, comptime toktags: []const TokenTag) bool {
             const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 if ((peeked == tag)) {
@@ -2650,7 +2105,7 @@ pub fn peek_any_comptime(self: *@This(), comptime toktags: []const TokenTag) boo
             return false;
     }
 
-pub fn peek_any(self: *@This(), toktags: []const TokenTag) bool {
+pub fn peek_any(self: *Parser, toktags: []const TokenTag) bool {
             const peeked = std.meta.activeTag(self.peek());
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
@@ -2661,7 +2116,7 @@ pub fn peek_any(self: *@This(), toktags: []const TokenTag) bool {
             return false;
     }
 
-pub fn check_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bool {
+pub fn check_any_comptime(self: *Parser, comptime toktags: []const TokenTag) bool {
             const peeked = std.meta.activeTag(self.peek());
             inline for (toktags) |tag| {
                 if ((peeked == tag)) {
@@ -2671,7 +2126,7 @@ pub fn check_any_comptime(self: *@This(), comptime toktags: []const TokenTag) bo
             return false;
     }
 
-pub fn check_any(self: *@This(), toktags: []const TokenTag) bool {
+pub fn check_any(self: *Parser, toktags: []const TokenTag) bool {
             const peeked = std.meta.activeTag(self.peek());
             for (cp_iter_slice(toktags)) |tag| {
                 _ = &tag;
@@ -2682,26 +2137,26 @@ pub fn check_any(self: *@This(), toktags: []const TokenTag) bool {
             return false;
     }
 
-pub fn check(self: *@This(), toktag: TokenTag) bool {
+pub fn check(self: *Parser, toktag: TokenTag) bool {
             return (std.meta.activeTag(self.peek()) == toktag);
     }
 
-pub fn peek(self: *@This()) Token {
+pub fn peek(self: *Parser) Token {
             return self.tokens[@as(usize, @intCast(self.current))];
     }
 
-pub fn peek_n(self: *@This(), n: u32) Token {
+pub fn peek_n(self: *Parser, n: u32) Token {
             if (((self.current + n) >= self.tokens.len)) {
                 return self.tokens[@as(usize, @intCast((self.tokens.len - 1)))];
             }
             return self.tokens[@as(usize, @intCast((self.current + n)))];
     }
 
-pub fn prev(self: *@This()) Token {
+pub fn prev(self: *Parser) Token {
             return self.tokens[@as(usize, @intCast((self.current - 1)))];
     }
 
-pub fn combineErrors(self: *@This()) []const u8 {
+pub fn combineErrors(self: *Parser) []const u8 {
             const errors = self.errors.items[0..];
             const str = str: {
             const size = size: {
@@ -2727,135 +2182,673 @@ pub fn combineErrors(self: *@This()) []const u8 {
             return str;
     }
 
-pub fn add_error(self: *@This(), comptime fmt: []const u8, args: anytype) !void {
+pub fn add_error(self: *Parser, comptime fmt: []const u8, args: anytype) !void {
             const error_msg = try std.fmt.allocPrint(self.alloc, fmt, args);
             _ = try self.errors.append(.{ .msg = error_msg });
     }
 
-pub fn add_error_expected_pipeline_item(self: *@This(), kind: AST.Expr.Tag) !void {
+pub fn add_error_expected_pipeline_item(self: *Parser, kind: AST.Expr.Tag) !void {
             const error_msg = try std.fmt.allocPrint(self.alloc, "Expected a command, assignment, or subshell but got: {s}", .{ @tagName(kind) });
             _ = try self.errors.append(.{ .msg = error_msg });
     }
 };
-pub const Token = union(TokenTag) {
-    /// |
-    Pipe,
-    /// ||
-    DoublePipe,
-    /// &
-    Ampersand,
-    /// &&
-    DoubleAmpersand,
 
-    Redirect: AST.RedirectFlags,
+pub const _TokenTextRange = struct {
+    start: u32,
+    end: u32,
 
-    /// $
-    Dollar,
-    // `*`
-    Asterisk,
-    DoubleAsterisk,
-
-    /// =
-    Eq,
-    /// ;
-    Semicolon,
-    /// \n (unescaped newline)
-    Newline,
-
-    BraceBegin,
-    Comma,
-    BraceEnd,
-    CmdSubstBegin,
-    /// When cmd subst is wrapped in quotes, then it should be interpreted as literal string, not word split-ed arguments to a cmd.
-    /// We lose quotation context in the AST, so we don't know how to disambiguate that.
-    /// So this is a quick hack to give the AST that context.
-    ///
-    /// This matches this shell behaviour:
-    /// echo test$(echo "1    2") -> test1 2\n
-    /// echo "test$(echo "1    2")" -> test1    2\n
-    CmdSubstQuoted,
-    CmdSubstEnd,
-    OpenParen,
-    CloseParen,
-
-    Var: TextRange,
-    VarArgv: u8,
-    Text: TextRange,
-    /// Quotation information is lost from the lexer -> parser stage and it is
-    /// helpful to disambiguate from regular text and quoted text
-    SingleQuotedText: TextRange,
-    DoubleQuotedText: TextRange,
-    JSObjRef: u32,
-
-    DoubleBracketOpen,
-    DoubleBracketClose,
-
-    Delimit,
-    Eof,
-
-    pub const TextRange = struct {
-        start: u32,
-        end: u32,
-
-        pub fn len(range: TextRange) u32 {
-            if (bun.Environment.allow_assert) assert(range.start <= range.end);
-            return range.end - range.start;
-        }
-
-        pub fn slice(range: TextRange, buf: []const u8) []const u8 {
-            return buf[range.start..range.end];
-        }
-    };
-
-    pub fn asHumanReadable(this: Token, strpool: []const u8) []const u8 {
-        const varargv_strings = blk: {
-            var res: [10][2]u8 = undefined;
-            for (&res, 0..) |*item, i| {
-                item[0] = '$';
-                item[1] = @as(u8, @intCast(i)) + '0';
+pub fn len(self: _TokenTextRange) u32 {
+            if (bun.Environment.allow_assert) {
+                _ = assert((self.start <= self.end));
             }
-            break :blk res;
-        };
-        return switch (this) {
-            .Pipe => "`|`",
-            .DoublePipe => "`||`",
-            .Ampersand => "`&`",
-            .DoubleAmpersand => "`&&`",
-            .Redirect => "`>`",
-            .Dollar => "`$`",
-            .Asterisk => "`*`",
-            .DoubleAsterisk => "`**`",
-            .Eq => "`=`",
-            .Semicolon => "`;`",
-            .Newline => "`\\n`",
-            // Comment,
-            .BraceBegin => "`{`",
-            .Comma => "`,`",
-            .BraceEnd => "`}`",
-            .CmdSubstBegin => "`$(`",
-            .CmdSubstQuoted => "CmdSubstQuoted",
-            .CmdSubstEnd => "`)`",
-            .OpenParen => "`(`",
-            .CloseParen => "`)",
-            .Var => strpool[this.Var.start..this.Var.end],
-            .VarArgv => &varargv_strings[this.VarArgv],
-            .Text => strpool[this.Text.start..this.Text.end],
-            .SingleQuotedText => strpool[this.SingleQuotedText.start..this.SingleQuotedText.end],
-            .DoubleQuotedText => strpool[this.DoubleQuotedText.start..this.DoubleQuotedText.end],
-            .JSObjRef => "JSObjRef",
-            .DoubleBracketOpen => "[[",
-            .DoubleBracketClose => "]]",
-            .Delimit => "Delimit",
-            .Eof => "EOF",
-        };
+            return (self.end - self.start);
+    }
+
+pub fn slice(self: *const _TokenTextRange, buf: []const u8) []const u8 {
+            return buf[self.start..self.end];
     }
 };
+
+pub const Token = union(TokenTag) {
+    Pipe: void,
+    DoublePipe: void,
+    Ampersand: void,
+    DoubleAmpersand: void,
+    Redirect: AST.RedirectFlags,
+    Dollar: void,
+    Asterisk: void,
+    DoubleAsterisk: void,
+    Eq: void,
+    Semicolon: void,
+    Newline: void,
+    BraceBegin: void,
+    Comma: void,
+    BraceEnd: void,
+    CmdSubstBegin: void,
+    CmdSubstQuoted: void,
+    CmdSubstEnd: void,
+    OpenParen: void,
+    CloseParen: void,
+    Var: _TokenTextRange,
+    VarArgv: u8,
+    Text: _TokenTextRange,
+    SingleQuotedText: _TokenTextRange,
+    DoubleQuotedText: _TokenTextRange,
+    JSObjRef: u32,
+    DoubleBracketOpen: void,
+    DoubleBracketClose: void,
+    Delimit: void,
+    Eof: void,
+
+pub fn asHumanReadable(self: *const Token, strpool: []const u8) []const u8 {
+            const varargv_strings = blk: {
+            var res: [10][2]u8 = undefined;
+            _ = &res;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < res.len)) : (i = (i + 1)) {
+                res[@as(usize, @intCast(i))][cp_cast_int(usize, 0)] = 36;
+                res[@as(usize, @intCast(i))][cp_cast_int(usize, 1)] = (@as(u8, @intCast(i)) + 48);
+            }
+            break :blk res;
+};
+            return (switch (self.*) {
+.Pipe => "`|`",
+.DoublePipe => "`||`",
+.Ampersand => "`&`",
+.DoubleAmpersand => "`&&`",
+.Redirect => "`>`",
+.Dollar => "`$`",
+.Asterisk => "`*`",
+.DoubleAsterisk => "`**`",
+.Eq => "`=`",
+.Semicolon => "`;`",
+.Newline => "`\n`",
+.BraceBegin => "`{`",
+.Comma => "`,`",
+.BraceEnd => "`}`",
+.CmdSubstBegin => "`$(`",
+.CmdSubstQuoted => "CmdSubstQuoted",
+.CmdSubstEnd => "`)`",
+.OpenParen => "`(`",
+.CloseParen => "`)",
+.Var => strpool[self.Var.start..self.Var.end],
+.VarArgv => (&varargv_strings[@as(usize, @intCast(self.VarArgv))]),
+.Text => strpool[self.Text.start..self.Text.end],
+.SingleQuotedText => strpool[self.SingleQuotedText.start..self.SingleQuotedText.end],
+.DoubleQuotedText => strpool[self.DoubleQuotedText.start..self.DoubleQuotedText.end],
+.JSObjRef => "JSObjRef",
+.DoubleBracketOpen => "[[",
+.DoubleBracketClose => "]]",
+.Delimit => "Delimit",
+.Eof => "EOF",
+});
+    }
+    const TextRange = _TokenTextRange;
+};
+
+pub const LexResult = struct {
+    errors: []LexError,
+    tokens: []const Token,
+    strpool: []const u8,
+
+pub fn combineErrors(self: *const LexResult, allocator: Allocator) []const u8 {
+            const errors = self.errors;
+            const str = str: {
+            const size = size: {
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(errors)) |e| {
+                _ = &e;
+                i = (i + e.msg.len());
+            }
+            break :size i;
+};
+            var buf = bun.handleOom(allocator.alloc(u8, size));
+            _ = &buf;
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(errors)) |e| {
+                _ = &e;
+                _ = @memcpy(buf[i..(i + e.msg.len())], e.msg.slice(self.strpool));
+                i = (i + e.msg.len());
+            }
+            break :str buf;
+};
+            return str;
+    }
+};
+
+pub const LexError = struct {
+    msg: Token.TextRange,
+};
+
+pub const _SrcAsciiIndexValue = packed struct(u8) {
+    char: u7,
+    escaped: bool = false,
+};
+
+pub const SrcAscii = struct {
+    bytes: []const u8,
+    i: usize,
+
+pub fn init(bytes: []const u8) SrcAscii {
+            return .{ .bytes = bytes, .i = 0 };
+    }
+
+pub inline fn index(self: SrcAscii) ?IndexValue {
+            if ((self.i >= self.bytes.len)) {
+                return null;
+            }
+            return .{ .char = @intCast(self.bytes[@as(usize, @intCast(self.i))]) };
+    }
+
+pub inline fn indexNext(self: SrcAscii) ?IndexValue {
+            if (((self.i + 1) >= self.bytes.len)) {
+                return null;
+            }
+            return .{ .char = @intCast(self.bytes[@as(usize, @intCast((self.i + 1)))]) };
+    }
+
+pub inline fn eat(self: *SrcAscii, escaped: bool) void {
+            self.i = (self.i + (1 + (if (comptime @typeInfo(@TypeOf(@intFromBool(escaped))) == .@"enum") cp_cast_int(u32, @intFromEnum(@intFromBool(escaped))) else cp_cast_int(u32, @intFromBool(escaped)))));
+    }
+    const IndexValue = _SrcAsciiIndexValue;
+};
+
+pub const _SrcUnicodeIndexValue = struct {
+    char: u32,
+    width: u8,
+};
+
+pub const SrcUnicode = struct {
+    iter: CodepointIterator,
+    cursor: Cursor,
+    next_cursor: Cursor,
+
+pub fn nextCursor(iter: *const CodepointIterator, cursor: *Cursor) void {
+            if ((!iter.next(cursor))) {
+                cursor.i = @intCast((iter.bytes.len + 1));
+                cursor.width = 1;
+                cursor.c = CodepointIterator.ZeroValue;
+            }
+    }
+
+pub fn init(bytes: []const u8) SrcUnicode {
+            var iter = CodepointIterator.init(bytes);
+            _ = &iter;
+            var cursor = Cursor{  };
+            _ = &cursor;
+            _ = nextCursor((&iter), (&cursor));
+            var next_cursor: Cursor = cursor;
+            _ = &next_cursor;
+            _ = nextCursor((&iter), (&next_cursor));
+            return .{ .iter = iter, .cursor = cursor, .next_cursor = next_cursor };
+    }
+
+pub inline fn index(self: SrcUnicode) ?IndexValue {
+            if (((self.cursor.width + self.cursor.i) > self.iter.bytes.len)) {
+                return null;
+            }
+            return .{ .char = self.cursor.c, .width = self.cursor.width };
+    }
+
+pub inline fn indexNext(self: SrcUnicode) ?IndexValue {
+            if (((self.next_cursor.width + self.next_cursor.i) > self.iter.bytes.len)) {
+                return null;
+            }
+            return .{ .char = @intCast(self.next_cursor.c), .width = self.next_cursor.width };
+    }
+
+pub inline fn eat(self: *SrcUnicode, escaped: bool) void {
+            if (escaped) {
+                _ = SrcUnicode.nextCursor((&self.iter), (&self.next_cursor));
+                self.cursor = self.next_cursor;
+                _ = SrcUnicode.nextCursor((&self.iter), (&self.next_cursor));
+            } else {
+                self.cursor = self.next_cursor;
+                _ = SrcUnicode.nextCursor((&self.iter), (&self.next_cursor));
+            }
+    }
+    const Cursor = CodepointIterator.Cursor;
+    const IndexValue = _SrcUnicodeIndexValue;
+};
+
+pub const _ShellCmdEnvIterEntry = struct {
+    key: _ShellCmdEnvIterKey,
+    value: _ShellCmdEnvIterValue,
+};
+
+pub const _ShellCmdEnvIterValue = struct {
+    val: [:0]const u8,
+
+pub fn format(self: _ShellCmdEnvIterValue, writer: *std.Io.Writer) !void {
+            _ = try writer.writeAll(self.val);
+    }
+};
+
+pub const _ShellCmdEnvIterKey = struct {
+    val: []const u8,
+
+pub fn format(self: _ShellCmdEnvIterKey, writer: *std.Io.Writer) !void {
+            _ = try writer.writeAll(self.val);
+    }
+
+pub fn eqlComptime(self: _ShellCmdEnvIterKey, comptime str: []const u8) bool {
+            return bun.strings.eqlComptime(self.val, str);
+    }
+};
+
+pub const CmdEnvIter = struct {
+    env: *const bun.StringArrayHashMap(EnvStrZ),
+    iter: bun.StringArrayHashMap(EnvStrZ).Iterator,
+
+pub fn fromEnv(env: *const bun.StringArrayHashMap(EnvStrZ)) CmdEnvIter {
+            const iter = env.iterator();
+            return .{ .env = env, .iter = iter };
+    }
+
+pub fn len(self: CmdEnvIter) usize {
+            return self.env.unmanaged.entries.len;
+    }
+
+pub fn next(self: *CmdEnvIter) !?Entry {
+            const entry = ((self.iter.next()) orelse { return null; });
+            return .{ .key = .{ .val = entry.key_ptr.* }, .value = .{ .val = entry.value_ptr.* } };
+    }
+    const Entry = _ShellCmdEnvIterEntry;
+    const Value = _ShellCmdEnvIterValue;
+    const Key = _ShellCmdEnvIterKey;
+};
+
+pub const Test = struct {
+    pub const TestToken = union(TokenTag) {
+            // |
+            Pipe,
+            // ||
+            DoublePipe,
+            // &
+            Ampersand,
+            // &&
+            DoubleAmpersand,
+    
+            // >
+            Redirect: AST.RedirectFlags,
+    
+            // $
+            Dollar,
+            // *
+            Asterisk,
+            DoubleAsterisk,
+            // =
+            Eq,
+            Semicolon,
+            Newline,
+    
+            BraceBegin,
+            Comma,
+            BraceEnd,
+            CmdSubstBegin,
+            CmdSubstQuoted,
+            CmdSubstEnd,
+            OpenParen,
+            CloseParen,
+    
+            Var: []const u8,
+            VarArgv: u8,
+            Text: []const u8,
+            SingleQuotedText: []const u8,
+            DoubleQuotedText: []const u8,
+            JSObjRef: u32,
+    
+            DoubleBracketOpen,
+            DoubleBracketClose,
+    
+            Delimit,
+            Eof,
+    
+            pub fn from_real(the_token: Token, buf: []const u8) TestToken {
+                switch (the_token) {
+                    .Var => |txt| return .{ .Var = buf[txt.start..txt.end] },
+                    .VarArgv => |int| return .{ .VarArgv = int },
+                    .Text => |txt| return .{ .Text = buf[txt.start..txt.end] },
+                    .SingleQuotedText => |txt| return .{ .SingleQuotedText = buf[txt.start..txt.end] },
+                    .DoubleQuotedText => |txt| return .{ .DoubleQuotedText = buf[txt.start..txt.end] },
+                    .JSObjRef => |val| return .{ .JSObjRef = val },
+                    .Pipe => return .Pipe,
+                    .DoublePipe => return .DoublePipe,
+                    .Ampersand => return .Ampersand,
+                    .DoubleAmpersand => return .DoubleAmpersand,
+                    .Redirect => |r| return .{ .Redirect = r },
+                    .Dollar => return .Dollar,
+                    .Asterisk => return .Asterisk,
+                    .DoubleAsterisk => return .DoubleAsterisk,
+                    .Eq => return .Eq,
+                    .Semicolon => return .Semicolon,
+                    .Newline => return .Newline,
+                    .BraceBegin => return .BraceBegin,
+                    .Comma => return .Comma,
+                    .BraceEnd => return .BraceEnd,
+                    .CmdSubstBegin => return .CmdSubstBegin,
+                    .CmdSubstQuoted => return .CmdSubstQuoted,
+                    .CmdSubstEnd => return .CmdSubstEnd,
+                    .OpenParen => return .OpenParen,
+                    .CloseParen => return .CloseParen,
+                    .DoubleBracketOpen => return .DoubleBracketOpen,
+                    .DoubleBracketClose => return .DoubleBracketClose,
+                    .Delimit => return .Delimit,
+                    .Eof => return .Eof,
+                }
+            }
+        };
+};
+
+pub const ShellSrcBuilder = struct {
+    globalThis: *jsc.JSGlobalObject,
+    outbuf: *std.array_list.Managed(u8),
+    jsstrs_to_escape: *std.array_list.Managed(bun.String),
+    jsstr_ref_buf: [128]u8 = undefined,
+
+pub fn init(globalThis: *jsc.JSGlobalObject, outbuf: *std.array_list.Managed(u8), jsstrs_to_escape: *std.array_list.Managed(bun.String)) ShellSrcBuilder {
+            return .{ .globalThis = globalThis, .outbuf = outbuf, .jsstrs_to_escape = jsstrs_to_escape };
+    }
+
+pub fn appendJSValueStr(self: *ShellSrcBuilder, jsval: JSValue, comptime allow_escape: bool) bun.JSError!bool {
+            const bunstr = try jsval.toBunString(self.globalThis);
+            var _guard_bunstr = DerefGuard(bun.String){ .val = bunstr };
+            _ = &_guard_bunstr;
+            var ___guard_bunstr_moved = false; _ = &___guard_bunstr_moved;
+            defer if (!___guard_bunstr_moved) { ___guard_bunstr_moved = true; const __T = @TypeOf(_guard_bunstr); if (@typeInfo(__T) == .optional) { if (_guard_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstr; _drop_val.__cp_deinit(); } };
+            if ((bunstr.indexOfAsciiChar(0) != null)) {
+                return self.globalThis.ERR(.INVALID_ARG_VALUE, "The shell argument must be a string without null bytes. Received \"{f}\"", .{ bunstr.toZigString() }).throw();
+            }
+            return try self.appendBunStr(bunstr, allow_escape);
+    }
+
+pub fn appendBunStr(self: *ShellSrcBuilder, bunstr: bun.String, comptime allow_escape: bool) bun.OOM!bool {
+            const invalid = ((bunstr.isUTF16() and (!bun.simdutf.validate.utf16le(bunstr.utf16()))) or (bunstr.isUTF8() and (!bun.simdutf.validate.utf8(bunstr.byteSlice()))));
+            if (invalid) {
+                return false;
+            }
+            if ((allow_escape and (bunstr.length() == 0))) {
+                _ = try self.appendJSStrRef(bunstr);
+                return true;
+            }
+            if (allow_escape) {
+                if (needsEscapeBunstr(bunstr)) {
+                    _ = try self.appendJSStrRef(bunstr);
+                    return true;
+                }
+            }
+            if (bunstr.isUTF16()) {
+                _ = try self.appendUTF16Impl(bunstr.utf16());
+                return true;
+            }
+            if ((bunstr.isUTF8() or bun.strings.isAllASCII(bunstr.byteSlice()))) {
+                _ = try self.appendUTF8Impl(bunstr.byteSlice());
+                return true;
+            }
+            _ = try self.appendLatin1Impl(bunstr.byteSlice());
+            return true;
+    }
+
+pub fn appendUTF8(self: *ShellSrcBuilder, utf8: []const u8, comptime allow_escape: bool) !bool {
+            const invalid = bun.simdutf.validate.utf8(utf8);
+            if ((!invalid)) {
+                return false;
+            }
+            if (allow_escape) {
+                if (needsEscapeUtf8AsciiLatin1(utf8)) {
+                    const bunstr = bun.String.cloneUTF8(utf8);
+                    var _guard_bunstr = DerefGuard(bun.String){ .val = bunstr };
+                    _ = &_guard_bunstr;
+                    var ___guard_bunstr_moved = false; _ = &___guard_bunstr_moved;
+                    defer if (!___guard_bunstr_moved) { ___guard_bunstr_moved = true; const __T = @TypeOf(_guard_bunstr); if (@typeInfo(__T) == .optional) { if (_guard_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstr; _drop_val.__cp_deinit(); } };
+                    _ = try self.appendJSStrRef(bunstr);
+                    return true;
+                }
+            }
+            _ = try self.appendUTF8Impl(utf8);
+            return true;
+    }
+
+pub fn appendUTF16Impl(self: *ShellSrcBuilder, utf16: []const u16) !void {
+            const size = bun.simdutf.simdutf__utf8_length_from_utf16le(utf16.ptr, utf16.len);
+            _ = try self.outbuf.ensureUnusedCapacity(size);
+            _ = try bun.strings.convertUTF16ToUTF8Append(self.outbuf, utf16);
+    }
+
+pub fn appendUTF8Impl(self: *ShellSrcBuilder, utf8: []const u8) !void {
+            _ = try self.outbuf.appendSlice(utf8);
+    }
+
+pub fn appendLatin1Impl(self: *ShellSrcBuilder, latin1: []const u8) !void {
+            const non_ascii_idx = ((bun.strings.firstNonASCII(latin1)) orelse (0));
+            if ((non_ascii_idx > 0)) {
+                _ = try self.appendUTF8Impl(latin1[0..non_ascii_idx]);
+            }
+            self.outbuf.* = try bun.strings.allocateLatin1IntoUTF8WithList(self.outbuf.*, self.outbuf.items.len, latin1);
+    }
+
+pub fn appendJSStrRef(self: *ShellSrcBuilder, bunstr: bun.String) !void {
+            const idx = self.jsstrs_to_escape.items.len;
+            const str = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrint(self.jsstr_ref_buf[0..], "{s}{d}", .{ LEX_JS_STRING_PREFIX, idx })) catch |__ce_2| { _ = &__ce_2; @panic("Impossible"); }); });
+            _ = try self.outbuf.appendSlice(str);
+            _ = bunstr.ref();
+            _ = try self.jsstrs_to_escape.append(bunstr);
+    }
+};
+
+pub const EscapeUtf16Result = struct {
+    is_invalid: bool = false,
+};
+
+pub const TestingAPIs = struct {
+
+pub fn disabledOnThisPlatform(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
+            if (comptime bun.Environment.isWindows) {
+                return jsc.JSValue.jsBoolean(false);
+            }
+            const arguments_ = callframe.arguments_old(1);
+            var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
+            _ = &arguments;
+            const str_arg_opt = arguments.nextEat();
+            if ((str_arg_opt == null)) {
+                return globalThis.throw("shellInternals.disabledOnPosix: expected 1 arguments, got 0", .{});
+            }
+            const str_arg = str_arg_opt.?;
+            const bunstr = try str_arg.toBunString(globalThis);
+            var _guard_bunstr = DerefGuard(bun.String){ .val = bunstr };
+            _ = &_guard_bunstr;
+            var ___guard_bunstr_moved = false; _ = &___guard_bunstr_moved;
+            defer if (!___guard_bunstr_moved) { ___guard_bunstr_moved = true; const __T = @TypeOf(_guard_bunstr); if (@typeInfo(__T) == .optional) { if (_guard_bunstr) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_bunstr.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_bunstr; _drop_val.__cp_deinit(); } };
+            var utf8str = bunstr.toUTF8(bun.default_allocator);
+            _ = &utf8str;
+            var _guard_utf8str = DeinitGuard(@TypeOf(utf8str)){ .ptr = (&utf8str) };
+            _ = &_guard_utf8str;
+            var ___guard_utf8str_moved = false; _ = &___guard_utf8str_moved;
+            defer if (!___guard_utf8str_moved) { ___guard_utf8str_moved = true; const __T = @TypeOf(_guard_utf8str); if (@typeInfo(__T) == .optional) { if (_guard_utf8str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_utf8str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_utf8str; _drop_val.__cp_deinit(); } };
+            inline for (Interpreter.Builtin.Kind.DISABLED_ON_POSIX) |disabled| {
+                if (bun.strings.eqlComptime(utf8str.byteSlice(), @tagName(disabled))) {
+                    return jsc.JSValue.jsBoolean(true);
+                }
+            }
+            return jsc.JSValue.jsBoolean(false);
+    }
+
+pub fn shellLexImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer) bun.JSError!jsc.JSValue {
+            const arguments_ = callframe.arguments_old(2);
+            var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
+            _ = &arguments;
+            const string_args_opt = arguments.nextEat();
+            if ((string_args_opt == null)) {
+                return globalThis.throw("shell_parse: expected 2 arguments, got 0", .{});
+            }
+            const string_args = string_args_opt.?;
+            var arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
+            _ = &arena_;
+            var _guard_arena = DeinitGuard(@TypeOf(arena_)){ .ptr = (&arena_) };
+            _ = &_guard_arena;
+            var ___guard_arena_moved = false; _ = &___guard_arena_moved;
+            defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
+            const template_args_js_opt = arguments.nextEat();
+            if ((template_args_js_opt == null)) {
+                return globalThis.throw("shell: expected 2 arguments, got 0", .{});
+            }
+            const template_args_js = template_args_js_opt.?;
+            var template_args = try template_args_js.arrayIterator(globalThis);
+            _ = &template_args;
+            var stack_alloc = std.heap.stackFallback((@sizeOf(bun.String) * 4), arena_.allocator());
+            _ = &stack_alloc;
+            var jsstrings = try std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4);
+            _ = &jsstrings;
+            var _guard_jsstrings = JsStringsGuard(@TypeOf(jsstrings)){ .ptr = (&jsstrings) };
+            _ = &_guard_jsstrings;
+            var ___guard_jsstrings_moved = false; _ = &___guard_jsstrings_moved;
+            defer if (!___guard_jsstrings_moved) { ___guard_jsstrings_moved = true; const __T = @TypeOf(_guard_jsstrings); if (@typeInfo(__T) == .optional) { if (_guard_jsstrings) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsstrings.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsstrings; _drop_val.__cp_deinit(); } };
+            var jsobjs = std.array_list.Managed(JSValue).init(arena_.allocator());
+            _ = &jsobjs;
+            var _guard_jsobjs = DeinitGuard(@TypeOf(jsobjs)){ .ptr = (&jsobjs) };
+            _ = &_guard_jsobjs;
+            var ___guard_jsobjs_moved = false; _ = &___guard_jsobjs_moved;
+            defer if (!___guard_jsobjs_moved) { ___guard_jsobjs_moved = true; const __T = @TypeOf(_guard_jsobjs); if (@typeInfo(__T) == .optional) { if (_guard_jsobjs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsobjs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsobjs; _drop_val.__cp_deinit(); } };
+            var script = std.array_list.Managed(u8).init(arena_.allocator());
+            _ = &script;
+            _ = try shellCmdFromJS(globalThis, string_args, (&template_args), (&jsobjs), (&jsstrings), (&script), marked_argument_buffer);
+            const jsobjs_len: u32 = @intCast(jsobjs.items.len);
+            const lex_result = brk: {
+            if (bun.strings.isAllASCII(script.items[0..])) {
+                var lexer = LexerAscii.new(arena_.allocator(), script.items[0..], jsstrings.items[0..], jsobjs_len);
+                _ = &lexer;
+                _ = (blk_catch_3: { break :blk_catch_3 ((lexer.lex()) catch |e| { _ = &e; return globalThis.throwError(e, "failed to lex shell"); }); });
+                break :brk lexer.get_result();
+            }
+            var lexer = LexerUnicode.new(arena_.allocator(), script.items[0..], jsstrings.items[0..], jsobjs_len);
+            _ = &lexer;
+            _ = (blk_catch_4: { break :blk_catch_4 ((lexer.lex()) catch |e| { _ = &e; return globalThis.throwError(e, "failed to lex shell"); }); });
+            break :brk lexer.get_result();
+};
+            if ((lex_result.errors.len > 0)) {
+                const str = lex_result.combineErrors(arena_.allocator());
+                return globalThis.throwPretty("{s}", .{ str });
+            }
+            var test_tokens = try std.array_list.Managed(Test.TestToken).initCapacity(arena_.allocator(), lex_result.tokens.len);
+            _ = &test_tokens;
+            for (cp_iter_slice(lex_result.tokens)) |tok| {
+                _ = &tok;
+                const test_tok = Test.TestToken.from_real(tok, lex_result.strpool);
+                _ = try test_tokens.append(test_tok);
+            }
+            const str = bun.handleOom(std.fmt.allocPrint(globalThis.bunVM().allocator, "{f}", .{ std.json.fmt(test_tokens.items[0..], .{}) }));
+            var _guard_str = AllocFreeGuard(@TypeOf(str)){ .allocator = globalThis.bunVM().allocator, .slice = str };
+            _ = &_guard_str;
+            var ___guard_str_moved = false; _ = &___guard_str_moved;
+            defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
+            var bun_str = bun.String.fromBytes(str);
+            _ = &bun_str;
+            return bun_str.toJS(globalThis);
+    }
+
+pub fn shellParseImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer) bun.JSError!jsc.JSValue {
+            const arguments_ = callframe.arguments_old(2);
+            var arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
+            _ = &arguments;
+            const string_args_opt = arguments.nextEat();
+            if ((string_args_opt == null)) {
+                return globalThis.throw("shell_parse: expected 2 arguments, got 0", .{});
+            }
+            const string_args = string_args_opt.?;
+            var arena_ = bun.ArenaAllocator.init(bun.default_allocator);
+            _ = &arena_;
+            var _guard_arena = DeinitGuard(@TypeOf(arena_)){ .ptr = (&arena_) };
+            _ = &_guard_arena;
+            var ___guard_arena_moved = false; _ = &___guard_arena_moved;
+            defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
+            const template_args_js_opt = arguments.nextEat();
+            if ((template_args_js_opt == null)) {
+                return globalThis.throw("shell: expected 2 arguments, got 0", .{});
+            }
+            const template_args_js = template_args_js_opt.?;
+            var template_args = try template_args_js.arrayIterator(globalThis);
+            _ = &template_args;
+            var stack_alloc = std.heap.stackFallback((@sizeOf(bun.String) * 4), arena_.allocator());
+            _ = &stack_alloc;
+            var jsstrings = try std.array_list.Managed(bun.String).initCapacity(stack_alloc.get(), 4);
+            _ = &jsstrings;
+            var _guard_jsstrings = JsStringsGuard(@TypeOf(jsstrings)){ .ptr = (&jsstrings) };
+            _ = &_guard_jsstrings;
+            var ___guard_jsstrings_moved = false; _ = &___guard_jsstrings_moved;
+            defer if (!___guard_jsstrings_moved) { ___guard_jsstrings_moved = true; const __T = @TypeOf(_guard_jsstrings); if (@typeInfo(__T) == .optional) { if (_guard_jsstrings) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsstrings.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsstrings; _drop_val.__cp_deinit(); } };
+            var jsobjs = std.array_list.Managed(JSValue).init(arena_.allocator());
+            _ = &jsobjs;
+            var _guard_jsobjs = DeinitGuard(@TypeOf(jsobjs)){ .ptr = (&jsobjs) };
+            _ = &_guard_jsobjs;
+            var ___guard_jsobjs_moved = false; _ = &___guard_jsobjs_moved;
+            defer if (!___guard_jsobjs_moved) { ___guard_jsobjs_moved = true; const __T = @TypeOf(_guard_jsobjs); if (@typeInfo(__T) == .optional) { if (_guard_jsobjs) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_jsobjs.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_jsobjs; _drop_val.__cp_deinit(); } };
+            var script = std.array_list.Managed(u8).init(arena_.allocator());
+            _ = &script;
+            _ = try shellCmdFromJS(globalThis, string_args, (&template_args), (&jsobjs), (&jsstrings), (&script), marked_argument_buffer);
+            var out_parser: ?Parser = null;
+            _ = &out_parser;
+            var out_lex_result: ?LexResult = null;
+            _ = &out_lex_result;
+            const script_ast = (blk_catch_5: { break :blk_catch_5 ((Interpreter.parse(arena_.allocator(), script.items[0..], jsobjs.items[0..], jsstrings.items[0..], (&out_parser), (&out_lex_result))) catch |e| { _ = &e; if ((e == ParseError.Lex)) {
+                if (bun.Environment.allow_assert) {
+                    _ = assert((out_lex_result != null));
+                }
+                const str = out_lex_result.?.combineErrors(arena_.allocator());
+                return globalThis.throwPretty("{s}", .{ str });
+            }
+            if (out_parser) |*p| {
+                _ = &p;
+                const errstr = (p.*).combineErrors();
+                return globalThis.throwPretty("{s}", .{ errstr });
+            }
+            return globalThis.throwError(e, "failed to lex/parse shell"); }); });
+            const str = bun.handleOom(std.fmt.allocPrint(globalThis.bunVM().allocator, "{f}", .{ std.json.fmt(script_ast, .{}) }));
+            var _guard_str = AllocFreeGuard(@TypeOf(str)){ .allocator = globalThis.bunVM().allocator, .slice = str };
+            _ = &_guard_str;
+            var ___guard_str_moved = false; _ = &___guard_str_moved;
+            defer if (!___guard_str_moved) { ___guard_str_moved = true; const __T = @TypeOf(_guard_str); if (@typeInfo(__T) == .optional) { if (_guard_str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_str; _drop_val.__cp_deinit(); } };
+            return bun.String.createUTF8ForJS(globalThis, str);
+    }
+    pub const shellLex = jsc.MarkedArgumentBuffer.wrap(shellLexImpl);
+    pub const shellParse = jsc.MarkedArgumentBuffer.wrap(shellParseImpl);
+};
+
+const EnvStrZ = [:0]const u8;
+pub const EnvMap = interpret.EnvMap;
+pub const EnvStr = interpret.EnvStr;
+pub const Interpreter = interpret.Interpreter;
+pub const ParsedShellScript = interpret.ParsedShellScript;
+pub const Subprocess = subproc.ShellSubprocess;
+pub const ExitCode = interpret.ExitCode;
+pub const IOWriter = Interpreter.IOWriter;
+pub const IOReader = Interpreter.IOReader;
+pub const Yield = @import("./Yield.zig").Yield;
+pub const unreachableState = interpret.unreachableState;
+const GlobWalker = bun.glob.GlobWalker(null, true);
+pub const SUBSHELL_TODO_ERROR = "Subshells are not implemented, please open GitHub issue!";
+pub const STDIN_FD: bun.FD = .fromUV(0);
+pub const STDOUT_FD: bun.FD = .fromUV(1);
+pub const STDERR_FD: bun.FD = .fromUV(2);
+pub const POSIX_DEV_NULL: [:0]const u8 = "/dev/null";
+pub const WINDOWS_DEV_NULL: [:0]const u8 = "NUL";
+pub const ParseError = error{
+    Unsupported,
+    Expected,
+    Unexpected,
+    Unknown,
+    Lex,
+};
+pub const Pipe = [2]bun.FD;
+const log = bun.Output.scoped(.SHELL, .hidden);
+const _AST_SUPPORTED_OPS: [7]ASTCondExprOp = .{ .@"-f", .@"-z", .@"-n", .@"-d", .@"-c", .@"==", .@"!=" };
 pub const LexerAscii = NewLexer(.ascii);
 pub const LexerUnicode = NewLexer(.wtf8);
 const SPECIAL_JS_CHAR = 8;
 pub const LEX_JS_OBJREF_PREFIX: [7]u8 = .{ 8, 95, 95, 98, 117, 110, 95 };
 pub const LEX_JS_STRING_PREFIX: [10]u8 = .{ 8, 95, 95, 98, 117, 110, 115, 116, 114, 95 };
-pub const StringEncoding = enum { ascii, wtf8, utf16 };
 var stderr_mutex = bun.Mutex{  };
 const SPECIAL_CHARS = .{ 126, 91, 93, 35, 59, 10, 42, 123, 44, 125, 96, 36, 61, 40, 41, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 124, 62, 60, 38, 39, 34, 32, 92, SPECIAL_JS_CHAR };
 const SPECIAL_CHARS_TABLE: bun.bit_set.IntegerBitSet(256) = brk: {
@@ -2897,6 +2890,61 @@ extern "c" fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: i32) 
 
 pub fn setEnv(name: [*:0]const u8, value: [*:0]const u8) void {
         _ = setenv(name, value, 1);
+}
+
+pub fn #atomsMemoryCost(self: *const @This()) usize {
+        var cost: usize = 0;
+        _ = &cost;
+        for (cp_mut_slice(&self.atoms)) |*atom| {
+            _ = &atom;
+            cost = (cost + (atom.*).memoryCost());
+        }
+        return cost;
+}
+
+pub fn asHumanReadable(self: Token, strpool: []const u8) []const u8 {
+        const varargv_strings = blk: {
+        var res: [10][2]u8 = undefined;
+        _ = &res;
+        for (&res, 0..) |*item, i| {
+            _ = &item;
+            _ = &i;
+            item[cp_cast_int(usize, 0)] = 36;
+            item[cp_cast_int(usize, 1)] = (@as(u8, @intCast(i)) + 48);
+        }
+        break :blk res;
+};
+        return (switch (self) {
+.Pipe => "`|`",
+.DoublePipe => "`||`",
+.Ampersand => "`&`",
+.DoubleAmpersand => "`&&`",
+.Redirect => "`>`",
+.Dollar => "`$`",
+.Asterisk => "`*`",
+.DoubleAsterisk => "`**`",
+.Eq => "`=`",
+.Semicolon => "`;`",
+.Newline => "`\\n`",
+.BraceBegin => "`{`",
+.Comma => "`,`",
+.BraceEnd => "`}`",
+.CmdSubstBegin => "`$(`",
+.CmdSubstQuoted => "CmdSubstQuoted",
+.CmdSubstEnd => "`)`",
+.OpenParen => "`(`",
+.CloseParen => "`)",
+.Var => strpool[self.Var.start..self.Var.end],
+.VarArgv => (&varargv_strings[@as(usize, @intCast(self.VarArgv))]),
+.Text => strpool[self.Text.start..self.Text.end],
+.SingleQuotedText => strpool[self.SingleQuotedText.start..self.SingleQuotedText.end],
+.DoubleQuotedText => strpool[self.DoubleQuotedText.start..self.DoubleQuotedText.end],
+.JSObjRef => "JSObjRef",
+.DoubleBracketOpen => "[[",
+.DoubleBracketClose => "]]",
+.Delimit => "Delimit",
+.Eof => "EOF",
+});
 }
 
 pub fn NewLexerBacktrackSnapshot(comptime Chars: type) type {
@@ -4180,7 +4228,7 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                 const idx = out_jsobjs.items.len;
                 _ = marked_argument_buffer.append(template_value);
                 _ = try out_jsobjs.append(template_value);
-                const slice = (blk_catch_4: { break :blk_catch_4 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_4| { _ = &__ce_4; return globalThis.throwOutOfMemory(); }); });
+                const slice = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_6| { _ = &__ce_6; return globalThis.throwOutOfMemory(); }); });
                 _ = try out_script.appendSlice(slice);
                 return;
             }
@@ -4205,7 +4253,7 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                 const idx = out_jsobjs.items.len;
                 _ = marked_argument_buffer.append(template_value);
                 _ = try out_jsobjs.append(template_value);
-                const slice = (blk_catch_5: { break :blk_catch_5 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_5| { _ = &__ce_5; return globalThis.throwOutOfMemory(); }); });
+                const slice = (blk_catch_7: { break :blk_catch_7 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_7| { _ = &__ce_7; return globalThis.throwOutOfMemory(); }); });
                 _ = try out_script.appendSlice(slice);
                 return;
             }
@@ -4215,7 +4263,7 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                 const idx = out_jsobjs.items.len;
                 _ = marked_argument_buffer.append(template_value);
                 _ = try out_jsobjs.append(template_value);
-                const slice = (blk_catch_6: { break :blk_catch_6 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_6| { _ = &__ce_6; return globalThis.throwOutOfMemory(); }); });
+                const slice = (blk_catch_8: { break :blk_catch_8 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_8| { _ = &__ce_8; return globalThis.throwOutOfMemory(); }); });
                 _ = try out_script.appendSlice(slice);
                 return;
             }
@@ -4225,7 +4273,7 @@ pub fn handleTemplateValue(globalThis: *jsc.JSGlobalObject, template_value: JSVa
                 const idx = out_jsobjs.items.len;
                 _ = marked_argument_buffer.append(template_value);
                 _ = try out_jsobjs.append(template_value);
-                const slice = (blk_catch_7: { break :blk_catch_7 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_7| { _ = &__ce_7; return globalThis.throwOutOfMemory(); }); });
+                const slice = (blk_catch_9: { break :blk_catch_9 ((std.fmt.bufPrint(jsobjref_buf[0..], "{s}{d}", .{ LEX_JS_OBJREF_PREFIX, idx })) catch |__ce_9| { _ = &__ce_9; return globalThis.throwOutOfMemory(); }); });
                 _ = try out_script.appendSlice(slice);
                 return;
             }

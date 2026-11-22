@@ -20,7 +20,7 @@ pub struct DeinitGuard<T> {
     }
 }
 
-const SourceURLFormatterImpl = struct {
+struct SourceURLFormatterImpl {
     source_url: bun.String,
     position: ZigStackFramePosition,
     enable_color: bool,
@@ -29,7 +29,7 @@ const SourceURLFormatterImpl = struct {
     remapped: bool = false,
     root_path: string = "",
 
-    pub fn format(writer: *std.Io.Writer): !void {
+    fn format(writer: *std.Io.Writer)! {
         if (_.enable_color) {
             writer.writeAll(Output.prettyFmt("<r><cyan>", true))?;
         }
@@ -118,13 +118,13 @@ const SourceURLFormatterImpl = struct {
     }
 }
 
-const NameFormatterImpl = struct {
+struct NameFormatterImpl {
     function_name: String,
     code_type: ZigStackFrameCode,
     enable_color: bool,
     is_async: bool,
 
-    pub fn format(writer: *std.Io.Writer): !void {
+    fn format(writer: *std.Io.Writer)! {
         const name = _.function_name;
 
         switch (_.code_type) {
@@ -218,12 +218,12 @@ const NameFormatterImpl = struct {
         jsc_stack_frame_index: -1,
     };
 
-    pub fn deinit(*_) {
+    fn deinit(*_) {
         _.function_name.deref();
         _.source_url.deref();
     }
 
-    pub fn toAPI(root_path: string, origin: (*const ZigURL)?, allocator: std.mem.Allocator): !api.StackFrame {
+    fn toAPI(root_path: string, origin: (*const ZigURL)?, allocator: std.mem.Allocator): !api.StackFrame {
         let frame: api.StackFrame = comptime std.mem.zeroes(api.StackFrame);
         if (!_.function_name.isEmpty()) {
             let slicer = _.function_name.toUTF8(allocator);
@@ -241,11 +241,11 @@ const NameFormatterImpl = struct {
         return frame;
     }
 
-    pub fn nameFormatter(comptime enable_color: bool): NameFormatterImpl {
+    fn nameFormatter(comptime enable_color: bool): NameFormatterImpl {
         return NameFormatterImpl{ function_name: _.function_name, code_type: _.code_type, enable_color: enable_color, is_async: _.is_async };
     }
 
-    pub fn sourceURLFormatter(root_path: string, origin: (*const ZigURL)?, exclude_line_column: bool, comptime enable_color: bool): SourceURLFormatterImpl {
+    fn sourceURLFormatter(root_path: string, origin: (*const ZigURL)?, exclude_line_column: bool, comptime enable_color: bool): SourceURLFormatterImpl {
         return SourceURLFormatterImpl{
             source_url: _.source_url,
             exclude_line_column: exclude_line_column,

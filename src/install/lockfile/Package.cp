@@ -27,6 +27,62 @@ pub struct FreeGuard<T> {
     }
 }
 
+pub struct PackageDependencyGroup {
+    prop: string,
+    field: string,
+    behavior: Behavior,
+
+    pub const dependencies = PackageDependencyGroup{ prop: "dependencies", field: "dependencies", behavior: { prod: true } };
+    pub const dev = PackageDependencyGroup{ prop: "devDependencies", field: "dev_dependencies", behavior: { dev: true } };
+    pub const optional = PackageDependencyGroup{ prop: "optionalDependencies", field: "optional_dependencies", behavior: { optional: true } };
+    pub const peer = PackageDependencyGroup{ prop: "peerDependencies", field: "peer_dependencies", behavior: { peer: true } };
+    pub const workspaces = PackageDependencyGroup{ prop: "workspaces", field: "workspaces", behavior: { workspace: true } };
+}
+
+pub fn PackageAlphabetizer(comptime Res: type): type {
+    return struct {
+        names: []const String,
+        buf: []const u8,
+        resolutions: []const Res,
+
+        fn isAlphabetical(lhs: PackageID, rhs: PackageID): bool {
+            return switch (_.names[lhs].order(&_.names[rhs], _.buf, _.buf)) {
+                .eq => _.resolutions[lhs].order(&_.resolutions[rhs], _.buf, _.buf) == .lt,
+                .lt => true,
+                .gt => false,
+            };
+        }
+    };
+}
+
+pub struct DiffSummary {
+    add: u32 = 0,
+    remove: u32 = 0,
+    update: u32 = 0,
+    overrides_changed: bool = false,
+    catalogs_changed: bool = false,
+
+    // bool for if this dependency should be added to lockfile trusted dependencies.
+    // it is false when the new trusted dependency is coming from the default list.
+    added_trusted_dependencies: std.ArrayHashMapUnmanaged(TruncatedPackageNameHash, bool, ArrayIdentityContext, false) = {},
+    removed_trusted_dependencies: TrustedDependenciesSet = {},
+
+    patched_dependencies_changed: bool = false,
+
+    inline fn sum(*_, that: DiffSummary) {
+        _.add += that.add;
+        _.remove += that.remove;
+        _.update += that.update;
+    }
+
+    inline fn hasDiffs(): bool {
+        return _.add > 0 || _.remove > 0 || _.update > 0 || _.overrides_changed || _.catalogs_changed ||
+            _.added_trusted_dependencies.count() > 0 ||
+            _.removed_trusted_dependencies.count() > 0 ||
+            _.patched_dependencies_changed;
+    }
+}
+
 pub fn Package(comptime SemverIntType: type): type {
     return struct {
         name: String = {},
@@ -74,40 +130,17 @@ pub fn Package(comptime SemverIntType: type): type {
         pub const Meta = @import("./Package/Meta.zig").Meta;
         pub const WorkspaceMap = @import("./Package/WorkspaceMap.zig");
 
-        pub const DependencyGroup = struct {
-            prop: string,
-            field: string,
-            behavior: Behavior,
+        pub const DependencyGroup = PackageDependencyGroup;
 
-            pub const dependencies = DependencyGroup{ .prop = "dependencies", .field = "dependencies", .behavior = .{ .prod = true } };
-            pub const dev = DependencyGroup{ .prop = "devDependencies", .field = "dev_dependencies", .behavior = .{ .dev = true } };
-            pub const optional = DependencyGroup{ .prop = "optionalDependencies", .field = "optional_dependencies", .behavior = .{ .optional = true } };
-            pub const peer = DependencyGroup{ .prop = "peerDependencies", .field = "peer_dependencies", .behavior = .{ .peer = true } };
-            pub const workspaces = DependencyGroup{ .prop = "workspaces", .field = "workspaces", .behavior = .{ .workspace = true } };
-        };
-
-        pub inline fn isDisabled(this: *const @This(), cpu: Npm.Architecture, os: Npm.OperatingSystem): bool {
-            return this.@"meta".isDisabled(cpu, os);
+        inline fn isDisabled(cpu: Npm.Architecture, os: Npm.OperatingSystem): bool {
+            return _.@"meta".isDisabled(cpu, os);
         }
 
-        pub const Alphabetizer = struct {
-            names: []const String,
-            buf: []const u8,
-            resolutions: []const Resolution,
-
-            pub fn isAlphabetical(ctx: Alphabetizer, lhs: PackageID, rhs: PackageID): bool {
-                return switch (ctx.names[lhs].order(&ctx.names[rhs], ctx.buf, ctx.buf)) {
-                    .eq => ctx.resolutions[lhs].order(&ctx.resolutions[rhs], ctx.buf, ctx.buf) == .lt,
-                    .lt => true,
-                    .gt => false,
-                };
-            }
-        };
+        pub const Alphabetizer = PackageAlphabetizer(Resolution);
 
         const debug = Output.scoped(.Lockfile, .hidden);
 
-        pub fn clone(
-            this: *const @This(),
+        fn clone(
             pm: *PackageManager,
             old: *Lockfile,
             new_lockfile: *Lockfile,
@@ -118,25 +151,25 @@ pub fn Package(comptime SemverIntType: type): type {
             const old_extern_string_buf = old.buffers.extern_strings.items;
             let builder_ = new_lockfile.stringBuilder();
             let builder = &builder_;
-            const name_slice = @TypeOf(this.name).slice(&this.name, old_string_buf);
+            const name_slice = @TypeOf(_.name).slice(&_.name, old_string_buf);
             debug("Clone: {s}@{f} ({s}, {d} dependencies)", .{
                 name_slice,
-                this.resolution.fmt(old_string_buf, .auto),
-                @tagName(this.resolution.tag),
-                this.dependencies.len,
+                _.resolution.fmt(old_string_buf, .auto),
+                @tagName(_.resolution.tag),
+                _.dependencies.len,
             });
 
             builder.count(name_slice);
-            this.resolution.count(old_string_buf, *Lockfile.StringBuilder, builder);
-            this.@"meta".count(old_string_buf, *Lockfile.StringBuilder, builder);
-            this.scripts.count(old_string_buf, *Lockfile.StringBuilder, builder);
+            _.resolution.count(old_string_buf, *Lockfile.StringBuilder, builder);
+            _.@"meta".count(old_string_buf, *Lockfile.StringBuilder, builder);
+            _.scripts.count(old_string_buf, *Lockfile.StringBuilder, builder);
             for (patched_dep of old.patched_dependencies.values()) {
                 const pslice = @TypeOf(patched_dep.path).slice(&patched_dep.path, old.buffers.string_bytes.items);
                 builder.count(pslice);
             }
-            const new_extern_string_count = this.bin.count(old_string_buf, old_extern_string_buf, *Lockfile.StringBuilder, builder);
-            const old_dependencies: []const Dependency = this.dependencies.get(old.buffers.dependencies.items);
-            const old_resolutions: []const PackageID = this.resolutions.get(old.buffers.resolutions.items);
+            const new_extern_string_count = _.bin.count(old_string_buf, old_extern_string_buf, *Lockfile.StringBuilder, builder);
+            const old_dependencies: []const Dependency = _.dependencies.get(old.buffers.dependencies.items);
+            const old_resolutions: []const PackageID = _.resolutions.get(old.buffers.resolutions.items);
 
             for (dependency of old_dependencies) {
                 dependency.count(old_string_buf, *Lockfile.StringBuilder, builder);
@@ -163,14 +196,14 @@ pub fn Package(comptime SemverIntType: type): type {
             const resolutions: []PackageID = new_lockfile.buffers.resolutions.items[prev_len..end];
 
             const id = @as(PackageID, @truncate(new_lockfile.packages.len));
-            const new_package = try new_lockfile.appendPackageWithID(
+            const new_package = (new_lockfile.appendPackageWithID(
                 {
                     name: builder.appendWithHash(
                         String,
                         name_slice,
-                        this.name_hash,
+                        _.name_hash,
                     ),
-                    bin: this.bin.clone(
+                    bin: _.bin.clone(
                         old_string_buf,
                         old_extern_string_buf,
                         new_lockfile.buffers.extern_strings.items,
@@ -178,19 +211,19 @@ pub fn Package(comptime SemverIntType: type): type {
                         *Lockfile.StringBuilder,
                         builder,
                     ),
-                    name_hash: this.name_hash,
-                    @"meta": this.@"meta".clone(
+                    name_hash: _.name_hash,
+                    @"meta": _.@"meta".clone(
                         id,
                         old_string_buf,
                         *Lockfile.StringBuilder,
                         builder,
                     ),
-                    resolution: this.resolution.clone(
+                    resolution: _.resolution.clone(
                         old_string_buf,
                         *Lockfile.StringBuilder,
                         builder,
                     ),
-                    scripts: this.scripts.clone(
+                    scripts: _.scripts.clone(
                         old_string_buf,
                         *Lockfile.StringBuilder,
                         builder,
@@ -199,12 +232,12 @@ pub fn Package(comptime SemverIntType: type): type {
                     resolutions: { off: prev_len, len: end - prev_len },
                 },
                 id,
-            );
+            )?);
 
-            package_id_mapping[this.@"meta".id] = new_package.@"meta".id;
+            package_id_mapping[_.@"meta".id] = new_package.@"meta".id;
 
             if (cloner.manager.preinstall_state.items.len > 0) {
-                cloner.manager.preinstall_state.items[new_package.@"meta".id] = cloner.old_preinstall_state.items[this.@"meta".id];
+                cloner.manager.preinstall_state.items[new_package.@"meta".id] = cloner.old_preinstall_state.items[_.@"meta".id];
             }
 
             for (old_dependencies, dependencies) |old_dep, *new_dep| {
@@ -563,33 +596,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 link,
             };
 
-            pub const Summary = struct {
-                add: u32 = 0,
-                remove: u32 = 0,
-                update: u32 = 0,
-                overrides_changed: bool = false,
-                catalogs_changed: bool = false,
-
-                // bool for if this dependency should be added to lockfile trusted dependencies.
-                // it is false when the new trusted dependency is coming from the default list.
-                added_trusted_dependencies: std.ArrayHashMapUnmanaged(TruncatedPackageNameHash, bool, ArrayIdentityContext, false) = {},
-                removed_trusted_dependencies: TrustedDependenciesSet = {},
-
-                patched_dependencies_changed: bool = false,
-
-                pub inline fn sum(*_, that: Summary) {
-                    _.add += that.add;
-                    _.remove += that.remove;
-                    _.update += that.update;
-                }
-
-                pub inline fn hasDiffs(): bool {
-                    return _.add > 0 || _.remove > 0 || _.update > 0 || _.overrides_changed || _.catalogs_changed ||
-                        _.added_trusted_dependencies.count() > 0 ||
-                        _.removed_trusted_dependencies.count() > 0 ||
-                        _.patched_dependencies_changed;
-                }
-            };
+            pub const Summary = DiffSummary;
 
             pub fn generate(
                 pm: *PackageManager,

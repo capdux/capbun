@@ -98,6 +98,157 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const ZigStringByteString = union(enum) {
+    latin1: []const u8,
+    utf16: []const u16,
+};
+
+pub const ZigStringSlice = struct {
+    allocator: NullableAllocator = .{},
+    ptr: [*]const u8 = &.{},
+    len: u32 = 0,
+
+pub fn reportExtraMemory(self: ZigStringSlice, vm: *jsc.VM) void {
+            if (self.allocator.get()) |allocator| {
+                _ = &allocator;
+                if ((!bun.String.isWTFAllocator(allocator))) {
+                    _ = vm.reportExtraMemory(self.len);
+                }
+            }
+    }
+
+pub fn isWTFAllocated(self: ZigStringSlice) bool {
+            return bun.String.isWTFAllocator(((self.allocator.get()) orelse { return false; }));
+    }
+
+pub fn init(allocator: std.mem.Allocator, input: []const u8) ZigStringSlice {
+            return .{ .ptr = input.ptr, .len = @as(u32, @truncate(input.len)), .allocator = NullableAllocator.init(allocator) };
+    }
+
+pub fn initDupe(allocator: std.mem.Allocator, input: []const u8) OOM!ZigStringSlice {
+            return ZigStringSlice.init(allocator, try allocator.dupe(u8, input));
+    }
+
+pub fn byteLength(self: ZigStringSlice) usize {
+            return self.len;
+    }
+
+pub fn toZigString(self: ZigStringSlice) ZigString {
+            if (self.isAllocated()) {
+                return ZigString.initUTF8((blk: {
+                break :blk self.ptr[0..self.len];
+
+}));
+            }
+            return ZigString.init(self.slice());
+    }
+
+pub inline fn length(self: ZigStringSlice) usize {
+            return self.len;
+    }
+
+pub fn fromUTF8NeverFree(input: []const u8) ZigStringSlice {
+            return .{ .ptr = input.ptr, .len = @as(u32, @truncate(input.len)), .allocator = .{} };
+    }
+
+pub inline fn isAllocated(self: ZigStringSlice) bool {
+            return (!self.allocator.isNull());
+    }
+
+pub fn toOwned(self: ZigStringSlice, allocator: std.mem.Allocator) OOM!ZigStringSlice {
+            const duped = try allocator.dupe(u8, (blk: {
+            break :blk self.ptr[0..self.len];
+
+}));
+            return .{ .allocator = .init(allocator), .ptr = duped.ptr, .len = self.len };
+    }
+
+pub fn intoOwnedSlice(self: *ZigStringSlice, allocator: std.mem.Allocator) OOM![]const u8 {
+            defer {
+            self.* = .{};
+            }
+            if (self.allocator.get()) |this_allocator| {
+                _ = &this_allocator;
+                _ = blk: {
+                if ((allocator.vtable != this_allocator.vtable)) {
+                    break :blk;
+                }
+                if ((allocator.vtable == bun.default_allocator.vtable)) {
+                    return self.slice();
+                }
+};
+            }
+            var _slice_guard = DeinitGuard(ZigStringSlice){ .ptr = self };
+            _ = &_slice_guard;
+            var ___slice_guard_moved = false; _ = &___slice_guard_moved;
+            defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
+            const owned = try self.toOwned(allocator);
+            return owned.slice();
+    }
+
+pub fn intoOwnedSliceZ(self: *ZigStringSlice, allocator: std.mem.Allocator) OOM![:0]const u8 {
+            defer {
+            self.* = .{};
+            }
+            var _slice_guard = DeinitGuard(ZigStringSlice){ .ptr = self };
+            _ = &_slice_guard;
+            var ___slice_guard_moved = false; _ = &___slice_guard_moved;
+            defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
+            return allocator.dupeZ(u8, self.slice());
+    }
+
+pub fn cloneIfBorrowed(self: ZigStringSlice, allocator: std.mem.Allocator) bun.OOM!ZigStringSlice {
+            if (self.isAllocated()) {
+                return self;
+            }
+            const duped = try allocator.dupe(u8, (blk: {
+            break :blk self.ptr[0..self.len];
+
+}));
+            return ZigStringSlice{ .allocator = NullableAllocator.init(allocator), .ptr = duped.ptr, .len = self.len };
+    }
+
+pub fn cloneWithTrailingSlash(self: ZigStringSlice, allocator: std.mem.Allocator) !ZigStringSlice {
+            const buf = try strings.cloneNormalizingSeparators(allocator, self.slice());
+            return ZigStringSlice{ .allocator = NullableAllocator.init(allocator), .ptr = buf.ptr, .len = @as(u32, @truncate(buf.len)) };
+    }
+
+pub fn slice(self: *const ZigStringSlice) []const u8 {
+            return (blk: {
+            break :blk self.ptr[0..self.len];
+
+});
+    }
+
+pub fn mut(self: *const ZigStringSlice) []u8 {
+            _ = bun.assertf((!self.allocator.isNull()), "cannot mutate a borrowed ZigString.Slice", .{});
+            return (blk: {
+            break :blk @constCast(self.ptr)[0..self.len];
+
+});
+    }
+
+pub fn deinit(self: ZigStringSlice) void {
+            _ = self.allocator.free(self.slice());
+    }
+    pub const byteSlice = ZigStringSlice.slice;
+    pub const empty = ZigStringSlice{ .ptr = "", .len = 0 };
+};
+
+pub const ZigStringGithubActionFormatter = struct {
+    text: ZigString,
+
+pub fn format(self: ZigStringGithubActionFormatter, writer: *std.Io.Writer) !void {
+            var bytes = self.text.toSlice(bun.default_allocator);
+            _ = &bytes;
+            var _bytes_guard = DeinitGuard(ZigStringSlice){ .ptr = (&bytes) };
+            _ = &_bytes_guard;
+            var ___bytes_guard_moved = false; _ = &___bytes_guard_moved;
+            defer if (!___bytes_guard_moved) { ___bytes_guard_moved = true; const __T = @TypeOf(_bytes_guard); if (@typeInfo(__T) == .optional) { if (_bytes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _bytes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _bytes_guard; _drop_val.__cp_deinit(); } };
+            _ = try bun.fmt.githubActionWriter(writer, bytes.slice());
+    }
+};
+
 pub const ZigString = extern struct {
     _unsafe_ptr_do_not_use: [*]const u8,
     len: usize,
@@ -753,7 +904,7 @@ pub fn withEncoding(self: ZigString) ZigString {
     }
 
 pub fn toJSStringRef(self: ZigString) C_API.JSStringRef {
-            if (comptime @hasDecl(@import("bun"), "bindgen")) {
+            if (comptime @hasDecl(bun, "bindgen")) {
                 return undefined;
             }
             const ptr: [*]const u16 = (blk: {
@@ -792,139 +943,9 @@ pub extern "c" fn ZigString__toRangeErrorInstance(this_str: *const ZigString, gl
 pub fn toRangeErrorInstance(self: ZigString, global: *JSGlobalObject) JSValue {
             return ZigString.ZigString__toRangeErrorInstance((&self), global);
     }
-    pub const ByteString = union(enum) {
-        latin1: []const u8,
-        utf16: []const u16,
-    };
-    pub const Slice = struct {
-        allocator: NullableAllocator = .{},
-        ptr: [*]const u8 = &.{},
-        len: u32 = 0,
-    
-    pub fn reportExtraMemory(self: @This(), vm: *jsc.VM) void {
-                if (self.allocator.get()) |allocator| {
-                    _ = &allocator;
-                    if ((!bun.String.isWTFAllocator(allocator))) {
-                        _ = vm.reportExtraMemory(self.len);
-                    }
-                }
-        }
-    
-    pub fn isWTFAllocated(self: @This()) bool {
-                return bun.String.isWTFAllocator(((self.allocator.get()) orelse { return false; }));
-        }
-    
-    pub fn init(allocator: std.mem.Allocator, input: []const u8) Slice {
-                return .{ .ptr = input.ptr, .len = @as(u32, @truncate(input.len)), .allocator = NullableAllocator.init(allocator) };
-        }
-    
-    pub fn initDupe(allocator: std.mem.Allocator, input: []const u8) OOM!Slice {
-                return Slice.init(allocator, try allocator.dupe(u8, input));
-        }
-    
-    pub fn byteLength(self: @This()) usize {
-                return self.len;
-        }
-    
-    pub fn toZigString(self: @This()) ZigString {
-                if (self.isAllocated()) {
-                    return ZigString.initUTF8(self.ptr[0..self.len]);
-                }
-                return ZigString.init(self.slice());
-        }
-    
-    pub inline fn length(self: @This()) usize {
-                return self.len;
-        }
-    
-    pub fn fromUTF8NeverFree(input: []const u8) Slice {
-                return .{ .ptr = input.ptr, .len = @as(u32, @truncate(input.len)), .allocator = .{} };
-        }
-    
-    pub inline fn isAllocated(self: @This()) bool {
-                return (!self.allocator.isNull());
-        }
-    
-    pub fn toOwned(self: @This(), allocator: std.mem.Allocator) OOM!Slice {
-                const duped = try allocator.dupe(u8, self.ptr[0..self.len]);
-                return .{ .allocator = .init(allocator), .ptr = duped.ptr, .len = self.len };
-        }
-    
-    pub fn intoOwnedSlice(self: *@This(), allocator: std.mem.Allocator) OOM![]const u8 {
-                defer {
-                self.* = .{};
-                }
-                if (self.allocator.get()) |this_allocator| {
-                    _ = &this_allocator;
-                    _ = blk: {
-                    if ((allocator.vtable != this_allocator.vtable)) {
-                        break :blk;
-                    }
-                    if ((allocator.vtable == bun.default_allocator.vtable)) {
-                        return self.slice();
-                    }
-    };
-                }
-                var _slice_guard = DeinitGuard(Slice){ .ptr = self };
-                _ = &_slice_guard;
-                var ___slice_guard_moved = false; _ = &___slice_guard_moved;
-                defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
-                const owned = try self.toOwned(allocator);
-                return owned.slice();
-        }
-    
-    pub fn intoOwnedSliceZ(self: *@This(), allocator: std.mem.Allocator) OOM![:0]const u8 {
-                defer {
-                self.* = .{};
-                }
-                var _slice_guard = DeinitGuard(Slice){ .ptr = self };
-                _ = &_slice_guard;
-                var ___slice_guard_moved = false; _ = &___slice_guard_moved;
-                defer if (!___slice_guard_moved) { ___slice_guard_moved = true; const __T = @TypeOf(_slice_guard); if (@typeInfo(__T) == .optional) { if (_slice_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _slice_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _slice_guard; _drop_val.__cp_deinit(); } };
-                return allocator.dupeZ(u8, self.slice());
-        }
-    
-    pub fn cloneIfBorrowed(self: @This(), allocator: std.mem.Allocator) bun.OOM!Slice {
-                if (self.isAllocated()) {
-                    return self;
-                }
-                const duped = try allocator.dupe(u8, self.ptr[0..self.len]);
-                return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = duped.ptr, .len = self.len };
-        }
-    
-    pub fn cloneWithTrailingSlash(self: @This(), allocator: std.mem.Allocator) !Slice {
-                const buf = try strings.cloneNormalizingSeparators(allocator, self.slice());
-                return Slice{ .allocator = NullableAllocator.init(allocator), .ptr = buf.ptr, .len = @as(u32, @truncate(buf.len)) };
-        }
-    
-    pub fn slice(self: *const @This()) []const u8 {
-                return self.ptr[0..self.len];
-        }
-    
-    pub fn mut(self: *const @This()) []u8 {
-                _ = bun.assertf((!self.allocator.isNull()), "cannot mutate a borrowed ZigString.Slice", .{});
-                return @constCast(self.ptr)[0..self.len];
-        }
-    
-    pub fn deinit(self: @This()) void {
-                _ = self.allocator.free(self.slice());
-        }
-        pub const byteSlice = Slice.slice;
-        pub const empty = Slice{ .ptr = "", .len = 0 };
-    };
-    pub const GithubActionFormatter = struct {
-        text: ZigString,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                var bytes = self.text.toSlice(bun.default_allocator);
-                _ = &bytes;
-                var _bytes_guard = DeinitGuard(Slice){ .ptr = (&bytes) };
-                _ = &_bytes_guard;
-                var ___bytes_guard_moved = false; _ = &___bytes_guard_moved;
-                defer if (!___bytes_guard_moved) { ___bytes_guard_moved = true; const __T = @TypeOf(_bytes_guard); if (@typeInfo(__T) == .optional) { if (_bytes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _bytes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _bytes_guard; _drop_val.__cp_deinit(); } };
-                _ = try bun.fmt.githubActionWriter(writer, bytes.slice());
-        }
-    };
+    pub const ByteString = ZigStringByteString;
+    pub const Slice = ZigStringSlice;
+    pub const GithubActionFormatter = ZigStringGithubActionFormatter;
     pub const Empty = ZigString{ ._unsafe_ptr_do_not_use = "", .len = 0 };
 };
 

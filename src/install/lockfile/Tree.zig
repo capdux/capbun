@@ -127,10 +127,37 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const HoistResolveReplace = struct {
+    id: Id,
+    dep_id: DependencyID,
+};
+
+pub const HoistPlacement = struct {
+    id: Id,
+    bundled: bool = false,
+};
+
+pub const IteratorNext = struct {
+    relative_path: stringZ,
+    dependencies: []const DependencyID,
+    tree_id: Tree.Id,
+    depth: usize,
+};
+
 pub const FillItem = struct {
     tree_id: Tree.Id,
     dependency_id: DependencyID,
     hoist_root_id: Tree.Id,
+};
+
+pub const BuilderEntry = struct {
+    tree: Tree,
+    dependencies: Lockfile.DependencyIDList,
+};
+
+pub const BuilderCleanResult = struct {
+    trees: std.ArrayListUnmanaged(Tree),
+    dep_ids: std.ArrayListUnmanaged(DependencyID),
 };
 
 pub const Tree = @This();
@@ -311,7 +338,7 @@ _ = bun.handleOom(dependency_lists[@as(usize, @intCast(dest.id))].append(builder
         }
 }
 
-pub fn hoistDependency(self: *Tree, comptime as_defined: bool, hoist_root_id: Id, package_id: PackageID, dependency: *const Dependency, dependency_lists: []Lockfile.DependencyIDList, trees: []Tree, comptime method: BuilderMethod, builder: *Builder(method)) !HoistDependencyResult {
+pub fn hoistDependency(self: Tree, comptime as_defined: bool, hoist_root_id: Id, package_id: PackageID, dependency: *const Dependency, dependency_lists: []Lockfile.DependencyIDList, trees: []Tree, comptime method: BuilderMethod, builder: *Builder(method)) !HoistDependencyResult {
         const this_dependencies = self.dependencies.get(dependency_lists[@as(usize, @intCast(self.id))].items);
         {
             var i: i32 = 0;
@@ -413,15 +440,8 @@ pub const HoistDependencyResult = union(enum) {
     resolve_later,
     placement: Placement,
 
-    pub const ResolveReplace = struct {
-        id: Id,
-        dep_id: DependencyID,
-    };
-
-    pub const Placement = struct {
-        id: Id,
-        bundled: bool = false,
-    };
+    pub const ResolveReplace = HoistResolveReplace;
+    pub const Placement = HoistPlacement;
 };
 pub const max_depth = ((bun.MAX_PATH_BYTES / "node_modules".len) + 1);
 pub const DepthBuf = [max_depth]Id;
@@ -522,12 +542,7 @@ pub fn next(self: *@This(), completed_trees: if ((path_style == IteratorPathStyl
             self.tree_id = (self.tree_id + 1);
             return .{ .relative_path = relative_path, .dependencies = tree_dependencies, .tree_id = current_tree_id, .depth = depth };
     }
-    pub const Next = struct {
-        relative_path: stringZ,
-        dependencies: []const DependencyID,
-        tree_id: Tree.Id,
-        depth: usize,
-    };
+    pub const Next = IteratorNext;
 };
 }
 
@@ -550,7 +565,7 @@ pub fn Builder(comptime method: BuilderMethod) type {
     install_root_dependencies: if (is_filter) bool else void,
     packages_to_install: if (is_filter) ?[]const PackageID else void,
 
-pub fn maybeReportError(self: *@This(), comptime fmt: []const u8, args: anytype) void {
+pub fn maybeReportError(self: @This(), comptime fmt: []const u8, args: anytype) void {
             _ = (blk_catch_0: { break :blk_catch_0 ((self.log.addErrorFmt(null, logger.Loc.Empty, self.allocator, fmt, args)) catch |__ce_0| { _ = &__ce_0; _ = 0; }); });
     }
 
@@ -558,11 +573,11 @@ pub fn buf(self: *const @This()) []const u8 {
             return self.lockfile.buffers.string_bytes.items;
     }
 
-pub fn packageName(self: *@This(), id: PackageID) String.Formatter {
+pub fn packageName(self: @This(), id: PackageID) String.Formatter {
             return self.lockfile.packages.items(.name)[@as(usize, @intCast(id))].fmt(self.lockfile.buffers.string_bytes.items);
     }
 
-pub fn packageVersion(self: *@This(), id: PackageID) Resolution.Formatter {
+pub fn packageVersion(self: @This(), id: PackageID) Resolution.Formatter {
             return self.lockfile.packages.items(.resolution)[@as(usize, @intCast(id))].fmt(self.lockfile.buffers.string_bytes.items, .auto);
     }
 
@@ -615,14 +630,8 @@ pub fn clean(self: *@This()) OOM!CleanResult {
             }
             return .{ .trees = std.ArrayListUnmanaged(Tree).fromOwnedSlice(trees), .dep_ids = dep_ids };
     }
-    pub const Entry = struct {
-        tree: Tree,
-        dependencies: Lockfile.DependencyIDList,
-    };
-    pub const CleanResult = struct {
-        trees: std.ArrayListUnmanaged(Tree),
-        dep_ids: std.ArrayListUnmanaged(DependencyID),
-    };
+    pub const Entry = BuilderEntry;
+    pub const CleanResult = BuilderCleanResult;
 };
 }
 

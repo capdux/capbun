@@ -24,6 +24,15 @@ pub struct DeinitGuard<T> {
 
 pub let child_singleton: InternalMsgHolder = {};
 
+struct SendHelperImpl {
+    static fn @"impl"(globalThis_: *jsc.JSGlobalObject, callframe_: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+        const arguments_ = callframe_.arguments_old(1).slice();
+        const ex = arguments_[0];
+        Process__emitErrorEvent(globalThis_, ex.toError() ?? ex);
+        return jsc.JSValue.js_undefined;
+    }
+}
+
 pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     log("sendHelperChild", .{});
 
@@ -62,21 +71,12 @@ pub fn sendHelperChild(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFram
 
     const ipc_instance = vm.getIPCInstance().?;
 
-    const S = struct {
-        fn @"impl"(globalThis_: *jsc.JSGlobalObject, callframe_: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-            const arguments_ = callframe_.arguments_old(1).slice();
-            const ex = arguments_[0];
-            Process__emitErrorEvent(globalThis_, ex.toError() ?? ex);
-            return jsc.JSValue.js_undefined;
-        }
-    };
-
     const good = ipc_instance.data.serializeAndSend(globalThis, message, .internal, .@"null", null);
 
     if (good == .failure) {
         const ex = globalThis.createTypeErrorInstance("sendInternal() failed", .{});
         ex.put(globalThis, ZigString.static("syscall"), (bun.String.static("write").toJS(globalThis))?);
-        const fnvalue = jsc.JSFunction.create(globalThis, "", S.@"impl", 1, .{});
+        const fnvalue = jsc.JSFunction.create(globalThis, "", SendHelperImpl.@"impl", 1, .{});
         fnvalue.callNextTick(globalThis, .{ ex })?;
         return jsc.JSValue.@"false";
     }
@@ -114,7 +114,7 @@ pub struct InternalMsgHolder {
     cb: jsc.Strong.Optional = .empty,
     messages: std.ArrayListUnmanaged(jsc.Strong.Optional) = {},
 
-    fn isReady(*_): bool {
+    fn isReady(): bool {
         return _.worker.has() && _.cb.has();
     }
 

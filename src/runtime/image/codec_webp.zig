@@ -49,6 +49,25 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const bun = @import("bun");
 pub const codecs = @import("./codecs.zig");
+const WebPData = extern struct {
+    bytes: ?[*]const u8 = null,
+    size: usize = 0,
+};
+
+const WebPChunkIterator = extern struct {
+    chunk_num: c_int,
+    num_chunks: c_int,
+    chunk: WebPData,
+    pad: [6]u32,
+    private_: ?*anyopaque,
+};
+
+pub const WebPDemuxer = opaque {
+};
+
+pub const WebPMux = opaque {
+};
+
 pub const WebPFreeGuard = struct {
     ptr: ?*anyopaque = null,
     __cp_dropped: bool = false,
@@ -64,16 +83,13 @@ pub fn __cp_deinit(self: *WebPFreeGuard) void {
 };
 
 pub const DefaultFreeGuard = struct {
-    slice: ?[]u8 = null,
-    __cp_dropped: bool = false,
+    slice: []u8,
+    __cp_errdropped: bool = false,
 
-pub fn __cp_deinit(self: *DefaultFreeGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            if (self.slice) |s| {
-                _ = &s;
-                _ = bun.default_allocator.free(s);
-            }
+pub fn __cp_errdeinit(self: *DefaultFreeGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = bun.default_allocator.free(self.slice);
     }
 };
 
@@ -125,19 +141,6 @@ const WEBP_MUX_ABI_VERSION: c_int = 265;
 const WEBP_FF_FORMAT_FLAGS: c_int = 0;
 const ICCP_FLAG: u32 = 32;
 const WEBP_MUX_OK: c_int = 1;
-const WebPData = extern struct {
-    bytes: ?[*]const u8 = null,
-    size: usize = 0,
-};
-const WebPChunkIterator = extern struct {
-    chunk_num: c_int,
-    num_chunks: c_int,
-    chunk: WebPData,
-    pad: [6]u32,
-    private_: ?*anyopaque,
-};
-const WebPDemuxer = opaque {};
-const WebPMux = opaque {};
 
 pub extern "c" fn WebPGetInfo(data: [*]const u8, len: usize, w: *c_int, h: *c_int) callconv(.c) c_int;
 
@@ -200,7 +203,7 @@ pub fn decode(bytes: []const u8, max_pixels: u64) codecs.Error!codecs.Decoded {
         var out_guard = DefaultFreeGuard{ .slice = out };
         _ = &out_guard;
         var __out_guard_moved = false; _ = &__out_guard_moved;
-        defer if (!__out_guard_moved) { __out_guard_moved = true; const __T = @TypeOf(out_guard); if (@typeInfo(__T) == .optional) { if (out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { out_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = out_guard; _drop_val.__cp_deinit(); } };
+        errdefer if (!__out_guard_moved) { __out_guard_moved = true; const __T = @TypeOf(out_guard); if (@typeInfo(__T) == .optional) { if (out_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { out_guard.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = out_guard; _drop_val.__cp_errdeinit(); } };
         const icc: ?[]u8 = icc_blk: {
         const data: WebPData = .{ .bytes = bytes.ptr, .size = bytes.len };
         var dmux_val = WebPDemuxInternal((&data), 0, null, WEBP_DEMUX_ABI_VERSION);
@@ -229,19 +232,18 @@ pub fn decode(bytes: []const u8, max_pixels: u64) codecs.Error!codecs.Decoded {
         }
         if (iter_guard.iter.chunk.bytes) |p| {
             _ = &p;
-            break :icc_blk (blk_catch_0: { break :blk_catch_0 ((bun.default_allocator.dupe(u8, (blk: {
+            break :icc_blk try bun.default_allocator.dupe(u8, (blk: {
             break :blk p[0..iter_guard.iter.chunk.size];
 
-}))) catch |e| { _ = &e; return e; }); });
+}));
         }
         break :icc_blk null;
 };
-        out_guard.slice = null;
         return .{ .rgba = out, .width = w, .height = h, .icc_profile = icc };
 }
 
 pub fn encode(rgba: []const u8, w: u32, h: u32, quality: u8, lossless: bool, icc_profile: ?[]const u8) codecs.Error!codecs.Encoded {
-        var out: ?[*]u8 = null;
+        var out: OptU8MultiPtr = null;
         _ = &out;
         const stride: c_int = @intCast((w * 4));
         const len = (if (lossless) WebPEncodeLosslessRGBA(rgba.ptr, @intCast(w), @intCast(h), stride, (&out)) else WebPEncodeRGBA(rgba.ptr, @intCast(w), @intCast(h), stride, @floatFromInt(quality), (&out)));

@@ -23,12 +23,12 @@ pub fn CustomIterator(
 
         state: State,
         next_cp_it: CodePointIterator,
-        next_cp: ?u21,
+        next_cp: u21?,
         next_gb: GB,
 
         const Self = @This();
 
-        pub fn init(cp_it: CodePointIterator) Self {
+        static fn init(cp_it: CodePointIterator): Self {
             let next_cp_it = cp_it;
             const i = next_cp_it.i;
             const next_cp = next_cp_it.next();
@@ -47,17 +47,17 @@ pub fn CustomIterator(
             };
         }
 
-        pub fn nextCodePoint(self: *Self) ?IteratorResult {
-            if (self.next_cp == null) return null;
+        fn nextCodePoint(*_): IteratorResult? {
+            if (_.next_cp == null) return null;
 
-            const cp1 = self.next_cp.?;
-            const gb1 = self.next_gb;
-            self.i = self.next_cp_it.i;
-            self.next_cp = self.next_cp_it.next();
+            const cp1 = _.next_cp.?;
+            const gb1 = _.next_gb;
+            _.i = _.next_cp_it.i;
+            _.next_cp = _.next_cp_it.next();
 
-            if (self.next_cp) |cp2| {
-                self.next_gb = getpkg.get(grapheme_break_field, cp2);
-                const is_break = customIsBreak(gb1, self.next_gb, &self.state);
+            if (cp2 := _.next_cp) {
+                _.next_gb = getpkg.get(grapheme_break_field, cp2);
+                const is_break = customIsBreak(gb1, _.next_gb, &_.state);
                 return IteratorResult{
                     .code_point = cp1,
                     .is_break = is_break,
@@ -70,20 +70,20 @@ pub fn CustomIterator(
             }
         }
 
-        pub fn peekCodePoint(self: Self) ?IteratorResult {
-            let it = self;
+        fn peekCodePoint(): IteratorResult? {
+            let it = _;
             return it.nextCodePoint();
         }
 
-        pub fn nextGrapheme(self: *Self) ?Grapheme {
-            const start = self.i;
-            return while (self.nextCodePoint()) |result| {
-                if (result.is_break) break .{ .start = start, .end = self.i };
+        fn nextGrapheme(*_): Grapheme? {
+            const start = _.i;
+            return while (result := _.nextCodePoint()) {
+                if (result.is_break) break .{ .start = start, .end = _.i };
             } else null;
         }
 
-        pub fn peekGrapheme(self: Self) ?Grapheme {
-            let it = self;
+        fn peekGrapheme(): Grapheme? {
+            let it = _;
             return it.nextGrapheme();
         }
     };
@@ -103,7 +103,7 @@ pub fn utf8Iterator(bytes: []const u8): Iterator(utf8.Iterator) {
     return Iterator(utf8.Iterator).init(.init(bytes));
 }
 
-fn testIteratorNextcodepointPeekcodepoint(): void! {
+fn testIteratorNextcodepointPeekcodepoint()! {
     const str = "👩🏽‍🚀🇨🇭";
     let it = Iterator(utf8.Iterator).init(.init(str));
     std.testing.expect(it.i == 0)?;
@@ -150,7 +150,7 @@ fn testIteratorNextcodepointPeekcodepoint(): void! {
     std.testing.expect(it.nextCodePoint() == null)?;
 }
 
-fn testUtf8iteratorNextgraphemePeekgrapheme(): void! {
+fn testUtf8iteratorNextgraphemePeekgrapheme()! {
     const str = "👩🏽‍🚀🇨🇭👨🏻‍🍼";
     let it = utf8Iterator(str);
     std.testing.expect(it.i == 0)?;
@@ -451,7 +451,7 @@ struct FreeGuard<T> {
     }
 }
 
-fn testGraphemeBreak(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *BreakState) bool) !void {
+fn testGraphemeBreak(getActualIsBreak: fn (cp1: u21, cp2: u21, state: *BreakState) bool)! {
 
     const trim = Ucd.trim;
     const parseCp = Ucd.parseCp;
@@ -533,7 +533,7 @@ fn testGetActualComputedGraphemeBreak(cp1: u21, cp2: u21, state: *BreakState): b
     return computeGraphemeBreak(gb1, gb2, state);
 }
 
-fn testGraphemebreaktestTxtComputegraphemebreak(): void! {
+fn testGraphemebreaktestTxtComputegraphemebreak()! {
     testGraphemeBreak(testGetActualComputedGraphemeBreak)?;
 }
 
@@ -557,16 +557,16 @@ pub fn GraphemeBreakTable(comptime GB: type, comptime State: type): type {
     return struct {
         data: [n]Result,
 
-        inline fn index(gb1: GB, gb2: GB, state: State) usize {
+        static inline fn index(gb1: GB, gb2: GB, state: State): usize {
             return @intFromEnum(state) * n_gb_2 + @intFromEnum(gb1) * n_gb + @intFromEnum(gb2);
         }
 
-        pub fn set(self: *@This(), gb1: GB, gb2: GB, state: State, result: Result) void {
-            self.data[index(gb1, gb2, state)] = result;
+        fn set(*_, gb1: GB, gb2: GB, state: State, result: Result) {
+            _.data[index(gb1, gb2, state)] = result;
         }
 
-        pub fn get(self: @This(), gb1: GB, gb2: GB, state: State) Result {
-            return self.data[index(gb1, gb2, state)];
+        fn get(gb1: GB, gb2: GB, state: State): Result {
+            return _.data[index(gb1, gb2, state)];
         }
     };
 }
@@ -628,11 +628,11 @@ pub fn isBreak(
     return precomputedGraphemeBreak(gb1, gb2, state);
 }
 
-fn testGraphemebreaktestTxtIsbreak(): void! {
+fn testGraphemebreaktestTxtIsbreak()! {
     testGraphemeBreak(isBreak)?;
 }
 
-fn testLongEmojiZwjSequences(): void! {
+fn testLongEmojiZwjSequences()! {
     // 👩‍👩‍👧‍👦 (family: woman, woman, girl, boy)
     let it = utf8Iterator("\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}_");
     let result = it.nextCodePoint();
@@ -668,7 +668,7 @@ fn testLongEmojiZwjSequences(): void! {
     std.testing.expect(result.?.is_break)?; // break
 }
 
-fn testLongEmojiZwjSequencesWithEmojiModifiers(): void! {
+fn testLongEmojiZwjSequencesWithEmojiModifiers()! {
     // 👨🏻‍❤️‍👨🏿 Kiss: man, man, light skin tone, dark skin tone
     let it = utf8Iterator("\u{1F468}\u{1F3FB}\u{200D}\u{2764}\u{FE0F}\u{200D}\u{1F48B}\u{200D}\u{1F468}\u{1F3FF}_");
 
@@ -717,7 +717,7 @@ fn testLongEmojiZwjSequencesWithEmojiModifiers(): void! {
     std.testing.expect(result.?.is_break)?; // break
 }
 
-fn testSequenceOfRegionalIndicators(): void! {
+fn testSequenceOfRegionalIndicators()! {
     // 🇺🇸🇦🇹🇼_🇳_
     let it = utf8Iterator("\u{1F1FA}\u{1F1F8}\u{1F1E6}\u{1F1F9}\u{1F1FC}_\u{1F1F3}_");
 
@@ -754,7 +754,6 @@ fn testSequenceOfRegionalIndicators(): void! {
     std.testing.expect(result.?.is_break)?; // break
 }
 
-import std from "std";
 import types from "./types.zig";
 import utf8 from "./utf8.zig";
 

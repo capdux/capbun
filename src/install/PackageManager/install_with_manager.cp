@@ -57,8 +57,8 @@ pub fn getWorkspaceFilters(manager: *PackageManager, original_cwd: []const u8): 
 
         for (filter of workspace_filters.items) {
             const filter_pair = switch (filter) {
-                .name => |pattern| .{ pattern, pkg_names[0].slice(manager.lockfile.buffers.string_bytes.items) },
-                .path => |pattern| .{ pattern, abs_root_path },
+                .name pattern => .{ pattern, pkg_names[0].slice(manager.lockfile.buffers.string_bytes.items) },
+                .path pattern => .{ pattern, abs_root_path },
                 .all => {
                     install_root_dependencies = true;
                     continue;
@@ -144,7 +144,7 @@ pub fn installWithManager(
     manager.progress = {};
 
     switch (load_result) {
-        .err => |cause| {
+        .err cause => {
             if (log_level != .silent) {
                 switch (cause.step) {
                     .open_file => Output.err(cause.value, "failed to open lockfile: '{s}'", .{
@@ -240,15 +240,15 @@ pub fn installWithManager(
                     root_package_json_path,
                     {},
                 )) {
-                    .entry => |entry| entry,
-                    .read_err => |e| {
+                    .entry entry => entry,
+                    .read_err e => {
                         if (ctx.log.errors > 0) {
                             manager.log.print(Output.errorWriter())?;
                         }
                         Output.err(e, "failed to read '{s}'", .{root_package_json_path});
                         Global.exit(1);
                     },
-                    .parse_err => |e| {
+                    .parse_err e => {
                         if (ctx.log.errors > 0) {
                             manager.log.print(Output.errorWriter())?;
                         }
@@ -473,7 +473,7 @@ pub fn installWithManager(
                                     &dependency,
                                     invalid_package_id,
                                     false,
-                                ) catch |e| {
+                                ) catch e => {
                                     addDependencyError(manager, &dependency, e);
                                 };
                             }
@@ -493,7 +493,7 @@ pub fn installWithManager(
                                 &dep,
                                 invalid_package_id,
                                 false,
-                            ) catch |e| {
+                            ) catch e => {
                                 addDependencyError(manager, &dep, e);
                             };
                         }
@@ -515,7 +515,7 @@ pub fn installWithManager(
                                     &dependency,
                                     manager.lockfile.buffers.resolutions.items[dependency_i],
                                     false,
-                                ) catch |e| {
+                                ) catch e => {
                                     addDependencyError(manager, &dependency, e);
                                 };
                             }
@@ -546,15 +546,15 @@ pub fn installWithManager(
             root_package_json_path,
             {},
         )) {
-            .entry => |entry| entry,
-            .read_err => |e| {
+            .entry entry => entry,
+            .read_err e => {
                 if (ctx.log.errors > 0) {
                     manager.log.print(Output.errorWriter())?;
                 }
                 Output.err(e, "failed to read '{s}'", .{root_package_json_path});
                 Global.exit(1);
             },
-            .parse_err => |e| {
+            .parse_err e => {
                 if (ctx.log.errors > 0) {
                     manager.log.print(Output.errorWriter())?;
                 }
@@ -620,7 +620,7 @@ pub fn installWithManager(
                     static fn isDone(closure: *@This()): bool {
                         let mgr = closure.manager;
                         if (comptime check_peers)
-                            mgr.processPeerDependencyList() catch |e| {
+                            mgr.processPeerDependencyList() catch e => {
                                 closure.err = e;
                                 return true;
                             };
@@ -639,7 +639,7 @@ pub fn installWithManager(
                             },
                             check_peers,
                             mgr.options.log_level,
-                        ) catch |e| {
+                        ) catch e => {
                             closure.err = e;
                             return true;
                         };
@@ -747,7 +747,7 @@ pub fn installWithManager(
             const is_subcommand_to_run_scanner = manager.subcommand == .add || manager.subcommand == .update || manager.subcommand == .install || manager.subcommand == .remove;
 
             if (is_subcommand_to_run_scanner) {
-                if (results := security_scanner.performSecurityScanAfterResolution(manager, ctx, original_cwd) catch |e| {
+                if (results := security_scanner.performSecurityScanAfterResolution(manager, ctx, original_cwd) catch e => {
                     switch (e) {
                         error.SecurityScannerInWorkspace => {
                             Output.errGeneric("security scanner cannot be a dependency of a workspace package. It must be a direct dependency of the root package.", {});
@@ -833,7 +833,7 @@ pub fn installWithManager(
                                     @field(manager.lockfile.scripts, Lockfile.Scripts.names[i]).append(
                                         manager.lockfile.allocator,
                                         entry,
-                                    ) catch |e| bun.handleOom(e);
+                                    ) catch e => bun.handleOom(e);
                                 }
                             }
                         }
@@ -856,7 +856,7 @@ pub fn installWithManager(
                                 @field(manager.lockfile.scripts, Lockfile.Scripts.names[i]).append(
                                     manager.lockfile.allocator,
                                     entry,
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
                             }
                         }
                     }
@@ -1237,7 +1237,8 @@ const Package = Lockfile.Package;
 
 const PackageManager = bun.install.PackageManager;
 const Options = PackageManager.Options;
-const WorkspaceFilter = PackageManager.WorkspaceFilter;pub const WorkspaceFilterResult = struct {
+const WorkspaceFilter = PackageManager.WorkspaceFilter;
+pub const WorkspaceFilterResult = struct {
     []const WorkspaceFilter,
     bool,
 };

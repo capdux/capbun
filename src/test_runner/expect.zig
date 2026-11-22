@@ -97,6 +97,28 @@ pub fn fromJS(globalObject: *JSGlobalObject, value: JSValue) bun.JSError!Asymmet
     }
 };
 
+pub const _ExpectPromiseFlag = enum(u2) {
+    none = 0,
+    resolves = 1,
+    rejects = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _ReturnStatus = enum {
+    throw,
+    @"return",
+    incomplete,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+    
+    pub const Map = bun.ComptimeEnumMap(_ReturnStatus);
+};
+
 pub const Counter = struct {
     expected: u32 = 0,
     actual: u32 = 0,
@@ -200,6 +222,95 @@ pub fn __cp_deinit(self: *OptSliceFreeGuard) void {
                     _ = self.allocator.free(name);
                     self.slot.* = null;
                 }
+            }
+    }
+};
+
+pub const _TestScope = struct {
+    test_id: TestRunner.Test.ID,
+    describe: *DescribeScope,
+};
+
+pub const _ExpectFlags = packed struct(u8) {
+    promise: _ExpectPromiseFlag = .none,
+    not: bool = false,
+    asymmetric_matcher_constructor_type: AsymmetricMatcherType = .none,
+
+pub inline fn encode(self: _ExpectFlags) FlagsCppType {
+            return @bitCast(self);
+    }
+
+pub inline fn decode(bitset: FlagsCppType) _ExpectFlags {
+            return @bitCast(bitset);
+    }
+
+pub inline fn fromBitset(bitset: anytype) _ExpectFlags {
+            return @bitCast(@as(u8, @truncate(@as(u32, @bitCast(bitset)))));
+    }
+    pub const AsymmetricMatcherConstructorType = AsymmetricMatcherType;
+    pub const FlagsCppType = u8;
+    comptime {
+            if (@bitSizeOf(_ExpectFlags) != @bitSizeOf(FlagsCppType)) @compileError("Flags size is invalid, should match FlagsCppType");
+        }
+};
+
+pub const _TrimResult = struct {
+    trimmed: []const u8,
+    start_indent: ?[]const u8,
+    end_indent: ?[]const u8,
+};
+
+pub const _CustomMatcherParamsFormatter = struct {
+    colors: bool,
+    globalThis: *JSGlobalObject,
+    matcher_fn: JSValue,
+
+pub fn format(self: _CustomMatcherParamsFormatter, writer: *std.Io.Writer) !void {
+            if (jsc.JSFunction.getSourceCode(self.matcher_fn)) |source_str| {
+                _ = &source_str;
+                var source_slice = DeinitGuard(ZigString.Slice){ .val = source_str.toUTF8(self.globalThis.allocator()) };
+                _ = &source_slice;
+                var __source_slice_moved = false; _ = &__source_slice_moved;
+                defer if (!__source_slice_moved) { __source_slice_moved = true; const __T = @TypeOf(source_slice); if (@typeInfo(__T) == .optional) { if (source_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { source_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = source_slice; _drop_val.__cp_deinit(); } };
+                var source: []const u8 = source_slice.val.slice();
+                _ = &source;
+                if (std.mem.indexOfScalar(u8, source, 40)) |lparen| {
+                    _ = &lparen;
+                    if (std.mem.indexOfScalarPos(u8, source, lparen, 41)) |rparen| {
+                        _ = &rparen;
+                        const params_str = source[(lparen + 1)..rparen];
+                        var param_index: usize = 0;
+                        _ = &param_index;
+                        var iter = std.mem.splitScalar(u8, params_str, 44);
+                        _ = &iter;
+                        while (iter.next()) |param_name| : (param_index = (param_index + 1)) {
+                            if ((param_index > 0)) {
+                                if ((param_index > 1)) {
+                                    _ = try writer.writeAll((if (self.colors) Output.prettyFmt("<r><d>, <r><green>", true) else ", "));
+                                } else {
+                                    if (self.colors) {
+                                        _ = try writer.writeAll("<green>");
+                                    }
+                                }
+                                const param_name_trimmed = std.mem.trim(u8, param_name, " ");
+                                if ((param_name_trimmed.len > 0)) {
+                                    _ = try writer.writeAll(param_name_trimmed);
+                                } else {
+                                    _ = try writer.print("arg{d}", .{ (param_index - 1) });
+                                }
+                            }
+                        }
+                        if (((param_index > 1) and self.colors)) {
+                            _ = try writer.writeAll("<r>");
+                        }
+                        return;
+                    }
+                }
+            }
+            if (self.colors) {
+                _ = try writer.print(Output.prettyFmt("<green>...args<r>", true), .{});
+            } else {
+                _ = try writer.print(Output.prettyFmt("<green>...args<r>", false), .{});
             }
     }
 };
@@ -1346,44 +1457,8 @@ pub fn doUnreachable(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSE
     pub const toJS = js.toJS;
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
-    pub const TestScope = struct {
-        test_id: TestRunner.Test.ID,
-        describe: *DescribeScope,
-    };
-    pub const Flags = packed struct(u8) {
-            // note: keep this struct in sync with C++ implementation (at bindings.cpp)
-    
-            promise: enum(u2) {
-                none = 0,
-                resolves = 1,
-                rejects = 2,
-            } = .none,
-    
-            not: bool = false,
-    
-            // This was originally padding.
-            // We don't use all the bits in the u5, so if you need to reuse this elsewhere, you could.
-            asymmetric_matcher_constructor_type: AsymmetricMatcherType = .none,
-    
-            pub const AsymmetricMatcherConstructorType = AsymmetricMatcherType;
-    
-            pub const FlagsCppType = u8;
-            comptime {
-                if (@bitSizeOf(Flags) != @bitSizeOf(FlagsCppType)) @compileError("Flags size is invalid, should match FlagsCppType");
-            }
-    
-            pub inline fn encode(this: Flags) FlagsCppType {
-                return @bitCast(this);
-            }
-    
-            pub inline fn decode(bitset: FlagsCppType) Flags {
-                return @bitCast(bitset);
-            }
-    
-            pub inline fn fromBitset(bitset: anytype) Flags {
-                return @bitCast(@as(u8, @truncate(@as(u32, @bitCast(bitset)))));
-            }
-        };
+    pub const TestScope = _TestScope;
+    pub const Flags = _ExpectFlags;
     pub const toBe = @import("./expect/toBe.zig").toBe;
     pub const toBeArray = @import("./expect/toBeArray.zig").toBeArray;
     pub const toBeArrayOfSize = @import("./expect/toBeArrayOfSize.zig").toBeArrayOfSize;
@@ -1459,65 +1534,8 @@ pub fn doUnreachable(globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSE
     pub const toThrow = @import("./expect/toThrow.zig").toThrow;
     pub const toThrowErrorMatchingInlineSnapshot = @import("./expect/toThrowErrorMatchingInlineSnapshot.zig").toThrowErrorMatchingInlineSnapshot;
     pub const toThrowErrorMatchingSnapshot = @import("./expect/toThrowErrorMatchingSnapshot.zig").toThrowErrorMatchingSnapshot;
-    const TrimResult = struct {
-        trimmed: []const u8,
-        start_indent: ?[]const u8,
-        end_indent: ?[]const u8,
-    };
-    const CustomMatcherParamsFormatter = struct {
-        colors: bool,
-        globalThis: *JSGlobalObject,
-        matcher_fn: JSValue,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                if (jsc.JSFunction.getSourceCode(self.matcher_fn)) |source_str| {
-                    _ = &source_str;
-                    var source_slice = DeinitGuard(ZigString.Slice){ .val = source_str.toUTF8(self.globalThis.allocator()) };
-                    _ = &source_slice;
-                    var __source_slice_moved = false; _ = &__source_slice_moved;
-                    defer if (!__source_slice_moved) { __source_slice_moved = true; const __T = @TypeOf(source_slice); if (@typeInfo(__T) == .optional) { if (source_slice) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { source_slice.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = source_slice; _drop_val.__cp_deinit(); } };
-                    var source: []const u8 = source_slice.val.slice();
-                    _ = &source;
-                    if (std.mem.indexOfScalar(u8, source, 40)) |lparen| {
-                        _ = &lparen;
-                        if (std.mem.indexOfScalarPos(u8, source, lparen, 41)) |rparen| {
-                            _ = &rparen;
-                            const params_str = source[(lparen + 1)..rparen];
-                            var param_index: usize = 0;
-                            _ = &param_index;
-                            var iter = std.mem.splitScalar(u8, params_str, 44);
-                            _ = &iter;
-                            while (iter.next()) |param_name| : (param_index = (param_index + 1)) {
-                                if ((param_index > 0)) {
-                                    if ((param_index > 1)) {
-                                        _ = try writer.writeAll((if (self.colors) Output.prettyFmt("<r><d>, <r><green>", true) else ", "));
-                                    } else {
-                                        if (self.colors) {
-                                            _ = try writer.writeAll("<green>");
-                                        }
-                                    }
-                                    const param_name_trimmed = std.mem.trim(u8, param_name, " ");
-                                    if ((param_name_trimmed.len > 0)) {
-                                        _ = try writer.writeAll(param_name_trimmed);
-                                    } else {
-                                        _ = try writer.print("arg{d}", .{ (param_index - 1) });
-                                    }
-                                }
-                            }
-                            if (((param_index > 1) and self.colors)) {
-                                _ = try writer.writeAll("<r>");
-                            }
-                            return;
-                        }
-                    }
-                }
-                switch (self.colors) {
-    inline else => |colors| {
-    _ = try writer.print(Output.prettyFmt("<green>...args<r>", colors), .{});
-    },
-    }
-        }
-    };
+    const TrimResult = _TrimResult;
+    const CustomMatcherParamsFormatter = _CustomMatcherParamsFormatter;
     pub const addSnapshotSerializer = notImplementedStaticFn;
 };
 
@@ -2184,6 +2202,98 @@ pub fn call(globalThis: *JSGlobalObject, _: *CallFrame) bun.JSError!JSValue {
     pub const fromJSDirect = js.fromJSDirect;
 };
 
+pub const _AllCallsWithArgsFormatter = struct {
+    globalThis: *JSGlobalObject,
+    calls: JSValue,
+    formatter: *jsc.ConsoleObject.Formatter,
+
+pub fn format(self: _AllCallsWithArgsFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            var printed_once = false;
+            _ = &printed_once;
+            const calls_count = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_18: { break :blk_catch_18 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })))));
+            if ((calls_count == 0)) {
+                _ = try writer.writeAll("(no calls)");
+                return;
+            }
+            var i: u32 = 0;
+            _ = &i;
+            while ((i < calls_count)) : (i = (i + 1)) {
+                if (printed_once) {
+                    _ = try writer.writeAll("\n");
+                }
+                printed_once = true;
+                _ = try writer.print("           {d: >4}: ", .{ (i + 1) });
+                const call_args = (blk_catch_19: { break :blk_catch_19 ((self.calls.getIndex(self.globalThis, i)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                _ = try writer.print("{f}", .{ call_args.toFmt(self.formatter) });
+            }
+    }
+};
+
+pub const _AllCallsFormatter = struct {
+    globalThis: *JSGlobalObject,
+    returns: JSValue,
+    formatter: *jsc.ConsoleObject.Formatter,
+
+pub fn format(self: _AllCallsFormatter, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+            var printed_once = false;
+            _ = &printed_once;
+            var num_returns: i32 = 0;
+            _ = &num_returns;
+            var num_calls: i32 = 0;
+            _ = &num_calls;
+            var iter = (blk_catch_20: { break :blk_catch_20 ((self.returns.arrayIterator(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+            _ = &iter;
+            while ((blk_catch_21: { break :blk_catch_21 ((iter.next()) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) |item| {
+                if (printed_once) {
+                    _ = try writer.writeAll("\n");
+                }
+                printed_once = true;
+                num_calls = (num_calls + 1);
+                _ = try writer.print("           {d: >2}: ", .{ num_calls });
+                const value = (blk_catch_22: { break :blk_catch_22 ((mock.jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
+                switch ((blk_catch_23: { break :blk_catch_23 ((mock.jestMockReturnObject_type(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) {
+.@"return" => {
+_ = try writer.print("{f}", .{ value.toFmt(self.formatter) });
+                num_returns = (num_returns + 1);
+},
+.throw => {
+_ = try writer.print("function call threw an error: {f}", .{ value.toFmt(self.formatter) });
+},
+.incomplete => {
+_ = try writer.print("<incomplete call>", .{});
+},
+}
+            }
+    }
+};
+
+pub const _SuccessfulReturnsFormatter = struct {
+    globalThis: *JSGlobalObject,
+    successful_returns: *const std.array_list.Managed(JSValue),
+    formatter: *jsc.ConsoleObject.Formatter,
+
+pub fn format(self: _SuccessfulReturnsFormatter, writer: *std.Io.Writer) !void {
+            const len = self.successful_returns.items.len;
+            if ((len == 0)) {
+                return;
+            }
+            var printed_once = false;
+            _ = &printed_once;
+            var i_val: usize = 1;
+            _ = &i_val;
+            for (self.successful_returns.items) |val| {
+                _ = &val;
+                if (printed_once) {
+                    _ = try writer.writeAll("\n");
+                }
+                printed_once = true;
+                _ = try writer.print("           {d: >4}: ", .{ i_val });
+                _ = try writer.print("{f}", .{ val.toFmt(self.formatter) });
+                i_val = (i_val + 1);
+            }
+    }
+};
+
 pub const mock = struct {
 
 pub fn jestMockIterator(globalThis: *JSGlobalObject, value: bun.jsc.JSValue) bun.JSError!bun.jsc.JSArrayIterator {
@@ -2218,102 +2328,10 @@ pub fn jestMockReturnObject_type(globalThis: *JSGlobalObject, value: bun.jsc.JSV
 pub fn jestMockReturnObject_value(globalThis: *JSGlobalObject, value: bun.jsc.JSValue) bun.JSError!JSValue {
             return ((try value.get(globalThis, "value")) orelse (.js_undefined));
     }
-    pub const AllCallsWithArgsFormatter = struct {
-        globalThis: *JSGlobalObject,
-        calls: JSValue,
-        formatter: *jsc.ConsoleObject.Formatter,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-                var printed_once = false;
-                _ = &printed_once;
-                const calls_count = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf((blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf((blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) == .@"enum") cp_cast_int(i32, @intFromEnum((blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); }))) else cp_cast_int(i32, (blk_catch_0: { break :blk_catch_0 ((self.calls.getLength(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })))));
-                if ((calls_count == 0)) {
-                    _ = try writer.writeAll("(no calls)");
-                    return;
-                }
-                var i: u32 = 0;
-                _ = &i;
-                while ((i < calls_count)) : (i = (i + 1)) {
-                    if (printed_once) {
-                        _ = try writer.writeAll("\n");
-                    }
-                    printed_once = true;
-                    _ = try writer.print("           {d: >4}: ", .{ (i + 1) });
-                    const call_args = (blk_catch_1: { break :blk_catch_1 ((self.calls.getIndex(self.globalThis, i)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
-                    _ = try writer.print("{f}", .{ call_args.toFmt(self.formatter) });
-                }
-        }
-    };
-    pub const ReturnStatus = enum {
-            throw,
-            @"return",
-            incomplete,
-    
-            pub const Map = bun.ComptimeEnumMap(ReturnStatus);
-        };
-    pub const AllCallsFormatter = struct {
-        globalThis: *JSGlobalObject,
-        returns: JSValue,
-        formatter: *jsc.ConsoleObject.Formatter,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-                var printed_once = false;
-                _ = &printed_once;
-                var num_returns: i32 = 0;
-                _ = &num_returns;
-                var num_calls: i32 = 0;
-                _ = &num_calls;
-                var iter = (blk_catch_0: { break :blk_catch_0 ((self.returns.arrayIterator(self.globalThis)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
-                _ = &iter;
-                while ((blk_catch_1: { break :blk_catch_1 ((iter.next()) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) |item| {
-                    if (printed_once) {
-                        _ = try writer.writeAll("\n");
-                    }
-                    printed_once = true;
-                    num_calls = (num_calls + 1);
-                    _ = try writer.print("           {d: >2}: ", .{ num_calls });
-                    const value = (blk_catch_2: { break :blk_catch_2 ((jestMockReturnObject_value(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); });
-                    switch ((blk_catch_3: { break :blk_catch_3 ((jestMockReturnObject_type(self.globalThis, item)) catch |e| { _ = &e; return bun.deprecated.jsErrorToWriteError(e); }); })) {
-    .@"return" => {
-    _ = try writer.print("{f}", .{ value.toFmt(self.formatter) });
-                    num_returns = (num_returns + 1);
-    },
-    .throw => {
-    _ = try writer.print("function call threw an error: {f}", .{ value.toFmt(self.formatter) });
-    },
-    .incomplete => {
-    _ = try writer.print("<incomplete call>", .{});
-    },
-    }
-                }
-        }
-    };
-    pub const SuccessfulReturnsFormatter = struct {
-        globalThis: *JSGlobalObject,
-        successful_returns: *const std.array_list.Managed(JSValue),
-        formatter: *jsc.ConsoleObject.Formatter,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                const len = self.successful_returns.items.len;
-                if ((len == 0)) {
-                    return;
-                }
-                var printed_once = false;
-                _ = &printed_once;
-                var i_val: usize = 1;
-                _ = &i_val;
-                for (self.successful_returns.items) |val| {
-                    _ = &val;
-                    if (printed_once) {
-                        _ = try writer.writeAll("\n");
-                    }
-                    printed_once = true;
-                    _ = try writer.print("           {d: >4}: ", .{ i_val });
-                    _ = try writer.print("{f}", .{ val.toFmt(self.formatter) });
-                    i_val = (i_val + 1);
-                }
-        }
-    };
+    pub const AllCallsWithArgsFormatter = _AllCallsWithArgsFormatter;
+    pub const ReturnStatus = _ReturnStatus;
+    pub const AllCallsFormatter = _AllCallsFormatter;
+    pub const SuccessfulReturnsFormatter = _SuccessfulReturnsFormatter;
 };
 
 const ExpectRefDataPtr = *bun.jsc.Jest.bun_test.BunTest.RefData;

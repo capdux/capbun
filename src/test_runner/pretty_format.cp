@@ -65,7 +65,7 @@ pub struct FormatterMapGuard<T> {
 }
 
 
-pub const EventType = enum(u8) {
+pub enum EventType: u8 {
     Event,
     MessageEvent,
     CloseEvent,
@@ -74,7 +74,7 @@ pub const EventType = enum(u8) {
     unknown = 254,
     _,
 
-    pub const map = bun.ComptimeStringMap(EventType, .{
+    const map = bun.ComptimeStringMap(EventType, .{
         .{ EventType.Event.label(), EventType.Event },
         .{ EventType.MessageEvent.label(), EventType.MessageEvent },
         .{ EventType.CloseEvent.label(), EventType.CloseEvent },
@@ -82,8 +82,8 @@ pub const EventType = enum(u8) {
         .{ EventType.OpenEvent.label(), EventType.OpenEvent },
     });
 
-    pub fn label(this: EventType): string {
-        return switch (this) {
+    fn label(): string {
+        return switch (_) {
             .Event => "event",
             .MessageEvent => "message",
             .CloseEvent => "close",
@@ -92,7 +92,41 @@ pub const EventType = enum(u8) {
             else => "event",
         };
     }
-};
+}
+
+pub enum _MessageLevel: u32 {
+    Log = 0,
+    Warning = 1,
+    Error = 2,
+    Debug = 3,
+    Info = 4,
+    _,
+}
+
+pub enum _MessageType: u32 {
+    Log = 0,
+    Dir = 1,
+    DirXML = 2,
+    Table = 3,
+    Trace = 4,
+    StartGroup = 5,
+    StartGroupCollapsed = 6,
+    EndGroup = 7,
+    Clear = 8,
+    Assert = 9,
+    Timing = 10,
+    Profile = 11,
+    ProfileEnd = 12,
+    Image = 13,
+    _,
+}
+
+pub struct _FormatOptions {
+    enable_colors: bool,
+    add_newline: bool,
+    flush: bool,
+    quote_strings: bool = false,
+}
 
 pub struct JestPrettyFormat {
     pub const Type = *!;
@@ -100,39 +134,9 @@ pub struct JestPrettyFormat {
 
     counts: Counter = {},
 
-    pub const MessageLevel = enum(u32) {
-        Log = 0,
-        Warning = 1,
-        Error = 2,
-        Debug = 3,
-        Info = 4,
-        _,
-    };
-
-    pub const MessageType = enum(u32) {
-        Log = 0,
-        Dir = 1,
-        DirXML = 2,
-        Table = 3,
-        Trace = 4,
-        StartGroup = 5,
-        StartGroupCollapsed = 6,
-        EndGroup = 7,
-        Clear = 8,
-        Assert = 9,
-        Timing = 10,
-        Profile = 11,
-        ProfileEnd = 12,
-        Image = 13,
-        _,
-    };
-
-    pub const FormatOptions = struct {
-        enable_colors: bool,
-        add_newline: bool,
-        flush: bool,
-        quote_strings: bool = false,
-    };
+    pub const MessageLevel = _MessageLevel;
+    pub const MessageType = _MessageType;
+    pub const FormatOptions = _FormatOptions;
 
     static fn format(
         level: MessageLevel,
@@ -432,127 +436,98 @@ pub struct JestPrettyFormat {
 
 
 
-pub struct PrettyFormatter {
-    const Formatter = PrettyFormatter;
-    // For detecting circular references
-    pub const Visited = struct {
-        const ObjectPool = pool.ObjectPool;
-        pub const Map = std.AutoHashMap(JSValue, void);
-        pub const Pool = ObjectPool(
-            Map,
-            VisitedInit.init,
-            true,
-            16,
-        );
-    };
-
-
-    remaining_values: []const JSValue = empty_jsvalues[0..0],
-    map: Visited.Map = undefined,
-    map_node: *Visited.Pool.Node? = null,
-    hide_native: bool = false,
-    globalThis: *JSGlobalObject,
-    indent: u32 = 0,
-    quote_strings: bool = false,
-    failed: bool = false,
-    estimated_line_length: usize = 0,
-    always_newline_scope: bool = false,
-
-    fn goodTimeForANewLine(*_): bool {
-        if (_.estimated_line_length > 80) {
-            _.resetLine();
-            return true;
-        }
-        return false;
-    }
-
-    fn resetLine(*_) {
-        _.estimated_line_length = _.indent * 2;
-    }
-
-    fn addForNewLine(*_, len: usize) {
-        _.estimated_line_length = std.math.add(usize, _.estimated_line_length, len) catch std.math.maxInt(usize);
-    }
-
-    pub const ZigFormatter = struct {
-        formatter: *JestPrettyFormat.Formatter,
-        global: *JSGlobalObject,
-        value: JSValue,
-
-        pub const WriteError = error{UhOh};
-        fn format(writer: *std.Io.Writer)! {
-            _.formatter.remaining_values = &[_.value];
-            defer {
-                _.formatter.remaining_values = [];
-            }
-            _.formatter.globalThis = _.global;
-            _.formatter.format(
-                Tag.get(_.value, _.global),
-                @TypeOf(writer),
-                writer,
-                _.value,
-                _.formatter.globalThis,
-                false,
-            );
-        }
-    };
-
-    pub const Tag = enum {
-        StringPossiblyFormatted,
-        String,
-        Undefined,
-        Double,
-        Integer,
-        Null,
-        Boolean,
-        Array,
-        Object,
-        Function,
-        Class,
-        Error,
-        TypedArray,
+pub struct _PrettyVisited {
+    const ObjectPool = pool.ObjectPool;
+    pub const Map = std.AutoHashMap(JSValue, void);
+    pub const Pool = ObjectPool(
         Map,
-        Set,
-        Symbol,
-        BigInt,
+        VisitedInit.init,
+        true,
+        16,
+    );
+}
 
-        GlobalObject,
-        Private,
-        Promise,
+pub struct _PrettyZigFormatter {
+    formatter: *JestPrettyFormat.Formatter,
+    global: *JSGlobalObject,
+    value: JSValue,
 
-        JSON,
-        NativeCode,
-        ArrayBuffer,
-
-        JSX,
-        Event,
-
-        pub fn isPrimitive(this: Tag) bool {
-            return switch (this) {
-                .String,
-                .StringPossiblyFormatted,
-                .Undefined,
-                .Double,
-                .Integer,
-                .Null,
-                .Boolean,
-                .Symbol,
-                .BigInt,
-                => true,
-                else => false,
-            };
+    pub const WriteError = error{UhOh};
+    fn format(*_, writer: *std.Io.Writer)! {
+        _.formatter.remaining_values = &[_.value];
+        defer {
+            _.formatter.remaining_values = [];
         }
+        _.formatter.globalThis = _.global;
+        _.formatter.format(
+            _PrettyTag.get(_.value, _.global),
+            @TypeOf(writer),
+            writer,
+            _.value,
+            _.formatter.globalThis,
+            false,
+        );
+    }
+}
 
-        pub inline fn canHaveCircularReferences(tag: Tag) bool {
-            return tag == .Array or tag == .Object or tag == .Map or tag == .Set;
-        }
+pub struct _PrettyTagResult {
+    tag: _PrettyTag,
+    cell: JSValue.JSType = .Cell,
+}
 
-        const Result = struct {
-            tag: Tag,
-            cell: JSValue.JSType = .Cell,
+pub enum _PrettyTag {
+    StringPossiblyFormatted,
+    String,
+    Undefined,
+    Double,
+    Integer,
+    Null,
+    Boolean,
+    Array,
+    Object,
+    Function,
+    Class,
+    Error,
+    TypedArray,
+    Map,
+    Set,
+    Symbol,
+    BigInt,
+
+    GlobalObject,
+    Private,
+    Promise,
+
+    JSON,
+    NativeCode,
+    ArrayBuffer,
+
+    JSX,
+    Event,
+
+    const Result = _PrettyTagResult;
+
+    fn isPrimitive(): bool {
+        return switch (_) {
+            .String,
+            .StringPossiblyFormatted,
+            .Undefined,
+            .Double,
+            .Integer,
+            .Null,
+            .Boolean,
+            .Symbol,
+            .BigInt,
+            => true,
+            else => false,
         };
+    }
 
-        pub fn get(value: JSValue, globalThis: *JSGlobalObject) bun.JSError!Result {
+    static inline fn canHaveCircularReferences(tag: _PrettyTag): bool {
+        return tag == .Array || tag == .Object || tag == .Map || tag == .Set;
+    }
+
+    static fn get(value: JSValue, globalThis: *JSGlobalObject): bun.JSError!_PrettyTagResult {
             switch (value) {
                 .zero, .js_undefined => return Result{
                     .tag = .Undefined,
@@ -625,20 +600,20 @@ pub struct PrettyFormatter {
             }
 
             if (js_type == .GlobalProxy) {
-                return Tag.get(
+                return _PrettyTag.get(
                     jsc.JSValue.c(jsc.C.JSObjectGetProxyTarget(value.asObjectRef())),
                     globalThis,
                 );
             }
 
             // Is this a react element?
-            if (js_type.isObject() and js_type != .ProxyObject) {
-                if (try value.getOwnTruthy(globalThis, "$$typeof")) |typeof_symbol| {
+            if (js_type.isObject() && js_type != .ProxyObject) {
+                if (typeof_symbol := value.getOwnTruthy(globalThis, "$$typeof")?) {
                     let reactElement = ZigString.init("react.element");
                     let react_fragment = ZigString.init("react.fragment");
 
-                    if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) or (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
-                        return .{ .tag = .JSX, .cell = js_type };
+                    if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) || (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
+                        return _PrettyTagResult{ tag: .JSX, cell: js_type };
                     }
                 }
             }
@@ -714,7 +689,40 @@ pub struct PrettyFormatter {
                 .cell = js_type,
             };
         }
-    };
+}
+
+pub struct PrettyFormatter {
+    const Formatter = PrettyFormatter;
+    pub const Visited = _PrettyVisited;
+    pub const ZigFormatter = _PrettyZigFormatter;
+    pub const Tag = _PrettyTag;
+
+    remaining_values: []const JSValue = empty_jsvalues[0..0],
+    map: Visited.Map = undefined,
+    map_node: *Visited.Pool.Node? = null,
+    hide_native: bool = false,
+    globalThis: *JSGlobalObject,
+    indent: u32 = 0,
+    quote_strings: bool = false,
+    failed: bool = false,
+    estimated_line_length: usize = 0,
+    always_newline_scope: bool = false,
+
+    fn goodTimeForANewLine(*_): bool {
+        if (_.estimated_line_length > 80) {
+            _.resetLine();
+            return true;
+        }
+        return false;
+    }
+
+    fn resetLine(*_) {
+        _.estimated_line_length = _.indent * 2;
+    }
+
+    fn addForNewLine(*_, len: usize) {
+        _.estimated_line_length = std.math.add(usize, _.estimated_line_length, len) catch std.math.maxInt(usize);
+    }
 
     const CellType = CAPI.CellType;
 

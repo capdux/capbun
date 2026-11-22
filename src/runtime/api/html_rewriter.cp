@@ -29,44 +29,26 @@ struct FinalizeGuard<T> {
 
 struct ErrDeinitGuard<T> {
     ptr: *T!,
-    active: bool = true,
-    ~init() {
-        if (_.active) {
-            unsafe { _.ptr.deinit(); }
-        }
-    }
-    fn disarm(*_) {
-        _.active = false;
+    ~errinit() {
+        unsafe { _.ptr.deinit(); }
     }
 }
 
 struct ErrDestroyDeinitGuard<T> {
     alloc: std.mem.Allocator,
     ptr: *T!,
-    active: bool = true,
-    ~init() {
-        if (_.active) {
-            unsafe {
-                _.ptr.deinit();
-                _.alloc.destroy(_.ptr);
-            }
+    ~errinit() {
+        unsafe {
+            _.ptr.deinit();
+            _.alloc.destroy(_.ptr);
         }
-    }
-    fn disarm(*_) {
-        _.active = false;
     }
 }
 
 struct ErrCallbacksGuard<T> {
     ptr: *T!,
-    active: bool = true,
-    ~init() {
-        if (_.active) {
-            unsafe { _.ptr.unprotectCallbacks(); }
-        }
-    }
-    fn disarm(*_) {
-        _.active = false;
+    ~errinit() {
+        unsafe { _.ptr.unprotectCallbacks(); }
     }
 }
 
@@ -114,6 +96,407 @@ pub struct LOLHTMLContext {
         bun.destroy(_);
     }
 }
+enum ResponseKind { @"string", array_buffer, other }
+
+pub struct HTMLRewriterLoaderImpl {
+    rewriter: *LOLHTML.HTMLRewriter,
+    finalized: bool = false,
+    context: LOLHTMLContext,
+    chunk_size: usize = 0,
+    failed: bool = false,
+    output: jsc.WebCore.Sink,
+    signal: jsc.WebCore.Signal = {},
+    backpressure: bun.LinearFifo(u8, .Dynamic) = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator),
+
+    fn finalize(*_) {
+        if (_.finalized) return;
+        _.rewriter.deinit();
+        _.backpressure.deinit();
+        _.backpressure = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator);
+        _.finalized = true;
+    }
+
+    fn fail(*_, e: bun.sys.Error) {
+        _.signal.close(e);
+        _.output.end(e);
+        _.failed = true;
+        _.finalize();
+    }
+
+    fn connect(*_, signal: jsc.WebCore.Signal) {
+        _.signal = signal;
+    }
+
+    fn writeToDestination(*_, bytes: []const u8) {
+        if (_.backpressure.count > 0) {
+            _.backpressure.write(bytes) catch {
+                _.fail(bun.sys.Error.oom);
+                _.finalize();
+            };
+            return;
+        }
+
+        const write_result = _.output.write({ temporary: bun.ByteList.fromBorrowedSliceDangerous(bytes) });
+
+        switch (write_result) {
+            .err e => {
+                _.fail(e);
+            },
+            .owned_and_done, .temporary_and_done, .into_array_and_done => {
+                _.done();
+            },
+            .pending pending => {
+                pending.applyBackpressure(bun.default_allocator, &_.output, pending, bytes);
+            },
+            .into_array, .owned, .temporary => {
+                _.signal.ready(if (_.chunk_size > 0) _.chunk_size else null, null);
+            },
+        }
+    }
+
+    fn done(*_) {
+        _.output.end(null);
+        _.signal.close(null);
+        _.finalize();
+    }
+
+    fn setup(
+        *_,
+        builder: *LOLHTML.HTMLRewriter.Builder,
+        context: *LOLHTMLContext,
+        size_hint: usize?,
+        output: jsc.WebCore.Sink,
+    ): ([]const u8)? {
+        const chunk_size = @max(size_hint ?? 16384, 1024);
+        _.rewriter = builder.build(
+            .UTF8,
+            {
+                preallocated_parsing_buffer_size: chunk_size,
+                max_allowed_memory_usage: std.math.maxInt(u32),
+            },
+            false,
+            HTMLRewriterLoaderImpl,
+            _,
+            HTMLRewriterLoaderImpl.writeToDestination,
+            HTMLRewriterLoaderImpl.done,
+        ) catch {
+            output.end();
+            return LOLHTML.HTMLString.lastError().slice();
+        };
+
+        _.chunk_size = chunk_size;
+        _.context = context;
+        _.output = output;
+
+        return null;
+    }
+
+    fn sink(*_): jsc.WebCore.Sink {
+        return jsc.WebCore.Sink.init(_);
+    }
+
+    fn writeBytes(*_, bytes: bun.ByteList, comptime deinit_: bool): bun.sys.Error? {
+        _.rewriter.write(bytes.slice()) catch {
+            return bun.sys.Error{
+                errno: 1,
+                // TODO: make this a union
+                path: bun.handleOom(bun.default_allocator.dupe(u8, LOLHTML.HTMLString.lastError().slice())),
+            };
+        };
+        if (comptime deinit_) {
+            let mut_bytes = bytes;
+            mut_bytes.deinit(bun.default_allocator);
+        }
+        return null;
+    }
+
+    fn write(*_, data: jsc.WebCore.StreamResult): jsc.WebCore.StreamResult.Writable {
+        switch (data) {
+            .owned bytes => {
+                if (e := _.writeBytes(bytes, true)) {
+                    return { err: e };
+                }
+                return { owned: bytes.len };
+            },
+            .owned_and_done bytes => {
+                if (e := _.writeBytes(bytes, true)) {
+                    return { err: e };
+                }
+                return { owned_and_done: bytes.len };
+            },
+            .temporary_and_done bytes => {
+                if (e := _.writeBytes(bytes, false)) {
+                    return { err: e };
+                }
+                return { temporary_and_done: bytes.len };
+            },
+            .temporary bytes => {
+                if (e := _.writeBytes(bytes, false)) {
+                    return { err: e };
+                }
+                return { temporary: bytes.len };
+            },
+            else => unreachable,
+        }
+    }
+
+    fn writeUTF16(*_, data: jsc.WebCore.StreamResult): jsc.WebCore.StreamResult.Writable {
+        return jsc.WebCore.Sink.UTF8Fallback.writeUTF16(HTMLRewriterLoaderImpl, _, data, write);
+    }
+
+    fn writeLatin1(*_, data: jsc.WebCore.StreamResult): jsc.WebCore.StreamResult.Writable {
+        return jsc.WebCore.Sink.UTF8Fallback.writeLatin1(HTMLRewriterLoaderImpl, _, data, write);
+    }
+}
+
+pub enum BufferOutputSinkSync { suspended, pending, done }
+
+pub struct BufferOutputSinkImpl {
+    const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, {});
+    pub const ref = RefCount.ref;
+    pub const deref = RefCount.deref;
+    pub const Sync = BufferOutputSinkSync;
+
+    ref_count: RefCount,
+    global: *JSGlobalObject,
+    bytes: bun.MutableString,
+    rewriter: (*LOLHTML.HTMLRewriter)? = null,
+    context: *LOLHTMLContext,
+    response: *Response,
+    response_value: jsc.Strong.Optional = .empty,
+    bodyValueBufferer: jsc.WebCore.Body.ValueBufferer? = null,
+    tmp_sync_error: (*jsc.JSValue)? = null,
+
+    // const log = bun.Output.scoped(.BufferOutputSink, .visible);
+    static fn init(context: *LOLHTMLContext, global: *JSGlobalObject, original: *Response, builder: *LOLHTML.HTMLRewriter.Builder): jsc.JSValue ! bun.JSError {
+        let sink = bun.new(BufferOutputSinkImpl, {
+            ref_count: .init(),
+            global: global,
+            bytes: bun.MutableString.initEmpty(bun.default_allocator),
+            rewriter: null,
+            context: context,
+            response: undefined,
+        });
+        const _guard_sink = DerefGuard<BufferOutputSinkImpl>{ ptr: sink };
+        let result = bun.new(Response, Response.init(
+            {
+                status_code: 200,
+            },
+            {
+                value: {
+                    Locked: {
+                        global: global,
+                        task: sink,
+                    },
+                },
+            },
+            bun.String.empty,
+            false,
+        ));
+
+        sink.response = result;
+        let sink_error: jsc.JSValue = .zero;
+        const input_size = original.getBodyLen();
+        let vm = global.bunVM();
+
+        // Since we're still using vm.waitForPromise, we have to also
+        // override the error rejection handler. That way, we can propagate
+        // errors to the caller.
+        let scope = vm.unhandledRejectionScope();
+        const prev_unhandled_pending_rejection_to_capture = vm.unhandled_pending_rejection_to_capture;
+        vm.unhandled_pending_rejection_to_capture = &sink_error;
+        sink.tmp_sync_error = &sink_error;
+        vm.onUnhandledRejection = &jsc.VirtualMachine.onQuietUnhandledRejectionHandlerCaptureValue;
+        defer {
+            sink_error.ensureStillAlive();
+            vm.unhandled_pending_rejection_to_capture = prev_unhandled_pending_rejection_to_capture;
+            scope.apply(vm);
+        }
+
+        sink.rewriter = builder.build(
+            .UTF8,
+            {
+                preallocated_parsing_buffer_size: if (input_size == jsc.WebCore.Blob.max_size)
+                    1024
+                else
+                    @max(input_size, 1024),
+                max_allowed_memory_usage: std.math.maxInt(u32),
+            },
+            false,
+            BufferOutputSinkImpl,
+            sink,
+            BufferOutputSinkImpl.write,
+            BufferOutputSinkImpl.done,
+        ) catch {
+            result.finalize();
+            return createLOLHTMLError(global);
+        };
+
+        result.setInit(
+            original.getMethod(),
+            original.getInitStatusCode(),
+            original.getInitStatusText().clone(),
+        );
+
+        // https://github.com/oven-sh/bun/issues/3334
+        if (_headers := original.getInitHeaders()) {
+            result.setInitHeaders(_headers.cloneThis(global)?);
+        }
+
+        // Hold off on cloning until we're actually done.
+        const response_js_value = sink.response.toJS(sink.global);
+        sink.response_value.set(global, response_js_value);
+
+        result.setUrl(original.getUrl().clone());
+
+        const value = original.getBodyValue();
+        const owned_readable_stream = original.getBodyReadableStream(sink.global);
+        sink.ref();
+        sink.bodyValueBufferer = jsc.WebCore.Body.ValueBufferer.init(sink, unsafe { @ptrCast(&onFinishedBuffering) }, sink.global, bun.default_allocator);
+        response_js_value.ensureStillAlive();
+
+        sink.bodyValueBufferer.?.run(value, owned_readable_stream) catch buffering_error => {
+            const _guard_sink_err = DerefGuard<BufferOutputSinkImpl>{ ptr: sink };
+            if (buffering_error == error.StreamAlreadyUsed) {
+                let e = jsc.SystemError{
+                    code: bun.String.static("ERR_STREAM_ALREADY_FINISHED"),
+                    message: bun.String.static("Stream already used, please create a new one"),
+                };
+                return e.toErrorInstance(sink.global);
+            } else {
+                let e = jsc.SystemError{
+                    code: bun.String.static("ERR_STREAM_CANNOT_PIPE"),
+                    message: bun.String.static("Failed to pipe stream"),
+                };
+                return e.toErrorInstance(sink.global);
+            }
+        };
+
+        // sync error occurs
+        if (sink_error != .zero) {
+            sink_error.ensureStillAlive();
+            sink_error.unprotect();
+
+            return sink_error;
+        }
+
+        response_js_value.ensureStillAlive();
+        return response_js_value;
+    }
+
+    static fn onFinishedBuffering(sink: *BufferOutputSinkImpl, bytes: []const u8, js_err: jsc.WebCore.Body.Value.ValueError?, is_async: bool) {
+        const _guard_sink = DerefGuard<BufferOutputSinkImpl>{ ptr: sink };
+        if (e := js_err) {
+            const sinkBodyValue = sink.response.getBodyValue();
+            if (unsafe { sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
+                sinkBodyValue.Locked.promise == null })
+            {
+                sinkBodyValue.Locked.readable.deinit();
+                unsafe { sinkBodyValue.* = .Empty; }
+                // is there a pending promise?
+                // we will need to reject it
+            } else if (unsafe { sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
+                sinkBodyValue.Locked.promise != null })
+            {
+                sinkBodyValue.Locked.onReceiveValue = null;
+                sinkBodyValue.Locked.task = null;
+            }
+            if (is_async) {
+                let mut_e = e;
+                let duped_err = mut_e.dupe(sink.global);
+                sinkBodyValue.toErrorInstance(duped_err, sink.global) catch {}; // TODO: properly propagate exception upwards
+            } else {
+                let ret_err = createLOLHTMLError(sink.global);
+                ret_err.ensureStillAlive();
+                ret_err.protect();
+                sink.tmp_sync_error.?.* = ret_err;
+            }
+            sink.rewriter.?.end() catch {};
+
+            return;
+        }
+
+        if (ret_err := BufferOutputSinkImpl.runOutputSink(sink, bytes, is_async)) {
+            ret_err.ensureStillAlive();
+            ret_err.protect();
+            sink.tmp_sync_error.?.* = ret_err;
+        } else {}
+    }
+
+    static fn runOutputSink(
+        sink: *BufferOutputSinkImpl,
+        bytes: []const u8,
+        is_async: bool,
+    ): JSValue? {
+        bun.handleOom(sink.bytes.growBy(bytes.len));
+        const global = sink.global;
+        const response = sink.response;
+
+        sink.rewriter.?.write(bytes) catch {
+            if (is_async) {
+                response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
+                return null;
+            } else {
+                return createLOLHTMLError(global);
+            }
+        };
+
+        sink.rewriter.?.end() catch {
+            if (is_async) {
+                response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
+                return null;
+            } else {
+                return createLOLHTMLError(global);
+            }
+        };
+
+        return null;
+    }
+
+    fn done(*_) {
+        const bodyValue = _.response.getBodyValue();
+        let prev_value = bodyValue.*;
+        bodyValue.* = jsc.WebCore.Body.Value{
+            InternalBlob: {
+                bytes: _.bytes.list.toManaged(bun.default_allocator),
+            },
+        };
+
+        _.bytes = {
+            allocator: bun.default_allocator,
+            list: {
+                items: [],
+                capacity: 0,
+            },
+        };
+
+        prev_value.resolve(
+            bodyValue,
+            _.global,
+            null,
+        ) catch {}; // TODO: properly propagate exception upwards
+    }
+
+    fn write(*_, bytes: []const u8) {
+        bun.handleOom(_.bytes.append(bytes));
+    }
+
+    fn deinit(*_) {
+        _.bytes.deinit();
+        if (*bufferer := _.bodyValueBufferer) {
+            bufferer.deinit();
+        }
+
+        _.context.deref();
+        _.response_value.deinit();
+        if (rewriter := _.rewriter) {
+            rewriter.deinit();
+        }
+
+        bun.destroy(_);
+    }
+}
+
 pub struct HTMLRewriter {
     builder: *LOLHTML.HTMLRewriter.Builder,
     context: *LOLHTMLContext,
@@ -123,7 +506,7 @@ pub struct HTMLRewriter {
     pub const fromJS = js.fromJS;
     pub const fromJSDirect = js.fromJSDirect;
 
-    static fn constructor(_: *JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*HTMLRewriter {
+    static fn constructor(_: *JSGlobalObject, _: *jsc.CallFrame): (*HTMLRewriter) ! bun.JSError {
         const rewriter = bun.handleOom(bun.default_allocator.create(HTMLRewriter));
         rewriter.* = HTMLRewriter{
             builder: LOLHTML.HTMLRewriter.Builder.init(),
@@ -141,18 +524,18 @@ pub struct HTMLRewriter {
         selector_name: ZigString,
         callFrame: *jsc.CallFrame,
         listener: JSValue,
-    ): bun.JSError!JSValue {
+    ): JSValue ! bun.JSError {
         const selector_slice = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}", { selector_name}));
         const _guard_selector_slice = FreeGuard<@TypeOf(selector_slice)>{ alloc: bun.default_allocator, slice: selector_slice };
 
         let selector = LOLHTML.HTMLSelector.parse(selector_slice) catch
             return global.throwValue(createLOLHTMLError(global));
-        let _guard_selector = ErrDeinitGuard<LOLHTML.HTMLSelector>{ ptr: selector };
+        const _guard_selector = ErrDeinitGuard<LOLHTML.HTMLSelector>{ ptr: selector };
 
         const handler_ = ElementHandler.init(global, listener)?;
         const handler = bun.handleOom(bun.default_allocator.create(ElementHandler));
         handler.* = handler_;
-        let _guard_handler = ErrDestroyDeinitGuard<ElementHandler>{ alloc: bun.default_allocator, ptr: handler };
+        const _guard_handler = ErrDestroyDeinitGuard<ElementHandler>{ alloc: bun.default_allocator, ptr: handler };
 
         _.builder.addElementContentHandlers(
             selector,
@@ -181,8 +564,6 @@ pub struct HTMLRewriter {
             return global.throwValue(createLOLHTMLError(global));
         };
 
-        _guard_selector.disarm();
-        _guard_handler.disarm();
         bun.handleOom(_.context.selectors.append(bun.default_allocator, selector));
         bun.handleOom(_.context.element_handlers.append(bun.default_allocator, handler));
         return callFrame.this();
@@ -193,12 +574,12 @@ pub struct HTMLRewriter {
         global: *JSGlobalObject,
         listener: JSValue,
         callFrame: *jsc.CallFrame,
-    ): bun.JSError!JSValue {
+    ): JSValue ! bun.JSError {
         const handler_ = DocumentHandler.init(global, listener)?;
 
         const handler = bun.handleOom(bun.default_allocator.create(DocumentHandler));
         handler.* = handler_;
-        let _guard_handler = ErrDestroyDeinitGuard<DocumentHandler>{ alloc: bun.default_allocator, ptr: handler };
+        const _guard_handler = ErrDestroyDeinitGuard<DocumentHandler>{ alloc: bun.default_allocator, ptr: handler };
 
         // If this fails, subsequent calls to write or end should throw
         _.builder.addDocumentContentHandlers(
@@ -231,7 +612,6 @@ pub struct HTMLRewriter {
                 null,
         );
 
-        _guard_handler.disarm();
         bun.handleOom(_.context.document_handlers.append(bun.default_allocator, handler));
         return callFrame.this();
     }
@@ -246,13 +626,13 @@ pub struct HTMLRewriter {
         _.builder.deinit();
     }
 
-    fn beginTransform(*_, global: *JSGlobalObject, response: *Response): bun.JSError!JSValue {
+    fn beginTransform(*_, global: *JSGlobalObject, response: *Response): JSValue ! bun.JSError {
         const new_context = _.context;
         new_context.ref();
-        return BufferOutputSink.init(new_context, global, response, _.builder);
+        return BufferOutputSinkImpl.init(new_context, global, response, _.builder);
     }
 
-    fn transform_(*_, global: *JSGlobalObject, response_value: jsc.JSValue): bun.JSError!JSValue {
+    fn transform_(*_, global: *JSGlobalObject, response_value: jsc.JSValue): JSValue ! bun.JSError {
         if (response := response_value.@"as"(Response)) {
             const body_value = response.getBodyValue();
             if (body_value.* == .Used) {
@@ -266,7 +646,6 @@ pub struct HTMLRewriter {
             return out;
         }
 
-        const ResponseKind = enum { @"string", array_buffer, other };
         const kind: ResponseKind = brk: {
             if (response_value.isString())
                 break :brk .@"string";
@@ -318,403 +697,8 @@ pub struct HTMLRewriter {
     pub const on = host_fn.wrapInstanceMethod(HTMLRewriter, "on_", false);
     pub const onDocument = host_fn.wrapInstanceMethod(HTMLRewriter, "onDocument_", false);
     pub const transform = host_fn.wrapInstanceMethod(HTMLRewriter, "transform_", false);
-
-    pub const HTMLRewriterLoader = struct {
-        rewriter: *LOLHTML.HTMLRewriter,
-        finalized: bool = false,
-        context: LOLHTMLContext,
-        chunk_size: usize = 0,
-        failed: bool = false,
-        output: jsc.WebCore.Sink,
-        signal: jsc.WebCore.Signal = {},
-        backpressure: bun.LinearFifo(u8, .Dynamic) = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator),
-
-        fn finalize(*_) {
-            if (_.finalized) return;
-            _.rewriter.deinit();
-            _.backpressure.deinit();
-            _.backpressure = bun.LinearFifo(u8, .Dynamic).init(bun.default_allocator);
-            _.finalized = true;
-        }
-
-        fn fail(*_, e: bun.sys.Error) {
-            _.signal.close(e);
-            _.output.end(e);
-            _.failed = true;
-            _.finalize();
-        }
-
-        fn connect(*_, signal: jsc.WebCore.Signal) {
-            _.signal = signal;
-        }
-
-        fn writeToDestination(*_, bytes: []const u8) {
-            if (_.backpressure.count > 0) {
-                _.backpressure.write(bytes) catch {
-                    _.fail(bun.sys.Error.oom);
-                    _.finalize();
-                };
-                return;
-            }
-
-            const write_result = _.output.write({ temporary: bun.ByteList.fromBorrowedSliceDangerous(bytes) });
-
-            switch (write_result) {
-                .err => |e| {
-                    _.fail(e);
-                },
-                .owned_and_done, .temporary_and_done, .into_array_and_done => {
-                    _.done();
-                },
-                .pending => |pending| {
-                    pending.applyBackpressure(bun.default_allocator, &_.output, pending, bytes);
-                },
-                .into_array, .owned, .temporary => {
-                    _.signal.ready(if (_.chunk_size > 0) _.chunk_size else null, null);
-                },
-            }
-        }
-
-        pub fn done(
-        *_,
-        ) {
-            _.output.end(null);
-            _.signal.close(null);
-            _.finalize();
-        }
-
-        pub fn setup(
-        *_,
-            builder: *LOLHTML.HTMLRewriter.Builder,
-            context: *LOLHTMLContext,
-            size_hint: usize?,
-            output: jsc.WebCore.Sink,
-        ): ([]const u8)? {
-            const chunk_size = @max(size_hint ?? 16384, 1024);
-            _.rewriter = builder.build(
-                .UTF8,
-                {
-                    preallocated_parsing_buffer_size: chunk_size,
-                    max_allowed_memory_usage: std.math.maxInt(u32),
-                },
-                false,
-                HTMLRewriterLoader,
-                _,
-                HTMLRewriterLoader.writeToDestination,
-                HTMLRewriterLoader.done,
-            ) catch {
-                output.end();
-                return LOLHTML.HTMLString.lastError().slice();
-            };
-
-            _.chunk_size = chunk_size;
-            _.context = context;
-            _.output = output;
-
-            return null;
-        }
-
-        fn sink(*_): jsc.WebCore.Sink {
-            return jsc.WebCore.Sink.init(_);
-        }
-
-        fn writeBytes(*_, bytes: bun.ByteList, comptime deinit_: bool): bun.sys.Error? {
-            _.rewriter.write(bytes.slice()) catch {
-                return bun.sys.Error{
-                    errno: 1,
-                    // TODO: make this a union
-                    path: bun.handleOom(bun.default_allocator.dupe(u8, LOLHTML.HTMLString.lastError().slice())),
-                };
-            };
-            if (comptime deinit_) bytes.deinit(bun.default_allocator);
-            return null;
-        }
-
-        fn write(*_, data: jsc.WebCore.StreamResult): jsc.WebCore.StreamResult.Writable {
-            switch (data) {
-                .owned => |bytes| {
-                    if (e := _.writeBytes(bytes, true)) {
-                        return { err: e };
-                    }
-                    return { owned: bytes.len };
-                },
-                .owned_and_done => |bytes| {
-                    if (e := _.writeBytes(bytes, true)) {
-                        return { err: e };
-                    }
-                    return { owned_and_done: bytes.len };
-                },
-                .temporary_and_done => |bytes| {
-                    if (e := _.writeBytes(bytes, false)) {
-                        return { err: e };
-                    }
-                    return { temporary_and_done: bytes.len };
-                },
-                .temporary => |bytes| {
-                    if (e := _.writeBytes(bytes, false)) {
-                        return { err: e };
-                    }
-                    return { temporary: bytes.len };
-                },
-                else => unreachable,
-            }
-        }
-
-        fn writeUTF16(*_, data: jsc.WebCore.StreamResult): jsc.WebCore.StreamResult.Writable {
-            return jsc.WebCore.Sink.UTF8Fallback.writeUTF16(HTMLRewriterLoader, _, data, write);
-        }
-
-        fn writeLatin1(*_, data: jsc.WebCore.StreamResult): jsc.WebCore.StreamResult.Writable {
-            return jsc.WebCore.Sink.UTF8Fallback.writeLatin1(HTMLRewriterLoader, _, data, write);
-        }
-    };
-
-    pub const BufferOutputSink = struct {
-        const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, {});
-        pub const ref = RefCount.ref;
-        pub const deref = RefCount.deref;
-
-        ref_count: RefCount,
-        global: *JSGlobalObject,
-        bytes: bun.MutableString,
-        rewriter: (*LOLHTML.HTMLRewriter)? = null,
-        context: *LOLHTMLContext,
-        response: *Response,
-        response_value: jsc.Strong.Optional = .empty,
-        bodyValueBufferer: jsc.WebCore.Body.ValueBufferer? = null,
-        tmp_sync_error: (*jsc.JSValue)? = null,
-
-        // const log = bun.Output.scoped(.BufferOutputSink, .visible);
-        static fn init(context: *LOLHTMLContext, global: *JSGlobalObject, original: *Response, builder: *LOLHTML.HTMLRewriter.Builder): bun.JSError!jsc.JSValue {
-            let sink = bun.new(BufferOutputSink, {
-                ref_count: .init(),
-                global: global,
-                bytes: bun.MutableString.initEmpty(bun.default_allocator),
-                rewriter: null,
-                context: context,
-                response: undefined,
-            });
-            const _guard_sink = DerefGuard<BufferOutputSink>{ ptr: sink };
-            let result = bun.new(Response, Response.init(
-                {
-                    status_code: 200,
-                },
-                {
-                    value: {
-                        Locked: {
-                            global: global,
-                            task: sink,
-                        },
-                    },
-                },
-                bun.String.empty,
-                false,
-            ));
-
-            sink.response = result;
-            let sink_error: jsc.JSValue = .zero;
-            const input_size = original.getBodyLen();
-            let vm = global.bunVM();
-
-            // Since we're still using vm.waitForPromise, we have to also
-            // override the error rejection handler. That way, we can propagate
-            // errors to the caller.
-            let scope = vm.unhandledRejectionScope();
-            const prev_unhandled_pending_rejection_to_capture = vm.unhandled_pending_rejection_to_capture;
-            vm.unhandled_pending_rejection_to_capture = &sink_error;
-            sink.tmp_sync_error = &sink_error;
-            vm.onUnhandledRejection = &jsc.VirtualMachine.onQuietUnhandledRejectionHandlerCaptureValue;
-            defer {
-                sink_error.ensureStillAlive();
-                vm.unhandled_pending_rejection_to_capture = prev_unhandled_pending_rejection_to_capture;
-                scope.apply(vm);
-            }
-
-            sink.rewriter = builder.build(
-                .UTF8,
-                {
-                    preallocated_parsing_buffer_size: if (input_size == jsc.WebCore.Blob.max_size)
-                        1024
-                    else
-                        @max(input_size, 1024),
-                    max_allowed_memory_usage: std.math.maxInt(u32),
-                },
-                false,
-                BufferOutputSink,
-                sink,
-                BufferOutputSink.write,
-                BufferOutputSink.done,
-            ) catch {
-                result.finalize();
-                return createLOLHTMLError(global);
-            };
-
-            result.setInit(
-                original.getMethod(),
-                original.getInitStatusCode(),
-                original.getInitStatusText().clone(),
-            );
-
-            // https://github.com/oven-sh/bun/issues/3334
-            if (_headers := original.getInitHeaders()) {
-                result.setInitHeaders(try _headers.cloneThis(global));
-            }
-
-            // Hold off on cloning until we're actually done.
-            const response_js_value = sink.response.toJS(sink.global);
-            sink.response_value.set(global, response_js_value);
-
-            result.setUrl(original.getUrl().clone());
-
-            const value = original.getBodyValue();
-            const owned_readable_stream = original.getBodyReadableStream(sink.global);
-            sink.ref();
-            sink.bodyValueBufferer = jsc.WebCore.Body.ValueBufferer.init(sink, unsafe { @ptrCast(&onFinishedBuffering) }, sink.global, bun.default_allocator);
-            response_js_value.ensureStillAlive();
-
-            sink.bodyValueBufferer.?.run(value, owned_readable_stream) catch |buffering_error| {
-                const _guard_sink_err = DerefGuard<BufferOutputSink>{ ptr: sink };
-                if (buffering_error == error.StreamAlreadyUsed) {
-                    let e = jsc.SystemError{
-                        code: bun.String.static("ERR_STREAM_ALREADY_FINISHED"),
-                        message: bun.String.static("Stream already used, please create a new one"),
-                    };
-                    return e.toErrorInstance(sink.global);
-                } else {
-                    let e = jsc.SystemError{
-                        code: bun.String.static("ERR_STREAM_CANNOT_PIPE"),
-                        message: bun.String.static("Failed to pipe stream"),
-                    };
-                    return e.toErrorInstance(sink.global);
-                }
-            };
-
-            // sync error occurs
-            if (sink_error != .zero) {
-                sink_error.ensureStillAlive();
-                sink_error.unprotect();
-
-                return sink_error;
-            }
-
-            response_js_value.ensureStillAlive();
-            return response_js_value;
-        }
-
-        static fn onFinishedBuffering(sink: *BufferOutputSink, bytes: []const u8, js_err: jsc.WebCore.Body.Value.ValueError?, is_async: bool) {
-            const _guard_sink = DerefGuard<BufferOutputSink>{ ptr: sink };
-            if (e := js_err) {
-                const sinkBodyValue = sink.response.getBodyValue();
-                if (unsafe { sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
-                    sinkBodyValue.Locked.promise == null })
-                {
-                    sinkBodyValue.Locked.readable.deinit();
-                    unsafe { sinkBodyValue.* = .Empty; }
-                    // is there a pending promise?
-                    // we will need to reject it
-                } else if (unsafe { sinkBodyValue.* == .Locked && @intFromPtr(sinkBodyValue.Locked.task) == @intFromPtr(sink) &&
-                    sinkBodyValue.Locked.promise != null })
-                {
-                    sinkBodyValue.Locked.onReceiveValue = null;
-                    sinkBodyValue.Locked.task = null;
-                }
-                if (is_async) {
-                    let mut_e = e;
-                    let duped_err = mut_e.dupe(sink.global);
-                    sinkBodyValue.toErrorInstance(duped_err, sink.global) catch {}; // TODO: properly propagate exception upwards
-                } else {
-                    let ret_err = createLOLHTMLError(sink.global);
-                    ret_err.ensureStillAlive();
-                    ret_err.protect();
-                    sink.tmp_sync_error.?.* = ret_err;
-                }
-                sink.rewriter.?.end() catch {};
-
-                return;
-            }
-
-            if (ret_err := sink.runOutputSink(bytes, is_async)) {
-                ret_err.ensureStillAlive();
-                ret_err.protect();
-                sink.tmp_sync_error.?.* = ret_err;
-            } else {}
-        }
-
-        static fn runOutputSink(
-            sink: *BufferOutputSink,
-            bytes: []const u8,
-            is_async: bool,
-        ): JSValue? {
-            bun.handleOom(sink.bytes.growBy(bytes.len));
-            const global = sink.global;
-            const response = sink.response;
-
-            sink.rewriter.?.write(bytes) catch {
-                if (is_async) {
-                    response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
-                    return null;
-                } else {
-                    return createLOLHTMLError(global);
-                }
-            };
-
-            sink.rewriter.?.end() catch {
-                if (is_async) {
-                    response.getBodyValue().toErrorInstance({ Message: createLOLHTMLStringError() }, global) catch {}; // TODO: properly propagate exception upwards
-                    return null;
-                } else {
-                    return createLOLHTMLError(global);
-                }
-            };
-
-            return null;
-        }
-
-        pub const Sync = enum { suspended, pending, done };
-
-        fn done(*_) {
-            const bodyValue = _.response.getBodyValue();
-            let prev_value = bodyValue.*;
-            bodyValue.* = jsc.WebCore.Body.Value{
-                InternalBlob: {
-                    bytes: _.bytes.list.toManaged(bun.default_allocator),
-                },
-            };
-
-            _.bytes = {
-                allocator: bun.default_allocator,
-                list: {
-                    items: [],
-                    capacity: 0,
-                },
-            };
-
-            prev_value.resolve(
-                bodyValue,
-                _.global,
-                null,
-            ) catch {}; // TODO: properly propagate exception upwards
-        }
-
-        fn write(*_, bytes: []const u8) {
-            bun.handleOom(_.bytes.append(bytes));
-        }
-
-        fn deinit(*_) {
-            _.bytes.deinit();
-            if (*bufferer := _.bodyValueBufferer) {
-                bufferer.deinit();
-            }
-
-            _.context.deref();
-            _.response_value.deinit();
-            if (rewriter := _.rewriter) {
-                rewriter.deinit();
-            }
-
-            bun.destroy(_);
-        }
-    };
+    pub const HTMLRewriterLoader = HTMLRewriterLoaderImpl;
+    pub const BufferOutputSink = BufferOutputSinkImpl;
 
     // pub const StreamOutputSink = struct {
     //     global: *JSGlobalObject,
@@ -882,7 +866,7 @@ struct DocumentHandler {
             return global.throwInvalidArguments("Expected object", {});
         }
 
-        let _guard_callbacks = ErrCallbacksGuard<DocumentHandler>{ ptr: &handler };
+        const _guard_callbacks = ErrCallbacksGuard<DocumentHandler>{ ptr: &handler };
 
         if (val := thisObject.get(global, "doctype")?) {
             if (val.isUndefinedOrNull() || !val.isCell() || !val.isCallable()) {
@@ -916,7 +900,6 @@ struct DocumentHandler {
             handler.onEndCallback = val;
         }
 
-        _guard_callbacks.disarm();
         thisObject.protect();
         return handler;
     }
@@ -1057,7 +1040,7 @@ struct ElementHandler {
             thisObject: thisObject,
             global: global,
         };
-        let _guard_callbacks = ErrCallbacksGuard<ElementHandler>{ ptr: &handler };
+        const _guard_callbacks = ErrCallbacksGuard<ElementHandler>{ ptr: &handler };
 
         if (!thisObject.isObject()) {
             return global.throwInvalidArguments("Expected object", {});
@@ -1087,7 +1070,6 @@ struct ElementHandler {
             handler.onTextCallback = val;
         }
 
-        _guard_callbacks.disarm();
         thisObject.protect();
         return handler;
     }
@@ -1555,6 +1537,21 @@ pub struct Comment {
     }
 }
 
+pub struct EndTagHandler {
+    callback: JSValue?,
+    global: *JSGlobalObject,
+
+    pub const onEndTag = HandlerCallback(
+        EndTagHandler,
+        EndTag,
+        LOLHTML.EndTag,
+        "end_tag",
+        "callback",
+    );
+
+    pub const onEndTagHandler = LOLHTML.DirectiveHandler(LOLHTML.EndTag, EndTagHandler, onEndTag);
+}
+
 pub struct EndTag {
     const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, {});
     pub const ref = RefCount.ref;
@@ -1579,20 +1576,7 @@ pub struct EndTag {
         bun.destroy(_);
     }
 
-    pub const Handler = struct {
-        callback: JSValue?,
-        global: *JSGlobalObject,
-
-        pub const onEndTag = HandlerCallback(
-            Handler,
-            EndTag,
-            LOLHTML.EndTag,
-            "end_tag",
-            "callback",
-        );
-
-        pub const onEndTagHandler = LOLHTML.DirectiveHandler(LOLHTML.EndTag, Handler, onEndTag);
-    };
+    pub const Handler = EndTagHandler;
 
     pub const js = jsc.Codegen.JSEndTag;
     pub const toJS = js.toJS;

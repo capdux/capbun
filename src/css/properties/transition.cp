@@ -104,10 +104,10 @@ pub struct Transition {
     }
 }
 
-const TransitionProperties = struct { SmallList(PropertyId, 1), VendorPrefix };
-const TransitionDurations = struct { SmallList(Time, 1), VendorPrefix };
-const TransitionDelays = struct { SmallList(Time, 1), VendorPrefix };
-const TransitionTimingFunctions = struct { SmallList(EasingFunction, 1), VendorPrefix };
+type TransitionProperties = [SmallList(PropertyId, 1), VendorPrefix];
+type TransitionDurations = [SmallList(Time, 1), VendorPrefix];
+type TransitionDelays = [SmallList(Time, 1), VendorPrefix];
+type TransitionTimingFunctions = [SmallList(EasingFunction, 1), VendorPrefix];
 
 pub struct TransitionHandler {
     properties: TransitionProperties? = null,
@@ -329,6 +329,10 @@ pub struct TransitionHandler {
         _.reset();
     }
 
+    static inline fn cycleBump(idx: *u32, len: u32) {
+        idx.* = (idx.* + 1) % len;
+    }
+
     inline fn getTransitions(
         context: *const css.PropertyHandlerContext,
         properties: *SmallList(PropertyId, 1),
@@ -336,12 +340,6 @@ pub struct TransitionHandler {
         delays: *SmallList(Time, 1),
         timing_functions: *SmallList(EasingFunction, 1),
     ): SmallList(Transition, 1) {
-        const cycleBump = struct {
-            inline fn cycleBump(idx: *u32, len: u32) {
-                idx.* = (idx.* + 1) % len;
-            }
-        }.cycleBump;
-
         // transition-property determines the number of transitions. The values of other
         // properties are repeated to match this length.
         let transitions = SmallList(Transition, 1).initCapacity(context.allocator, 1);
@@ -388,16 +386,14 @@ pub struct TransitionHandler {
     }
 }
 
-fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.PropertyHandlerContext): SmallList(PropertyId, 1)? {
-    const replace = struct {
-        inline fn replace(allocator: Allocator, propertiez: *SmallList(PropertyId, 1), props: []const PropertyId, i: u32) {
-            propertiez.mut(i).* = props[0].deepClone(allocator);
-            if (props.len > 1) {
-                propertiez.insertSlice(allocator, i + 1, props[1..]);
-            }
-        }
-    }.replace;
+inline fn replaceProperties(allocator: Allocator, propertiez: *SmallList(PropertyId, 1), props: []const PropertyId, i: u32) {
+    propertiez.mut(i).* = props[0].deepClone(allocator);
+    if (props.len > 1) {
+        propertiez.insertSlice(allocator, i + 1, props[1..]);
+    }
+}
 
+fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.PropertyHandlerContext): SmallList(PropertyId, 1)? {
     let rtl_properties: css.SmallList(PropertyId, 1)? = null;
     let i: u32 = 0;
 
@@ -405,9 +401,9 @@ fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.Propert
     while (i < properties.len()) {
         const result = getLogicalProperties(properties.at(i));
         if (result == .block && context.shouldCompileLogical(result.block[0])) {
-            replace(context.allocator, properties, result.block[1], i);
+            replaceProperties(context.allocator, properties, result.block[1], i);
             if (rtl_properties != null) {
-                replace(context.allocator, &rtl_properties.?, result.block[1], i);
+                replaceProperties(context.allocator, &rtl_properties.?, result.block[1], i);
             }
             i += 1;
         } else if (result == .@"inline" && context.shouldCompileLogical(result.@"inline"[0])) {
@@ -418,9 +414,9 @@ fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.Propert
                 rtl_properties = properties.deepClone(context.allocator);
             }
 
-            replace(context.allocator, properties, ltr, i);
+            replaceProperties(context.allocator, properties, ltr, i);
             if (rtl_properties != null) {
-                replace(context.allocator, &rtl_properties.?, rtl, i);
+                replaceProperties(context.allocator, &rtl_properties.?, rtl, i);
             }
 
             i += @as(u32, @intCast(ltr.len));
@@ -454,11 +450,14 @@ fn expandProperties(properties: *SmallList(PropertyId, 1), context: *css.Propert
     return rtl_properties;
 }
 
-const LogicalPropertyId = union(enum) {
-    none,
-    block: struct { css.compat.Feature, []const PropertyId },
-    @"inline": struct { css.compat.Feature, []const PropertyId, []const PropertyId },
-};
+type LogicalBlockPayload = [css.compat.Feature, []const PropertyId];
+type LogicalInlinePayload = [css.compat.Feature, []const PropertyId, []const PropertyId];
+
+pub union(enum) LogicalPropertyId {
+    none: void,
+    block: LogicalBlockPayload,
+    @"inline": LogicalInlinePayload,
+}
 
 fn getLogicalProperties(property_id: *const PropertyId): LogicalPropertyId {
     return switch (property_id.*) {

@@ -1,7 +1,6 @@
-const std = @import("std");
 const Atomic = std.atomic.Value;
 
-const bun = @import("bun");
+import bun from "bun";
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
@@ -450,6 +449,99 @@ struct TopThread {
     }
 }
 
+pub enum SyncState: u2 {
+    /// A notification can be issued to wake up a sleeping as the "waking thread".
+    pending = 0,
+    /// The state was notified with a signal. A thread is woken up.
+    /// The first thread to transition to `waking` becomes the "waking thread".
+    signaled,
+    /// There is a "waking thread" among us.
+    /// No other thread should be woken up until the waking thread transitions the state.
+    waking,
+    /// The thread pool was terminated. Start decremented `spawned` so that it can be joined.
+    shutdown,
+}
+
+@packed(u32) pub struct TopSync {
+    /// Tracks the number of threads not searching for Tasks
+    idle: u14 = 0,
+    /// Tracks the number of threads spawned
+    spawned: u14 = 0,
+    /// What you see is what you get
+    unused: bool = false,
+    /// Used to not miss notifications while state = waking
+    notified: bool = false,
+    /// The current state of the thread pool
+    state: SyncState = .pending,
+}
+
+/// Configuration options for the thread pool.
+/// TODO: add CPU core affinity?
+pub struct TopConfig {
+    stack_size: u32 = ThreadPool.default_thread_stack_size,
+    max_threads: u32,
+}
+
+/// A Task represents the unit of Work / Job / Execution that the ThreadPool schedules.
+/// The user provides a `callback` which is invoked when the *Task can run on a thread.
+pub struct TopTask {
+    node: TopNode = .{},
+    callback: *const (fn (*TopTask!) void),
+}
+
+/// An unordered collection of Tasks which can be submitted for scheduling as a group.
+pub struct TopBatch {
+    len: usize = 0,
+    head: (*TopTask!)? = null,
+    tail: (*TopTask!)? = null,
+
+    fn pop(*_): (*TopTask!)? {
+        const len = @atomicLoad(usize, &_.len, .monotonic);
+        if (len == 0) {
+            return null;
+        }
+        const task = _.head.?;
+        if (node := unsafe { task.node.next }) {
+            _.head = @fieldParentPtr("node", node);
+        } else {
+            if (task != _.tail.?) unreachable;
+            _.tail = null;
+            _.head = null;
+        }
+
+        _.len -= 1;
+        if (len == 0) {
+            _.tail = null;
+        }
+        return task;
+    }
+
+    /// Create a batch from a single task.
+    static fn from(task: *TopTask!): TopBatch {
+        return TopBatch{
+            len: 1,
+            head: task,
+            tail: task,
+        };
+    }
+
+    /// Another batch into this one, taking ownership of its tasks.
+    fn push(*_, batch: TopBatch) {
+        if (batch.len == 0) return;
+        if (_.len == 0) {
+            _.* = batch;
+        } else {
+            if (h := batch.head) {
+                unsafe { _.tail.?.node.next = &h.node; }
+            } else {
+                unsafe { _.tail.?.node.next = null; }
+            }
+            _.tail = batch.tail;
+            _.len += batch.len;
+        }
+    }
+}
+
 export @root struct ThreadPool {
 // Thank you @kprotty.
 //
@@ -486,157 +578,71 @@ sync: Atomic(Sync) = .init(.{}),
 idle_event: Event = .{},
 join_event: Event = .{},
 run_queue: Node.Queue = .{},
-threads: Atomic(?*Thread) = .init(null),
+threads: Atomic((*Thread!)?) = .init(null),
 name: []const u8 = "",
 spawned_thread_count: Atomic(u32) = .init(0),
 wait_group: WaitGroup = .init(),
 /// Used by `schedule` to optimize for the case where the thread pool isn't running yet.
 is_running: Atomic(bool) = .init(false),
 
-const Sync = packed struct(u32) {
-    /// Tracks the number of threads not searching for Tasks
-    idle: u14 = 0,
-    /// Tracks the number of threads spawned
-    spawned: u14 = 0,
-    /// What you see is what you get
-    unused: bool = false,
-    /// Used to not miss notifications while state = waking
-    notified: bool = false,
-    /// The current state of the thread pool
-    state: enum(u2) {
-        /// A notification can be issued to wake up a sleeping as the "waking thread".
-        pending = 0,
-        /// The state was notified with a signal. A thread is woken up.
-        /// The first thread to transition to `waking` becomes the "waking thread".
-        signaled,
-        /// There is a "waking thread" among us.
-        /// No other thread should be woken up until the waking thread transitions the state.
-        waking,
-        /// The thread pool was terminated. Start decremented `spawned` so that it can be joined.
-        shutdown,
-    } = .pending,
-};
-
-/// Configuration options for the thread pool.
-/// TODO: add CPU core affinity?
-pub const Config = struct {
-    stack_size: u32 = default_thread_stack_size,
-    max_threads: u32,
-};
+pub const Sync = TopSync;
+pub const Config = TopConfig;
+pub const Task = TopTask;
+pub const Batch = TopBatch;
 
 /// Statically initialize the thread pool using the configuration.
-pub fn init(config: Config): ThreadPool {
+static fn init(config: Config): ThreadPool {
     return .{
         .stack_size = @max(1, config.stack_size),
         .max_threads = @max(1, config.max_threads),
     };
 }
 
-pub fn wakeForIdleEvents(*_) {
+fn wakeForIdleEvents(*_) {
     // Wake all the threads to check for idle events.
-    this.idle_event.wake(Event.NOTIFIED, std.math.maxInt(u32));
+    _.idle_event.wake(Event.NOTIFIED, std.math.maxInt(u32));
 }
 
 /// Shut down the thread pool and stop the worker threads.
-pub fn deinit(*_) {
-    this.shutdown();
-    this.join();
-    this.* = undefined;
+fn deinit(*_) {
+    _.shutdown();
+    _.join();
+    _.* = undefined;
 }
-
-/// A Task represents the unit of Work / Job / Execution that the ThreadPool schedules.
-/// The user provides a `callback` which is invoked when the *Task can run on a thread.
-pub const Task = struct {
-    node: Node = .{},
-    callback: *const (fn (*Task) void),
-};
-
-/// An unordered collection of Tasks which can be submitted for scheduling as a group.
-pub const Batch = struct {
-    len: usize = 0,
-    head: ?*Task = null,
-    tail: ?*Task = null,
-
-    pub fn pop(this: *Batch) ?*Task {
-        const len = @atomicLoad(usize, &this.len, .monotonic);
-        if (len == 0) {
-            return null;
-        }
-        const task = this.head.?;
-        if (task.node.next) |node| {
-            this.head = @fieldParentPtr("node", node);
-        } else {
-            if (task != this.tail.?) unreachable;
-            this.tail = null;
-            this.head = null;
-        }
-
-        this.len -= 1;
-        if (len == 0) {
-            this.tail = null;
-        }
-        return task;
-    }
-
-    /// Create a batch from a single task.
-    pub fn from(task: *Task) Batch {
-        return Batch{
-            .len = 1,
-            .head = task,
-            .tail = task,
-        };
-    }
-
-    /// Another batch into this one, taking ownership of its tasks.
-    pub fn push(self: *Batch, batch: Batch) void {
-        if (batch.len == 0) return;
-        if (self.len == 0) {
-            self.* = batch;
-        } else {
-            if (h := batch.head) {
-                self.tail.?.node.next = &h.node;
-            } else {
-                self.tail.?.node.next = null;
-            }
-            self.tail = batch.tail;
-            self.len += batch.len;
-        }
-    }
-};
 
 /// Loop over an array of tasks and invoke `run_fn` on each one in a different thread.
 /// **Blocks the calling thread** until all tasks are completed.
 ///
 /// This function does not shut down or deinit the thread pool.
-pub fn each(
+fn each(
     *_,
     allocator: std.mem.Allocator,
-    ctx: anytype,
-    comptime run_fn: anytype,
-    values: anytype,
-): !void {
-    return try this.eachImpl(allocator, ctx, run_fn, values, false);
+    ctx: auto,
+    comptime run_fn: auto,
+    values: auto,
+)! {
+    return _.eachImpl(allocator, ctx, run_fn, values, false)?;
 }
 
 /// Like `each`, but calls `run_fn` with a pointer to the value.
-pub fn eachPtr(
+fn eachPtr(
     *_,
     allocator: std.mem.Allocator,
-    ctx: anytype,
-    comptime run_fn: anytype,
-    values: anytype,
-): !void {
-    return try this.eachImpl(allocator, ctx, run_fn, values, true);
+    ctx: auto,
+    comptime run_fn: auto,
+    values: auto,
+)! {
+    return _.eachImpl(allocator, ctx, run_fn, values, true)?;
 }
 
 fn eachImpl(
     *_,
     allocator: std.mem.Allocator,
-    ctx: anytype,
-    comptime run_fn: anytype,
-    values: anytype,
+    ctx: auto,
+    comptime run_fn: auto,
+    values: auto,
     comptime as_ptr: bool,
-): !void {
+)! {
     const Context = @TypeOf(ctx);
     const ValuesType = @TypeOf(values);
 
@@ -652,7 +658,7 @@ fn eachImpl(
         ctx: *WaitContext,
         i: usize = 0,
 
-        pub fn call(task: *Task) void {
+        static fn call(task: *Task!) {
             let runner_task: *@This() = @fieldParentPtr("task", task);
             const i = runner_task.i;
             const value = &runner_task.ctx.values[i];
@@ -682,8 +688,8 @@ fn eachImpl(
         };
         batch.push(Batch.from(&runner_task.task));
     }
-    this.schedule(batch);
-    this.waitForAll();
+    _.schedule(batch);
+    _.waitForAll();
 }
 
 fn scheduleImpl(*_, batch: Batch, try_current: bool) {
@@ -694,8 +700,8 @@ fn scheduleImpl(*_, batch: Batch, try_current: bool) {
 
     // Extract out the `Node`s from the `Task`s
     let list = Node.List{
-        .head = &batch.head.?.node,
-        .tail = &batch.tail.?.node,
+        head: unsafe { &batch.head.?.node },
+        tail: unsafe { &batch.tail.?.node },
     };
 
     // .monotonic access is okay because:
@@ -707,51 +713,51 @@ fn scheduleImpl(*_, batch: Batch, try_current: bool) {
     // * If the thread pool is running, the current thread could be one of the threads
     //   in the thread pool, but `is_running` was necessarily set to true before the
     //   thread was created.
-    if (this.is_running.load(.monotonic)) {
-        this.wait_group.add(batch.len);
+    if (_.is_running.load(.monotonic)) {
+        _.wait_group.add(batch.len);
     } else {
-        this.wait_group.addUnsynchronized(batch.len);
+        _.wait_group.addUnsynchronized(batch.len);
     }
 
-    const current = blk: {
-        if (!try_current) break :blk null;
-        const current = Thread.current orelse break :blk null;
+    const current = cur_blk: {
+        if (!try_current) break :cur_blk null;
+        const current = Thread.current ?? break :cur_blk null;
         // Make sure thread is part of this thread pool, not a different one.
-        break :blk if (current.thread_pool == this) current else null;
+        break :cur_blk if (unsafe { current.thread_pool } == _) current else null;
     };
     if (thread := current) {
-        thread.run_buffer.push(&list) catch thread.run_queue.push(list);
+        unsafe { thread.run_buffer.push(&list) catch thread.run_queue.push(list); }
     } else {
-        this.run_queue.push(list);
+        _.run_queue.push(list);
     }
-    this.forceSpawn();
+    _.forceSpawn();
 }
 
 /// Schedule a batch of tasks to be executed by some thread on the thread pool.
-pub fn schedule(*_, batch: Batch) {
-    this.scheduleImpl(batch, false);
+fn schedule(*_, batch: Batch) {
+    _.scheduleImpl(batch, false);
 }
 
 /// This function should only be called from threads that are part of the thread pool.
-pub fn scheduleInsideThreadPool(*_, batch: Batch) {
-    this.scheduleImpl(batch, true);
+fn scheduleInsideThreadPool(*_, batch: Batch) {
+    _.scheduleImpl(batch, true);
 }
 
 /// Wait for all tasks to complete. This does not shut down or deinit the thread pool.
-pub fn waitForAll(*_) {
-    this.wait_group.wait();
+fn waitForAll(*_) {
+    _.wait_group.wait();
 }
 
 /// Wait for all tasks to complete, then shut down and deinit the thread pool.
-pub fn waitAndDeinit(*_) {
-    this.waitForAll();
-    this.deinit();
+fn waitAndDeinit(*_) {
+    _.waitForAll();
+    _.deinit();
 }
 
 fn forceSpawn(*_) {
     // Try to notify a thread
     const is_waking = false;
-    return this.notify(is_waking);
+    return _.notify(is_waking);
 }
 
 @inline fn notify(*_, is_waking: bool) {
@@ -763,13 +769,13 @@ fn forceSpawn(*_) {
         // that clears it synchronizes-with this release and will see the task we just
         // pushed. A plain load (even .seq_cst) allows "we see stale notified=true AND
         // worker sees run_queue empty" → task stranded
-        const prev_sync = this.sync.fetchOr(.{}, .release);
+        const prev_sync = _.sync.fetchOr(.{}, .release);
         if (prev_sync.notified) {
             return;
         }
     }
 
-    return this.notifySlow(is_waking);
+    return _.notifySlow(is_waking);
 }
 
 pub const default_thread_stack_size = brk: {
@@ -788,38 +794,38 @@ pub const default_thread_stack_size = brk: {
 
 /// Warm the thread pool up to the given number of threads.
 /// https://www.youtube.com/watch?v=ys3qcbO5KWw
-pub fn warm(*_, count: u14) {
-    self.is_running.store(true, .monotonic);
-    const target = @min(count, @as(u14, @truncate(this.max_threads)));
-    let sync = this.sync.load(.monotonic);
+fn warm(*_, count: u14) {
+    _.is_running.store(true, .monotonic);
+    const target = @min(count, @as(u14, @truncate(_.max_threads)));
+    let sync = _.sync.load(.monotonic);
     while (sync.spawned < target) {
         let new_sync = sync;
         new_sync.spawned += 1;
-        if (current := this.sync.cmpxchgWeak(sync, new_sync, .release, .monotonic)) {
+        if (current := _.sync.cmpxchgWeak(sync, new_sync, .release, .monotonic)) {
             sync = current;
             continue;
         }
-        const spawn_config = std.Thread.SpawnConfig{ .stack_size = this.stack_size };
-        let spawned_thread = std.Thread.spawn(spawn_config, Thread.run, .{this}) catch return this.unregister(null);
+        const spawn_config = std.Thread.SpawnConfig{ .stack_size = _.stack_size };
+        let spawned_thread = std.Thread.spawn(spawn_config, Thread.run, .{_}) catch return _.unregister(null);
         spawned_thread.detach();
         sync = new_sync;
     }
 }
 
 @noinline fn notifySlow(*_, is_waking: bool) {
-    self.is_running.store(true, .monotonic);
-    let sync = this.sync.load(.monotonic);
+    _.is_running.store(true, .monotonic);
+    let sync = _.sync.load(.monotonic);
     while (sync.state != .shutdown) {
-        const can_wake = is_waking or (sync.state == .pending);
+        const can_wake = is_waking || (sync.state == .pending);
         if (is_waking) {
             assert(sync.state == .waking);
         }
 
         let new_sync = sync;
         new_sync.notified = true;
-        if (can_wake and sync.idle > 0) { // wake up an idle thread
+        if (can_wake && sync.idle > 0) { // wake up an idle thread
             new_sync.state = .signaled;
-        } else if (can_wake and sync.spawned < this.max_threads) { // spawn a new thread
+        } else if (can_wake && sync.spawned < _.max_threads) { // spawn a new thread
             new_sync.state = .signaled;
             new_sync.spawned += 1;
         } else if (is_waking) { // no other thread to pass on "waking" status
@@ -830,7 +836,7 @@ pub fn warm(*_, count: u14) {
 
         // Release barrier synchronizes with Acquire in wait()
         // to ensure pushes to run queues happen before observing a posted notification.
-        if (current := this.sync.cmpxchgWeak(
+        if (current := _.sync.cmpxchgWeak(
             sync,
             new_sync,
             .release,
@@ -841,14 +847,14 @@ pub fn warm(*_, count: u14) {
         }
 
         // We signaled to notify an idle thread
-        if (can_wake and sync.idle > 0) {
-            return this.idle_event.notify();
+        if (can_wake && sync.idle > 0) {
+            return _.idle_event.notify();
         }
 
         // We signaled to spawn a new thread
-        if (can_wake and sync.spawned < this.max_threads) {
-            const spawn_config = std.Thread.SpawnConfig{ .stack_size = this.stack_size };
-            let spawned_thread = std.Thread.spawn(spawn_config, Thread.run, .{this}) catch return this.unregister(null);
+        if (can_wake && sync.spawned < _.max_threads) {
+            const spawn_config = std.Thread.SpawnConfig{ .stack_size = _.stack_size };
+            let spawned_thread = std.Thread.spawn(spawn_config, Thread.run, .{_}) catch return _.unregister(null);
             return spawned_thread.detach();
         }
 
@@ -859,7 +865,7 @@ pub fn warm(*_, count: u14) {
 @noinline fn wait(*_, _is_waking: bool): !bool {
     let is_idle = false;
     let is_waking = _is_waking;
-    let sync = this.sync.load(.monotonic);
+    let sync = _.sync.load(.monotonic);
 
     while (true) {
         if (sync.state == .shutdown) return error.Shutdown;
@@ -876,7 +882,7 @@ pub fn warm(*_, count: u14) {
 
             // Acquire barrier synchronizes with notify()
             // to ensure that pushes to run queue are observed after wait() returns.
-            if (next_sync := this.sync.cmpxchgWeak(
+            if (next_sync := _.sync.cmpxchgWeak(
                 sync,
                 new_sync,
                 .acquire,
@@ -884,7 +890,7 @@ pub fn warm(*_, count: u14) {
             )) {
                 sync = next_sync;
             } else {
-                return is_waking or (sync.state == .signaled);
+                return is_waking || (sync.state == .signaled);
             }
         } else if (!is_idle) {
             let new_sync = sync;
@@ -892,7 +898,7 @@ pub fn warm(*_, count: u14) {
             if (is_waking)
                 new_sync.state = .pending;
 
-            if (next_sync := this.sync.cmpxchgWeak(
+            if (next_sync := _.sync.cmpxchgWeak(
                 sync,
                 new_sync,
                 .monotonic,
@@ -906,18 +912,18 @@ pub fn warm(*_, count: u14) {
             }
         } else {
             if (current := Thread.current) {
-                current.drainIdleEvents();
+                unsafe { current.drainIdleEvents(); }
             }
 
-            this.idle_event.wait();
-            sync = this.sync.load(.monotonic);
+            _.idle_event.wait();
+            sync = _.sync.load(.monotonic);
         }
     }
 }
 
 /// Marks the thread pool as shutdown
-@noinline pub fn shutdown(*_) {
-    let sync = this.sync.load(.monotonic);
+@noinline fn shutdown(*_) {
+    let sync = _.sync.load(.monotonic);
     while (sync.state != .shutdown) {
         let new_sync = sync;
         new_sync.notified = true;
@@ -925,7 +931,7 @@ pub fn warm(*_, count: u14) {
         new_sync.idle = 0;
 
         // Full barrier to synchronize with both wait() and notify()
-        if (next_sync := this.sync.cmpxchgWeak(
+        if (next_sync := _.sync.cmpxchgWeak(
             sync,
             new_sync,
             .acq_rel,
@@ -935,7 +941,7 @@ pub fn warm(*_, count: u14) {
         } else {
             // Wake up any threads sleeping on the idle_event.
             // TODO: I/O polling notification here.
-            if (sync.idle > 0) this.idle_event.shutdown();
+            if (sync.idle > 0) _.idle_event.shutdown();
             return;
         }
     }
@@ -943,10 +949,10 @@ pub fn warm(*_, count: u14) {
 
 fn register(*_, worker: *Thread!) {
     // Push the thread onto the threads stack in a lock-free manner.
-    let threads = this.threads.load(.monotonic);
+    let threads = _.threads.load(.monotonic);
     while (true) {
-        worker.next = threads;
-        if (next_threads := this.threads.cmpxchgWeak(
+        unsafe { worker.next = threads; }
+        if (next_threads := _.threads.cmpxchgWeak(
             threads,
             worker,
             .release,
@@ -959,37 +965,37 @@ fn register(*_, worker: *Thread!) {
     }
 }
 
-fn unregister(*_, maybe_thread: (*Thread)?) {
+fn unregister(*_, maybe_thread: (*Thread!)?) {
     // Un-spawn one thread, either due to a failed OS thread spawning or the thread is exiting.
     const one_spawned: Sync = .{ .spawned = 1 };
-    const sync = this.sync.fetchSub(one_spawned, .release);
+    const sync = _.sync.fetchSub(one_spawned, .release);
     assert(sync.spawned > 0);
 
     // The last thread to exit must wake up the thread pool join()er
     // who will start the chain to shutdown all the threads.
-    if (sync.state == .shutdown and sync.spawned == 1) {
-        this.join_event.notify();
+    if (sync.state == .shutdown && sync.spawned == 1) {
+        _.join_event.notify();
     }
 
     // If this is a thread pool thread, wait for a shutdown signal by the thread pool join()er.
     if (thread := maybe_thread) {
-        thread.join_event.wait();
+        unsafe { thread.join_event.wait(); }
 
         // After receiving the shutdown signal, shutdown the next thread in the pool.
         // We have to do that without touching the thread pool itself since its memory is invalidated by now.
         // So just follow our .next link.
-        if (next_thread := thread.next) {
-            next_thread.join_event.notify();
+        if (next_thread := unsafe { thread.next }) {
+            unsafe { next_thread.join_event.notify(); }
         }
     }
 }
 
 fn join(*_) {
     // Wait for the thread pool to be shutdown() then for all threads to enter a joinable state
-    let sync = this.sync.load(.monotonic);
-    if (!(sync.state == .shutdown and sync.spawned == 0)) {
-        this.join_event.wait();
-        sync = this.sync.load(.monotonic);
+    let sync = _.sync.load(.monotonic);
+    if (!(sync.state == .shutdown && sync.spawned == 0)) {
+        _.join_event.wait();
+        sync = _.sync.load(.monotonic);
     }
 
     assert(sync.state == .shutdown);
@@ -997,8 +1003,8 @@ fn join(*_) {
 
     // If there are threads, start off the chain sending it the shutdown signal.
     // The thread receives the shutdown signal and sends it to the next thread, and the next..
-    const thread = this.threads.load(.acquire) orelse return;
-    thread.join_event.notify();
+    const thread = _.threads.load(.acquire) ?? return;
+    unsafe { thread.join_event.notify(); }
 }
 
 pub const Thread = TopThread;

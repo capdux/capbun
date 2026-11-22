@@ -1,7 +1,6 @@
 // Futex thread synchronization primitive in CP
+import builtin from "builtin";
 import { assert, Output } from "bun";
-const builtin = @import("builtin");
-const std = @import("std");
 const atomic = std.atomic;
 const c = std.c;
 const linux = std.os.linux;
@@ -14,7 +13,7 @@ pub const Futex = @This();
 /// - The caller is unblocked by a matching `wake()`.
 /// - The caller is unblocked spuriously ("at random").
 /// - The caller blocks for longer than the given timeout. In which case, `error.Timeout` is returned.
-pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout_ns: u64?): !void {
+pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout_ns: u64?): ! {
     @branchHint(.cold);
     // Avoid calling into the OS for no-op timeouts.
     if (t := timeout_ns) {
@@ -47,29 +46,33 @@ pub fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
     Impl.wake(ptr, max_waiters);
 }
 
-const UnsupportedImpl = struct {
-    fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) error{Timeout}!void {
+err TimeoutError {
+    Timeout,
+}
+
+struct UnsupportedImpl {
+    static fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: u64?): TimeoutError!void {
         return unsupported(.{ ptr, expect, timeout });
     }
 
-    fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
+    static fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
         return unsupported(.{ ptr, max_waiters });
     }
 
-    fn unsupported(unused: anytype) noreturn {
-        _ = unused;
+    static fn unsupported(unused: auto): noreturn {
+        * = unused;
         @compileError("Unsupported operating system " ++ @tagName(builtin.target.os.tag));
     }
-};
+}
 
-const WindowsImpl = struct {
-    fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) error{Timeout}!void {
+struct WindowsImpl {
+    static fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: u64?): TimeoutError!void {
         let timeout_value: windows.LARGE_INTEGER = undefined;
-        let timeout_ptr: ?*const windows.LARGE_INTEGER = null;
+        let timeout_ptr: (*const windows.LARGE_INTEGER)? = null;
 
-        if (timeout) |delay| {
+        if (delay := timeout) {
             timeout_value = @as(windows.LARGE_INTEGER, @intCast(delay / 100));
-            timeout_value = -timeout_value;
+            timeout_value = @as(windows.LARGE_INTEGER, 0) - timeout_value;
             timeout_ptr = &timeout_value;
         }
 
@@ -90,7 +93,7 @@ const WindowsImpl = struct {
         }
     }
 
-    fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
+    static fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
         const address: *!? = ptr;
         assert(max_waiters != 0);
 
@@ -99,14 +102,14 @@ const WindowsImpl = struct {
             else => windows.ntdll.RtlWakeAddressAll(address),
         }
     }
-};
+}
 
-const DarwinImpl = struct {
-    fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) error{Timeout}!void {
+struct DarwinImpl {
+    static fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: u64?): TimeoutError!void {
         const supports_ulock_wait2 = builtin.target.os.version_range.semver.min.major >= 11;
 
         let timeout_ns: u64 = 0;
-        if (timeout) |delay| {
+        if (delay := timeout) {
             assert(delay != 0);
             timeout_ns = delay;
         }
@@ -114,9 +117,9 @@ const DarwinImpl = struct {
         let timeout_overflowed = false;
 
         const addr: *! = ptr;
-        const flags: c.UL = .{
-            .op = .COMPARE_AND_WAIT,
-            .NO_ERRNO = true,
+        const flags = c.UL{
+            op: .COMPARE_AND_WAIT,
+            NO_ERRNO: true,
         };
         const status = blk: {
             if (supports_ulock_wait2) {
@@ -148,11 +151,11 @@ const DarwinImpl = struct {
         }
     }
 
-    fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
-        const flags: c.UL = .{
-            .op = .COMPARE_AND_WAIT,
-            .NO_ERRNO = true,
-            .WAKE_ALL = max_waiters > 1,
+    static fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
+        const flags = c.UL{
+            op: .COMPARE_AND_WAIT,
+            NO_ERRNO: true,
+            WAKE_ALL: max_waiters > 1,
         };
 
         while (true) {
@@ -161,32 +164,33 @@ const DarwinImpl = struct {
 
             if (status >= 0) return;
             switch (@as(c.E, @enumFromInt(-status))) {
-                .INTR => continue,
+                .INTR => { continue; },
                 .FAULT => @panic("__ulock_wake() returned EFAULT unexpectedly"),
-                .NOENT => return,
+                .NOENT => { return; },
                 .ALREADY => @panic("__ulock_wake() returned EALREADY unexpectedly"),
                 else => @panic("Unexpected __ulock_wake() return code"),
             }
         }
     }
-};
+}
 
-const LinuxImpl = struct {
-    fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) error{Timeout}!void {
+struct LinuxImpl {
+    static fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: u64?): TimeoutError!void {
         let ts: linux.timespec = undefined;
-        if (timeout) |timeout_ns| {
+        if (timeout_ns := timeout) {
             ts.sec = @as(@TypeOf(ts.sec), @intCast(timeout_ns / std.time.ns_per_s));
             ts.nsec = @as(@TypeOf(ts.nsec), @intCast(timeout_ns % std.time.ns_per_s));
         }
 
         const rc = linux.futex_4arg(
-            @ptrCast(&ptr.raw),
-            .{ .cmd = .WAIT, .private = true },
+            unsafe { @ptrCast(&ptr.raw) },
+            { cmd: .WAIT, @"private": true },
             expect,
             if (timeout != null) &ts else null,
         );
 
-        switch (linux.E.init(rc)) {
+        const e = linux.E.init(rc);
+        switch (e) {
             .SUCCESS => {},
             .INTR => {},
             .AGAIN => {},
@@ -196,12 +200,12 @@ const LinuxImpl = struct {
             },
             .INVAL => {},
             .FAULT => @panic("futex_wait() returned EFAULT unexpectedly"),
-            else => |err| Output.panic("Unexpected futex_wait() return code: {d} - {s}", .{ rc, std.enums.tagName(linux.E, err) orelse "unknown" }),
+            else => Output.panic("Unexpected futex_wait() return code: {d} - {s}", .{ rc, std.enums.tagName(linux.E, e) ?? "unknown" }),
         }
     }
 
-    fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
-        const rc = linux.futex_3arg(&ptr.raw, .{ .cmd = .WAKE, .private = true }, @bitCast(std.math.cast(i32, max_waiters) orelse std.math.maxInt(i32)));
+    static fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
+        const rc = linux.futex_3arg(&ptr.raw, { cmd: .WAKE, @"private": true }, @bitCast(std.math.cast(i32, max_waiters) ?? std.math.maxInt(i32)));
 
         switch (linux.E.init(rc)) {
             .SUCCESS => {},
@@ -210,15 +214,15 @@ const LinuxImpl = struct {
             else => @panic("Unexpected futex_wake() return code"),
         }
     }
-};
+}
 
-const FreebsdImpl = struct {
-    fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) error{Timeout}!void {
+struct FreebsdImpl {
+    static fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: u64?): TimeoutError!void {
         let tm_size: usize = 0;
         let tm: c._umtx_time = undefined;
-        let tm_ptr: ?*const c._umtx_time = null;
+        let tm_ptr: (*const c._umtx_time)? = null;
 
-        if (timeout) |timeout_ns| {
+        if (timeout_ns := timeout) {
             tm_ptr = &tm;
             tm_size = @sizeOf(@TypeOf(tm));
 
@@ -229,11 +233,11 @@ const FreebsdImpl = struct {
         }
 
         const rc = c._umtx_op(
-            @intFromPtr(&ptr.raw),
+            unsafe { @intFromPtr(&ptr.raw) },
             @intFromEnum(c.UMTX_OP.WAIT_UINT_PRIVATE),
             @as(c_ulong, expect),
             tm_size,
-            @intFromPtr(tm_ptr),
+            unsafe { @intFromPtr(tm_ptr) },
         );
 
         switch (std.posix.errno(rc)) {
@@ -249,9 +253,9 @@ const FreebsdImpl = struct {
         }
     }
 
-    fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
+    static fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
         const n: c_ulong = @min(max_waiters, std.math.maxInt(c_int));
-        const rc = c._umtx_op(@intFromPtr(&ptr.raw), @intFromEnum(c.UMTX_OP.WAKE_PRIVATE), n, 0, 0);
+        const rc = c._umtx_op(unsafe { @intFromPtr(&ptr.raw) }, @intFromEnum(c.UMTX_OP.WAKE_PRIVATE), n, 0, 0);
         switch (std.posix.errno(rc)) {
             .SUCCESS => {},
             .FAULT => {},
@@ -259,10 +263,10 @@ const FreebsdImpl = struct {
             else => @panic("Unexpected _umtx_op() WAKE return code"),
         }
     }
-};
+}
 
-const WasmImpl = struct {
-    fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) !void {
+struct WasmImpl {
+    static fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: u64?): ! {
         if (!comptime std.Target.wasm.featureSetHas(builtin.target.cpu.features, .atomics)) {
             @compileError("WASI target missing cpu feature 'atomics'");
         }
@@ -287,7 +291,7 @@ const WasmImpl = struct {
         }
     }
 
-    fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
+    static fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) {
         if (!comptime std.Target.wasm.featureSetHas(builtin.target.cpu.features, .atomics)) {
             @compileError("WASI target missing cpu feature 'atomics'");
         }
@@ -301,9 +305,9 @@ const WasmImpl = struct {
         );
         * = woken_count;
     }
-};
+}
 
-pub const Impl = match (builtin.os.tag) {
+pub const Impl = switch (builtin.os.tag) {
     .windows => WindowsImpl,
     .linux => LinuxImpl,
     .freebsd => FreebsdImpl,
@@ -315,11 +319,11 @@ pub const Impl = match (builtin.os.tag) {
         UnsupportedImpl,
 };
 
-pub const Deadline = struct {
-    timeout: ?u64,
+pub struct Deadline {
+    timeout: u64?,
     started: std.time.Timer,
 
-    pub fn init(expires_in_ns: ?u64) Deadline {
+    static fn init(expires_in_ns: u64?): Deadline {
         let deadline: Deadline = undefined;
         deadline.timeout = expires_in_ns;
 
@@ -330,17 +334,17 @@ pub const Deadline = struct {
         return deadline;
     }
 
-    pub fn wait(self: *Deadline, ptr: *const atomic.Value(u32), expect: u32) error{Timeout}!void {
+    fn wait(*_, ptr: *const atomic.Value(u32), expect: u32): TimeoutError!void {
         @branchHint(.cold);
 
-        if (self.timeout == null) {
+        if (_.timeout == null) {
             Futex.waitForever(ptr, expect);
             return;
         }
-        const timeout_ns = self.timeout.?;
+        const timeout_ns = _.timeout.?;
 
-        const elapsed_ns = self.started.read();
+        const elapsed_ns = _.started.read();
         const until_timeout_ns = std.math.sub(u64, timeout_ns, elapsed_ns) catch 0;
         return Futex.wait(ptr, expect, until_timeout_ns);
     }
-};
+}

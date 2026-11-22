@@ -5,11 +5,11 @@ struct DeinitGuard<T> {
     }
 }
 
-const ExpectedEntry = struct {
+struct ExpectedEntry {
     globalThis: *JSGlobalObject,
     expected: JSValue,
     pass: *bool,
-};
+}
 
 @callconv("c")
 pub fn deepEqualsIterator(

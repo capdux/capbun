@@ -216,6 +216,25 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const path_watcher = @import("./path_watcher.zig");
 pub const bun = @import("bun");
+pub const CFRunLoopSourceContext = extern struct {
+    version: CFIndex = 0,
+    info: *anyopaque,
+    retain: ?*anyopaque = null,
+    release: ?*anyopaque = null,
+    copyDescription: ?*anyopaque = null,
+    equal: ?*anyopaque = null,
+    hash: ?*anyopaque = null,
+    schedule: ?*anyopaque = null,
+    cancel: ?*anyopaque = null,
+    perform: CFRunLoopPerformFn,
+};
+
+pub const FSEventStreamContext = extern struct {
+    version: CFIndex = 0,
+    info: ?*anyopaque = null,
+    pad: [3]?*anyopaque = .{ null, null, null },
+};
+
 pub const MutexGuard = struct {
     ptr: *Mutex,
     __cp_dropped: bool = false,
@@ -723,23 +742,6 @@ pub const FSEventStreamEventId = u64;
 pub const CFStringEncoding = c_uint;
 pub const FSEventStreamCallback = *const fn(FSEventStreamRef, ?*anyopaque, usize, ?*anyopaque, *FSEventStreamEventFlags, *FSEventStreamEventId) callconv(.c) void;
 pub const CFRunLoopPerformFn = *const fn(?*anyopaque) callconv(.c) void;
-pub const CFRunLoopSourceContext = extern struct {
-    version: CFIndex = 0,
-    info: *anyopaque,
-    retain: ?*anyopaque = null,
-    release: ?*anyopaque = null,
-    copyDescription: ?*anyopaque = null,
-    equal: ?*anyopaque = null,
-    hash: ?*anyopaque = null,
-    schedule: ?*anyopaque = null,
-    cancel: ?*anyopaque = null,
-    perform: CFRunLoopPerformFn,
-};
-pub const FSEventStreamContext = extern struct {
-    version: CFIndex = 0,
-    info: ?*anyopaque = null,
-    pad: [3]?*anyopaque = .{ null, null, null },
-};
 pub const kCFStringEncodingUTF8: CFStringEncoding = (if (@typeInfo(CFStringEncoding) == .@"enum") @as(CFStringEncoding, @enumFromInt(134217984)) else @as(CFStringEncoding, 134217984));
 pub const noErr: OSStatus = (if (@typeInfo(OSStatus) == .@"enum") @as(OSStatus, @enumFromInt(0)) else @as(OSStatus, 0));
 pub const kFSEventStreamCreateFlagNoDefer: c_int = 2;

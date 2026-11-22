@@ -1,3 +1,5 @@
+import bun from "bun";
+
 pub const BytecodeResult = struct { []const u8, *CachedBytecode };
 type OptU8Ptr = ([*]u8)?;
 
@@ -19,7 +21,7 @@ fn vtableFree(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize)
     * = buf;
     * = alignment;
     * = ret_addr;
-    CachedBytecode__deref(@ptrCast(ctx));
+    CachedBytecode__deref(unsafe { @ptrCast(ctx) });
 }
 
 @opaque pub struct CachedBytecode {
@@ -76,5 +78,3 @@ fn vtableFree(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ret_addr: usize)
         return allocator_.vtable == VTable;
     }
 }
-
-import bun from "bun";

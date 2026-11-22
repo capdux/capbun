@@ -46,6 +46,7 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const bun = @import("bun");
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         val: T,
@@ -59,7 +60,6 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const bun = @import("bun");
 const uws = bun.uws;
 
 pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime onBody: anytype, comptime onError: anytype) type {
@@ -68,39 +68,36 @@ pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime
     body: std.array_list.Managed(u8),
 
 pub fn init(allocator: std.mem.Allocator) @This() {
-            return .{ .body = .init(allocator) };
+            return @This(){ .body = std.array_list.Managed(u8).init(allocator) };
+    }
+
+pub fn onDataGeneric(mixin: *@This(), r: anytype, chunk: []const u8, last: bool) void {
+            const any_resp = uws.AnyResponse.init(r);
+            _ = (blk_catch_0: { break :blk_catch_0 ((mixin.onData(any_resp, chunk, last)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+                return mixin.fail(any_resp, "500 Internal Server Error");
+            }
+            return mixin.fail(any_resp, "400 Bad Request"); }); });
+    }
+
+pub fn onAborted(mixin: *@This(), _: anytype) void {
+            _ = mixin.body.clearAndFree();
+            _ = onError(@fieldParentPtr(field, mixin));
     }
 
 pub fn readBody(self: *@This(), resp: anytype) void {
             const ctx = self;
-            const Mixin = @This();
-            const Response = @TypeOf(resp);
-            const handlers = struct {
-
-pub fn onDataGeneric(mixin: *Mixin, r: Response, chunk: []const u8, last: bool) void {
-            const any_resp = uws.AnyResponse.init(r);
-            _ = (blk_catch_0: { break :blk_catch_0 ((onData(mixin, any_resp, chunk, last)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
-                return mixin.onOOM(any_resp);
-            }
-            return mixin.onInvalid(any_resp); }); });
+            _ = resp.onData(ctx, @This().onDataGeneric);
+            _ = resp.onAborted(ctx, @This().onAborted);
     }
 
-pub fn onAborted(mixin: *Mixin, _: Response) void {
-            _ = mixin.body.clearAndFree();
-            _ = onError(@fieldParentPtr(field, mixin));
-    }
-};
-            _ = resp.onData(ctx, handlers.onDataGeneric);
-            _ = resp.onAborted(ctx, handlers.onAborted);
-    }
-
-pub fn onData(ctx: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: bool) !void {
+pub fn onData(self: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: bool) !void {
+            const ctx = self;
             if (last) {
                 var body_guard = DeinitGuard(@TypeOf(ctx.body)){ .val = ctx.body };
                 _ = &body_guard;
                 var __body_guard_moved = false; _ = &__body_guard_moved;
                 defer if (!__body_guard_moved) { __body_guard_moved = true; const __T = @TypeOf(body_guard); if (@typeInfo(__T) == .optional) { if (body_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { body_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = body_guard; _drop_val.__cp_deinit(); } };
-                ctx.body = .init(ctx.body.allocator);
+                ctx.body = std.array_list.Managed(u8).init(ctx.body.allocator);
                 _ = resp.clearOnData();
                 if ((body_guard.val.items.len > 0)) {
                     _ = try body_guard.val.appendSlice(chunk);
@@ -113,28 +110,16 @@ pub fn onData(ctx: *@This(), resp: uws.AnyResponse, chunk: []const u8, last: boo
             }
     }
 
-pub fn onOOM(ctx: *@This(), r: uws.AnyResponse) void {
+pub fn fail(self: *@This(), r: uws.AnyResponse, status: []const u8) void {
+            const ctx = self;
             var body = ctx.body;
             _ = &body;
-            ctx.body = .init(ctx.body.allocator);
+            ctx.body = std.array_list.Managed(u8).init(ctx.body.allocator);
             _ = body.deinit();
             _ = r.clearAborted();
             _ = r.clearOnData();
             _ = r.clearOnWritable();
-            _ = r.writeStatus("500 Internal Server Error");
-            _ = r.endWithoutBody(false);
-            _ = onError(@fieldParentPtr(field, ctx));
-    }
-
-pub fn onInvalid(ctx: *@This(), r: uws.AnyResponse) void {
-            var body = ctx.body;
-            _ = &body;
-            ctx.body = .init(ctx.body.allocator);
-            _ = body.deinit();
-            _ = r.clearAborted();
-            _ = r.clearOnData();
-            _ = r.clearOnWritable();
-            _ = r.writeStatus("400 Bad Request");
+            _ = r.writeStatus(status);
             _ = r.endWithoutBody(false);
             _ = onError(@fieldParentPtr(field, ctx));
     }

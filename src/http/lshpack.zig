@@ -13,6 +13,14 @@ pub const lshpack_header = extern struct {
     hpack_index: u16 = 255,
 };
 
+pub const _DecodeResult = struct {
+    name: []const u8,
+    value: []const u8,
+    never_index: bool,
+    well_know: u16,
+    next: usize,
+};
+
 pub const HPACK = struct {
     self: *anyopaque,
 
@@ -53,19 +61,13 @@ pub fn release(self: *HPACK) void {
 pub fn deinit(self: *HPACK) void {
             _ = lshpack_wrapper_deinit(self);
     }
-    pub const DecodeResult = struct {
-        name: []const u8,
-        value: []const u8,
-        never_index: bool,
-        well_know: u16,
-        next: usize,
-    };
+    pub const DecodeResult = _DecodeResult;
 };
 
 pub const MallocFn = *const fn (usize) callconv(.c) ?*anyopaque;
 pub const FreeFn = *const fn (?*anyopaque) callconv(.c) void;
 const bun = @import("bun");
-pub const LSHPACK_MAX_HEADER_SIZE: usize = 65536;
+pub export const LSHPACK_MAX_HEADER_SIZE: usize = 65536;
 
 pub extern "c" fn lshpack_wrapper_init(alloc: ?MallocFn, free: ?FreeFn, capacity: usize) callconv(.c) ?*HPACK;
 

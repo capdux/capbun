@@ -59,7 +59,15 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const ConvertESMExportsForHmr = @import("./ast/ConvertESMExportsForHmr.zig");
 pub const ImportScanner = @import("./ast/ImportScanner.zig");
@@ -92,6 +100,33 @@ pub const JSXImport = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
     
     pub const Symbols = JSXImportSymbols;
+};
+
+pub const _RelocateVarsMode = enum {
+    normal,
+    for_in_or_for_of,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _JSXTagType = enum {
+    fragment,
+    tag,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const FunctionKind = enum {
+    stmt,
+    expr,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
 pub const AsyncPrefixExpression = enum(u2) {
@@ -137,6 +172,27 @@ pub const StrictModeFeature = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const AwaitOrYield = enum(u3) {
+    allow_ident,
+    allow_expr,
+    forbid_all,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const LexicalDecl = enum(u8) {
+    forbid,
+    allow_all,
+    allow_fn_inside_if,
+    allow_fn_inside_label,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const JSXTransformType = enum {
     none,
     react,
@@ -163,6 +219,13 @@ pub const ExprListLoc = struct {
 pub const DeferredImportNamespace = struct {
     namespace: LocRef,
     import_record_id: u32,
+};
+
+pub const TypeParameterFlag = packed struct(u8) {
+    allow_in_out_variance_annotations: bool = false,
+    allow_const_modifier: bool = false,
+    allow_empty_type_parameters: bool = false,
+    _: u5 = 0,
 };
 
 pub const JSXImportSymbols = struct {
@@ -251,7 +314,7 @@ if (self.createElement) |createElement| {
 }
     }
 
-pub fn runtimeImportNames(self: JSXImportSymbols, buf: *[3][]const u8) []const []const u8 {
+pub fn runtimeImportNames(self: *const JSXImportSymbols, buf: *[3][]const u8) []const []const u8 {
             var i: usize = 0;
             _ = &i;
             if ((self.jsxDEV != null)) {
@@ -275,7 +338,7 @@ pub fn runtimeImportNames(self: JSXImportSymbols, buf: *[3][]const u8) []const [
             return buf[0..i];
     }
 
-pub fn sourceImportNames(self: JSXImportSymbols) []const []const u8 {
+pub fn sourceImportNames(self: *const JSXImportSymbols) []const []const u8 {
             if ((self.createElement != null)) {
                 return (&create_element_names);
             }
@@ -288,10 +351,16 @@ pub const MacroRefData = struct {
     name: ?[]const u8 = null,
 };
 
+pub const Substitution = union(enum) {
+    success: Expr,
+    failure: Expr,
+    continue_: Expr,
+};
+
 pub const RelocateVars = struct {
     stmt: ?Stmt = null,
     ok: bool = false,
-    pub const Mode = enum { normal, for_in_or_for_of };
+    pub const Mode = _RelocateVarsMode;
 };
 
 pub const VisitArgsOpts = struct {
@@ -310,12 +379,28 @@ pub const TransposeState = struct {
     import_options: Expr = Expr.empty,
 };
 
+pub const _JSXTagData = union(_JSXTagType) {
+    fragment: u8,
+    tag: Expr,
+
+pub fn asExpr(self: _JSXTagData) ?ExprNodeIndex {
+            switch (self) {
+.tag => |tag| {
+return tag;
+},
+else => {
+return null;
+},
+}
+    }
+};
+
 pub const JSXTag = struct {
     data: Data,
     range: logger.Range,
     name: []const u8,
 
-pub fn parse(comptime P: type, p: *P) anyerror!JSXTag {
+pub fn parse(comptime P: type, p: *P) !JSXTag {
             const loc = p.lexer.loc();
             if ((p.lexer.token == .t_greater_than)) {
                 return JSXTag{ .range = logger.Range{ .loc = loc, .len = 0 }, .data = Data{ .fragment = 1 }, .name = "" };
@@ -351,27 +436,21 @@ pub fn parse(comptime P: type, p: *P) anyerror!JSXTag {
             }
             return JSXTag{ .data = Data{ .tag = tag }, .range = tag_range, .name = name };
     }
-    pub const TagType = enum { fragment, tag };
-    pub const Data = union(TagType) {
-        fragment: u8,
-        tag: Expr,
-    
-    pub fn asExpr(d: *const Data) ?ExprNodeIndex {
-                switch (d.*) {
-    .tag => |tag| {
-    return tag;
-    },
-    else => {
-    return null;
-    },
-    }
-        }
-    };
+    pub const TagType = _JSXTagType;
+    pub const Data = _JSXTagData;
 };
 
 pub const ExprOrLetStmt = struct {
     stmt_or_expr: js_ast.StmtOrExpr,
     decls: []G.Decl = &.{},
+};
+
+pub const IdentifierOpts = packed struct(u8) {
+    assign_target: js_ast.AssignTarget = js_ast.AssignTarget.none,
+    is_delete_target: bool = false,
+    was_originally_identifier: bool = false,
+    is_call_target: bool = false,
+    _padding: u3 = 0,
 };
 
 pub const ExprIn = struct {
@@ -579,6 +658,17 @@ pub const PropertyOpts = struct {
     has_class_decorators: bool = false,
 };
 
+pub const _ScanPassResultParsePassSymbolUse = struct {
+    ref: Ref,
+    used: bool = false,
+    import_record_index: u32,
+};
+
+pub const _ScanPassResultNamespaceCounter = struct {
+    count: u16,
+    import_record_index: u32,
+};
+
 pub const ScanPassResult = struct {
     import_records: ListManaged(ImportRecord),
     named_imports: js_ast.Ast.NamedImports,
@@ -590,22 +680,21 @@ pub fn init(allocator: Allocator) ScanPassResult {
             return .{ .import_records = ListManaged(ImportRecord).init(allocator), .named_imports = .{}, .used_symbols = ParsePassSymbolUsageMap.init(allocator), .import_records_to_keep = ListManaged(u32).init(allocator), .approximate_newline_count = 0 };
     }
 
-pub fn reset(scan_pass: *ScanPassResult) void {
-            _ = scan_pass.named_imports.clearRetainingCapacity();
-            _ = scan_pass.import_records.clearRetainingCapacity();
-            _ = scan_pass.used_symbols.clearRetainingCapacity();
-            scan_pass.approximate_newline_count = 0;
+pub fn reset(self: *ScanPassResult) void {
+            _ = self.named_imports.clearRetainingCapacity();
+            _ = self.import_records.clearRetainingCapacity();
+            _ = self.used_symbols.clearRetainingCapacity();
+            self.approximate_newline_count = 0;
     }
-    pub const ParsePassSymbolUse = struct {
-        ref: Ref,
-        used: bool = false,
-        import_record_index: u32,
-    };
-    pub const NamespaceCounter = struct {
-        count: u16,
-        import_record_index: u32,
-    };
+    pub const ParsePassSymbolUse = _ScanPassResultParsePassSymbolUse;
+    pub const NamespaceCounter = _ScanPassResultNamespaceCounter;
     pub const ParsePassSymbolUsageMap = bun.StringArrayHashMap(ParsePassSymbolUse);
+};
+
+pub const FindLabelSymbolResult = struct {
+    ref: Ref,
+    is_loop: bool,
+    found: bool = false,
 };
 
 pub const FindSymbolResult = struct {
@@ -712,7 +801,7 @@ pub const Prefill = struct {
 };
 
 pub const ReactJSX = struct {
-    hoisted_elements: std.ArrayHashMapUnmanaged(Ref,G.Decl,bun.ArrayIdentityContext,false) = .{},
+    hoisted_elements: std.ArrayHashMapUnmanaged(Ref, G.Decl, bun.ArrayIdentityContext, false) = .{},
 };
 
 pub const ImportOrRequireScanResults = struct {
@@ -722,7 +811,7 @@ pub const ImportOrRequireScanResults = struct {
 pub const MacroState = struct {
     refs: MacroRefs,
     prepend_stmts: *ListManaged(Stmt) = undefined,
-    imports: std.AutoArrayHashMap(i32,Ref),
+    imports: std.AutoArrayHashMap(i32, Ref),
 
 pub fn init(allocator: Allocator) MacroState {
             return MacroState{ .refs = MacroRefs.init(allocator), .prepend_stmts = undefined, .imports = std.AutoArrayHashMap(i32, Ref).init(allocator) };
@@ -749,6 +838,12 @@ pub const Jest = struct {
 pub const DeferredArrowArgErrors = struct {
     invalid_expr_await: logger.Range = logger.Range.None,
     invalid_expr_yield: logger.Range = logger.Range.None,
+};
+
+pub const _ReactRefreshHookContext = struct {
+    hasher: std.hash.Wyhash,
+    signature_cb: Ref,
+    user_hooks: std.AutoArrayHashMapUnmanaged(Ref, Expr),
 };
 
 pub const ReactRefresh = struct {
@@ -778,11 +873,7 @@ else => false,
 }));
     }
     pub const HookContextPtr = ?HookContext;
-    pub const HookContext = struct {
-        hasher: std.hash.Wyhash,
-        signature_cb: Ref,
-        user_hooks: std.AutoArrayHashMapUnmanaged(Ref,Expr),
-    };
+    pub const HookContext = _ReactRefreshHookContext;
     pub const built_in_hooks = bun.ComptimeEnumMap(enum {
             useState,
             useReducer,
@@ -813,53 +904,17 @@ pub const ParseBindingOptions = struct {
 const ScopeOrderOpt = ?ScopeOrder;
 const string = []const u8;
 pub const locModuleScope = logger.Loc{ .start = -100 };
-pub const TypeParameterFlag = packed struct(u8) {
-    /// TypeScript 4.7
-    allow_in_out_variance_annotations: bool = false,
-
-    /// TypeScript 5.0
-    allow_const_modifier: bool = false,
-
-    /// Allow "<>" without any type parameters
-    allow_empty_type_parameters: bool = false,
-
-    _: u5 = 0,
-};
 const create_element_names: [1][]const u8 = .{ "createElement" };
 const empty_import_names: [0][]const u8 = undefined;
 pub const arguments_str: []const u8 = "arguments";
 pub const ScopeOrderList = std.ArrayListUnmanaged(ScopeOrderOpt);
 pub const exports_string_name: []const u8 = "exports";
 const MacroRefs = std.AutoArrayHashMap(Ref, MacroRefData);
-pub const Substitution = union(enum) {
-    success: Expr,
-    failure: Expr,
-    continue_: Expr,
-};
-pub const FunctionKind = enum { stmt, expr };
-pub const IdentifierOpts = packed struct(u8) {
-    assign_target: js_ast.AssignTarget = js_ast.AssignTarget.none,
-    is_delete_target: bool = false,
-    was_originally_identifier: bool = false,
-    is_call_target: bool = false,
-    _padding: u3 = 0,
-};
 pub const LocList = ListManaged(InvalidLoc);
 pub const StmtList = ListManaged(Stmt);
 pub const StringBoolMap = bun.StringHashMapUnmanaged(bool);
 pub const RefMap = std.HashMapUnmanaged(Ref, void, RefCtx, 80);
 pub const RefRefMap = std.HashMapUnmanaged(Ref, Ref, RefCtx, 80);
-pub const AwaitOrYield = enum(u3) {
-    allow_ident,
-    allow_expr,
-    forbid_all,
-};
-pub const FindLabelSymbolResult = struct {
-    ref: Ref,
-    is_loop: bool,
-    found: bool = false,
-};
-const LexicalDecl = enum(u8) { forbid, allow_all, allow_fn_inside_if, allow_fn_inside_label };
 pub const ImportItemForNamespaceMap = bun.StringArrayHashMap(LocRef);
 pub const JavaScriptParser = NewParser(.{});
 pub const JSXParser = NewParser(.{ .jsx = .react });

@@ -115,6 +115,33 @@ pub fn __cp_deinit(self: *StringOrBufferGuard) void {
     }
 };
 
+pub const RandomJobCtx = struct {
+    value: JSValue,
+    bytes: [*]u8,
+    offset: u32,
+    length: usize,
+    result: void = undefined,
+
+pub fn init(self: *RandomJobCtx, _: *JSGlobalObject) !void {
+            _ = self.value.protect();
+    }
+
+pub fn runTask(self: *RandomJobCtx, _: void) void {
+            {
+                _ = bun.csprng(self.bytes[self.offset..][0..self.length]);
+            }
+    }
+
+pub fn runFromJS(self: RandomJobCtx, global: *JSGlobalObject, callback: JSValue) void {
+            const vm = global.bunVM();
+            _ = vm.eventLoop().runCallback(callback, global, .js_undefined, (&.{ .@"null", self.value }));
+    }
+
+pub fn deinit(self: *RandomJobCtx) void {
+            _ = self.value.unprotect();
+    }
+};
+
 pub const random = struct {
 
 pub fn randomInt(global: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bun.JSError!jsc.JSValue {
@@ -291,33 +318,8 @@ pub fn randomFill(global: *JSGlobalObject, callFrame: *jsc.CallFrame) JSError!JS
             _ = try Job.initAndSchedule(global, callback, (&ctx));
             return JSValue.js_undefined;
     }
-    pub const JobCtx = struct {
-        value: JSValue,
-        bytes: [*]u8,
-        offset: u32,
-        length: usize,
-        result: void = undefined,
-    
-    pub fn init(self: *@This(), _: *JSGlobalObject) !void {
-                _ = self.value.protect();
-        }
-    
-    pub fn runTask(self: *@This(), _: void) void {
-                {
-                    _ = bun.csprng(self.bytes[self.offset..][0..self.length]);
-                }
-        }
-    
-    pub fn runFromJS(self: *@This(), global: *JSGlobalObject, callback: JSValue) void {
-                const vm = global.bunVM();
-                _ = vm.eventLoop().runCallback(callback, global, .js_undefined, (&.{ .@"null", self.value }));
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                _ = self.value.unprotect();
-        }
-    };
-    pub const Job = CryptoJob(JobCtx);
+    pub const JobCtx = RandomJobCtx;
+    pub const Job = CryptoJob(RandomJobCtx);
     const max_possible_length = @min(jsc.ArrayBuffer.max_size, std.math.maxInt(i32));
     const max_range = 281474976710655;
 };
@@ -599,14 +601,11 @@ pub fn runFromJS(job: *@This()) void {
             if (vm.isShuttingDown()) {
                 return;
             }
-            const callback_opt = job.callback.trySwap();
-            if ((callback_opt == null)) {
-                return;
+            if (job.callback.trySwap()) |callback| {
+                _ = &callback;
+                _ = (blk_catch_0: { break :blk_catch_0 ((job.ctx.runFromJS(vm.global, callback)) catch |e| { _ = &e; const reported = vm.global.reportUncaughtException((vm.global.takeException(e).asException(vm.global.vm())).?);
+                _ = &reported; }); });
             }
-            const callback = callback_opt.?;
-            _ = (blk_catch_0: { break :blk_catch_0 ((job.ctx.runFromJS(vm.global, callback)) catch |e| { _ = &e; const reported = vm.global.reportUncaughtException((vm.global.takeException(e).asException(vm.global.vm())).?);
-            _ = reported;
-            break :blk_catch_0 {}; }); });
     }
 
 pub fn deinit(job: *@This()) void {
@@ -693,12 +692,10 @@ pub fn runFromJS(job: *@This()) void {
             if (vm.isShuttingDown()) {
                 return;
             }
-            const callback_opt = job.callback.trySwap();
-            if ((callback_opt == null)) {
-                return;
+            if (job.callback.trySwap()) |callback| {
+                _ = &callback;
+                _ = job.ctx.runFromJS(vm.global, callback);
             }
-            const callback = callback_opt.?;
-            _ = job.ctx.runFromJS(vm.global, callback);
     }
 
 pub fn deinit(job: *@This()) void {
@@ -734,7 +731,6 @@ pub fn pbkdf2Sync(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame) bu
         const out_arraybuffer = try jsc.JSValue.createBufferFromLength(globalThis, @as(usize, @intCast(data.length)));
         const output_opt = out_arraybuffer.asArrayBuffer(globalThis);
         if ((output_opt == null)) {
-            _ = data.deinit();
             return globalThis.throwOutOfMemory();
         }
         const output = output_opt.?;

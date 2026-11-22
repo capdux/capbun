@@ -60,8 +60,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
-fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -82,8 +80,18 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
+pub const identifier = @import("../js_parser/lexer/identifier.zig");
+pub const bun = @import("bun");
 pub const ParseError = error{
     OutOfMemory,
     UnexpectedCharacter,
@@ -113,6 +121,124 @@ pub const ExternalError = error{
     OutOfMemory,
     SyntaxError,
     StackOverflow,
+};
+
+pub const TokenData = union(enum) {
+    eof: void,
+    left_brace: void,
+    right_brace: void,
+    left_bracket: void,
+    right_bracket: void,
+    colon: void,
+    comma: void,
+    string: []u8,
+    number: f64,
+    boolean: bool,
+    @"null": void,
+    identifier: []u8,
+
+pub fn canStartValue(self: TokenData) bool {
+            return (switch (self) {
+.string, .number, .boolean, .identifier, .@"null", .left_brace, .left_bracket => true,
+.eof, .right_brace, .right_bracket, .colon, .comma => false,
+});
+    }
+};
+
+pub const JSON5Token = struct {
+    loc: logger.Loc,
+    data: TokenData,
+    const Data = TokenData;
+};
+
+pub const JSON5ErrorPos = struct {
+    pos: usize,
+};
+
+pub const JSON5Error = union(enum) {
+    oom: void,
+    stack_overflow: void,
+    unexpected_character: JSON5ErrorPos,
+    unexpected_token: JSON5ErrorPos,
+    unexpected_eof: JSON5ErrorPos,
+    unterminated_string: JSON5ErrorPos,
+    unterminated_comment: JSON5ErrorPos,
+    unterminated_object: JSON5ErrorPos,
+    unterminated_array: JSON5ErrorPos,
+    unterminated_escape: JSON5ErrorPos,
+    invalid_number: JSON5ErrorPos,
+    leading_zeros: JSON5ErrorPos,
+    invalid_hex_number: JSON5ErrorPos,
+    invalid_hex_escape: JSON5ErrorPos,
+    invalid_unicode_escape: JSON5ErrorPos,
+    octal_escape: JSON5ErrorPos,
+    expected_colon: JSON5ErrorPos,
+    expected_comma: JSON5ErrorPos,
+    expected_closing_brace: JSON5ErrorPos,
+    expected_closing_bracket: JSON5ErrorPos,
+    invalid_identifier: JSON5ErrorPos,
+    trailing_data: JSON5ErrorPos,
+
+pub fn addToLog(self: *const JSON5Error, source: *const logger.Source, log: *logger.Log) !void {
+            const pos: usize = (switch (self.*) {
+.oom => {
+return error.OutOfMemory;
+},
+.stack_overflow => {
+return error.StackOverflow;
+},
+.unexpected_character => |e| e.pos,
+.unexpected_token => |e| e.pos,
+.unexpected_eof => |e| e.pos,
+.unterminated_string => |e| e.pos,
+.unterminated_comment => |e| e.pos,
+.unterminated_object => |e| e.pos,
+.unterminated_array => |e| e.pos,
+.unterminated_escape => |e| e.pos,
+.invalid_number => |e| e.pos,
+.leading_zeros => |e| e.pos,
+.invalid_hex_number => |e| e.pos,
+.invalid_hex_escape => |e| e.pos,
+.invalid_unicode_escape => |e| e.pos,
+.octal_escape => |e| e.pos,
+.expected_colon => |e| e.pos,
+.expected_comma => |e| e.pos,
+.expected_closing_brace => |e| e.pos,
+.expected_closing_bracket => |e| e.pos,
+.invalid_identifier => |e| e.pos,
+.trailing_data => |e| e.pos,
+});
+            const loc = logger.Loc{ .start = @intCast(pos) };
+            const msg: []const u8 = (switch (self.*) {
+.oom, .stack_overflow => unreachable,
+.unexpected_character => "Unexpected character",
+.unexpected_token => "Unexpected token",
+.unexpected_eof => "Unexpected end of input",
+.unterminated_string => "Unterminated string",
+.unterminated_comment => "Unterminated multi-line comment",
+.unterminated_object => "Unterminated object",
+.unterminated_array => "Unterminated array",
+.unterminated_escape => "Unexpected end of input in escape sequence",
+.invalid_number => "Invalid number",
+.leading_zeros => "Leading zeros are not allowed in JSON5",
+.invalid_hex_number => "Invalid hex number",
+.invalid_hex_escape => "Invalid hex escape",
+.invalid_unicode_escape => "Invalid unicode escape: expected 4 hex digits",
+.octal_escape => "Octal escape sequences are not allowed in JSON5",
+.expected_colon => "Expected ':' after object key",
+.expected_comma => "Expected ','",
+.expected_closing_brace => "Expected '}'",
+.expected_closing_bracket => "Expected ']'",
+.invalid_identifier => "Invalid identifier start character",
+.trailing_data => "Unexpected token after JSON5 value",
+});
+            _ = try log.addError(source, loc, msg);
+    }
+};
+
+pub const Codepoint = struct {
+    cp: i32,
+    len: u3,
 };
 
 pub const JSON5Parser = struct {
@@ -215,9 +341,10 @@ pub fn peek(self: JSON5Parser) u8 {
 
 pub fn scan(self: *JSON5Parser) ParseError!void {
             while (true) {
-                switch (self.peek()) {
+                const c = self.peek();
+                switch (c) {
 0 => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.token.data = .eof;
                 return;
 },
@@ -226,61 +353,61 @@ self.pos = (self.pos + 1);
                 continue;
 },
 '{' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
                 self.token.data = .left_brace;
                 return;
 },
 '}' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
                 self.token.data = .right_brace;
                 return;
 },
 '[' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
                 self.token.data = .left_bracket;
                 return;
 },
 ']' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
                 self.token.data = .right_bracket;
                 return;
 },
 ':' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
                 self.token.data = .colon;
                 return;
 },
 ',' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
                 self.token.data = .comma;
                 return;
 },
 '+' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
-                self.token.data = .{ .number = try self.scanSignedValue(false) };
+                self.token.data = TokenData{ .number = try self.scanSignedValue(false) };
                 return;
 },
 '-' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
                 self.pos = (self.pos + 1);
-                self.token.data = .{ .number = try self.scanSignedValue(true) };
+                self.token.data = TokenData{ .number = try self.scanSignedValue(true) };
                 return;
 },
 '"', '\'' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
-                self.token.data = .{ .string = try self.scanString() };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                self.token.data = TokenData{ .string = try self.scanString() };
                 return;
 },
 48...57, '.' => {
-self.token.loc = .{ .start = @intCast(self.pos) };
-                self.token.data = .{ .number = try self.scanNumber() };
+self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                self.token.data = TokenData{ .number = try self.scanNumber() };
                 return;
 },
 '/' => {
@@ -298,25 +425,37 @@ const n = (if (((self.pos + 1) < self.source.len)) self.source[@as(usize, @intCa
                 }
                 return error.UnexpectedCharacter;
 },
-else => |c| {
+else => {
 if ((c == 116)) {
-                    self.token.loc = .{ .start = @intCast(self.pos) };
-                    self.token.data = (if (self.scanKeyword("true")) .{ .boolean = true } else .{ .identifier = try self.scanIdentifier() });
+                    self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                    if (self.scanKeyword("true")) {
+                        self.token.data = TokenData{ .boolean = true };
+                    } else {
+                        self.token.data = TokenData{ .identifier = try self.scanIdentifier() };
+                    }
                     return;
                 } else {
                     if ((c == 102)) {
-                        self.token.loc = .{ .start = @intCast(self.pos) };
-                        self.token.data = (if (self.scanKeyword("false")) .{ .boolean = false } else .{ .identifier = try self.scanIdentifier() });
+                        self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                        if (self.scanKeyword("false")) {
+                            self.token.data = TokenData{ .boolean = false };
+                        } else {
+                            self.token.data = TokenData{ .identifier = try self.scanIdentifier() };
+                        }
                         return;
                     } else {
                         if ((c == 110)) {
-                            self.token.loc = .{ .start = @intCast(self.pos) };
-                            self.token.data = (if (self.scanKeyword("null")) TokenData.null else .{ .identifier = try self.scanIdentifier() });
+                            self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                            if (self.scanKeyword("null")) {
+                                self.token.data = TokenData.@"null";
+                            } else {
+                                self.token.data = TokenData{ .identifier = try self.scanIdentifier() };
+                            }
                             return;
                         } else {
                             if (((((((c >= 97) and (c <= 122)) or ((c >= 65) and (c <= 90))) or (c == 95)) or (c == 36)) or (c == 92))) {
-                                self.token.loc = .{ .start = @intCast(self.pos) };
-                                self.token.data = .{ .identifier = try self.scanIdentifier() };
+                                self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                                self.token.data = TokenData{ .identifier = try self.scanIdentifier() };
                                 return;
                             } else {
                                 if ((c >= 128)) {
@@ -325,13 +464,15 @@ if ((c == 116)) {
                                         self.pos = (self.pos + mb);
                                         continue;
                                     }
-                                    self.token.loc = .{ .start = @intCast(self.pos) };
-                                    const cp = ((self.readCodepoint()) orelse {
-                                    return error.UnexpectedCharacter;
-});
-                                    if (identifier.isIdentifierStart(cp.cp)) {
-                                        self.token.data = .{ .identifier = try self.scanIdentifier() };
-                                        return;
+                                    self.token.loc = logger.Loc{ .start = @intCast(self.pos) };
+                                    if (self.readCodepoint()) |cp| {
+                                        _ = &cp;
+                                        if (identifier.isIdentifierStart(cp.cp)) {
+                                            self.token.data = TokenData{ .identifier = try self.scanIdentifier() };
+                                            return;
+                                        } else {
+                                            return error.UnexpectedCharacter;
+                                        }
                                     } else {
                                         return error.UnexpectedCharacter;
                                     }
@@ -621,12 +762,8 @@ if ((self.pos < self.source.len)) {
             _ = try buf.append(0);
 },
 'x' => {
-const hi = ((self.readHexDigit()) orelse {
-            return error.InvalidHexEscape;
-});
-            const lo = ((self.readHexDigit()) orelse {
-            return error.InvalidHexEscape;
-});
+const hi = ((self.readHexDigit()) orelse { return error.InvalidHexEscape; });
+            const lo = ((self.readHexDigit()) orelse { return error.InvalidHexEscape; });
             const value = (cp_shl((if (comptime @typeInfo(@TypeOf(hi)) == .@"enum") cp_cast_int(u8, @intFromEnum(hi)) else cp_cast_int(u8, hi)), 4) | (if (comptime @typeInfo(@TypeOf(lo)) == .@"enum") cp_cast_int(u8, @intFromEnum(lo)) else cp_cast_int(u8, lo)));
             _ = try appendCodepointToUtf8(buf, @intCast(value));
 },
@@ -787,9 +924,7 @@ break;
 pub fn scanIdentifier(self: *JSON5Parser) ParseError![]u8 {
             var buf = std.array_list.Managed(u8).init(self.allocator);
             _ = &buf;
-            const start_cp = ((self.readCodepoint()) orelse {
-            return error.InvalidIdentifier;
-});
+            const start_cp = ((self.readCodepoint()) orelse { return error.InvalidIdentifier; });
             if ((start_cp.cp == 92)) {
                 const escaped_cp = try self.parseIdentifierUnicodeEscape();
                 if ((!identifier.isIdentifierStart(escaped_cp))) {
@@ -914,10 +1049,10 @@ return null;
 pub fn readHex4(self: *JSON5Parser) ParseError!i32 {
             var value: i32 = 0;
             _ = &value;
-            inline for (0..4) |_| {
-                const digit = ((self.readHexDigit()) orelse {
-                return error.InvalidUnicodeEscape;
-});
+            var i: usize = 0;
+            _ = &i;
+            while ((i < 4)) : (i = (i + 1)) {
+                const digit = ((self.readHexDigit()) orelse { return error.InvalidUnicodeEscape; });
                 value = (cp_shl(value, 4) | (if (comptime @typeInfo(@TypeOf(digit)) == .@"enum") cp_cast_int(i32, @intFromEnum(digit)) else cp_cast_int(i32, digit)));
             }
             return value;
@@ -935,107 +1070,18 @@ pub fn readCodepoint(self: JSON5Parser) ?Codepoint {
             if (((self.pos + seq_len) > self.source.len)) {
                 return .{ .cp = @intCast(first), .len = 1 };
             }
-            const decoded = strings.decodeWTF8RuneT(self.source[self.pos..].ptr[0..4], seq_len, i32, -1);
-            if ((decoded < 0)) {
-                return .{ .cp = @intCast(first), .len = 1 };
+            {
+                const decoded = strings.decodeWTF8RuneT(self.source[self.pos..].ptr[0..4], seq_len, i32, -1);
+                if ((decoded < 0)) {
+                    return .{ .cp = @intCast(first), .len = 1 };
+                }
+                return .{ .cp = decoded, .len = @intCast(seq_len) };
             }
-            return .{ .cp = decoded, .len = @intCast(seq_len) };
     }
-    pub const Token = JSON5Token;
-    pub const Error = JSON5Error;
+    const Token = JSON5Token;
+    const Error = JSON5Error;
 };
 
-pub const TokenData = union(enum) {
-    eof,
-    // Structural
-    left_brace,
-    right_brace,
-    left_bracket,
-    right_bracket,
-    colon,
-    comma,
-    // Values
-    string: []u8,
-    number: f64,
-    boolean: bool,
-    null,
-    // Identifiers (for unquoted keys that aren't keywords)
-    identifier: []u8,
-
-    pub fn canStartValue(data: TokenData) bool {
-        return switch (data) {
-            .string, .number, .boolean, .identifier, .@"null", .left_brace, .left_bracket => true,
-            .eof, .right_brace, .right_bracket, .colon, .comma => false,
-        };
-    }
-};
-pub const JSON5Token = struct {
-    loc: logger.Loc,
-    data: TokenData,
-    pub const Data = TokenData;
-};
-pub const JSON5Error = union(enum) {
-    oom,
-    stack_overflow,
-    unexpected_character: struct { pos: usize },
-    unexpected_token: struct { pos: usize },
-    unexpected_eof: struct { pos: usize },
-    unterminated_string: struct { pos: usize },
-    unterminated_comment: struct { pos: usize },
-    unterminated_object: struct { pos: usize },
-    unterminated_array: struct { pos: usize },
-    unterminated_escape: struct { pos: usize },
-    invalid_number: struct { pos: usize },
-    leading_zeros: struct { pos: usize },
-    invalid_hex_number: struct { pos: usize },
-    invalid_hex_escape: struct { pos: usize },
-    invalid_unicode_escape: struct { pos: usize },
-    octal_escape: struct { pos: usize },
-    expected_colon: struct { pos: usize },
-    expected_comma: struct { pos: usize },
-    expected_closing_brace: struct { pos: usize },
-    expected_closing_bracket: struct { pos: usize },
-    invalid_identifier: struct { pos: usize },
-    trailing_data: struct { pos: usize },
-
-    pub fn addToLog(this: *const JSON5Error, source: *const logger.Source, log: *logger.Log) !void {
-        const loc: logger.Loc = switch (this.*) {
-            .oom => return error.OutOfMemory,
-            .stack_overflow => return error.StackOverflow,
-            inline else => |e| .{ .start = @intCast(e.pos) },
-        };
-        const msg: []const u8 = switch (this.*) {
-            .oom, .stack_overflow => unreachable,
-            .unexpected_character => "Unexpected character",
-            .unexpected_token => "Unexpected token",
-            .unexpected_eof => "Unexpected end of input",
-            .unterminated_string => "Unterminated string",
-            .unterminated_comment => "Unterminated multi-line comment",
-            .unterminated_object => "Unterminated object",
-            .unterminated_array => "Unterminated array",
-            .unterminated_escape => "Unexpected end of input in escape sequence",
-            .invalid_number => "Invalid number",
-            .leading_zeros => "Leading zeros are not allowed in JSON5",
-            .invalid_hex_number => "Invalid hex number",
-            .invalid_hex_escape => "Invalid hex escape",
-            .invalid_unicode_escape => "Invalid unicode escape: expected 4 hex digits",
-            .octal_escape => "Octal escape sequences are not allowed in JSON5",
-            .expected_colon => "Expected ':' after object key",
-            .expected_comma => "Expected ','",
-            .expected_closing_brace => "Expected '}'",
-            .expected_closing_bracket => "Expected ']'",
-            .invalid_identifier => "Invalid identifier start character",
-            .trailing_data => "Unexpected token after JSON5 value",
-        };
-        try log.addError(source, loc, msg);
-    }
-};
-const Codepoint = struct {
-    cp: i32,
-    len: u3,
-};
-const identifier = @import("../js_parser/lexer/identifier.zig");
-const bun = @import("bun");
 const OOM = bun.OOM;
 const logger = bun.logger;
 const strings = bun.strings;

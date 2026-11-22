@@ -85,6 +85,26 @@ pub fn __cp_deinit(self: *SliceFreeGuard) void {
     }
 };
 
+pub const PrinterWriteIdentClosure = struct {
+    first: bool,
+    printer: *Printer,
+
+pub fn writeFn(self: *PrinterWriteIdentClosure, s1: []const u8, replace_dots: bool) void {
+            var _s_guard = SliceFreeGuard{ .alloc = self.printer.allocator, .slice = (if ((!replace_dots)) s1 else Printer.replaceDots(self.printer.allocator, s1)), .active = replace_dots };
+            _ = &_s_guard;
+            var ___s_guard_moved = false; _ = &___s_guard_moved;
+            defer if (!___s_guard_moved) { ___s_guard_moved = true; const __T = @TypeOf(_s_guard); if (@typeInfo(__T) == .optional) { if (_s_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _s_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _s_guard; _drop_val.__cp_deinit(); } };
+            const s = _s_guard.slice;
+            self.printer.col = (self.printer.col + @as(u32, @intCast(s.len)));
+            if (self.first) {
+                self.first = false;
+                return (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier(s, self.printer)) catch |e| { _ = &e; break :blk_catch_0 css.OOM(e); }); });
+            } else {
+                return (blk_catch_1: { break :blk_catch_1 ((css.serializer.serializeName(s, self.printer)) catch |e| { _ = &e; break :blk_catch_1 css.OOM(e); }); });
+            }
+    }
+};
+
 pub const PrinterOptions = struct {
     minify: bool = false,
     source_map: ?*sourcemap.SourceMap = null,
@@ -288,11 +308,11 @@ pub fn context(self: *const Printer) ?*const css.StyleContext {
     }
 
 pub fn writeAll(self: *Printer, str: []const u8) !void {
-            return (blk_catch_0: { break :blk_catch_0 ((self.writeStr(str)) catch |__ce_0| { _ = &__ce_0; return std.mem.Allocator.Error.OutOfMemory; }); });
+            return (blk_catch_2: { break :blk_catch_2 ((self.writeStr(str)) catch |__ce_2| { _ = &__ce_2; return std.mem.Allocator.Error.OutOfMemory; }); });
     }
 
 pub fn writeComment(self: *Printer, comment: []const u8) PrintErr!void {
-            _ = (blk_catch_1: { break :blk_catch_1 ((self.dest.writeAll(comment)) catch |__ce_1| { _ = &__ce_1; return self.addFmtError(); }); });
+            _ = (blk_catch_3: { break :blk_catch_3 ((self.dest.writeAll(comment)) catch |__ce_3| { _ = &__ce_3; return self.addFmtError(); }); });
             const new_lines = std.mem.count(u8, comment, "\n");
             self.line = (self.line + @as(u32, @intCast(new_lines)));
             self.col = 0;
@@ -306,13 +326,13 @@ pub fn writeStr(self: *Printer, s: []const u8) PrintErr!void {
                 _ = bun.assert((std.mem.indexOfScalar(u8, s, 10) == null));
             }
             self.col = (self.col + @as(u32, @intCast(s.len)));
-            _ = (blk_catch_2: { break :blk_catch_2 ((self.dest.writeAll(s)) catch |__ce_2| { _ = &__ce_2; return self.addFmtError(); }); });
+            _ = (blk_catch_4: { break :blk_catch_4 ((self.dest.writeAll(s)) catch |__ce_4| { _ = &__ce_4; return self.addFmtError(); }); });
             return;
     }
 
 pub fn writeFmt(self: *Printer, comptime fmt: []const u8, args: anytype) PrintErr!void {
             const start: usize = Printer.getWrittenAmt(self.dest);
-            _ = (blk_catch_3: { break :blk_catch_3 ((self.dest.print(fmt, args)) catch |__ce_3| { _ = &__ce_3; return self.addFmtError(); }); });
+            _ = (blk_catch_5: { break :blk_catch_5 ((self.dest.print(fmt, args)) catch |__ce_5| { _ = &__ce_5; return self.addFmtError(); }); });
             const written = (Printer.getWrittenAmt(self.dest) - start);
             self.col = (self.col + @as(u32, @intCast(written)));
     }
@@ -328,7 +348,7 @@ pub fn writeIdentOrRef(self: *Printer, ident: css.css_values.ident.IdentOrRef, h
             if ((!handle_css_module)) {
                 if (ident.asIdent()) |identifier| {
                     _ = &identifier;
-                    return (blk_catch_4: { break :blk_catch_4 ((css.serializer.serializeIdentifier(identifier.v, self)) catch |__ce_4| { _ = &__ce_4; return self.addFmtError(); }); });
+                    return (blk_catch_6: { break :blk_catch_6 ((css.serializer.serializeIdentifier(identifier.v, self)) catch |__ce_6| { _ = &__ce_6; return self.addFmtError(); }); });
                 } else {
                     const ref_ = (ident.asRef()).?;
                     const symbol_opt = self.symbols.get(ref_);
@@ -336,45 +356,25 @@ pub fn writeIdentOrRef(self: *Printer, ident: css.css_values.ident.IdentOrRef, h
                         return self.addFmtError();
                     }
                     const symbol = symbol_opt.?;
-                    return (blk_catch_5: { break :blk_catch_5 ((css.serializer.serializeIdentifier(symbol.original_name, self)) catch |__ce_5| { _ = &__ce_5; return self.addFmtError(); }); });
+                    return (blk_catch_7: { break :blk_catch_7 ((css.serializer.serializeIdentifier(symbol.original_name, self)) catch |__ce_7| { _ = &__ce_7; return self.addFmtError(); }); });
                 }
             }
             const str = self.lookupIdentOrRef(ident);
-            return (blk_catch_6: { break :blk_catch_6 ((css.serializer.serializeIdentifier(str, self)) catch |__ce_6| { _ = &__ce_6; return self.addFmtError(); }); });
+            return (blk_catch_8: { break :blk_catch_8 ((css.serializer.serializeIdentifier(str, self)) catch |__ce_8| { _ = &__ce_8; return self.addFmtError(); }); });
     }
 
 pub fn writeIdent(self: *Printer, ident: []const u8, handle_css_module: bool) PrintErr!void {
             if (handle_css_module) {
                 if (self.css_module) |*css_module| {
                     _ = &css_module;
-                    const Closure = struct {
-    first: bool,
-    printer: *This,
-};
-                    var closure = Closure{ .first = true, .printer = self };
+                    var closure = PrinterWriteIdentClosure{ .first = true, .printer = self };
                     _ = &closure;
-                    _ = (css_module.*).config.pattern.write((css_module.*).hashes.items[@as(usize, @intCast(self.loc.source_index))], (css_module.*).sources.items[@as(usize, @intCast(self.loc.source_index))], ident, (&closure), (struct {
-
-pub fn writeFn(c: *Closure, s1: []const u8, replace_dots: bool) void {
-            var _s_guard = SliceFreeGuard{ .alloc = c.printer.allocator, .slice = (if ((!replace_dots)) s1 else replaceDots(c.printer.allocator, s1)), .active = replace_dots };
-            _ = &_s_guard;
-            var ___s_guard_moved = false; _ = &___s_guard_moved;
-            defer if (!___s_guard_moved) { ___s_guard_moved = true; const __T = @TypeOf(_s_guard); if (@typeInfo(__T) == .optional) { if (_s_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _s_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _s_guard; _drop_val.__cp_deinit(); } };
-            const s = _s_guard.slice;
-            c.printer.col = (c.printer.col + @as(u32, @intCast(s.len)));
-            if (c.first) {
-                c.first = false;
-                return (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeIdentifier(s, c.printer)) catch |e| { _ = &e; break :blk_catch_0 css.OOM(e); }); });
-            } else {
-                return (blk_catch_1: { break :blk_catch_1 ((css.serializer.serializeName(s, c.printer)) catch |e| { _ = &e; break :blk_catch_1 css.OOM(e); }); });
-            }
-    }
-}).writeFn);
+                    _ = (css_module.*).config.pattern.write((css_module.*).hashes.items[@as(usize, @intCast(self.loc.source_index))], (css_module.*).sources.items[@as(usize, @intCast(self.loc.source_index))], ident, (&closure), PrinterWriteIdentClosure.writeFn);
                     _ = (css_module.*).addLocal(self.allocator, ident, ident, self.loc.source_index);
                     return;
                 }
             }
-            return (blk_catch_7: { break :blk_catch_7 ((css.serializer.serializeIdentifier(ident, self)) catch |__ce_7| { _ = &__ce_7; return self.addFmtError(); }); });
+            return (blk_catch_9: { break :blk_catch_9 ((css.serializer.serializeIdentifier(ident, self)) catch |__ce_9| { _ = &__ce_9; return self.addFmtError(); }); });
     }
 
 pub fn writeDashedIdent(self: *Printer, ident: *const DashedIdent, is_declaration: bool) !void {
@@ -382,29 +382,17 @@ pub fn writeDashedIdent(self: *Printer, ident: *const DashedIdent, is_declaratio
             if (self.css_module) |*css_module| {
                 _ = &css_module;
                 if ((css_module.*).config.dashed_idents) {
-                    const Fn = struct {
-
-pub fn writeFn(p: *Printer, s1: []const u8, replace_dots: bool) void {
-            var _s_guard = SliceFreeGuard{ .alloc = p.allocator, .slice = (if ((!replace_dots)) s1 else replaceDots(p.allocator, s1)), .active = replace_dots };
-            _ = &_s_guard;
-            var ___s_guard_moved = false; _ = &___s_guard_moved;
-            defer if (!___s_guard_moved) { ___s_guard_moved = true; const __T = @TypeOf(_s_guard); if (@typeInfo(__T) == .optional) { if (_s_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _s_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _s_guard; _drop_val.__cp_deinit(); } };
-            const s = _s_guard.slice;
-            p.col = (p.col + @as(u32, @intCast(s.len)));
-            return (blk_catch_0: { break :blk_catch_0 ((css.serializer.serializeName(s, p)) catch |e| { _ = &e; break :blk_catch_0 css.OOM(e); }); });
-    }
-};
-                    _ = (css_module.*).config.pattern.write((css_module.*).hashes.items[@as(usize, @intCast(self.loc.source_index))], (css_module.*).sources.items[@as(usize, @intCast(self.loc.source_index))], ident.v[2..], self, Fn.writeFn);
+                    _ = (css_module.*).config.pattern.write((css_module.*).hashes.items[@as(usize, @intCast(self.loc.source_index))], (css_module.*).sources.items[@as(usize, @intCast(self.loc.source_index))], ident.v[2..], self, _printerWriteDashedIdentFn);
                     if (is_declaration) {
                         _ = (css_module.*).addDashed(self.allocator, ident.v, self.loc.source_index);
                     }
                 }
             }
-            return (blk_catch_8: { break :blk_catch_8 ((css.serializer.serializeName(ident.v[2..], self)) catch |__ce_8| { _ = &__ce_8; return self.addFmtError(); }); });
+            return (blk_catch_10: { break :blk_catch_10 ((css.serializer.serializeName(ident.v[2..], self)) catch |__ce_10| { _ = &__ce_10; return self.addFmtError(); }); });
     }
 
 pub fn writeByte(self: *Printer, char: u8) !void {
-            return (blk_catch_9: { break :blk_catch_9 ((self.writeChar(char)) catch |__ce_9| { _ = &__ce_9; return Allocator.Error.OutOfMemory; }); });
+            return (blk_catch_11: { break :blk_catch_11 ((self.writeChar(char)) catch |__ce_11| { _ = &__ce_11; return Allocator.Error.OutOfMemory; }); });
     }
 
 pub fn writeChar(self: *Printer, char: u8) PrintErr!void {
@@ -414,7 +402,7 @@ pub fn writeChar(self: *Printer, char: u8) PrintErr!void {
             } else {
                 self.col = (self.col + 1);
             }
-            _ = (blk_catch_10: { break :blk_catch_10 ((self.dest.writeByte(char)) catch |__ce_10| { _ = &__ce_10; return self.addFmtError(); }); });
+            _ = (blk_catch_12: { break :blk_catch_12 ((self.dest.writeByte(char)) catch |__ce_12| { _ = &__ce_12; return self.addFmtError(); }); });
     }
 
 pub fn newline(self: *Printer) PrintErr!void {
@@ -482,7 +470,7 @@ pub fn getIndent(self: *Printer, idnt: u8) []const u8 {
 pub fn writeIndent(self: *Printer) PrintErr!void {
             _ = bun.debugAssert((!self.minify));
             if ((self.indent_amt > 0)) {
-                _ = (blk_catch_12: { break :blk_catch_12 ((self.dest.splatByteAll(32, self.indent_amt)) catch |__ce_12| { _ = &__ce_12; return self.addFmtError(); }); });
+                _ = (blk_catch_14: { break :blk_catch_14 ((self.dest.splatByteAll(32, self.indent_amt)) catch |__ce_14| { _ = &__ce_14; return self.addFmtError(); }); });
             }
     }
     const This = @This();
@@ -524,3 +512,13 @@ const INDENTS: []const []const u8 = indents: {
 };
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
+
+pub fn _printerWriteDashedIdentFn(p: *Printer, s1: []const u8, replace_dots: bool) void {
+        var _s_guard = SliceFreeGuard{ .alloc = p.allocator, .slice = (if ((!replace_dots)) s1 else Printer.replaceDots(p.allocator, s1)), .active = replace_dots };
+        _ = &_s_guard;
+        var ___s_guard_moved = false; _ = &___s_guard_moved;
+        defer if (!___s_guard_moved) { ___s_guard_moved = true; const __T = @TypeOf(_s_guard); if (@typeInfo(__T) == .optional) { if (_s_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _s_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _s_guard; _drop_val.__cp_deinit(); } };
+        const s = _s_guard.slice;
+        p.col = (p.col + @as(u32, @intCast(s.len)));
+        return (blk_catch_15: { break :blk_catch_15 ((css.serializer.serializeName(s, p)) catch |e| { _ = &e; break :blk_catch_15 css.OOM(e); }); });
+}

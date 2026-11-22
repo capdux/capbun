@@ -269,16 +269,8 @@ pub struct UnicodeRange {
         return { err: undefined };
     }
 
-    const QmResult = struct {
-        count: usize,
-        rest: []const u8,
-    };
-
-    const HexResult = struct {
-        value: u32,
-        digits: usize,
-        rest: []const u8,
-    };
+    const QmResult = UnicodeRangeQmResult;
+    const HexResult = UnicodeRangeHexResult;
 
     static fn consumeQuestionMarks(text_in: []const u8): QmResult {
         let text = text_in;
@@ -464,12 +456,7 @@ pub union(enum) Source {
 
         if (e := input.expectFunctionMatching("local").asErr()) return { err: e };
 
-        const Fn = struct {
-            static fn parseNestedBlock(_: void, i: *css.Parser): Result(fontprops.FontFamily) {
-                return fontprops.FontFamily.parse(i);
-            }
-        };
-        const local = switch (input.parseNestedBlock(fontprops.FontFamily, @as(void, undefined), Fn.parseNestedBlock)) {
+        const local = switch (input.parseNestedBlock(fontprops.FontFamily, @as(void, undefined), SourceLocalFn.parseNestedBlock)) {
             .result => |vv| vv,
             .err => |e| return { err: e },
         };
@@ -582,12 +569,7 @@ pub struct UrlSource {
 
         let tech: ArrayList(FontTechnology) = .{};
         if (input.tryParse(css.Parser.expectFunctionMatching, .{"tech"}).isOk()) {
-            const Fn = struct {
-                fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ArrayList(FontTechnology)) {
-                    return i.parseList(FontTechnology, FontTechnology.parse);
-                }
-            };
-            switch (input.parseNestedBlock(ArrayList(FontTechnology), @as(void, undefined), Fn.parseNestedBlockFn)) {
+            switch (input.parseNestedBlock(ArrayList(FontTechnology), @as(void, undefined), UrlSourceTechFn.parseNestedBlockFn)) {
                 .result => |vv| tech = vv,
                 .err => |e| return { err: e },
             }
@@ -656,6 +638,29 @@ pub struct FontFaceRule {
     fn deepClone(allocator: std.mem.Allocator): This {
         const s = _;
         return css.implementDeepClone(@This(), unsafe { &s }, allocator);
+    }
+}
+
+pub struct UnicodeRangeQmResult {
+    count: usize,
+    rest: []const u8,
+}
+
+pub struct UnicodeRangeHexResult {
+    value: u32,
+    digits: usize,
+    rest: []const u8,
+}
+
+pub struct SourceLocalFn {
+    static fn parseNestedBlock(_: void, i: *css.Parser): Result(fontprops.FontFamily) {
+        return fontprops.FontFamily.parse(i);
+    }
+}
+
+pub struct UrlSourceTechFn {
+    static fn parseNestedBlockFn(_: void, i: *css.Parser): Result(ArrayList(FontTechnology)) {
+        return i.parseList(FontTechnology, FontTechnology.parse);
     }
 }
 

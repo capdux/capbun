@@ -1,10 +1,17 @@
+import bun from "bun";
+const api = bun.schema.api;
+
+pub struct DefaultBunDefinesKeys {
+    const window = "window";
+}
+
+pub struct DefaultBunDefinesValues {
+    const window = "undefined";
+}
+
 pub struct DefaultBunDefines {
-    pub const Keys = struct {
-        const window = "window";
-    };
-    pub const Values = struct {
-        const window = "undefined";
-    };
+    pub const Keys = DefaultBunDefinesKeys;
+    pub const Values = DefaultBunDefinesValues;
 }
 
 pub fn configureTransformOptionsForBunVM(allocator: std.mem.Allocator, _args: api.TransformOptions): !api.TransformOptions {
@@ -20,6 +27,3 @@ pub fn configureTransformOptionsForBun(_: std.mem.Allocator, _args: api.Transfor
     args.target = api.Target.bun;
     return args;
 }
-
-import bun from "bun";
-const api = bun.schema.api;

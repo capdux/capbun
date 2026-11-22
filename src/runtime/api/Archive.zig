@@ -67,6 +67,24 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const libarchive = @import("../../libarchive/libarchive.zig");
 pub const libdeflate = @import("../../libdeflate_sys/libdeflate.zig");
 pub const bun = @import("bun");
+pub const BlobOutputType = enum {
+    blob,
+    bytes,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CompressionGzip = struct {
+    level: u8 = 6,
+};
+
+pub const Compression = union(enum) {
+    none: void,
+    gzip: CompressionGzip,
+};
+
 pub const ArchiveReader = struct {
     handle: *libarchive.lib.Archive,
     __cp_dropped: bool = false,
@@ -259,6 +277,27 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const PromiseResult = union(enum) {
+    resolve: jsc.JSValue,
+    reject: jsc.JSValue,
+
+pub fn fulfill(self: PromiseResult, globalThis: *jsc.JSGlobalObject, promise: *jsc.JSPromise) bun.JSTerminated!void {
+            switch (self) {
+.resolve => |v| {
+_ = try promise.resolve(globalThis, v);
+},
+.reject => |v| {
+_ = try promise.rejectWithAsyncStack(globalThis, v);
+},
+}
+    }
+};
+
+pub const ExtractResult = union(enum) {
+    success: u32,
+    @"err": ExtractReadErr,
+};
+
 pub const ExtractContext = struct {
     store: *jsc.WebCore.Blob.Store,
     path: []const u8,
@@ -289,10 +328,13 @@ pub fn deinit(self: *ExtractContext) void {
                 _ = freePatterns(patterns);
             }
     }
-    const Result = union(enum) {
-            success: u32,
-            @"err": error{ReadError},
-        };
+    const Result = ExtractResult;
+};
+
+pub const BlobResult = union(enum) {
+    compressed: []u8,
+    uncompressed: void,
+    @"err": anyerror,
 };
 
 pub const BlobContext = struct {
@@ -345,13 +387,20 @@ pub fn deinit(self: *BlobContext) void {
                 _ = bun.default_allocator.free(self.result.compressed);
             }
     }
-    const OutputType = enum { blob, bytes };
+    const OutputType = BlobOutputType;
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
-    const Result = union(enum) {
-        compressed: []u8,
-        uncompressed: void,
-        @"err": anyerror,
-    };
+    const Result = BlobResult;
+};
+
+pub const WriteResult = union(enum) {
+    success: void,
+    @"err": anyerror,
+    sys_err: bun.sys.Error,
+};
+
+pub const WriteData = union(enum) {
+    owned: []u8,
+    store: *jsc.WebCore.Blob.Store,
 };
 
 pub const WriteContext = struct {
@@ -417,15 +466,8 @@ _ = s.deref();
             }
     }
     const Err = error{ OutOfMemory, GzipInitFailed, GzipCompressFailed };
-    const Result = union(enum) {
-        success: void,
-        @"err": anyerror,
-        sys_err: bun.sys.Error,
-    };
-    const Data = union(enum) {
-        owned: []u8,
-        store: *jsc.WebCore.Blob.Store,
-    };
+    const Result = WriteResult;
+    const Data = WriteData;
 };
 
 pub const WriteDataGuard = struct {
@@ -466,6 +508,32 @@ pub fn __cp_deinit(self: *FileEntryListGuard) void {
 pub fn take(self: *FileEntryListGuard) FilesContext.FileEntryList {
             self.armed = false;
             return self.list;
+    }
+};
+
+pub const ArchiveFileEntry = struct {
+    path: []u8,
+    data: []u8,
+    mtime: i64,
+};
+
+pub const ArchiveFilesResult = union(enum) {
+    success: ArchiveFileEntryList,
+    libarchive_err: [*:0]u8,
+    @"err": ArchiveFilesErr,
+
+pub fn deinit(self: *ArchiveFilesResult) void {
+            switch (self.*) {
+.libarchive_err => |s| {
+_ = bun.default_allocator.free(std.mem.span(s));
+},
+.success => |*list| {
+_ = FilesContext.freeEntries(list);
+},
+.err => {
+
+},
+}
     }
 };
 
@@ -604,32 +672,10 @@ pub fn deinit(self: *FilesContext) void {
                 _ = freePatterns(patterns);
             }
     }
-    const FileEntry = struct {
-        path: []u8,
-        data: []u8,
-        mtime: i64,
-    };
-    const FileEntryList = std.ArrayList(FileEntry);
-    const FilesErr = error{ OutOfMemory, ReadError };
-    const Result = union(enum) {
-        success: FileEntryList,
-        libarchive_err: [*:0]u8,
-        @"err": FilesErr,
-    
-    pub fn deinit(self: *@This()) void {
-                switch (self.*) {
-    .libarchive_err => |s| {
-    _ = bun.default_allocator.free(std.mem.span(s));
-    },
-    .success => |*list| {
-    _ = freeEntries(list);
-    },
-    .err => {
-    
-    },
-    }
-        }
-    };
+    const FileEntry = ArchiveFileEntry;
+    const FileEntryList = ArchiveFileEntryList;
+    const FilesErr = ArchiveFilesErr;
+    const Result = ArchiveFilesResult;
 };
 
 pub const Archive = @This();
@@ -788,31 +834,13 @@ pub const toJS = js.toJS;
 pub const fromJS = js.fromJS;
 pub const fromJSDirect = js.fromJSDirect;
 const PatternList = []const []const u8;
+const ArchiveFileEntryList = std.ArrayList(ArchiveFileEntry);
 const jsc = bun.jsc;
-pub const Compression = union(enum) {
-    none,
-    gzip: struct {
-        level: u8 = 6,
-    },
-};
-const PromiseResult = union(enum) {
-    resolve: jsc.JSValue,
-    reject: jsc.JSValue,
-
-pub fn fulfill(self: @This(), globalThis: *jsc.JSGlobalObject, promise: *jsc.JSPromise) bun.JSTerminated!void {
-            switch (self) {
-.resolve => |v| {
-_ = try promise.resolve(globalThis, v);
-},
-.reject => |v| {
-_ = try promise.rejectWithAsyncStack(globalThis, v);
-},
-}
-    }
-};
+const ExtractReadErr = error{ReadError};
 pub const ExtractTask = AsyncTask(ExtractContext);
 pub const BlobTask = AsyncTask(BlobContext);
 pub const WriteTask = AsyncTask(WriteContext);
+const ArchiveFilesErr = error{ OutOfMemory, ReadError };
 pub const FilesTask = AsyncTask(FilesContext);
 
 pub fn configureArchiveReader(archive: *libarchive.lib.Archive) void {

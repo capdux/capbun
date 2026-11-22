@@ -1306,17 +1306,17 @@ pub fn duplicate(
 
 // cluster(subcommand: "KEYSLOT", key: RedisKey)
 
-const compile = struct {
-    pub const ClientStateRequirement = enum {
-        /// The client must be a subscriber (in subscription mode).
-        subscriber,
-        /// The client must not be a subscriber (not in subscription mode).
-        not_subscriber,
-        /// We don't care about the client state (subscriber || not).
-        dont_care,
-    };
+pub enum ClientStateRequirement {
+    /// The client must be a subscriber (in subscription mode).
+    subscriber,
+    /// The client must not be a subscriber (not in subscription mode).
+    not_subscriber,
+    /// We don't care about the client state (subscriber || not).
+    dont_care,
+}
 
-    fn testCorrectState(
+struct compile {
+    static fn testCorrectState(
         client: *JSValkeyClient,
         js_client_prototype_function_name: []const u8,
         comptime client_state_requirement: ClientStateRequirement,
@@ -1334,8 +1334,8 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
                 const promise = valkeySend(client, 
                     globalObject,
@@ -1344,7 +1344,7 @@ const compile = struct {
             command: command,
                         args: .{ .args = [] },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
@@ -1359,10 +1359,10 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
-                const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
+                const key = (fromJS(globalObject, callframe.argument(0))?) ?? {
                     return globalObject.throwInvalidArgumentType(name, arg0_name, "string or buffer");
                 };
                 const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
@@ -1374,7 +1374,7 @@ const compile = struct {
             command: command,
                         args: .{ .args = &.{key} },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
@@ -1389,15 +1389,15 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
                 if (callframe.argument(0).isUndefinedOrNull()) {
                     return globalObject.throwMissingArgumentsValue(&.{arg0_name});
                 }
 
                 const arguments = callframe.arguments();
-                let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, arguments.len);
+                let args = std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, arguments.len)?;
                 const _args_ptr = unsafe { &args };
                 const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
@@ -1406,10 +1406,10 @@ const compile = struct {
                         continue;
                     }
 
-                    const another = (try fromJS(globalObject, arg)) orelse {
+                    const another = (fromJS(globalObject, arg)?) ?? {
                         return globalObject.throwInvalidArgumentType(name, "additional arguments", "string or buffer");
                     };
-                    try args.append(another);
+                    args.append(another)?;
                 }
 
                 const promise = valkeySend(client, 
@@ -1419,7 +1419,7 @@ const compile = struct {
             command: command,
                         args: .{ .args = args.items },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
@@ -1434,14 +1434,14 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
-                const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
+                const key = (fromJS(globalObject, callframe.argument(0))?) ?? {
                     return globalObject.throwInvalidArgumentType(name, arg0_name, "string or buffer");
                 };
                 const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
-                const value = (try fromJS(globalObject, callframe.argument(1))) orelse {
+                const value = (fromJS(globalObject, callframe.argument(1))?) ?? {
                     return globalObject.throwInvalidArgumentType(name, arg1_name, "string or buffer");
                 };
                 const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
@@ -1453,7 +1453,7 @@ const compile = struct {
             command: command,
                         args: .{ .args = &.{ key, value } },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
@@ -1470,18 +1470,18 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
-                const key = (try fromJS(globalObject, callframe.argument(0))) orelse {
+                const key = (fromJS(globalObject, callframe.argument(0))?) ?? {
                     return globalObject.throwInvalidArgumentType(name, arg0_name, "string or buffer");
                 };
                 const _key_deinit_guard = DeinitGuard<@TypeOf(key)>{ val: key };
-                const value = (try fromJS(globalObject, callframe.argument(1))) orelse {
+                const value = (fromJS(globalObject, callframe.argument(1))?) ?? {
                     return globalObject.throwInvalidArgumentType(name, arg1_name, "string or buffer");
                 };
                 const _value_deinit_guard = DeinitGuard<@TypeOf(value)>{ val: value };
-                const value2 = (try fromJS(globalObject, callframe.argument(2))) orelse {
+                const value2 = (fromJS(globalObject, callframe.argument(2))?) ?? {
                     return globalObject.throwInvalidArgumentType(name, arg2_name, "string or buffer");
                 };
                 const _value2_deinit_guard = DeinitGuard<@TypeOf(value2)>{ val: value2 };
@@ -1493,7 +1493,7 @@ const compile = struct {
             command: command,
                         args: .{ .args = &.{ key, value, value2 } },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
@@ -1507,18 +1507,18 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
-                let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, callframe.arguments().len);
+                let args = std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, callframe.arguments().len)?;
                 const _args_ptr = unsafe { &args };
                 const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-                for (callframe.arguments()) |arg| {
-                    const another = (try fromJS(globalObject, arg)) orelse {
+                for (arg of callframe.arguments()) {
+                    const another = (fromJS(globalObject, arg)?) ?? {
                         return globalObject.throwInvalidArgumentType(name, "additional arguments", "string or buffer");
                     };
-                    try args.append(another);
+                    args.append(another)?;
                 }
 
                 const promise = valkeySend(client, 
@@ -1528,7 +1528,7 @@ const compile = struct {
             command: command,
                         args: .{ .args = args.items },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
@@ -1542,22 +1542,22 @@ const compile = struct {
         comptime client_state_requirement: ClientStateRequirement,
     ): type {
         return struct {
-            pub fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-                try testCorrectState(client, name, client_state_requirement);
+            static fn call(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): JSValue ! bun.JSError {
+                testCorrectState(client, name, client_state_requirement)?;
 
-                let args = try std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, callframe.arguments().len);
+                let args = std.array_list.Managed(JSArgument).initCapacity(bun.default_allocator, callframe.arguments().len)?;
                 const _args_ptr = unsafe { &args };
                 const _args_list_guard = DeinitListPtrGuard<@TypeOf(_args_ptr)>{ list: _args_ptr };
 
-                for (callframe.arguments()) |arg| {
+                for (arg of callframe.arguments()) {
                     if (arg.isUndefinedOrNull()) {
                         continue;
                     }
 
-                    const another = (try fromJS(globalObject, arg)) orelse {
+                    const another = (fromJS(globalObject, arg)?) ?? {
                         return globalObject.throwInvalidArgumentType(name, "additional arguments", "string or buffer");
                     };
-                    try args.append(another);
+                    args.append(another)?;
                 }
 
                 const promise = valkeySend(client, 
@@ -1567,14 +1567,14 @@ const compile = struct {
             command: command,
                         args: .{ .args = args.items },
                     },
-                ) catch |e| {
+                ) catch e => {
                     return protocol.valkeyErrorToJS(globalObject, "Failed to send " ++ command, e);
                 };
                 return promise.toJS();
             }
         };
     }
-};
+}
 
 fn fromJS(globalObject: *jsc.JSGlobalObject, value: JSValue): !(JSArgument?) {
     if (value.isUndefinedOrNull()) {

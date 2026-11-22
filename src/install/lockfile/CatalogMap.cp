@@ -20,33 +20,31 @@ err FromPnpmLockfileError {
     InvalidPnpmLockfile,
 }
 
-const DepSortCtx = struct {
+struct DepSortCtx {
     buf: string,
-    catalog_deps: [*]const Dependency,
+    catalog_deps: []const Dependency,
 
-    fn lessThan(sorter: *const DepSortCtx, l: usize, r: usize): bool {
-        const deps = sorter.catalog_deps;
-        const l_dep = deps[l];
-        const r_dep = deps[r];
-        const buf = sorter.buf;
+    fn lessThan(l: usize, r: usize): bool {
+        const l_dep = _.catalog_deps[l];
+        const r_dep = _.catalog_deps[r];
+        const buf = _.buf;
 
         return l_dep.name.order(&r_dep.name, buf, buf) == .lt;
     }
-};
+}
 
-const NameSortCtx = struct {
+struct NameSortCtx {
     buf: string,
-    catalog_names: [*]const String,
+    catalog_names: []const String,
 
-    fn lessThan(sorter: *const NameSortCtx, l: usize, r: usize): bool {
-        const buf = sorter.buf;
-        const names = sorter.catalog_names;
-        const l_name = names[l];
-        const r_name = names[r];
+    fn lessThan(l: usize, r: usize): bool {
+        const buf = _.buf;
+        const l_name = _.catalog_names[l];
+        const r_name = _.catalog_names[r];
 
         return l_name.order(&r_name, buf, buf) == .lt;
     }
-};
+}
 
 fn putEntriesFromPnpmLockfile(
     lockfile: *Lockfile,
@@ -55,7 +53,7 @@ fn putEntriesFromPnpmLockfile(
     catalog_map: *Map,
     entries_obj: *bun.ast.E.Object,
     string_buf: *String.Buf,
-): void!FromPnpmLockfileError {
+): FromPnpmLockfileError!void {
     for (entry_prop of entries_obj.properties.slice()) {
         const dep_name_opt = entry_prop.key.?.asString(allocator);
         if (dep_name_opt == null) {
@@ -163,7 +161,7 @@ fn putEntriesFromPnpmLockfile(
         });
     }
 
-    fn parseCount(lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) {
+    static fn parseCount(lockfile: *Lockfile, expr: Expr, builder: *Lockfile.StringBuilder) {
         if (default_catalog := expr.get("catalog")) {
             switch (default_catalog.data) {
                 .e_object => |obj| {
@@ -353,7 +351,7 @@ fn putEntriesFromPnpmLockfile(
         log: *logger.Log,
         catalogs_obj: *bun.ast.E.Object,
         string_buf: *String.Buf,
-    ): void!FromPnpmLockfileError {
+    ): FromPnpmLockfileError!void {
         for (prop of catalogs_obj.properties.slice()) {
             const group_name_opt = prop.key.?.asString(allocator);
             if (group_name_opt == null) {
@@ -380,20 +378,20 @@ fn putEntriesFromPnpmLockfile(
     fn sort(*_, lockfile: *const Lockfile) {
         let dep_sort_ctx: DepSortCtx = {
             buf: lockfile.buffers.string_bytes.items,
-            catalog_deps: lockfile.catalogs.default.values().ptr,
+            catalog_deps: lockfile.catalogs.default.values(),
         };
 
         _.default.sort(&dep_sort_ctx);
 
         let iter = _.groups.iterator();
         while (catalog := iter.next()) {
-            dep_sort_ctx.catalog_deps = catalog.value_ptr.values().ptr;
+            dep_sort_ctx.catalog_deps = catalog.value_ptr.values();
             catalog.value_ptr.sort(&dep_sort_ctx);
         }
 
         let name_sort_ctx: NameSortCtx = {
             buf: lockfile.buffers.string_bytes.items,
-            catalog_names: _.groups.keys().ptr,
+            catalog_names: _.groups.keys(),
         };
 
         _.groups.sort(&name_sort_ctx);

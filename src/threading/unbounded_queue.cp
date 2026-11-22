@@ -3,7 +3,6 @@ import bun from "bun";
 const assertf = bun.assertf;
 
 const atomic = std.atomic;
-const builtin = std.builtin;
 const meta = std.meta;
 
 pub const cache_line_length = switch (@import("builtin").target.cpu.arch) {
@@ -13,6 +12,20 @@ pub const cache_line_length = switch (@import("builtin").target.cpu.arch) {
     else => 64,
 };
 
+pub fn QueueBatchIterator(comptime BatchType: type, comptime T: type, comptime getNextFn: auto): type {
+    return struct {
+        batch: BatchType,
+
+        fn next(*_): (*T)? {
+            if (_.batch.count == 0) return null;
+            const front = _.batch.front ?? unreachable;
+            _.batch.front = getNextFn(front);
+            _.batch.count -= 1;
+            return front;
+        }
+    };
+}
+
 pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)): type {
     const field_info = meta.fieldInfo(T, next_field);
     const next_name = field_info.name;
@@ -20,24 +33,42 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
 
     // Check if the field type has custom accessors (for packed pointer types).
     // If so, use the accessor methods instead of direct field access.
-    const has_custom_accessors = @typeInfo(FieldType) != .optional and
-        @hasDecl(FieldType, "getPtr") and
-        @hasDecl(FieldType, "setPtr") and
-        @hasDecl(FieldType, "atomicLoadPtr") and
+    const has_custom_accessors = @typeInfo(FieldType) != .optional &&
+        @hasDecl(FieldType, "getPtr") &&
+        @hasDecl(FieldType, "setPtr") &&
+        @hasDecl(FieldType, "atomicLoadPtr") &&
         @hasDecl(FieldType, "atomicStorePtr");
 
-    return struct {
-        const Self = @This();
-
-        inline fn getNext(item: *T) ?*T {
+    const getNext = struct {
+        static inline fn call(item: *T): (*T)? {
             if (comptime has_custom_accessors) {
                 return @field(item, next_name).getPtr();
             } else {
                 return @field(item, next_name);
             }
         }
+    }.call;
 
-        inline fn setNext(item: *T, ptr: ?*T) void {
+    const QueueBatch = struct {
+        pub const Iterator = QueueBatchIterator(@This(), T, getNext);
+
+        front: (*T)? = null,
+        last: (*T)? = null,
+        count: usize = 0,
+
+        fn iterator(): Iterator {
+            return Iterator{ batch: _ };
+        }
+    };
+
+    return struct {
+        pub const Batch = QueueBatch;
+        pub const queue_padding_length = cache_line_length / 2;
+
+        back: std.atomic.Value((*T)?) align(queue_padding_length) = .init(null),
+        front: std.atomic.Value((*T)?) align(queue_padding_length) = .init(null),
+
+        static inline fn setNext(item: *T, ptr: (*T)?) {
             if (comptime has_custom_accessors) {
                 const field_ptr: *FieldType = &@field(item, next_name);
                 field_ptr.setPtr(ptr);
@@ -46,123 +77,108 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
             }
         }
 
-        inline fn atomicLoadNext(item: *T, ordering: std.builtin.AtomicOrder) ?*T {
+        static inline fn atomicLoadNext(item: *T, ordering: std.builtin.AtomicOrder): (*T)? {
             if (comptime has_custom_accessors) {
                 const field_ptr: *FieldType = &@field(item, next_name);
                 return field_ptr.atomicLoadPtr(ordering);
             } else {
-                return @atomicLoad(?*T, &@field(item, next_name), ordering);
+                return @atomicLoad(@TypeOf(@as((*T)?, null)), &@field(item, next_name), ordering);
             }
         }
 
-        inline fn atomicStoreNext(item: *T, ptr: ?*T, ordering: std.builtin.AtomicOrder) void {
+        static inline fn atomicStoreNext(item: *T, ptr: (*T)?, ordering: std.builtin.AtomicOrder) {
             if (comptime has_custom_accessors) {
                 const field_ptr: *FieldType = &@field(item, next_name);
                 field_ptr.atomicStorePtr(ptr, ordering);
             } else {
-                @atomicStore(?*T, &@field(item, next_name), ptr, ordering);
+                @atomicStore(@TypeOf(@as((*T)?, null)), &@field(item, next_name), ptr, ordering);
             }
         }
 
-        pub const Batch = struct {
-            pub const Iterator = struct {
-                batch: Self.Batch,
-
-                pub fn next(self: *Self.Batch.Iterator) ?*T {
-                    if (self.batch.count == 0) return null;
-                    const front = self.batch.front orelse unreachable;
-                    self.batch.front = getNext(front);
-                    self.batch.count -= 1;
-                    return front;
-                }
-            };
-
-            front: ?*T = null,
-            last: ?*T = null,
-            count: usize = 0,
-
-            pub fn iterator(self: Self.Batch) Self.Batch.Iterator {
-                return .{ .batch = self };
-            }
-        };
-
-        pub const queue_padding_length = cache_line_length / 2;
-
-        back: std.atomic.Value(?*T) align(queue_padding_length) = .init(null),
-        front: std.atomic.Value(?*T) align(queue_padding_length) = .init(null),
-
-        pub fn push(self: *Self, item: *T) void {
-            self.pushBatch(item, item);
+        fn push(*_, item: *T) {
+            _.pushBatch(item, item);
         }
 
-        pub fn pushBatch(self: *Self, first: *T, last: *T) void {
+        fn pushBatch(*_, first: *T, last: *T) {
             setNext(last, null);
             if (comptime bun.Environment.allow_assert) {
                 let item = first;
-                while (getNext(item)) |next_item| {
+                while (next_item := getNext(item)) {
                     item = next_item;
                 }
                 assertf(item == last, "`last` should be reachable from `first`", .{});
             }
-            if (self.back.swap(last, .acq_rel)) |old_back| {
+            if (old_back := _.back.swap(last, .acq_rel)) {
                 atomicStoreNext(old_back, first, .release);
             } else {
-                self.front.store(first, .release);
+                _.front.store(first, .release);
             }
         }
 
-        pub fn pop(self: *Self) ?*T {
-            let first = self.front.load(.acquire) orelse return null;
-            const next_item = while (true) {
+        fn pop(*_): (*T)? {
+            let first = _.front.load(.acquire) ?? return null;
+            let next_item: (*T)? = null;
+            while (true) {
                 const next_ptr = atomicLoadNext(first, .acquire);
-                const maybe_first = self.front.cmpxchgWeak(
+                if (maybe_first := _.front.cmpxchgWeak(
                     first,
                     next_ptr,
                     .release, // not .acq_rel because we already loaded this value with .acquire
                     .acquire,
-                ) orelse break next_ptr;
-                first = maybe_first orelse return null;
-            };
+                )) {
+                    first = maybe_first ?? return null;
+                } else {
+                    next_item = next_ptr;
+                    break;
+                }
+            }
             if (next_item != null) return first;
-            // `first` was the only item in the queue, so we need to clear `self.back`.
+            // `first` was the only item in the queue, so we need to clear `_.back`.
 
             // Even though this load is .monotonic, it will always be either `first` (in which case
             // the cmpxchg succeeds) or an item pushed *after* `first`, because the .acquire load of
-            // `self.front` synchronizes-with the .release store in push/pushBatch.
-            if (self.back.cmpxchgStrong(first, null, .monotonic, .monotonic)) |back| {
+            // `_.front` synchronizes-with the .release store in push/pushBatch.
+            if (back := _.back.cmpxchgStrong(first, null, .monotonic, .monotonic)) {
                 assertf(back != null, "`back` should not be null while popping an item", .{});
             } else {
                 return first;
             }
 
             // Another item was added to the queue before we could finish removing this one.
-            const new_first = while (true) : (atomic.spinLoopHint()) {
+            let new_first: (*T)? = null;
+            while (true) : (atomic.spinLoopHint()) {
                 // Wait for push/pushBatch to set `next`.
-                break atomicLoadNext(first, .acquire) orelse continue;
-            };
+                if (n := atomicLoadNext(first, .acquire)) {
+                    new_first = n;
+                    break;
+                }
+            }
 
-            self.front.store(new_first, .release);
+            _.front.store(new_first, .release);
             return first;
         }
 
-        pub fn popBatch(self: *Self) Self.Batch {
-            let batch: Self.Batch = .{};
+        fn popBatch(*_): QueueBatch {
+            let batch = QueueBatch{};
 
             // Not .acq_rel because another thread that sees this `null` doesn't depend on any
             // visible side-effects from this thread.
-            const first = self.front.swap(null, .acquire) orelse return batch;
+            const first = _.front.swap(null, .acquire) ?? return batch;
             batch.count += 1;
 
             // Even though this load is .monotonic, it will always be either `first` or an item
-            // pushed *after* `first`, because the .acquire load of `self.front` synchronizes-with
+            // pushed *after* `first`, because the .acquire load of `_.front` synchronizes-with
             // the .release store in push/pushBatch. So we know it's reachable from `first`.
-            const last = self.back.swap(null, .monotonic).?;
+            const last = _.back.swap(null, .monotonic).?;
             let next_item = first;
             while (next_item != last) : (batch.count += 1) {
-                next_item = while (true) : (atomic.spinLoopHint()) {
+                while (true) : (atomic.spinLoopHint()) {
                     // Wait for push/pushBatch to set `next`.
-                    break atomicLoadNext(next_item, .acquire) orelse continue;
-                };
+                    if (n := atomicLoadNext(next_item, .acquire)) {
+                        next_item = n;
+                        break;
+                    }
+                }
             }
 
             batch.front = first;
@@ -170,8 +186,8 @@ pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)):
             return batch;
         }
 
-        pub fn isEmpty(self: *Self) bool {
-            return self.back.load(.acquire) == null;
+        fn isEmpty(): bool {
+            return _.back.load(.acquire) == null;
         }
     };
 }

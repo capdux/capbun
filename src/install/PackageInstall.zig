@@ -70,6 +70,74 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const Walker = @import("../sys/walker_skippable.zig");
 pub const bun = @import("bun");
+pub const PackageInstallMethod = enum(u8) {
+    clonefile,
+    clonefile_each_dir,
+    hardlink,
+    copyfile,
+    symlink,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isSupported(self: PackageInstallMethod) bool {
+            if (comptime Environment.isMac) {
+                return macOS.get(self);
+            }
+            if (comptime (Environment.isLinux or Environment.isFreeBSD)) {
+                return linux.get(self);
+            }
+            if (comptime Environment.isWindows) {
+                return windows.get(self);
+            }
+            return false;
+    }
+    
+    pub const BackendSupport = std.EnumArray(PackageInstallMethod, bool);
+    
+    pub const map = bun.ComptimeStringMap(PackageInstallMethod, .{ .{ "clonefile", .clonefile }, .{ "clonefile_each_dir", .clonefile_each_dir }, .{ "hardlink", .hardlink }, .{ "copyfile", .copyfile }, .{ "symlink", .symlink } });
+    
+    pub const macOS = BackendSupport.initDefault(false, .{ .clonefile = true, .clonefile_each_dir = true, .hardlink = true, .copyfile = true, .symlink = true });
+    
+    pub const linux = BackendSupport.initDefault(false, .{ .hardlink = true, .copyfile = true, .symlink = true });
+    
+    pub const windows = BackendSupport.initDefault(false, .{ .hardlink = true, .copyfile = true });
+};
+
+pub const PackageInstallStep = enum {
+    copyfile,
+    opening_cache_dir,
+    opening_dest_dir,
+    copying_files,
+    linking,
+    linking_dependency,
+    patching,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+
+pub fn name(self: PackageInstallStep) []const u8 {
+            return (switch (self) {
+.copyfile, .copying_files => "copying files from cache to destination",
+.opening_cache_dir => "opening cache/package/version dir",
+.opening_dest_dir => "opening node_modules/package dir",
+.linking => "linking bins",
+.linking_dependency => "linking dependency/workspace to node_modules",
+.patching => "patching dependency",
+});
+    }
+};
+
+pub const PackageInstallResultTag = enum {
+    success,
+    failure,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub fn DeinitGuard(comptime T: type) type {
     return struct {
         ptr: T,
@@ -167,6 +235,227 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const PackageInstallPatch = struct {
+    path: []const u8,
+    contents_hash: u64,
+};
+
+pub const PackageInstallSummary = struct {
+    fail: u32 = 0,
+    success: u32 = 0,
+    skipped: u32 = 0,
+    successfully_installed: ?Bitset = null,
+    packages_with_blocked_scripts: std.AutoArrayHashMapUnmanaged(TruncatedPackageNameHash, usize) = .{},
+};
+
+pub const PackageInstallResultFailure = struct {
+    @"err": anyerror,
+    step: PackageInstallStep,
+    debug_trace: if (Environment.isDebug) bun.crash_handler.StoredTrace else void,
+
+pub inline fn isPackageMissingFromCache(self: PackageInstallResultFailure) bool {
+            return (((self.@"err" == error.FileNotFound) or (self.@"err" == error.ENOENT)) and (self.step == .opening_cache_dir));
+    }
+};
+
+pub const PackageInstallResult = union(PackageInstallResultTag) {
+    success: void,
+    failure: PackageInstallResultFailure,
+
+pub inline fn fail(e: anyerror, step: PackageInstallStep, trace: ?*std.builtin.StackTrace) PackageInstallResult {
+            return .{ .failure = .{ .@"err" = e, .step = step, .debug_trace = (if (Environment.isDebug) (if (trace) |t| bun.crash_handler.StoredTrace.from(t) else bun.crash_handler.StoredTrace.capture(@returnAddress())) else null) } };
+    }
+
+pub fn isFail(self: PackageInstallResult) bool {
+            return (switch (self) {
+.success => false,
+.failure => true,
+});
+    }
+    const Tag = PackageInstallResultTag;
+};
+
+pub const InstallDirState = struct {
+    cached_package_dir: std.fs.Dir = undefined,
+    walker: Walker = undefined,
+    subdir: std.fs.Dir = (if (Environment.isWindows) std.fs.Dir{ .fd = std.os.windows.INVALID_HANDLE_VALUE } else undefined),
+    buf: if (Environment.isWindows) bun.windows.WPathBuffer else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
+    buf2: if (Environment.isWindows) bun.windows.WPathBuffer else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
+    to_copy_buf: if (Environment.isWindows) []u16 else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
+    to_copy_buf2: if (Environment.isWindows) []u16 else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
+
+pub fn deinit(self: *InstallDirState) void {
+            if ((!Environment.isWindows)) {
+                _ = self.subdir.close();
+            }
+            var _guard_cache_dir = CloseGuard(*std.fs.Dir){ .ptr = (&self.cached_package_dir) };
+            _ = &_guard_cache_dir;
+            var ___guard_cache_dir_moved = false; _ = &___guard_cache_dir_moved;
+            defer if (!___guard_cache_dir_moved) { ___guard_cache_dir_moved = true; const __T = @TypeOf(_guard_cache_dir); if (@typeInfo(__T) == .optional) { if (_guard_cache_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cache_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cache_dir; _drop_val.__cp_deinit(); } };
+            var _guard_walker = DeinitGuard(*Walker){ .ptr = (&self.walker) };
+            _ = &_guard_walker;
+            var ___guard_walker_moved = false; _ = &___guard_walker_moved;
+            defer if (!___guard_walker_moved) { ___guard_walker_moved = true; const __T = @TypeOf(_guard_walker); if (@typeInfo(__T) == .optional) { if (_guard_walker) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_walker.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_walker; _drop_val.__cp_deinit(); } };
+    }
+};
+
+pub const HardLinkWindowsInstallTask = struct {
+    bytes: []u16,
+    src: [:0]bun.OSPathChar,
+    dest: [:0]bun.OSPathChar,
+    basename: u16,
+    task: bun.jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
+    @"err": ?anyerror = null,
+    pub var queue: Queue = undefined;
+
+pub fn initQueue() *Queue {
+            queue = Queue{ .thread_pool = (&PackageManager.get().thread_pool) };
+            return (blk: {
+            break :blk (&queue);
+
+});
+    }
+
+pub fn init(src: []const bun.OSPathChar, dest: []const bun.OSPathChar, basename: []const bun.OSPathChar) *@This() {
+            const allocation_size = (((src.len + 1) + dest.len) + 1);
+            const combined = bun.handleOom(bun.default_allocator.alloc(u16, allocation_size));
+            var remaining = combined;
+            _ = &remaining;
+            _ = @memcpy(remaining[0..src.len], src);
+            remaining[cp_cast_int(usize, src.len)] = 0;
+            const src_ = remaining[0..src.len :0];
+            remaining = remaining[(src.len + 1)..];
+            _ = @memcpy(remaining[0..dest.len], dest);
+            remaining[cp_cast_int(usize, dest.len)] = 0;
+            var dest_ = remaining[0..dest.len :0];
+            _ = &dest_;
+            remaining = remaining[(dest.len + 1)..];
+            return @This().new(.{ .bytes = combined, .src = src_, .dest = dest_, .basename = @truncate(basename.len) });
+    }
+
+pub fn runFromThreadPool(task: *bun.jsc.WorkPoolTask) void {
+            var hw_task: *@This() = @fieldParentPtr("task", task);
+            _ = &hw_task;
+            defer {
+            _ = queue.completeOne();
+            }
+            if (hw_task.run()) |e| {
+                _ = &e;
+                hw_task.@"err" = e;
+                _ = queue.errored_task.cmpxchgStrong(null, hw_task, .monotonic, .monotonic);
+                return;
+            }
+            _ = hw_task.deinit();
+    }
+
+pub fn deinit(self: *HardLinkWindowsInstallTask) void {
+            _ = bun.default_allocator.free(self.bytes);
+            {
+                self.* = undefined;
+            }
+            _ = bun.destroy(self);
+    }
+
+pub fn run(self: *HardLinkWindowsInstallTask) ?anyerror {
+            const src = self.src;
+            var dest = self.dest;
+            _ = &dest;
+            if ((bun.windows.CreateHardLinkW(dest.ptr, src.ptr, null) != 0)) {
+                return null;
+            }
+            switch (bun.windows.GetLastError()) {
+.ALREADY_EXISTS, .FILE_EXISTS, .CANNOT_MAKE => {
+if (comptime Environment.isDebug) {
+                _ = PackageInstall.debug("CreateHardLinkW returned EEXIST, this shouldn't happen: {f}", .{ bun.fmt.fmtPath(u16, dest, .{}) });
+            }
+            _ = bun.windows.DeleteFileW(dest.ptr);
+            if ((bun.windows.CreateHardLinkW(dest.ptr, src.ptr, null) != 0)) {
+                return null;
+            }
+},
+else => {
+
+},
+}
+            dest[cp_cast_int(usize, ((dest.len - self.basename) - 1))] = 0;
+            const dirpath = dest[0..((dest.len - self.basename) - 1) :0];
+            _ = (blk_catch_0: { break :blk_catch_0 ((PackageInstall.node_fs_for_package_installer().mkdirRecursiveOSPathImpl(void, .{}, dirpath, 0, false).unwrap()) catch |__ce_0| { _ = &__ce_0;  }); });
+            dest[cp_cast_int(usize, ((dest.len - self.basename) - 1))] = std.fs.path.sep;
+            if ((bun.windows.CreateHardLinkW(dest.ptr, src.ptr, null) != 0)) {
+                return null;
+            }
+            if (PackageManager.verbose_install) {
+                const once_log = struct {
+                var once = false;
+
+                fn get() bool {
+                    const prev = once;
+                    once = true;
+                    return !prev;
+                }
+            }.get();
+                if (once_log) {
+                    _ = Output.warn("CreateHardLinkW failed, falling back to CopyFileW: {f} -> {f}\n", .{ bun.fmt.fmtOSPath(src, .{}), bun.fmt.fmtOSPath(dest, .{}) });
+                }
+            }
+            if ((bun.windows.CopyFileW(src.ptr, dest.ptr, 0) != 0)) {
+                return null;
+            }
+            return bun.windows.getLastError();
+    }
+    const Queue = PackageInstall.NewTaskQueue(@This());
+    const new = bun.TrivialNew(@This());
+};
+
+pub const UninstallTask = struct {
+    absolute_path: []const u8,
+    task: jsc.WorkPoolTask = .{ .callback = (&run) },
+
+pub fn run(task: *jsc.WorkPoolTask) void {
+            var unintall_task: *@This() = @fieldParentPtr("task", task);
+            _ = &unintall_task;
+            var debug_timer = bun.Output.DebugTimer.start();
+            _ = &debug_timer;
+            defer {
+            {
+                _ = PackageManager.get().decrementPendingTasks();
+                _ = PackageManager.get().wake();
+            }
+            }
+            var _guard_task = DeinitGuard(@TypeOf(unintall_task)){ .ptr = unintall_task };
+            _ = &_guard_task;
+            var ___guard_task_moved = false; _ = &___guard_task_moved;
+            defer if (!___guard_task_moved) { ___guard_task_moved = true; const __T = @TypeOf(_guard_task); if (@typeInfo(__T) == .optional) { if (_guard_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_task; _drop_val.__cp_deinit(); } };
+            const dirname = ((std.fs.path.dirname(unintall_task.absolute_path)) orelse {
+            _ = Output.debugWarn("Unexpectedly failed to get dirname of {s}", .{ unintall_task.absolute_path });
+            return;
+});
+            const basename = std.fs.path.basename(unintall_task.absolute_path);
+            var dir = (blk_catch_1: { break :blk_catch_1 ((bun.openDirA(std.fs.cwd(), dirname)) catch |e| { _ = &e; if (comptime (Environment.isDebug or Environment.enable_asan)) {
+                _ = Output.debugWarn("Failed to delete {s}: {s}", .{ unintall_task.absolute_path, @errorName(e) });
+            }
+            return; }); });
+            _ = &dir;
+            var _guard_dir_fd = CloseValGuard(bun.FD){ .val = bun.FD.fromStdDir(dir) };
+            _ = &_guard_dir_fd;
+            var ___guard_dir_fd_moved = false; _ = &___guard_dir_fd_moved;
+            defer if (!___guard_dir_fd_moved) { ___guard_dir_fd_moved = true; const __T = @TypeOf(_guard_dir_fd); if (@typeInfo(__T) == .optional) { if (_guard_dir_fd) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dir_fd.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dir_fd; _drop_val.__cp_deinit(); } };
+            _ = (blk_catch_2: { break :blk_catch_2 ((dir.deleteTree(basename)) catch |e| { _ = &e; if (comptime (Environment.isDebug or Environment.enable_asan)) {
+                _ = Output.debugWarn("Failed to delete {s} in {s}: {s}", .{ basename, dirname, @errorName(e) });
+            } }); });
+            if (Environment.isDebug) {
+                _ = (&debug_timer);
+                _ = PackageInstall.debug("deleteTree({s}, {s}) = {f}", .{ basename, dirname, debug_timer });
+            }
+    }
+
+pub fn deinit(self: *UninstallTask) void {
+            _ = bun.default_allocator.free(self.absolute_path);
+            _ = bun.destroy(self);
+    }
+    const new = bun.TrivialNew(@This());
+};
+
 pub const PackageInstall = struct {
     cache_dir: std.fs.Dir,
     cache_dir_subpath: stringZ = "",
@@ -189,14 +478,14 @@ pub fn verifyPatchHash(self: *PackageInstall, patch: *const Patch, root_node_mod
             const bunhashtag = buntaghashbuf_make((&buf), patchfile_contents_hash);
             const patch_tag_parts: [2][]const u8 = .{ self.destination_dir_subpath, bunhashtag };
             const patch_tag_path = bun.path.joinZ((&patch_tag_parts), .posix);
-            var destination_dir = (blk_catch_0: { break :blk_catch_0 ((self.node_modules.openDir(root_node_modules_dir)) catch |__ce_0| { _ = &__ce_0; return false; }); });
+            var destination_dir = (blk_catch_3: { break :blk_catch_3 ((self.node_modules.openDir(root_node_modules_dir)) catch |__ce_3| { _ = &__ce_3; return false; }); });
             _ = &destination_dir;
             var _guard_dest_dir = DirIfNotCwdGuard{ .dir = (&destination_dir) };
             _ = &_guard_dest_dir;
             var ___guard_dest_dir_moved = false; _ = &___guard_dest_dir_moved;
             defer if (!___guard_dest_dir_moved) { ___guard_dest_dir_moved = true; const __T = @TypeOf(_guard_dest_dir); if (@typeInfo(__T) == .optional) { if (_guard_dest_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dest_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dest_dir; _drop_val.__cp_deinit(); } };
             if (comptime bun.Environment.isPosix) {
-                _ = (blk_catch_1: { break :blk_catch_1 ((bun.sys.fstatat(.fromStdDir(destination_dir), patch_tag_path).unwrap()) catch |__ce_1| { _ = &__ce_1; return false; }); });
+                _ = (blk_catch_4: { break :blk_catch_4 ((bun.sys.fstatat(.fromStdDir(destination_dir), patch_tag_path).unwrap()) catch |__ce_4| { _ = &__ce_4; return false; }); });
             } else {
                 switch (bun.sys.openat(.fromStdDir(destination_dir), patch_tag_path, bun.O.RDONLY, 0)) {
 .err => {
@@ -220,7 +509,7 @@ pub fn verifyGitResolution(self: *PackageInstall, repo: *const Repository, root_
             var git_tag_stack_fallback = std.heap.stackFallback(2048, bun.default_allocator);
             _ = &git_tag_stack_fallback;
             const allocator = git_tag_stack_fallback.get();
-            var bun_tag_file = (blk_catch_2: { break :blk_catch_2 ((self.node_modules.readSmallFile(root_node_modules_dir, bun_tag_path, allocator)) catch |__ce_2| { _ = &__ce_2; return false; }); });
+            var bun_tag_file = (blk_catch_5: { break :blk_catch_5 ((self.node_modules.readSmallFile(root_node_modules_dir, bun_tag_path, allocator)) catch |__ce_5| { _ = &__ce_5; return false; }); });
             _ = &bun_tag_file;
             var _guard_bytes = DeinitGuard(@TypeOf(&bun_tag_file.bytes)){ .ptr = (&bun_tag_file.bytes) };
             _ = &_guard_bytes;
@@ -264,25 +553,25 @@ pub fn getInstalledPackageJsonSource(self: *PackageInstall, root_node_modules_di
             defer {
             self.destination_dir_subpath_buf[cp_cast_int(usize, self.destination_dir_subpath.len)] = 0;
             }
-            var package_json_file = (blk_catch_3: { break :blk_catch_3 ((self.node_modules.openFile(root_node_modules_dir, package_json_path)) catch |__ce_3| { _ = &__ce_3; return null; }); });
+            var package_json_file = (blk_catch_6: { break :blk_catch_6 ((self.node_modules.openFile(root_node_modules_dir, package_json_path)) catch |__ce_6| { _ = &__ce_6; return null; }); });
             _ = &package_json_file;
             var _guard_pkg_json = CloseGuard(@TypeOf(&package_json_file)){ .ptr = (&package_json_file) };
             _ = &_guard_pkg_json;
             var ___guard_pkg_json_moved = false; _ = &___guard_pkg_json_moved;
             defer if (!___guard_pkg_json_moved) { ___guard_pkg_json_moved = true; const __T = @TypeOf(_guard_pkg_json); if (@typeInfo(__T) == .optional) { if (_guard_pkg_json) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pkg_json.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pkg_json; _drop_val.__cp_deinit(); } };
-            read = (blk_catch_4: { break :blk_catch_4 ((package_json_file.read(mutable.list.items[total..]).unwrap()) catch |__ce_4| { _ = &__ce_4; return null; }); });
+            read = (blk_catch_7: { break :blk_catch_7 ((package_json_file.read(mutable.list.items[total..]).unwrap()) catch |__ce_7| { _ = &__ce_7; return null; }); });
             var remain = mutable.list.items[@min(total, read)..];
             _ = &remain;
             if (((read > 0) and (remain.len < 1024))) {
-                _ = (blk_catch_5: { break :blk_catch_5 ((mutable.growBy(4096)) catch |__ce_5| { _ = &__ce_5; return null; }); });
+                _ = (blk_catch_8: { break :blk_catch_8 ((mutable.growBy(4096)) catch |__ce_8| { _ = &__ce_8; return null; }); });
                 _ = mutable.list.expandToCapacity();
             }
-            while ((read > 0)) : (read = (blk_catch_6: { break :blk_catch_6 ((package_json_file.read(remain).unwrap()) catch |__ce_6| { _ = &__ce_6; return null; }); })) {
+            while ((read > 0)) : (read = (blk_catch_9: { break :blk_catch_9 ((package_json_file.read(remain).unwrap()) catch |__ce_9| { _ = &__ce_9; return null; }); })) {
                 total = (total + read);
                 _ = mutable.list.expandToCapacity();
                 remain = mutable.list.items[total..];
                 if ((remain.len < 1024)) {
-                    _ = (blk_catch_7: { break :blk_catch_7 ((mutable.growBy(4096)) catch |__ce_7| { _ = &__ce_7; return null; }); });
+                    _ = (blk_catch_10: { break :blk_catch_10 ((mutable.growBy(4096)) catch |__ce_10| { _ = &__ce_10; return null; }); });
                 }
                 _ = mutable.list.expandToCapacity();
                 remain = mutable.list.items[total..];
@@ -311,9 +600,9 @@ pub fn verifyPackageJSONNameAndVersion(self: *PackageInstall, root_node_modules_
             var ___guard_log_moved = false; _ = &___guard_log_moved;
             defer if (!___guard_log_moved) { ___guard_log_moved = true; const __T = @TypeOf(_guard_log); if (@typeInfo(__T) == .optional) { if (_guard_log) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_log.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_log; _drop_val.__cp_deinit(); } };
             _ = initializeStore();
-            var package_json_checker = (blk_catch_8: { break :blk_catch_8 ((JSON.PackageJSONVersionChecker.init(self.allocator, source, (&log))) catch |__ce_8| { _ = &__ce_8; return false; }); });
+            var package_json_checker = (blk_catch_11: { break :blk_catch_11 ((JSON.PackageJSONVersionChecker.init(self.allocator, source, (&log))) catch |__ce_11| { _ = &__ce_11; return false; }); });
             _ = &package_json_checker;
-            const parsed_expr = (blk_catch_9: { break :blk_catch_9 ((package_json_checker.parseExpr()) catch |__ce_9| { _ = &__ce_9; return false; }); });
+            const parsed_expr = (blk_catch_12: { break :blk_catch_12 ((package_json_checker.parseExpr()) catch |__ce_12| { _ = &__ce_12; return false; }); });
             if ((@TypeOf(parsed_expr) == void)) {
             }
             if (((log.errors > 0) or (!package_json_checker.has_found_name))) {
@@ -353,14 +642,14 @@ break :brk (if (comptime @typeInfo(@TypeOf(c)) == .@"enum") cp_cast_int(usize, @
     }
 
 pub fn installWithClonefileEachDir(self: *PackageInstall, destination_dir: std.fs.Dir) anyerror!Result {
-            var cached_package_dir = (blk_catch_10: { break :blk_catch_10 ((bun.openDir(self.cache_dir, self.cache_dir_subpath)) catch |e| { _ = &e; return Result.fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
+            var cached_package_dir = (blk_catch_13: { break :blk_catch_13 ((bun.openDir(self.cache_dir, self.cache_dir_subpath)) catch |e| { _ = &e; return Result.fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
             _ = &cached_package_dir;
             var _guard_cache_dir = CloseGuard(@TypeOf(&cached_package_dir)){ .ptr = (&cached_package_dir) };
             _ = &_guard_cache_dir;
             var ___guard_cache_dir_moved = false; _ = &___guard_cache_dir_moved;
             defer if (!___guard_cache_dir_moved) { ___guard_cache_dir_moved = true; const __T = @TypeOf(_guard_cache_dir); if (@typeInfo(__T) == .optional) { if (_guard_cache_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cache_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cache_dir; _drop_val.__cp_deinit(); } };
             const empty_os_slices: [0]bun.OSPathSlice = undefined;
-            var walker_ = (blk_catch_11: { break :blk_catch_11 ((Walker.walk(.fromStdDir(cached_package_dir), self.allocator, empty_os_slices[0..0], empty_os_slices[0..0])) catch |e| { _ = &e; return Result.fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
+            var walker_ = (blk_catch_14: { break :blk_catch_14 ((Walker.walk(.fromStdDir(cached_package_dir), self.allocator, empty_os_slices[0..0], empty_os_slices[0..0])) catch |e| { _ = &e; return Result.fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
             _ = &walker_;
             walker_.resolve_unknown_entry_types = true;
             var _guard_walker = DeinitGuard(@TypeOf(&walker_)){ .ptr = (&walker_) };
@@ -422,13 +711,13 @@ else => {
             return real_file_count;
     }
 };
-            var subdir = (blk_catch_12: { break :blk_catch_12 ((destination_dir.makeOpenPath(bun.span(self.destination_dir_subpath), .{})) catch |e| { _ = &e; return Result.fail(e, .opening_dest_dir, @errorReturnTrace()); }); });
+            var subdir = (blk_catch_15: { break :blk_catch_15 ((destination_dir.makeOpenPath(bun.span(self.destination_dir_subpath), .{})) catch |e| { _ = &e; return Result.fail(e, .opening_dest_dir, @errorReturnTrace()); }); });
             _ = &subdir;
             var _guard_subdir = CloseGuard(@TypeOf(&subdir)){ .ptr = (&subdir) };
             _ = &_guard_subdir;
             var ___guard_subdir_moved = false; _ = &___guard_subdir_moved;
             defer if (!___guard_subdir_moved) { ___guard_subdir_moved = true; const __T = @TypeOf(_guard_subdir); if (@typeInfo(__T) == .optional) { if (_guard_subdir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_subdir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_subdir; _drop_val.__cp_deinit(); } };
-            self.file_count = (blk_catch_13: { break :blk_catch_13 ((FileCopier.copy(subdir, (&walker_))) catch |e| { _ = &e; return Result.fail(e, .copying_files, @errorReturnTrace()); }); });
+            self.file_count = (blk_catch_16: { break :blk_catch_16 ((FileCopier.copy(subdir, (&walker_))) catch |e| { _ = &e; return Result.fail(e, .copying_files, @errorReturnTrace()); }); });
             return .{ .success = .{} };
     }
 
@@ -441,7 +730,7 @@ pub fn installWithClonefile(self: *PackageInstall, destination_dir: std.fs.Dir) 
                     _ = &slash;
                     self.destination_dir_subpath_buf[cp_cast_int(usize, slash)] = 0;
                     const subdir = self.destination_dir_subpath_buf[0..slash :0];
-                    _ = (blk_catch_14: { break :blk_catch_14 ((destination_dir.makeDirZ(subdir)) catch |__ce_14| { _ = &__ce_14;  }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((destination_dir.makeDirZ(subdir)) catch |__ce_17| { _ = &__ce_17;  }); });
                     self.destination_dir_subpath_buf[cp_cast_int(usize, slash)] = std.fs.path.sep;
                 }
             }
@@ -467,13 +756,13 @@ pub inline fn node_fs_for_package_installer() *bun.jsc.Node.fs.NodeFS {
 pub fn initInstallDir(self: *PackageInstall, state: *InstallDirState, destination_dir: std.fs.Dir, method: Method) Result {
             const destbase = destination_dir;
             const destpath = self.destination_dir_subpath;
-            state.cached_package_dir = (blk_catch_15: { break :blk_catch_15 (((if (comptime Environment.isWindows) (if ((method == .symlink)) bun.openDirNoRenamingOrDeletingWindows(.fromStdDir(self.cache_dir), self.cache_dir_subpath) else bun.openDir(self.cache_dir, self.cache_dir_subpath)) else bun.openDir(self.cache_dir, self.cache_dir_subpath))) catch |e| { _ = &e; return Result.fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
+            state.cached_package_dir = (blk_catch_18: { break :blk_catch_18 (((if (comptime Environment.isWindows) (if ((method == .symlink)) bun.openDirNoRenamingOrDeletingWindows(.fromStdDir(self.cache_dir), self.cache_dir_subpath) else bun.openDir(self.cache_dir, self.cache_dir_subpath)) else bun.openDir(self.cache_dir, self.cache_dir_subpath))) catch |e| { _ = &e; return Result.fail(e, .opening_cache_dir, @errorReturnTrace()); }); });
             const empty_os_slices: [0]bun.OSPathSlice = undefined;
             const node_modules_slices: [1]bun.OSPathSlice = .{ (comptime bun.OSPathLiteral("node_modules")) };
-            state.walker = (blk_catch_16: { break :blk_catch_16 ((Walker.walk(.fromStdDir(state.cached_package_dir), self.allocator, empty_os_slices[0..0], (if ((((method == .symlink) and (self.cache_dir_subpath.len == 1)) and (self.cache_dir_subpath[0] == 46))) (&node_modules_slices) else empty_os_slices[0..0]))) catch |e| { _ = &e; break :blk_catch_16 bun.handleOom(e); }); });
+            state.walker = (blk_catch_19: { break :blk_catch_19 ((Walker.walk(.fromStdDir(state.cached_package_dir), self.allocator, empty_os_slices[0..0], (if ((((method == .symlink) and (self.cache_dir_subpath.len == 1)) and (self.cache_dir_subpath[0] == 46))) (&node_modules_slices) else empty_os_slices[0..0]))) catch |e| { _ = &e; break :blk_catch_19 bun.handleOom(e); }); });
             state.walker.resolve_unknown_entry_types = true;
             if ((!Environment.isWindows)) {
-                state.subdir = (blk_catch_17: { break :blk_catch_17 ((destbase.makeOpenPath(bun.span(destpath), .{ .iterate = true, .access_sub_paths = true })) catch |e| { _ = &e; _ = state.cached_package_dir.close();
+                state.subdir = (blk_catch_20: { break :blk_catch_20 ((destbase.makeOpenPath(bun.span(destpath), .{ .iterate = true, .access_sub_paths = true })) catch |e| { _ = &e; _ = state.cached_package_dir.close();
                 _ = state.walker.deinit();
                 return Result.fail(e, .opening_dest_dir, @errorReturnTrace()); }); });
                 return .success;
@@ -637,7 +926,7 @@ _ = unreachable;
             return real_file_count;
     }
 };
-            self.file_count = (blk_catch_18: { break :blk_catch_18 ((FileCopier.copy(state.subdir, (&state.walker), self.progress, (if (Environment.isWindows) state.to_copy_buf else @as(void, undefined)), (if (Environment.isWindows) (&state.buf) else @as(void, undefined)), (if (Environment.isWindows) state.to_copy_buf2 else @as(void, undefined)), (if (Environment.isWindows) (&state.buf2) else @as(void, undefined)))) catch |e| { _ = &e; return Result.fail(e, .copying_files, @errorReturnTrace()); }); });
+            self.file_count = (blk_catch_21: { break :blk_catch_21 ((FileCopier.copy(state.subdir, (&state.walker), self.progress, (if (Environment.isWindows) state.to_copy_buf else @as(void, undefined)), (if (Environment.isWindows) (&state.buf) else @as(void, undefined)), (if (Environment.isWindows) state.to_copy_buf2 else @as(void, undefined)), (if (Environment.isWindows) (&state.buf2) else @as(void, undefined)))) catch |e| { _ = &e; return Result.fail(e, .copying_files, @errorReturnTrace()); }); });
             return .success;
     }
 
@@ -662,7 +951,7 @@ pub fn wait(self: *@This()) void {
 };
     }
 
-pub fn installWithHardlink(self: *PackageInstall, dest_dir: std.fs.Dir) anyerror!Result {
+pub fn installWithHardlink(self: *PackageInstall, dest_dir: std.fs.Dir) !Result {
             var state = InstallDirState{  };
             _ = &state;
             const res = self.initInstallDir((&state), dest_dir, .hardlink);
@@ -732,7 +1021,7 @@ _ = continue;
             return real_file_count;
     }
 };
-            self.file_count = (blk_catch_19: { break :blk_catch_19 ((FileCopier.copy(state.subdir, (&state.walker), state.to_copy_buf, (if (Environment.isWindows) (&state.buf) else @as(void, undefined)), state.to_copy_buf2, (if (Environment.isWindows) (&state.buf2) else @as(void, undefined)))) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
+            self.file_count = (blk_catch_22: { break :blk_catch_22 ((FileCopier.copy(state.subdir, (&state.walker), state.to_copy_buf, (if (Environment.isWindows) (&state.buf) else @as(void, undefined)), state.to_copy_buf2, (if (Environment.isWindows) (&state.buf2) else @as(void, undefined)))) catch |e| { _ = &e; _ = bun.handleErrorReturnTrace(e, @errorReturnTrace());
             if (comptime Environment.isWindows) {
                 if ((e == error.FailedToCopyFile)) {
                     return Result.fail(e, .copying_files, @errorReturnTrace());
@@ -771,7 +1060,7 @@ pub fn installWithSymlink(self: *PackageInstall, dest_dir: std.fs.Dir) anyerror!
                 }
             }
             const FileCopier = struct {
-            pub fn copy(
+            fn copy(
                 destination_dir: std.fs.Dir,
                 walker: *Walker,
                 to_copy_into1: if (Environment.isWindows) []u16 else void,
@@ -842,7 +1131,7 @@ pub fn installWithSymlink(self: *PackageInstall, dest_dir: std.fs.Dir) anyerror!
                                             const once_log = struct {
                                                 var once = false;
 
-                                                pub fn get() bool {
+                                                fn get() bool {
                                                     const prev = once;
                                                     once = true;
                                                     return !prev;
@@ -870,7 +1159,7 @@ pub fn installWithSymlink(self: *PackageInstall, dest_dir: std.fs.Dir) anyerror!
                 return real_file_count;
             }
         };
-            self.file_count = (blk_catch_20: { break :blk_catch_20 ((FileCopier.copy(state.subdir, (&state.walker), (if (Environment.isWindows) state.to_copy_buf else @as(void, undefined)), (if (Environment.isWindows) (&state.buf) else @as(void, undefined)), (if (Environment.isWindows) state.to_copy_buf2 else to_copy_buf2), (if (Environment.isWindows) (&state.buf2) else (&buf2)))) catch |e| { _ = &e; if (comptime Environment.isWindows) {
+            self.file_count = (blk_catch_23: { break :blk_catch_23 ((FileCopier.copy(state.subdir, (&state.walker), (if (Environment.isWindows) state.to_copy_buf else @as(void, undefined)), (if (Environment.isWindows) (&state.buf) else @as(void, undefined)), (if (Environment.isWindows) state.to_copy_buf2 else to_copy_buf2), (if (Environment.isWindows) (&state.buf2) else (&buf2)))) catch |e| { _ = &e; if (comptime Environment.isWindows) {
                 if ((e == error.FailedToCopyFile)) {
                     return Result.fail(e, .copying_files, @errorReturnTrace());
                 }
@@ -884,7 +1173,7 @@ pub fn installWithSymlink(self: *PackageInstall, dest_dir: std.fs.Dir) anyerror!
     }
 
 pub fn uninstall(self: *PackageInstall, destination_dir: std.fs.Dir) void {
-            _ = (blk_catch_21: { break :blk_catch_21 ((destination_dir.deleteTree(bun.span(self.destination_dir_subpath))) catch |__ce_21| { _ = &__ce_21;  }); });
+            _ = (blk_catch_24: { break :blk_catch_24 ((destination_dir.deleteTree(bun.span(self.destination_dir_subpath))) catch |__ce_24| { _ = &__ce_24;  }); });
     }
 
 pub fn uninstallBeforeInstall(self: *PackageInstall, destination_dir: std.fs.Dir) void {
@@ -896,55 +1185,7 @@ pub fn uninstallBeforeInstall(self: *PackageInstall, destination_dir: std.fs.Dir
 
 },
 .result => {
-const UninstallTask = struct {
-    absolute_path: []const u8,
-    task: jsc.WorkPoolTask = .{ .callback = (&run) },
-
-pub fn run(task: *jsc.WorkPoolTask) void {
-            var unintall_task: *@This() = @fieldParentPtr("task", task);
-            _ = &unintall_task;
-            var debug_timer = bun.Output.DebugTimer.start();
-            _ = &debug_timer;
-            defer {
-            {
-                _ = PackageManager.get().decrementPendingTasks();
-                _ = PackageManager.get().wake();
-            }
-            }
-            var _guard_task = DeinitGuard(@TypeOf(unintall_task)){ .ptr = unintall_task };
-            _ = &_guard_task;
-            var ___guard_task_moved = false; _ = &___guard_task_moved;
-            defer if (!___guard_task_moved) { ___guard_task_moved = true; const __T = @TypeOf(_guard_task); if (@typeInfo(__T) == .optional) { if (_guard_task) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_task.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_task; _drop_val.__cp_deinit(); } };
-            const dirname = ((std.fs.path.dirname(unintall_task.absolute_path)) orelse {
-            _ = Output.debugWarn("Unexpectedly failed to get dirname of {s}", .{ unintall_task.absolute_path });
-            return;
-});
-            const basename = std.fs.path.basename(unintall_task.absolute_path);
-            var dir = (blk_catch_0: { break :blk_catch_0 ((bun.openDirA(std.fs.cwd(), dirname)) catch |err| { _ = &err; if (comptime (Environment.isDebug or Environment.enable_asan)) {
-                _ = Output.debugWarn("Failed to delete {s}: {s}", .{ unintall_task.absolute_path, @errorName(err) });
-            }
-            return; }); });
-            _ = &dir;
-            var _guard_dir_fd = CloseValGuard(bun.FD){ .val = bun.FD.fromStdDir(dir) };
-            _ = &_guard_dir_fd;
-            var ___guard_dir_fd_moved = false; _ = &___guard_dir_fd_moved;
-            defer if (!___guard_dir_fd_moved) { ___guard_dir_fd_moved = true; const __T = @TypeOf(_guard_dir_fd); if (@typeInfo(__T) == .optional) { if (_guard_dir_fd) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dir_fd.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dir_fd; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_1: { break :blk_catch_1 ((dir.deleteTree(basename)) catch |err| { _ = &err; if (comptime (Environment.isDebug or Environment.enable_asan)) {
-                _ = Output.debugWarn("Failed to delete {s} in {s}: {s}", .{ basename, dirname, @errorName(err) });
-            } }); });
-            if (Environment.isDebug) {
-                _ = (&debug_timer);
-                _ = debug("deleteTree({s}, {s}) = {f}", .{ basename, dirname, debug_timer });
-            }
-    }
-
-pub fn deinit(uninstall_task: *@This()) void {
-            _ = bun.default_allocator.free(uninstall_task.absolute_path);
-            _ = bun.destroy(uninstall_task);
-    }
-    pub const new = bun.TrivialNew(@This());
-};
-            var task = UninstallTask.new(.{ .absolute_path = bun.handleOom(bun.default_allocator.dupeZ(u8, bun.path.joinAbsString(FileSystem.instance.top_level_dir, (&.{ self.node_modules.path.items, temp_path }), .auto))) });
+var task = UninstallTask.new(.{ .absolute_path = bun.handleOom(bun.default_allocator.dupeZ(u8, bun.path.joinAbsString(FileSystem.instance.top_level_dir, (&.{ self.node_modules.path.items, temp_path }), .auto))) });
             _ = &task;
             _ = PackageManager.get().incrementPendingTasks(1);
             _ = PackageManager.get().thread_pool.schedule(bun.ThreadPool.Batch.from((&task.task)));
@@ -991,18 +1232,18 @@ _ = fd.close();
 pub fn isDanglingWindowsBinLink(node_mod_fd: bun.FD, path: []const u16, temp_buffer: []u8) bool {
             const WinBinLinkingShim = @import("./windows-shim/BinLinkingShim.zig");
             const bin_path = bin_path: {
-            const fd = (blk_catch_23: { break :blk_catch_23 ((bun.sys.openatWindows(node_mod_fd, path, bun.O.RDONLY).unwrap()) catch |__ce_23| { _ = &__ce_23; return true; }); });
+            const fd = (blk_catch_26: { break :blk_catch_26 ((bun.sys.openatWindows(node_mod_fd, path, bun.O.RDONLY).unwrap()) catch |__ce_26| { _ = &__ce_26; return true; }); });
             var _guard_fd = CloseValGuard(@TypeOf(fd)){ .val = fd };
             _ = &_guard_fd;
             var ___guard_fd_moved = false; _ = &___guard_fd_moved;
             defer if (!___guard_fd_moved) { ___guard_fd_moved = true; const __T = @TypeOf(_guard_fd); if (@typeInfo(__T) == .optional) { if (_guard_fd) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_fd.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_fd; _drop_val.__cp_deinit(); } };
-            const size = (blk_catch_24: { break :blk_catch_24 ((fd.stdFile().readAll(temp_buffer)) catch |__ce_24| { _ = &__ce_24; return true; }); });
+            const size = (blk_catch_27: { break :blk_catch_27 ((fd.stdFile().readAll(temp_buffer)) catch |__ce_27| { _ = &__ce_27; return true; }); });
             const decoded = ((WinBinLinkingShim.looseDecode(temp_buffer[0..size])) orelse { return true; });
             _ = bun.assert(decoded.flags.isValid());
             break :bin_path decoded.bin_path;
 };
             {
-                const fd = (blk_catch_25: { break :blk_catch_25 ((bun.sys.openatWindows(node_mod_fd, bin_path, bun.O.RDONLY).unwrap()) catch |__ce_25| { _ = &__ce_25; return true; }); });
+                const fd = (blk_catch_28: { break :blk_catch_28 ((bun.sys.openatWindows(node_mod_fd, bin_path, bun.O.RDONLY).unwrap()) catch |__ce_28| { _ = &__ce_28; return true; }); });
                 _ = fd.close();
             }
             return false;
@@ -1019,7 +1260,7 @@ pub fn installFromLink(self: *PackageInstall, skip_delete: bool, destination_dir
             const symlinked_path = self.cache_dir_subpath;
             var to_buf: bun.PathBuffer = undefined;
             _ = &to_buf;
-            const to_path = (blk_catch_26: { break :blk_catch_26 ((self.cache_dir.realpath(symlinked_path, (&to_buf))) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, @errorReturnTrace()); }); });
+            const to_path = (blk_catch_29: { break :blk_catch_29 ((self.cache_dir.realpath(symlinked_path, (&to_buf))) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, @errorReturnTrace()); }); });
             const dest = std.fs.path.basename(dest_path);
             if (comptime Environment.isWindows) {
                 var wbuf: bun.WPathBuffer = undefined;
@@ -1085,15 +1326,15 @@ break :brk;
                 var dest_dir = destination_dir;
                 _ = &dest_dir;
                 if ((subdir != null)) {
-                    dest_dir = (blk_catch_27: { break :blk_catch_27 ((bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{})) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, @errorReturnTrace()); }); });
+                    dest_dir = (blk_catch_30: { break :blk_catch_30 ((bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{})) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, @errorReturnTrace()); }); });
                 }
                 var _guard_dest_dir = DirCloseIfGuard{ .dir = (&dest_dir), .should_close = (subdir != null) };
                 _ = &_guard_dest_dir;
                 var ___guard_dest_dir_moved = false; _ = &___guard_dest_dir_moved;
                 defer if (!___guard_dest_dir_moved) { ___guard_dest_dir_moved = true; const __T = @TypeOf(_guard_dest_dir); if (@typeInfo(__T) == .optional) { if (_guard_dest_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_dest_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_dest_dir; _drop_val.__cp_deinit(); } };
-                const dest_dir_path = (blk_catch_28: { break :blk_catch_28 ((bun.getFdPath(.fromStdDir(dest_dir), (&dest_buf))) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, @errorReturnTrace()); }); });
+                const dest_dir_path = (blk_catch_31: { break :blk_catch_31 ((bun.getFdPath(.fromStdDir(dest_dir), (&dest_buf))) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, @errorReturnTrace()); }); });
                 const target = Path.relative(dest_dir_path, to_path);
-                _ = (blk_catch_29: { break :blk_catch_29 ((std.posix.symlinkat(target, dest_dir.fd, dest)) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, null); }); });
+                _ = (blk_catch_32: { break :blk_catch_32 ((std.posix.symlinkat(target, dest_dir.fd, dest)) catch |e| { _ = &e; return Result.fail(e, .linking_dependency, null); }); });
             }
             if (PackageInstall.isDanglingSymlink(symlinked_path)) {
                 return Result.fail(error.DanglingSymlink, .linking_dependency, @errorReturnTrace());
@@ -1101,7 +1342,7 @@ break :brk;
             return .success;
     }
 
-pub fn getInstallMethod(self: *const PackageInstall) Method {
+pub fn getInstallMethod(self: PackageInstall) Method {
             return (if ((strings.eqlComptime(self.cache_dir_subpath, ".") or strings.hasPrefixComptime(self.cache_dir_subpath, ".."))) Method.symlink else PackageInstall.supported_method);
     }
 
@@ -1127,7 +1368,7 @@ else => brk: {
                 const subpath = buf[0..((subpath_len + 1) + "package.json".len) :0];
                 break :package_json_exists Syscall.existsAt(.fromStdDir(self.cache_dir), subpath);
 },
-else => (blk_catch_30: { break :blk_catch_30 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), self.cache_dir_subpath).unwrap()) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 false; }); }),
+else => (blk_catch_33: { break :blk_catch_33 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), self.cache_dir_subpath).unwrap()) catch |__ce_33| { _ = &__ce_33; break :blk_catch_33 false; }); }),
 });
                 if (exists) {
                     _ = manager.setPreinstallState(package_id, manager.lockfile, .done);
@@ -1137,7 +1378,7 @@ else => (blk_catch_30: { break :blk_catch_30 ((Syscall.directoryExistsAt(.fromSt
             const cache_dir_subpath_without_patch_hash = self.cache_dir_subpath[0..((std.mem.lastIndexOf(u8, self.cache_dir_subpath, "_patch_hash=")) orelse (@panic("Patched dependency cache dir subpath does not have the \"_patch_hash=HASH\" suffix. This is a bug, please file a GitHub issue.")))];
             _ = @memcpy(bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len], cache_dir_subpath_without_patch_hash);
             bun.path.join_buf[cp_cast_int(usize, cache_dir_subpath_without_patch_hash.len)] = 0;
-            const exists = (blk_catch_31: { break :blk_catch_31 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len :0]).unwrap()) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 false; }); });
+            const exists = (blk_catch_34: { break :blk_catch_34 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), bun.path.join_buf[0..cache_dir_subpath_without_patch_hash.len :0]).unwrap()) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 false; }); });
             if (exists) {
                 _ = manager.setPreinstallState(package_id, manager.lockfile, .done);
             }
@@ -1147,7 +1388,7 @@ else => (blk_catch_30: { break :blk_catch_30 ((Syscall.directoryExistsAt(.fromSt
     }
 
 pub fn patchedPackageMissingFromCache(self: *PackageInstall, manager: *PackageManager, package_id: PackageID) bool {
-            const exists = (blk_catch_32: { break :blk_catch_32 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), self.cache_dir_subpath).unwrap()) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 false; }); });
+            const exists = (blk_catch_35: { break :blk_catch_35 ((Syscall.directoryExistsAt(.fromStdDir(self.cache_dir), self.cache_dir_subpath).unwrap()) catch |__ce_35| { _ = &__ce_35; break :blk_catch_35 false; }); });
             if (exists) {
                 _ = manager.setPreinstallState(package_id, manager.lockfile, .done);
             }
@@ -1174,7 +1415,7 @@ pub fn install(self: *PackageInstall, skip_delete: bool, destination_dir: std.fs
 if (comptime Environment.isMac) {
                 var fallback = false;
                 _ = &fallback;
-                const res = (blk_catch_33: { break :blk_catch_33 ((self.installWithClonefile(destination_dir)) catch |e| { _ = &e; break :blk_catch_33 @as(void, blk: {
+                const res = (blk_catch_36: { break :blk_catch_36 ((self.installWithClonefile(destination_dir)) catch |e| { _ = &e; break :blk_catch_36 @as(void, blk: {
                 if ((e == error.NotSupported)) {
                     PackageInstall.supported_method = .copyfile;
                     supported_method_to_use = .copyfile;
@@ -1195,7 +1436,7 @@ if (comptime Environment.isMac) {
 if (comptime Environment.isMac) {
                 var fallback = false;
                 _ = &fallback;
-                const res = (blk_catch_34: { break :blk_catch_34 ((self.installWithClonefileEachDir(destination_dir)) catch |e| { _ = &e; break :blk_catch_34 @as(Result, blk: {
+                const res = (blk_catch_37: { break :blk_catch_37 ((self.installWithClonefileEachDir(destination_dir)) catch |e| { _ = &e; break :blk_catch_37 @as(Result, blk: {
                 if ((e == error.NotSupported)) {
                     PackageInstall.supported_method = .copyfile;
                     supported_method_to_use = .copyfile;
@@ -1215,7 +1456,7 @@ if (comptime Environment.isMac) {
 .hardlink => {
 var fallback = false;
             _ = &fallback;
-            const res = (blk_catch_35: { break :blk_catch_35 ((self.installWithHardlink(destination_dir)) catch |e| { _ = &e; break :blk_catch_35 @as(Result, blk: {
+            const res = (blk_catch_38: { break :blk_catch_38 ((self.installWithHardlink(destination_dir)) catch |e| { _ = &e; break :blk_catch_38 @as(Result, blk: {
             if (comptime (!Environment.isWindows)) {
                 if ((e == error.NotSameFileSystem)) {
                     PackageInstall.supported_method = .copyfile;
@@ -1234,7 +1475,7 @@ var fallback = false;
             }
 },
 .symlink => {
-return (blk_catch_36: { break :blk_catch_36 ((self.installWithSymlink(destination_dir)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
+return (blk_catch_39: { break :blk_catch_39 ((self.installWithSymlink(destination_dir)) catch |e| { _ = &e; if ((e == error.FileNotFound)) {
                 return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
             }
             return Result.fail(e, .copying_files, @errorReturnTrace()); }); });
@@ -1249,252 +1490,15 @@ else => {
             return self.installWithCopyfile(destination_dir);
     }
     const ThisPackageInstall = @This();
-    pub const Patch = struct {
-        path: []const u8,
-        contents_hash: u64,
-    };
+    const Patch = PackageInstallPatch;
     const debug = Output.scoped(.install, .hidden);
-    pub const Summary = struct {
-        fail: u32 = 0,
-        success: u32 = 0,
-        skipped: u32 = 0,
-        successfully_installed: ?Bitset = null,
-        packages_with_blocked_scripts: std.AutoArrayHashMapUnmanaged(TruncatedPackageNameHash, usize) = .{},
-    };
-    pub const Method = enum(u8) {
-            clonefile,
-    
-            /// Slower than clonefile
-            clonefile_each_dir,
-    
-            /// On macOS, slow.
-            /// On Linux, fast.
-            hardlink,
-    
-            /// Slowest if single-threaded
-            /// Note that copyfile does technically support recursion
-            /// But I suspect it is slower in practice than manually doing it because:
-            /// - it adds syscalls
-            /// - it runs in userspace
-            /// - it reads each dir twice incase the first pass modifies it
-            copyfile,
-    
-            /// Used for file: when file: points to a parent directory
-            /// example: "file:../"
-            symlink,
-    
-            const BackendSupport = std.EnumArray(Method, bool);
-            pub const map = bun.ComptimeStringMap(Method, .{
-                .{ "clonefile", .clonefile },
-                .{ "clonefile_each_dir", .clonefile_each_dir },
-                .{ "hardlink", .hardlink },
-                .{ "copyfile", .copyfile },
-                .{ "symlink", .symlink },
-            });
-    
-            pub const macOS = BackendSupport.initDefault(false, .{
-                .clonefile = true,
-                .clonefile_each_dir = true,
-                .hardlink = true,
-                .copyfile = true,
-                .symlink = true,
-            });
-    
-            pub const linux = BackendSupport.initDefault(false, .{
-                .hardlink = true,
-                .copyfile = true,
-                .symlink = true,
-            });
-    
-            pub const windows = BackendSupport.initDefault(false, .{
-                .hardlink = true,
-                .copyfile = true,
-            });
-    
-            pub inline fn isSupported(this: Method) bool {
-                if (comptime Environment.isMac) return macOS.get(this);
-                if (comptime Environment.isLinux or Environment.isFreeBSD) return linux.get(this);
-                if (comptime Environment.isWindows) return windows.get(this);
-    
-                return false;
-            }
-        };
-    pub const Result = union(Tag) {
-        success: void,
-        failure: struct {
-                err: anyerror,
-                step: Step,
-                debug_trace: if (Environment.isDebug) bun.crash_handler.StoredTrace else void,
-    
-                pub inline fn isPackageMissingFromCache(this: @This()) bool {
-                    return (this.err == error.FileNotFound or this.err == error.ENOENT) and this.step == .opening_cache_dir;
-                }
-            },
-    
-    pub inline fn fail(err: anyerror, step: Step, trace: ?*std.builtin.StackTrace) Result {
-                return .{ .failure = .{ .err = err, .step = step, .debug_trace = (if (Environment.isDebug) (if (trace) |t| bun.crash_handler.StoredTrace.from(t) else bun.crash_handler.StoredTrace.capture(@returnAddress())) else null) } };
-        }
-    
-    pub fn isFail(self: @This()) bool {
-                return (switch (self) {
-    .success => false,
-    .failure => true,
-    });
-        }
-        pub const Tag = enum {
-                    success,
-                    failure,
-                };
-    };
-    pub const Step = enum {
-            copyfile,
-            opening_cache_dir,
-            opening_dest_dir,
-            copying_files,
-            linking,
-            linking_dependency,
-            patching,
-    
-            /// "error: failed {s} for package"
-            pub fn name(this: Step) []const u8 {
-                return switch (this) {
-                    .copyfile, .copying_files => "copying files from cache to destination",
-                    .opening_cache_dir => "opening cache/package/version dir",
-                    .opening_dest_dir => "opening node_modules/package dir",
-                    .linking => "linking bins",
-                    .linking_dependency => "linking dependency/workspace to node_modules",
-                    .patching => "patching dependency",
-                };
-            }
-        };
-    const InstallDirState = struct {
-        cached_package_dir: std.fs.Dir = undefined,
-        walker: Walker = undefined,
-        subdir: std.fs.Dir = (if (Environment.isWindows) std.fs.Dir{ .fd = std.os.windows.INVALID_HANDLE_VALUE } else undefined),
-        buf: if (Environment.isWindows) bun.windows.WPathBuffer else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
-        buf2: if (Environment.isWindows) bun.windows.WPathBuffer else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
-        to_copy_buf: if (Environment.isWindows) []u16 else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
-        to_copy_buf2: if (Environment.isWindows) []u16 else void = (if (Environment.isWindows) undefined else @as(void, undefined)),
-    
-    pub fn deinit(self: *@This()) void {
-                if ((!Environment.isWindows)) {
-                    _ = self.subdir.close();
-                }
-                var _guard_cache_dir = CloseGuard(*std.fs.Dir){ .ptr = (&self.cached_package_dir) };
-                _ = &_guard_cache_dir;
-                var ___guard_cache_dir_moved = false; _ = &___guard_cache_dir_moved;
-                defer if (!___guard_cache_dir_moved) { ___guard_cache_dir_moved = true; const __T = @TypeOf(_guard_cache_dir); if (@typeInfo(__T) == .optional) { if (_guard_cache_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_cache_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_cache_dir; _drop_val.__cp_deinit(); } };
-                var _guard_walker = DeinitGuard(*Walker){ .ptr = (&self.walker) };
-                _ = &_guard_walker;
-                var ___guard_walker_moved = false; _ = &___guard_walker_moved;
-                defer if (!___guard_walker_moved) { ___guard_walker_moved = true; const __T = @TypeOf(_guard_walker); if (@typeInfo(__T) == .optional) { if (_guard_walker) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_walker.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_walker; _drop_val.__cp_deinit(); } };
-        }
-    };
+    pub const Summary = PackageInstallSummary;
+    pub const Method = PackageInstallMethod;
+    pub const Result = PackageInstallResult;
+    const Step = PackageInstallStep;
     const node_fs_bufs = bun.ThreadlocalBuffers(struct {
         fs: bun.jsc.Node.fs.NodeFS = .{},
     });
-    const HardLinkWindowsInstallTask = struct {
-        bytes: []u16,
-        src: [:0]bun.OSPathChar,
-        dest: [:0]bun.OSPathChar,
-        basename: u16,
-        task: bun.jsc.WorkPoolTask = .{ .callback = (&runFromThreadPool) },
-        err: ?anyerror = null,
-        pub var queue: Queue = undefined;
-    
-    pub fn initQueue() *Queue {
-                queue = Queue{ .thread_pool = (&PackageManager.get().thread_pool) };
-                return (&queue);
-        }
-    
-    pub fn init(src: []const bun.OSPathChar, dest: []const bun.OSPathChar, basename: []const bun.OSPathChar) *@This() {
-                const allocation_size = (((src.len + 1) + dest.len) + 1);
-                const combined = bun.handleOom(bun.default_allocator.alloc(u16, allocation_size));
-                var remaining = combined;
-                _ = &remaining;
-                _ = @memcpy(remaining[0..src.len], src);
-                remaining[cp_cast_int(usize, src.len)] = 0;
-                const src_ = remaining[0..src.len :0];
-                remaining = remaining[(src.len + 1)..];
-                _ = @memcpy(remaining[0..dest.len], dest);
-                remaining[cp_cast_int(usize, dest.len)] = 0;
-                const dest_ = remaining[0..dest.len :0];
-                remaining = remaining[(dest.len + 1)..];
-                return @This().new(.{ .bytes = combined, .src = src_, .dest = dest_, .basename = @truncate(basename.len) });
-        }
-    
-    pub fn runFromThreadPool(task: *bun.jsc.WorkPoolTask) void {
-                var self: *@This() = @fieldParentPtr("task", task);
-                _ = &self;
-                defer {
-                _ = queue.completeOne();
-                }
-                if (self.run()) |err| {
-                    _ = &err;
-                    self.err = err;
-                    _ = queue.errored_task.cmpxchgStrong(null, self, .monotonic, .monotonic);
-                    return;
-                }
-                _ = self.deinit();
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                _ = bun.default_allocator.free(self.bytes);
-                {
-                    self.* = undefined;
-                }
-                _ = bun.destroy(self);
-        }
-    
-    pub fn run(task: *@This()) ?anyerror {
-                const src = task.src;
-                const dest = task.dest;
-                if ((bun.windows.CreateHardLinkW(dest.ptr, src.ptr, null) != 0)) {
-                    return null;
-                }
-                switch (bun.windows.GetLastError()) {
-    .ALREADY_EXISTS, .FILE_EXISTS, .CANNOT_MAKE => {
-    if (comptime Environment.isDebug) {
-                    _ = debug("CreateHardLinkW returned EEXIST, this shouldn't happen: {f}", .{ bun.fmt.fmtPath(u16, dest, .{}) });
-                }
-                _ = bun.windows.DeleteFileW(dest.ptr);
-                if ((bun.windows.CreateHardLinkW(dest.ptr, src.ptr, null) != 0)) {
-                    return null;
-                }
-    },
-    else => {
-    
-    },
-    }
-                dest[cp_cast_int(usize, ((dest.len - task.basename) - 1))] = 0;
-                const dirpath = dest[0..((dest.len - task.basename) - 1) :0];
-                _ = (blk_catch_0: { break :blk_catch_0 ((node_fs_for_package_installer().mkdirRecursiveOSPathImpl(void, .{}, dirpath, 0, false).unwrap()) catch |__ce_0| { _ = &__ce_0;  }); });
-                dest[cp_cast_int(usize, ((dest.len - task.basename) - 1))] = std.fs.path.sep;
-                if ((bun.windows.CreateHardLinkW(dest.ptr, src.ptr, null) != 0)) {
-                    return null;
-                }
-                if (PackageManager.verbose_install) {
-                    const once_log = struct {
-                        var once = false;
-    
-                        pub fn get() bool {
-                            const prev = once;
-                            once = true;
-                            return !prev;
-                        }
-                    }.get();
-                    if (once_log) {
-                        _ = Output.warn("CreateHardLinkW failed, falling back to CopyFileW: {f} -> {f}\n", .{ bun.fmt.fmtOSPath(src, .{}), bun.fmt.fmtOSPath(dest, .{}) });
-                    }
-                }
-                if ((bun.windows.CopyFileW(src.ptr, dest.ptr, 0) != 0)) {
-                    return null;
-                }
-                return bun.windows.getLastError();
-        }
-        pub const Queue = NewTaskQueue(@This());
-        const new = bun.TrivialNew(@This());
-    };
 };
 
 const string = []const u8;

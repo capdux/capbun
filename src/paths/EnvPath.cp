@@ -1,5 +1,4 @@
-import * as std from "std";
-import * as bun from "bun";
+import bun from "bun";
 
 const AbsPath = bun.AbsPath;
 const OOM = bun.OOM;
@@ -18,28 +17,48 @@ fn trimPathDelimiters(input: []const u8): []const u8 {
     return trimmed;
 }
 
-export fn EnvPath(comptime opts: EnvPathOptions): type {
+fn PathComponentBuilder_(comptime opts: EnvPathOptions): type {
+    return struct {
+        env_path: *EnvPath(opts),
+        path_buf: AbsPath(.{ .sep = .auto }),
+
+        fn append(*_, component: string) {
+            _.path_buf.append(component);
+        }
+
+        fn appendFmt(*_, comptime component_fmt: string, component_args: auto) {
+            _.path_buf.appendFmt(component_fmt, component_args);
+        }
+
+        fn apply(*_): OOM!void {
+            _.env_path.append(&_.path_buf)?;
+            _.path_buf.deinit();
+        }
+    };
+}
+
+pub fn EnvPath(comptime opts: EnvPathOptions): type {
     return struct {
         allocator: std.mem.Allocator,
         buf: std.ArrayListUnmanaged(u8) = .empty,
 
-        pub fn init(allocator: std.mem.Allocator) @This() {
+        static fn init(allocator: std.mem.Allocator): @This() {
             return .{ .allocator = allocator };
         }
 
-        pub fn initCapacity(allocator: std.mem.Allocator, capacity: usize) OOM!@This() {
-            return .{ .allocator = allocator, .buf = try .initCapacity(allocator, capacity) };
+        static fn initCapacity(allocator: std.mem.Allocator, capacity: usize): @This() ! OOM {
+            return .{ .allocator = allocator, .buf = std.ArrayListUnmanaged(u8).initCapacity(allocator, capacity)? };
         }
 
-        pub fn deinit(this: *const @This()) void {
-            @constCast(this).buf.deinit(this.allocator);
+        fn deinit(*_) {
+            _.buf.deinit(_.allocator);
         }
 
-        pub fn slice(this: *const @This()) string {
-            return this.buf.items;
+        fn slice(): string {
+            return _.buf.items;
         }
 
-        pub fn append(this: *@This(), input: anytype) OOM!void {
+        fn append(*_, input: auto): OOM!void {
             const trimmed: string = switch (@TypeOf(input)) {
                 []u8, []const u8 => strings.withoutTrailingSlash(trimPathDelimiters(input)),
                 else => input.slice(),
@@ -49,36 +68,20 @@ export fn EnvPath(comptime opts: EnvPathOptions): type {
                 return;
             }
 
-            if (this.buf.items.len != 0) {
-                try this.buf.ensureUnusedCapacity(this.allocator, trimmed.len + 1);
-                this.buf.appendAssumeCapacity(std.fs.path.delimiter);
-                this.buf.appendSliceAssumeCapacity(trimmed);
+            if (_.buf.items.len != 0) {
+                _.buf.ensureUnusedCapacity(_.allocator, trimmed.len + 1)?;
+                _.buf.appendAssumeCapacity(std.fs.path.delimiter);
+                _.buf.appendSliceAssumeCapacity(trimmed);
             } else {
-                try this.buf.appendSlice(this.allocator, trimmed);
+                _.buf.appendSlice(_.allocator, trimmed)?;
             }
         }
 
-        pub const PathComponentBuilder = struct {
-            env_path: *EnvPath(opts),
-            path_buf: AbsPath(.{ .sep = .auto }),
+        const PathComponentBuilder = PathComponentBuilder_(opts);
 
-            pub fn append(this: *@This(), component: string) void {
-                this.path_buf.append(component);
-            }
-
-            pub fn appendFmt(this: *@This(), comptime component_fmt: string, component_args: anytype) void {
-                this.path_buf.appendFmt(component_fmt, component_args);
-            }
-
-            pub fn apply(this: *@This()) OOM!void {
-                try this.env_path.append(&this.path_buf);
-                this.path_buf.deinit();
-            }
-        };
-
-        pub fn pathComponentBuilder(this: *@This()) PathComponentBuilder {
+        fn pathComponentBuilder(*_): PathComponentBuilder {
             return .{
-                .env_path = this,
+                .env_path = _,
                 .path_buf = .init(),
             };
         }

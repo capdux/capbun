@@ -17,6 +17,44 @@ const AnyResponse = uws.AnyResponse;
 type AbortFn = *const fn (*!, AnyResponse) void;
 const log = bun.Output.scoped(.FileResponseStream, .hidden);
 
+@packed(u8) struct _State {
+    response_done: bool = false,
+    finished: bool = false,
+    errored: bool = false,
+    resp_detached: bool = false,
+    _: u4 = 0,
+}
+
+enum _Mode { reader, sendfile }
+
+struct _Sendfile {
+    socket_fd: bun.FD = bun.invalid_fd,
+    remain: u64 = 0,
+    offset: u64 = 0,
+    has_set_on_writable: bool = false,
+}
+
+pub struct _StartOptions {
+    fd: bun.FD,
+    auto_close: bool = true,
+    resp: AnyResponse,
+    vm: *jsc.VirtualMachine,
+    file_type: bun.io.FileType,
+    pollable: bool,
+    /// Byte offset into the file to begin reading from.
+    offset: u64 = 0,
+    /// Maximum bytes to send; `null` reads to EOF. For regular files this
+    /// should be `stat.size - offset` (after Range/slice clamping).
+    length: u64? = null,
+    idle_timeout: u8,
+    ctx: *!,
+    on_complete: *const fn (*!, AnyResponse) void,
+    /// Fires instead of `on_complete` when the client disconnects mid-stream.
+    /// If null, abort is reported via `on_complete`.
+    on_abort: AbortFn? = null,
+    on_error: *const fn (*!, AnyResponse, bun.sys.Error) void,
+}
+
 export @root struct FileResponseStream {
 ref_count: RefCount,
 resp: AnyResponse,
@@ -36,45 +74,15 @@ max_size: u64? = null,
 eof_task: jsc.AnyTask? = null,
 sendfile: Sendfile = .{},
 
-const State = packed struct(u8) {
-    response_done: bool = false,
-    finished: bool = false,
-    errored: bool = false,
-    resp_detached: bool = false,
-    _: u4 = 0,
-};
+const State = _State;
 
 state: State = .{},
 
-const Mode = enum { reader, sendfile };
+const Mode = _Mode;
 
-const Sendfile = struct {
-    socket_fd: bun.FD = bun.invalid_fd,
-    remain: u64 = 0,
-    offset: u64 = 0,
-    has_set_on_writable: bool = false,
-};
+const Sendfile = _Sendfile;
 
-pub const StartOptions = struct {
-    fd: bun.FD,
-    auto_close: bool = true,
-    resp: AnyResponse,
-    vm: *jsc.VirtualMachine,
-    file_type: bun.io.FileType,
-    pollable: bool,
-    /// Byte offset into the file to begin reading from.
-    offset: u64 = 0,
-    /// Maximum bytes to send; `null` reads to EOF. For regular files this
-    /// should be `stat.size - offset` (after Range/slice clamping).
-    length: ?u64 = null,
-    idle_timeout: u8,
-    ctx: *!,
-    on_complete: *const fn (*!, AnyResponse) void,
-    /// Fires instead of `on_complete` when the client disconnects mid-stream.
-    /// If null, abort is reported via `on_complete`.
-    on_abort: ?*const fn (*!, AnyResponse) void = null,
-    on_error: *const fn (*!, AnyResponse, bun.sys.Error) void,
-};
+pub const StartOptions = _StartOptions;
 
 pub fn start(opts: StartOptions) {
     const use_sendfile = canSendfile(opts.resp, opts.file_type, opts.length);
@@ -126,8 +134,8 @@ pub fn start(opts: StartOptions) {
         stream.reader.startFileOffset(stream.fd, opts.pollable, opts.offset)
     else
         stream.reader.start(stream.fd, opts.pollable)) {
-        .err => |err| {
-            stream.failWith(err);
+        .err e => {
+            stream.failWith(e);
             return;
         },
         .result => {},

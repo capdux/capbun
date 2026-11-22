@@ -72,6 +72,89 @@ pub const options = @import("../bundler/options.zig");
 pub const resolve_path = @import("../paths/resolve_path.zig");
 pub const resolver = @import("./resolver.zig");
 pub const bun = @import("bun");
+pub const IncludeScripts = enum {
+    ignore_scripts,
+    include_scripts,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const IncludeDependencies = enum {
+    main,
+    local,
+    none,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const PackageJSON_LoadFramework = enum {
+    none,
+    development,
+    production,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ExportsMap_EntryDataTag = enum {
+    invalid,
+    @"null",
+    boolean,
+    string,
+    array,
+    map,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ESModule_Status = enum {
+    Undefined,
+    UndefinedNoConditionsMatch,
+    Null,
+    Exact,
+    ExactEndsWithStar,
+    Inexact,
+    InvalidModuleSpecifier,
+    InvalidPackageConfiguration,
+    InvalidPackageTarget,
+    PackagePathNotExported,
+    ModuleNotFound,
+    ModuleNotFoundMissingExtension,
+    UnsupportedDirectoryImport,
+    UnsupportedDirectoryImportMissingIndex,
+    PackagePathDisabled,
+    PackageImportNotDefined,
+    PackageResolve,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub inline fn isUndefined(self: ESModule_Status) bool {
+            return (switch (self) {
+.Undefined, .UndefinedNoConditionsMatch => true,
+else => false,
+});
+    }
+};
+
+pub const ESModule_ReverseKind = enum {
+    exact,
+    pattern,
+    prefix,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const FreeGuard = struct {
     allocator: std.mem.Allocator,
     ptr: []const u8,
@@ -101,6 +184,32 @@ pub const DependencyMap = struct {
     map: HashMap = .{},
     source_buf: []const u8 = "",
     pub const HashMap = std.ArrayHashMapUnmanaged(String, Dependency, String.ArrayHashContext, false);
+};
+
+pub const PackageJSON_FrameworkRouterPair = struct {
+    framework: *options.Framework,
+    router: *options.RouteConfig,
+    loaded_routes: bool = false,
+};
+
+pub const PackageJSON_SideEffectsMixedPatterns = struct {
+    exact: PackageJSON_SideEffectsMap,
+    globs: PackageJSON_SideEffectsGlobList,
+};
+
+pub const PackageJSON_SideEffects = union(enum) {
+    unspecified: void,
+    @"false": void,
+    map: PackageJSON_SideEffectsMap,
+    glob: PackageJSON_SideEffectsGlobList,
+    mixed: PackageJSON_SideEffectsMixedPatterns,
+
+pub fn hasSideEffects(side_effects: PackageJSON_SideEffects, path: []const u8) bool {
+            return sideEffectsHasSideEffects(side_effects, path);
+    }
+    const Map = PackageJSON_SideEffectsMap;
+    const GlobList = PackageJSON_SideEffectsGlobList;
+    const MixedPatterns = PackageJSON_SideEffectsMixedPatterns;
 };
 
 pub const PackageJSON = struct {
@@ -911,50 +1020,171 @@ pub fn hashModule(self: PackageJSON, module: []const u8) u32 {
             _ = hasher.update(module);
             return @as(u32, @truncate(hasher.final()));
     }
-    pub const LoadFramework = enum {
-            none,
-            development,
-            production,
-        };
+    const LoadFramework = PackageJSON_LoadFramework;
     pub const new = bun.TrivialNew(@This());
     pub const deinit = bun.TrivialDeinit(@This());
     const node_modules_path = ((std.fs.path.sep_str ++ "node_modules") ++ std.fs.path.sep_str);
-    pub const FrameworkRouterPair = struct {
-        framework: *options.Framework,
-        router: *options.RouteConfig,
-        loaded_routes: bool = false,
-    };
-    pub const SideEffects = union(enum) {
-            /// either `package.json` is missing "sideEffects", it is true, or some
-            /// other unsupported value. Treat all files as side effects
-            unspecified,
-            /// "sideEffects": false
-            false,
-            /// "sideEffects": ["file.js", "other.js"]
-            map: Map,
-            /// "sideEffects": ["side_effects/*.js"]
-            glob: GlobList,
-            /// "sideEffects": ["file.js", "side_effects/*.js"] - mixed patterns
-            mixed: MixedPatterns,
-    
-            pub const Map = std.HashMapUnmanaged(
-                bun.StringHashMapUnowned.Key,
-                void,
-                bun.StringHashMapUnowned.Adapter,
-                80,
-            );
-    
-            pub const GlobList = std.ArrayListUnmanaged(string);
-    
-            pub const MixedPatterns = struct {
-                exact: Map,
-                globs: GlobList,
-            };
-    
-            pub fn hasSideEffects(side_effects: SideEffects, path: []const u8) bool {
-                return sideEffectsHasSideEffects(side_effects, path);
+    const FrameworkRouterPair = PackageJSON_FrameworkRouterPair;
+    const SideEffects = PackageJSON_SideEffects;
+};
+
+pub const ExportsMap_EntryDataMapEntry = struct {
+    key: []const u8,
+    key_range: logger.Range,
+    value: ExportsMap_Entry,
+};
+
+pub const ExportsMap_EntryDataMap = struct {
+    expansion_keys: []ExportsMap_EntryDataMapEntry,
+    list: List,
+    const List = std.MultiArrayList(ExportsMap_EntryDataMapEntry);
+    const MapEntry = ExportsMap_EntryDataMapEntry;
+};
+
+pub const ExportsMap_EntryData = union(ExportsMap_EntryDataTag) {
+    invalid: void,
+    @"null": void,
+    boolean: bool,
+    string: []const u8,
+    array: []const ExportsMap_Entry,
+    map: ExportsMap_EntryDataMap,
+    const Tag = ExportsMap_EntryDataTag;
+    const Map = ExportsMap_EntryDataMap;
+};
+
+pub const ExportsMap_Entry = struct {
+    first_token: logger.Range,
+    data: ExportsMap_EntryData,
+
+pub fn keysStartWithDot(self: ExportsMap_Entry) bool {
+            return (((self.data == .map) and (self.data.map.list.len > 0)) and strings.startsWithChar(self.data.map.list.items(.key)[0], 46));
+    }
+
+pub fn valueForKey(self: ExportsMap_Entry, key_: []const u8) ?ExportsMap_Entry {
+            switch (self.data) {
+.map => {
+var slice = self.data.map.list.slice();
+            _ = &slice;
+            const keys = slice.items(.key);
+            var i: usize = 0;
+            _ = &i;
+            while ((i < keys.len)) : (i = (i + 1)) {
+                const key = keys[@as(usize, @intCast(i))];
+                if (strings.eql(key, key_)) {
+                    return slice.items(.value)[@as(usize, @intCast(i))];
+                }
             }
-        };
+            return null;
+},
+else => {
+return null;
+},
+}
+    }
+    const Data = ExportsMap_EntryData;
+};
+
+pub const ExportsMap_Visitor = struct {
+    allocator: std.mem.Allocator,
+    source: *const logger.Source,
+    log: *logger.Log,
+
+pub fn visit(self: *ExportsMap_Visitor, expr: js_ast.Expr) ExportsMap_Entry {
+            var first_token: logger.Range = logger.Range.None;
+            _ = &first_token;
+            switch (expr.data) {
+.e_null => {
+return ExportsMap_Entry{ .first_token = js_lexer.rangeOfIdentifier(self.source, expr.loc), .data = ExportsMap_EntryData{ .@"null" = undefined } };
+},
+.e_string => {
+const str = expr.data.e_string;
+            const str_slice = js_ast.E.String.slice;
+            return ExportsMap_Entry{ .data = ExportsMap_EntryData{ .string = str_slice(str, self.allocator) }, .first_token = self.source.rangeOfString(expr.loc) };
+},
+.e_array => {
+const e_array = expr.data.e_array;
+            var array = ((self.allocator.alloc(ExportsMap_Entry, e_array.items.len)) catch unreachable);
+            _ = &array;
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(e_array.items.slice())) |item| {
+                _ = &item;
+                array[cp_cast_int(usize, i)] = self.visit(item);
+                i = (i + 1);
+            }
+            return ExportsMap_Entry{ .data = ExportsMap_EntryData{ .array = array }, .first_token = logger.Range{ .loc = expr.loc, .len = 1 } };
+},
+.e_object => {
+const e_obj = expr.data.e_object;
+            var map_data: ExportsMap_EntryDataMap.List = .{};
+            _ = &map_data;
+            _ = ((map_data.ensureTotalCapacity(self.allocator, e_obj.properties.len)) catch unreachable);
+            map_data.len = e_obj.properties.len;
+            var expansion_keys = ((self.allocator.alloc(ExportsMap_EntryDataMapEntry, e_obj.properties.len)) catch unreachable);
+            _ = &expansion_keys;
+            var expansion_key_i: usize = 0;
+            _ = &expansion_key_i;
+            var map_data_slices = map_data.slice();
+            _ = &map_data_slices;
+            var map_data_keys = map_data_slices.items(.key);
+            _ = &map_data_keys;
+            var map_data_ranges = map_data_slices.items(.key_range);
+            _ = &map_data_ranges;
+            var map_data_entries = map_data_slices.items(.value);
+            _ = &map_data_entries;
+            var is_conditional_sugar = false;
+            _ = &is_conditional_sugar;
+            first_token.loc = expr.loc;
+            first_token.len = 1;
+            const str_slice = js_ast.E.String.slice;
+            var i: usize = 0;
+            _ = &i;
+            for (cp_iter_slice(e_obj.properties.slice())) |prop| {
+                _ = &prop;
+                const key: []const u8 = str_slice(prop.key.?.data.e_string, self.allocator);
+                const key_range: logger.Range = self.source.rangeOfString(prop.key.?.loc);
+                const cur_is_conditional_sugar = (!strings.startsWithChar(key, 46));
+                if ((i == 0)) {
+                    is_conditional_sugar = cur_is_conditional_sugar;
+                } else {
+                    if ((is_conditional_sugar != cur_is_conditional_sugar)) {
+                        const prev_key_range = map_data_ranges[@as(usize, @intCast((i - 1)))];
+                        const prev_key = map_data_keys[@as(usize, @intCast((i - 1)))];
+                        _ = ((self.log.addRangeWarningFmtWithNote(self.source, key_range, self.allocator, "This object cannot contain keys that both start with \".\" and don't start with \".\"", .{}, "The previous key \"{s}\" is incompatible with the current key \"{s}\"", .{ prev_key, key }, prev_key_range)) catch unreachable);
+                        _ = map_data.deinit(self.allocator);
+                        _ = self.allocator.free(expansion_keys);
+                        return ExportsMap_Entry{ .data = ExportsMap_EntryData{ .invalid = undefined }, .first_token = first_token };
+                    }
+                }
+                map_data_keys[cp_cast_int(usize, i)] = key;
+                map_data_ranges[cp_cast_int(usize, i)] = key_range;
+                map_data_entries[cp_cast_int(usize, i)] = self.visit((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?);
+                if ((strings.endsWithComptime(key, "/") or strings.containsChar(key, 42))) {
+                    expansion_keys[cp_cast_int(usize, expansion_key_i)] = ExportsMap_EntryDataMapEntry{ .value = map_data_entries[@as(usize, @intCast(i))], .key = key, .key_range = key_range };
+                    expansion_key_i = (expansion_key_i + 1);
+                }
+                i = (i + 1);
+            }
+            expansion_keys = expansion_keys[0..expansion_key_i];
+            const GlobLengthSorter: type = strings.NewGlobLengthSorter(ExportsMap_EntryDataMapEntry, "key");
+            const sorter = GlobLengthSorter{  };
+            _ = std.sort.pdq(ExportsMap_EntryDataMapEntry, expansion_keys, sorter, GlobLengthSorter.lessThan);
+            return ExportsMap_Entry{ .data = ExportsMap_EntryData{ .map = ExportsMap_EntryDataMap{ .list = map_data, .expansion_keys = expansion_keys } }, .first_token = first_token };
+},
+.e_boolean => {
+first_token = js_lexer.rangeOfIdentifier(self.source, expr.loc);
+},
+.e_number => {
+first_token.loc = expr.loc;
+            first_token.len = 1;
+},
+else => {
+first_token.loc = expr.loc;
+},
+}
+            _ = ((self.log.addRangeWarning(self.source, first_token, "This value must be a string, an object, an array, or null")) catch unreachable);
+            return ExportsMap_Entry{ .data = ExportsMap_EntryData{ .invalid = undefined }, .first_token = first_token };
+    }
 };
 
 pub const ExportsMap = struct {
@@ -971,156 +1201,130 @@ pub fn parse(allocator: std.mem.Allocator, source: *const logger.Source, log: *l
             }
             return ExportsMap{ .root = root, .exports_range = source.rangeOfString(json.loc), .property_key_loc = property_key_loc };
     }
-    pub const Visitor = struct {
-        allocator: std.mem.Allocator,
-        source: *const logger.Source,
-        log: *logger.Log,
-    
-    pub fn visit(self: *@This(), expr: js_ast.Expr) Entry {
-                var first_token: logger.Range = logger.Range.None;
-                _ = &first_token;
-                switch (expr.data) {
-    .e_null => {
-    return Entry{ .first_token = js_lexer.rangeOfIdentifier(self.source, expr.loc), .data = .@"null" };
-    },
-    .e_string => |str| {
-    const str_slice = js_ast.E.String.slice;
-                return Entry{ .data = .{ .string = str_slice(str, self.allocator) }, .first_token = self.source.rangeOfString(expr.loc) };
-    },
-    .e_array => |e_array| {
-    const array = ((self.allocator.alloc(Entry, e_array.items.len)) catch unreachable);
-                for (e_array.items.slice(), array) |item, *dest| {
-                    _ = &item;
-                    _ = &dest;
-                    dest.* = self.visit(item);
+    const Visitor = ExportsMap_Visitor;
+    const Entry = ExportsMap_Entry;
+};
+
+pub const ESModule_ResolutionDebug = struct {
+    token: logger.Range = logger.Range.None,
+    unmatched_conditions: [][]const u8 = &.{},
+};
+
+pub const ESModule_Resolution = struct {
+    status: ESModule_Status = ESModule_Status.Undefined,
+    path: []const u8 = "",
+    debug: ESModule_ResolutionDebug = ESModule_ResolutionDebug{  },
+    const Debug = ESModule_ResolutionDebug;
+};
+
+pub const ESModule_PackageExternal = struct {
+    name: Semver.String = .{},
+    version: Semver.String = .{},
+    subpath: Semver.String = .{},
+};
+
+pub const ESModule_Package = struct {
+    name: []const u8,
+    version: []const u8 = "",
+    subpath: []const u8,
+
+pub fn count(self: ESModule_Package, builder: *Semver.String.Builder) void {
+            _ = builder.count(self.name);
+            _ = builder.count(self.version);
+            _ = builder.count(self.subpath);
+    }
+
+pub fn clone(self: ESModule_Package, builder: *Semver.String.Builder) ESModule_PackageExternal {
+            return ESModule_PackageExternal{ .name = builder.appendUTF8WithoutPool(Semver.String, self.name, 0), .version = builder.appendUTF8WithoutPool(Semver.String, self.version, 0), .subpath = builder.appendUTF8WithoutPool(Semver.String, self.subpath, 0) };
+    }
+
+pub fn toExternal(self: ESModule_Package, buffer: []const u8) ESModule_PackageExternal {
+            return ESModule_PackageExternal{ .name = Semver.String.init(buffer, self.name), .version = Semver.String.init(buffer, self.version), .subpath = Semver.String.init(buffer, self.subpath) };
+    }
+
+pub fn withAutoVersion(self: ESModule_Package) ESModule_Package {
+            if ((self.version.len == 0)) {
+                return ESModule_Package{ .name = self.name, .subpath = self.subpath, .version = "latest" };
+            }
+            return self;
+    }
+
+pub fn parseName(specifier: []const u8) ?[]const u8 {
+            var slash = strings.indexOfCharNeg(specifier, 47);
+            _ = &slash;
+            if ((!strings.startsWithChar(specifier, 64))) {
+                slash = (if ((slash == -1)) @as(i32, @intCast(specifier.len)) else slash);
+                return specifier[0..@as(usize, @intCast(slash))];
+            } else {
+                if ((slash == -1)) {
+                    return null;
                 }
-                return Entry{ .data = .{ .array = array }, .first_token = logger.Range{ .loc = expr.loc, .len = 1 } };
-    },
-    .e_object => |e_obj| {
-    var map_data = Entry.Data.Map.List{  };
-                _ = &map_data;
-                _ = ((map_data.ensureTotalCapacity(self.allocator, e_obj.properties.len)) catch unreachable);
-                map_data.len = e_obj.properties.len;
-                var expansion_keys = ((self.allocator.alloc(Entry.Data.Map.MapEntry, e_obj.properties.len)) catch unreachable);
-                _ = &expansion_keys;
-                var expansion_key_i: usize = 0;
-                _ = &expansion_key_i;
-                var map_data_slices = map_data.slice();
-                _ = &map_data_slices;
-                var map_data_keys = map_data_slices.items(.key);
-                _ = &map_data_keys;
-                var map_data_ranges = map_data_slices.items(.key_range);
-                _ = &map_data_ranges;
-                var map_data_entries = map_data_slices.items(.value);
-                _ = &map_data_entries;
-                var is_conditional_sugar = false;
-                _ = &is_conditional_sugar;
-                first_token.loc = expr.loc;
-                first_token.len = 1;
-                const str_slice = js_ast.E.String.slice;
-                for (e_obj.properties.slice(), 0..) |prop, i| {
-                    _ = &prop;
-                    _ = &i;
-                    const key: []const u8 = str_slice(prop.key.?.data.e_string, self.allocator);
-                    const key_range: logger.Range = self.source.rangeOfString(prop.key.?.loc);
-                    const cur_is_conditional_sugar = (!strings.startsWithChar(key, 46));
-                    if ((i == 0)) {
-                        is_conditional_sugar = cur_is_conditional_sugar;
+                const slash2 = ((strings.indexOfChar(specifier[(@as(usize, @intCast(slash)) + 1)..], 47)) orelse (specifier[@as(u32, @intCast((slash + 1)))..].len));
+                return specifier[0..(@as(usize, @intCast((slash + 1))) + slash2)];
+            }
+    }
+
+pub fn parseVersion(specifier_after_name: []const u8) ?[]const u8 {
+            if (strings.indexOfChar(specifier_after_name, 47)) |slash| {
+                _ = &slash;
+                const remainder = specifier_after_name[0..slash];
+                if (((remainder.len > 0) and (remainder[0] == 64))) {
+                    return remainder[1..];
+                }
+                return remainder;
+            }
+            return null;
+    }
+
+pub fn parse(specifier: []const u8, subpath_buf: []u8) ?ESModule_Package {
+            if ((specifier.len == 0)) {
+                return null;
+            }
+            var package = ESModule_Package{ .name = ((parseName(specifier)) orelse { return null; }), .subpath = "" };
+            _ = &package;
+            if ((strings.startsWith(package.name, ".") or (strings.indexAnyComptime(package.name, "\\%") != null))) {
+                return null;
+            }
+            const offset: usize = (if (((package.name.len == 0) or (package.name[0] != 64))) 0 else 1);
+            if ((offset < package.name.len)) {
+                if (strings.indexOfChar(specifier[offset..package.name.len], 64)) |at| {
+                    _ = &at;
+                    if (parseVersion(specifier[offset..][at..])) |ver| {
+                        _ = &ver;
+                        package.version = ver;
                     } else {
-                        if ((is_conditional_sugar != cur_is_conditional_sugar)) {
-                            const prev_key_range = map_data_ranges[@as(usize, @intCast((i - 1)))];
-                            const prev_key = map_data_keys[@as(usize, @intCast((i - 1)))];
-                            _ = ((self.log.addRangeWarningFmtWithNote(self.source, key_range, self.allocator, "This object cannot contain keys that both start with \".\" and don't start with \".\"", .{}, "The previous key \"{s}\" is incompatible with the current key \"{s}\"", .{ prev_key, key }, prev_key_range)) catch unreachable);
-                            _ = map_data.deinit(self.allocator);
-                            _ = self.allocator.free(expansion_keys);
-                            return Entry{ .data = .invalid, .first_token = first_token };
+                        package.version = "";
+                    }
+                    if ((package.version.len == 0)) {
+                        package.version = specifier[offset..][at..];
+                        if (((package.version.len > 0) and (package.version[0] == 64))) {
+                            package.version = package.version[1..];
                         }
                     }
-                    map_data_keys[cp_cast_int(usize, i)] = key;
-                    map_data_ranges[cp_cast_int(usize, i)] = key_range;
-                    map_data_entries[cp_cast_int(usize, i)] = self.visit((if (@typeInfo(@TypeOf(prop)) == .@"enum") @intFromEnum(prop) else prop.value).?);
-                    if ((strings.endsWithComptime(key, "/") or strings.containsChar(key, 42))) {
-                        expansion_keys[cp_cast_int(usize, expansion_key_i)] = Entry.Data.Map.MapEntry{ .value = map_data_entries[@as(usize, @intCast(i))], .key = key, .key_range = key_range };
-                        expansion_key_i = (expansion_key_i + 1);
-                    }
+                    package.name = specifier[0..(at + offset)];
+                    _ = parseSubpath((&package.subpath), specifier[@min(((package.name.len + package.version.len) + 1), specifier.len)..], subpath_buf);
+                    return package;
                 }
-                expansion_keys = expansion_keys[0..expansion_key_i];
-                const GlobLengthSorter: type = strings.NewGlobLengthSorter(Entry.Data.Map.MapEntry, "key");
-                const sorter = GlobLengthSorter{  };
-                _ = std.sort.pdq(Entry.Data.Map.MapEntry, expansion_keys, sorter, GlobLengthSorter.lessThan);
-                return Entry{ .data = .{ .map = Entry.Data.Map{ .list = map_data, .expansion_keys = expansion_keys } }, .first_token = first_token };
-    },
-    .e_boolean => {
-    first_token = js_lexer.rangeOfIdentifier(self.source, expr.loc);
-    },
-    .e_number => {
-    first_token.loc = expr.loc;
-                first_token.len = 1;
-    },
-    else => {
-    first_token.loc = expr.loc;
-    },
+            }
+            _ = parseSubpath((&package.subpath), specifier[package.name.len..], subpath_buf);
+            return package;
     }
-                _ = ((self.log.addRangeWarning(self.source, first_token, "This value must be a string, an object, an array, or null")) catch unreachable);
-                return Entry{ .data = .{ .invalid = undefined }, .first_token = first_token };
-        }
-    };
-    pub const Entry = struct {
-        first_token: logger.Range,
-        data: Data,
-    
-    pub fn keysStartWithDot(self: @This()) bool {
-                return (((self.data == .map) and (self.data.map.list.len > 0)) and strings.startsWithChar(self.data.map.list.items(.key)[0], 46));
-        }
-    
-    pub fn valueForKey(self: @This(), key_: []const u8) ?Entry {
-                switch (self.data) {
-    .map => {
-    var slice = self.data.map.list.slice();
-                _ = &slice;
-                const keys = slice.items(.key);
-                var i: usize = 0;
-                _ = &i;
-                while ((i < keys.len)) : (i = (i + 1)) {
-                    const key = keys[@as(usize, @intCast(i))];
-                    if (strings.eql(key, key_)) {
-                        return slice.items(.value)[@as(usize, @intCast(i))];
-                    }
-                }
-                return null;
-    },
-    else => {
-    return null;
-    },
+
+pub fn parseSubpath(subpath: *[]const u8, specifier: []const u8, subpath_buf: []u8) void {
+            if (((specifier.len + 1) > subpath_buf.len)) {
+                subpath.* = "";
+                return;
+            }
+            subpath_buf[cp_cast_int(usize, 0)] = 46;
+            _ = bun.copy(u8, subpath_buf[1..], specifier);
+            subpath.* = subpath_buf[0..(specifier.len + 1)];
     }
-        }
-        pub const Data = union(Tag) {
-            invalid: void,
-            null: void,
-            boolean: bool,
-            string: []const u8,
-            array: []const Entry,
-            map: Map,
-            pub const Tag = enum {
-                            invalid,
-                            null,
-                            boolean,
-                            string,
-                            array,
-                            map,
-                        };
-            pub const Map = struct {
-                expansion_keys: []MapEntry,
-                list: List,
-                pub const List = std.MultiArrayList(MapEntry);
-                pub const MapEntry = struct {
-                    key: []const u8,
-                    key_range: logger.Range,
-                    value: Entry,
-                };
-            };
-        };
-    };
+    pub const External = ESModule_PackageExternal;
+};
+
+pub const ESModule_ReverseResolution = struct {
+    subpath: []const u8 = "",
+    token: logger.Range = logger.Range.None,
 };
 
 pub const ESModule = struct {
@@ -1161,7 +1365,7 @@ pub fn finalize(result_: Resolution) Resolution {
             _ = &fbs;
             var writer = fbs.writer();
             _ = &writer;
-            const len = (blk_catch_45: { break :blk_catch_45 ((PercentEncoding.decode(@TypeOf((&writer)), (&writer), result.path)) catch |__ce_45| { _ = &__ce_45; return Resolution{ .status = .InvalidModuleSpecifier, .path = result.path, .debug = result.debug }; }); });
+            const len = (blk_catch_50: { break :blk_catch_50 ((PercentEncoding.decode(@TypeOf((&writer)), (&writer), result.path)) catch |__ce_50| { _ = &__ce_50; return Resolution{ .status = .InvalidModuleSpecifier, .path = result.path, .debug = result.debug }; }); });
             const resolved_path = resolved_path_buf_percent[0..len];
             var found: []const u8 = "";
             _ = &found;
@@ -1616,169 +1820,11 @@ else => {
             return null;
     }
     pub const ConditionsMap = bun.StringArrayHashMap(void);
-    pub const Resolution = struct {
-        status: Status = Status.Undefined,
-        path: []const u8 = "",
-        debug: Debug = Debug{  },
-        pub const Debug = struct {
-            token: logger.Range = logger.Range.None,
-            unmatched_conditions: [][]const u8 = &.{},
-        };
-    };
-    pub const Status = enum {
-            Undefined,
-            UndefinedNoConditionsMatch, // A more friendly error message for when no conditions are matched
-            Null,
-            Exact,
-            ExactEndsWithStar,
-            Inexact, // This means we may need to try CommonJS-style extension suffixes
-    
-            /// Module specifier is an invalid URL, package name or package subpath specifier.
-            InvalidModuleSpecifier,
-    
-            /// package.json configuration is invalid or contains an invalid configuration.
-            InvalidPackageConfiguration,
-    
-            /// Package exports or imports define a target module for the package that is an invalid type or string target.
-            InvalidPackageTarget,
-    
-            /// Package exports do not define or permit a target subpath in the package for the given module.
-            PackagePathNotExported,
-    
-            /// The package or module requested does not exist.
-            ModuleNotFound,
-    
-            /// The user just needs to add the missing extension
-            ModuleNotFoundMissingExtension,
-    
-            /// The resolved path corresponds to a directory, which is not a supported target for module imports.
-            UnsupportedDirectoryImport,
-    
-            /// The user just needs to add the missing "/index.js" suffix
-            UnsupportedDirectoryImportMissingIndex,
-    
-            /// When a package path is explicitly set to null, that means it's not exported.
-            PackagePathDisabled,
-    
-            // The internal #import specifier was not found
-            PackageImportNotDefined,
-    
-            PackageResolve,
-    
-            pub inline fn isUndefined(this: @This()) bool {
-                return switch (this) {
-                    .Undefined, .UndefinedNoConditionsMatch => true,
-                    else => false,
-                };
-            }
-        };
-    pub const Package = struct {
-        name: []const u8,
-        version: []const u8 = "",
-        subpath: []const u8,
-    
-    pub fn count(self: @This(), builder: *Semver.String.Builder) void {
-                _ = builder.count(self.name);
-                _ = builder.count(self.version);
-                _ = builder.count(self.subpath);
-        }
-    
-    pub fn clone(self: @This(), builder: *Semver.String.Builder) External {
-                return .{ .name = builder.appendUTF8WithoutPool(Semver.String, self.name, 0), .version = builder.appendUTF8WithoutPool(Semver.String, self.version, 0), .subpath = builder.appendUTF8WithoutPool(Semver.String, self.subpath, 0) };
-        }
-    
-    pub fn toExternal(self: @This(), buffer: []const u8) External {
-                return .{ .name = Semver.String.init(buffer, self.name), .version = Semver.String.init(buffer, self.version), .subpath = Semver.String.init(buffer, self.subpath) };
-        }
-    
-    pub fn withAutoVersion(self: @This()) Package {
-                if ((self.version.len == 0)) {
-                    return .{ .name = self.name, .subpath = self.subpath, .version = "latest" };
-                }
-                return self;
-        }
-    
-    pub fn parseName(specifier: []const u8) ?[]const u8 {
-                var slash = strings.indexOfCharNeg(specifier, 47);
-                _ = &slash;
-                if ((!strings.startsWithChar(specifier, 64))) {
-                    slash = (if ((slash == -1)) @as(i32, @intCast(specifier.len)) else slash);
-                    return specifier[0..@as(usize, @intCast(slash))];
-                } else {
-                    if ((slash == -1)) {
-                        return null;
-                    }
-                    const slash2 = ((strings.indexOfChar(specifier[(@as(usize, @intCast(slash)) + 1)..], 47)) orelse (specifier[@as(u32, @intCast((slash + 1)))..].len));
-                    return specifier[0..(@as(usize, @intCast((slash + 1))) + slash2)];
-                }
-        }
-    
-    pub fn parseVersion(specifier_after_name: []const u8) ?[]const u8 {
-                if (strings.indexOfChar(specifier_after_name, 47)) |slash| {
-                    _ = &slash;
-                    const remainder = specifier_after_name[0..slash];
-                    if (((remainder.len > 0) and (remainder[0] == 64))) {
-                        return remainder[1..];
-                    }
-                    return remainder;
-                }
-                return null;
-        }
-    
-    pub fn parse(specifier: []const u8, subpath_buf: []u8) ?Package {
-                if ((specifier.len == 0)) {
-                    return null;
-                }
-                var package = Package{ .name = ((parseName(specifier)) orelse { return null; }), .subpath = "" };
-                _ = &package;
-                if ((strings.startsWith((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name), ".") or (strings.indexAnyComptime((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name), "\\%") != null))) {
-                    return null;
-                }
-                const offset: usize = (if ((((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len == 0) or ((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name)[0] != 64))) 0 else 1);
-                if ((offset < (if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len)) {
-                    if (strings.indexOfChar(specifier[offset..(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len], 64)) |at| {
-                        _ = &at;
-                        if (parseVersion(specifier[offset..][at..])) |ver| {
-                            _ = &ver;
-                            package.version = ver;
-                        } else {
-                            package.version = "";
-                        }
-                        if ((package.version.len == 0)) {
-                            package.version = specifier[offset..][at..];
-                            if (((package.version.len > 0) and (package.version[0] == 64))) {
-                                package.version = package.version[1..];
-                            }
-                        }
-                        (if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name) = specifier[0..(at + offset)];
-                        _ = parseSubpath((&package.subpath), specifier[@min((((if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len + package.version.len) + 1), specifier.len)..], subpath_buf);
-                        return package;
-                    }
-                }
-                _ = parseSubpath((&package.subpath), specifier[(if (@typeInfo(@TypeOf(package)) == .@"enum" or @typeInfo(@TypeOf(package)) == .@"union") @tagName(package) else package.name).len..], subpath_buf);
-                return package;
-        }
-    
-    pub fn parseSubpath(subpath: *[]const u8, specifier: []const u8, subpath_buf: []u8) void {
-                if (((specifier.len + 1) > subpath_buf.len)) {
-                    subpath.* = "";
-                    return;
-                }
-                subpath_buf[cp_cast_int(usize, 0)] = 46;
-                _ = bun.copy(u8, subpath_buf[1..], specifier);
-                subpath.* = subpath_buf[0..(specifier.len + 1)];
-        }
-        pub const External = struct {
-            name: Semver.String = .{},
-            version: Semver.String = .{},
-            subpath: Semver.String = .{},
-        };
-    };
-    const ReverseKind = enum { exact, pattern, prefix };
-    pub const ReverseResolution = struct {
-        subpath: []const u8 = "",
-        token: logger.Range = logger.Range.None,
-    };
+    pub const Resolution = ESModule_Resolution;
+    const Status = ESModule_Status;
+    pub const Package = ESModule_Package;
+    const ReverseKind = ESModule_ReverseKind;
+    const ReverseResolution = ESModule_ReverseResolution;
     const invalid_percent_chars = .{ "%2f", "%2F", "%5c", "%5C" };
     const module_bufs = bun.ThreadlocalBuffers(struct {
         resolved_path_buf_percent: bun.PathBuffer = undefined,
@@ -1789,12 +1835,12 @@ else => {
     });
 };
 
-pub const IncludeScripts = enum { ignore_scripts, include_scripts };
-pub const IncludeDependencies = enum { main, local, none };
 pub const BrowserMap = bun.StringMap;
 pub const MacroImportReplacementMap = bun.StringArrayHashMap(string);
 pub const MacroMap = bun.StringArrayHashMapUnmanaged(MacroImportReplacementMap);
 const ScriptsMap = bun.StringArrayHashMap(string);
+pub const PackageJSON_SideEffectsMap = std.HashMapUnmanaged(bun.StringHashMapUnowned.Key, void, bun.StringHashMapUnowned.Adapter, 80);
+pub const PackageJSON_SideEffectsGlobList = std.ArrayListUnmanaged(string);
 const Architecture = @import("../install/npm.zig").Architecture;
 const OperatingSystem = @import("../install/npm.zig").OperatingSystem;
 const Environment = bun.Environment;
@@ -1819,7 +1865,7 @@ pub fn sideEffectsHasSideEffects(side_effects: PackageJSON.SideEffects, path: []
 .map => |map| map.contains(bun.StringHashMapUnowned.Key.init(path)),
 .glob => |glob_list| {
 {
-            const normalized_path = (blk_catch_48: { break :blk_catch_48 ((PackageJSON.normalizePathForGlob(bun.default_allocator, path)) catch |__ce_48| { _ = &__ce_48; return true; }); });
+            const normalized_path = (blk_catch_53: { break :blk_catch_53 ((PackageJSON.normalizePathForGlob(bun.default_allocator, path)) catch |__ce_53| { _ = &__ce_53; return true; }); });
             var normalized_path_guard = FreeGuard{ .allocator = bun.default_allocator, .ptr = normalized_path };
             _ = &normalized_path_guard;
             var __normalized_path_guard_moved = false; _ = &__normalized_path_guard_moved;
@@ -1838,7 +1884,7 @@ pub fn sideEffectsHasSideEffects(side_effects: PackageJSON.SideEffects, path: []
             if (mixed.exact.contains(bun.StringHashMapUnowned.Key.init(path))) {
                 return true;
             }
-            const normalized_path = (blk_catch_49: { break :blk_catch_49 ((PackageJSON.normalizePathForGlob(bun.default_allocator, path)) catch |__ce_49| { _ = &__ce_49; return true; }); });
+            const normalized_path = (blk_catch_54: { break :blk_catch_54 ((PackageJSON.normalizePathForGlob(bun.default_allocator, path)) catch |__ce_54| { _ = &__ce_54; return true; }); });
             var normalized_path_guard = FreeGuard{ .allocator = bun.default_allocator, .ptr = normalized_path };
             _ = &normalized_path_guard;
             var __normalized_path_guard_moved = false; _ = &__normalized_path_guard_moved;

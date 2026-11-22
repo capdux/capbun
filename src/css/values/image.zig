@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,10 +60,199 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
+pub const Image = union(enum) {
+    none: void,
+    url: Url,
+    gradient: *Gradient,
+    image_set: ImageSet,
+
+pub fn deinit(self: *Image, allocator: Allocator) void {
+        _ = self;
+            _ = &allocator;
+    }
+
+pub fn isCompatible(self: Image, browsers: css.targets.Browsers) bool {
+            return (switch (self) {
+.gradient => |g| (switch (g.*) {
+.linear => |linear| (css.Feature.isCompatible(.linear_gradient, browsers) and linear.isCompatible(browsers)),
+.repeating_linear => |repeating_linear| (css.Feature.isCompatible(.repeating_linear_gradient, browsers) and repeating_linear.isCompatible(browsers)),
+.radial => |radial| (css.Feature.isCompatible(.radial_gradient, browsers) and radial.isCompatible(browsers)),
+.repeating_radial => |repeating_radial| (css.Feature.isCompatible(.repeating_radial_gradient, browsers) and repeating_radial.isCompatible(browsers)),
+.conic => |conic| (css.Feature.isCompatible(.conic_gradient, browsers) and conic.isCompatible(browsers)),
+.repeating_conic => |repeating_conic| (css.Feature.isCompatible(.repeating_conic_gradient, browsers) and repeating_conic.isCompatible(browsers)),
+.@"webkit-gradient" => css.prefixes.Feature.isWebkitGradient(browsers),
+}),
+.image_set => |image_set| image_set.isCompatible(browsers),
+.url, .none => true,
+});
+    }
+
+pub fn getPrefixed(self: Image, allocator: Allocator, prefix: css.VendorPrefix) Image {
+            return (switch (self) {
+.gradient => |grad| Image{ .gradient = bun.create(allocator, Gradient, grad.getPrefixed(allocator, prefix)) },
+.image_set => |image_set| Image{ .image_set = image_set.getPrefixed(allocator, prefix) },
+else => self.deepClone(allocator),
+});
+    }
+
+pub fn getNecessaryPrefixes(self: Image, targets: css.targets.Targets) css.VendorPrefix {
+            return (switch (self) {
+.gradient => |grad| grad.getNecessaryPrefixes(targets),
+.image_set => self.image_set.getNecessaryPrefixes(targets),
+else => css.VendorPrefix{ .none = true },
+});
+    }
+
+pub fn hasVendorPrefix(self: Image) bool {
+            const prefix = self.getVendorPrefix();
+            return ((!prefix.isEmpty()) and (prefix != VendorPrefix{ .none = true }));
+    }
+
+pub fn getVendorPrefix(self: Image) VendorPrefix {
+            return (switch (self) {
+.gradient => |a| a.getVendorPrefix(),
+.image_set => |a| a.getVendorPrefix(),
+else => VendorPrefix{  },
+});
+    }
+
+pub fn getImage(self: *const Image) *const Image {
+            return self;
+    }
+
+pub fn withImage(self: Image, allocator: Allocator, image: Image) @This() {
+            const self_val = self;
+            _ = &self_val;
+            _ = &allocator;
+            return image;
+    }
+
+pub fn default() Image {
+            return .none;
+    }
+
+pub fn eql(self: Image, other: *const Image) bool {
+            return css.implementEql(@This(), self.getImage(), other);
+    }
+
+pub fn deepClone(self: Image, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), self.getImage(), allocator);
+    }
+
+pub fn getLegacyWebkit(self: Image, allocator: Allocator) ?Image {
+            return (switch (self) {
+.gradient => |gradient| {
+if (gradient.getLegacyWebkit(allocator)) |legacy| {
+                _ = &legacy;
+                return Image{ .gradient = bun.create(allocator, Gradient, legacy) };
+            } else {
+                return null;
+            }
+},
+else => self.deepClone(allocator),
+});
+    }
+
+pub fn getFallbacks(self: *Image, allocator: Allocator, targets: css.targets.Targets) css.SmallList(Image, 6) {
+            const ColorFallbackKind = css.ColorFallbackKind;
+            _ = &ColorFallbackKind;
+            const prefixes = self.getNecessaryPrefixes(targets);
+            const fallbacks = self.getNecessaryFallbacks(targets);
+            const SmallListImage = css.SmallList(Image, 6);
+            _ = &SmallListImage;
+            var res = SmallListImage{  };
+            _ = &res;
+            var rgb: ?Image = (if (fallbacks.rgb) self.getFallback(allocator, ColorFallbackKind{ .rgb = true }) else null);
+            _ = &rgb;
+            var prefix_image: Image = self.*;
+            _ = &prefix_image;
+            if (rgb) |r| {
+                _ = &r;
+                prefix_image = r;
+            }
+            if (((prefixes.webkit and (if (targets.browsers) |browsers| css.prefixes.Feature.isWebkitGradient(browsers) else false)) and (prefix_image == .gradient))) {
+                if (prefix_image.getLegacyWebkit(allocator)) |legacy| {
+                    _ = &legacy;
+                    _ = res.append(allocator, legacy);
+                }
+            }
+            if (prefixes.webkit) {
+                _ = res.append(allocator, prefix_image.getPrefixed(allocator, css.VendorPrefix.WEBKIT));
+            }
+            if (prefixes.moz) {
+                _ = res.append(allocator, prefix_image.getPrefixed(allocator, css.VendorPrefix.MOZ));
+            }
+            if (prefixes.o) {
+                _ = res.append(allocator, prefix_image.getPrefixed(allocator, css.VendorPrefix.O));
+            }
+            if (prefixes.none) {
+                if (rgb) |r| {
+                    _ = &r;
+                    _ = res.append(allocator, r);
+                }
+                if (fallbacks.p3) {
+                    _ = res.append(allocator, self.getFallback(allocator, ColorFallbackKind{ .p3 = true }));
+                }
+                if (fallbacks.lab) {
+                    self.* = self.getFallback(allocator, ColorFallbackKind{ .lab = true });
+                }
+            } else {
+                if (res.pop()) |last| {
+                    _ = &last;
+                    self.* = last;
+                }
+            }
+            return res;
+    }
+
+pub fn getFallback(self: Image, allocator: Allocator, kind: css.ColorFallbackKind) Image {
+            return (switch (self) {
+.gradient => |grad| Image{ .gradient = bun.create(allocator, Gradient, grad.getFallback(allocator, kind)) },
+else => self.deepClone(allocator),
+});
+    }
+
+pub fn getNecessaryFallbacks(self: Image, targets: css.targets.Targets) css.ColorFallbackKind {
+            return (switch (self) {
+.gradient => |grad| grad.getNecessaryFallbacks(targets),
+else => css.ColorFallbackKind{  },
+});
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
+pub const ImageSetParseFn = struct {
+
+pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(ArrayList(ImageSetOption)) {
+            return i.parseCommaSeparated(ImageSetOption, ImageSetOption.parse);
+    }
+};
+
+pub const FileTypeParseFn = struct {
+
+pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(Str) {
+            return i.expectString();
+    }
+};
+
 pub const ImageSet = struct {
     options: ArrayList(ImageSetOption),
     vendor_prefix: VendorPrefix,
@@ -87,13 +276,7 @@ return .{ .err = e };
                 }
             }
 };
-            const Fn = struct {
-
-pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(ArrayList(ImageSetOption)) {
-            return i.parseCommaSeparated(ImageSetOption, ImageSetOption.parse);
-    }
-};
-            const options = (switch (input.parseNestedBlock(ArrayList(ImageSetOption), @as(void, undefined), Fn.parseNestedBlockFn)) {
+            const options = (switch (input.parseNestedBlock(ArrayList(ImageSetOption), @as(void, undefined), ImageSetParseFn.parseNestedBlockFn)) {
 .result => |vv| vv,
 .err => |e| {
 return .{ .err = e };
@@ -138,11 +321,15 @@ pub fn getPrefixed(self: ImageSet, allocator: Allocator, prefix: css.VendorPrefi
     }
 
 pub fn eql(self: ImageSet, other: *const ImageSet) bool {
-            return css.implementEql(@This(), (&self), other);
+            var arr: [1]ImageSet = .{ self };
+            _ = &arr;
+            return css.implementEql(@This(), (&arr[0]), other);
     }
 
 pub fn deepClone(self: ImageSet, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            var arr: [1]ImageSet = .{ self };
+            _ = &arr;
+            return css.implementDeepClone(@This(), (&arr[0]), allocator);
     }
 
 pub fn getVendorPrefix(self: ImageSet) VendorPrefix {
@@ -198,7 +385,7 @@ return .{ .err = e };
 
 pub fn toCss(self: ImageSetOption, dest: *css.Printer, is_prefixed: bool) PrintErr!void {
             if (((self.image == .url) and (!is_prefixed))) {
-                const url_ptr: *const css.Url = (&self.image.url);
+                const url_ptr: *const Url = (&self.image.url);
                 const _dep: ?UrlDependency = (if ((dest.dependencies != null)) UrlDependency.new(dest.allocator, url_ptr, dest.filename(), try dest.getImportRecords()) else null);
                 if (_dep) |dep| {
                     _ = &dep;
@@ -230,7 +417,9 @@ pub fn toCss(self: ImageSetOption, dest: *css.Printer, is_prefixed: bool) PrintE
     }
 
 pub fn deepClone(self: ImageSetOption, allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
+            var arr: [1]ImageSetOption = .{ self };
+            _ = &arr;
+            return css.implementDeepClone(@This(), (&arr[0]), allocator);
     }
 
 pub fn eql(lhs: *const ImageSetOption, rhs: *const ImageSetOption) bool {
@@ -247,195 +436,6 @@ const Gradient = css.css_values.gradient.Gradient;
 const Resolution = css.css_values.resolution.Resolution;
 const VendorPrefix = css.VendorPrefix;
 const UrlDependency = css.dependencies.UrlDependency;
-pub const Image = union(enum) {
-    /// The `none` keyword.
-    none,
-    /// A `url()`.
-    url: Url,
-    /// A gradient.
-    gradient: *Gradient,
-    /// An `image-set()`.
-    image_set: ImageSet,
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn deinit(_: *@This(), _: std.mem.Allocator) void {
-        // TODO: implement this
-        // Right now not implementing this.
-        // It is not a bug to implement this since all memory allocated in CSS parser is allocated into arena.
-    }
-
-    pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers) bool {
-        return switch (this.*) {
-            .gradient => |g| switch (g.*) {
-                .linear => |linear| css.Feature.isCompatible(.linear_gradient, browsers) and linear.isCompatible(browsers),
-                .repeating_linear => |repeating_linear| css.Feature.isCompatible(.repeating_linear_gradient, browsers) and repeating_linear.isCompatible(browsers),
-                .radial => |radial| css.Feature.isCompatible(.radial_gradient, browsers) and radial.isCompatible(browsers),
-                .repeating_radial => |repeating_radial| css.Feature.isCompatible(.repeating_radial_gradient, browsers) and repeating_radial.isCompatible(browsers),
-                .conic => |conic| css.Feature.isCompatible(.conic_gradient, browsers) and conic.isCompatible(browsers),
-                .repeating_conic => |repeating_conic| css.Feature.isCompatible(.repeating_conic_gradient, browsers) and repeating_conic.isCompatible(browsers),
-                .@"webkit-gradient" => css.prefixes.Feature.isWebkitGradient(browsers),
-            },
-            .image_set => |image_set| image_set.isCompatible(browsers),
-            .url, .none => true,
-        };
-    }
-
-    pub fn getPrefixed(this: *const @This(), allocator: Allocator, prefix: css.VendorPrefix) Image {
-        return switch (this.*) {
-            .gradient => |grad| .{ .gradient = bun.create(allocator, Gradient, grad.getPrefixed(allocator, prefix)) },
-            .image_set => |image_set| .{ .image_set = image_set.getPrefixed(allocator, prefix) },
-            else => this.deepClone(allocator),
-        };
-    }
-
-    pub fn getNecessaryPrefixes(this: *const @This(), targets: css.targets.Targets) css.VendorPrefix {
-        return switch (this.*) {
-            .gradient => |grad| grad.getNecessaryPrefixes(targets),
-            .image_set => |*image_set| image_set.getNecessaryPrefixes(targets),
-            else => css.VendorPrefix{ .none = true },
-        };
-    }
-
-    pub fn hasVendorPrefix(this: *const @This()) bool {
-        const prefix = this.getVendorPrefix();
-        return !prefix.isEmpty() and prefix != VendorPrefix{ .none = true };
-    }
-
-    /// Returns the vendor prefix used in the image value.
-    pub fn getVendorPrefix(this: *const @This()) VendorPrefix {
-        return switch (this.*) {
-            .gradient => |a| a.getVendorPrefix(),
-            .image_set => |a| a.getVendorPrefix(),
-            else => .{},
-        };
-    }
-
-    /// Needed to satisfy ImageFallback interface
-    pub fn getImage(this: *const @This()) *const Image {
-        return this;
-    }
-
-    /// Needed to satisfy ImageFallback interface
-    pub fn withImage(_: *const @This(), _: Allocator, image: Image) @This() {
-        return image;
-    }
-
-    pub fn default() Image {
-        return .none;
-    }
-
-    pub inline fn eql(this: *const Image, other: *const Image) bool {
-        return css.implementEql(@This(), this, other);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-
-    /// Returns a legacy `-webkit-gradient()` value for the image.
-    ///
-    /// May return an error in case the gradient cannot be converted.
-    pub fn getLegacyWebkit(this: *const @This(), allocator: Allocator) ?Image {
-        return switch (this.*) {
-            .gradient => |gradient| Image{ .gradient = bun.create(allocator, Gradient, gradient.getLegacyWebkit(allocator) orelse return null) },
-            else => this.deepClone(allocator),
-        };
-    }
-
-    pub fn getFallbacks(this: *@This(), allocator: Allocator, targets: css.targets.Targets) css.SmallList(Image, 6) {
-        const ColorFallbackKind = css.ColorFallbackKind;
-        // Determine which prefixes and color fallbacks are needed.
-        const prefixes = this.getNecessaryPrefixes(targets);
-        const fallbacks = this.getNecessaryFallbacks(targets);
-        var res = css.SmallList(Image, 6){};
-
-        // Get RGB fallbacks if needed.
-        var rgb = if (fallbacks.rgb)
-            this.getFallback(allocator, ColorFallbackKind.RGB)
-        else
-            null;
-
-        // Prefixed properties only support RGB.
-        var prefix_image = this;
-        if (rgb != null) {
-            prefix_image = &rgb.?;
-        }
-
-        // Legacy -webkit-gradient()
-        if (prefixes.webkit and
-            if (targets.browsers) |browsers| css.prefixes.Feature.isWebkitGradient(browsers) else false and
-                prefix_image.* == .gradient)
-        {
-            if (prefix_image.getLegacyWebkit(allocator)) |legacy| {
-                res.append(allocator, legacy);
-            }
-        }
-
-        // Standard syntax, with prefixes.
-        if (prefixes.webkit) {
-            res.append(allocator, prefix_image.getPrefixed(allocator, css.VendorPrefix.WEBKIT));
-        }
-
-        if (prefixes.moz) {
-            res.append(allocator, prefix_image.getPrefixed(allocator, css.VendorPrefix.MOZ));
-        }
-
-        if (prefixes.o) {
-            res.append(allocator, prefix_image.getPrefixed(allocator, css.VendorPrefix.O));
-        }
-
-        if (prefixes.none) {
-            // Unprefixed, rgb fallback.
-            if (rgb) |r| {
-                res.append(allocator, r);
-            }
-
-            // P3 fallback.
-            if (fallbacks.p3) {
-                res.append(allocator, this.getFallback(allocator, ColorFallbackKind.P3));
-            }
-
-            // Convert original to lab if needed (e.g. if oklab is not supported but lab is).
-            if (fallbacks.lab) {
-                this.* = this.getFallback(allocator, ColorFallbackKind.LAB);
-            }
-        } else if (res.pop()) |last| {
-            // Prefixed property with no unprefixed version.
-            // Replace self with the last prefixed version so that it doesn't
-            // get duplicated when the caller pushes the original value.
-            this.* = last;
-        }
-
-        return res;
-    }
-
-    pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) Image {
-        return switch (this.*) {
-            .gradient => |grad| .{ .gradient = bun.create(allocator, Gradient, grad.getFallback(allocator, kind)) },
-            else => this.deepClone(allocator),
-        };
-    }
-
-    pub fn getNecessaryFallbacks(this: *const @This(), targets: css.targets.Targets) css.ColorFallbackKind {
-        return switch (this.*) {
-            .gradient => |grad| grad.getNecessaryFallbacks(targets),
-            else => css.ColorFallbackKind{},
-        };
-    }
-
-    // pub fn parse(input: *css.Parser) Result(Image) {
-    //     _ = input; // autofix
-    //     @panic(css.todo_stuff.depth);
-    // }
-
-    // pub fn toCss(this: *const Image, dest: *css.Printer) css.PrintErr!void {
-    //     _ = this; // autofix
-    //     _ = dest; // autofix
-    //     @panic(css.todo_stuff.depth);
-    // }
-};
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 
@@ -444,11 +444,5 @@ pub fn parseFileType(input: *css.Parser) Result(Str) {
             _ = &e;
             return .{ .err = e };
         }
-        const Fn = struct {
-
-pub fn parseNestedBlockFn(_: void, i: *css.Parser) Result(Str) {
-            return i.expectString();
-    }
-};
-        return input.parseNestedBlock(Str, @as(void, undefined), Fn.parseNestedBlockFn);
+        return input.parseNestedBlock(Str, @as(void, undefined), FileTypeParseFn.parseNestedBlockFn);
 }

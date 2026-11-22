@@ -463,23 +463,21 @@ pub fn takeServerName(self: *SSLConfig) ?[]const u8 {
 }
 pub const SharedPtr = bun.ptr.shared.WithOptions(*SSLConfig, .{ .atomic = true, .allow_weak = true });
 pub const WeakPtr = SharedPtr.Weak;
-pub const SingleFileInput = union(enum) {
-    string: bun.string.WTFStringImpl,
-    buffer: *jsc.JSCArrayBuffer,
-    file: *bun.webcore.Blob,
+pub const _GlobalRegistryMapContext = struct {
+
+pub fn hash(self: _GlobalRegistryMapContext, key: *SSLConfig) u32 {
+            const _ctx = self;
+            _ = &_ctx;
+            return @truncate(key.contentHash());
+    }
+
+pub fn eql(self: _GlobalRegistryMapContext, a: *SSLConfig, b: *SSLConfig, _: usize) bool {
+            const _ctx = self;
+            _ = &_ctx;
+            return a.isSame(b);
+    }
 };
 
-pub const CString = [*:0]const u8;
-pub const CStringSlice = []CString;
-const OptCStringSlice = ?CStringSlice;
-const OptCString = ?[*:0]const u8;
-const strings = bun.strings;
-const uws = bun.uws;
-const jsc = bun.jsc;
-const JSGlobalObject = jsc.JSGlobalObject;
-const JSValue = jsc.JSValue;
-const VirtualMachine = jsc.VirtualMachine;
-pub const zero = SSLConfig{  };
 pub const GlobalRegistry = struct {
     pub var mutex: bun.Mutex = .{};
     pub var configs: std.ArrayHashMapUnmanaged(*SSLConfig, SSLConfig.WeakPtr, MapContext, true) = .empty;
@@ -551,19 +549,26 @@ pub fn remove(config: *SSLConfig) void {
             _ = configs.swapRemoveAt(idx);
             _ = weak.deinit();
     }
-    const MapContext = struct {
-    
-    pub fn hash(self: @This(), key: *SSLConfig) u32 {
-            _ = self;
-                return @truncate(key.contentHash());
-        }
-    
-    pub fn eql(self: @This(), a: *SSLConfig, b: *SSLConfig, _: usize) bool {
-            _ = self;
-                return a.isSame(b);
-        }
-    };
+    const MapContext = _GlobalRegistryMapContext;
 };
+
+pub const SingleFileInput = union(enum) {
+    string: bun.string.WTFStringImpl,
+    buffer: *jsc.JSCArrayBuffer,
+    file: *bun.webcore.Blob,
+};
+
+pub const CString = [*:0]const u8;
+pub const CStringSlice = []CString;
+const OptCStringSlice = ?CStringSlice;
+const OptCString = ?[*:0]const u8;
+const strings = bun.strings;
+const uws = bun.uws;
+const jsc = bun.jsc;
+const JSGlobalObject = jsc.JSGlobalObject;
+const JSValue = jsc.JSValue;
+const VirtualMachine = jsc.VirtualMachine;
+pub const zero = SSLConfig{  };
 
 pub fn stringsEqualOpt(first: ?[*:0]const u8, second: ?[*:0]const u8) bool {
         if (first) |a| {

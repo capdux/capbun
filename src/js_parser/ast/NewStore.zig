@@ -46,7 +46,7 @@ fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTarge
 fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const Environment = bun.Environment;
@@ -76,8 +76,8 @@ pub fn NewStore(comptime types: []const type, comptime count: usize) type {
     current: *Block,
     debug_lock: std.debug.SafetyLock = .{},
 
-pub fn firstBlock(store: *Store) *Block {
-            const prealloc: *PreAlloc = @fieldParentPtr("metadata", store);
+pub fn firstBlock(self: *@This()) *Block {
+            const prealloc: *PreAlloc = @fieldParentPtr("metadata", self);
             return (&prealloc.first_block);
     }
 
@@ -88,9 +88,9 @@ pub fn init() *Store {
             return (&prealloc.metadata);
     }
 
-pub fn deinit(store: *Store) void {
+pub fn deinit(self: *@This()) void {
             _ = log("deinit", .{});
-            var it = store.firstBlock().next;
+            var it = self.firstBlock().next;
             _ = &it;
             while (it) |next| {
                 if ((Environment.isDebug or Environment.enable_asan)) {
@@ -99,52 +99,52 @@ pub fn deinit(store: *Store) void {
                 it = next.next;
                 _ = backing_allocator.destroy(next);
             }
-            const prealloc: *PreAlloc = @fieldParentPtr("metadata", store);
-            _ = bun.assert(((&prealloc.first_block) == store.head));
+            const prealloc: *PreAlloc = @fieldParentPtr("metadata", self);
+            _ = bun.assert(((&prealloc.first_block) == self.head));
             _ = backing_allocator.destroy(prealloc);
     }
 
-pub fn reset(store: *Store) void {
+pub fn reset(self: *@This()) void {
             _ = log("reset", .{});
             if ((Environment.isDebug or Environment.enable_asan)) {
-                var it: ?*Block = store.firstBlock();
+                var it: ?*Block = self.firstBlock();
                 _ = &it;
                 while (it) |next| : (it = next.next) {
                     next.bytes_used = undefined;
                     _ = @memset((&next.buffer), undefined);
                 }
             }
-            store.current = store.firstBlock();
-            store.current.bytes_used = 0;
+            self.current = self.firstBlock();
+            self.current.bytes_used = 0;
     }
 
-pub fn allocate(store: *Store, comptime T: type) *T {
+pub fn allocate(self: *@This(), comptime T: type) *T {
             _ = (comptime bun.assert((@sizeOf(T) > 0)));
             _ = (comptime (if ((!supportsType(T))) ({
             _ = @compileError(("Store does not know about type: " ++ @typeName(T)));
 }) else null));
-            if (store.current.tryAlloc(T)) |ptr| {
+            if (self.current.tryAlloc(T)) |ptr| {
                 _ = &ptr;
                 return ptr;
             }
             var next_block: *Block = undefined;
             _ = &next_block;
-            if (store.current.next) |next| {
+            if (self.current.next) |next| {
                 _ = &next;
                 next.bytes_used = 0;
                 next_block = next;
             } else {
                 const new_block = (blk_catch_0: { break :blk_catch_0 ((backing_allocator.create(Block)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 bun.outOfMemory(); }); });
                 _ = new_block.zero();
-                store.current.next = new_block;
+                self.current.next = new_block;
                 next_block = new_block;
             }
-            store.current = next_block;
-            return ((store.current.tryAlloc(T)) orelse (unreachable));
+            self.current = next_block;
+            return ((self.current.tryAlloc(T)) orelse (unreachable));
     }
 
-pub inline fn append(store: *Store, comptime T: type, data: T) *T {
-            const ptr = store.allocate(T);
+pub inline fn append(self: *@This(), comptime T: type, data: T) *T {
+            const ptr = self.allocate(T);
             if (Environment.isDebug) {
                 _ = log("append({s}) -> 0x{x}", .{ bun.@"meta".typeName(T), @intFromPtr(ptr) });
             }
@@ -152,12 +152,12 @@ pub inline fn append(store: *Store, comptime T: type, data: T) *T {
             return ptr;
     }
 
-pub fn lock(store: *Store) void {
-            _ = store.debug_lock.lock();
+pub fn lock(self: *@This()) void {
+            _ = self.debug_lock.lock();
     }
 
-pub fn unlock(store: *Store) void {
-            _ = store.debug_lock.unlock();
+pub fn unlock(self: *@This()) void {
+            _ = self.debug_lock.unlock();
     }
 
 pub fn supportsType(T: type) bool {
@@ -179,21 +179,21 @@ pub fn supportsType(T: type) bool {
                 self.next = null;
         }
     
-    pub fn tryAlloc(block: *Block, comptime T: type) ?*T {
-                const start = std.mem.alignForward(usize, block.bytes_used, @alignOf(T));
-                if (((start + @sizeOf(T)) > block.buffer.len)) {
+    pub fn tryAlloc(self: *@This(), comptime T: type) ?*T {
+                const start = std.mem.alignForward(usize, self.bytes_used, @alignOf(T));
+                if (((start + @sizeOf(T)) > self.buffer.len)) {
                     return null;
                 }
                 defer {
-                block.bytes_used = @intCast((start + @sizeOf(T)));
+                self.bytes_used = @intCast((start + @sizeOf(T)));
                 }
                 if (Environment.isDebug) {
-                    _ = block.buffer[block.bytes_used..][0..@sizeOf(T)];
+                    _ = self.buffer[self.bytes_used..][0..@sizeOf(T)];
                 }
-                return @ptrCast(@alignCast((&block.buffer[@as(usize, @intCast(start))])));
+                return @ptrCast(@alignCast((&self.buffer[@as(usize, @intCast(start))])));
         }
-        pub const size = ((largest_size * count) * 2);
-        pub const Size = std.math.IntFittingRange(0, (size + largest_size));
+        const size = ((largest_size * count) * 2);
+        const Size = std.math.IntFittingRange(0, (size + largest_size));
     };
     const PreAlloc = struct {
         metadata: Store,

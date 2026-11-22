@@ -39,7 +39,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -326,6 +326,475 @@ pub const ContentPosition = enum {
     pub const toCss = css_impl.toCss;
     
     pub const deepClone = css_impl.deepClone;
+};
+
+pub const AlignContentPosition = struct {
+    overflow: ?OverflowPosition,
+    value: ContentPosition,
+
+pub fn toInner(self: AlignContentPosition) ContentPositionInner {
+            return .{ .overflow = self.overflow, .value = self.value };
+    }
+
+pub fn __generateToCss() void {
+    }
+
+pub fn parse(input: *css.Parser) css.Result(@This()) {
+            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
+            const value = (switch (ContentPosition.parse(input)) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            return .{ .result = .{ .overflow = overflow, .value = value } };
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: AlignContentPosition, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const JustifyContentPosition = struct {
+    value: ContentPosition,
+    overflow: ?OverflowPosition,
+
+pub fn toInner(self: JustifyContentPosition) ContentPositionInner {
+            return .{ .overflow = self.overflow, .value = self.value };
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: JustifyContentPosition, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const AlignOverflowPosition = struct {
+    overflow: ?OverflowPosition,
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: AlignOverflowPosition, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const AlignSelfPosition = struct {
+    overflow: ?OverflowPosition,
+    value: SelfPosition,
+
+pub fn toInner(self: AlignSelfPosition) SelfPositionInner {
+            return .{ .overflow = self.overflow, .value = self.value };
+    }
+
+pub fn __generateToCss() void {
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn parse(input: *css.Parser) css.Result(@This()) {
+            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
+            const self_position = (switch (SelfPosition.parse(input)) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            return .{ .result = .{ .overflow = overflow, .value = self_position } };
+    }
+
+pub fn deepClone(self: AlignSelfPosition, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const JustifySelfPosition = struct {
+    value: SelfPosition,
+    overflow: ?OverflowPosition,
+
+pub fn toInner(self: JustifySelfPosition) SelfPositionInner {
+            return .{ .overflow = self.overflow, .value = self.value };
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: JustifySelfPosition, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const AlignContent = union(enum) {
+    normal: void,
+    baseline_position: BaselinePosition,
+    content_distribution: ContentDistribution,
+    content_position: AlignContentPosition,
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: AlignContent, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
+pub const JustifyContent = union(enum) {
+    normal: void,
+    content_distribution: ContentDistribution,
+    content_position: JustifyContentPosition,
+    left: AlignOverflowPosition,
+    right: AlignOverflowPosition,
+
+pub fn parse(input: *css.Parser) css.Result(@This()) {
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "normal" }).isOk()) {
+                return .{ .result = .normal };
+            }
+            if (input.tryParse(ContentDistribution.parse, .{}).asValue()) |val| {
+                _ = &val;
+                return .{ .result = .{ .content_distribution = val } };
+            }
+            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
+            if (input.tryParse(ContentPosition.parse, .{}).asValue()) |content_position| {
+                _ = &content_position;
+                return .{ .result = .{ .content_position = .{ .overflow = overflow, .value = content_position } } };
+            }
+            const location = input.currentSourceLocation();
+            const ident = (switch (input.expectIdent()) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            const JustifyContentIdent = enum {
+            left,
+            right,
+        };
+            const JustifyContentIdentMap = bun.ComptimeEnumMap(JustifyContentIdent);
+            if (JustifyContentIdentMap.getASCIIICaseInsensitive(ident)) |value| {
+                _ = &value;
+                switch (value) {
+.left => {
+return .{ .result = .{ .left = .{ .overflow = overflow } } };
+},
+.right => {
+return .{ .result = .{ .right = .{ .overflow = overflow } } };
+},
+}
+            } else {
+                return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+            }
+    }
+
+pub fn toCss(self: JustifyContent, dest: *css.Printer) css.PrintErr!void {
+            return (switch (self) {
+.normal => dest.writeStr("normal"),
+.content_distribution => |value| value.toCss(dest),
+.content_position => |*cp| {
+{
+                if (cp.overflow) |overflow| {
+                    _ = &overflow;
+                    _ = try overflow.toCss(dest);
+                    _ = try dest.writeStr(" ");
+                }
+                return (if (@typeInfo(@TypeOf(cp)) == .@"enum") @intFromEnum(cp) else cp.value).toCss(dest);
+            }
+},
+.left => |*l| {
+{
+                if (l.overflow) |overflow| {
+                    _ = &overflow;
+                    _ = try overflow.toCss(dest);
+                    _ = try dest.writeStr(" ");
+                }
+                return dest.writeStr("left");
+            }
+},
+.right => |*r| {
+{
+                if (r.overflow) |overflow| {
+                    _ = &overflow;
+                    _ = try overflow.toCss(dest);
+                    _ = try dest.writeStr(" ");
+                }
+                return dest.writeStr("right");
+            }
+},
+});
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: JustifyContent, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const AlignSelf = union(enum) {
+    auto: void,
+    normal: void,
+    stretch: void,
+    baseline_position: BaselinePosition,
+    self_position: AlignSelfPosition,
+
+pub fn deepClone(self: AlignSelf, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
+pub const JustifySelf = union(enum) {
+    auto: void,
+    normal: void,
+    stretch: void,
+    baseline_position: BaselinePosition,
+    self_position: JustifySelfPosition,
+    left: AlignOverflowPosition,
+    right: AlignOverflowPosition,
+
+pub fn parse(input: *css.Parser) css.Result(@This()) {
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "auto" }).isOk()) {
+                return .{ .result = .auto };
+            }
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "normal" }).isOk()) {
+                return .{ .result = .normal };
+            }
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "stretch" }).isOk()) {
+                return .{ .result = .stretch };
+            }
+            if (input.tryParse(BaselinePosition.parse, .{}).asValue()) |val| {
+                _ = &val;
+                return .{ .result = .{ .baseline_position = val } };
+            }
+            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
+            if (input.tryParse(SelfPosition.parse, .{}).asValue()) |self_position| {
+                _ = &self_position;
+                return .{ .result = .{ .self_position = .{ .overflow = overflow, .value = self_position } } };
+            }
+            const location = input.currentSourceLocation();
+            const ident = (switch (input.expectIdent()) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            const Enum = enum { left, right };
+            const Map = bun.ComptimeEnumMap(Enum);
+            if (Map.getASCIIICaseInsensitive(ident)) |val| {
+                _ = &val;
+                switch (val) {
+.left => {
+return .{ .result = .{ .left = .{ .overflow = overflow } } };
+},
+.right => {
+return .{ .result = .{ .right = .{ .overflow = overflow } } };
+},
+}
+            }
+            return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+    }
+
+pub fn toCss(self: JustifySelf, dest: *css.Printer) css.PrintErr!void {
+            return (switch (self) {
+.auto => dest.writeStr("auto"),
+.normal => dest.writeStr("normal"),
+.stretch => dest.writeStr("stretch"),
+.baseline_position => |*baseline_position| baseline_position.toCss(dest),
+.self_position => |*self_position| {
+{
+                if (self_position.overflow) |overflow| {
+                    _ = &overflow;
+                    _ = try overflow.toCss(dest);
+                    _ = try dest.writeStr(" ");
+                }
+                _ = try self_position.value.toCss(dest);
+            }
+},
+.left => |*left| {
+{
+                if (left.overflow) |overflow| {
+                    _ = &overflow;
+                    _ = try overflow.toCss(dest);
+                    _ = try dest.writeStr(" ");
+                }
+                _ = try dest.writeStr("left");
+            }
+},
+.right => |*right| {
+{
+                if (right.overflow) |overflow| {
+                    _ = &overflow;
+                    _ = try overflow.toCss(dest);
+                    _ = try dest.writeStr(" ");
+                }
+                _ = try dest.writeStr("right");
+            }
+},
+});
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: JustifySelf, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const AlignItems = union(enum) {
+    normal: void,
+    stretch: void,
+    baseline_position: BaselinePosition,
+    self_position: AlignSelfPosition,
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: AlignItems, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
+pub const JustifyItems = union(enum) {
+    normal: void,
+    stretch: void,
+    baseline_position: BaselinePosition,
+    self_position: JustifySelfPosition,
+    left: AlignOverflowPosition,
+    right: AlignOverflowPosition,
+    legacy: LegacyJustify,
+
+pub fn parse(input: *css.Parser) css.Result(@This()) {
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "normal" }).isOk()) {
+                return .{ .result = .normal };
+            }
+            if (input.tryParse(css.Parser.expectIdentMatching, .{ "stretch" }).isOk()) {
+                return .{ .result = .stretch };
+            }
+            if (input.tryParse(BaselinePosition.parse, .{}).asValue()) |val| {
+                _ = &val;
+                return .{ .result = .{ .baseline_position = val } };
+            }
+            if (input.tryParse(LegacyJustify.parse, .{}).asValue()) |val| {
+                _ = &val;
+                return .{ .result = .{ .legacy = val } };
+            }
+            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
+            if (input.tryParse(SelfPosition.parse, .{}).asValue()) |self_position| {
+                _ = &self_position;
+                return .{ .result = .{ .self_position = .{ .overflow = overflow, .value = self_position } } };
+            }
+            const location = input.currentSourceLocation();
+            const ident = (switch (input.expectIdent()) {
+.result => |v| v,
+.err => |e| {
+return .{ .err = e };
+},
+});
+            const Enum = enum { left, right };
+            const Map = bun.ComptimeEnumMap(Enum);
+            if (Map.getASCIIICaseInsensitive(ident)) |val| {
+                _ = &val;
+                switch (val) {
+.left => {
+return .{ .result = .{ .left = .{ .overflow = overflow } } };
+},
+.right => {
+return .{ .result = .{ .right = .{ .overflow = overflow } } };
+},
+}
+            }
+            return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
+    }
+
+pub fn toCss(self: JustifyItems, dest: *css.Printer) css.PrintErr!void {
+            switch (self) {
+.normal => {
+_ = try dest.writeStr("normal");
+},
+.stretch => {
+_ = try dest.writeStr("stretch");
+},
+.baseline_position => |*val| {
+_ = try val.toCss(dest);
+},
+.self_position => |*sp| {
+if (sp.overflow) |overflow| {
+                _ = &overflow;
+                _ = try overflow.toCss(dest);
+                _ = try dest.writeStr(" ");
+            }
+            _ = try (if (@typeInfo(@TypeOf(sp)) == .@"enum") @intFromEnum(sp) else sp.value).toCss(dest);
+},
+.left => |*l| {
+if (l.overflow) |overflow| {
+                _ = &overflow;
+                _ = try overflow.toCss(dest);
+                _ = try dest.writeStr(" ");
+            }
+            _ = try dest.writeStr("left");
+},
+.right => |*r| {
+if (r.overflow) |overflow| {
+                _ = &overflow;
+                _ = try overflow.toCss(dest);
+                _ = try dest.writeStr(" ");
+            }
+            _ = try dest.writeStr("right");
+},
+.legacy => |l| {
+_ = try l.toCss(dest);
+},
+}
+    }
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: JustifyItems, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+};
+
+pub const GapValue = union(enum) {
+    normal: void,
+    length_percentage: LengthPercentage,
+
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+            return css.implementEql(@This(), lhs, rhs);
+    }
+
+pub fn deepClone(self: GapValue, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
 };
 
 pub const Gap = struct {
@@ -928,596 +1397,6 @@ pub fn flushShorthandHelper(dest: *css.DeclarationList, context: *css.PropertyHa
     }
 };
 
-const Printer = css.Printer;
-const PrintErr = css.PrintErr;
-const LengthPercentage = css.css_values.length.LengthPercentage;
-const VendorPrefix = css.VendorPrefix;
-const Property = css.Property;
-const Feature = css.prefixes.Feature;
-pub const AlignContent = union(enum) {
-    /// Default alignment.
-    normal: void,
-    /// A baseline position.
-    baseline_position: BaselinePosition,
-    /// A content distribution keyword.
-    content_distribution: ContentDistribution,
-    /// A content position keyword.
-    content_position: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-        /// A content position keyword.
-        value: ContentPosition,
-
-        pub fn toInner(this: *const @This()) ContentPositionInner {
-            return .{
-                .overflow = this.overflow,
-                .value = this.value,
-            };
-        }
-
-        pub fn __generateToCss() void {}
-
-        pub fn parse(input: *css.Parser) css.Result(@This()) {
-            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
-
-            const value = switch (ContentPosition.parse(input)) {
-                .result => |v| v,
-                .err => |e| return .{ .err = e },
-            };
-            return .{ .result = .{ .overflow = overflow, .value = value } };
-        }
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const JustifyContent = union(enum) {
-    /// Default justification.
-    normal,
-    /// A content distribution keyword.
-    content_distribution: ContentDistribution,
-    /// A content position keyword.
-    content_position: struct {
-        /// A content position keyword.
-        value: ContentPosition,
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn toInner(this: *const @This()) ContentPositionInner {
-            return .{
-                .overflow = this.overflow,
-                .value = this.value,
-            };
-        }
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// Justify to the left.
-    left: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// Justify to the right.
-    right: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-
-    pub fn parse(input: *css.Parser) css.Result(@This()) {
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"normal"}).isOk()) {
-            return .{ .result = .normal };
-        }
-
-        if (input.tryParse(ContentDistribution.parse, .{}).asValue()) |val| {
-            return .{ .result = .{ .content_distribution = val } };
-        }
-
-        const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
-        if (input.tryParse(ContentPosition.parse, .{}).asValue()) |content_position| {
-            return .{ .result = .{
-                .content_position = .{
-                    .overflow = overflow,
-                    .value = content_position,
-                },
-            } };
-        }
-
-        const location = input.currentSourceLocation();
-        const ident = switch (input.expectIdent()) {
-            .result => |v| v,
-            .err => |e| return .{ .err = e },
-        };
-
-        const JustifyContentIdent = enum {
-            left,
-            right,
-        };
-
-        const JustifyContentIdentMap = bun.ComptimeEnumMap(JustifyContentIdent);
-        if (JustifyContentIdentMap.getASCIIICaseInsensitive(ident)) |value|
-            return switch (value) {
-                .left => .{ .result = .{ .left = .{ .overflow = overflow } } },
-                .right => .{ .result = .{ .right = .{ .overflow = overflow } } },
-            }
-        else
-            return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
-    }
-
-    pub fn toCss(this: *const @This(), dest: *css.Printer) css.PrintErr!void {
-        return switch (this.*) {
-            .normal => dest.writeStr("normal"),
-            .content_distribution => |value| value.toCss(dest),
-            .content_position => |*cp| {
-                if (cp.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                return cp.value.toCss(dest);
-            },
-            .left => |*l| {
-                if (l.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                return dest.writeStr("left");
-            },
-            .right => |*r| {
-                if (r.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                return dest.writeStr("right");
-            },
-        };
-    }
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const AlignSelf = union(enum) {
-    /// Automatic alignment.
-    auto,
-    /// Default alignment.
-    normal,
-    /// Item is stretched.
-    stretch,
-    /// A baseline position keyword.
-    baseline_position: BaselinePosition,
-    /// A self position keyword.
-    self_position: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-        /// A self position keyword.
-        value: SelfPosition,
-
-        pub fn toInner(this: *const @This()) SelfPositionInner {
-            return .{
-                .overflow = this.overflow,
-                .value = this.value,
-            };
-        }
-
-        pub fn __generateToCss() void {}
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn parse(input: *css.Parser) css.Result(@This()) {
-            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
-            const self_position = switch (SelfPosition.parse(input)) {
-                .result => |v| v,
-                .err => |e| return .{ .err = e },
-            };
-            return .{
-                .result = .{
-                    .overflow = overflow,
-                    .value = self_position,
-                },
-            };
-        }
-    },
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-};
-pub const JustifySelf = union(enum) {
-    /// Automatic justification.
-    auto,
-    /// Default justification.
-    normal,
-    /// Item is stretched.
-    stretch,
-    /// A baseline position keyword.
-    baseline_position: BaselinePosition,
-    /// A self position keyword.
-    self_position: struct {
-        /// A self position keyword.
-        value: SelfPosition,
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn toInner(this: *const @This()) SelfPositionInner {
-            return .{
-                .overflow = this.overflow,
-                .value = this.value,
-            };
-        }
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// Item is justified to the left.
-    left: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// Item is justified to the right.
-    right: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-
-    pub fn parse(input: *css.Parser) css.Result(@This()) {
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"auto"}).isOk()) {
-            return .{ .result = .auto };
-        }
-
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"normal"}).isOk()) {
-            return .{ .result = .normal };
-        }
-
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"stretch"}).isOk()) {
-            return .{ .result = .stretch };
-        }
-
-        if (input.tryParse(BaselinePosition.parse, .{}).asValue()) |val| {
-            return .{ .result = .{ .baseline_position = val } };
-        }
-
-        const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
-        if (input.tryParse(SelfPosition.parse, .{}).asValue()) |self_position| {
-            return .{ .result = .{ .self_position = .{ .overflow = overflow, .value = self_position } } };
-        }
-
-        const location = input.currentSourceLocation();
-        const ident = switch (input.expectIdent()) {
-            .result => |v| v,
-            .err => |e| return .{ .err = e },
-        };
-        const Enum = enum { left, right };
-        const Map = bun.ComptimeEnumMap(Enum);
-        if (Map.getASCIIICaseInsensitive(ident)) |val| return .{ .result = switch (val) {
-            .left => .{ .left = .{ .overflow = overflow } },
-            .right => .{ .right = .{ .overflow = overflow } },
-        } };
-        return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
-    }
-
-    pub fn toCss(this: *const JustifySelf, dest: *css.Printer) css.PrintErr!void {
-        return switch (this.*) {
-            .auto => try dest.writeStr("auto"),
-            .normal => try dest.writeStr("normal"),
-            .stretch => try dest.writeStr("stretch"),
-            .baseline_position => |*baseline_position| baseline_position.toCss(dest),
-            .self_position => |*self_position| {
-                if (self_position.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-
-                try self_position.value.toCss(dest);
-            },
-            .left => |*left| {
-                if (left.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                try dest.writeStr("left");
-            },
-            .right => |*right| {
-                if (right.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                try dest.writeStr("right");
-            },
-        };
-    }
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const AlignItems = union(enum) {
-    /// Default alignment.
-    normal,
-    /// Items are stretched.
-    stretch,
-    /// A baseline position keyword.
-    baseline_position: BaselinePosition,
-    /// A self position keyword.
-    self_position: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-        /// A self position keyword.
-        value: SelfPosition,
-
-        pub fn toInner(this: *const @This()) SelfPositionInner {
-            return .{
-                .overflow = this.overflow,
-                .value = this.value,
-            };
-        }
-
-        pub fn parse(input: *css.Parser) css.Result(@This()) {
-            const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
-            const self_position = switch (SelfPosition.parse(input)) {
-                .result => |v| v,
-                .err => |e| return .{ .err = e },
-            };
-            return .{
-                .result = .{
-                    .overflow = overflow,
-                    .value = self_position,
-                },
-            };
-        }
-
-        pub fn __generateToCss() void {}
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const JustifyItems = union(enum) {
-    /// Default justification.
-    normal,
-    /// Items are stretched.
-    stretch,
-    /// A baseline position keyword.
-    baseline_position: BaselinePosition,
-    /// A self position keyword, with optional overflow position.
-    self_position: struct {
-        /// A self position keyword.
-        value: SelfPosition,
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn toInner(this: *const @This()) SelfPositionInner {
-            return .{
-                .overflow = this.overflow,
-                .value = this.value,
-            };
-        }
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// Items are justified to the left, with an optional overflow position.
-    left: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// Items are justified to the right, with an optional overflow position.
-    right: struct {
-        /// An overflow alignment mode.
-        overflow: ?OverflowPosition,
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-            return css.implementEql(@This(), lhs, rhs);
-        }
-
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
-    },
-    /// A legacy justification keyword.
-    legacy: LegacyJustify,
-
-    pub fn parse(input: *css.Parser) css.Result(@This()) {
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"normal"}).isOk()) {
-            return .{ .result = .normal };
-        }
-
-        if (input.tryParse(css.Parser.expectIdentMatching, .{"stretch"}).isOk()) {
-            return .{ .result = .stretch };
-        }
-
-        if (input.tryParse(BaselinePosition.parse, .{}).asValue()) |val| {
-            return .{ .result = .{ .baseline_position = val } };
-        }
-
-        if (input.tryParse(LegacyJustify.parse, .{}).asValue()) |val| {
-            return .{ .result = .{ .legacy = val } };
-        }
-
-        const overflow = input.tryParse(OverflowPosition.parse, .{}).asValue();
-        if (input.tryParse(SelfPosition.parse, .{}).asValue()) |self_position| {
-            return .{ .result = .{ .self_position = .{ .overflow = overflow, .value = self_position } } };
-        }
-
-        const location = input.currentSourceLocation();
-        const ident = switch (input.expectIdent()) {
-            .result => |v| v,
-            .err => |e| return .{ .err = e },
-        };
-
-        const Enum = enum { left, right };
-        const Map = bun.ComptimeEnumMap(Enum);
-        if (Map.getASCIIICaseInsensitive(ident)) |val| return .{ .result = switch (val) {
-            .left => .{ .left = .{ .overflow = overflow } },
-            .right => .{ .right = .{ .overflow = overflow } },
-        } };
-        return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
-    }
-
-    pub fn toCss(this: *const JustifyItems, dest: *css.Printer) css.PrintErr!void {
-        switch (this.*) {
-            .normal => try dest.writeStr("normal"),
-            .stretch => try dest.writeStr("stretch"),
-            .baseline_position => |*val| try val.toCss(dest),
-            .self_position => |*sp| {
-                if (sp.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                try sp.value.toCss(dest);
-            },
-            .left => |*l| {
-                if (l.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                try dest.writeStr("left");
-            },
-            .right => |*r| {
-                if (r.overflow) |*overflow| {
-                    try overflow.toCss(dest);
-                    try dest.writeStr(" ");
-                }
-                try dest.writeStr("right");
-            },
-            .legacy => |l| try l.toCss(dest),
-        }
-    }
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-pub const GapValue = union(enum) {
-    /// Equal to `1em` for multi-column containers, and zero otherwise.
-    normal,
-    /// An explicit length.
-    length_percentage: LengthPercentage,
-
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-
-    pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
-        return css.implementEql(@This(), lhs, rhs);
-    }
-
-    pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-        return css.implementDeepClone(@This(), this, allocator);
-    }
-};
-const FlexLinePack = css.css_properties.flex.FlexLinePack;
-const BoxPack = css.css_properties.flex.BoxPack;
-const FlexPack = css.css_properties.flex.FlexPack;
-const BoxAlign = css.css_properties.flex.BoxAlign;
-const FlexAlign = css.css_properties.flex.FlexAlign;
-const FlexItemAlign = css.css_properties.flex.FlexItemAlign;
 const AlignContentAndPrefix = struct { AlignContent, VendorPrefix };
 const FlexLinePackAndPrefix = struct { FlexLinePack, VendorPrefix };
 const JustifyContentAndPrefix = struct { JustifyContent, VendorPrefix };
@@ -1528,6 +1407,18 @@ const FlexItemAlignAndPrefix = struct { FlexItemAlign, VendorPrefix };
 const AlignItemsAndPrefix = struct { AlignItems, VendorPrefix };
 const BoxAlignAndPrefix = struct { BoxAlign, VendorPrefix };
 const FlexAlignAndPrefix = struct { FlexAlign, VendorPrefix };
+const Printer = css.Printer;
+const PrintErr = css.PrintErr;
+const LengthPercentage = css.css_values.length.LengthPercentage;
+const VendorPrefix = css.VendorPrefix;
+const Property = css.Property;
+const Feature = css.prefixes.Feature;
+const FlexLinePack = css.css_properties.flex.FlexLinePack;
+const BoxPack = css.css_properties.flex.BoxPack;
+const FlexPack = css.css_properties.flex.FlexPack;
+const BoxAlign = css.css_properties.flex.BoxAlign;
+const FlexAlign = css.css_properties.flex.FlexAlign;
+const FlexItemAlign = css.css_properties.flex.FlexItemAlign;
 const Allocator = std.mem.Allocator;
 
 pub fn isAlignProperty(property_id: css.PropertyId) bool {

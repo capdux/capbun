@@ -62,6 +62,7 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const Debugger = @import("../../jsc/Debugger.zig");
 pub fn DerefGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -110,11 +111,21 @@ pub fn __cp_deinit(self: *InspectorDispatchGuard) void {
     }
 };
 
+pub const TimerObjectFlags = packed struct(u32) {
+    epoch: u25 = 0,
+    kind: Kind = .setTimeout,
+    has_cleared_timer: bool = false,
+    is_keeping_event_loop_alive: bool = false,
+    has_accessed_primitive: bool = false,
+    has_js_ref: bool = true,
+    in_callback: bool = false,
+};
+
 pub const TimerObjectInternals = struct {
     id: i32 = -1,
     interval: u31 = 0,
     this_value: jsc.JSRef = .empty(),
-    flags: Flags = .{},
+    flags: TimerObjectFlags = .{},
     generation: u32 = 0,
     
 pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try allocator.create(@This()); self_ptr.* = undefined; self_ptr.id = -1; self_ptr.interval = 0; self_ptr.this_value = .empty(); self_ptr.flags = .{}; self_ptr.generation = 0; return self_ptr; }
@@ -441,7 +452,7 @@ pub fn cancel(self: *TimerObjectInternals, vm: *VirtualMachine) void {
             }
     }
 
-pub fn shouldRescheduleTimer(self: *TimerObjectInternals, repeat: JSValue, idle_timeout: JSValue) bool {
+pub fn shouldRescheduleTimer(self: *const TimerObjectInternals, repeat: JSValue, idle_timeout: JSValue) bool {
             if (((self.flags.kind == .setInterval) and repeat.isNull())) {
                 return false;
             }
@@ -494,7 +505,7 @@ _ = vm.timer.incrementImmediateRef((if (enable) 1 else -1));
 }
     }
 
-pub fn hasRef(self: *TimerObjectInternals) JSValue {
+pub fn hasRef(self: *const TimerObjectInternals) JSValue {
             return JSValue.jsBoolean(self.flags.is_keeping_event_loop_alive);
     }
 
@@ -560,15 +571,7 @@ const parent: *TimeoutObject = @fieldParentPtr("internals", self);
 },
 }
     }
-    pub const Flags = packed struct(u32) {
-            epoch: u25 = 0,
-            kind: Kind = .setTimeout,
-            has_cleared_timer: bool = false,
-            is_keeping_event_loop_alive: bool = false,
-            has_accessed_primitive: bool = false,
-            has_js_ref: bool = true,
-            in_callback: bool = false,
-        };
+    pub const Flags = TimerObjectFlags;
 };
 
 const Environment = bun.Environment;
@@ -585,6 +588,5 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 const VirtualMachine = jsc.VirtualMachine;
-const Debugger = @import("../../jsc/Debugger.zig");
 
 extern "c" fn Bun__JSTimeout__call(globalObject: *jsc.JSGlobalObject, timer: JSValue, callback: JSValue, arguments: JSValue) callconv(.c) bool;

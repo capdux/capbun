@@ -34,20 +34,20 @@ pub union(enum) TopFormDataEntry {
 
 @opaque pub struct DOMFormData {
     pub const FormDataEntry = TopFormDataEntry;
-    pub fn create(
+    static fn create(
         global: *JSGlobalObject,
     ): JSValue {
         return WebCore__DOMFormData__create(global);
     }
 
-    pub fn createFromURLQuery(
+    static fn createFromURLQuery(
         global: *JSGlobalObject,
         query: *ZigString,
     ): JSValue {
         return WebCore__DOMFormData__createFromURLQuery(global, query);
     }
 
-    pub fn toQueryString(
+    fn toQueryString(
         *_,
         comptime Ctx: type,
         ctx: Ctx,
@@ -64,11 +64,11 @@ pub union(enum) TopFormDataEntry {
         WebCore__DOMFormData__toQueryString(_, ctx, &Wrapper.run);
     }
 
-    pub fn fromJS(value: JSValue): (*DOMFormData)? {
+    static fn fromJS(value: JSValue): (*DOMFormData)? {
         return WebCore__DOMFormData__fromJS(value);
     }
 
-    pub fn append(
+    fn append(
         *_,
         name_: *ZigString,
         value_: *ZigString,
@@ -76,7 +76,7 @@ pub union(enum) TopFormDataEntry {
         WebCore__DOMFormData__append(_, name_, value_);
     }
 
-    pub fn appendBlob(
+    fn appendBlob(
         *_,
         global: *jsc.JSGlobalObject,
         name_: *ZigString,
@@ -86,13 +86,13 @@ pub union(enum) TopFormDataEntry {
         return WebCore__DOMFormData__appendBlob(_, global, name_, blob, filename_);
     }
 
-    pub fn count(
+    fn count(
         *_,
     ): usize {
         return WebCore__DOMFormData__count(_);
     }
 
-    pub fn forEach(
+    fn forEach(
         *_,
         comptime Context: type,
         ctx: *Context,

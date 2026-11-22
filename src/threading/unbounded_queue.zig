@@ -32,13 +32,14 @@ pub const Error = __CpErr;
 fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
 fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
 fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -59,12 +60,11 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 const assertf = bun.assertf;
 const atomic = std.atomic;
-const builtin = std.builtin;
 const meta = std.meta;
 pub const cache_line_length = (switch (@import("builtin").target.cpu.arch) {
 .x86_64, .aarch64, .powerpc64 => 128,
@@ -73,157 +73,163 @@ pub const cache_line_length = (switch (@import("builtin").target.cpu.arch) {
 else => 64,
 });
 
+pub fn QueueBatchIterator(comptime BatchType: type, comptime T: type, comptime getNextFn: anytype) type {
+        return struct {
+    batch: BatchType,
+
+pub fn next(self: *@This()) ?*T {
+            if ((self.batch.count == 0)) {
+                return null;
+            }
+            const front = ((self.batch.front) orelse (unreachable));
+            self.batch.front = getNextFn(front);
+            self.batch.count = (self.batch.count - 1);
+            return front;
+    }
+};
+}
+
 pub fn UnboundedQueue(comptime T: type, comptime next_field: meta.FieldEnum(T)) type {
         const field_info = meta.fieldInfo(T, next_field);
         const next_name = (if (@typeInfo(@TypeOf(field_info)) == .@"enum" or @typeInfo(@TypeOf(field_info)) == .@"union") @tagName(field_info) else field_info.name);
         const FieldType = field_info.type;
         const has_custom_accessors = (((((@typeInfo(FieldType) != .optional) and @hasDecl(FieldType, "getPtr")) and @hasDecl(FieldType, "setPtr")) and @hasDecl(FieldType, "atomicLoadPtr")) and @hasDecl(FieldType, "atomicStorePtr"));
-        return struct {
-        const Self = @This();
+        const getNext = (struct {
 
-        inline fn getNext(item: *T) ?*T {
+pub inline fn call(item: *T) ?*T {
             if (comptime has_custom_accessors) {
                 return @field(item, next_name).getPtr();
             } else {
                 return @field(item, next_name);
             }
-        }
+    }
+}).call;
+        const QueueBatch = struct {
+    front: ?*T = null,
+    last: ?*T = null,
+    count: usize = 0,
 
-        inline fn setNext(item: *T, ptr: ?*T) void {
+pub fn iterator(self: @This()) Iterator {
+            return Iterator{ .batch = self };
+    }
+    pub const Iterator = QueueBatchIterator(@This(), T, getNext);
+};
+        return struct {
+    back: std.atomic.Value(?*T) align(queue_padding_length) = .init(null),
+    front: std.atomic.Value(?*T) align(queue_padding_length) = .init(null),
+
+pub inline fn setNext(item: *T, ptr: ?*T) void {
             if (comptime has_custom_accessors) {
-                const field_ptr: *FieldType = &@field(item, next_name);
-                field_ptr.setPtr(ptr);
+                const field_ptr: *FieldType = (&@field(item, next_name));
+                _ = field_ptr.setPtr(ptr);
             } else {
                 @field(item, next_name) = ptr;
             }
-        }
+    }
 
-        inline fn atomicLoadNext(item: *T, ordering: std.builtin.AtomicOrder) ?*T {
+pub inline fn atomicLoadNext(item: *T, ordering: std.builtin.AtomicOrder) ?*T {
             if (comptime has_custom_accessors) {
-                const field_ptr: *FieldType = &@field(item, next_name);
+                const field_ptr: *FieldType = (&@field(item, next_name));
                 return field_ptr.atomicLoadPtr(ordering);
             } else {
-                return @atomicLoad(?*T, &@field(item, next_name), ordering);
+                return @atomicLoad(@TypeOf(@as(?*T, null)), (&@field(item, next_name)), ordering);
             }
-        }
+    }
 
-        inline fn atomicStoreNext(item: *T, ptr: ?*T, ordering: std.builtin.AtomicOrder) void {
+pub inline fn atomicStoreNext(item: *T, ptr: ?*T, ordering: std.builtin.AtomicOrder) void {
             if (comptime has_custom_accessors) {
-                const field_ptr: *FieldType = &@field(item, next_name);
-                field_ptr.atomicStorePtr(ptr, ordering);
+                const field_ptr: *FieldType = (&@field(item, next_name));
+                _ = field_ptr.atomicStorePtr(ptr, ordering);
             } else {
-                @atomicStore(?*T, &@field(item, next_name), ptr, ordering);
+                _ = @atomicStore(@TypeOf(@as(?*T, null)), (&@field(item, next_name)), ptr, ordering);
             }
-        }
+    }
 
-        pub const Batch = struct {
-            pub const Iterator = struct {
-                batch: Self.Batch,
+pub fn push(self: *@This(), item: *T) void {
+            _ = self.pushBatch(item, item);
+    }
 
-                pub fn next(self: *Self.Batch.Iterator) ?*T {
-                    if (self.batch.count == 0) return null;
-                    const front = self.batch.front orelse unreachable;
-                    self.batch.front = getNext(front);
-                    self.batch.count -= 1;
-                    return front;
-                }
-            };
-
-            front: ?*T = null,
-            last: ?*T = null,
-            count: usize = 0,
-
-            pub fn iterator(self: Self.Batch) Self.Batch.Iterator {
-                return .{ .batch = self };
-            }
-        };
-
-        pub const queue_padding_length = cache_line_length / 2;
-
-        back: std.atomic.Value(?*T) align(queue_padding_length) = .init(null),
-        front: std.atomic.Value(?*T) align(queue_padding_length) = .init(null),
-
-        pub fn push(self: *Self, item: *T) void {
-            self.pushBatch(item, item);
-        }
-
-        pub fn pushBatch(self: *Self, first: *T, last: *T) void {
-            setNext(last, null);
+pub fn pushBatch(self: *@This(), first: *T, last: *T) void {
+            _ = setNext(last, null);
             if (comptime bun.Environment.allow_assert) {
                 var item = first;
+                _ = &item;
                 while (getNext(item)) |next_item| {
                     item = next_item;
                 }
-                assertf(item == last, "`last` should be reachable from `first`", .{});
+                _ = assertf((item == last), "`last` should be reachable from `first`", .{});
             }
             if (self.back.swap(last, .acq_rel)) |old_back| {
-                atomicStoreNext(old_back, first, .release);
+                _ = &old_back;
+                _ = atomicStoreNext(old_back, first, .release);
             } else {
-                self.front.store(first, .release);
+                _ = self.front.store(first, .release);
             }
-        }
+    }
 
-        pub fn pop(self: *Self) ?*T {
-            var first = self.front.load(.acquire) orelse return null;
-            const next_item = while (true) {
+pub fn pop(self: *@This()) ?*T {
+            var first = ((self.front.load(.acquire)) orelse { return null; });
+            _ = &first;
+            var next_item: ?*T = null;
+            _ = &next_item;
+            while (true) {
                 const next_ptr = atomicLoadNext(first, .acquire);
-                const maybe_first = self.front.cmpxchgWeak(
-                    first,
-                    next_ptr,
-                    .release, // not .acq_rel because we already loaded this value with .acquire
-                    .acquire,
-                ) orelse break next_ptr;
-                first = maybe_first orelse return null;
-            };
-            if (next_item != null) return first;
-            // `first` was the only item in the queue, so we need to clear `self.back`.
-
-            // Even though this load is .monotonic, it will always be either `first` (in which case
-            // the cmpxchg succeeds) or an item pushed *after* `first`, because the .acquire load of
-            // `self.front` synchronizes-with the .release store in push/pushBatch.
+                if (self.front.cmpxchgWeak(first, next_ptr, .release, .acquire)) |maybe_first| {
+                    _ = &maybe_first;
+                    first = ((maybe_first) orelse { return null; });
+                } else {
+                    next_item = next_ptr;
+                    break;
+                }
+            }
+            if ((next_item != null)) {
+                return first;
+            }
             if (self.back.cmpxchgStrong(first, null, .monotonic, .monotonic)) |back| {
-                assertf(back != null, "`back` should not be null while popping an item", .{});
+                _ = &back;
+                _ = assertf((back != null), "`back` should not be null while popping an item", .{});
             } else {
                 return first;
             }
-
-            // Another item was added to the queue before we could finish removing this one.
-            const new_first = while (true) : (atomic.spinLoopHint()) {
-                // Wait for push/pushBatch to set `next`.
-                break atomicLoadNext(first, .acquire) orelse continue;
-            };
-
-            self.front.store(new_first, .release);
-            return first;
-        }
-
-        pub fn popBatch(self: *Self) Self.Batch {
-            var batch: Self.Batch = .{};
-
-            // Not .acq_rel because another thread that sees this `null` doesn't depend on any
-            // visible side-effects from this thread.
-            const first = self.front.swap(null, .acquire) orelse return batch;
-            batch.count += 1;
-
-            // Even though this load is .monotonic, it will always be either `first` or an item
-            // pushed *after* `first`, because the .acquire load of `self.front` synchronizes-with
-            // the .release store in push/pushBatch. So we know it's reachable from `first`.
-            const last = self.back.swap(null, .monotonic).?;
-            var next_item = first;
-            while (next_item != last) : (batch.count += 1) {
-                next_item = while (true) : (atomic.spinLoopHint()) {
-                    // Wait for push/pushBatch to set `next`.
-                    break atomicLoadNext(next_item, .acquire) orelse continue;
-                };
+            var new_first: ?*T = null;
+            _ = &new_first;
+            while (true) : (atomic.spinLoopHint()) {
+                if (atomicLoadNext(first, .acquire)) |n| {
+                    _ = &n;
+                    new_first = n;
+                    break;
+                }
             }
+            _ = self.front.store(new_first, .release);
+            return first;
+    }
 
+pub fn popBatch(self: *@This()) QueueBatch {
+            var batch = QueueBatch{  };
+            _ = &batch;
+            const first = ((self.front.swap(null, .acquire)) orelse { return batch; });
+            batch.count = (batch.count + 1);
+            const last = (self.back.swap(null, .monotonic)).?;
+            var next_item = first;
+            _ = &next_item;
+            while ((next_item != last)) : (batch.count = (batch.count + 1)) {
+                while (true) : (atomic.spinLoopHint()) {
+                    if (atomicLoadNext(next_item, .acquire)) |n| {
+                        _ = &n;
+                        next_item = n;
+                        break;
+                    }
+                }
+            }
             batch.front = first;
             batch.last = last;
             return batch;
-        }
+    }
 
-        pub fn isEmpty(self: *Self) bool {
-            return self.back.load(.acquire) == null;
-        }
-    };
+pub fn isEmpty(self: @This()) bool {
+            return (self.back.load(.acquire) == null);
+    }
+    pub const Batch = QueueBatch;
+    pub const queue_padding_length = (cache_line_length / 2);
+};
 }

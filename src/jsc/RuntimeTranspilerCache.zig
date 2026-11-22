@@ -63,6 +63,28 @@ fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const _ModuleType = enum(u8) {
+    none = 0,
+    esm = 1,
+    cjs = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _Encoding = enum(u8) {
+    none = 0,
+    utf8 = 1,
+    utf16 = 2,
+    latin1 = 3,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const OwnedSlice = struct {
     slice: []u8 = &.{},
     allocator: std.mem.Allocator,
@@ -277,6 +299,241 @@ return error.UnknownEncoding;
     };
 };
 
+pub const _OutputCode = union(enum) {
+    utf8: []const u8,
+    string: bun.String,
+
+pub fn deinit(self: *_OutputCode, allocator: std.mem.Allocator) void {
+            switch (self.*) {
+.utf8 => {
+_ = allocator.free(self.utf8);
+},
+.string => {
+_ = self.string.deref();
+},
+}
+    }
+
+pub fn byteSlice(self: *const _OutputCode) []const u8 {
+            switch (self.*) {
+.utf8 => {
+return self.utf8;
+},
+.string => {
+return self.string.byteSlice();
+},
+}
+    }
+};
+
+pub const _Entry = struct {
+    metadata: CacheMetadata,
+    output_code: _OutputCode = .{ .utf8 = "" },
+    sourcemap: []const u8 = "",
+    esm_record: []const u8 = "",
+
+pub fn deinit(self: *_Entry, sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) void {
+            _ = self.output_code.deinit(output_code_allocator);
+            if ((self.sourcemap.len > 0)) {
+                _ = sourcemap_allocator.free(self.sourcemap);
+            }
+            if ((self.esm_record.len > 0)) {
+                _ = esm_record_allocator.free(self.esm_record);
+            }
+    }
+
+pub fn save(destination_dir: bun.FD, destination_path: bun.PathString, input_byte_length: u64, input_hash: u64, features_hash: u64, sourcemap: []const u8, esm_record: []const u8, output_code: _OutputCode, exports_kind: bun.ast.ExportsKind) !void {
+            var _trace = TraceGuard{ .trace = bun.perf.trace("RuntimeTranspilerCache.save") };
+            _ = &_trace;
+            var ___trace_moved = false; _ = &___trace_moved;
+            defer if (!___trace_moved) { ___trace_moved = true; const __T = @TypeOf(_trace); if (@typeInfo(__T) == .optional) { if (_trace) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace; _drop_val.__cp_deinit(); } };
+            var tmpname_buf: bun.PathBuffer = undefined;
+            _ = &tmpname_buf;
+            const tmpfilename = try bun.fs.FileSystem.tmpname(std.fs.path.extension(destination_path.slice()), (&tmpname_buf), input_hash);
+            const output_bytes = output_code.byteSlice();
+            var guard = TmpfileGuard{ .tmpfile = try bun.Tmpfile.create(destination_dir, tmpfilename).unwrap(), .dir = destination_dir, .name = tmpfilename };
+            _ = &guard;
+            var __guard_moved = false; _ = &__guard_moved;
+            defer if (!__guard_moved) { __guard_moved = true; const __T = @TypeOf(guard); if (@typeInfo(__T) == .optional) { if (guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = guard; _drop_val.__cp_deinit(); } };
+            {
+                const metadata_buf_size = (CacheMetadata.size * 2);
+                _ = &metadata_buf_size;
+                var metadata_buf: [metadata_buf_size]u8 = @splat(0);
+                _ = &metadata_buf;
+                const metadata_bytes = brk: {
+                var metadata = CacheMetadata{ .input_byte_length = input_byte_length, .input_hash = input_hash, .features_hash = features_hash, .module_type = (switch (exports_kind) {
+.cjs => _ModuleType.cjs,
+else => _ModuleType.esm,
+}), .output_encoding = (switch (output_code) {
+.utf8 => _Encoding.utf8,
+.string => |str| (switch (str.encoding()) {
+.utf8 => _Encoding.utf8,
+.utf16 => _Encoding.utf16,
+.latin1 => _Encoding.latin1,
+}),
+}), .sourcemap_byte_length = sourcemap.len, .output_byte_offset = CacheMetadata.size, .output_byte_length = output_bytes.len, .sourcemap_byte_offset = (CacheMetadata.size + output_bytes.len), .esm_record_byte_offset = ((CacheMetadata.size + output_bytes.len) + sourcemap.len), .esm_record_byte_length = esm_record.len };
+                _ = &metadata;
+                metadata.output_hash = RuntimeTranspilerCache.hash(output_bytes);
+                metadata.sourcemap_hash = RuntimeTranspilerCache.hash(sourcemap);
+                if ((esm_record.len > 0)) {
+                    metadata.esm_record_hash = RuntimeTranspilerCache.hash(esm_record);
+                }
+                var metadata_stream = std.io.fixedBufferStream((&metadata_buf));
+                _ = &metadata_stream;
+                _ = try metadata.encode(metadata_stream.writer());
+                if (comptime bun.Environment.isDebug) {
+                    var metadata_stream2 = std.io.fixedBufferStream(metadata_buf[0..CacheMetadata.size]);
+                    _ = &metadata_stream2;
+                    var metadata2 = CacheMetadata{  };
+                    _ = &metadata2;
+                    _ = (blk_catch_0: { break :blk_catch_0 ((metadata2.decode(metadata_stream2.reader())) catch |e| { _ = &e; break :blk_catch_0 @as(void, bun.Output.panic("CacheMetadata did not roundtrip encode -> decode  successfully: {s}", .{ @errorName(e) })); }); });
+                    _ = bun.assert(std.@"meta".eql(metadata, metadata2));
+                }
+                break :brk metadata_buf[0..metadata_stream.pos];
+};
+                var vecs_buf: [4]bun.PlatformIOVecConst = undefined;
+                _ = &vecs_buf;
+                var vecs_i: usize = 0;
+                _ = &vecs_i;
+                vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(metadata_bytes);
+                vecs_i = (vecs_i + 1);
+                if ((output_bytes.len > 0)) {
+                    vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(output_bytes);
+                    vecs_i = (vecs_i + 1);
+                }
+                if ((sourcemap.len > 0)) {
+                    vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(sourcemap);
+                    vecs_i = (vecs_i + 1);
+                }
+                if ((esm_record.len > 0)) {
+                    vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(esm_record);
+                    vecs_i = (vecs_i + 1);
+                }
+                const vecs: []const bun.PlatformIOVecConst = vecs_buf[0..vecs_i];
+                var position: isize = 0;
+                _ = &position;
+                const end_position = (((CacheMetadata.size + output_bytes.len) + sourcemap.len) + esm_record.len);
+                if (bun.Environment.allow_assert) {
+                    var total: usize = 0;
+                    _ = &total;
+                    var vi: usize = 0;
+                    _ = &vi;
+                    while ((vi < vecs.len)) : (vi = (vi + 1)) {
+                        const v = vecs[@as(usize, @intCast(vi))];
+                        _ = bun.assert((v.len > 0));
+                        total = (total + v.len);
+                    }
+                    _ = bun.assert((end_position == total));
+                }
+                _ = bun.assert((end_position == (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))) else cp_cast_int(i32, (((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf((((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))) else cp_cast_int(i32, (((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf((((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len))) else cp_cast_int(i32, (((sourcemap.len + output_bytes.len) + CacheMetadata.size) + esm_record.len)))))));
+                _ = (blk_catch_1: { break :blk_catch_1 ((bun.sys.preallocate_file(guard.tmpfile.fd.cast(), 0, (if (comptime @typeInfo(@TypeOf(end_position)) == .@"enum") cp_cast_int(i32, @intFromEnum(end_position)) else cp_cast_int(i32, end_position)))) catch |__ce_1| { _ = &__ce_1;  }); });
+                while ((position < end_position)) {
+                    const written = try bun.sys.pwritev(guard.tmpfile.fd, vecs, position).unwrap();
+                    if ((written <= 0)) {
+                        return error.WriteFailed;
+                    }
+                    position = (position + (if (comptime @typeInfo(@TypeOf(written)) == .@"enum") cp_cast_int(i32, @intFromEnum(written)) else cp_cast_int(i32, written)));
+                }
+            }
+            {
+                _ = try guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())));
+            }
+            guard.finished = true;
+    }
+
+pub fn load(self: *_Entry, file: std.fs.File, sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) !void {
+            const stat_size = try file.getEndPos();
+            if ((stat_size < ((CacheMetadata.size + self.metadata.output_byte_length) + self.metadata.sourcemap_byte_length))) {
+                return error.MissingData;
+            }
+            _ = bun.assert(((self.output_code == .utf8) and (self.output_code.utf8.len == 0)));
+            var output_guard = OutputCodeGuard{ .code = (&self.output_code), .allocator = output_code_allocator, .armed = false };
+            _ = &output_guard;
+            var __output_guard_moved = false; _ = &__output_guard_moved;
+            defer if (!__output_guard_moved) { __output_guard_moved = true; const __T = @TypeOf(output_guard); if (@typeInfo(__T) == .optional) { if (output_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { output_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = output_guard; _drop_val.__cp_deinit(); } };
+            self.output_code = (if ((self.metadata.output_byte_length == 0)) .{ .string = bun.String.empty } else (switch (self.metadata.output_encoding) {
+.utf8 => brk: {
+            var utf8 = OwnedSlice{ .slice = try output_code_allocator.alloc(u8, self.metadata.output_byte_length), .allocator = output_code_allocator };
+            _ = &utf8;
+            var __utf8_moved = false; _ = &__utf8_moved;
+            defer if (!__utf8_moved) { __utf8_moved = true; const __T = @TypeOf(utf8); if (@typeInfo(__T) == .optional) { if (utf8) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { utf8.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = utf8; _drop_val.__cp_deinit(); } };
+            const read_bytes = try file.preadAll(utf8.slice, self.metadata.output_byte_offset);
+            if ((read_bytes != self.metadata.output_byte_length)) {
+                return error.MissingData;
+            }
+            break :brk .{ .utf8 = utf8.take() };
+},
+.latin1 => brk: {
+            const res = bun.String.createUninitialized(.latin1, self.metadata.output_byte_length);
+            var latin1 = BunStringGuard{ .str = res[0] };
+            _ = &latin1;
+            var __latin1_moved = false; _ = &__latin1_moved;
+            defer if (!__latin1_moved) { __latin1_moved = true; const __T = @TypeOf(latin1); if (@typeInfo(__T) == .optional) { if (latin1) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { latin1.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = latin1; _drop_val.__cp_deinit(); } };
+            const bytes = res[1];
+            const read_bytes = try file.preadAll(bytes, self.metadata.output_byte_offset);
+            if ((self.metadata.output_hash != 0)) {
+                if ((RuntimeTranspilerCache.hash(latin1.str.latin1()) != self.metadata.output_hash)) {
+                    return error.InvalidHash;
+                }
+            }
+            if ((read_bytes != self.metadata.output_byte_length)) {
+                return error.MissingData;
+            }
+            break :brk .{ .string = latin1.take() };
+},
+.utf16 => brk: {
+            const res = bun.String.createUninitialized(.utf16, (self.metadata.output_byte_length / 2));
+            var str = BunStringGuard{ .str = res[0] };
+            _ = &str;
+            var __str_moved = false; _ = &__str_moved;
+            defer if (!__str_moved) { __str_moved = true; const __T = @TypeOf(str); if (@typeInfo(__T) == .optional) { if (str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str; _drop_val.__cp_deinit(); } };
+            const chars = res[1];
+            const read_bytes = try file.preadAll(std.mem.sliceAsBytes(chars), self.metadata.output_byte_offset);
+            if ((read_bytes != self.metadata.output_byte_length)) {
+                return error.MissingData;
+            }
+            if ((self.metadata.output_hash != 0)) {
+                if ((RuntimeTranspilerCache.hash(std.mem.sliceAsBytes(str.str.utf16())) != self.metadata.output_hash)) {
+                    return error.InvalidHash;
+                }
+            }
+            break :brk .{ .string = str.take() };
+},
+else => @panic("Unexpected output encoding"),
+}));
+            output_guard.armed = true;
+            if ((self.metadata.sourcemap_byte_length > 0)) {
+                var sourcemap = OwnedSlice{ .slice = try sourcemap_allocator.alloc(u8, self.metadata.sourcemap_byte_length), .allocator = sourcemap_allocator };
+                _ = &sourcemap;
+                var __sourcemap_moved = false; _ = &__sourcemap_moved;
+                defer if (!__sourcemap_moved) { __sourcemap_moved = true; const __T = @TypeOf(sourcemap); if (@typeInfo(__T) == .optional) { if (sourcemap) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sourcemap.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sourcemap; _drop_val.__cp_deinit(); } };
+                const read_bytes = try file.preadAll(sourcemap.slice, self.metadata.sourcemap_byte_offset);
+                if ((read_bytes != self.metadata.sourcemap_byte_length)) {
+                    return error.MissingData;
+                }
+                self.sourcemap = sourcemap.take();
+            }
+            if ((self.metadata.esm_record_byte_length > 0)) {
+                var esm_record = OwnedSlice{ .slice = try esm_record_allocator.alloc(u8, self.metadata.esm_record_byte_length), .allocator = esm_record_allocator };
+                _ = &esm_record;
+                var __esm_record_moved = false; _ = &__esm_record_moved;
+                defer if (!__esm_record_moved) { __esm_record_moved = true; const __T = @TypeOf(esm_record); if (@typeInfo(__T) == .optional) { if (esm_record) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { esm_record.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = esm_record; _drop_val.__cp_deinit(); } };
+                const read_bytes = try file.preadAll(esm_record.slice, self.metadata.esm_record_byte_offset);
+                if ((read_bytes != self.metadata.esm_record_byte_length)) {
+                    return error.MissingData;
+                }
+                if ((self.metadata.esm_record_hash != 0)) {
+                    if ((RuntimeTranspilerCache.hash(esm_record.slice) != self.metadata.esm_record_hash)) {
+                        return error.InvalidHash;
+                    }
+                }
+                self.esm_record = esm_record.take();
+            }
+            output_guard.armed = false;
+    }
+    pub const OutputCode = _OutputCode;
+};
+
 pub const RuntimeTranspilerCache = struct {
     input_hash: ?u64 = null,
     input_byte_length: ?u64 = null,
@@ -469,7 +726,7 @@ pub fn get(self: *RuntimeTranspilerCache, source: *const bun.logger.Source, pars
             _ = &features_hasher;
             _ = parser_options.hashForRuntimeTranspiler((&features_hasher), used_jsx);
             self.features_hash = features_hasher.final();
-            self.entry = (blk_catch_0: { break :blk_catch_0 ((RuntimeTranspilerCache.fromFile(input_hash, self.features_hash.?, source.contents.len, self.sourcemap_allocator, self.output_code_allocator, self.esm_record_allocator)) catch |e| { _ = &e; _ = debug("get(\"{s}\") = {s}", .{ source.path.text, @errorName(e) });
+            self.entry = (blk_catch_2: { break :blk_catch_2 ((RuntimeTranspilerCache.fromFile(input_hash, self.features_hash.?, source.contents.len, self.sourcemap_allocator, self.output_code_allocator, self.esm_record_allocator)) catch |e| { _ = &e; _ = debug("get(\"{s}\") = {s}", .{ source.path.text, @errorName(e) });
             return false; }); });
             if (comptime bun.Environment.isDebug) {
                 if (bun_debug_restore_from_cache) {
@@ -501,7 +758,7 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
             _ = bun.assert((self.entry == null));
             const out_code = bun.String.cloneLatin1(output_code_bytes);
             self.output_code = out_code;
-            _ = (blk_catch_1: { break :blk_catch_1 ((RuntimeTranspilerCache.toFile(self.input_byte_length.?, self.input_hash.?, self.features_hash.?, sourcemap, esm_record, out_code, self.exports_kind)) catch |e| { _ = &e; _ = debug("put() = {s}", .{ @errorName(e) });
+            _ = (blk_catch_3: { break :blk_catch_3 ((RuntimeTranspilerCache.toFile(self.input_byte_length.?, self.input_hash.?, self.features_hash.?, sourcemap, esm_record, out_code, self.exports_kind)) catch |e| { _ = &e; _ = debug("put() = {s}", .{ @errorName(e) });
             return; }); });
             if (comptime bun.Environment.allow_assert) {
                 _ = debug("put() = {d} bytes", .{ out_code.latin1().len });
@@ -509,250 +766,9 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
     }
     const seed = 42;
     pub const Metadata = CacheMetadata;
-    pub const Entry = struct {
-        metadata: Metadata,
-        output_code: OutputCode = .{ .utf8 = "" },
-        sourcemap: []const u8 = "",
-        esm_record: []const u8 = "",
-    
-    pub fn deinit(self: *@This(), sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) void {
-                _ = self.output_code.deinit(output_code_allocator);
-                if ((self.sourcemap.len > 0)) {
-                    _ = sourcemap_allocator.free(self.sourcemap);
-                }
-                if ((self.esm_record.len > 0)) {
-                    _ = esm_record_allocator.free(self.esm_record);
-                }
-        }
-    
-    pub fn save(destination_dir: bun.FD, destination_path: bun.PathString, input_byte_length: u64, input_hash: u64, features_hash: u64, sourcemap: []const u8, esm_record: []const u8, output_code: OutputCode, exports_kind: bun.ast.ExportsKind) !void {
-                var _trace = TraceGuard{ .trace = bun.perf.trace("RuntimeTranspilerCache.save") };
-                _ = &_trace;
-                var ___trace_moved = false; _ = &___trace_moved;
-                defer if (!___trace_moved) { ___trace_moved = true; const __T = @TypeOf(_trace); if (@typeInfo(__T) == .optional) { if (_trace) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace; _drop_val.__cp_deinit(); } };
-                var tmpname_buf: bun.PathBuffer = undefined;
-                _ = &tmpname_buf;
-                const tmpfilename = try bun.fs.FileSystem.tmpname(std.fs.path.extension(destination_path.slice()), (&tmpname_buf), input_hash);
-                const output_bytes = output_code.byteSlice();
-                var guard = TmpfileGuard{ .tmpfile = try bun.Tmpfile.create(destination_dir, tmpfilename).unwrap(), .dir = destination_dir, .name = tmpfilename };
-                _ = &guard;
-                var __guard_moved = false; _ = &__guard_moved;
-                defer if (!__guard_moved) { __guard_moved = true; const __T = @TypeOf(guard); if (@typeInfo(__T) == .optional) { if (guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = guard; _drop_val.__cp_deinit(); } };
-                {
-                    const metadata_buf_size = (Metadata.size * 2);
-                    _ = &metadata_buf_size;
-                    var metadata_buf: [metadata_buf_size]u8 = @splat(0);
-                    _ = &metadata_buf;
-                    const metadata_bytes = brk: {
-                    var metadata = Metadata{ .input_byte_length = input_byte_length, .input_hash = input_hash, .features_hash = features_hash, .module_type = (switch (exports_kind) {
-    .cjs => ModuleType.cjs,
-    else => ModuleType.esm,
-    }), .output_encoding = (switch (output_code) {
-    .utf8 => Encoding.utf8,
-    .string => |str| (switch (str.encoding()) {
-    .utf8 => Encoding.utf8,
-    .utf16 => Encoding.utf16,
-    .latin1 => Encoding.latin1,
-    }),
-    }), .sourcemap_byte_length = sourcemap.len, .output_byte_offset = Metadata.size, .output_byte_length = output_bytes.len, .sourcemap_byte_offset = (Metadata.size + output_bytes.len), .esm_record_byte_offset = ((Metadata.size + output_bytes.len) + sourcemap.len), .esm_record_byte_length = esm_record.len };
-                    _ = &metadata;
-                    metadata.output_hash = hash(output_bytes);
-                    metadata.sourcemap_hash = hash(sourcemap);
-                    if ((esm_record.len > 0)) {
-                        metadata.esm_record_hash = hash(esm_record);
-                    }
-                    var metadata_stream = std.io.fixedBufferStream((&metadata_buf));
-                    _ = &metadata_stream;
-                    _ = try metadata.encode(metadata_stream.writer());
-                    if (comptime bun.Environment.isDebug) {
-                        var metadata_stream2 = std.io.fixedBufferStream(metadata_buf[0..Metadata.size]);
-                        _ = &metadata_stream2;
-                        var metadata2 = Metadata{  };
-                        _ = &metadata2;
-                        _ = (blk_catch_0: { break :blk_catch_0 ((metadata2.decode(metadata_stream2.reader())) catch |e| { _ = &e; break :blk_catch_0 bun.Output.panic("Metadata did not roundtrip encode -> decode  successfully: {s}", .{ @errorName(e) }); }); });
-                        _ = bun.assert(std.@"meta".eql(metadata, metadata2));
-                    }
-                    break :brk metadata_buf[0..metadata_stream.pos];
-    };
-                    var vecs_buf: [4]bun.PlatformIOVecConst = undefined;
-                    _ = &vecs_buf;
-                    var vecs_i: usize = 0;
-                    _ = &vecs_i;
-                    vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(metadata_bytes);
-                    vecs_i = (vecs_i + 1);
-                    if ((output_bytes.len > 0)) {
-                        vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(output_bytes);
-                        vecs_i = (vecs_i + 1);
-                    }
-                    if ((sourcemap.len > 0)) {
-                        vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(sourcemap);
-                        vecs_i = (vecs_i + 1);
-                    }
-                    if ((esm_record.len > 0)) {
-                        vecs_buf[cp_cast_int(usize, vecs_i)] = bun.platformIOVecConstCreate(esm_record);
-                        vecs_i = (vecs_i + 1);
-                    }
-                    const vecs: []const bun.PlatformIOVecConst = vecs_buf[0..vecs_i];
-                    var position: isize = 0;
-                    _ = &position;
-                    const end_position = (((Metadata.size + output_bytes.len) + sourcemap.len) + esm_record.len);
-                    if (bun.Environment.allow_assert) {
-                        var total: usize = 0;
-                        _ = &total;
-                        var vi: usize = 0;
-                        _ = &vi;
-                        while ((vi < vecs.len)) : (vi = (vi + 1)) {
-                            const v = vecs[@as(usize, @intCast(vi))];
-                            _ = bun.assert((v.len > 0));
-                            total = (total + v.len);
-                        }
-                        _ = bun.assert((end_position == total));
-                    }
-                    _ = bun.assert((end_position == (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf((((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))) else cp_cast_int(i32, (((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf((((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))) else cp_cast_int(i32, (((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf((((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))) == .@"enum") cp_cast_int(i32, @intFromEnum((((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len))) else cp_cast_int(i32, (((sourcemap.len + output_bytes.len) + Metadata.size) + esm_record.len)))))));
-                    _ = (blk_catch_1: { break :blk_catch_1 ((bun.sys.preallocate_file(guard.tmpfile.fd.cast(), 0, (if (comptime @typeInfo(@TypeOf(end_position)) == .@"enum") cp_cast_int(i32, @intFromEnum(end_position)) else cp_cast_int(i32, end_position)))) catch |__ce_1| { _ = &__ce_1;  }); });
-                    while ((position < end_position)) {
-                        const written = try bun.sys.pwritev(guard.tmpfile.fd, vecs, position).unwrap();
-                        if ((written <= 0)) {
-                            return error.WriteFailed;
-                        }
-                        position = (position + (if (comptime @typeInfo(@TypeOf(written)) == .@"enum") cp_cast_int(i32, @intFromEnum(written)) else cp_cast_int(i32, written)));
-                    }
-                }
-                {
-                    _ = try guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())));
-                }
-                guard.finished = true;
-        }
-    
-    pub fn load(self: *@This(), file: std.fs.File, sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) !void {
-                const stat_size = try file.getEndPos();
-                if ((stat_size < ((Metadata.size + self.metadata.output_byte_length) + self.metadata.sourcemap_byte_length))) {
-                    return error.MissingData;
-                }
-                _ = bun.assert(((self.output_code == .utf8) and (self.output_code.utf8.len == 0)));
-                var output_guard = OutputCodeGuard{ .code = (&self.output_code), .allocator = output_code_allocator, .armed = false };
-                _ = &output_guard;
-                var __output_guard_moved = false; _ = &__output_guard_moved;
-                defer if (!__output_guard_moved) { __output_guard_moved = true; const __T = @TypeOf(output_guard); if (@typeInfo(__T) == .optional) { if (output_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { output_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = output_guard; _drop_val.__cp_deinit(); } };
-                self.output_code = (if ((self.metadata.output_byte_length == 0)) .{ .string = bun.String.empty } else (switch (self.metadata.output_encoding) {
-    .utf8 => brk: {
-                var utf8 = OwnedSlice{ .slice = try output_code_allocator.alloc(u8, self.metadata.output_byte_length), .allocator = output_code_allocator };
-                _ = &utf8;
-                var __utf8_moved = false; _ = &__utf8_moved;
-                defer if (!__utf8_moved) { __utf8_moved = true; const __T = @TypeOf(utf8); if (@typeInfo(__T) == .optional) { if (utf8) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { utf8.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = utf8; _drop_val.__cp_deinit(); } };
-                const read_bytes = try file.preadAll(utf8.slice, self.metadata.output_byte_offset);
-                if ((read_bytes != self.metadata.output_byte_length)) {
-                    return error.MissingData;
-                }
-                break :brk .{ .utf8 = utf8.take() };
-    },
-    .latin1 => brk: {
-                const res = bun.String.createUninitialized(.latin1, self.metadata.output_byte_length);
-                var latin1 = BunStringGuard{ .str = res[0] };
-                _ = &latin1;
-                var __latin1_moved = false; _ = &__latin1_moved;
-                defer if (!__latin1_moved) { __latin1_moved = true; const __T = @TypeOf(latin1); if (@typeInfo(__T) == .optional) { if (latin1) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { latin1.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = latin1; _drop_val.__cp_deinit(); } };
-                const bytes = res[1];
-                const read_bytes = try file.preadAll(bytes, self.metadata.output_byte_offset);
-                if ((self.metadata.output_hash != 0)) {
-                    if ((hash(latin1.str.latin1()) != self.metadata.output_hash)) {
-                        return error.InvalidHash;
-                    }
-                }
-                if ((read_bytes != self.metadata.output_byte_length)) {
-                    return error.MissingData;
-                }
-                break :brk .{ .string = latin1.take() };
-    },
-    .utf16 => brk: {
-                const res = bun.String.createUninitialized(.utf16, (self.metadata.output_byte_length / 2));
-                var str = BunStringGuard{ .str = res[0] };
-                _ = &str;
-                var __str_moved = false; _ = &__str_moved;
-                defer if (!__str_moved) { __str_moved = true; const __T = @TypeOf(str); if (@typeInfo(__T) == .optional) { if (str) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { str.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = str; _drop_val.__cp_deinit(); } };
-                const chars = res[1];
-                const read_bytes = try file.preadAll(std.mem.sliceAsBytes(chars), self.metadata.output_byte_offset);
-                if ((read_bytes != self.metadata.output_byte_length)) {
-                    return error.MissingData;
-                }
-                if ((self.metadata.output_hash != 0)) {
-                    if ((hash(std.mem.sliceAsBytes(str.str.utf16())) != self.metadata.output_hash)) {
-                        return error.InvalidHash;
-                    }
-                }
-                break :brk .{ .string = str.take() };
-    },
-    else => @panic("Unexpected output encoding"),
-    }));
-                output_guard.armed = true;
-                if ((self.metadata.sourcemap_byte_length > 0)) {
-                    var sourcemap = OwnedSlice{ .slice = try sourcemap_allocator.alloc(u8, self.metadata.sourcemap_byte_length), .allocator = sourcemap_allocator };
-                    _ = &sourcemap;
-                    var __sourcemap_moved = false; _ = &__sourcemap_moved;
-                    defer if (!__sourcemap_moved) { __sourcemap_moved = true; const __T = @TypeOf(sourcemap); if (@typeInfo(__T) == .optional) { if (sourcemap) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { sourcemap.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = sourcemap; _drop_val.__cp_deinit(); } };
-                    const read_bytes = try file.preadAll(sourcemap.slice, self.metadata.sourcemap_byte_offset);
-                    if ((read_bytes != self.metadata.sourcemap_byte_length)) {
-                        return error.MissingData;
-                    }
-                    self.sourcemap = sourcemap.take();
-                }
-                if ((self.metadata.esm_record_byte_length > 0)) {
-                    var esm_record = OwnedSlice{ .slice = try esm_record_allocator.alloc(u8, self.metadata.esm_record_byte_length), .allocator = esm_record_allocator };
-                    _ = &esm_record;
-                    var __esm_record_moved = false; _ = &__esm_record_moved;
-                    defer if (!__esm_record_moved) { __esm_record_moved = true; const __T = @TypeOf(esm_record); if (@typeInfo(__T) == .optional) { if (esm_record) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { esm_record.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = esm_record; _drop_val.__cp_deinit(); } };
-                    const read_bytes = try file.preadAll(esm_record.slice, self.metadata.esm_record_byte_offset);
-                    if ((read_bytes != self.metadata.esm_record_byte_length)) {
-                        return error.MissingData;
-                    }
-                    if ((self.metadata.esm_record_hash != 0)) {
-                        if ((hash(esm_record.slice) != self.metadata.esm_record_hash)) {
-                            return error.InvalidHash;
-                        }
-                    }
-                    self.esm_record = esm_record.take();
-                }
-                output_guard.armed = false;
-        }
-        pub const OutputCode = union(enum) {
-            utf8: []const u8,
-            string: bun.String,
-        
-        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-                    switch (self.*) {
-        .utf8 => {
-        _ = allocator.free(self.utf8);
-        },
-        .string => {
-        _ = self.string.deref();
-        },
-        }
-            }
-        
-        pub fn byteSlice(self: *const @This()) []const u8 {
-                    switch (self.*) {
-        .utf8 => {
-        return self.utf8;
-        },
-        .string => {
-        return self.string.byteSlice();
-        },
-        }
-            }
-        };
-    };
-    pub const ModuleType = enum(u8) {
-            none = 0,
-            esm = 1,
-            cjs = 2,
-        };
-    pub const Encoding = enum(u8) {
-            none = 0,
-            utf8 = 1,
-            utf16 = 2,
-            latin1 = 3,
-            _,
-        };
+    pub const Entry = _Entry;
+    pub const ModuleType = _ModuleType;
+    pub const Encoding = _Encoding;
     const PathZ = [:0]const u8;
     const cache_dir_bufs = bun.ThreadlocalBuffers(struct {
         buf: bun.PathBuffer = undefined,

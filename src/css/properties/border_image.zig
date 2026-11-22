@@ -125,6 +125,18 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const WidthAndOutset = struct {
+    width: ?Rect(BorderImageSideWidth),
+    outset: ?Rect(LengthOrNumber),
+};
+
+pub const BorderImageParseCb = struct {
+
+pub fn cb(_: void, _: *css.Parser) bool {
+            return false;
+    }
+};
+
 pub const BorderImage = struct {
     source: Image,
     slice: BorderImageSlice,
@@ -133,12 +145,7 @@ pub const BorderImage = struct {
     repeat: BorderImageRepeat,
 
 pub fn parse(input: *css.Parser) css.Result(BorderImage) {
-            return parseWithCallback(input, undefined, (struct {
-
-pub fn cb(_: void, _: *css.Parser) bool {
-            return false;
-    }
-}).cb);
+            return parseWithCallback(input, undefined, BorderImageParseCb.cb);
     }
 
 pub fn parseWithCallback(input: *css.Parser, ctx: anytype, comptime callback: anytype) css.Result(BorderImage) {
@@ -305,6 +312,60 @@ pub fn deepClone(self: BorderImageRepeat, allocator: std.mem.Allocator) @This() 
     }
 };
 
+pub const BorderImageSideWidth = union(enum) {
+    number: CSSNumber,
+    length_percentage: LengthPercentage,
+    auto: void,
+
+pub fn deinit(self: *BorderImageSideWidth, allocator: std.mem.Allocator) void {
+            switch (self.*) {
+.length_percentage => |*l| {
+_ = l.deinit(allocator);
+},
+.number => {
+
+},
+.auto => {
+
+},
+}
+    }
+
+pub fn default() BorderImageSideWidth {
+            return .{ .number = 1.0 };
+    }
+
+pub fn deepClone(self: BorderImageSideWidth, allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
+
+pub fn eql(self: BorderImageSideWidth, other: *const BorderImageSideWidth) bool {
+            return (switch (self) {
+.number => |*a| (switch (other.*) {
+.number => |*b| (a.* == b.*),
+else => false,
+}),
+.length_percentage => |*a| (switch (other.*) {
+.length_percentage => css.generic.eql(LengthPercentage, a, (&other.length_percentage)),
+else => false,
+}),
+.auto => (switch (other.*) {
+.auto => true,
+else => false,
+}),
+});
+    }
+
+pub fn isCompatible(self: BorderImageSideWidth, browsers: css.targets.Browsers) bool {
+            return (switch (self) {
+.length_percentage => |*l| l.isCompatible(browsers),
+else => true,
+});
+    }
+    pub const parse = css.DeriveParse(@This()).parse;
+    pub const toCss = css.DeriveToCss(@This()).toCss;
+};
+
 pub const BorderImageSlice = struct {
     offsets: Rect(NumberOrPercentage),
     fill: bool,
@@ -403,52 +464,48 @@ pub const BorderImageHandler = struct {
     flushed_properties: BorderImageProperty = .{},
     has_any: bool = false,
 
+pub inline fn flushHelper(self: *BorderImageHandler, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext, comptime name: []const u8, val: anytype) void {
+            if (((((@field(self, name) != null) and (!(@field(self, name)).?.eql(val))) and (ctx.targets.browsers != null)) and css.generic.isCompatible(@TypeOf((@field(self, name)).?), val, ctx.targets.browsers.?))) {
+                _ = self.flush(d, ctx);
+            }
+    }
+
+pub inline fn propertyHelper(self: *BorderImageHandler, comptime field: []const u8, comptime T: type, val: *const T, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext) void {
+            if ((self.vendor_prefix != VendorPrefix{ .none = true })) {
+                _ = self.flush(d, ctx);
+            }
+            _ = self.flushHelper(d, ctx, field, val);
+            self.vendor_prefix = VendorPrefix{ .none = true };
+            @field(self, field) = val.deepClone(ctx.allocator);
+            self.has_any = true;
+    }
+
 pub fn handleProperty(self: *BorderImageHandler, property: *const css.Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) bool {
             const allocator = context.allocator;
-            const flushHelper = (struct {
-
-pub inline fn flushHelper(handler: *BorderImageHandler, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext, comptime name: []const u8, val: anytype) void {
-            if (((((@field(handler, name) != null) and (!(@field(handler, name)).?.eql(val))) and (ctx.targets.browsers != null)) and css.generic.isCompatible(@TypeOf((@field(handler, name)).?), val, ctx.targets.browsers.?))) {
-                _ = handler.flush(d, ctx);
-            }
-    }
-}).flushHelper;
-            const propertyHelper = (struct {
-
-pub inline fn propertyHelper(handler: *BorderImageHandler, comptime field: []const u8, comptime T: type, val: *const T, d: *css.DeclarationList, ctx: *css.PropertyHandlerContext) void {
-            if ((handler.vendor_prefix != VendorPrefix{ .none = true })) {
-                _ = handler.flush(d, ctx);
-            }
-            _ = flushHelper(handler, d, ctx, field, val);
-            handler.vendor_prefix = VendorPrefix{ .none = true };
-            @field(handler, field) = val.deepClone(ctx.allocator);
-            handler.has_any = true;
-    }
-}).propertyHelper;
             switch (property.*) {
 .@"border-image-source" => |*val| {
-_ = propertyHelper(self, "source", Image, val, dest, context);
+_ = self.propertyHelper("source", Image, val, dest, context);
 },
 .@"border-image-slice" => |*val| {
-_ = propertyHelper(self, "slice", BorderImageSlice, val, dest, context);
+_ = self.propertyHelper("slice", BorderImageSlice, val, dest, context);
 },
 .@"border-image-width" => |*val| {
-_ = propertyHelper(self, "width", Rect(BorderImageSideWidth), val, dest, context);
+_ = self.propertyHelper("width", Rect(BorderImageSideWidth), val, dest, context);
 },
 .@"border-image-outset" => |*val| {
-_ = propertyHelper(self, "outset", Rect(LengthOrNumber), val, dest, context);
+_ = self.propertyHelper("outset", Rect(LengthOrNumber), val, dest, context);
 },
 .@"border-image-repeat" => |*val| {
-_ = propertyHelper(self, "repeat", BorderImageRepeat, val, dest, context);
+_ = self.propertyHelper("repeat", BorderImageRepeat, val, dest, context);
 },
 .@"border-image" => |_val| {
 const val = (&_val[0]);
             const vp = _val[1];
-            _ = flushHelper(self, dest, context, "source", (&val.source));
-            _ = flushHelper(self, dest, context, "slice", (&val.slice));
-            _ = flushHelper(self, dest, context, "width", (&val.width));
-            _ = flushHelper(self, dest, context, "outset", (&val.outset));
-            _ = flushHelper(self, dest, context, "repeat", (&val.repeat));
+            _ = self.flushHelper(dest, context, "source", (&val.source));
+            _ = self.flushHelper(dest, context, "slice", (&val.slice));
+            _ = self.flushHelper(dest, context, "width", (&val.width));
+            _ = self.flushHelper(dest, context, "outset", (&val.outset));
+            _ = self.flushHelper(dest, context, "repeat", (&val.repeat));
             self.source = val.source.deepClone(allocator);
             self.slice = val.slice.deepClone(allocator);
             self.width = val.width.deepClone(allocator);
@@ -596,63 +653,6 @@ const NumberOrPercentage = css.css_values.percentage.NumberOrPercentage;
 const Percentage = css.css_values.percentage.Percentage;
 const Property = css.Property;
 const VendorPrefix = css.VendorPrefix;
-const WidthAndOutset = struct {
-    width: ?Rect(BorderImageSideWidth),
-    outset: ?Rect(LengthOrNumber),
-};
-pub const BorderImageSideWidth = union(enum) {
-    number: CSSNumber,
-    length_percentage: LengthPercentage,
-    auto: void,
-
-pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-            switch (self.*) {
-.length_percentage => |*l| {
-_ = l.deinit(allocator);
-},
-.number => {
-
-},
-.auto => {
-
-},
-}
-    }
-
-pub fn default() BorderImageSideWidth {
-            return .{ .number = 1.0 };
-    }
-
-pub fn deepClone(self: @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), (&self), allocator);
-    }
-
-pub fn eql(self: @This(), other: *const BorderImageSideWidth) bool {
-            return (switch (self) {
-.number => |*a| (switch (other.*) {
-.number => |*b| (a.* == b.*),
-else => false,
-}),
-.length_percentage => |*a| (switch (other.*) {
-.length_percentage => css.generic.eql(LengthPercentage, a, (&other.length_percentage)),
-else => false,
-}),
-.auto => (switch (other.*) {
-.auto => true,
-else => false,
-}),
-});
-    }
-
-pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
-            return (switch (self) {
-.length_percentage => |*l| l.isCompatible(browsers),
-else => true,
-});
-    }
-    pub const parse = css.DeriveParse(@This()).parse;
-    pub const toCss = css.DeriveToCss(@This()).toCss;
-};
 const Allocator = std.mem.Allocator;
 
 pub fn parseBorderImageOutset(inp: *css.Parser) css.Result(Rect(LengthOrNumber)) {

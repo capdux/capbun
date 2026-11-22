@@ -62,11 +62,196 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const expect = @import("./expect.zig");
 pub const bun = @import("bun");
 pub const pool = @import("../collections/pool.zig");
+pub const EventType = enum(u8) {
+    Event,
+    MessageEvent,
+    CloseEvent,
+    ErrorEvent,
+    OpenEvent,
+    unknown = 254,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn label(self: EventType) []const u8 {
+            return (switch (self) {
+.Event => "event",
+.MessageEvent => "message",
+.CloseEvent => "close",
+.ErrorEvent => "error",
+.OpenEvent => "open",
+else => "event",
+});
+    }
+    
+    pub const map = bun.ComptimeStringMap(EventType, .{ .{ EventType.Event.label(), EventType.Event }, .{ EventType.MessageEvent.label(), EventType.MessageEvent }, .{ EventType.CloseEvent.label(), EventType.CloseEvent }, .{ EventType.ErrorEvent.label(), EventType.ErrorEvent }, .{ EventType.OpenEvent.label(), EventType.OpenEvent } });
+};
+
+pub const _MessageLevel = enum(u32) {
+    Log = 0,
+    Warning = 1,
+    Error = 2,
+    Debug = 3,
+    Info = 4,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _MessageType = enum(u32) {
+    Log = 0,
+    Dir = 1,
+    DirXML = 2,
+    Table = 3,
+    Trace = 4,
+    StartGroup = 5,
+    StartGroupCollapsed = 6,
+    EndGroup = 7,
+    Clear = 8,
+    Assert = 9,
+    Timing = 10,
+    Profile = 11,
+    ProfileEnd = 12,
+    Image = 13,
+    _,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _PrettyTag = enum {
+    StringPossiblyFormatted,
+    String,
+    Undefined,
+    Double,
+    Integer,
+    Null,
+    Boolean,
+    Array,
+    Object,
+    Function,
+    Class,
+    Error,
+    TypedArray,
+    Map,
+    Set,
+    Symbol,
+    BigInt,
+    GlobalObject,
+    Private,
+    Promise,
+    JSON,
+    NativeCode,
+    ArrayBuffer,
+    JSX,
+    Event,
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn isPrimitive(self: _PrettyTag) bool {
+            return (switch (self) {
+.String, .StringPossiblyFormatted, .Undefined, .Double, .Integer, .Null, .Boolean, .Symbol, .BigInt => true,
+else => false,
+});
+    }
+
+pub inline fn canHaveCircularReferences(tag: _PrettyTag) bool {
+            return ((((tag == .Array) or (tag == .Object)) or (tag == .Map)) or (tag == .Set));
+    }
+
+pub fn get(value: JSValue, globalThis: *JSGlobalObject) bun.JSError!_PrettyTagResult {
+            switch (value) {
+.zero, .js_undefined => {
+return Result{ .tag = .Undefined };
+},
+.null => {
+return Result{ .tag = .Null };
+},
+else => {
+
+},
+}
+            if (value.isInt32()) {
+                return .{ .tag = .Integer };
+            } else {
+                if (value.isNumber()) {
+                    return .{ .tag = .Double };
+                } else {
+                    if (value.isBoolean()) {
+                        return .{ .tag = .Boolean };
+                    }
+                }
+            }
+            if ((!value.isCell())) {
+                return .{ .tag = .NativeCode };
+            }
+            const js_type = value.jsType();
+            if (js_type.isHidden()) {
+                return .{ .tag = .NativeCode, .cell = js_type };
+            }
+            if ((js_type == .Cell)) {
+                return .{ .tag = .NativeCode, .cell = js_type };
+            }
+            if ((js_type == .DOMWrapper)) {
+                return .{ .tag = .Private, .cell = js_type };
+            }
+            if (((js_type != .Object) and value.isCallable())) {
+                if (value.isClass(globalThis)) {
+                    return .{ .tag = .Class, .cell = js_type };
+                }
+                return .{ .tag = (if ((js_type == .InternalFunction)) .Object else .Function), .cell = js_type };
+            }
+            if ((js_type == .GlobalProxy)) {
+                return _PrettyTag.get(jsc.JSValue.c(jsc.C.JSObjectGetProxyTarget(value.asObjectRef())), globalThis);
+            }
+            if ((js_type.isObject() and (js_type != .ProxyObject))) {
+                if (try value.getOwnTruthy(globalThis, "$$typeof")) |typeof_symbol| {
+                    _ = &typeof_symbol;
+                    var reactElement = ZigString.init("react.element");
+                    _ = &reactElement;
+                    var react_fragment = ZigString.init("react.fragment");
+                    _ = &react_fragment;
+                    if (((blk_catch_0: { break :blk_catch_0 ((typeof_symbol.isSameValue(.symbolFor(globalThis, (&reactElement)), globalThis)) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 false; }); }) or (blk_catch_1: { break :blk_catch_1 ((typeof_symbol.isSameValue(.symbolFor(globalThis, (&react_fragment)), globalThis)) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 false; }); }))) {
+                        return _PrettyTagResult{ .tag = .JSX, .cell = js_type };
+                    }
+                }
+            }
+            return .{ .tag = (switch (js_type) {
+.ErrorInstance => .Error,
+.NumberObject => .Double,
+.DerivedArray, .Array => .Array,
+.DerivedStringObject, .String, .StringObject => .String,
+.RegExpObject => .String,
+.Symbol => .Symbol,
+.BooleanObject => .Boolean,
+.JSFunction => .Function,
+.WeakMap, .Map => .Map,
+.WeakSet, .Set => .Set,
+.JSDate => .JSON,
+.JSPromise => .Promise,
+.Object, .FinalObject, .ModuleNamespaceObject, .GlobalObject => .Object,
+.ArrayBuffer, .Int8Array, .Uint8Array, .Uint8ClampedArray, .Int16Array, .Uint16Array, .Int32Array, .Uint32Array, .Float16Array, .Float32Array, .Float64Array, .BigInt64Array, .BigUint64Array, .DataView => .TypedArray,
+.HeapBigInt => .BigInt,
+.GetterSetter, .CustomGetterSetter, .APIValueWrapper, .NativeExecutable, .ProgramExecutable, .ModuleProgramExecutable, .EvalExecutable, .FunctionExecutable, .UnlinkedFunctionExecutable, .UnlinkedProgramCodeBlock, .UnlinkedModuleProgramCodeBlock, .UnlinkedEvalCodeBlock, .UnlinkedFunctionCodeBlock, .CodeBlock, .JSCellButterfly, .JSSourceCode, .JSCallee, .GlobalLexicalEnvironment, .LexicalEnvironment, .ModuleEnvironment, .StrictEvalActivation, .WithScope => .NativeCode,
+.Event => .Event,
+else => .JSON,
+}), .cell = js_type };
+    }
+    
+    pub const Result = _PrettyTagResult;
+};
+
 pub const VisitedInit = struct {
 
 pub fn init(allocator: std.mem.Allocator) anyerror!std.AutoHashMap(JSValue, void) {
@@ -149,6 +334,13 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const _FormatOptions = struct {
+    enable_colors: bool,
+    add_newline: bool,
+    flush: bool,
+    quote_strings: bool = false,
+};
+
 pub const JestPrettyFormat = struct {
     counts: Counter = .{},
 
@@ -184,13 +376,13 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                         _ = try fmt.format(tag, @TypeOf(writer), writer, first_val, global, false);
                     }
                     if (options.add_newline) {
-                        _ = (blk_catch_2: { break :blk_catch_2 ((writer.writeAll("\n")) catch |__ce_2| { _ = &__ce_2;  }); });
+                        _ = (blk_catch_4: { break :blk_catch_4 ((writer.writeAll("\n")) catch |__ce_4| { _ = &__ce_4;  }); });
                     }
                 } else {
                     defer {
                     {
                         if (options.flush) {
-                            _ = (blk_catch_3: { break :blk_catch_3 ((writer.flush()) catch |__ce_3| { _ = &__ce_3;  }); });
+                            _ = (blk_catch_5: { break :blk_catch_5 ((writer.flush()) catch |__ce_5| { _ = &__ce_5;  }); });
                         }
                     }
                     }
@@ -200,16 +392,16 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                         _ = try fmt.format(tag, *std.Io.Writer, writer, first_val, global, false);
                     }
                     if (options.add_newline) {
-                        _ = (blk_catch_4: { break :blk_catch_4 ((writer.write("\n")) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 0; }); });
+                        _ = (blk_catch_6: { break :blk_catch_6 ((writer.write("\n")) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 0; }); });
                     }
                 }
-                _ = (blk_catch_5: { break :blk_catch_5 ((writer.flush()) catch |__ce_5| { _ = &__ce_5;  }); });
+                _ = (blk_catch_7: { break :blk_catch_7 ((writer.flush()) catch |__ce_7| { _ = &__ce_7;  }); });
                 return;
             }
             defer {
             {
                 if (options.flush) {
-                    _ = (blk_catch_6: { break :blk_catch_6 ((writer.flush()) catch |__ce_6| { _ = &__ce_6;  }); });
+                    _ = (blk_catch_8: { break :blk_catch_8 ((writer.flush()) catch |__ce_8| { _ = &__ce_8;  }); });
                 }
             }
             }
@@ -232,7 +424,7 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                 }
                 while (true) {
                     if (has_any) {
-                        _ = (blk_catch_8: { break :blk_catch_8 ((writer.write(" ")) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 0; }); });
+                        _ = (blk_catch_10: { break :blk_catch_10 ((writer.write(" ")) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); });
                     }
                     has_any = true;
                     tag = try Formatter.Tag.get(this_value, global);
@@ -252,7 +444,7 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
             } else {
                 while (true) {
                     if (has_any) {
-                        _ = (blk_catch_10: { break :blk_catch_10 ((writer.write(" ")) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 0; }); });
+                        _ = (blk_catch_12: { break :blk_catch_12 ((writer.write(" ")) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 0; }); });
                     }
                     has_any = true;
                     tag = try Formatter.Tag.get(this_value, global);
@@ -268,7 +460,7 @@ pub fn format(level: MessageLevel, global: *JSGlobalObject, vals: [*]const JSVal
                 }
             }
             if (options.add_newline) {
-                _ = (blk_catch_11: { break :blk_catch_11 ((writer.write("\n")) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 0; }); });
+                _ = (blk_catch_13: { break :blk_catch_13 ((writer.write("\n")) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 0; }); });
             }
     }
 
@@ -446,38 +638,39 @@ pub fn printAsymmetricMatcher(fmt: anytype, comptime Format: anytype, writer: an
     }
     pub const Type = *anyopaque;
     const Counter = std.AutoHashMapUnmanaged(u64, u32);
-    pub const MessageLevel = enum(u32) {
-            Log = 0,
-            Warning = 1,
-            Error = 2,
-            Debug = 3,
-            Info = 4,
-            _,
-        };
-    pub const MessageType = enum(u32) {
-            Log = 0,
-            Dir = 1,
-            DirXML = 2,
-            Table = 3,
-            Trace = 4,
-            StartGroup = 5,
-            StartGroupCollapsed = 6,
-            EndGroup = 7,
-            Clear = 8,
-            Assert = 9,
-            Timing = 10,
-            Profile = 11,
-            ProfileEnd = 12,
-            Image = 13,
-            _,
-        };
-    pub const FormatOptions = struct {
-        enable_colors: bool,
-        add_newline: bool,
-        flush: bool,
-        quote_strings: bool = false,
-    };
+    pub const MessageLevel = _MessageLevel;
+    pub const MessageType = _MessageType;
+    pub const FormatOptions = _FormatOptions;
     pub const Formatter = PrettyFormatter;
+};
+
+pub const _PrettyVisited = struct {
+    const ObjectPool = pool.ObjectPool;
+    pub const Map = std.AutoHashMap(JSValue, void);
+    pub const Pool = ObjectPool(Map, VisitedInit.init, true, 16);
+};
+
+pub const _PrettyZigFormatter = struct {
+    formatter: *JestPrettyFormat.Formatter,
+    global: *JSGlobalObject,
+    value: JSValue,
+
+pub fn format(self: *_PrettyZigFormatter, writer: *std.Io.Writer) !void {
+            self.formatter.remaining_values = (&.{ self.value });
+            defer {
+            {
+                self.formatter.remaining_values = &.{};
+            }
+            }
+            self.formatter.globalThis = self.global;
+            _ = self.formatter.format(_PrettyTag.get(self.value, self.global), @TypeOf(writer), writer, self.value, self.formatter.globalThis, false);
+    }
+    pub const WriteError = error{UhOh};
+};
+
+pub const _PrettyTagResult = struct {
+    tag: _PrettyTag,
+    cell: JSValue.JSType = .Cell,
 };
 
 pub const PrettyFormatter = struct {
@@ -505,7 +698,7 @@ pub fn resetLine(self: *PrettyFormatter) void {
     }
 
 pub fn addForNewLine(self: *PrettyFormatter, len: usize) void {
-            self.estimated_line_length = (blk_catch_13: { break :blk_catch_13 ((std.math.add(usize, self.estimated_line_length, len)) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 std.math.maxInt(usize); }); });
+            self.estimated_line_length = (blk_catch_15: { break :blk_catch_15 ((std.math.add(usize, self.estimated_line_length, len)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 std.math.maxInt(usize); }); });
     }
 
 pub fn WrappedWriter(comptime Writer: type) type {
@@ -560,7 +753,6 @@ pub fn writeWithFormatting(self: *PrettyFormatter, comptime Writer: type, writer
             const self_ptr = self;
             _ = &self_ptr;
             const WW = PrettyFormatter.WrappedWriter(Writer);
-            _ = &WW;
             var writer = WW{ .ctx = writer_ };
             _ = &writer;
             var slice = slice_;
@@ -600,16 +792,16 @@ else => continue,
                 self.remaining_values = self.remaining_values[1..];
                 switch (token) {
 Tag.String => {
-_ = (blk_catch_14: { break :blk_catch_14 ((self.printAs(Tag.String, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_14| { _ = &__ce_14; return; }); });
+_ = (blk_catch_16: { break :blk_catch_16 ((self.printAs(Tag.String, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_16| { _ = &__ce_16; return; }); });
 },
 Tag.Double => {
-_ = (blk_catch_15: { break :blk_catch_15 ((self.printAs(Tag.Double, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_15| { _ = &__ce_15; return; }); });
+_ = (blk_catch_17: { break :blk_catch_17 ((self.printAs(Tag.Double, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_17| { _ = &__ce_17; return; }); });
 },
 Tag.Object => {
-_ = (blk_catch_16: { break :blk_catch_16 ((self.printAs(Tag.Object, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_16| { _ = &__ce_16; return; }); });
+_ = (blk_catch_18: { break :blk_catch_18 ((self.printAs(Tag.Object, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_18| { _ = &__ce_18; return; }); });
 },
 Tag.Integer => {
-_ = (blk_catch_17: { break :blk_catch_17 ((self.printAs(Tag.Integer, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_17| { _ = &__ce_17; return; }); });
+_ = (blk_catch_19: { break :blk_catch_19 ((self.printAs(Tag.Integer, Writer, writer_, next_value, next_value.jsType(), enable_ansi_colors)) catch |__ce_19| { _ = &__ce_19; return; }); });
 },
 Tag.Undefined => {
 return;
@@ -727,7 +919,6 @@ pub fn PropertyIterator(comptime Writer: type, comptime enable_ansi_colors_: boo
 pub fn handleFirstProperty(self: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue) !void {
             if ((!value.jsType().isFunction())) {
                 const WW = PrettyFormatter.WrappedWriter(Writer);
-                _ = &WW;
                 var writer = WW{ .ctx = self.writer, .failed = false };
                 _ = &writer;
                 var name_str = ZigString.init("");
@@ -781,7 +972,6 @@ pub fn forEach(globalThis: *JSGlobalObject, ctx_ptr: ?*anyopaque, key_: [*c]ZigS
                 return;
             }
             const WW = PrettyFormatter.WrappedWriter(Writer);
-            _ = &WW;
             var writer = WW{ .ctx = writer_, .failed = false };
             _ = &writer;
             const tag = (blk_catch_4: { break :blk_catch_4 ((Tag.get(value, globalThis)) catch |__ce_4| { _ = &__ce_4; return; }); });
@@ -855,7 +1045,6 @@ pub fn printAs(self: *PrettyFormatter, comptime Format: JestPrettyFormat.Formatt
                 return;
             }
             const WW = PrettyFormatter.WrappedWriter(Writer);
-            _ = &WW;
             var writer = WW{ .ctx = writer_, .estimated_line_length = (&self.estimated_line_length) };
             _ = &writer;
             defer {
@@ -994,7 +1183,7 @@ _ = unreachable;
                     _ = writer.writeAll(str.slice());
                 } else {
                     if ((str.len > 0)) {
-                        const buf = (blk_catch_21: { break :blk_catch_21 ((strings.allocateLatin1IntoUTF8(bun.default_allocator, str.slice())) catch |__ce_21| { _ = &__ce_21; break :blk_catch_21 ""; }); });
+                        const buf = (blk_catch_23: { break :blk_catch_23 ((strings.allocateLatin1IntoUTF8(bun.default_allocator, str.slice())) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 ""; }); });
                         if ((buf.len > 0)) {
                             var buf_guard = FreeGuard(u8){ .allocator = bun.default_allocator, .slice = buf };
                             _ = &buf_guard;
@@ -1181,7 +1370,7 @@ const len: u32 = @truncate(try value.getLength(self.globalThis));
             }
             _ = self.resetLine();
             _ = writer.writeAll("\n");
-            _ = (blk_catch_27: { break :blk_catch_27 ((self.writeIndent(Writer, writer_)) catch |__ce_27| { _ = &__ce_27;  }); });
+            _ = (blk_catch_29: { break :blk_catch_29 ((self.writeIndent(Writer, writer_)) catch |__ce_29| { _ = &__ce_29;  }); });
             _ = writer.writeAll("]");
             if ((self.indent == 0)) {
                 _ = writer.writeAll("\n");
@@ -1192,7 +1381,7 @@ const len: u32 = @truncate(try value.getLength(self.globalThis));
 .Private => {
 if (value.@"as"(jsc.WebCore.Response)) |response| {
                 _ = &response;
-                _ = (blk_catch_28: { break :blk_catch_28 ((response.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                _ = (blk_catch_30: { break :blk_catch_30 ((response.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                 if ((!self.globalThis.hasException())) {
                     return self.globalThis.throwError(e, "failed to print Response");
                 }
@@ -1200,7 +1389,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
             } else {
                 if (value.@"as"(jsc.WebCore.Request)) |request| {
                     _ = &request;
-                    _ = (blk_catch_29: { break :blk_catch_29 ((request.writeFormat(value, Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                    _ = (blk_catch_31: { break :blk_catch_31 ((request.writeFormat(value, Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                     if ((!self.globalThis.hasException())) {
                         return self.globalThis.throwError(e, "failed to print Request");
                     }
@@ -1209,7 +1398,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                 } else {
                     if (value.@"as"(jsc.API.BuildArtifact)) |build| {
                         _ = &build;
-                        _ = (blk_catch_30: { break :blk_catch_30 ((build.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                        _ = (blk_catch_32: { break :blk_catch_32 ((build.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                         if ((!self.globalThis.hasException())) {
                             return self.globalThis.throwError(e, "failed to print BuildArtifact");
                         }
@@ -1217,7 +1406,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                     } else {
                         if (value.@"as"(jsc.WebCore.Blob)) |blob| {
                             _ = &blob;
-                            _ = (blk_catch_31: { break :blk_catch_31 ((blob.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
+                            _ = (blk_catch_33: { break :blk_catch_33 ((blob.writeFormat(Formatter, self, writer_, enable_ansi_colors)) catch |e| { _ = &e; self.failed = true;
                             if ((!self.globalThis.hasException())) {
                                 return self.globalThis.throwError(e, "failed to print Blob");
                             }
@@ -1250,15 +1439,15 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
                                     } else {
                                         if (value.@"as"(bun.api.BuildMessage)) |build_log| {
                                             _ = &build_log;
-                                            _ = (blk_catch_32: { break :blk_catch_32 ((build_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_32| { _ = &__ce_32;  }); });
+                                            _ = (blk_catch_34: { break :blk_catch_34 ((build_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_34| { _ = &__ce_34;  }); });
                                             return;
                                         } else {
                                             if (value.@"as"(bun.api.ResolveMessage)) |resolve_log| {
                                                 _ = &resolve_log;
-                                                _ = (blk_catch_33: { break :blk_catch_33 ((resolve_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_33| { _ = &__ce_33;  }); });
+                                                _ = (blk_catch_35: { break :blk_catch_35 ((resolve_log.msg.writeFormat(writer_, enable_ansi_colors)) catch |__ce_35| { _ = &__ce_35;  }); });
                                                 return;
                                             } else {
-                                                if ((blk_catch_34: { break :blk_catch_34 ((JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, formatter_name_buf, value, enable_ansi_colors)) catch |__ce_34| { _ = &__ce_34; break :blk_catch_34 @as(bool, false); }); })) {
+                                                if ((blk_catch_36: { break :blk_catch_36 ((JestPrettyFormat.printAsymmetricMatcher(self, Format, (&writer), writer_, formatter_name_buf, value, enable_ansi_colors)) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 @as(bool, false); }); })) {
                                                     return;
                                                 } else {
                                                     if ((jsType != .DOMWrapper)) {
@@ -1282,7 +1471,7 @@ if (value.@"as"(jsc.WebCore.Response)) |response| {
 .Promise => {
 if (self.goodTimeForANewLine()) {
                 _ = writer.writeAll("\n");
-                _ = (blk_catch_35: { break :blk_catch_35 ((self.writeIndent(Writer, writer_)) catch |__ce_35| { _ = &__ce_35;  }); });
+                _ = (blk_catch_37: { break :blk_catch_37 ((self.writeIndent(Writer, writer_)) catch |__ce_37| { _ = &__ce_37;  }); });
             }
             _ = writer.writeAll("Promise {}");
 },
@@ -1327,12 +1516,11 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
                 }
                 }
                 const IterT = PrettyFormatter.MapIterator(Writer, enable_ansi_colors);
-                _ = &IterT;
                 var iter = IterT{ .formatter = self, .writer = writer_ };
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
             }
-            _ = (blk_catch_36: { break :blk_catch_36 ((self.writeIndent(Writer, writer_)) catch |__ce_36| { _ = &__ce_36;  }); });
+            _ = (blk_catch_38: { break :blk_catch_38 ((self.writeIndent(Writer, writer_)) catch |__ce_38| { _ = &__ce_38;  }); });
             _ = writer.writeAll("}");
             _ = writer.writeAll("\n");
 },
@@ -1344,7 +1532,7 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
             defer {
             self.quote_strings = prev_quote_strings;
             }
-            _ = (blk_catch_37: { break :blk_catch_37 ((self.writeIndent(Writer, writer_)) catch |__ce_37| { _ = &__ce_37;  }); });
+            _ = (blk_catch_39: { break :blk_catch_39 ((self.writeIndent(Writer, writer_)) catch |__ce_39| { _ = &__ce_39;  }); });
             const set_name = (if ((value.jsType() == .WeakSet)) "WeakSet" else "Set");
             if ((length == 0)) {
                 return writer.print("{s} {{}}", .{ set_name });
@@ -1360,12 +1548,11 @@ const length_value = ((try value.get(self.globalThis, "size")) orelse (jsc.JSVal
                 }
                 }
                 const IterT = PrettyFormatter.SetIterator(Writer, enable_ansi_colors);
-                _ = &IterT;
                 var iter = IterT{ .formatter = self, .writer = writer_ };
                 _ = &iter;
                 _ = try value.forEach(self.globalThis, (&iter), @TypeOf(iter).forEach);
             }
-            _ = (blk_catch_38: { break :blk_catch_38 ((self.writeIndent(Writer, writer_)) catch |__ce_38| { _ = &__ce_38;  }); });
+            _ = (blk_catch_40: { break :blk_catch_40 ((self.writeIndent(Writer, writer_)) catch |__ce_40| { _ = &__ce_40;  }); });
             _ = writer.writeAll("}");
             _ = writer.writeAll("\n");
 },
@@ -1379,7 +1566,7 @@ var str = DerefGuard(bun.String){ .val = bun.String.empty };
             if ((jsType == .JSDate)) {
                 var iso_string_buf: [36]u8 = undefined;
                 _ = &iso_string_buf;
-                var out_buf: []const u8 = (blk_catch_39: { break :blk_catch_39 ((std.fmt.bufPrint((&iso_string_buf), "{f}", .{ str.val })) catch |__ce_39| { _ = &__ce_39; break :blk_catch_39 ""; }); });
+                var out_buf: []const u8 = (blk_catch_41: { break :blk_catch_41 ((std.fmt.bufPrint((&iso_string_buf), "{f}", .{ str.val })) catch |__ce_41| { _ = &__ce_41; break :blk_catch_41 ""; }); });
                 _ = &out_buf;
                 if ((out_buf.len > 2)) {
                     out_buf = out_buf[1..(out_buf.len - 1)];
@@ -1401,7 +1588,7 @@ const event_type_value: JSValue = brk: {
             }
             break :brk .js_undefined;
 };
-            const mapped_event = (((blk_catch_40: { break :blk_catch_40 ((EventType.map.fromJS(self.globalThis, event_type_value)) catch |__ce_40| { _ = &__ce_40; break :blk_catch_40 null; }); })) orelse (.unknown));
+            const mapped_event = (((blk_catch_42: { break :blk_catch_42 ((EventType.map.fromJS(self.globalThis, event_type_value)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 null; }); })) orelse (.unknown));
             const event_type = (switch (mapped_event) {
 .MessageEvent => EventType.MessageEvent,
 .ErrorEvent => EventType.ErrorEvent,
@@ -1730,7 +1917,7 @@ const prev_quote_strings = self.quote_strings;
                         self.indent = (self.indent - 1);
                     }
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_55: { break :blk_catch_55 ((self.writeIndent(Writer, writer_)) catch |__ce_55| { _ = &__ce_55;  }); });
+                    _ = (blk_catch_57: { break :blk_catch_57 ((self.writeIndent(Writer, writer_)) catch |__ce_57| { _ = &__ce_57;  }); });
                     _ = writer.writeAll("}");
                     self.estimated_line_length = (self.estimated_line_length + 1);
                 } else {
@@ -1758,13 +1945,13 @@ const arrayBuffer = (value.asArrayBuffer(self.globalThis)).?;
                     }
                     _ = writer.writeAll("{\n");
                     self.indent = (self.indent + 1);
-                    _ = (blk_catch_56: { break :blk_catch_56 ((self.writeIndent(Writer, writer_)) catch |__ce_56| { _ = &__ce_56;  }); });
+                    _ = (blk_catch_58: { break :blk_catch_58 ((self.writeIndent(Writer, writer_)) catch |__ce_58| { _ = &__ce_58;  }); });
                     _ = writer.writeAll("\"data\": [");
                     self.indent = (self.indent + 1);
                     for (cp_iter_slice(slice)) |el| {
                         _ = &el;
                         _ = writer.writeAll("\n");
-                        _ = (blk_catch_57: { break :blk_catch_57 ((self.writeIndent(Writer, writer_)) catch |__ce_57| { _ = &__ce_57;  }); });
+                        _ = (blk_catch_59: { break :blk_catch_59 ((self.writeIndent(Writer, writer_)) catch |__ce_59| { _ = &__ce_59;  }); });
                         _ = writer.print("{d},", .{ .el = el });
                     }
                     if ((self.indent > 0)) {
@@ -1772,17 +1959,17 @@ const arrayBuffer = (value.asArrayBuffer(self.globalThis)).?;
                     }
                     if ((slice.len > 0)) {
                         _ = writer.writeAll("\n");
-                        _ = (blk_catch_58: { break :blk_catch_58 ((self.writeIndent(Writer, writer_)) catch |__ce_58| { _ = &__ce_58;  }); });
+                        _ = (blk_catch_60: { break :blk_catch_60 ((self.writeIndent(Writer, writer_)) catch |__ce_60| { _ = &__ce_60;  }); });
                         _ = writer.writeAll("],\n");
                     } else {
                         _ = writer.writeAll("],\n");
                     }
-                    _ = (blk_catch_59: { break :blk_catch_59 ((self.writeIndent(Writer, writer_)) catch |__ce_59| { _ = &__ce_59;  }); });
+                    _ = (blk_catch_61: { break :blk_catch_61 ((self.writeIndent(Writer, writer_)) catch |__ce_61| { _ = &__ce_61;  }); });
                     _ = writer.writeAll("\"type\": \"Buffer\",\n");
                     if ((self.indent > 0)) {
                         self.indent = (self.indent - 1);
                     }
-                    _ = (blk_catch_60: { break :blk_catch_60 ((self.writeIndent(Writer, writer_)) catch |__ce_60| { _ = &__ce_60;  }); });
+                    _ = (blk_catch_62: { break :blk_catch_62 ((self.writeIndent(Writer, writer_)) catch |__ce_62| { _ = &__ce_62;  }); });
                     _ = writer.writeAll("}");
                     if ((self.indent == 0)) {
                         _ = writer.writeAll("\n");
@@ -1812,7 +1999,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i8)) i8 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_61: { break :blk_catch_61 ((self.writeIndent(Writer, writer_)) catch |__ce_61| { _ = &__ce_61;  }); });
+                    _ = (blk_catch_63: { break :blk_catch_63 ((self.writeIndent(Writer, writer_)) catch |__ce_63| { _ = &__ce_63;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1832,7 +2019,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i16)) i16 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_62: { break :blk_catch_62 ((self.writeIndent(Writer, writer_)) catch |__ce_62| { _ = &__ce_62;  }); });
+                    _ = (blk_catch_64: { break :blk_catch_64 ((self.writeIndent(Writer, writer_)) catch |__ce_64| { _ = &__ce_64;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1852,7 +2039,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u16)) u16 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_63: { break :blk_catch_63 ((self.writeIndent(Writer, writer_)) catch |__ce_63| { _ = &__ce_63;  }); });
+                    _ = (blk_catch_65: { break :blk_catch_65 ((self.writeIndent(Writer, writer_)) catch |__ce_65| { _ = &__ce_65;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1872,7 +2059,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i32)) i32 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_64: { break :blk_catch_64 ((self.writeIndent(Writer, writer_)) catch |__ce_64| { _ = &__ce_64;  }); });
+                    _ = (blk_catch_66: { break :blk_catch_66 ((self.writeIndent(Writer, writer_)) catch |__ce_66| { _ = &__ce_66;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1892,7 +2079,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u32)) u32 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_65: { break :blk_catch_65 ((self.writeIndent(Writer, writer_)) catch |__ce_65| { _ = &__ce_65;  }); });
+                    _ = (blk_catch_67: { break :blk_catch_67 ((self.writeIndent(Writer, writer_)) catch |__ce_67| { _ = &__ce_67;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1912,7 +2099,7 @@ const slice_with_type: []align(std.@"meta".alignment([]f16)) f16 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_66: { break :blk_catch_66 ((self.writeIndent(Writer, writer_)) catch |__ce_66| { _ = &__ce_66;  }); });
+                    _ = (blk_catch_68: { break :blk_catch_68 ((self.writeIndent(Writer, writer_)) catch |__ce_68| { _ = &__ce_68;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1932,7 +2119,7 @@ const slice_with_type: []align(std.@"meta".alignment([]f32)) f32 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_67: { break :blk_catch_67 ((self.writeIndent(Writer, writer_)) catch |__ce_67| { _ = &__ce_67;  }); });
+                    _ = (blk_catch_69: { break :blk_catch_69 ((self.writeIndent(Writer, writer_)) catch |__ce_69| { _ = &__ce_69;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1952,7 +2139,7 @@ const slice_with_type: []align(std.@"meta".alignment([]f64)) f64 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_68: { break :blk_catch_68 ((self.writeIndent(Writer, writer_)) catch |__ce_68| { _ = &__ce_68;  }); });
+                    _ = (blk_catch_70: { break :blk_catch_70 ((self.writeIndent(Writer, writer_)) catch |__ce_70| { _ = &__ce_70;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1972,7 +2159,7 @@ const slice_with_type: []align(std.@"meta".alignment([]i64)) i64 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_69: { break :blk_catch_69 ((self.writeIndent(Writer, writer_)) catch |__ce_69| { _ = &__ce_69;  }); });
+                    _ = (blk_catch_71: { break :blk_catch_71 ((self.writeIndent(Writer, writer_)) catch |__ce_71| { _ = &__ce_71;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -1992,7 +2179,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u64)) u64 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_70: { break :blk_catch_70 ((self.writeIndent(Writer, writer_)) catch |__ce_70| { _ = &__ce_70;  }); });
+                    _ = (blk_catch_72: { break :blk_catch_72 ((self.writeIndent(Writer, writer_)) catch |__ce_72| { _ = &__ce_72;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2012,7 +2199,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = (blk: {
                 for (cp_iter_slice(slice_with_type)) |el| {
                     _ = &el;
                     _ = writer.writeAll("\n");
-                    _ = (blk_catch_71: { break :blk_catch_71 ((self.writeIndent(Writer, writer_)) catch |__ce_71| { _ = &__ce_71;  }); });
+                    _ = (blk_catch_73: { break :blk_catch_73 ((self.writeIndent(Writer, writer_)) catch |__ce_73| { _ = &__ce_73;  }); });
                     _ = writer.print("{d},", .{ .el = el });
                 }
 },
@@ -2020,7 +2207,7 @@ const slice_with_type: []align(std.@"meta".alignment([]u8)) u8 = (blk: {
             }
             if ((slice.len > 0)) {
                 _ = writer.writeAll("\n");
-                _ = (blk_catch_72: { break :blk_catch_72 ((self.writeIndent(Writer, writer_)) catch |__ce_72| { _ = &__ce_72;  }); });
+                _ = (blk_catch_74: { break :blk_catch_74 ((self.writeIndent(Writer, writer_)) catch |__ce_74| { _ = &__ce_74;  }); });
                 _ = writer.writeAll("]");
                 if ((self.indent == 0)) {
                     _ = writer.writeAll("\n");
@@ -2069,246 +2256,9 @@ pub fn format(self: *PrettyFormatter, result: Tag.Result, comptime Writer: type,
 });
     }
     const Formatter = PrettyFormatter;
-    pub const Visited = struct {
-        const ObjectPool = pool.ObjectPool;
-        pub const Map = std.AutoHashMap(JSValue, void);
-        pub const Pool = ObjectPool(Map, VisitedInit.init, true, 16);
-    };
-    pub const ZigFormatter = struct {
-        formatter: *JestPrettyFormat.Formatter,
-        global: *JSGlobalObject,
-        value: JSValue,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                self.formatter.remaining_values = (&.{ self.value });
-                defer {
-                {
-                    self.formatter.remaining_values = &.{};
-                }
-                }
-                self.formatter.globalThis = self.global;
-                _ = self.formatter.format(Tag.get(self.value, self.global), @TypeOf(writer), writer, self.value, self.formatter.globalThis, false);
-        }
-        pub const WriteError = error{UhOh};
-    };
-    pub const Tag = enum {
-            StringPossiblyFormatted,
-            String,
-            Undefined,
-            Double,
-            Integer,
-            Null,
-            Boolean,
-            Array,
-            Object,
-            Function,
-            Class,
-            Error,
-            TypedArray,
-            Map,
-            Set,
-            Symbol,
-            BigInt,
-    
-            GlobalObject,
-            Private,
-            Promise,
-    
-            JSON,
-            NativeCode,
-            ArrayBuffer,
-    
-            JSX,
-            Event,
-    
-            pub fn isPrimitive(this: Tag) bool {
-                return switch (this) {
-                    .String,
-                    .StringPossiblyFormatted,
-                    .Undefined,
-                    .Double,
-                    .Integer,
-                    .Null,
-                    .Boolean,
-                    .Symbol,
-                    .BigInt,
-                    => true,
-                    else => false,
-                };
-            }
-    
-            pub inline fn canHaveCircularReferences(tag: Tag) bool {
-                return tag == .Array or tag == .Object or tag == .Map or tag == .Set;
-            }
-    
-            const Result = struct {
-                tag: Tag,
-                cell: JSValue.JSType = .Cell,
-            };
-    
-            pub fn get(value: JSValue, globalThis: *JSGlobalObject) bun.JSError!Result {
-                switch (value) {
-                    .zero, .js_undefined => return Result{
-                        .tag = .Undefined,
-                    },
-                    .null => return Result{
-                        .tag = .Null,
-                    },
-                    else => {},
-                }
-    
-                if (value.isInt32()) {
-                    return .{
-                        .tag = .Integer,
-                    };
-                } else if (value.isNumber()) {
-                    return .{
-                        .tag = .Double,
-                    };
-                } else if (value.isBoolean()) {
-                    return .{
-                        .tag = .Boolean,
-                    };
-                }
-    
-                if (!value.isCell())
-                    return .{
-                        .tag = .NativeCode,
-                    };
-    
-                const js_type = value.jsType();
-    
-                if (js_type.isHidden()) return .{
-                    .tag = .NativeCode,
-                    .cell = js_type,
-                };
-    
-                // Cell is the "unknown" type
-                if (js_type == .Cell) {
-                    return .{
-                        .tag = .NativeCode,
-                        .cell = js_type,
-                    };
-                }
-    
-                if (js_type == .DOMWrapper) {
-                    return .{
-                        .tag = .Private,
-                        .cell = js_type,
-                    };
-                }
-    
-                // If we check an Object has a method table and it does not
-                // it will crash
-                if (js_type != .Object and value.isCallable()) {
-                    if (value.isClass(globalThis)) {
-                        return .{
-                            .tag = .Class,
-                            .cell = js_type,
-                        };
-                    }
-    
-                    return .{
-                        // TODO: we print InternalFunction as Object because we have a lot of
-                        // callable namespaces and printing the contents of it is better than [Function: namespace]
-                        // ideally, we would print [Function: namespace] { ... } on all functions, internal and js.
-                        // what we'll do later is rid of .Function and .Class and handle the prefix in the .Object formatter
-                        .tag = if (js_type == .InternalFunction) .Object else .Function,
-                        .cell = js_type,
-                    };
-                }
-    
-                if (js_type == .GlobalProxy) {
-                    return Tag.get(
-                        jsc.JSValue.c(jsc.C.JSObjectGetProxyTarget(value.asObjectRef())),
-                        globalThis,
-                    );
-                }
-    
-                // Is this a react element?
-                if (js_type.isObject() and js_type != .ProxyObject) {
-                    if (try value.getOwnTruthy(globalThis, "$$typeof")) |typeof_symbol| {
-                        var reactElement = ZigString.init("react.element");
-                        var react_fragment = ZigString.init("react.fragment");
-    
-                        if ((typeof_symbol.isSameValue(.symbolFor(globalThis, &reactElement), globalThis) catch false) or (typeof_symbol.isSameValue(.symbolFor(globalThis, &react_fragment), globalThis) catch false)) {
-                            return .{ .tag = .JSX, .cell = js_type };
-                        }
-                    }
-                }
-    
-                return .{
-                    .tag = switch (js_type) {
-                        .ErrorInstance => .Error,
-                        .NumberObject => .Double,
-                        .DerivedArray, .Array => .Array,
-                        .DerivedStringObject, .String, .StringObject => .String,
-                        .RegExpObject => .String,
-                        .Symbol => .Symbol,
-                        .BooleanObject => .Boolean,
-                        .JSFunction => .Function,
-                        .WeakMap, .Map => .Map,
-                        .WeakSet, .Set => .Set,
-                        .JSDate => .JSON,
-                        .JSPromise => .Promise,
-                        .Object,
-                        .FinalObject,
-                        .ModuleNamespaceObject,
-                        .GlobalObject,
-                        => .Object,
-    
-                        .ArrayBuffer,
-                        .Int8Array,
-                        .Uint8Array,
-                        .Uint8ClampedArray,
-                        .Int16Array,
-                        .Uint16Array,
-                        .Int32Array,
-                        .Uint32Array,
-                        .Float16Array,
-                        .Float32Array,
-                        .Float64Array,
-                        .BigInt64Array,
-                        .BigUint64Array,
-                        .DataView,
-                        => .TypedArray,
-    
-                        .HeapBigInt => .BigInt,
-    
-                        // None of these should ever exist here
-                        // But we're going to check anyway
-                        .GetterSetter,
-                        .CustomGetterSetter,
-                        .APIValueWrapper,
-                        .NativeExecutable,
-                        .ProgramExecutable,
-                        .ModuleProgramExecutable,
-                        .EvalExecutable,
-                        .FunctionExecutable,
-                        .UnlinkedFunctionExecutable,
-                        .UnlinkedProgramCodeBlock,
-                        .UnlinkedModuleProgramCodeBlock,
-                        .UnlinkedEvalCodeBlock,
-                        .UnlinkedFunctionCodeBlock,
-                        .CodeBlock,
-                        .JSCellButterfly,
-                        .JSSourceCode,
-                        .JSCallee,
-                        .GlobalLexicalEnvironment,
-                        .LexicalEnvironment,
-                        .ModuleEnvironment,
-                        .StrictEvalActivation,
-                        .WithScope,
-                        => .NativeCode,
-    
-                        .Event => .Event,
-    
-                        else => .JSON,
-                    },
-                    .cell = js_type,
-                };
-            }
-        };
+    pub const Visited = _PrettyVisited;
+    pub const ZigFormatter = _PrettyZigFormatter;
+    pub const Tag = _PrettyTag;
     const CellType = CAPI.CellType;
 };
 
@@ -2324,31 +2274,3 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const empty_jsvalues: [0]JSValue = undefined;
 threadlocal var formatter_name_buf: [512]u8 = undefined;
-pub const EventType = enum(u8) {
-    Event,
-    MessageEvent,
-    CloseEvent,
-    ErrorEvent,
-    OpenEvent,
-    unknown = 254,
-    _,
-
-    pub const map = bun.ComptimeStringMap(EventType, .{
-        .{ EventType.Event.label(), EventType.Event },
-        .{ EventType.MessageEvent.label(), EventType.MessageEvent },
-        .{ EventType.CloseEvent.label(), EventType.CloseEvent },
-        .{ EventType.ErrorEvent.label(), EventType.ErrorEvent },
-        .{ EventType.OpenEvent.label(), EventType.OpenEvent },
-    });
-
-    pub fn label(this: EventType) string {
-        return switch (this) {
-            .Event => "event",
-            .MessageEvent => "message",
-            .CloseEvent => "close",
-            .ErrorEvent => "error",
-            .OpenEvent => "open",
-            else => "event",
-        };
-    }
-};

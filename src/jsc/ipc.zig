@@ -64,6 +64,14 @@ fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).
 fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
 fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -84,11 +92,11 @@ pub fn init(mode: Mode) IncomingBuffer {
 
 pub fn deinit(self: *IncomingBuffer) void {
             switch (self.*) {
-.advanced => |*b| {
-_ = b.deinit(bun.default_allocator);
+.advanced => {
+_ = self.advanced.deinit(bun.default_allocator);
 },
-.json => |*b| {
-_ = b.deinit();
+.json => {
+_ = self.json.deinit();
 },
 }
     }
@@ -126,6 +134,14 @@ pub const Mode = enum {
     pub const fromJS = Map.fromJS;
     
     pub const fromString = Map.get;
+};
+
+pub const IPCDecodeError = error{
+    NotEnoughBytes,
+    InvalidFormat,
+    JSError,
+    JSTerminated,
+    OutOfMemory,
 };
 
 pub const IPCSerializationError = error{
@@ -239,6 +255,42 @@ _ = self.callback_array.unprotect();
     }
 };
 
+pub const CloseSocketReason = enum {
+    normal,
+    failure,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const CloseSocketFrom = enum {
+    user,
+    deinit,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const AckNack = enum {
+    ack,
+    nack,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ContinueSendReason = enum {
+    new_message_appended,
+    on_writable,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const FromEnum = enum {
     subprocess_exited,
     subprocess,
@@ -332,7 +384,7 @@ pub const advanced = struct {
 pub fn decodeIPCMessage(data: []const u8, global: *jsc.JSGlobalObject) IPCDecodeError!DecodeIPCMessageResult {
             if ((data.len < header_length)) {
                 _ = log("Not enough bytes to decode IPC message header, have {d} bytes", .{ data.len });
-                return IPCDecodeError.NotEnoughBytes;
+                return error.NotEnoughBytes;
             }
             const message_type: IPCMessageType = @enumFromInt(data[0]);
             const message_len = std.mem.readInt(u32, data[1..(@sizeOf(u32) + 1)], .little);
@@ -341,17 +393,26 @@ pub fn decodeIPCMessage(data: []const u8, global: *jsc.JSGlobalObject) IPCDecode
 .Version => {
 return DecodeIPCMessageResult{ .bytes_consumed = header_length, .message = DecodedIPCMessage{ .version = message_len } };
 },
-.SerializedMessage, .SerializedInternalMessage => |tag| {
+.SerializedMessage => {
 if (((data.len - header_length) < message_len)) {
                 _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
-                return IPCDecodeError.NotEnoughBytes;
+                return error.NotEnoughBytes;
             }
             const message = data[header_length..][0..message_len];
             const deserialized = try JSValue.deserialize(message, global);
-            return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = (if ((tag == .SerializedInternalMessage)) DecodedIPCMessage{ .internal = deserialized } else DecodedIPCMessage{ .data = deserialized }) };
+            return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .data = deserialized } };
+},
+.SerializedInternalMessage => {
+if (((data.len - header_length) < message_len)) {
+                _ = log("Not enough bytes to decode IPC message body of len {d}, have {d} bytes", .{ message_len, data.len });
+                return error.NotEnoughBytes;
+            }
+            const message = data[header_length..][0..message_len];
+            const deserialized = try JSValue.deserialize(message, global);
+            return DecodeIPCMessageResult{ .bytes_consumed = (header_length + message_len), .message = DecodedIPCMessage{ .internal = deserialized } };
 },
 else => {
-return IPCDecodeError.InvalidFormat;
+return error.InvalidFormat;
 },
 }
     }
@@ -424,18 +485,18 @@ pub fn decodeIPCMessage(data: []const u8, globalThis: *jsc.JSGlobalObject, known
             } else {
                 const found_opt = bun.strings.indexOfChar(data, 10);
                 if ((found_opt == null)) {
-                    return IPCDecodeError.NotEnoughBytes;
+                    return error.NotEnoughBytes;
                 }
                 const found = found_opt.?;
                 if ((found >= std.math.maxInt(u32))) {
-                    return IPCDecodeError.InvalidFormat;
+                    return error.InvalidFormat;
                 }
                 idx = @as(u32, @intCast(found));
             }
             var json_data = data[0..idx];
             _ = &json_data;
             if ((json_data.len == 0)) {
-                return IPCDecodeError.InvalidFormat;
+                return error.InvalidFormat;
             }
             var kind: JsonKind = .regular;
             _ = &kind;
@@ -450,7 +511,7 @@ pub fn decodeIPCMessage(data: []const u8, globalThis: *jsc.JSGlobalObject, known
             const s = bun.String.createExternal(*bool, json_data, true, (&was_ascii_string_freed), jsonIPCDataStringFreeCB);
             if ((s.tag == .Dead)) {
                 @branchHint(.unlikely);
-                return IPCDecodeError.OutOfMemory;
+                return error.OutOfMemory;
             }
             break :ascii s;
 } else bun.String.borrowUTF8(json_data));
@@ -468,13 +529,13 @@ pub fn decodeIPCMessage(data: []const u8, globalThis: *jsc.JSGlobalObject, known
             const parse_res = str.toJSByParseJSON(globalThis);
             const deserialized = (blk_catch_0: { break :blk_catch_0 ((parse_res) catch |e| { _ = &e; if (((e == error.JSError) or (e == error.JSTerminated))) {
                 _ = globalThis.clearException();
-                return IPCDecodeError.InvalidFormat;
+                return error.InvalidFormat;
             } else {
                 if ((e == error.OutOfMemory)) {
                     return bun.outOfMemory();
                 }
             }
-            return IPCDecodeError.InvalidFormat; }); });
+            return error.InvalidFormat; }); });
             return (switch (kind) {
 .regular => DecodeIPCMessageResult{ .bytes_consumed = @as(u32, @intCast((idx + 1))), .message = DecodedIPCMessage{ .data = deserialized } },
 .internal => DecodeIPCMessageResult{ .bytes_consumed = @as(u32, @intCast((idx + 1))), .message = DecodedIPCMessage{ .internal = deserialized } },
@@ -579,6 +640,12 @@ pub fn destroy(self: *WindowsWrite) void {
 pub const IPCSendQueueOwner = union(enum) {
     subprocess: *bun.api.Subprocess.Subprocess,
     virtual_machine: *bun.jsc.VirtualMachine.IPCInstance,
+};
+
+pub const IPCSocketUnion = union(enum) {
+    uninitialized: void,
+    open: IPCSocketType,
+    closed: void,
 };
 
 pub const WindowsState = struct {
@@ -745,12 +812,11 @@ pub fn _onAfterIPCClosed(self: *SendQueue) void {
             }
             self.close_event_sent = true;
             switch (self.owner) {
-inline else => |owner| {
-if (comptime @hasDecl(@TypeOf(owner.*), "handleIPCClose")) {
-                _ = owner.*.handleIPCClose();
-            } else {
-                _ = owner.*.onAfterIPCClosed();
-            }
+.subprocess => |owner| {
+_ = owner.*.onAfterIPCClosed();
+},
+.virtual_machine => |owner| {
+_ = owner.*.handleIPCClose();
 },
 }
     }
@@ -1051,7 +1117,8 @@ pub fn _windowsOnWriteComplete(write_req: *WindowsWrite, status: uv.ReturnCode) 
 
 pub fn getOwnerGlobalThis(owner: IPCSendQueueOwner) *jsc.JSGlobalObject {
             return (switch (owner) {
-inline else => |o| o.globalThis,
+.subprocess => |o| o.globalThis,
+.virtual_machine => |o| o.globalThis,
 });
     }
 
@@ -1172,8 +1239,9 @@ pub const IPCWindowsNamedPipeHandler = struct {
 
 pub fn onReadAlloc(send_queue: *SendQueue, suggested_size: usize) []u8 {
             switch (send_queue.incoming) {
-.json => |*json_buf| {
-var available = json_buf.unusedCapacitySlice();
+.json => {
+const json_buf = (&send_queue.incoming.json);
+            var available = json_buf.unusedCapacitySlice();
             _ = &available;
             if ((available.len < suggested_size)) {
                 _ = json_buf.ensureUnusedCapacity(suggested_size);
@@ -1182,8 +1250,9 @@ var available = json_buf.unusedCapacitySlice();
             _ = log("NewNamedPipeIPCHandler#onReadAlloc {d}", .{ suggested_size });
             return available.ptr[0..suggested_size];
 },
-.advanced => |*adv_buf| {
-var available = adv_buf.unusedCapacitySlice();
+.advanced => {
+const adv_buf = (&send_queue.incoming.advanced);
+            var available = adv_buf.unusedCapacitySlice();
             _ = &available;
             if ((available.len < suggested_size)) {
                 _ = bun.handleOom(adv_buf.ensureUnusedCapacity(bun.default_allocator, suggested_size));
@@ -1209,8 +1278,9 @@ pub fn onRead(send_queue: *SendQueue, buffer: []const u8) void {
             _ = loop.exit();
             }
             switch (send_queue.incoming) {
-.json => |*json_buf| {
-_ = bun.assert(((json_buf.data.len + buffer.len) <= json_buf.data.cap));
+.json => {
+const json_buf = (&send_queue.incoming.json);
+            _ = bun.assert(((json_buf.data.len + buffer.len) <= json_buf.data.cap));
             _ = bun.assert(bun.isSliceInBuffer(buffer, json_buf.data.allocatedSlice()));
             _ = json_buf.notifyWritten(buffer);
             while (json_buf.next()) |msg| {
@@ -1232,8 +1302,9 @@ _ = bun.assert(((json_buf.data.len + buffer.len) <= json_buf.data.cap));
                 _ = json_buf.consume(result.bytes_consumed);
             }
 },
-.advanced => |*adv_buf| {
-adv_buf.len = (adv_buf.len +| @as(u32, @intCast(buffer.len)));
+.advanced => {
+const adv_buf = (&send_queue.incoming.advanced);
+            adv_buf.len = (adv_buf.len +| @as(u32, @intCast(buffer.len)));
             var slice = adv_buf.slice();
             _ = &slice;
             _ = bun.assert((adv_buf.len <= adv_buf.cap));
@@ -1290,30 +1361,12 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 pub const log = Output.scoped(.IPC, .visible);
-pub const IPCDecodeError = error{
-    /// There werent enough bytes, recall this function again when new data is available.
-    NotEnoughBytes,
-    /// Format could not be recognized. Report an error and close the socket.
-    InvalidFormat,
-    JSError,
-    JSTerminated,
-    OutOfMemory,
-};
 pub const AdvancedVersionPacket = extern struct {
     type: AdvancedIPCMessageType align(1) = .Version,
     version: u32 align(1) = 1,
 };
 pub const Socket = uws.NewSocketHandler(false);
 pub const IPCSocketType = (if (Environment.isWindows) *uv.Pipe else Socket);
-pub const IPCSocketUnion = union(enum) {
-    uninitialized: void,
-    open: IPCSocketType,
-    closed: void,
-};
-pub const CloseSocketReason = enum { normal, failure };
-pub const CloseSocketFrom = enum { user, deinit };
-pub const AckNack = enum { ack, nack };
-pub const ContinueSendReason = enum { new_message_appended, on_writable };
 pub const WindowsQueueState = (if (Environment.isWindows) WindowsState else NonWindowsState);
 pub const Data = SendQueue;
 pub const SendQueueOwner = IPCSendQueueOwner;
@@ -1571,7 +1624,10 @@ _ = send_queue.onAckNack(globalThis, .nack);
 }
         } else {
             switch (send_queue.owner) {
-inline else => |owner| {
+.subprocess => |owner| {
+_ = owner.handleIPCMessage(message, .js_undefined);
+},
+.virtual_machine => |owner| {
 _ = owner.handleIPCMessage(message, .js_undefined);
 },
 }
@@ -1583,8 +1639,9 @@ pub fn onData2(send_queue: *SendQueue, all_data: []const u8) void {
         _ = &data;
         const globalThis = SendQueue.getOwnerGlobalThis(send_queue.owner);
         switch (send_queue.incoming) {
-.json => |*json_buf| {
-_ = json_buf.append(data);
+.json => {
+const json_buf = (&send_queue.incoming.json);
+        _ = json_buf.append(data);
         while (json_buf.next()) |msg| {
             const decode_res = decodeIPCMessage(.json, msg.data, globalThis, msg.newline_pos);
             const result = (blk_catch_15: { break :blk_catch_15 ((decode_res) catch |e| { _ = &e; if ((e == error.NotEnoughBytes)) {
@@ -1604,8 +1661,9 @@ _ = json_buf.append(data);
             _ = json_buf.consume(result.bytes_consumed);
         }
 },
-.advanced => |*adv_buf| {
-if ((adv_buf.len == 0)) {
+.advanced => {
+const adv_buf = (&send_queue.incoming.advanced);
+        if ((adv_buf.len == 0)) {
             while (true) {
                 const decode_res = decodeIPCMessage(.advanced, data, globalThis, null);
                 const result = (blk_catch_16: { break :blk_catch_16 ((decode_res) catch |e| { _ = &e; if ((e == error.NotEnoughBytes)) {

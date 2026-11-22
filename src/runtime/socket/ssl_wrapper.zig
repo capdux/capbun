@@ -48,6 +48,16 @@ fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T 
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
+pub const SSLWrapperHandshakeState = enum(u2) {
+    HANDSHAKE_PENDING = 0,
+    HANDSHAKE_COMPLETED = 1,
+    HANDSHAKE_RENEGOTIATION_PENDING = 2,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const SSLFreeGuard = struct {
     ssl: ?*BoringSSL.SSL = null,
     __cp_dropped: bool = false,
@@ -90,6 +100,37 @@ pub fn __cp_deinit(self: *SSLCTXFreeGuard) void {
     }
 };
 
+pub const SSLWrapperFlags = packed struct(u8) {
+    handshake_state: SSLWrapperHandshakeState = SSLWrapperHandshakeState.HANDSHAKE_PENDING,
+    received_ssl_shutdown: bool = false,
+    sent_ssl_shutdown: bool = false,
+    is_client: bool = false,
+    authorized: bool = false,
+    fatal_error: bool = false,
+    closed_notified: bool = false,
+};
+
+pub fn SSLWrapperHandlers(comptime T: type) type {
+    return struct {
+        ctx: T,
+        onOpen: *const fn (T) void,
+        onHandshake: *const fn (T, bool, uws.us_bun_verify_error_t) void,
+        write: *const fn (T, []const u8) void,
+        onData: *const fn (T, []const u8) void,
+        onClose: *const fn (T) void,
+    };
+}
+
+pub fn DummyReadHandler(comptime T: type) type {
+    return struct {
+
+pub fn onData(ctx: T, data: []const u8) void {
+                _ = &ctx;
+                _ = &data;
+        }
+    };
+}
+
 const jsc = bun.jsc;
 const uws = bun.uws;
 const BoringSSL = bun.BoringSSL.c;
@@ -97,15 +138,15 @@ const log = bun.Output.scoped(.SSLWrapper, .hidden);
 
 pub fn SSLWrapper(comptime T: type) type {
         return struct {
-    handlers: Handlers,
+    handlers: SSLWrapperHandlers(T),
     ssl: ?*BoringSSL.SSL = null,
     ctx: ?*BoringSSL.SSL_CTX = null,
-    flags: Flags = .{},
+    flags: SSLWrapperFlags = .{},
 
-pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers) anyerror!This {
+pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers) !This {
             _ = bun.BoringSSL.load();
             const ssl = ((BoringSSL.SSL_new(ctx)) orelse {
-            return @as(anyerror!This, error.OutOfMemory);
+            return error.OutOfMemory;
 });
             var ssl_guard = SSLFreeGuard{ .ssl = ssl };
             _ = &ssl_guard;
@@ -128,7 +169,7 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
             const s_mem = BoringSSL.BIO_s_mem;
             const bio_method_in = s_mem();
             const input = ((BoringSSL.BIO_new(bio_method_in)) orelse {
-            return @as(anyerror!This, error.OutOfMemory);
+            return error.OutOfMemory;
 });
             var input_guard = BIOFreeGuard{ .bio = input };
             _ = &input_guard;
@@ -136,7 +177,7 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
             defer if (!__input_guard_moved) { __input_guard_moved = true; const __T = @TypeOf(input_guard); if (@typeInfo(__T) == .optional) { if (input_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { input_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = input_guard; _drop_val.__cp_deinit(); } };
             const bio_method_out = s_mem();
             const output = ((BoringSSL.BIO_new(bio_method_out)) orelse {
-            return @as(anyerror!This, error.OutOfMemory);
+            return error.OutOfMemory;
 });
             _ = BoringSSL.BIO_set_mem_eof_return(input, -1);
             _ = BoringSSL.BIO_set_mem_eof_return(output, -1);
@@ -149,9 +190,9 @@ pub fn initWithCTX(ctx: *BoringSSL.SSL_CTX, is_client: bool, handlers: Handlers)
 pub fn init(ssl_options: jsc.API.ServerConfig.SSLConfig, is_client: bool, handlers: Handlers) !This {
             _ = bun.BoringSSL.load();
             const ctx_opts: uws.SocketContext.BunSocketContextOptions = ssl_options.asUSockets();
-            var err: uws.create_bun_socket_error_t = .none;
-            _ = &err;
-            const ssl_ctx = ((ctx_opts.createSSLContext((&err))) orelse { return error.InvalidOptions; });
+            var err_val: uws.create_bun_socket_error_t = .none;
+            _ = &err_val;
+            const ssl_ctx = ((ctx_opts.createSSLContext((&err_val))) orelse { return error.InvalidOptions; });
             var ctx_guard = SSLCTXFreeGuard{ .ctx = ssl_ctx };
             _ = &ctx_guard;
             var __ctx_guard_moved = false; _ = &__ctx_guard_moved;
@@ -173,14 +214,7 @@ pub fn startWithPayload(self: *@This(), payload: []const u8) void {
     }
 
 pub fn shutdownRead(self: *@This()) void {
-            const DummyReadHandler = struct {
-
-pub fn onData(ctx: T, data: []const u8) void {
-            _ = &ctx;
-            _ = &data;
-    }
-};
-            self.handlers.onData = DummyReadHandler.onData;
+            self.handlers.onData = DummyReadHandler(T).onData;
     }
 
 pub fn shutdown(self: *@This(), fast_shutdown: bool) bool {
@@ -201,9 +235,9 @@ pub fn shutdown(self: *@This(), fast_shutdown: bool) bool {
             }
             self.flags.sent_ssl_shutdown = (ret >= 0);
             if ((ret < 0)) {
-                const err = BoringSSL.SSL_get_error(ssl, ret);
+                const ssl_err = BoringSSL.SSL_get_error(ssl, ret);
                 _ = BoringSSL.ERR_clear_error;
-                if (((err == BoringSSL.SSL_ERROR_SSL) or (err == BoringSSL.SSL_ERROR_SYSCALL))) {
+                if (((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL))) {
                     self.flags.fatal_error = true;
                     _ = self.triggerCloseCallback();
                     return false;
@@ -222,25 +256,25 @@ pub fn flush(self: *@This()) usize {
             return 0;
     }
 
-pub fn hasPendingData(self: *const @This()) bool {
+pub fn hasPendingData(self: @This()) bool {
             const ssl = ((self.ssl) orelse { return false; });
             return ((BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_wbio(ssl)) > 0) or (BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_rbio(ssl)) > 0));
     }
 
-pub fn hasPendingRead(self: *const @This()) bool {
+pub fn hasPendingRead(self: @This()) bool {
             const ssl = ((self.ssl) orelse { return false; });
             return (BoringSSL.BIO_ctrl_pending(BoringSSL.SSL_get_rbio(ssl)) > 0);
     }
 
-pub fn isShutdown(self: *const @This()) bool {
+pub fn isShutdown(self: @This()) bool {
             return ((self.flags.closed_notified or self.flags.received_ssl_shutdown) or self.flags.sent_ssl_shutdown);
     }
 
-pub fn isClosed(self: *const @This()) bool {
+pub fn isClosed(self: @This()) bool {
             return (self.flags.received_ssl_shutdown and self.flags.sent_ssl_shutdown);
     }
 
-pub fn isAuthorized(self: *@This()) bool {
+pub fn isAuthorized(self: @This()) bool {
             if ((self.flags.handshake_state == HandshakeState.HANDSHAKE_COMPLETED)) {
                 return self.flags.authorized;
             }
@@ -267,17 +301,17 @@ pub fn writeData(self: *@This(), data: []const u8) !usize {
             }
             const written = BoringSSL.SSL_write(ssl, data.ptr, @as(c_int, @intCast(data.len)));
             if ((written <= 0)) {
-                const err = BoringSSL.SSL_get_error(ssl, written);
+                const ssl_err = BoringSSL.SSL_get_error(ssl, written);
                 _ = BoringSSL.ERR_clear_error;
-                if ((err == BoringSSL.SSL_ERROR_WANT_READ)) {
+                if ((ssl_err == BoringSSL.SSL_ERROR_WANT_READ)) {
                     _ = self.handleTraffic();
                     return error.WantRead;
                 }
-                if ((err == BoringSSL.SSL_ERROR_WANT_WRITE)) {
+                if ((ssl_err == BoringSSL.SSL_ERROR_WANT_WRITE)) {
                     _ = self.handleTraffic();
                     return error.WantWrite;
                 }
-                self.flags.fatal_error = ((err == BoringSSL.SSL_ERROR_SSL) or (err == BoringSSL.SSL_ERROR_SYSCALL));
+                self.flags.fatal_error = ((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL));
                 _ = self.triggerCloseCallback();
                 return error.ConnectionClosed;
             }
@@ -333,7 +367,7 @@ pub fn triggerCloseCallback(self: *@This()) void {
             _ = self.handlers.onClose(self.handlers.ctx);
     }
 
-pub fn getVerifyError(self: *@This()) uws.us_bun_verify_error_t {
+pub fn getVerifyError(self: @This()) uws.us_bun_verify_error_t {
             if (self.isShutdown()) {
                 return .{};
             }
@@ -360,16 +394,16 @@ pub fn updateHandshakeState(self: *@This()) bool {
             }
             const result = BoringSSL.SSL_do_handshake(ssl);
             if ((result <= 0)) {
-                const err = BoringSSL.SSL_get_error(ssl, result);
+                const ssl_err = BoringSSL.SSL_get_error(ssl, result);
                 _ = BoringSSL.ERR_clear_error;
-                if ((err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
+                if ((ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
                     self.flags.received_ssl_shutdown = true;
                     _ = self.shutdown(false);
                     _ = self.handleEndOfRenegotiation();
                     return false;
                 }
-                if (((err != BoringSSL.SSL_ERROR_WANT_READ) and (err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
-                    self.flags.fatal_error = ((err == BoringSSL.SSL_ERROR_SSL) or (err == BoringSSL.SSL_ERROR_SYSCALL));
+                if (((ssl_err != BoringSSL.SSL_ERROR_WANT_READ) and (ssl_err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
+                    self.flags.fatal_error = ((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL));
                     self.flags.handshake_state = HandshakeState.HANDSHAKE_COMPLETED;
                     _ = self.triggerHandshakeCallback(false, self.getVerifyError());
                     if (self.flags.fatal_error) {
@@ -403,10 +437,10 @@ pub fn handleReading(self: *@This(), buffer: *[BUFFER_SIZE]u8) bool {
                 const just_read = BoringSSL.SSL_read(ssl, available.ptr, @as(c_int, @intCast(available.len)));
                 _ = log("just read {d}", .{ just_read });
                 if ((just_read <= 0)) {
-                    const err = BoringSSL.SSL_get_error(ssl, just_read);
+                    const ssl_err = BoringSSL.SSL_get_error(ssl, just_read);
                     _ = BoringSSL.ERR_clear_error;
-                    if (((err != BoringSSL.SSL_ERROR_WANT_READ) and (err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
-                        if ((err == BoringSSL.SSL_ERROR_WANT_RENEGOTIATE)) {
+                    if (((ssl_err != BoringSSL.SSL_ERROR_WANT_READ) and (ssl_err != BoringSSL.SSL_ERROR_WANT_WRITE))) {
+                        if ((ssl_err == BoringSSL.SSL_ERROR_WANT_RENEGOTIATE)) {
                             self.flags.handshake_state = HandshakeState.HANDSHAKE_RENEGOTIATION_PENDING;
                             if ((BoringSSL.SSL_renegotiate(ssl) == 0)) {
                                 self.flags.handshake_state = HandshakeState.HANDSHAKE_COMPLETED;
@@ -416,13 +450,13 @@ pub fn handleReading(self: *@This(), buffer: *[BUFFER_SIZE]u8) bool {
                             }
                             continue;
                         } else {
-                            if ((err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
+                            if ((ssl_err == BoringSSL.SSL_ERROR_ZERO_RETURN)) {
                                 self.flags.received_ssl_shutdown = true;
                                 _ = self.shutdown(false);
                                 _ = self.handleEndOfRenegotiation();
                             }
                         }
-                        self.flags.fatal_error = ((err == BoringSSL.SSL_ERROR_SSL) or (err == BoringSSL.SSL_ERROR_SYSCALL));
+                        self.flags.fatal_error = ((ssl_err == BoringSSL.SSL_ERROR_SSL) or (ssl_err == BoringSSL.SSL_ERROR_SYSCALL));
                         if ((read > 0)) {
                             _ = log("triggering data callback (read {d})", .{ read });
                             _ = self.triggerDataCallback(buffer[0..read]);
@@ -493,28 +527,9 @@ pub fn handleTraffic(self: *@This()) void {
     }
     const This = @This();
     const BUFFER_SIZE = 65536;
-    pub const Flags = packed struct(u8) {
-                handshake_state: HandshakeState = HandshakeState.HANDSHAKE_PENDING,
-                received_ssl_shutdown: bool = false,
-                sent_ssl_shutdown: bool = false,
-                is_client: bool = false,
-                authorized: bool = false,
-                fatal_error: bool = false,
-                closed_notified: bool = false,
-            };
-    pub const HandshakeState = enum(u2) {
-                HANDSHAKE_PENDING = 0,
-                HANDSHAKE_COMPLETED = 1,
-                HANDSHAKE_RENEGOTIATION_PENDING = 2,
-            };
-    pub const Handlers = struct {
-        ctx: T,
-        onOpen: *const fn (T) void,
-        onHandshake: *const fn (T, bool, uws.us_bun_verify_error_t) void,
-        write: *const fn (T, []const u8) void,
-        onData: *const fn (T, []const u8) void,
-        onClose: *const fn (T) void,
-    };
+    pub const Flags = SSLWrapperFlags;
+    pub const HandshakeState = SSLWrapperHandshakeState;
+    pub const Handlers = SSLWrapperHandlers(T);
 };
 }
 

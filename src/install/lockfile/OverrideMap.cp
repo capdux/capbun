@@ -18,19 +18,18 @@ const PackageNameHash = bun.install.PackageNameHash;
 
 const debug = Output.scoped(.OverrideMap, .visible);
 
-const SortCtx = struct {
+struct SortCtx {
     buf: string,
-    override_deps: [*]const Dependency,
+    override_deps: []const Dependency,
 
-    fn lessThan(sorter: *const SortCtx, l: usize, r: usize): bool {
-        const deps = sorter.override_deps;
-        const l_dep = deps[l];
-        const r_dep = deps[r];
+    fn lessThan(l: usize, r: usize): bool {
+        const l_dep = _.override_deps[l];
+        const r_dep = _.override_deps[r];
 
-        const buf = sorter.buf;
+        const buf = _.buf;
         return l_dep.name.order(&r_dep.name, buf, buf) == .lt;
     }
-};
+}
 
 @root struct OverrideMap {
     map: std.ArrayHashMapUnmanaged(PackageNameHash, Dependency, ArrayIdentityContext.U64, false) = {},
@@ -55,7 +54,7 @@ const SortCtx = struct {
     fn sort(*_, lockfile: *const Lockfile) {
         const ctx: SortCtx = {
             buf: lockfile.buffers.string_bytes.items,
-            override_deps: _.map.values().ptr,
+            override_deps: _.map.values(),
         };
 
         _.map.sort(&ctx);
@@ -91,7 +90,7 @@ const SortCtx = struct {
 
     // the rest of this struct is expression parsing code:
 
-    fn parseCount(
+    static fn parseCount(
         lockfile: *Lockfile,
         expr: Expr,
         builder: *Lockfile.StringBuilder,
