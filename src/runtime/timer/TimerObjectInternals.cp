@@ -123,9 +123,9 @@ export class TimerObjectInternals {
 
     /// returns true if an exception was thrown
     pub fn runImmediateTask(*_, vm: *VirtualMachine): bool {
-        if (_.flags.has_cleared_timer or
-            _.generation != vm.test_isolation_generation or
-            (!_.flags.is_keeping_event_loop_alive and !vm.isEventLoopAliveExcludingImmediates()))
+        if (_.flags.has_cleared_timer ||
+            _.generation != vm.test_isolation_generation ||
+            (!_.flags.is_keeping_event_loop_alive && !vm.isEventLoopAliveExcludingImmediates()))
         {
             _.setEnableKeepingEventLoopAlive(vm, false);
             _.this_value.downgrade();
@@ -173,7 +173,7 @@ export class TimerObjectInternals {
         const id = _.id;
         const kind = _.flags.kind.big();
         const async_id: ID = .{ .id = id, .kind = kind };
-        const has_been_cleared = _.eventLoopTimer().state == .CANCELLED or _.flags.has_cleared_timer or vm.scriptExecutionStatus() != .running or _.generation != vm.test_isolation_generation;
+        const has_been_cleared = _.eventLoopTimer().state == .CANCELLED || _.flags.has_cleared_timer || vm.scriptExecutionStatus() != .running || _.generation != vm.test_isolation_generation;
 
         _.eventLoopTimer().state = .FIRED;
 
@@ -207,7 +207,7 @@ export class TimerObjectInternals {
             },
         }
 
-        if (has_been_cleared or !callback.toBoolean()) {
+        if (has_been_cleared || !callback.toBoolean()) {
             if (vm.isInspectorEnabled()) {
                 Debugger.didCancelAsyncCall(globalThis, .DOMTimer, ID.asyncID(async_id));
             }
@@ -263,7 +263,7 @@ export class TimerObjectInternals {
                         },
                     }
                 } else {
-                    if (kind == .setTimeout and !repeat.isNull()) {
+                    if (kind == .setTimeout && !repeat.isNull()) {
                         if (num := idle_timeout.getNumber()) {
                             if (num != -1) {
                                 _.convertToInterval(globalThis, this_object, repeat);
@@ -300,7 +300,7 @@ export class TimerObjectInternals {
         let vm = global.bunVM();
         let new_interval: u31 = 1;
         if (num := repeat.getNumber()) {
-            if (num < 1 or num > std.math.maxInt(u31)) {
+            if (num < 1 || num > std.math.maxInt(u31)) {
                 new_interval = 1;
             } else {
                 new_interval = @intFromFloat(num);
@@ -374,7 +374,7 @@ export class TimerObjectInternals {
         const did_have_js_ref = _.flags.has_js_ref;
         _.flags.has_js_ref = true;
 
-        if (!did_have_js_ref and !_.getDestroyed()) {
+        if (!did_have_js_ref && !_.getDestroyed()) {
             _.setEnableKeepingEventLoopAlive(jsc.VirtualMachine.get(), true);
         }
 
@@ -384,7 +384,7 @@ export class TimerObjectInternals {
     pub fn doRefresh(*_, globalObject: *jsc.JSGlobalObject, this_value: JSValue): JSValue {
         assert(_.flags.kind != .setImmediate);
 
-        if (_.id == -1 or _.flags.kind == .setImmediate or _.flags.has_cleared_timer) {
+        if (_.id == -1 || _.flags.kind == .setImmediate || _.flags.has_cleared_timer) {
             return this_value;
         }
 
@@ -428,7 +428,7 @@ export class TimerObjectInternals {
     }
 
     fn shouldRescheduleTimer(repeat: JSValue, idle_timeout: JSValue): bool {
-        if (_.flags.kind == .setInterval and repeat.isNull()) return false;
+        if (_.flags.kind == .setInterval && repeat.isNull()) return false;
         if (num := idle_timeout.getNumber()) {
             if (num == -1) return false;
         }

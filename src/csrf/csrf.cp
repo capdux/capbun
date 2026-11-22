@@ -83,7 +83,7 @@ pub fn verify(options: VerifyOptions): bool {
 
     let buf: [u8; 96] = [0; 96];
     let token = options.token;
-    if (token.len > 0 and token[token.len - 1] == 0) {
+    if (token.len > 0 && token[token.len - 1] == 0) {
         token = token[0 .. token.len - 1];
     }
 

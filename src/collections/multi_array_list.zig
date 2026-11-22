@@ -294,7 +294,6 @@ pub fn MultiArrayList(comptime T: type) type {
             }
         }
         const SizesT = MultiArrayListSizes(elem_fields.len);
-        _ = &SizesT;
         break :blk SizesT{ .bytes = sizes_bytes, .fields = field_indexes };
 };
         const EntryType = entry: {
@@ -619,7 +618,6 @@ pub fn clone(self: @This(), gpa: Allocator) !Self {
 
 pub fn sortInternal(self: @This(), a: usize, b: usize, ctx: anytype, comptime mode: std.sort.Mode) void {
             const SortContext = MultiArrayListSortContext(@TypeOf(ctx), Slice, Field, fields);
-            _ = &SortContext;
             const sort_context = SortContext{ .sub_ctx = ctx, .slice = self.slice() };
             switch (mode) {
 .stable => {

@@ -178,9 +178,9 @@ pub fn Bun__randomUUIDv7_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame
     };
 
     const timestamp: u64 = brk: {
-        const timestamp_value: JSValue = if (!encoding_value.isUndefined() and arguments.len > 1)
+        const timestamp_value: JSValue = if (!encoding_value.isUndefined() && arguments.len > 1)
             arguments[1]
-        else if (arguments.len == 1 and encoding_value.isUndefined())
+        else if (arguments.len == 1 && encoding_value.isUndefined())
             arguments[0]
         else
             .js_undefined;
@@ -219,16 +219,16 @@ comptime {
 pub fn Bun__randomUUIDv5_(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
     const arguments: []const JSValue = callframe.argumentsUndef(3).slice();
 
-    if (arguments.len == 0 or arguments[0].isUndefinedOrNull()) {
+    if (arguments.len == 0 || arguments[0].isUndefinedOrNull()) {
         return globalThis.ERR(.INVALID_ARG_TYPE, "The \"name\" argument must be specified", .{}).throw();
     }
 
-    if (arguments.len < 2 or arguments[1].isUndefinedOrNull()) {
+    if (arguments.len < 2 || arguments[1].isUndefinedOrNull()) {
         return globalThis.ERR(.INVALID_ARG_TYPE, "The \"namespace\" argument must be specified", .{}).throw();
     }
 
     const encoding: jsc.Node.Encoding = brk: {
-        if (arguments.len > 2 and !arguments[2].isUndefined()) {
+        if (arguments.len > 2 && !arguments[2].isUndefined()) {
             if (arguments[2].isString()) {
                 const enc_opt = jsc.Node.Encoding.fromJS(arguments[2], globalThis)?;
                 if (enc_opt == null) {

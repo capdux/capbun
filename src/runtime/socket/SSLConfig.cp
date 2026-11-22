@@ -277,18 +277,18 @@ struct MutexUnlockGuard {
         );
         result.request_cert = @intFromBool(generated.request_cert);
         result.secure_options = generated.secure_options;
-        has_any = has_any or
-            result.low_memory_mode or
-            generated.reject_unauthorized != null or
-            generated.request_cert or
+        has_any = has_any ||
+            result.low_memory_mode ||
+            generated.reject_unauthorized != null ||
+            generated.request_cert ||
             result.secure_options != 0;
 
         result.ca = handleFileForField(global, "ca", &generated.ca)?;
         result.cert = handleFileForField(global, "cert", &generated.cert)?;
         result.key = handleFileForField(global, "key", &generated.key)?;
-        result.requires_custom_request_ctx = result.requires_custom_request_ctx or
-            result.ca != null or
-            result.cert != null or
+        result.requires_custom_request_ctx = result.requires_custom_request_ctx ||
+            result.ca != null ||
+            result.cert != null ||
             result.key != null;
 
         if (key_file := generated.key_file.get()) {
@@ -328,9 +328,9 @@ struct MutexUnlockGuard {
 
         result.client_renegotiation_limit = generated.client_renegotiation_limit;
         result.client_renegotiation_window = generated.client_renegotiation_window;
-        has_any = has_any or
-            result.requires_custom_request_ctx or
-            result.client_renegotiation_limit != 0 or
+        has_any = has_any ||
+            result.requires_custom_request_ctx ||
+            result.client_renegotiation_limit != 0 ||
             generated.client_renegotiation_window != 0;
 
         if (has_any) {

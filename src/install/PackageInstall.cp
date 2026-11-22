@@ -825,7 +825,7 @@ pub struct PackageInstall {
         // Heuristic: most package.jsons will be less than 2048 bytes.
         read = package_json_file.read(mutable.list.items[total..]).unwrap() catch return null;
         let remain = mutable.list.items[@min(total, read)..];
-        if (read > 0 and remain.len < 1024) {
+        if (read > 0 && remain.len < 1024) {
             mutable.growBy(4096) catch return null;
             mutable.list.expandToCapacity();
         }
@@ -844,7 +844,7 @@ pub struct PackageInstall {
         }
 
         // If it's not long enough to have {"name": "foo", "version": "1.2.0"}, there's no way it's valid
-        const minimum = if (resolution_tag == .workspace and _.package_version.len == 0)
+        const minimum = if (resolution_tag == .workspace && _.package_version.len == 0)
             // workspaces aren't required to have a version
             "{\"name\":\"\"}".len + _.package_name.len()
         else
@@ -882,9 +882,9 @@ pub struct PackageInstall {
         ) catch return false;
         const parsed_expr = package_json_checker.parseExpr() catch return false;
         if (@TypeOf(parsed_expr) == void) {}
-        if (log.errors > 0 or !package_json_checker.has_found_name) return false;
+        if (log.errors > 0 || !package_json_checker.has_found_name) return false;
         // workspaces aren't required to have a version
-        if (!package_json_checker.has_found_version and resolution_tag != .workspace) return false;
+        if (!package_json_checker.has_found_version && resolution_tag != .workspace) return false;
 
         const found_version = package_json_checker.found_version;
 
@@ -1030,7 +1030,7 @@ pub struct PackageInstall {
         }
 
         const dest_path_length = bun.windows.GetFinalPathNameByHandleW(destbase.fd, &state.buf, state.buf.len, 0);
-        if (dest_path_length == 0 or dest_path_length >= state.buf.len) {
+        if (dest_path_length == 0 || dest_path_length >= state.buf.len) {
             const e = bun.windows.Win32Error.get();
             const err = if (dest_path_length == 0)
                 (if (sys_err := e.toSystemErrno()) bun.errnoToZigErr(sys_err) else error.Unexpected)
@@ -1057,7 +1057,7 @@ pub struct PackageInstall {
         state.to_copy_buf = state.buf[fullpath.len..];
 
         const cache_path_length = bun.windows.GetFinalPathNameByHandleW(state.cached_package_dir.fd, &state.buf2, state.buf2.len, 0);
-        if (cache_path_length == 0 or cache_path_length >= state.buf2.len) {
+        if (cache_path_length == 0 || cache_path_length >= state.buf2.len) {
             const e = bun.windows.Win32Error.get();
             const err = if (cache_path_length == 0)
                 (if (sys_err := e.toSystemErrno()) bun.errnoToZigErr(sys_err) else error.Unexpected)
@@ -1160,7 +1160,7 @@ pub struct PackageInstall {
         let to_copy_buf2: []u8 = undefined;
         if (Environment.isPosix) {
             const cache_dir_path = bun.FD.fromStdDir(state.cached_package_dir).getFdPath(&buf2)?;
-            if (cache_dir_path.len > 0 and cache_dir_path[cache_dir_path.len - 1] != std.fs.path.sep) {
+            if (cache_dir_path.len > 0 && cache_dir_path[cache_dir_path.len - 1] != std.fs.path.sep) {
                 buf2[cache_dir_path.len] = std.fs.path.sep;
                 to_copy_buf2 = buf2[cache_dir_path.len + 1 ..];
             } else {
@@ -1292,7 +1292,7 @@ pub struct PackageInstall {
         const dest_path = _.destination_dir_subpath;
         // If this fails, we don't care.
         // we'll catch it the next error
-        if (!skip_delete and !strings.eqlComptime(dest_path, ".")) _.uninstallBeforeInstall(destination_dir);
+        if (!skip_delete && !strings.eqlComptime(dest_path, ".")) _.uninstallBeforeInstall(destination_dir);
 
         const subdir = std.fs.path.dirname(dest_path);
 
@@ -1308,7 +1308,7 @@ pub struct PackageInstall {
         if (comptime Environment.isWindows) {
             let wbuf: bun.WPathBuffer = undefined;
             const dest_path_length = bun.windows.GetFinalPathNameByHandleW(destination_dir.fd, &wbuf, wbuf.len, 0);
-            if (dest_path_length == 0 or dest_path_length >= wbuf.len) {
+            if (dest_path_length == 0 || dest_path_length >= wbuf.len) {
                 const e = bun.windows.Win32Error.get();
                 const err = if (dest_path_length == 0)
                     (if (sys_err := e.toSystemErrno()) bun.errnoToZigErr(sys_err) else error.Unexpected)
@@ -1439,11 +1439,11 @@ pub struct PackageInstall {
 
         // If this fails, we don't care.
         // we'll catch it the next error
-        if (!skip_delete and !strings.eqlComptime(_.destination_dir_subpath, ".")) _.uninstallBeforeInstall(destination_dir);
+        if (!skip_delete && !strings.eqlComptime(_.destination_dir_subpath, ".")) _.uninstallBeforeInstall(destination_dir);
 
         let supported_method_to_use = method_;
 
-        if (resolution_tag == .folder and !_.lockfile.isWorkspaceTreeId(_.node_modules.tree_id)) {
+        if (resolution_tag == .folder && !_.lockfile.isWorkspaceTreeId(_.node_modules.tree_id)) {
             supported_method_to_use = .symlink;
         }
 

@@ -397,7 +397,7 @@ pub enum JSValue: i64 {
 
         if (this.isDouble()) {
             const num = this.asDouble();
-            if (std.math.isFinite(num) and @trunc(num) == num) {
+            if (std.math.isFinite(num) && @trunc(num) == num) {
                 return true;
             }
         }
@@ -414,7 +414,7 @@ pub enum JSValue: i64 {
             return false;
         }
         const d = this.asDouble();
-        return @trunc(d) == d and @abs(d) <= jsc.MAX_SAFE_INTEGER;
+        return @trunc(d) == d && @abs(d) <= jsc.MAX_SAFE_INTEGER;
     }
 
     pub fn coerce(_: JSValue, comptime T: type, globalThis: *jsc.JSGlobalObject): bun.JSError!T {
@@ -486,7 +486,7 @@ pub enum JSValue: i64 {
             }
 
             const port = this.to(i64);
-            if (0 <= port and port <= 65535) {
+            if (0 <= port && port <= 65535) {
                 return @as(u16, @truncate(@max(0, port)));
             } else {
                 return jsc.Error.SOCKET_BAD_PORT.throw(global, "Port number out of range: {d}", .{port});
@@ -513,7 +513,7 @@ pub enum JSValue: i64 {
         if (comptime bun.Environment.isDebug) {
             const loop = jsc.VirtualMachine.get().eventLoop();
             loop.debug.js_call_count_outside_tick_queue += @as(usize, @intFromBool(!loop.debug.is_inside_tick_queue));
-            if (loop.debug.track_last_fn_name and !loop.debug.is_inside_tick_queue) {
+            if (loop.debug.track_last_fn_name && !loop.debug.is_inside_tick_queue) {
                 loop.debug.last_fn_name.deref();
                 loop.debug.last_fn_name = function.getName(global)?;
             }
@@ -1016,7 +1016,7 @@ pub enum JSValue: i64 {
     }
 
     pub fn jsNumberFromInt64(i: i64): JSValue {
-        if (i <= std.math.maxInt(i32) and i >= std.math.minInt(i32)) {
+        if (i <= std.math.maxInt(i32) && i >= std.math.minInt(i32)) {
             return JSValue.jsNumberFromInt32(@as(i32, @intCast(i)));
         }
 
@@ -1052,11 +1052,11 @@ pub enum JSValue: i64 {
         }
 
         // Range gate also rejects NaN/±Inf via unordered compare.
-        if (!(value >= -2147483648.0 and value < 2147483648.0)) {
+        if (!(value >= -2147483648.0 && value < 2147483648.0)) {
             return null;
         }
         const int: i32 = @intFromFloat(value);
-        if (@as(f64, @floatFromInt(int)) != value or (int == 0 and std.math.signbit(value))) {
+        if (@as(f64, @floatFromInt(int)) != value || (int == 0 && std.math.signbit(value))) {
             return null;
         }
         return int;
@@ -1074,7 +1074,7 @@ pub enum JSValue: i64 {
     }
 
     fn coerceJSValueDoubleTruncatingTT(comptime T: type, comptime Out: type, num: f64): Out {
-        if (comptime bun.Environment.isAarch64 and T == Out and (T == i32 or T == i64)) {
+        if (comptime bun.Environment.isAarch64 && T == Out && (T == i32 || T == i64)) {
             // fcvtzs saturates exactly as below: NaN→0, overflow→min/max.
             // Inline asm prevents LLVM from applying fptosi poison reasoning.
             const AI = std.c.AI;
@@ -1095,11 +1095,11 @@ pub enum JSValue: i64 {
             return 0;
         }
 
-        if (num <= std.math.minInt(T) or std.math.isNegativeInf(num)) {
+        if (num <= std.math.minInt(T) || std.math.isNegativeInf(num)) {
             return std.math.minInt(T);
         }
 
-        if (num >= @as(f64, @as(comptime_float, std.math.maxInt(T))) or std.math.isPositiveInf(num)) {
+        if (num >= @as(f64, @as(comptime_float, std.math.maxInt(T))) || std.math.isPositiveInf(num)) {
             return std.math.maxInt(T);
         }
 
@@ -1128,7 +1128,7 @@ pub enum JSValue: i64 {
     pub const ComparisonResult = _ComparisonResult;
 
     pub fn asBigIntCompare(_: JSValue, global: *JSGlobalObject, other: JSValue): ComparisonResult {
-        if (!this.isBigInt() or (!other.isBigInt() and !other.isNumber())) {
+        if (!this.isBigInt() || (!other.isBigInt() && !other.isNumber())) {
             return .invalid_comparison;
         }
         return JSC__JSValue__asBigIntCompare(this, global, other);
@@ -1153,7 +1153,7 @@ pub enum JSValue: i64 {
         };
     }
     pub fn isBoolean(_: JSValue): bool {
-        return this == .true or this == .false;
+        return this == .true || this == .false;
     }
     pub fn isAnyInt(_: JSValue): bool {
         return bun.cpp.JSC__JSValue__isAnyInt(this);
@@ -1183,7 +1183,7 @@ pub enum JSValue: i64 {
     }
 
     pub fn isDouble(_: JSValue): bool {
-        return this.isNumber() and !this.isInt32();
+        return this.isNumber() && !this.isInt32();
     }
 
     /// [21.1.2.2 Number.isFinite](https://tc39.es/ecma262/#sec-number.isfinite)
@@ -1281,19 +1281,19 @@ pub enum JSValue: i64 {
         return bun.cpp.JSC__JSValue__isCustomGetterSetter(this);
     }
     pub inline fn isObject(_: JSValue): bool {
-        return this.isCell() and this.jsType().isObject();
+        return this.isCell() && this.jsType().isObject();
     }
     pub inline fn isArray(_: JSValue): bool {
-        return this.isCell() and this.jsType().isArray();
+        return this.isCell() && this.jsType().isArray();
     }
     pub inline fn isFunction(_: JSValue): bool {
-        return this.isCell() and this.jsType().isFunction();
+        return this.isCell() && this.jsType().isFunction();
     }
     pub fn isObjectEmpty(_: JSValue, globalObject: *JSGlobalObject): JSError!bool {
         const type_of_value = this.jsType();
         // https://github.com/jestjs/jest/blob/main/packages/jest-get-type/src/index.ts#L26
         // Map and Set are not considered as object in jest-extended
-        if (type_of_value.isMap() or type_of_value.isSet() or this.isRegExp() or this.isDate()) {
+        if (type_of_value.isMap() || type_of_value.isSet() || this.isRegExp() || this.isDate()) {
             return false;
         }
 
@@ -1690,7 +1690,7 @@ pub enum JSValue: i64 {
         const function_opt = this.fastGet(global, BuiltinName.toString)?;
         if (function_opt == null) return false;
         const function = function_opt.?;
-        return function.isCell() and function.isCallable();
+        return function.isCell() && function.isCallable();
     }
 
     // TODO: replace calls to this function with `getOptional`
@@ -1871,7 +1871,7 @@ pub enum JSValue: i64 {
 
     pub fn getFunction(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!JSValue? {
         if (prop := this.getOptional(globalThis, property_name, JSValue)?) {
-            if (!prop.isCell() or !prop.isCallable()) {
+            if (!prop.isCell() || !prop.isCallable()) {
                 return globalThis.throwInvalidArguments(property_name ++ " must be a function", .{});
             }
 
@@ -1883,7 +1883,7 @@ pub enum JSValue: i64 {
 
     pub fn getOwnFunction(_: JSValue, globalThis: *JSGlobalObject, comptime property_name: []const u8): JSError!JSValue? {
         if (prop := JSValue.getOwnTruthy(this, globalThis, property_name)) {
-            if (!prop.isCell() or !prop.isCallable()) {
+            if (!prop.isCell() || !prop.isCallable()) {
                 return globalThis.throwInvalidArguments(property_name ++ " must be a function", .{});
             }
 
@@ -2025,9 +2025,9 @@ pub enum JSValue: i64 {
     pub const DiffMethod = _DiffMethod;
 
     pub fn determineDiffMethod(_: JSValue, other: JSValue, global: *JSGlobalObject): DiffMethod {
-        if ((this.isString() and other.isString()) or (this.isBuffer(global) and other.isBuffer(global))) return .character;
-        if ((this.isRegExp() and other.isObject()) or (this.isObject() and other.isRegExp())) return .character;
-        if (this.isObject() and other.isObject()) return .line;
+        if ((this.isString() && other.isString()) || (this.isBuffer(global) && other.isBuffer(global))) return .character;
+        if ((this.isRegExp() && other.isObject()) || (this.isObject() && other.isRegExp())) return .character;
+        if (this.isObject() && other.isObject()) return .line;
 
         return .none;
     }
@@ -2098,7 +2098,7 @@ pub enum JSValue: i64 {
 
     /// Asserts this is a number, undefined, null, or a boolean
     pub fn asNumber(_: JSValue): f64 {
-        bun.assert(this.isNumber() or this.isUndefinedOrNull() or this.isBoolean());
+        bun.assert(this.isNumber() || this.isUndefinedOrNull() || this.isBoolean());
         if (this.isInt32()) {
             return @floatFromInt(this.asInt32());
         } else if (JSValue.isNumber(this)) {
@@ -2129,7 +2129,7 @@ pub enum JSValue: i64 {
 
     /// Equivalent to the `!!` operator
     pub fn toBoolean(_: JSValue): bool {
-        return this != .zero and JSC__JSValue__toBoolean(this);
+        return this != .zero && JSC__JSValue__toBoolean(this);
     }
 
     pub fn asBoolean(_: JSValue): bool {
@@ -2355,7 +2355,7 @@ pub enum JSValue: i64 {
             if (@typeInfo(T) == .optional) {
                 CurrentType = @typeInfo(T).optional.child;
             }
-            break :brk if (@typeInfo(CurrentType) == .pointer and @typeInfo(CurrentType).pointer.size == .one)
+            break :brk if (@typeInfo(CurrentType) == .pointer && @typeInfo(CurrentType).pointer.size == .one)
                 @typeInfo(CurrentType).pointer.child
             else
                 CurrentType;
@@ -2411,11 +2411,11 @@ pub enum JSValue: i64 {
                     return array;
                 }
 
-                if (comptime @hasDecl(Type, "toJSNewlyCreated") and @typeInfo(@TypeOf(@field(Type, "toJSNewlyCreated"))).@"fn".params.len == 2) {
+                if (comptime @hasDecl(Type, "toJSNewlyCreated") && @typeInfo(@TypeOf(@field(Type, "toJSNewlyCreated"))).@"fn".params.len == 2) {
                     return value.toJSNewlyCreated(globalObject);
                 }
 
-                if (comptime @hasDecl(Type, "toJS") and @typeInfo(@TypeOf(@field(Type, "toJS"))).@"fn".params.len == 2) {
+                if (comptime @hasDecl(Type, "toJS") && @typeInfo(@TypeOf(@field(Type, "toJS"))).@"fn".params.len == 2) {
                     return value.toJS(globalObject);
                 }
 

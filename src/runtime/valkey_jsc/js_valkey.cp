@@ -351,7 +351,7 @@ pub struct SubscriptionCtx {
         // The user may request .close(), in which case we can dispose of the subscription object. If that is the case,
         // finalized will be true. Otherwise, we should treat the object as disposable if there are no active
         // subscriptions.
-        return this.parent().client.flags.finalized or !(this.hasSubscriptions(global_object)?);
+        return this.parent().client.flags.finalized || !(this.hasSubscriptions(global_object)?);
     }
 
     pub fn deinit(*_, global_object: *jsc.JSGlobalObject) {
@@ -474,7 +474,7 @@ pub struct JSValkeyClient {
         const protocol_utf8 = protocol_str.toUTF8WithoutRef(this_allocator);
         const _protocol_utf8_guard = DeinitGuard<@TypeOf(protocol_utf8)>{ val: protocol_utf8 };
         // Remove the trailing ':' from protocol (e.g., "redis:" -> "redis")
-        const protocol_slice = if (protocol_utf8.slice().len > 0 and protocol_utf8.slice()[protocol_utf8.slice().len - 1] == ':')
+        const protocol_slice = if (protocol_utf8.slice().len > 0 && protocol_utf8.slice()[protocol_utf8.slice().len - 1] == ':')
             protocol_utf8.slice()[0 .. protocol_utf8.slice().len - 1]
         else
             protocol_utf8.slice();
@@ -543,7 +543,7 @@ pub struct JSValkeyClient {
             },
         };
 
-        const options = if (arguments.len >= 2 and !arguments[1].isUndefinedOrNull() and arguments[1].isObject())
+        const options = if (arguments.len >= 2 && !arguments[1].isUndefinedOrNull() && arguments[1].isObject())
             Options.fromJS(globalObject, arguments[1])?
         else
             valkey.Options{};
@@ -556,7 +556,7 @@ pub struct JSValkeyClient {
 
         let _cs_guard = FreeSliceGuard{ ptr: &connection_strings, alloc: this_allocator, active: true };
 
-        if (username_utf8.slice().len > 0 or password_utf8.slice().len > 0 or hostname_slice.len > 0) {
+        if (username_utf8.slice().len > 0 || password_utf8.slice().len > 0 || hostname_slice.len > 0) {
             let b = bun.StringBuilder{};
             b.count(username_utf8.slice());
             b.count(password_utf8.slice());
@@ -1345,13 +1345,13 @@ pub struct JSValkeyClient {
         // in `subscriptionCallbackMap()` because `this_value.tryGet()` returns
         // null for a finalized ref. Short-circuit here: a finalized client has
         // no subscriptions by definition.
-        const subs_deletable: bool = this.client.flags.finalized or
+        const subs_deletable: bool = this.client.flags.finalized ||
             !(this._subscription_ctx.hasSubscriptions(this.globalObject) catch false);
 
-        const has_activity = has_pending_commands or !subs_deletable or this.client.flags.is_reconnecting;
+        const has_activity = has_pending_commands || !subs_deletable || this.client.flags.is_reconnecting;
 
         // There's a couple cases to handle here:
-        if (has_activity or this.client.status == .connecting) {
+        if (has_activity || this.client.status == .connecting) {
             // If we currently have pending activity or we are connecting, we need to keep the event
             // loop alive.
             this.poll_ref.ref(this.client.vm);

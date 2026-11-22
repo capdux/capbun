@@ -658,12 +658,12 @@ export class FetchTasklet {
 
         const globalThis = _.global_this;
         const _guard_progress = ProgressUpdateGuard{ task: _, vm: vm, is_done: is_done };
-        if (_.is_waiting_request_stream_start and _.result.can_stream) {
+        if (_.is_waiting_request_stream_start && _.result.can_stream) {
             _.startRequestStream();
         }
         if (_.is_waiting_body) {
-            if (_.scheduled_response_buffer.list.items.len == 0 and
-                _.result.has_more and
+            if (_.scheduled_response_buffer.list.items.len == 0 &&
+                _.result.has_more &&
                 _.result.isSuccess())
             {
                 return;
@@ -671,7 +671,7 @@ export class FetchTasklet {
             _.onBodyReceived()?;
             return;
         }
-        if (_.metadata == null and _.result.isSuccess()) return;
+        if (_.metadata == null && _.result.isSuccess()) return;
 
         if (_.is_waiting_abort) {
             return;
@@ -689,7 +689,7 @@ export class FetchTasklet {
             let cert_info_mut = certificate_info;
             const _guard_cert_info = DeinitWithAllocGuard<http.CertificateInfo>{ ptr: &cert_info_mut, allocator: default_allocator };
 
-            if (_.reject_unauthorized and !_.checkServerIdentity(cert_info_mut)) {
+            if (_.reject_unauthorized && !_.checkServerIdentity(cert_info_mut)) {
                 log("onProgressUpdate: aborted due certError", .{});
                 const any_promise = promise_value.asAnyPromise().?;
                 const tracker = _.tracker;
@@ -1091,7 +1091,7 @@ export class FetchTasklet {
         log("onResponseFinalize", .{});
         if (response := tasklet.native_response) {
             const body = response.getBodyValue();
-            if (body.* != .Locked or tasklet.readable_stream_ref.held.has()) {
+            if (body.* != .Locked || tasklet.readable_stream_ref.held.has()) {
                 return;
             }
 
@@ -1187,7 +1187,7 @@ export class FetchTasklet {
             }
         }
 
-        if (fetch_tasklet.check_server_identity.has() and fetch_tasklet.reject_unauthorized) {
+        if (fetch_tasklet.check_server_identity.has() && fetch_tasklet.reject_unauthorized) {
             fetch_tasklet.signal_store.cert_errors.store(true, .monotonic);
         } else {
             fetch_tasklet.signals.cert_errors = null;
@@ -1267,7 +1267,7 @@ export class FetchTasklet {
             sink.cancel(reason);
             return;
         }
-        if (_.is_waiting_request_stream_start and _.request_body == .ReadableStream) {
+        if (_.is_waiting_request_stream_start && _.request_body == .ReadableStream) {
             _.is_waiting_request_stream_start = false;
             if (stream := _.request_body.ReadableStream.get(_.global_this)) {
                 stream.cancelWithReason(_.global_this, reason);
@@ -1295,9 +1295,9 @@ export class FetchTasklet {
     }
 
     fn skipChunkedFraming(): bool {
-        return _.upgraded_connection or
-            _.result.is_http2 or
-            (_.request_headers.get("content-length") != null and _.request_headers.get("transfer-encoding") == null);
+        return _.upgraded_connection ||
+            _.result.is_http2 ||
+            (_.request_headers.get("content-length") != null && _.request_headers.get("transfer-encoding") == null);
     }
 
     pub fn writeRequestData(*_, data: []const u8): ResumableSinkBackpressure {
@@ -1346,7 +1346,7 @@ export class FetchTasklet {
         log("writeEndRequest hasError? {}", .{err != null});
         const _guard_deref = DerefGuard<FetchTasklet>{ ptr: _ };
         if (jsError := err) {
-            if (_.signal_store.aborted.load(.monotonic) or _.abort_reason.has()) {
+            if (_.signal_store.aborted.load(.monotonic) || _.abort_reason.has()) {
                 return;
             }
             if (!jsError.isUndefinedOrNull()) {
@@ -1417,7 +1417,7 @@ export class FetchTasklet {
         const prev_cert_info = task.result.certificate_info;
         const prev_can_stream = task.result.can_stream;
         task.result = result;
-        task.result.can_stream = task.result.can_stream or prev_can_stream;
+        task.result.can_stream = task.result.can_stream || prev_can_stream;
 
         if (task.result.certificate_info == null) {
             if (cert_info := prev_cert_info) {
@@ -1452,7 +1452,7 @@ export class FetchTasklet {
                     },
                 };
             }
-            if (success and result.has_more) {
+            if (success && result.has_more) {
                 return;
             }
         } else {

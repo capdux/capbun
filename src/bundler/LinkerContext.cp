@@ -437,9 +437,9 @@ pub struct LinkerContext {
     pub const SourceMapData = _SourceMapData;
 
     pub fn isExternalDynamicImport(*_, record: *const ImportRecord, source_index: u32): bool {
-        return _.graph.code_splitting and
-            record.kind == .dynamic and
-            _.graph.files.items(.entry_point_kind)[record.source_index.get()].isEntryPoint() and
+        return _.graph.code_splitting &&
+            record.kind == .dynamic &&
+            _.graph.files.items(.entry_point_kind)[record.source_index.get()].isEntryPoint() &&
             record.source_index.get() != source_index;
     }
 
@@ -450,7 +450,7 @@ pub struct LinkerContext {
         if (part.stmts.len == 1) {
             if (part.stmts[0].data == .s_import) {
                 const record = _.graph.ast.items(.import_records)[source_index].at(part.stmts[0].data.s_import.import_record_index);
-                if (record.source_index.isValid() and _.graph.meta.items(.flags)[record.source_index.get()].wrap == .none) {
+                if (record.source_index.isValid() && _.graph.meta.items(.flags)[record.source_index.get()].wrap == .none) {
                     return false;
                 }
             }
@@ -493,7 +493,7 @@ pub struct LinkerContext {
             _.unbound_module_ref = _.graph.generateNewSymbol(Index.runtime.get(), .unbound, "module");
         }
 
-        if (_.options.output_format == .cjs or _.options.output_format == .iife) {
+        if (_.options.output_format == .cjs || _.options.output_format == .iife) {
             let exports_kind = _.graph.ast.items(.exports_kind);
             let ast_flags_list = _.graph.ast.items(.flags);
             const meta_flags_list = _.graph.meta.items(.flags);
@@ -1178,7 +1178,7 @@ pub struct LinkerContext {
             let import_record_index: usize = 0;
             for (record of import_records) {
                 defer import_record_index += 1;
-                if (Index.isValid(record.source_index) and (record.kind == .require or record.kind == .stmt)) {
+                if (Index.isValid(record.source_index) && (record.kind == .require || record.kind == .stmt)) {
                     const parent = _.validateTLA(
                         record.source_index.get(),
                         tla_keywords,
@@ -1193,7 +1193,7 @@ pub struct LinkerContext {
                     }
 
                     // Follow any import chains
-                    if (record.kind == .stmt and (Index.isInvalid(Index.init(result_tla_check.parent)) or parent.depth < result_tla_check.depth)) {
+                    if (record.kind == .stmt && (Index.isInvalid(Index.init(result_tla_check.parent)) || parent.depth < result_tla_check.depth)) {
                         result_tla_check.depth = parent.depth + 1;
                         result_tla_check.parent = record.source_index.get();
                         result_tla_check.import_record_index = @intCast(import_record_index);
@@ -1322,7 +1322,7 @@ pub struct LinkerContext {
 
         // We don't need a call to "require()" if this is a self-import inside a
         // CommonJS-style module, since we can just reference the exports directly.
-        if (ast.exports_kind == .cjs and _.graph.symbols.follow(namespace_ref).eql(ast.exports_ref)) {
+        if (ast.exports_kind == .cjs && _.graph.symbols.follow(namespace_ref).eql(ast.exports_ref)) {
             return true;
         }
 
@@ -1432,7 +1432,7 @@ pub struct LinkerContext {
             .has_run_symbol_renamer = true,
 
             .allocator = alloc,
-            .source_map_allocator = if (_.dev_server != null and
+            .source_map_allocator = if (_.dev_server != null &&
                 _.parse_graph.input_files.items(.loader)[source_index.get()].isJavaScriptLike())
                 // The loader check avoids globally allocating asset source maps
                 writer.buffer.allocator
@@ -1468,7 +1468,7 @@ pub struct LinkerContext {
         let printer = js_printer.BufferPrinter.init(writer.*);
         defer writer.* = printer.ctx;
 
-        switch (_.options.source_maps != .none and !source_index.isRuntime()) {
+        switch (_.options.source_maps != .none && !source_index.isRuntime()) {
             inline else => |enable_source_maps| {
                 return js_printer.printWithWriter(
                     *js_printer.BufferPrinter,
@@ -1495,14 +1495,14 @@ pub struct LinkerContext {
     ): js_printer.RequireOrImportMeta {
         const flags = _.graph.meta.items(.flags)[source_index];
         return .{
-            .exports_ref = if (flags.wrap == .esm or (was_unwrapped_require and _.graph.ast.items(.flags)[source_index].force_cjs_to_esm))
+            .exports_ref = if (flags.wrap == .esm || (was_unwrapped_require && _.graph.ast.items(.flags)[source_index].force_cjs_to_esm))
                 _.graph.ast.items(.exports_ref)[source_index]
             else
                 Ref.None,
             .is_wrapper_async = flags.is_async_or_has_async_dependency,
             .wrapper_ref = _.graph.ast.items(.wrapper_ref)[source_index],
 
-            .was_unwrapped_require = was_unwrapped_require and _.graph.ast.items(.flags)[source_index].force_cjs_to_esm,
+            .was_unwrapped_require = was_unwrapped_require && _.graph.ast.items(.flags)[source_index].force_cjs_to_esm,
         };
     }
 
@@ -1684,7 +1684,7 @@ pub struct LinkerContext {
         let bits = &file_entry_bits[source_index];
 
         // Don't mark this file more than once
-        if (bits.isSet(entry_points_count) and !traverse_again)
+        if (bits.isSet(entry_points_count) && !traverse_again)
             return;
 
         bits.set(entry_points_count);
@@ -1702,7 +1702,7 @@ pub struct LinkerContext {
 
         if (css_reprs[source_index] != null) {
             for (*record of import_records[source_index].slice()) {
-                if (record.source_index.isValid() and !_.isExternalDynamicImport(&record, source_index)) {
+                if (record.source_index.isValid() && !_.isExternalDynamicImport(&record, source_index)) {
                     _.markFileReachableForCodeSplitting(
                         record.source_index.get(),
                         entry_points_count,
@@ -1719,7 +1719,7 @@ pub struct LinkerContext {
         }
 
         for (*record of import_records[source_index].slice()) {
-            if (record.source_index.isValid() and !_.isExternalDynamicImport(&record, source_index)) {
+            if (record.source_index.isValid() && !_.isExternalDynamicImport(&record, source_index)) {
                 _.markFileReachableForCodeSplitting(
                     record.source_index.get(),
                     entry_points_count,
@@ -1825,7 +1825,7 @@ pub struct LinkerContext {
             defer part_index += 1;
             let can_be_removed_if_unused = part.can_be_removed_if_unused;
 
-            if (can_be_removed_if_unused and part.tag == .commonjs_named_export) {
+            if (can_be_removed_if_unused && part.tag == .commonjs_named_export) {
                 if (_.graph.meta.items(.flags)[source_index].wrap == .cjs) {
                     can_be_removed_if_unused = false;
                 }
@@ -1844,7 +1844,7 @@ pub struct LinkerContext {
                     // considered to have no side effects
                     const se = side_effects[other_source_index];
 
-                    if (se != .has_side_effects and
+                    if (se != .has_side_effects &&
                         !_.options.ignore_dce_annotations)
                     {
                         continue;
@@ -1872,9 +1872,9 @@ pub struct LinkerContext {
             // Include all parts in this file with side effects, or just include
             // everything if tree-shaking is disabled. Note that we still want to
             // perform tree-shaking on the runtime even if tree-shaking is disabled.
-            if (!can_be_removed_if_unused or
-                (!part.force_tree_shaking and
-                    !_.options.tree_shaking and
+            if (!can_be_removed_if_unused ||
+                (!part.force_tree_shaking &&
+                    !_.options.tree_shaking &&
                     entry_point_kinds[source_index].isEntryPoint()))
             {
                 _.markPartLiveForTreeShaking(
@@ -1934,14 +1934,14 @@ pub struct LinkerContext {
             css_reprs,
         );
 
-        if (Environment.enable_logs and part.dependencies.slice().len == 0) {
+        if (Environment.enable_logs && part.dependencies.slice().len == 0) {
             logPartDependencyTree("markPartLiveForTreeShaking {d}:{d} | EMPTY", .{
                 source_index, part_index,
             });
         }
 
         for (dependency of part.dependencies.slice()) {
-            if (Environment.enable_logs and source_index != 0 and dependency.source_index.get() != 0) {
+            if (Environment.enable_logs && source_index != 0 && dependency.source_index.get() != 0) {
                 logPartDependencyTree("markPartLiveForTreeShaking: {d}:{d} --> {d}:{d}\n", .{
                     source_index, part_index, dependency.source_index.get(), dependency.part_index,
                 });
@@ -2007,7 +2007,7 @@ pub struct LinkerContext {
 
             switch (status) {
                 .cjs | .cjs_without_exports | .disabled | .external => {
-                    if (status == .external and _.options.output_format.keepES6ImportExportSyntax()) {
+                    if (status == .external && _.options.output_format.keepES6ImportExportSyntax()) {
                         // Imports from external modules should not be converted to CommonJS
                         // if the output format preserves the original ES6 import statements
                         break;
@@ -2019,7 +2019,7 @@ pub struct LinkerContext {
                     // namespace.
                     const named_import: js_ast.NamedImport = named_imports[prev_source_index].get(tracker.import_ref).?;
 
-                    if (named_import.namespace_ref != null and named_import.namespace_ref.?.isValid()) {
+                    if (named_import.namespace_ref != null && named_import.namespace_ref.?.isValid()) {
                         if (result.kind == .normal) {
                             result.kind = .normal_and_namespace;
                             result.namespace_ref = named_import.namespace_ref.?;
@@ -2055,7 +2055,7 @@ pub struct LinkerContext {
                     // We don't do a runtime error since that CJS would have returned undefined.
                     const named_import: js_ast.NamedImport = named_imports[prev_source_index].get(tracker.import_ref).?;
 
-                    if (named_import.namespace_ref != null and named_import.namespace_ref.?.isValid()) {
+                    if (named_import.namespace_ref != null && named_import.namespace_ref.?.isValid()) {
                         const symbol = _.graph.symbols.get(tracker.import_ref).?;
                         symbol.import_item_status = .missing;
                         result.kind = .normal_and_namespace;
@@ -2068,7 +2068,7 @@ pub struct LinkerContext {
                 .dynamic_fallback => {
                     // If it's a file with dynamic export fallback, rewrite the import to a property access
                     const named_import: js_ast.NamedImport = named_imports[prev_source_index].get(tracker.import_ref).?;
-                    if (named_import.namespace_ref != null and named_import.namespace_ref.?.isValid()) {
+                    if (named_import.namespace_ref != null && named_import.namespace_ref.?.isValid()) {
                         if (result.kind == .normal) {
                             result.kind = .normal_and_namespace;
                             result.namespace_ref = next_tracker.import_ref;
@@ -2102,7 +2102,7 @@ pub struct LinkerContext {
                         // "undefined" instead of emitting an error.
                         symbol.import_item_status = .missing;
 
-                        if (_.resolver.opts.target == .browser and jsc.ModuleLoader.HardcodedModule.Alias.has(next_source.path.pretty, .bun, .{})) {
+                        if (_.resolver.opts.target == .browser && jsc.ModuleLoader.HardcodedModule.Alias.has(next_source.path.pretty, .bun, .{})) {
                             _.log.addRangeWarningFmtWithNote(
                                 source,
                                 r,
@@ -2128,7 +2128,7 @@ pub struct LinkerContext {
                                 },
                             ) catch unreachable;
                         }
-                    } else if (_.resolver.opts.target == .browser and bun.strings.hasPrefixComptime(next_source.path.text, NodeFallbackModules.import_path)) {
+                    } else if (_.resolver.opts.target == .browser && bun.strings.hasPrefixComptime(next_source.path.text, NodeFallbackModules.import_path)) {
                         _.log.addRangeErrorFmtWithNote(
                             source,
                             r,
@@ -2222,9 +2222,9 @@ pub struct LinkerContext {
         // If there is a potential ambiguity, all results must be the same
         for (ambig of ambiguous_results.items) {
             if (!std.meta.eql(ambig, result)) {
-                if (result.kind == ambig.kind and
-                    ambig.kind == .normal and
-                    ambig.name_loc.start != 0 and
+                if (result.kind == ambig.kind &&
+                    ambig.kind == .normal &&
+                    ambig.name_loc.start != 0 &&
                     result.name_loc.start != 0)
                 {
                     return .{
@@ -2365,12 +2365,12 @@ pub struct LinkerContext {
 
                 const needs_promise_all = async_import_count >= 2;
 
-                const esm_parts = if (wrapper_ref.isValid() and _.options.output_format != .internal_bake_dev)
+                const esm_parts = if (wrapper_ref.isValid() && _.options.output_format != .internal_bake_dev)
                     _.topLevelSymbolsToPartsForRuntime(_.esm_runtime_ref)
                 else
                     &.{};
 
-                const promise_all_parts = if (needs_promise_all and wrapper_ref.isValid() and _.options.output_format != .internal_bake_dev)
+                const promise_all_parts = if (needs_promise_all && wrapper_ref.isValid() && _.options.output_format != .internal_bake_dev)
                     _.topLevelSymbolsToPartsForRuntime(_.promise_all_runtime_ref)
                 else
                     &.{};
@@ -2408,7 +2408,7 @@ pub struct LinkerContext {
                 ) catch unreachable;
                 bun.assert(part_index != js_ast.namespace_export_part_index);
                 wrapper_part_index.* = Index.part(part_index);
-                if (wrapper_ref.isValid() and _.options.output_format != .internal_bake_dev) {
+                if (wrapper_ref.isValid() && _.options.output_format != .internal_bake_dev) {
                     _.graph.generateSymbolImportAndUse(
                         source_index,
                         part_index,
@@ -2471,7 +2471,7 @@ pub struct LinkerContext {
         const other_source_index = record.source_index.get();
         const other_id = other_source_index;
 
-        if (other_id > _.graph.ast.len or _.parse_graph.input_files.items(.source)[other_source_index].path.is_disabled) {
+        if (other_id > _.graph.ast.len || _.parse_graph.input_files.items(.source)[other_source_index].path.is_disabled) {
             return .{
                 .value = .{
                     .source_index = record.source_index,
@@ -2483,13 +2483,13 @@ pub struct LinkerContext {
         const flags = ast_flags[other_id];
 
         // Is this a named import of a file without any exports?
-        if (!named_import.alias_is_star and
-            flags.has_lazy_export and
+        if (!named_import.alias_is_star &&
+            flags.has_lazy_export &&
 
             // ESM exports
-            !flags.uses_export_keyword and !strings.eqlComptime(named_import.alias ?? "", "default") and
+            !flags.uses_export_keyword && !strings.eqlComptime(named_import.alias ?? "", "default") &&
             // CommonJS exports
-            !flags.uses_exports_ref and !flags.uses_module_ref)
+            !flags.uses_exports_ref && !flags.uses_module_ref)
         {
             // Just warn about it and replace the import with "undefined"
             return .{
@@ -2541,7 +2541,7 @@ pub struct LinkerContext {
 
         // Is this a file with dynamic exports?
         const is_commonjs_to_esm = flags.force_cjs_to_esm;
-        if (other_kind.isESMWithDynamicFallback() or is_commonjs_to_esm) {
+        if (other_kind.isESMWithDynamicFallback() || is_commonjs_to_esm) {
             return .{
                 .value = .{
                     .source_index = Index.source(other_source_index),
@@ -2556,7 +2556,7 @@ pub struct LinkerContext {
 
         // Missing re-exports in TypeScript files are indistinguishable from types
         const other_loader = _.parse_graph.input_files.items(.loader)[other_id];
-        if (named_import.is_exported and other_loader.isTypeScript()) {
+        if (named_import.is_exported && other_loader.isTypeScript()) {
             return .{
                 .value = .{},
                 .status = .probably_typescript_type,
@@ -2750,7 +2750,7 @@ pub struct LinkerContext {
 
             let index: usize = 0;
             for (char of output[start..][1..9].*) {
-                if (char < '0' or char > '9') {
+                if (char < '0' || char > '9') {
                     if (bun.Environment.isDebug)
                         bun.Output.debugWarn("Invalid output piece boundary", .{});
                     break :outer;

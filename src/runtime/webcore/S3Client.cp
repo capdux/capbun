@@ -153,7 +153,7 @@ export class S3Client {
 
     pub fn writeFormat(*_, comptime Formatter: type, formatter: *Formatter, writer: anytype, comptime enable_ansi_colors: bool): !void {
         writer.writeAll(Output.prettyFmt("<r>S3Client<r>", enable_ansi_colors))?;
-        const bucket_name = if (_.credentials.virtual_hosted_style and _.credentials.endpoint.len > 0) (S3Credentials.guessBucket(_.credentials.endpoint) ?? _.credentials.bucket) else _.credentials.bucket;
+        const bucket_name = if (_.credentials.virtual_hosted_style && _.credentials.endpoint.len > 0) (S3Credentials.guessBucket(_.credentials.endpoint) ?? _.credentials.bucket) else _.credentials.bucket;
         if (bucket_name.len > 0) {
             writer.print(
                 Output.prettyFmt(" (<green>\"{s}\"<r>)<r> {{", enable_ansi_colors),

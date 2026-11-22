@@ -201,7 +201,7 @@ pub fn listObjects(
     }
 
     if (listOptions.encoding_type != null) {
-        if (listOptions.continuation_token != null or listOptions.delimiter != null) {
+        if (listOptions.continuation_token != null || listOptions.delimiter != null) {
             handleOom(search_params.appendSlice(default_allocator, "&encoding-type=url"));
         } else {
             handleOom(search_params.appendSlice(default_allocator, "encoding-type=url"));
@@ -209,14 +209,14 @@ pub fn listObjects(
     }
 
     if (fetch_owner := listOptions.fetch_owner) {
-        if (listOptions.continuation_token != null or listOptions.delimiter != null or listOptions.encoding_type != null) {
+        if (listOptions.continuation_token != null || listOptions.delimiter != null || listOptions.encoding_type != null) {
             handleOom(search_params.appendFmt(default_allocator, "&fetch-owner={}", .{ fetch_owner }));
         } else {
             handleOom(search_params.appendFmt(default_allocator, "fetch-owner={}", .{ fetch_owner }));
         }
     }
 
-    if (listOptions.continuation_token != null or listOptions.delimiter != null or listOptions.encoding_type != null or listOptions.fetch_owner != null) {
+    if (listOptions.continuation_token != null || listOptions.delimiter != null || listOptions.encoding_type != null || listOptions.fetch_owner != null) {
         handleOom(search_params.appendSlice(default_allocator, "&list-type=2"));
     } else {
         handleOom(search_params.appendSlice(default_allocator, "list-type=2"));
@@ -330,7 +330,7 @@ pub fn upload(
 
 export class NetworkSinkCallbackWrapper {
     static fn callback(result: S3UploadResult, sink: *WebCore.NetworkSink): JSTerminatedError!void {
-        if (sink.endPromise.hasValue() or sink.flushPromise.hasValue()) {
+        if (sink.endPromise.hasValue() || sink.flushPromise.hasValue()) {
             let event_loop = sink.globalThis.bunVM().eventLoop();
             event_loop.enter();
             defer event_loop.exit();
@@ -459,7 +459,7 @@ export class S3UploadStreamWrapper {
         this.detachSink();
         const _self_guard = DerefGuard<S3UploadStreamWrapper>{ ptr: this };
         if (js_err := err_val) {
-            if (this.endPromise.hasValue() and !js_err.isEmptyOrUndefinedOrNull()) {
+            if (this.endPromise.hasValue() && !js_err.isEmptyOrUndefinedOrNull()) {
                 this.endPromise.reject(this.global, js_err) catch {};
                 this.endPromise = .empty;
             }

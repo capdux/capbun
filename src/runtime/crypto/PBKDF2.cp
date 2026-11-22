@@ -191,14 +191,14 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
 
     const keylen_num = arg3.asNumber();
 
-    if (std.math.isInf(keylen_num) or std.math.isNan(keylen_num)) {
+    if (std.math.isInf(keylen_num) || std.math.isNan(keylen_num)) {
         return globalThis.throwRangeError(keylen_num, .{
             .field_name = "keylen",
             .msg = "an integer",
         });
     }
 
-    if (keylen_num < 0 or keylen_num > std.math.maxInt(i32)) {
+    if (keylen_num < 0 || keylen_num > std.math.maxInt(i32)) {
         return globalThis.throwRangeError(keylen_num, .{ .field_name = "keylen", .min = 0, .max = std.math.maxInt(i32) });
     }
 
@@ -214,7 +214,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
 
     const iteration_count = arg2.coerce(i64, globalThis)?;
 
-    if (!globalThis.hasException() and (iteration_count < 1 or iteration_count > std.math.maxInt(i32))) {
+    if (!globalThis.hasException() && (iteration_count < 1 || iteration_count > std.math.maxInt(i32))) {
         return globalThis.throwRangeError(iteration_count, .{ .field_name = "iterations", .min = 1, .max = std.math.maxInt(i32) + 1 });
     }
 
@@ -271,7 +271,7 @@ pub fn fromJS(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame, is_asy
 
     if (out.password.slice().len > std.math.maxInt(i32)) return globalThis.throwInvalidArguments("password is too long", .{});
 
-    if (is_async and !arg5.isFunction()) return globalThis.throwInvalidArgumentTypeValue("callback", "function", arg5);
+    if (is_async && !arg5.isFunction()) return globalThis.throwInvalidArgumentTypeValue("callback", "function", arg5);
 
     return out;
 }

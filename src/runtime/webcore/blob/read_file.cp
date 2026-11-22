@@ -301,7 +301,7 @@ export class ReadFile {
         let cb = _.onCompleteCallback;
         let cb_ctx = _.onCompleteCtx;
 
-        if (_.store == null and _.system_error != null) {
+        if (_.store == null && _.system_error != null) {
             let system_error = _.system_error.?;
             destroy(_);
             cb(cb_ctx, ReadFileResultType { err = system_error });
@@ -406,9 +406,9 @@ export class ReadFile {
         _.could_block = !isRegularFile(stat.mode);
         _.total_size = @intCast(@min(@max(stat.size, 0), Blob.max_size));
 
-        if (stat.size > 0 and !_.could_block) {
+        if (stat.size > 0 && !_.could_block) {
             _.size = @min(_.total_size, _.max_length);
-        } else if (stat.size == 0 and _.could_block) {
+        } else if (stat.size == 0 && _.could_block) {
             _.size = @min(_.max_length, 4096);
         }
 
@@ -429,14 +429,14 @@ export class ReadFile {
         if (_.errno != null)
             return _.onFinish();
 
-        if (_.size == 0 and isRegularFile(_.file_store.mode)) {
+        if (_.size == 0 && isRegularFile(_.file_store.mode)) {
             _.buffer = .{};
             _.byte_store = ByteStore.init(_.buffer.items, default_allocator);
             _.onFinish();
             return;
         }
 
-        if (!_.could_block or (_.size > 0 and _.size != Blob.max_size))
+        if (!_.could_block || (_.size > 0 && _.size != Blob.max_size))
             _.buffer = ArrayListUnmanaged(u8).initCapacity(default_allocator, _.size +| 16) catch |e| {
                 _.errno = e;
                 _.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
@@ -466,7 +466,7 @@ export class ReadFile {
             let stack_buffer: [65536]u8 = undefined;
             let buffer = _.remainingBuffer(&stack_buffer);
 
-            if (buffer.len > 0 and _.errno == null and !_.read_eof) {
+            if (buffer.len > 0 && _.errno == null && !_.read_eof) {
                 let read_amount: usize = 0;
                 let retry = false;
                 let continue_reading = _.doRead(buffer, &read_amount, &retry);
@@ -483,7 +483,7 @@ export class ReadFile {
                     _.buffer.items.len += read.len;
                 }
 
-                if (!_.read_eof and _.buffer.items.len >= _.max_length) {
+                if (!_.read_eof && _.buffer.items.len >= _.max_length) {
                     break;
                 }
 
@@ -491,8 +491,8 @@ export class ReadFile {
                     break;
                 }
 
-                if ((retry or (_.could_block and !_.read_eof))) {
-                    if ((_.could_block and !_.read_eof)) {
+                if ((retry || (_.could_block && !_.read_eof))) {
+                    if ((_.could_block && !_.read_eof)) {
                         switch (isReadable(_.opened_fd)) {
                             .not_ready => {},
                             .ready, .hup => continue,
@@ -664,9 +664,9 @@ export class ReadFileUV {
         self_uv.total_size = @intCast(@min(@max(stat.size, 0), Blob.max_size));
         self_uv.is_regular_file = isRegularFile(stat.mode);
 
-        if (stat.size > 0 and self_uv.is_regular_file) {
+        if (stat.size > 0 && self_uv.is_regular_file) {
             self_uv.size = @min(self_uv.total_size, self_uv.max_length);
-        } else if (stat.size == 0 and !self_uv.is_regular_file) {
+        } else if (stat.size == 0 && !self_uv.is_regular_file) {
             self_uv.size = @min(self_uv.max_length, 4096);
         }
 
@@ -676,7 +676,7 @@ export class ReadFileUV {
             }
         }
 
-        if (self_uv.size == 0 and self_uv.is_regular_file) {
+        if (self_uv.size == 0 && self_uv.is_regular_file) {
             self_uv.byte_store = ByteStore.init(self_uv.buffer.items, default_allocator);
             self_uv.onFinish();
             return;
@@ -706,7 +706,7 @@ export class ReadFileUV {
     }
 
     pub fn queueRead(*_) {
-        if ((_.remainingBuffer().len > 0 or !_.is_regular_file) and _.errno == null and !_.read_eof) {
+        if ((_.remainingBuffer().len > 0 || !_.is_regular_file) && _.errno == null && !_.read_eof) {
             log("ReadFileUV.queueRead - this.remainingBuffer().len = {d}", .{_.remainingBuffer().len});
             if (!_.is_regular_file) {
                 _.buffer.ensureUnusedCapacity(_.byte_store.allocator, 4096) catch {

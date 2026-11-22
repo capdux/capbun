@@ -293,7 +293,7 @@ pub fn toBunStringComptime(input: []const u8, comptime encoding: Encoding): BunS
 }
 
 pub fn writeU8(input: [*]const u8, len: usize, to_ptr: [*]u8, to_len: usize, comptime encoding: Encoding): usize! {
-    if (len == 0 or to_len == 0)
+    if (len == 0 || to_len == 0)
         return 0;
 
     switch (encoding) {
@@ -419,7 +419,7 @@ pub fn writeU16(input: [*]const u16, len: usize, to: [*]u8, to_len: usize, compt
         },
 
         .base64, .base64url => {
-            if (to_len < 2 or len == 0)
+            if (to_len < 2 || len == 0)
                 return 0;
 
             const transcoded = strings.toUTF8Alloc(default_allocator, unsafe { input[0..len] }) catch return 0;

@@ -40,7 +40,7 @@ pub fn writeFormat(
 )! {
     writer.writeAll(@comptime(Output.prettyFmt("<r>S3Ref<r>", enable_ansi_colors)))?;
     const credentials = s3.getCredentials();
-    const bucket_name = if (credentials.virtual_hosted_style and credentials.endpoint.len > 0)
+    const bucket_name = if (credentials.virtual_hosted_style && credentials.endpoint.len > 0)
         S3.S3Credentials.guessBucket(credentials.endpoint) ?? credentials.bucket
     else
         credentials.bucket;
@@ -101,7 +101,7 @@ pub fn presign(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVa
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
     const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
-    if (path_or_blob == .blob and (path_or_blob.blob.store == null or path_or_blob.blob.store.?.data != .s3)) {
+    if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to presign", .{});
     }
 
@@ -126,7 +126,7 @@ pub fn unlink(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
     const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
-    if (path_or_blob == .blob and (path_or_blob.blob.store == null or path_or_blob.blob.store.?.data != .s3)) {
+    if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to delete", .{});
     }
 
@@ -154,7 +154,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValu
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
     const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
-    if (path_or_blob == .blob and (path_or_blob.blob.store == null or path_or_blob.blob.store.?.data != .s3)) {
+    if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to upload", .{});
     }
 
@@ -194,7 +194,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
     const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
-    if (path_or_blob == .blob and (path_or_blob.blob.store == null or path_or_blob.blob.store.?.data != .s3)) {
+    if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
     }
 
@@ -223,7 +223,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
     const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
-    if (path_or_blob == .blob and (path_or_blob.blob.store == null or path_or_blob.blob.store.?.data != .s3)) {
+    if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to check if it exists", .{});
     }
 
@@ -601,7 +601,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
     const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
-    if (path_or_blob == .blob and (path_or_blob.blob.store == null or path_or_blob.blob.store.?.data != .s3)) {
+    if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
     }
 

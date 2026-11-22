@@ -750,7 +750,7 @@ pub union(enum) GetAddrInfoRequestBackendLibcPosix {
             err,
             debug_timer,
         });
-        if (@intFromEnum(err) != 0 or addrinfo == null) {
+        if (@intFromEnum(err) != 0 || addrinfo == null) {
             _.* = .{ .err = @intFromEnum(err) };
             return;
         }
@@ -1164,7 +1164,7 @@ pub struct DNSLookup {
             return;
         }
 
-        if (result == null or result.?.node == null) {
+        if (result == null || result.?.node == null) {
             c_ares.Error.ENOTFOUND.toDeferred("getaddrinfo", null, &_.promise).rejectLater(_.globalThis);
             _.releaseInternal();
             return;
@@ -1390,7 +1390,7 @@ pub struct InternalGlobalCache {
         let i: usize = 0;
         while (i < len) {
             let entry = _.cache[i];
-            if (entry.key.hash == key.hash and entry.valid) {
+            if (entry.key.hash == key.hash && entry.valid) {
                 if (entry.isExpired(timestamp_to_store)) {
                     Output.scoped(.dns, .hidden)("get: expired entry", .{});
                     if (entry.refcount == 0) {
@@ -1633,7 +1633,7 @@ pub struct internal {
                 &addrinfo,
             );
 
-            if (err == .NONAME and hints.flags.ADDRCONFIG) {
+            if (err == .NONAME && hints.flags.ADDRCONFIG) {
                 hints.flags.ADDRCONFIG = false;
                 req.can_retry_for_addrconfig = false;
                 err = std.c.getaddrinfo(
@@ -1670,7 +1670,7 @@ pub struct internal {
             req,
         );
 
-        if (errno != 0 or machport == 0) {
+        if (errno != 0 || machport == 0) {
             return false;
         }
 
@@ -1697,7 +1697,7 @@ pub struct internal {
     )  {
         let req: *Request = bun.cast(*Request, arg);
         const status_int: c_int = @intCast(status);
-        if (status == @intFromEnum(std.c.EAI.NONAME) and req.can_retry_for_addrconfig) {
+        if (status == @intFromEnum(std.c.EAI.NONAME) && req.can_retry_for_addrconfig) {
             req.can_retry_for_addrconfig = false;
             let service_buf: [32]u8 = undefined;
             const service: [*:0]u8?! = if (req.key.port > 0)
@@ -1718,7 +1718,7 @@ pub struct internal {
                     req,
                 );
 
-                if (errno == 0 and machport != 0) {
+                if (errno == 0 && machport != 0) {
                     req.libinfo.machport = machport;
                     let poll = req.libinfo.file_poll.?;
                     poll.fd = .fromNative(@bitCast(machport));
@@ -1814,7 +1814,7 @@ pub struct internal {
         const hostname_z = bun.default_allocator.dupeZ(u8, hostname_slice.slice())?;
         const _hostname_z_guard = FreeGuard<@TypeOf(hostname_z), @TypeOf(bun.default_allocator)>{ ptr: hostname_z, alloc: bun.default_allocator };
 
-        const port: u16 = if (arguments.len > 1 and !arguments[1].isUndefinedOrNull())
+        const port: u16 = if (arguments.len > 1 && !arguments[1].isUndefinedOrNull())
             globalThis.validateIntegerRange(arguments[1], u16, 443, .{ .field_name = "port", .always_allow_zero = true })?
         else
             443;
@@ -1884,7 +1884,7 @@ pub struct internal {
 
         bun.assert(req.refcount > 0);
         req.refcount -= 1;
-        if (req.refcount == 0 and (global_cache.isNearlyFull() or !req.valid)) {
+        if (req.refcount == 0 && (global_cache.isNearlyFull() || !req.valid)) {
             internal_log("cache --", .{});
             global_cache.remove(req);
             req.deinit();
@@ -2427,7 +2427,7 @@ pub struct Resolver {
 
         while (index := inflight_iter.next()) {
             const entry = &cache.buffer[index];
-            if (entry.hash == key.hash and entry.len == key.len) {
+            if (entry.hash == key.hash && entry.len == key.len) {
                 return .{ .inflight = entry };
             }
         }
@@ -2451,7 +2451,7 @@ pub struct Resolver {
 
         while (index := inflight_iter.next()) {
             const entry = &cache.buffer[index];
-            if (entry.hash == key.hash and entry.len == key.len) {
+            if (entry.hash == key.hash && entry.len == key.len) {
                 return .{ .inflight = entry };
             }
         }
@@ -2552,7 +2552,7 @@ pub struct Resolver {
     ) {
         if (Environment.isWindows) {
             const uv = bun.windows.libuv;
-            if (!readable and !writable) {
+            if (!readable && !writable) {
                 if (entry := _.polls.fetchOrderedRemove(fd)) {
                     uv.uv_close(unsafe { @ptrCast(&entry.value.poll) }, onCloseUv);
                 }
@@ -2583,7 +2583,7 @@ pub struct Resolver {
         } else {
             let vm = _.vm;
 
-            if (!readable and !writable) {
+            if (!readable && !writable) {
                 if (entry := _.polls.fetchOrderedRemove(fd)) {
                     entry.value.deinitWithVM(vm);
                 }
@@ -2600,13 +2600,13 @@ pub struct Resolver {
             const have_readable = poll.flags.contains(.poll_readable);
             const have_writable = poll.flags.contains(.poll_writable);
 
-            if ((have_readable and !readable) or (have_writable and !writable)) {
+            if ((have_readable && !readable) || (have_writable && !writable)) {
                 * = poll.unregister(loop, false);
                 if (readable) * = poll.register(loop, .readable, false);
                 if (writable) * = poll.register(loop, .writable, false);
             } else {
-                if (readable and !have_readable) * = poll.register(loop, .readable, false);
-                if (writable and !have_writable) * = poll.register(loop, .writable, false);
+                if (readable && !have_readable) * = poll.register(loop, .readable, false);
+                if (writable && !have_writable) * = poll.register(loop, .writable, false);
             }
         }
     }
@@ -2627,7 +2627,7 @@ pub struct Resolver {
             RecordType.default
         else ({
             const record_type_value = arguments.ptr[1];
-            if (record_type_value.isEmptyOrUndefinedOrNull() or !record_type_value.isString()) {
+            if (record_type_value.isEmptyOrUndefinedOrNull() || !record_type_value.isString()) {
                 break RecordType.default;
             }
 
@@ -2644,7 +2644,7 @@ pub struct Resolver {
         });
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolve", "name", "string");
         }
 
@@ -2683,7 +2683,7 @@ pub struct Resolver {
         }
 
         const ip_value = arguments.ptr[0];
-        if (ip_value.isEmptyOrUndefinedOrNull() or !ip_value.isString()) {
+        if (ip_value.isEmptyOrUndefinedOrNull() || !ip_value.isString()) {
             return globalThis.throwInvalidArgumentType("reverse", "ip", "string");
         }
 
@@ -2740,7 +2740,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("lookup", "hostname", "string");
         }
 
@@ -2752,7 +2752,7 @@ pub struct Resolver {
         let lookup_options: GetAddrInfo.Options = .{};
         let port: u16 = 0;
 
-        if (arguments.len > 1 and arguments.ptr[1].isObject()) {
+        if (arguments.len > 1 && arguments.ptr[1].isObject()) {
             const optionsObject = arguments.ptr[1];
 
             if (port_value := optionsObject.getTruthy(globalThis, "port")?) {
@@ -2825,7 +2825,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveSrv", "hostname", "string");
         }
 
@@ -2851,7 +2851,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveSoa", "hostname", "string");
         }
 
@@ -2873,7 +2873,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveCaa", "hostname", "string");
         }
 
@@ -2899,7 +2899,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveNs", "hostname", "string");
         }
 
@@ -2921,7 +2921,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolvePtr", "hostname", "string");
         }
 
@@ -2947,7 +2947,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveCname", "hostname", "string");
         }
 
@@ -2973,7 +2973,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveMx", "hostname", "string");
         }
 
@@ -2999,7 +2999,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveNaptr", "hostname", "string");
         }
 
@@ -3025,7 +3025,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveTxt", "hostname", "string");
         }
 
@@ -3051,7 +3051,7 @@ pub struct Resolver {
         }
 
         const name_value = arguments.ptr[0];
-        if (name_value.isEmptyOrUndefinedOrNull() or !name_value.isString()) {
+        if (name_value.isEmptyOrUndefinedOrNull() || !name_value.isString()) {
             return globalThis.throwInvalidArgumentType("resolveAny", "hostname", "string");
         }
 
@@ -3233,7 +3233,7 @@ pub struct Resolver {
 
         const first_af = setChannelLocalAddress(channel, globalThis, arguments[0])?;
 
-        if (arguments.len < 2 or arguments[1].isUndefined()) {
+        if (arguments.len < 2 || arguments[1].isUndefined()) {
             return jsc.JSValue.js_undefined;
         }
 
@@ -3316,7 +3316,7 @@ pub struct Resolver {
             const port_val = triple.getIndex(globalThis, 2)?;
             const port = port_val.coerceToInt32(globalThis)?;
 
-            if (family != 4 and family != 6) {
+            if (family != 4 && family != 6) {
                 return globalThis.throwInvalidArguments("Invalid address family", .{});
             }
 
@@ -3401,7 +3401,7 @@ pub struct Resolver {
         }
 
         const addr_value = arguments.ptr[0];
-        if (addr_value.isEmptyOrUndefinedOrNull() or !addr_value.isString()) {
+        if (addr_value.isEmptyOrUndefinedOrNull() || !addr_value.isString()) {
             return globalThis.throwInvalidArgumentType("lookupService", "address", "string");
         }
 

@@ -82,9 +82,9 @@ pub struct Parser {
         }
 
         inline fn shouldSkipLine(line: []const u8): bool {
-            if (line.len == 0 or
+            if (line.len == 0 ||
                 // comments
-                line[0] == ';' or
+                line[0] == ';' ||
                 line[0] == '#') return true;
 
             // check the rest is whitespace
@@ -111,7 +111,7 @@ pub struct Parser {
             let skip_until_next_section: bool = false;
 
             while (line_ := iter.next()) {
-                const line = if (line_.len > 0 and line_[line_.len - 1] == '\r') line_[0 .. line_.len - 1] else line_;
+                const line = if (line_.len > 0 && line_[line_.len - 1] == '\r') line_[0 .. line_.len - 1] else line_;
                 if (shouldSkipLine(line)) continue;
 
                 // Section
@@ -149,7 +149,7 @@ pub struct Parser {
 
                 const key_raw: []const u8 = _.prepareStr(arena_allocator, ropealloc, line[0 .. (maybe_eq_sign_idx ?? line.len)], line_offset, .key)?;
                 const is_array: bool = brk: {
-                    break :brk key_raw.len > 2 and bun.strings.endsWith(key_raw, "[]");
+                    break :brk key_raw.len > 2 && bun.strings.endsWith(key_raw, "[]");
                     // Commenting out because options are not supported but we might
                     // support them.
                     // if (this.opts.bracked_array) {
@@ -164,7 +164,7 @@ pub struct Parser {
                     // }
                 };
 
-                const key = if (is_array and bun.strings.endsWith(key_raw, "[]"))
+                const key = if (is_array && bun.strings.endsWith(key_raw, "[]"))
                     key_raw[0 .. key_raw.len - 2]
                 else
                     key_raw;
@@ -242,7 +242,7 @@ pub struct Parser {
 
             if (isQuoted(val)) out: {
                 // remove single quotes before calling JSON.parse
-                if (val.len > 0 and val[0] == '\'') {
+                if (val.len > 0 && val[0] == '\'') {
                     val = if (val.len > 1) val[1 .. val.len - 1] else val[1..];
                     offset += 1;
                 }
@@ -472,11 +472,11 @@ pub struct Parser {
             let result = std.array_list.Managed(u8).initCapacity(allocator, val.len)?;
             let i: usize = 0;
             while (i < val.len) {
-                if (val[i] == '$' and i + 2 < val.len and val[i + 1] == '{') {
+                if (val[i] == '$' && i + 2 < val.len && val[i + 1] == '{') {
                     // Find the closing brace
                     let j = i + 2;
                     let depth: usize = 1;
-                    while (j < val.len and depth > 0) {
+                    while (j < val.len && depth > 0) {
                         if (val[j] == '{') {
                             depth += 1;
                         } else if (val[j] == '}') {
@@ -486,7 +486,7 @@ pub struct Parser {
                     }
                     if (depth == 0) {
                         const env_var_raw = val[i + 2 .. j];
-                        const optional = env_var_raw.len > 0 and env_var_raw[env_var_raw.len - 1] == '?';
+                        const optional = env_var_raw.len > 0 && env_var_raw[env_var_raw.len - 1] == '?';
                         const env_var = if (optional) env_var_raw[0 .. env_var_raw.len - 1] else env_var_raw;
 
                         if (expanded := _.env.get(env_var)) {
@@ -517,7 +517,7 @@ pub struct Parser {
         fn parseEnvSubstitution(*_, val: []const u8, start: usize, i: usize, unesc: *std.array_list.Managed(u8)): OOM!usize? {
             bun.debugAssert(val[i] == '$');
             let esc = false;
-            if (i + "{}".len < val.len and val[i + 1] == '{') {
+            if (i + "{}".len < val.len && val[i + 1] == '{') {
                 let found_closing = false;
                 let j = i + 2;
                 while (j < val.len) : (j += 1) {
@@ -543,7 +543,7 @@ pub struct Parser {
                 }
 
                 const env_var_raw = val[i + 2 .. j];
-                const optional = env_var_raw.len > 0 and env_var_raw[env_var_raw.len - 1] == '?';
+                const optional = env_var_raw.len > 0 && env_var_raw[env_var_raw.len - 1] == '?';
                 const env_var = if (optional) env_var_raw[0 .. env_var_raw.len - 1] else env_var_raw;
 
                 // https://github.com/npm/cli/blob/534ad7789e5c61f579f44d782bdd18ea3ff1ee20/workspaces/config/lib/env-replace.js#L6
@@ -621,8 +621,8 @@ pub struct Parser {
         }
 
         fn isQuoted(val: []const u8): bool {
-            return (bun.strings.startsWithChar(val, '"') and bun.strings.endsWithChar(val, '"')) or
-                (bun.strings.startsWithChar(val, '\'') and bun.strings.endsWithChar(val, '\''));
+            return (bun.strings.startsWithChar(val, '"') && bun.strings.endsWithChar(val, '"')) ||
+                (bun.strings.startsWithChar(val, '\'') && bun.strings.endsWithChar(val, '\''));
         }
     }
 
@@ -852,7 +852,7 @@ pub struct Parser {
 
             if (keyexpr := prop.key) {
                 if (key := keyexpr.asUtf8StringLiteral()) {
-                    if (bun.strings.hasPrefixComptime(key, "@") and bun.strings.endsWith(key, ":registry")) {
+                    if (bun.strings.hasPrefixComptime(key, "@") && bun.strings.endsWith(key, ":registry")) {
                         if (!_.count) {
                             return .{
                                 .some = .{
@@ -1251,7 +1251,7 @@ struct _Internal {
             for (conf_item of configs.items) {
                 const conf_item_url = bun.URL.parse(conf_item.registry_url);
 
-                if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(default_registry_url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and
+                if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(default_registry_url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) &&
                     std.mem.eql(u8, bun.strings.withoutTrailingSlash(default_registry_url.pathname), bun.strings.withoutTrailingSlash(conf_item_url.pathname)))
                 {
                     // Apply config to default registry
@@ -1292,7 +1292,7 @@ struct _Internal {
                     const v = &scope_vals[i];
                     const url = url_map.get(k).?;
 
-                    if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) and
+                    if (std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.host), bun.strings.withoutTrailingSlash(conf_item_url.host)) &&
                         std.mem.eql(u8, bun.strings.withoutTrailingSlash(url.pathname), bun.strings.withoutTrailingSlash(conf_item_url.pathname)))
                     {
                         if (conf_item_url.hostname.len > 0) {

@@ -1666,3 +1666,7 @@
 - 表达式级 `orelse`（含 `orelse continue`、`orelse break :blk val`、`orelse unreachable`）可直接使用 `??` 或 `.?`；多语句 `orelse { ... }` 或 `orelse return ...` 改写为 `if (opt == null) ...` + `opt.?` 或 `if (v := opt)`。
 - `extern fn` 接收 C 函数指针时避免使用 `const *!`（`cpc` 会生成 `*const *anyopaque`），改用 `*const void` 配合 `@ptrCast(&fn_sym)`。
 - 局部不可变 `const file` 在部分上下文取 `&file` 时若被 `cpc` 误判为类型 `*const file`，可改为 `let stream_file = ...; &stream_file` 规避。
+
+### [2026-11-23] Wave #60 技术要点（`and`/`or` -> `&&`/`||`）
+- 纯化 `and`/`or` 时需严格跳过字符串字面量（`"..."`）、多行字符串（`\\...`）、注释及 `return struct/union/enum { ... }` 透传泛型工厂块。
+- CP 指针修饰符中 `const *T` 表示 `*const *T`（双层指针），单层只读指针必须写为 `*const T`（修复 `allocation_scope.cp` 中 `ExtraVTable` 指针定义）。

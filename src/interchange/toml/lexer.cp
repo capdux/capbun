@@ -196,7 +196,7 @@ pub @value class Lexer {
         this.step();
 
         // Dot without a digit after it
-        if (first == '.' and (this.code_point < '0' or this.code_point > '9')) {
+        if (first == '.' && (this.code_point < '0' || this.code_point > '9')) {
             // "."
             this.token = TokenType.t_dot;
             return;
@@ -248,12 +248,12 @@ pub @value class Lexer {
                 switch (this.code_point) {
                     '_' => {
                         // Cannot have multiple underscores in a row
-                        if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
+                        if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
                             this.syntaxError()?;
                         }
 
                         // The first digit must exist
-                        if (isFirst or is_legacy_octal_literal) {
+                        if (isFirst || is_legacy_octal_literal) {
                             this.syntaxError()?;
                         }
 
@@ -306,14 +306,14 @@ pub @value class Lexer {
                 isFirst = false;
             }
 
-            const isBigIntegerLiteral = this.code_point == 'n' and !hasDotOrExponent;
+            const isBigIntegerLiteral = this.code_point == 'n' && !hasDotOrExponent;
 
             // Slow path: do we need to re-scan the input as text?
-            if (isBigIntegerLiteral or isInvalidLegacyOctalLiteral) {
+            if (isBigIntegerLiteral || isInvalidLegacyOctalLiteral) {
                 const text = this.raw();
 
                 // Can't use a leading zero for bigint literals
-                if (isBigIntegerLiteral and is_legacy_octal_literal) {
+                if (isBigIntegerLiteral && is_legacy_octal_literal) {
                     this.syntaxError()?;
                 }
 
@@ -342,11 +342,11 @@ pub @value class Lexer {
             }
         } else {
             // Floating-point literal
-            const isInvalidLegacyOctalLiteral = first == '0' and (this.code_point == '8' or this.code_point == '9');
+            const isInvalidLegacyOctalLiteral = first == '0' && (this.code_point == '8' || this.code_point == '9');
 
             // Initial digits
             while (true) {
-                if (this.code_point < '0' or this.code_point > '9') {
+                if (this.code_point < '0' || this.code_point > '9') {
                     switch (this.code_point) {
                         '_' => {},
                         else => break,
@@ -356,7 +356,7 @@ pub @value class Lexer {
                     }
 
                     // Cannot have multiple underscores in a row
-                    if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
+                    if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
                         this.syntaxError()?;
                     }
 
@@ -372,9 +372,9 @@ pub @value class Lexer {
             }
 
             // Fractional digits
-            if (first != '.' and this.code_point == '.') {
+            if (first != '.' && this.code_point == '.') {
                 // An underscore must not come last
-                if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
+                if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
                     this.end -= 1;
                     this.syntaxError()?;
                 }
@@ -385,13 +385,13 @@ pub @value class Lexer {
                     this.syntaxError()?;
                 }
                 while (true) {
-                    if (this.code_point < '0' or this.code_point > '9') {
+                    if (this.code_point < '0' || this.code_point > '9') {
                         if (this.code_point != '_') {
                             break;
                         }
 
                         // Cannot have multiple underscores in a row
-                        if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
+                        if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
                             this.syntaxError()?;
                         }
 
@@ -403,29 +403,29 @@ pub @value class Lexer {
             }
 
             // Exponent
-            if (this.code_point == 'e' or this.code_point == 'E') {
+            if (this.code_point == 'e' || this.code_point == 'E') {
                 // An underscore must not come last
-                if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
+                if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
                     this.end -= 1;
                     this.syntaxError()?;
                 }
 
                 hasDotOrExponent = true;
                 this.step();
-                if (this.code_point == '+' or this.code_point == '-') {
+                if (this.code_point == '+' || this.code_point == '-') {
                     this.step();
                 }
-                if (this.code_point < '0' or this.code_point > '9') {
+                if (this.code_point < '0' || this.code_point > '9') {
                     this.syntaxError()?;
                 }
                 while (true) {
-                    if (this.code_point < '0' or this.code_point > '9') {
+                    if (this.code_point < '0' || this.code_point > '9') {
                         if (this.code_point != '_') {
                             break;
                         }
 
                         // Cannot have multiple underscores in a row
-                        if (lastUnderscoreEnd > 0 and this.end == lastUnderscoreEnd + 1) {
+                        if (lastUnderscoreEnd > 0 && this.end == lastUnderscoreEnd + 1) {
                             this.syntaxError()?;
                         }
 
@@ -455,7 +455,7 @@ pub @value class Lexer {
                 text = bytes;
             }
 
-            if (!hasDotOrExponent and this.end - this.start < 10) {
+            if (!hasDotOrExponent && this.end - this.start < 10) {
                 // Parse a 32-bit integer (very fast path)
                 let parsed_num: u32 = 0;
                 for (c of text) {
@@ -474,7 +474,7 @@ pub @value class Lexer {
         }
 
         // if it's a space, it might be a date timestamp
-        if (isIdentifierPart(this.code_point) or this.code_point == ' ') {}
+        if (isIdentifierPart(this.code_point) || this.code_point == ' ') {}
     }
 
     pub inline fn expect(*this, comptime token: TokenType) !void {
@@ -522,7 +522,7 @@ pub @value class Lexer {
                 '[' => {
                     this.step();
                     this.token = TokenType.t_open_bracket;
-                    if (this.code_point == '[' and this.allow_double_bracket) {
+                    if (this.code_point == '[' && this.allow_double_bracket) {
                         this.step();
                         this.token = TokenType.t_open_bracket_double;
                         return;
@@ -537,7 +537,7 @@ pub @value class Lexer {
                     this.step();
                     this.token = TokenType.t_close_bracket;
 
-                    if (this.code_point == ']' and this.allow_double_bracket) {
+                    if (this.code_point == ']' && this.allow_double_bracket) {
                         this.step();
                         this.token = TokenType.t_close_bracket_double;
                     }
@@ -807,7 +807,7 @@ pub @value class Lexer {
             switch (iter.c) {
                 '\r' => {
                     // Convert '\r\n' into '\n'
-                    if (iter.i < text.len and text[iter.i] == '\n') {
+                    if (iter.i < text.len && text[iter.i] == '\n') {
                         iter.i += 1;
                     }
 
@@ -1059,7 +1059,7 @@ pub @value class Lexer {
                             }
 
                             // Ignore line continuations. A line continuation is not an escaped newline.
-                            if (iter.i < text.len and text[iter.i + 1] == '\n') {
+                            if (iter.i < text.len && text[iter.i + 1] == '\n') {
                                 // Make sure Windows CRLF counts as a single newline
                                 iter.i += 1;
                             }

@@ -83,7 +83,7 @@ pub fn anyWebSocketGetTopicsAsJSArray(ws: uws.AnyWebSocket, globalObject: *jsc.J
     }
 
     const _node_buffer_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &node_buffer } };
-    if (node_buffer == .blob and node_buffer.blob.needsToReadFile()) {
+    if (node_buffer == .blob && node_buffer.blob.needsToReadFile()) {
         if (globalObject.throw("File blob not supported yet in this function.", .{}) == error.JSError) {}
         return .zero;
     }

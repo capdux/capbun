@@ -51,7 +51,7 @@ const JSValue = jsc.JSValue;
 
     if (slice.len <= buf.len / 4) {
         const result = strings.copyUTF16IntoUTF8(&buf, slice);
-        if (result.read == 0 or result.written == 0) {
+        if (result.read == 0 || result.written == 0) {
             const uint8array = jsc.JSValue.createUninitializedUint8Array(globalThis, 3) catch return .zero;
             const array_buffer = uint8array.asArrayBuffer(globalThis).?;
             const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
@@ -87,7 +87,7 @@ const JSValue = jsc.JSValue;
 
     if (slice.len <= buf.len / 4) {
         const result = strings.copyUTF16IntoUTF8(&buf, slice);
-        if (result.read == 0 or result.written == 0) {
+        if (result.read == 0 || result.written == 0) {
             const uint8array = jsc.JSValue.createUninitializedUint8Array(globalThis, 3) catch return .zero;
             const array_buffer = uint8array.asArrayBuffer(globalThis).?;
             const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
@@ -122,7 +122,7 @@ class RopeStringEncoder {
     @c static fn append8(it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32) {
         let enc = cast(*RopeStringEncoder, it.data.?);
         const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[enc.tail..], unsafe { ptr[0..len] }, true);
-        if (result.read == math.maxInt(u32) and result.written == math.maxInt(u32)) {
+        if (result.read == math.maxInt(u32) && result.written == math.maxInt(u32)) {
             it.stop = 1;
             enc.any_non_ascii = true;
         } else {
@@ -139,7 +139,7 @@ class RopeStringEncoder {
     @c static fn write8(it: *jsc.JSString.Iterator, ptr: [*]const u8, len: u32, offset: u32) {
         let enc = cast(*RopeStringEncoder, it.data.?);
         const result = strings.copyLatin1IntoUTF8StopOnNonASCII(enc.buf[offset..], unsafe { ptr[0..len] }, true);
-        if (result.read == math.maxInt(u32) and result.written == math.maxInt(u32)) {
+        if (result.read == math.maxInt(u32) && result.written == math.maxInt(u32)) {
             it.stop = 1;
             enc.any_non_ascii = true;
         }
@@ -210,7 +210,7 @@ class RopeStringEncoder {
     const output = unsafe { buf_ptr[0..buf_len] };
     const input = unsafe { input_ptr[0..input_len] };
     let result: strings.EncodeIntoResult = strings.copyUTF16IntoUTF8(output, input);
-    if (output.len >= 3 and (result.read == 0 or result.written == 0)) {
+    if (output.len >= 3 && (result.read == 0 || result.written == 0)) {
         const z0: u8 = 239; const z1: u8 = 191; const z2: u8 = 189; const replacement_char: [3]u8 = [ z0, z1, z2 ];
         @memcpy(unsafe { buf_ptr[0..replacement_char.len] }, &replacement_char);
         result.read = 1;

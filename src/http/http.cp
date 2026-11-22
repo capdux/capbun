@@ -486,7 +486,7 @@ pub fn firstCall(
         let proto: [*c]const u8 = undefined;
         let proto_len: c_uint = 0;
         bun.BoringSSL.c.SSL_get0_alpn_selected(ssl_ptr, &proto, &proto_len);
-        if (proto_len == 2 and proto != null and unsafe { proto[0] == 'h' and proto[1] == '2' }) {
+        if (proto_len == 2 && proto != null && unsafe { proto[0] == 'h' && proto[1] == '2' }) {
             bun.Output.scoped(.fetch, .visible)("ALPN negotiated h2 {s}", .{client.url.href});
             const ctx = client.getSslCtx(true);
             const session = H2.ClientSession.create(ctx, socket, client);
@@ -530,7 +530,7 @@ pub fn onClose(
         tunnel.shutdown();
         tunnel.detachAndDeref();
     }
-    const in_progress = client.state.stage != .done and client.state.stage != .fail and client.state.flags.is_redirect_pending == false;
+    const in_progress = client.state.stage != .done && client.state.stage != .fail && client.state.flags.is_redirect_pending == false;
     if (client.state.flags.is_redirect_pending) {
         client.doRedirect(is_ssl, client.getSslCtx(is_ssl), socket);
         return;
@@ -545,15 +545,15 @@ pub fn onClose(
                 },
                 else => {},
             }
-        } else if (client.state.content_length == null and client.state.response_stage == .body) {
+        } else if (client.state.content_length == null && client.state.response_stage == .body) {
             client.state.flags.received_last_chunk = true;
             client.progressUpdate(is_ssl, client.getSslCtx(is_ssl), socket);
             return;
         }
     }
 
-    if (client.allow_retry and client.method.isIdempotent() and
-        client.state.response_stage != .body and client.state.response_stage != .body_chunk)
+    if (client.allow_retry && client.method.isIdempotent() &&
+        client.state.response_stage != .body && client.state.response_stage != .body_chunk)
     {
         client.allow_retry = false;
         client.state.response_message_buffer.deinit();
@@ -900,8 +900,8 @@ export @root @value struct HTTPClient {
 
     fn progressUpdateH3(*_) {
         bun.debugAssert(this.flags.protocol == .http3);
-        if (this.state.stage == .done or this.state.stage == .fail) return;
-        if (this.state.flags.is_redirect_pending and this.state.fail == null) {
+        if (this.state.stage == .done || this.state.stage == .fail) return;
+        if (this.state.flags.is_redirect_pending && this.state.fail == null) {
             if (this.state.isDone()) this.doRedirectMultiplexed();
             return;
         }
@@ -940,7 +940,7 @@ export @root @value struct HTTPClient {
         }
         this.unix_socket_path.deinit();
         this.unix_socket_path = jsc.ZigString.Slice.empty;
-        const request_body = if (this.state.flags.resend_request_body_on_redirect and this.state.original_request_body == .bytes)
+        const request_body = if (this.state.flags.resend_request_body_on_redirect && this.state.original_request_body == .bytes)
             this.state.original_request_body.bytes
         else
             "";
@@ -1002,7 +1002,7 @@ export @root @value struct HTTPClient {
             tunnel.shutdown();
             tunnel.detachAndDeref();
         }
-        if (this.state.stage != .done and this.state.stage != .fail) {
+        if (this.state.stage != .done && this.state.stage != .fail) {
             this.state.request_stage = .fail;
             this.state.response_stage = .fail;
             this.state.fail = err;
@@ -1080,10 +1080,10 @@ export @root @value struct HTTPClient {
                     .body = this.state.body_out_str,
                     .redirected = this.flags.redirected,
                     .fail = this.state.fail,
-                    .has_more = certificate_info != null or (this.state.fail == null and !this.state.isDone()),
+                    .has_more = certificate_info != null || (this.state.fail == null && !this.state.isDone()),
                     .body_size = body_size,
                     .certificate_info = null,
-                    .can_stream = (this.state.request_stage == .body or this.state.request_stage == .proxy_body) and this.flags.is_streaming_request_body,
+                    .can_stream = (this.state.request_stage == .body || this.state.request_stage == .proxy_body) && this.flags.is_streaming_request_body,
                     .is_http2 = this.flags.protocol != .http1_1,
                 };
             }
@@ -1093,10 +1093,10 @@ export @root @value struct HTTPClient {
             .metadata = null,
             .redirected = this.flags.redirected,
             .fail = this.state.fail,
-            .has_more = certificate_info != null or (this.state.fail == null and !this.state.isDone()),
+            .has_more = certificate_info != null || (this.state.fail == null && !this.state.isDone()),
             .body_size = body_size,
             .certificate_info = certificate_info,
-            .can_stream = (this.state.request_stage == .body or this.state.request_stage == .proxy_body) and this.flags.is_streaming_request_body,
+            .can_stream = (this.state.request_stage == .body || this.state.request_stage == .proxy_body) && this.flags.is_streaming_request_body,
             .is_http2 = this.flags.protocol != .http1_1,
         };
     }
@@ -1173,7 +1173,7 @@ export @root @value struct HTTPClient {
                 }
             }
 
-            if (!override_connection_header and !this.flags.disable_keepalive) {
+            if (!override_connection_header && !this.flags.disable_keepalive) {
                 request_headers_buf[header_count] = connection_header;
                 header_count += 1;
             }
@@ -1201,7 +1201,7 @@ export @root @value struct HTTPClient {
                 header_count += 1;
             }
 
-            if (body_len > 0 or this.method.hasRequestBody()) {
+            if (body_len > 0 || this.method.hasRequestBody()) {
                 if (this.flags.is_streaming_request_body) {
                     if (content_length := original_content_length) {
                         if (add_transfer_encoding) {
@@ -1211,7 +1211,7 @@ export @root @value struct HTTPClient {
                             };
                             header_count += 1;
                         }
-                    } else if (add_transfer_encoding and this.flags.upgrade_state == .none) {
+                    } else if (add_transfer_encoding && this.flags.upgrade_state == .none) {
                         request_headers_buf[header_count] = chunked_encoded_header;
                         header_count += 1;
                     }
@@ -1262,7 +1262,7 @@ export @root @value struct HTTPClient {
                 // Comparing `ptr` is safe here because it is only done if the vtable pointers are equal,
                 // which means they are both mimalloc arenas and therefore have non-undefined context
                 // pointers.
-                if (this.allocator.vtable == default_allocator.vtable and this.allocator.ptr != default_allocator.ptr) {
+                if (this.allocator.vtable == default_allocator.vtable && this.allocator.ptr != default_allocator.ptr) {
                     @panic("HTTPClient used with threadlocal allocator belonging to another thread. This will cause crashes.");
                 }
             }
@@ -1292,7 +1292,7 @@ export @root @value struct HTTPClient {
                 // `doRedirectMultiplexed` resets `flags.protocol`, so the redirected
                 // request lands back here with `force_http3` still false and consults
                 // the cache for the new origin.
-                if (!this.flags.force_http3 and this.canTryH3AltSvc()) {
+                if (!this.flags.force_http3 && this.canTryH3AltSvc()) {
                     if (alt_port := H3.AltSvc.lookup(this.url.hostname, this.url.getPortAuto())) {
                         if (ctx := H3.ClientContext.getOrCreate(http_thread.loop.loop)) {
                             if (!ctx.connect(this, this.url.hostname, alt_port)) {
@@ -1310,7 +1310,7 @@ export @root @value struct HTTPClient {
                     this.fail(error.HTTP3Unsupported);
                     return;
                 }
-                if (this.http_proxy != null or this.unix_socket_path.length() > 0) {
+                if (this.http_proxy != null || this.unix_socket_path.length() > 0) {
                     this.fail(error.HTTP3Unsupported);
                     return;
                 }
@@ -1339,7 +1339,7 @@ export @root @value struct HTTPClient {
             }
             let socket = maybe_socket.?;
 
-            if (socket.isClosed() and (this.state.response_stage != .done and this.state.response_stage != .fail)) {
+            if (socket.isClosed() && (this.state.response_stage != .done && this.state.response_stage != .fail)) {
                 NewHTTPContext(is_ssl).markSocketAsDead(socket);
                 this.fail(error.ConnectionClosed);
                 return;
@@ -1364,7 +1364,7 @@ export @root @value struct HTTPClient {
             const ctx = this.getSslCtx(is_ssl);
             ctx.releaseSocket(
                 socket,
-                this.flags.did_have_handshaking_error and !this.flags.reject_unauthorized,
+                this.flags.did_have_handshaking_error && !this.flags.reject_unauthorized,
                 this.url.hostname,
                 this.url.getPortAuto(),
                 this.tls_props,
@@ -1419,7 +1419,7 @@ export @root @value struct HTTPClient {
 
             const headers_len = temporary_send_buffer.items.len;
             assert(temporary_send_buffer.items.len == writer.context.items.len);
-            if (this.state.request_body.len > 0 and temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0 and !this.flags.proxy_tunneling) {
+            if (this.state.request_body.len > 0 && temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0 && !this.flags.proxy_tunneling) {
                 let remain = temporary_send_buffer.items.ptr[temporary_send_buffer.items.len..temporary_send_buffer.capacity];
                 const wrote = @min(remain.len, this.state.request_body.len);
                 assert(wrote > 0);
@@ -1446,11 +1446,11 @@ export @root @value struct HTTPClient {
             this.state.request_sent_len += amount;
             const has_sent_headers = this.state.request_sent_len >= headers_len;
 
-            if (has_sent_headers and this.verbose != .none) {
+            if (has_sent_headers && this.verbose != .none) {
                 printRequest(.http1_1, request, this.url.href, !this.flags.reject_unauthorized, this.state.request_body, this.verbose == .curl);
             }
 
-            if (has_sent_headers and this.state.request_body.len > 0) {
+            if (has_sent_headers && this.state.request_body.len > 0) {
                 this.state.request_body = this.state.request_body[this.state.request_sent_len - headers_len ..];
             }
 
@@ -1462,7 +1462,7 @@ export @root @value struct HTTPClient {
             return .{
                 .has_sent_headers = has_sent_headers,
                 .has_sent_body = has_sent_body,
-                .try_sending_more_data = amount == to_send.len and (!has_sent_body or !has_sent_headers),
+                .try_sending_more_data = amount == to_send.len && (!has_sent_body || !has_sent_headers),
             };
         }
 
@@ -1530,8 +1530,8 @@ export @root @value struct HTTPClient {
                 return;
             }
             const buffer = stream_buffer.acquire();
-            const wasEmpty = buffer.isEmpty() and data.len == 0;
-            if (wasEmpty and this.state.original_request_body.stream.ended) {
+            const wasEmpty = buffer.isEmpty() && data.len == 0;
+            if (wasEmpty && this.state.original_request_body.stream.ended) {
                 stream_buffer.release();
                 this.state.original_request_body.stream.detach();
                 if (this.flags.upgrade_state == .upgraded) {
@@ -1595,7 +1595,7 @@ export @root @value struct HTTPClient {
                     const has_sent_body = result.has_sent_body;
                     const try_sending_more_data = result.try_sending_more_data;
 
-                    if (has_sent_headers and has_sent_body) {
+                    if (has_sent_headers && has_sent_body) {
                         if (this.flags.proxy_tunneling) {
                             this.state.request_stage = .proxy_handshake;
                         } else {
@@ -1617,8 +1617,8 @@ export @root @value struct HTTPClient {
                             }
                         }
                         assert(
-                            (this.state.original_request_body == .bytes and this.state.request_body.len > 0) or
-                                this.state.original_request_body == .sendfile or this.state.original_request_body == .stream,
+                            (this.state.original_request_body == .bytes && this.state.request_body.len > 0) ||
+                                this.state.original_request_body == .sendfile || this.state.original_request_body == .stream,
                         );
 
                         if (try_sending_more_data) {
@@ -1724,7 +1724,7 @@ export @root @value struct HTTPClient {
 
                         const headers_len = temporary_send_buffer.items.len;
                         assert(temporary_send_buffer.items.len == writer.context.items.len);
-                        if (this.state.request_body.len > 0 and temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0) {
+                        if (this.state.request_body.len > 0 && temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0) {
                             let remain = temporary_send_buffer.items.ptr[temporary_send_buffer.items.len..temporary_send_buffer.capacity];
                             const wrote = @min(remain.len, this.state.request_body.len);
                             assert(wrote > 0);
@@ -1749,13 +1749,13 @@ export @root @value struct HTTPClient {
                         this.state.request_sent_len += @as(usize, @intCast(amount));
                         const has_sent_headers = this.state.request_sent_len >= headers_len;
 
-                        if (has_sent_headers and this.state.request_body.len > 0) {
+                        if (has_sent_headers && this.state.request_body.len > 0) {
                             this.state.request_body = this.state.request_body[this.state.request_sent_len - headers_len ..];
                         }
 
                         const has_sent_body = this.state.request_body.len == 0;
 
-                        if (has_sent_headers and has_sent_body) {
+                        if (has_sent_headers && has_sent_body) {
                             this.state.request_stage = .done;
                             return;
                         }
@@ -1865,7 +1865,7 @@ export @root @value struct HTTPClient {
                     break;
                 }
 
-                if (response.status_code >= 100 and response.status_code < 200) {
+                if (response.status_code >= 100 && response.status_code < 200) {
                     log("information headers", .{});
                     this.state.pending_response = null;
                     if (to_read.len == 0) {
@@ -1885,7 +1885,7 @@ export @root @value struct HTTPClient {
                 return;
             };
 
-            if (this.state.content_encoding_i < response.headers.list.len and !this.state.flags.did_set_content_encoding) {
+            if (this.state.content_encoding_i < response.headers.list.len && !this.state.flags.did_set_content_encoding) {
                 const mutable_headers: std.ArrayListUnmanaged(picohttp.Header) = .{ .items = response.headers.list, .capacity = response.headers.list.len };
                 this.state.flags.did_set_content_encoding = true;
                 response.headers = .{ .list = mutable_headers.items };
@@ -1905,7 +1905,7 @@ export @root @value struct HTTPClient {
                 return;
             }
 
-            if (this.flags.proxy_tunneling and this.proxy_tunnel == null) {
+            if (this.flags.proxy_tunneling && this.proxy_tunnel == null) {
                 this.startProxyHandshake(is_ssl, socket, to_read);
                 return;
             }
@@ -2059,19 +2059,19 @@ export @root @value struct HTTPClient {
                     if (*w := t.wrapper) {
                         wrapper_ok = !w.isShutdown();
                     }
-                    tunnel_poolable = this.state.request_stage == .done and
-                        t.write_buffer.isEmpty() and
+                    tunnel_poolable = this.state.request_stage == .done &&
+                        t.write_buffer.isEmpty() &&
                         wrapper_ok;
                 }
 
-                if (this.isKeepAlivePossible() and !socket.isClosedOrHasError() and tunnel_poolable) {
+                if (this.isKeepAlivePossible() && !socket.isClosedOrHasError() && tunnel_poolable) {
                     log("release socket", .{});
                     const tunnel = this.proxy_tunnel;
                     this.proxy_tunnel = null;
                     if (t := tunnel) t.detachOwner(this);
                     ctx.releaseSocket(
                         socket,
-                        this.flags.did_have_handshaking_error and !this.flags.reject_unauthorized,
+                        this.flags.did_have_handshaking_error && !this.flags.reject_unauthorized,
                         this.connected_url.hostname,
                         this.connected_url.getPortAuto(),
                         this.tls_props,
@@ -2114,8 +2114,8 @@ export @root @value struct HTTPClient {
         }
 
         pub fn progressUpdate(*_: *HTTPClient, comptime is_ssl: bool, ctx: *NewHTTPContext(is_ssl), socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            if (this.state.stage != .done and this.state.stage != .fail) {
-                if (this.state.flags.is_redirect_pending and this.state.fail == null) {
+            if (this.state.stage != .done && this.state.stage != .fail) {
+                if (this.state.flags.is_redirect_pending && this.state.fail == null) {
                     if (this.state.isDone()) {
                         this.doRedirect(is_ssl, ctx, socket);
                     }
@@ -2140,7 +2140,7 @@ export @root @value struct HTTPClient {
 
             this.unix_socket_path.deinit();
             this.unix_socket_path = jsc.ZigString.Slice.empty;
-            const request_body = if (this.state.flags.resend_request_body_on_redirect and this.state.original_request_body == .bytes)
+            const request_body = if (this.state.flags.resend_request_body_on_redirect && this.state.original_request_body == .bytes)
                 this.state.original_request_body.bytes
             else
                 "";
@@ -2159,12 +2159,12 @@ export @root @value struct HTTPClient {
                 tunnel.shutdown();
                 tunnel.detachAndDeref();
                 NewHTTPContext(is_ssl).closeSocket(socket);
-            } else if (this.state.request_stage == .done and this.isKeepAlivePossible() and !socket.isClosedOrHasError()) {
+            } else if (this.state.request_stage == .done && this.isKeepAlivePossible() && !socket.isClosedOrHasError()) {
                 log("Keep-Alive release in redirect", .{});
                 assert(this.connected_url.hostname.len > 0);
                 ctx.releaseSocket(
                     socket,
-                    this.flags.did_have_handshaking_error and !this.flags.reject_unauthorized,
+                    this.flags.did_have_handshaking_error && !this.flags.reject_unauthorized,
                     this.connected_url.hostname,
                     this.connected_url.getPortAuto(),
                     this.tls_props,
@@ -2203,7 +2203,7 @@ export @root @value struct HTTPClient {
             assert(this.state.transfer_encoding == .identity);
             const content_length = this.state.content_length;
             // is it exactly as much as we need?
-            if (is_only_buffer and content_length != null and incoming_data.len >= content_length.?) {
+            if (is_only_buffer && content_length != null && incoming_data.len >= content_length.?) {
                 this.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?])?;
                 return true;
             } else {
@@ -2257,7 +2257,7 @@ export @root @value struct HTTPClient {
 
             // we can ignore the body data in redirects
             if (!this.state.flags.is_redirect_pending) {
-                if (buffer.list.items.len == 0 and incoming_data.len < preallocate_max) {
+                if (buffer.list.items.len == 0 && incoming_data.len < preallocate_max) {
                     buffer.list.ensureTotalCapacityPrecise(buffer.allocator, incoming_data.len) catch {};
                 }
 
@@ -2273,8 +2273,8 @@ export @root @value struct HTTPClient {
             }
 
             // done or streaming
-            const is_done = content_length != null and this.state.total_body_received >= content_length.?;
-            if (is_done or this.signals.get(.response_body_streaming) or content_length == null) {
+            const is_done = content_length != null && this.state.total_body_received >= content_length.?;
+            if (is_done || this.signals.get(.response_body_streaming) || content_length == null) {
                 const is_final_chunk = is_done;
                 const processed = this.state.processBodyBuffer(buffer.*, is_final_chunk)?;
 
@@ -2287,7 +2287,7 @@ export @root @value struct HTTPClient {
                     progress.setCompletedItems(this.state.total_body_received);
                     progress.context.maybeRefresh();
                 }
-                return is_done or processed;
+                return is_done || processed;
             }
             return false;
         }
@@ -2296,7 +2296,7 @@ export @root @value struct HTTPClient {
             *_: *HTTPClient,
             incoming_data: []const u8,
         ) !bool {
-            if (incoming_data.len <= single_packet_small_buffer.len and this.state.getBodyBuffer().list.items.len == 0) {
+            if (incoming_data.len <= single_packet_small_buffer.len && this.state.getBodyBuffer().list.items.len == 0) {
                 return this.handleResponseBodyChunkedEncodingFromSinglePacket(incoming_data)?;
             } else {
                 return this.handleResponseBodyChunkedEncodingFromMultiplePackets(incoming_data)?;
@@ -2511,7 +2511,7 @@ export @root @value struct HTTPClient {
                 } else if (header_hash == location_header_hash) {
                     location = header.value;
                 } else if (header_hash == connection_header_hash) {
-                    if (response.status_code >= 200 and response.status_code <= 299) {
+                    if (response.status_code >= 200 && response.status_code <= 299) {
                         // HTTP headers are case-insensitive (RFC 7230)
                         if (std.ascii.eqlIgnoreCase(header.value, "close")) {
                             this.state.flags.allow_keepalive = false;
@@ -2520,12 +2520,12 @@ export @root @value struct HTTPClient {
                         }
                     }
                 } else if (header_hash == last_modified_header_hash) {
-                    pretend_304 = this.flags.force_last_modified and response.status_code > 199 and response.status_code < 300 and this.if_modified_since.len > 0 and strings.eql(this.if_modified_since, header.value);
+                    pretend_304 = this.flags.force_last_modified && response.status_code > 199 && response.status_code < 300 && this.if_modified_since.len > 0 && strings.eql(this.if_modified_since, header.value);
                 } else if (header_hash == alt_svc_header_hash) {
                     // Record regardless of *this* request's shape — a future
                     // request to the same origin may be h3-eligible even if this
                     // one was pinned/proxied/sendfile.
-                    if (this.isHTTPS() and this.unix_socket_path.length() == 0 and h3AltSvcEnabled()) {
+                    if (this.isHTTPS() && this.unix_socket_path.length() == 0 && h3AltSvcEnabled()) {
                         H3.AltSvc.record(this.url.hostname, this.url.getPortAuto(), header.value);
                     }
                 }
@@ -2547,7 +2547,7 @@ export @root @value struct HTTPClient {
             // and is not waited for (which could cause a timeout).
             // This applies regardless of whether we're using a proxy tunnel or not,
             // since these status codes NEVER have a body per the HTTP spec.
-            if ((response.status_code >= 100 and response.status_code < 200) or response.status_code == 204 or response.status_code == 304) {
+            if ((response.status_code >= 100 && response.status_code < 200) || response.status_code == 204 || response.status_code == 304) {
                 this.state.content_length = 0;
             }
 
@@ -2562,12 +2562,12 @@ export @root @value struct HTTPClient {
                 // the keep-alive behavior (keep-alive being the default behavior for HTTP/1.1 and not for HTTP/1.0)
                 //
                 // but, we must only do this IF the status code allows it to contain a body.
-                if (this.state.content_length == null and this.state.transfer_encoding != .chunked) {
+                if (this.state.content_length == null && this.state.transfer_encoding != .chunked) {
                     this.state.flags.allow_keepalive = false;
                 }
             }
 
-            if (this.flags.proxy_tunneling and this.proxy_tunnel == null) {
+            if (this.flags.proxy_tunneling && this.proxy_tunnel == null) {
                 if (response.status_code == 200) {
                     // signal to continue the proxing
                     return ShouldContinue.continue_streaming;
@@ -2586,9 +2586,9 @@ export @root @value struct HTTPClient {
             }
 
             // if is no redirect or if is redirect == "manual" just proceed
-            const is_redirect = status_code >= 300 and status_code <= 399;
+            const is_redirect = status_code >= 300 && status_code <= 399;
             if (is_redirect) {
-                if (this.redirect_type == FetchRedirect.follow and location.len > 0 and this.remaining_redirect_count > 0) {
+                if (this.redirect_type == FetchRedirect.follow && location.len > 0 && this.remaining_redirect_count > 0) {
                     switch (status_code) {
                         302, 301, 307, 308, 303 => {
                             // https://fetch.spec.whatwg.org/#http-redirect-fetch step 11:
@@ -2597,7 +2597,7 @@ export @root @value struct HTTPClient {
                             // return a network error." A ReadableStream body has no
                             // source to replay from, so only 303 (which drops the body
                             // and switches to GET) may be followed.
-                            if (status_code != 303 and this.state.original_request_body == .stream) {
+                            if (status_code != 303 && this.state.original_request_body == .stream) {
                                 return error.RequestBodyNotReusable;
                             }
                             let is_same_origin = true;
@@ -2613,7 +2613,7 @@ export @root @value struct HTTPClient {
                                     const is_protocol_relative = i == 0;
                                     const protocol_name = if (is_protocol_relative) this.url.displayProtocol() else location[0..i];
                                     const is_http = strings.eqlComptime(protocol_name, "http");
-                                    if (is_http or strings.eqlComptime(protocol_name, "https")) {} else {
+                                    if (is_http || strings.eqlComptime(protocol_name, "https")) {} else {
                                         return error.UnsupportedRedirectProtocol;
                                     }
 
@@ -2733,8 +2733,8 @@ export @root @value struct HTTPClient {
                             // - internalResponse’s status is 301 or 302 and request’s method is `POST`
                             // - internalResponse’s status is 303 and request’s method is not `GET` or `HEAD`
                             // then:
-                            if (((status_code == 301 or status_code == 302) and this.method == .POST) or
-                                (status_code == 303 and this.method != .GET and this.method != .HEAD))
+                            if (((status_code == 301 || status_code == 302) && this.method == .POST) ||
+                                (status_code == 303 && this.method != .GET && this.method != .HEAD))
                             {
                                 // - Set request’s method to `GET` and request’s body to null.
                                 this.method = .GET;
@@ -2785,7 +2785,7 @@ export @root @value struct HTTPClient {
                             // locationURL’s origin, then for each headerName of CORS
                             // non-wildcard request-header name, delete headerName from
                             // request’s header list.
-                            if (!is_same_origin and this.header_entries.len > 0) {
+                            if (!is_same_origin && this.header_entries.len > 0) {
                                 const hashes_to_remove: [3]u64 = [
                                     authorization_header_hash,
                                     proxy_authorization_header_hash,
@@ -2832,7 +2832,7 @@ export @root @value struct HTTPClient {
                 return ShouldContinue.continue_streaming;
             }
 
-            if (this.method.hasBody() and (content_length == null or content_length.? > 0 or !this.state.flags.allow_keepalive or this.state.transfer_encoding == .chunked or is_server_sent_events)) {
+            if (this.method.hasBody() && (content_length == null || content_length.? > 0 || !this.state.flags.allow_keepalive || this.state.transfer_encoding == .chunked || is_server_sent_events)) {
                 return ShouldContinue.continue_streaming;
             } else {
                 return ShouldContinue.finished;

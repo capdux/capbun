@@ -367,7 +367,7 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
 
                     if (object_key_val := object_key) {
                         let owner: ObjectOwner? = null;
-                        if (owner_id != null or owner_display_name != null) {
+                        if (owner_id != null || owner_display_name != null) {
                             owner = ObjectOwner {
                                 id: owner_id,
                                 display_name: owner_display_name,
@@ -375,7 +375,7 @@ pub fn parseS3ListObjectsResult(xml: string): !S3ListObjectsV2Result {
                         }
 
                         let restore_status: ObjectRestoreStatus? = null;
-                        if (is_restore_in_progress != null or restore_expiry_date != null) {
+                        if (is_restore_in_progress != null || restore_expiry_date != null) {
                             restore_status = ObjectRestoreStatus {
                                 is_restore_in_progress: is_restore_in_progress,
                                 restore_expiry_date: restore_expiry_date,
@@ -521,7 +521,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
     if (val := listOptions.getTruthyComptime(globalThis, "continuationToken")?) {
         if (val.isString()) {
             let str = BunString.fromJS(val, globalThis)?;
-            if (str.tag != .Empty and str.tag != .Dead) {
+            if (str.tag != .Empty && str.tag != .Dead) {
                 listObjectsOptions._continuation_token = str.toUTF8(default_allocator);
                 listObjectsOptions.continuation_token = listObjectsOptions._continuation_token.?.slice();
             }
@@ -531,7 +531,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
     if (val := listOptions.getTruthyComptime(globalThis, "delimiter")?) {
         if (val.isString()) {
             let str = BunString.fromJS(val, globalThis)?;
-            if (str.tag != .Empty and str.tag != .Dead) {
+            if (str.tag != .Empty && str.tag != .Dead) {
                 listObjectsOptions._delimiter = str.toUTF8(default_allocator);
                 listObjectsOptions.delimiter = listObjectsOptions._delimiter.?.slice();
             }
@@ -541,7 +541,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
     if (val := listOptions.getTruthyComptime(globalThis, "encodingType")?) {
         if (val.isString()) {
             let str = BunString.fromJS(val, globalThis)?;
-            if (str.tag != .Empty and str.tag != .Dead) {
+            if (str.tag != .Empty && str.tag != .Dead) {
                 listObjectsOptions._encoding_type = str.toUTF8(default_allocator);
                 listObjectsOptions.encoding_type = listObjectsOptions._encoding_type.?.slice();
             }
@@ -561,7 +561,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
     if (val := listOptions.getTruthyComptime(globalThis, "prefix")?) {
         if (val.isString()) {
             let str = BunString.fromJS(val, globalThis)?;
-            if (str.tag != .Empty and str.tag != .Dead) {
+            if (str.tag != .Empty && str.tag != .Dead) {
                 listObjectsOptions._prefix = str.toUTF8(default_allocator);
                 listObjectsOptions.prefix = listObjectsOptions._prefix.?.slice();
             }
@@ -571,7 +571,7 @@ pub fn getListObjectsOptionsFromJS(globalThis: *JSGlobalObject, listOptions: JSV
     if (val := listOptions.getTruthyComptime(globalThis, "startAfter")?) {
         if (val.isString()) {
             let str = BunString.fromJS(val, globalThis)?;
-            if (str.tag != .Empty and str.tag != .Dead) {
+            if (str.tag != .Empty && str.tag != .Dead) {
                 listObjectsOptions._start_after = str.toUTF8(default_allocator);
                 listObjectsOptions.start_after = listObjectsOptions._start_after.?.slice();
             }

@@ -92,7 +92,7 @@ pub fn algorithmValueFromJS(globalObject: *jsc.JSGlobalObject, value: jsc.JSValu
 
                         const rounds = rounds_value.coerce(i32, globalObject)?;
 
-                        if (rounds < 4 or rounds > 31) {
+                        if (rounds < 4 || rounds > 31) {
                             return globalObject.throwInvalidArguments("Rounds must be between 4 and 31", .{});
                         }
 
@@ -721,7 +721,7 @@ pub class JSPasswordObject {
 
         let algorithm = Algorithm_Value{ .argon2id = .{} };
 
-        if (arguments.len > 1 and !arguments[1].isEmptyOrUndefinedOrNull()) {
+        if (arguments.len > 1 && !arguments[1].isEmptyOrUndefinedOrNull()) {
             algorithm = algorithmValueFromJS(globalObject, arguments[1])?;
         }
 
@@ -747,7 +747,7 @@ pub class JSPasswordObject {
 
         let algorithm = Algorithm_Value{ .argon2id = .{} };
 
-        if (arguments.len > 1 and !arguments[1].isEmptyOrUndefinedOrNull()) {
+        if (arguments.len > 1 && !arguments[1].isEmptyOrUndefinedOrNull()) {
             algorithm = algorithmValueFromJS(globalObject, arguments[1])?;
         }
 
@@ -775,7 +775,7 @@ pub class JSPasswordObject {
 
         let algorithm: AlgorithmEnum? = null;
 
-        if (arguments.len > 2 and !arguments[2].isEmptyOrUndefinedOrNull()) {
+        if (arguments.len > 2 && !arguments[2].isEmptyOrUndefinedOrNull()) {
             if (!arguments[2].isString()) {
                 return globalObject.throwInvalidArgumentType("verify", "algorithm", "string");
             }
@@ -822,7 +822,7 @@ pub class JSPasswordObject {
 
         let algorithm: AlgorithmEnum? = null;
 
-        if (arguments.len > 2 and !arguments[2].isEmptyOrUndefinedOrNull()) {
+        if (arguments.len > 2 && !arguments[2].isEmptyOrUndefinedOrNull()) {
             if (!arguments[2].isString()) {
                 return globalObject.throwInvalidArgumentType("verify", "algorithm", "string");
             }

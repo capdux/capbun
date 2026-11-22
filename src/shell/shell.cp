@@ -506,7 +506,7 @@ pub enum ASTCondExprOp {
             let idx: usize = 0;
             while (idx < fields.len) : (idx += 1) {
                 const f = fields[idx];
-                if (f.name[0] == '-' and f.name.len == 2) {
+                if (f.name[0] == '-' && f.name.len == 2) {
                     count += 1;
                 }
             }
@@ -517,7 +517,7 @@ pub enum ASTCondExprOp {
         let idx2: usize = 0;
         while (idx2 < fields.len) : (idx2 += 1) {
             const f = fields[idx2];
-            if (f.name[0] == '-' and f.name.len == 2) {
+            if (f.name[0] == '-' && f.name.len == 2) {
                 ret[len] = f;
                 len += 1;
             }
@@ -533,7 +533,7 @@ pub enum ASTCondExprOp {
             let idx: usize = 0;
             while (idx < fields.len) : (idx += 1) {
                 const f = fields[idx];
-                if (!(f.name[0] == '-' and f.name.len == 2)) {
+                if (!(f.name[0] == '-' && f.name.len == 2)) {
                     count += 1;
                 }
             }
@@ -544,7 +544,7 @@ pub enum ASTCondExprOp {
         let idx2: usize = 0;
         while (idx2 < fields.len) : (idx2 += 1) {
             const f = fields[idx2];
-            if (!(f.name[0] == '-' and f.name.len == 2)) {
+            if (!(f.name[0] == '-' && f.name.len == 2)) {
                 ret[len] = f;
                 len += 1;
             }

@@ -58,7 +58,7 @@ pub fn constructor(
 ): bun.JSError!*Response {
     let arguments = callframe.argumentsAsArray(2);
 
-    if (!arguments[0].isUndefinedOrNull() and arguments[0].isObject()) {
+    if (!arguments[0].isUndefinedOrNull() && arguments[0].isObject()) {
         bake_ssr_has_jsx.* = 0;
         if (arguments[0].isJSXElement(globalThis) ?) {
             const vm = globalThis.bunVM();
@@ -146,7 +146,7 @@ fn assertStreamingDisabled(
     async_local_storage: JSValue,
     display_function: []const u8,
 ): !void {
-    if (async_local_storage.isEmptyOrUndefinedOrNull() or !async_local_storage.isObject()) {
+    if (async_local_storage.isEmptyOrUndefinedOrNull() || !async_local_storage.isObject()) {
         return globalThis.throwInvalidArguments("store value must be an object", .{});
     }
     const getStoreFn = (async_local_storage.getPropertyValue(globalThis, "getStore") ?) ?? return globalThis.throwInvalidArguments("store value must have a \"getStore\" field", .{});

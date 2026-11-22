@@ -304,10 +304,10 @@ export class S3HttpSimpleTask {
                     }
                 }
             }
-            if ((!has_error and status == 200) or status == 206) {
+            if ((!has_error && status == 200) || status == 206) {
                 return false;
             }
-        } else if (status == 200 or status == 206) {
+        } else if (status == 200 || status == 206) {
             return false;
         }
 

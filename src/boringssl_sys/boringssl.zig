@@ -23510,7 +23510,7 @@ pub inline fn X509_STORE_set_lookup_crls_cb(ctx: anytype, func: anytype) @TypeOf
         }
 }
 
-pub inline fn timerisset(tvp: anytype) @TypeOf((tvp.*.tv_sec != 0) or (tvp.*.tv_usec != 0)) {
+pub inline fn timerisset(tvp: anytype) @TypeOf((tvp.*.tv_sec != 0) || (tvp.*.tv_usec != 0)) {
         {
             return ((tvp.*.tv_sec != 0) or (tvp.*.tv_usec != 0));
         }

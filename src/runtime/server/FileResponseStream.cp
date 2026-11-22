@@ -270,7 +270,7 @@ fn onSendfile(_: *FileResponseStream): bool {
 
             switch (errno) {
                 .SUCCESS => {
-                    if (_.sendfile.remain == 0 or sent == 0) {
+                    if (_.sendfile.remain == 0 || sent == 0) {
                         _.endSendfile();
                         return false;
                     }
@@ -301,7 +301,7 @@ fn onSendfile(_: *FileResponseStream): bool {
 
             switch (errno) {
                 .SUCCESS => {
-                    if (_.sendfile.remain == 0 or sent == 0) {
+                    if (_.sendfile.remain == 0 || sent == 0) {
                         _.endSendfile();
                         return false;
                     }

@@ -98,7 +98,7 @@ export struct UploadPart {
 
     static fn onPartResponse(result: S3SimpleRequest.S3PartResult, self_any: *!): JSTerminatedError!void {
         const part: *UploadPart = unsafe { @ptrCast(@alignCast(self_any)) };
-        if (part.state == .canceled or part.ctx.state == .finished) {
+        if (part.state == .canceled || part.ctx.state == .finished) {
             log("onPartResponse {} canceled", .{ part.partNumber });
             part.freeAllocatedSlice();
             part.ctx.deref();
@@ -157,7 +157,7 @@ export struct UploadPart {
     }
 
     pub fn start(*_): JSTerminatedError!void {
-        if (this.state != .pending or this.ctx.state != .multipart_completed) return;
+        if (this.state != .pending || this.ctx.state != .multipart_completed) return;
         this.ctx.ref();
         this.state = .started;
         this.perform()?;
@@ -349,7 +349,7 @@ export class MultiPartUpload {
     }
 
     fn drainEnqueuedParts(*_, flushed: u64): JSTerminatedError!void {
-        if (this.state == .finished or this.state == .singlefile_started) {
+        if (this.state == .finished || this.state == .singlefile_started) {
             return;
         }
         if (this.state == .multipart_completed) {
@@ -362,7 +362,7 @@ export class MultiPartUpload {
             }
         }
         let partSize = this.partSizeInBytes();
-        if (this.ended or this.buffered.size() >= partSize) {
+        if (this.ended || this.buffered.size() >= partSize) {
             this.processMultiPart(partSize)?;
         }
 
@@ -373,7 +373,7 @@ export class MultiPartUpload {
             if (this.ended) {
                 this.done()?;
             }
-        } else if (!this.hasBackpressure() and flushed > 0) {
+        } else if (!this.hasBackpressure() && flushed > 0) {
             if (callback := this.onWritable) {
                 callback(this, this.callback_context, flushed);
             }
@@ -577,7 +577,7 @@ export class MultiPartUpload {
 
     fn processMultiPart(*_, part_size: usize): JSTerminatedError!void {
         log("processMultiPart {s} {d}", .{ this.path, part_size });
-        if (this.buffered.isEmpty() and this.isQueueEmpty() and this.ended) {
+        if (this.buffered.isEmpty() && this.isQueueEmpty() && this.ended) {
             this.done()?;
             return;
         }
@@ -589,11 +589,11 @@ export class MultiPartUpload {
 
         while (this.buffered.isNotEmpty()) {
             let len = @min(part_size, this.buffered.size());
-            if (len < part_size and !this.ended) {
+            if (len < part_size && !this.ended) {
                 log("processMultiPart {s} {d} slice too small", .{ this.path, len });
                 break;
             }
-            if (this.buffered.cursor == 0 and this.buffered.size() == len) {
+            if (this.buffered.cursor == 0 && this.buffered.size() == len) {
                 let allocated_size = this.buffered.memoryCost();
                 let slice = this.buffered.slice();
 
@@ -622,7 +622,7 @@ export class MultiPartUpload {
     }
 
     fn processBuffered(*_, part_size: usize) {
-        if (this.ended and this.buffered.size() < this.partSizeInBytes() and this.state == .not_started) {
+        if (this.ended && this.buffered.size() < this.partSizeInBytes() && this.state == .not_started) {
             log("processBuffered {s} singlefile_started", .{ this.path });
             this.state = .singlefile_started;
             const req_opts = S3SimpleRequest.S3SimpleRequestOptions{
@@ -672,7 +672,7 @@ export class MultiPartUpload {
         if (this.ended) return ResumableSinkBackpressure.done;
         this.ref();
         let self_guard = DerefGuard<MultiPartUpload>{ ptr: this };
-        if (this.state == .wait_stream_check and chunk.len == 0 and is_last) {
+        if (this.state == .wait_stream_check && chunk.len == 0 && is_last) {
             this.ended = true;
             if (this.buffered.size() > 0) {
                 this.processBuffered(this.partSizeInBytes());

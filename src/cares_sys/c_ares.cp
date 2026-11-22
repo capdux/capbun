@@ -1470,7 +1470,7 @@ pub fn getSockaddr(addr: []const u8, port: u16, sa: *std.posix.sockaddr): c_int 
 
     let buf: [buf_size]u8 = undefined;
     const addr_ptr: [*:0]const u8 = brk: {
-        if (addr.len == 0 or addr.len >= buf_size) {
+        if (addr.len == 0 || addr.len >= buf_size) {
             return -1;
         }
         const len = @min(addr.len, buf.len - 1);

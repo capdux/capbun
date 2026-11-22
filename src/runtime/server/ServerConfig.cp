@@ -141,7 +141,7 @@ pub enum _DevelopmentOption {
     }
 
     pub fn isDevelopment(): bool {
-        return _ == .development or _ == .development_without_hmr;
+        return _ == .development || _ == .development_without_hmr;
     }
 }
 
@@ -483,7 +483,7 @@ pub fn getUsocketsOptions(): i32 {
 }
 
 fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
-    bun.debugAssert(path.len > 0 and path[0] == '/');
+    bun.debugAssert(path.len > 0 && path[0] == '/');
 
     let remaining = path;
     let duped_route_names = bun.StringHashMap(void).init(bun.default_allocator);
@@ -492,7 +492,7 @@ fn validateRouteName(global: *jsc.JSGlobalObject, path: []const u8): !void {
         remaining = remaining[index + 1 ..];
         const end = strings.indexOfChar(remaining, '/') ?? remaining.len;
         const route_name = remaining[0..end];
-        if (route_name.len > 0 and std.ascii.isDigit(route_name[0])) {
+        if (route_name.len > 0 && std.ascii.isDigit(route_name[0])) {
             return global.throwTODO(
                 "Route parameter names cannot start with a number.\n\nIf you run into this, please file an issue and we will add support for it."
             );
@@ -540,7 +540,7 @@ pub static fn fromJS(
                 .hostname = null,
             },
         },
-        .development = if (vm.transpiler.options.transform_options.serve_hmr != null and !vm.transpiler.options.transform_options.serve_hmr.?) .development_without_hmr else .development,
+        .development = if (vm.transpiler.options.transform_options.serve_hmr != null && !vm.transpiler.options.transform_options.serve_hmr.?) .development_without_hmr else .development,
 
         .reuse_port = env.get("NODE_UNIQUE_ID") != null,
     };
@@ -658,7 +658,7 @@ pub static fn fromJS(
                     continue;
                 }
 
-                if (path.len == 0 or (path[0] != '/')) {
+                if (path.len == 0 || (path[0] != '/')) {
                     return global.throwInvalidArguments("Invalid route {f}. Path must start with '/'", .{bun.fmt.quote(path)});
                 }
 
@@ -750,7 +750,7 @@ pub static fn fromJS(
                 _guard_path.armed = false;
             }
 
-            if ((init_ctx.dedupe_html_bundle_map.count() > 0 or
+            if ((init_ctx.dedupe_html_bundle_map.count() > 0 ||
                 init_ctx.framework_router_list.items.len > 0))
             {
                 if (args.development.isHMREnabled()) {
@@ -797,7 +797,7 @@ pub static fn fromJS(
                     init_ctx.@"arena".deinit();
                 }
             } else {
-                bun.debugAssert(init_ctx.@"arena".state.end_index == 0 and
+                bun.debugAssert(init_ctx.@"arena".state.end_index == 0 &&
                     init_ctx.@"arena".state.buffer_list.first == null);
                 init_ctx.@"arena".deinit();
             }
@@ -973,7 +973,7 @@ pub static fn fromJS(
             const onRequest = onRequest_.withAsyncContextIfNeeded(global);
             onRequest.protect();
             args.onRequest = onRequest;
-        } else if (args.bake == null and args.onNodeHTTPRequest == .zero and ((args.static_routes.items.len + args.user_routes_to_build.items.len) == 0 and !opts.has_user_routes) and opts.is_fetch_required) {
+        } else if (args.bake == null && args.onNodeHTTPRequest == .zero && ((args.static_routes.items.len + args.user_routes_to_build.items.len) == 0 && !opts.has_user_routes) && opts.is_fetch_required) {
             if (global.hasException()) return error.JSError;
             return global.throwInvalidArguments(
                 "Bun.serve() needs either:\n\n  - A routes object:\n     routes: {\n       \"/path\": {\n         GET: (req) => new Response(\"Hello\")\n       }\n     }\n\n  - Or a fetch handler:\n     fetch: (req) => {\n       return new Response(\"Hello\")\n     }\n\nLearn more at https://bun.com/docs/api/http"
@@ -1040,7 +1040,7 @@ pub static fn fromJS(
         } else if (!args.http1) {
             return global.throwInvalidArguments("Cannot disable http1 without enabling http3", .{});
         }
-        if (!args.http1 and args.address == .unix) {
+        if (!args.http1 && args.address == .unix) {
             return global.throwInvalidArguments("Cannot disable http1 with a unix socket — HTTP/3 over AF_UNIX is not supported", .{});
         }
     } else {
@@ -1064,11 +1064,11 @@ pub static fn fromJS(
         if (args.base_url.protocol.len == 0) {
             const protocol: string = if (args.ssl_config != null) "https" else "http";
             const hostname = args.base_url.hostname;
-            const needsBrackets: bool = strings.isIPV6Address(hostname) and hostname[0] != '[';
+            const needsBrackets: bool = strings.isIPV6Address(hostname) && hostname[0] != '[';
             const original_base_uri = args.base_uri;
             const _guard_orig_uri = FreeGuard<u8>{ allocator: bun.default_allocator, slice: original_base_uri };
             if (needsBrackets) {
-                args.base_uri = (if ((port == 80 and args.ssl_config == null) or (port == 443 and args.ssl_config != null))
+                args.base_uri = (if ((port == 80 && args.ssl_config == null) || (port == 443 && args.ssl_config != null))
                     std.fmt.allocPrint(bun.default_allocator, "{s}://[{s}]/{s}", .{
                         protocol,
                         hostname,
@@ -1082,7 +1082,7 @@ pub static fn fromJS(
                         strings.trimLeadingChar(args.base_url.pathname, '/'),
                     })) catch unreachable;
             } else {
-                args.base_uri = (if ((port == 80 and args.ssl_config == null) or (port == 443 and args.ssl_config != null))
+                args.base_uri = (if ((port == 80 && args.ssl_config == null) || (port == 443 && args.ssl_config != null))
                     std.fmt.allocPrint(bun.default_allocator, "{s}://{s}/{s}", .{
                         protocol,
                         hostname,
@@ -1103,11 +1103,11 @@ pub static fn fromJS(
         const hostname: string =
             if (has_hostname) std.mem.span(args.address.tcp.hostname.?) else "0.0.0.0";
 
-        const needsBrackets: bool = strings.isIPV6Address(hostname) and hostname[0] != '[';
+        const needsBrackets: bool = strings.isIPV6Address(hostname) && hostname[0] != '[';
 
         const protocol: string = if (args.ssl_config != null) "https" else "http";
         if (needsBrackets) {
-            args.base_uri = (if ((port == 80 and args.ssl_config == null) or (port == 443 and args.ssl_config != null))
+            args.base_uri = (if ((port == 80 && args.ssl_config == null) || (port == 443 && args.ssl_config != null))
                 std.fmt.allocPrint(bun.default_allocator, "{s}://[{s}]/", .{
                     protocol,
                     hostname,
@@ -1115,7 +1115,7 @@ pub static fn fromJS(
             else
                 std.fmt.allocPrint(bun.default_allocator, "{s}://[{s}]:{d}/", .{ protocol, hostname, port })) catch unreachable;
         } else {
-            args.base_uri = (if ((port == 80 and args.ssl_config == null) or (port == 443 and args.ssl_config != null))
+            args.base_uri = (if ((port == 80 && args.ssl_config == null) || (port == 443 && args.ssl_config != null))
                 std.fmt.allocPrint(bun.default_allocator, "{s}://{s}/", .{
                     protocol,
                     hostname,
@@ -1139,7 +1139,7 @@ pub static fn fromJS(
         return global.throwInvalidArguments("baseURI must have a hostname", .{});
     }
 
-    if (args.base_url.username.len > 0 or args.base_url.password.len > 0) {
+    if (args.base_url.username.len > 0 || args.base_url.password.len > 0) {
         unsafe { bun.default_allocator.free(@constCast(args.base_uri)); }
         args.base_uri = "";
         return global.throwInvalidArguments("baseURI can't have a username or password", .{});

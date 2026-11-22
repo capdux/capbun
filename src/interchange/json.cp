@@ -746,7 +746,7 @@ pub fn parse(
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data };
@@ -779,7 +779,7 @@ pub fn parsePackageJSONUTF8(
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data };
@@ -822,7 +822,7 @@ pub fn parsePackageJSONUTF8WithOpts(
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return .{ .root = Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data } };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return .{ .root = Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data } };
@@ -872,7 +872,7 @@ pub fn parseUTF8Impl(
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data };
@@ -903,7 +903,7 @@ pub fn parseForMacro(source: *const logger.Source, log: *logger.Log, allocator: 
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data };
@@ -940,7 +940,7 @@ pub fn parseForBundling(source: *const logger.Source, log: *logger.Log, allocato
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return JSONParseResult{ .expr = Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data }, .tag = .expr };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return JSONParseResult{ .expr = Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data }, .tag = .expr };
@@ -967,7 +967,7 @@ pub fn parseEnvJSON(source: *const logger.Source, log: *logger.Log, allocator: s
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data };
@@ -1019,7 +1019,7 @@ pub fn parseTSConfig(source: *const logger.Source, log: *logger.Log, allocator: 
         },
         // This is a fast pass I guess
         2 => {
-            if (strings.eqlComptime(source.contents[0..1], "\"\"") or strings.eqlComptime(source.contents[0..1], "''")) {
+            if (strings.eqlComptime(source.contents[0..1], "\"\"") || strings.eqlComptime(source.contents[0..1], "''")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_string_data };
             } else if (strings.eqlComptime(source.contents[0..1], "{}")) {
                 return Expr{ .loc = logger.Loc{ .start = 0 }, .data = empty_object_data };

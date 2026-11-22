@@ -481,7 +481,7 @@ struct ServePlugins {
                             pending.html_bundle_routes.append(bun.default_allocator, route)?;
                         },
                         .dev_server => |server| {
-                            assert(pending.dev_server == null or pending.dev_server == server); // one dev server per server
+                            assert(pending.dev_server == null || pending.dev_server == server); // one dev server per server
                             pending.dev_server = server;
                         },
                     }

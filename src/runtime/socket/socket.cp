@@ -1394,7 +1394,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             }
 
             const opts = args.ptr[0];
-            if (opts.isEmptyOrUndefinedOrNull() or opts.isBoolean() or !opts.isObject()) {
+            if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
                 return globalObject.throw("Expected options object", .{});
             }
 
@@ -1437,7 +1437,7 @@ pub fn NewSocket(comptime ssl: bool): type {
             const args = callframe.arguments_old(1);
             if (args.len < 1) return globalObject.throw("Expected 1 arguments", .{});
             const opts = args.ptr[0];
-            if (opts.isEmptyOrUndefinedOrNull() or opts.isBoolean() or !opts.isObject()) {
+            if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
                 return globalObject.throw("Expected options object", .{});
             }
 
@@ -1878,7 +1878,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     }
 
     const opts = args.ptr[1];
-    if (opts.isEmptyOrUndefinedOrNull() or opts.isBoolean() or !opts.isObject()) {
+    if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
         return globalObject.throw("Expected options object", .{});
     }
 
@@ -1923,7 +1923,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
             _ssl_opts_guard.val = jsc.API.ServerConfig.SSLConfig.zero;
         }
     }
-    if (_ctx_guard.ctx == null and _ssl_opts_guard.val == null) {
+    if (_ctx_guard.ctx == null && _ssl_opts_guard.val == null) {
         return globalObject.throw("Expected \"tls\" option", .{});
     }
     let socket_config: (*jsc.API.ServerConfig.SSLConfig)? = null;
@@ -1965,7 +1965,7 @@ pub fn jsUpgradeDuplexToTLS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.C
     TLSSocket.js.dataSetCached(tls_js_value, globalObject, default_data);
 
     let final_ssl_config: jsc.API.ServerConfig.SSLConfig? = null;
-    if (_ctx_guard.ctx == null and socket_config != null) {
+    if (_ctx_guard.ctx == null && socket_config != null) {
         final_ssl_config = socket_config.?.*;
     }
 

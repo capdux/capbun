@@ -512,3 +512,8 @@
 - 完成 `temp/wave59_orelse_todo.txt` 全部 12 组共 132 个 `.cp` 模块的 `orelse` -> `??` / `== null` + `.?` / `if (v := opt)` 纯化（`return struct/union/enum` 原生 Zig 泛型工厂透传块内部按规范保留），全量通过 `cpc --lib` + `zig ast-check` 与静态零违例门禁。
 - 修复 `src/js_parser_jsc/Macro.cp`（`Bun__startMacro` 参数改为 `*const void` + `@ptrCast(&call)`）与 `src/runtime/webcore/FileSink.cp`（`let stream_file` 规避 `&file` 被误生成为 `*const file`）后，`bun run zig:check` 5/5 通过（21s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
 - 推导下一阶段 Wave #60：`and`/`or` -> `&&`/`||`（`temp/wave60_and_or_todo.txt`，281 个非注释代码文件），启动 2 路并行子智能体推进。
+
+## [2026-11-23] Wave #60：布尔关键字 `and`/`or` -> `&&`/`||` 纯化完成与验收
+- 完成 `temp/wave60_and_or_todo.txt` 全部 7 组（覆盖 281 个非注释候选文件，剔除字符串与 `return struct/union/enum` 原生 Zig 透传泛型工厂块）的 `and`/`or` -> `&&`/`||` 纯化，全量通过 `cpc_brief.py` 四项门禁。
+- 修复 `src/bun_alloc/allocation_scope.cp` 第 38 行指针修饰符（`(const *ExtraVTable)?` -> `(*const ExtraVTable)?`）后，`bun run zig:check` 5/5 通过（30s），`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 通过（460 expect）。
+- 推导下一阶段 Wave #61：全仓尾项清扫（非透传 `try ` 26 候选与 `const X = struct/enum/union` 27 候选），继续保持 2 路并行子智能体推进。

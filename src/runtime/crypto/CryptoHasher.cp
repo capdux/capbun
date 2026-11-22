@@ -214,7 +214,7 @@ pub union(enum) CryptoHasher {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-        if (input == .blob and input.blob.isBunFile()) {
+        if (input == .blob && input.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
@@ -234,7 +234,7 @@ pub union(enum) CryptoHasher {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
-        if (input == .blob and input.blob.isBunFile()) {
+        if (input == .blob && input.blob.isBunFile()) {
             return globalThis.throw("Bun.file() is not supported here yet (it needs an async version)", .{});
         }
 
@@ -312,7 +312,7 @@ pub union(enum) CryptoHasher {
         }
 
         const algorithm_name = unsafe { arguments.ptr[0] };
-        if (algorithm_name.isEmptyOrUndefinedOrNull() or !algorithm_name.isString()) {
+        if (algorithm_name.isEmptyOrUndefinedOrNull() || !algorithm_name.isString()) {
             return globalThis.throwInvalidArguments("algorithm must be a string", .{});
         }
 

@@ -54,7 +54,7 @@ pub @value class Handler {
             .{ "pong", "onPong" },
         }) {
             if (value := object.getTruthy(globalObject, pair[0])?) {
-                if (!value.isCell() or !value.isCallable()) {
+                if (!value.isCell() || !value.isCallable()) {
                     return globalObject.throwInvalidArguments("websocket expects a function for the '{s}' option", .{pair[0]});
                 }
                 const cb = value.withAsyncContextIfNeeded(globalObject);
@@ -168,7 +168,7 @@ export @root struct WebSocketServerContext {
                     break :deflate;
                 }
 
-                if (per_message_deflate.isBoolean() or per_message_deflate.isNull()) {
+                if (per_message_deflate.isBoolean() || per_message_deflate.isNull()) {
                     if (per_message_deflate.toBoolean()) {
                         server.compression = uws.SHARED_COMPRESSOR | uws.SHARED_DECOMPRESSOR;
                     } else {

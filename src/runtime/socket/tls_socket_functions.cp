@@ -586,7 +586,7 @@ pub fn getTLSTicket(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
     let length: usize = 0;
     BoringSSL.SSL_SESSION_get0_ticket(session, unsafe { @as([*c][*c]const u8, @ptrCast(&ticket)) }, &length);
 
-    if (ticket == null or length == 0) {
+    if (ticket == null || length == 0) {
         return JSValue.js_undefined;
     }
 
@@ -631,7 +631,7 @@ pub fn setVerifyMode(*_: *This, globalObject: *jsc.JSGlobalObject, callframe: *j
     }
     const request_cert_js = args.ptr[0];
     const reject_unauthorized_js = args.ptr[1];
-    if (!request_cert_js.isBoolean() or !reject_unauthorized_js.isBoolean()) {
+    if (!request_cert_js.isBoolean() || !reject_unauthorized_js.isBoolean()) {
         return globalObject.throw("Expected requestCert and rejectUnauthorized arguments to be boolean", .{});
     }
 

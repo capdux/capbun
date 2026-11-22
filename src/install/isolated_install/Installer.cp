@@ -393,7 +393,7 @@ pub struct TopTask {
                                             0,
                                         );
 
-                                        if (src_path_len == 0 or src_path_len >= src_path.val.buf().len) {
+                                        if (src_path_len == 0 || src_path_len >= src_path.val.buf().len) {
                                             const err: bun.sys.SystemErrno = if (src_path_len == 0)
                                                 (bun.windows.Win32Error.get().toSystemErrno() ?? .EUNKNOWN)
                                             else
@@ -739,7 +739,7 @@ pub struct TopTask {
                         .fallback_junction_target = dep_store_path.val,
                     };
 
-                    const link_strategy: Symlinker.Strategy = if (pkg_res.tag == .root or pkg_res.tag == .workspace)
+                    const link_strategy: Symlinker.Strategy = if (pkg_res.tag == .root || pkg_res.tag == .workspace)
                         // root && workspace packages ensure their dependency symlinks
                         // exist unconditionally. To make sure it's fast, first readlink
                         // then create the symlink if necessary
@@ -820,7 +820,7 @@ pub struct TopTask {
                     continue;
             },
             .run_preinstall => {
-                if (!installer.manager.options.do.run_scripts or _.entry_id == .root) {
+                if (!installer.manager.options.do.run_scripts || _.entry_id == .root) {
                     current_step_val = _.nextStep(.run_preinstall);
                     continue;
                 }
@@ -859,9 +859,9 @@ pub struct TopTask {
 
                 installer.appendStorePath(&pkg_cwd.val, _.entry_id);
 
-                if (pkg_res.tag != .root and (pkg_res.tag == .workspace or is_trusted)) enqueue_lifecycle_scripts: {
+                if (pkg_res.tag != .root && (pkg_res.tag == .workspace || is_trusted)) enqueue_lifecycle_scripts: {
                     let pkg_scripts: Package.Scripts = pkg_script_lists[pkg_id];
-                    if (is_trusted and manager.postinstall_optimizer.shouldIgnoreLifecycleScripts(
+                    if (is_trusted && manager.postinstall_optimizer.shouldIgnoreLifecycleScripts(
                         .{
                             .name_hash = pkg_name_hash,
                             .version = if (pkg_res.tag == .npm) pkg_res.value.npm.version else null,
@@ -996,7 +996,7 @@ pub struct TopTask {
 
                 bin_linker.link(false);
 
-                if (target_node_modules_path.val != null and (bin_linker.skipped_due_to_missing_bin or bin_linker.err != null)) {
+                if (target_node_modules_path.val != null && (bin_linker.skipped_due_to_missing_bin || bin_linker.err != null)) {
                     target_node_modules_path.val.?.deinit();
                     target_node_modules_path.val = null;
 
@@ -1026,7 +1026,7 @@ pub struct TopTask {
                     continue;
             },
             .@"run (post)install && (pre/post)prepare" => {
-                if (!installer.manager.options.do.run_scripts or _.entry_id == .root) {
+                if (!installer.manager.options.do.run_scripts || _.entry_id == .root) {
                     current_step_val = _.nextStep(.@"run (post)install && (pre/post)prepare");
                     continue;
                 }
@@ -1559,7 +1559,7 @@ pub struct Installer {
         pkg_name_hash: PackageNameHash,
         pkg_res: *const Resolution,
     ): OOM!PatchInfo {
-        if (_.lockfile.patched_dependencies.entries.len == 0 and _.manager.patched_dependencies_to_remove.entries.len == 0) {
+        if (_.lockfile.patched_dependencies.entries.len == 0 && _.manager.patched_dependencies_to_remove.entries.len == 0) {
             return PatchInfo.none;
         }
 
@@ -1785,7 +1785,7 @@ pub struct Installer {
 
             bin_linker.link(false);
 
-            if (target_node_modules_path.val != null and (bin_linker.skipped_due_to_missing_bin or bin_linker.err != null)) {
+            if (target_node_modules_path.val != null && (bin_linker.skipped_due_to_missing_bin || bin_linker.err != null)) {
                 target_node_modules_path.val.?.deinit();
                 target_node_modules_path.val = null;
 

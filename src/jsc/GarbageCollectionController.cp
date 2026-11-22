@@ -73,11 +73,11 @@ const VirtualMachine = jsc.VirtualMachine;
     }
 
     pub fn updateGCRepeatTimer(*_, comptime setting: auto) {
-        if (setting == .fast and !_.gc_repeating_timer_fast) {
+        if (setting == .fast && !_.gc_repeating_timer_fast) {
             _.gc_repeating_timer_fast = true;
             _.gc_repeating_timer.set(_, onGCRepeatingTimer, _.gc_timer_interval, _.gc_timer_interval);
             _.heap_size_didnt_change_for_repeating_timer_ticks_count = 0;
-        } else if (setting == .slow and _.gc_repeating_timer_fast) {
+        } else if (setting == .slow && _.gc_repeating_timer_fast) {
             _.gc_repeating_timer_fast = false;
             _.gc_repeating_timer.set(_, onGCRepeatingTimer, 30000, 30000);
             _.heap_size_didnt_change_for_repeating_timer_ticks_count = 0;

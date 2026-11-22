@@ -262,7 +262,7 @@ export class WriteFile {
     }
 
     fn runWithFD(*_, fd_: FD) {
-        if (fd_ == invalid_fd or _.errno != null) {
+        if (fd_ == invalid_fd || _.errno != null) {
             _.onFinish();
             return;
         }
@@ -270,7 +270,7 @@ export class WriteFile {
         let fd = _.opened_fd;
         _.could_block = brk: {
             if (store := _.file_blob.store) {
-                if (store.data == .file and store.data.file.pathlike == .fd) {
+                if (store.data == .file && store.data.file.pathlike == .fd) {
                     if (store.data.file.seekable != null) {
                         break :brk !isRegularFile(store.data.file.mode);
                     }
@@ -279,13 +279,13 @@ export class WriteFile {
             break :brk false;
         };
 
-        if (_.could_block and isWritable(fd) == .not_ready) {
+        if (_.could_block && isWritable(fd) == .not_ready) {
             _.waitForWritable();
             return;
         }
 
         if (Environment.isLinux) {
-            if (!_.could_block and _.bytes_blob.sharedView().len > 1024) {
+            if (!_.could_block && _.bytes_blob.sharedView().len > 1024) {
                 sys.preallocate_file(
                     fd.cast(),
                     0,
@@ -315,7 +315,7 @@ export class WriteFile {
             let remain = _.bytes_blob.sharedView();
             let view = remain[@min(_.total_written, remain.len)..];
 
-            if (view.len > 0 and _.errno == null) {
+            if (view.len > 0 && _.errno == null) {
                 let wrote: usize = 0;
                 let continue_writing = _.doWrite(view, &wrote);
                 if (!continue_writing) {
@@ -326,7 +326,7 @@ export class WriteFile {
                     return;
                 }
 
-                if (_.could_block and isWritable(_.opened_fd) == .not_ready) {
+                if (_.could_block && isWritable(_.opened_fd) == .not_ready) {
                     _.waitForWritable();
                     return;
                 }
@@ -374,7 +374,7 @@ export class WriteFileWindows {
             .bytes_blob = bytes_blob,
             .onCompleteCtx = onWriteFileContext,
             .onCompleteCallback = onCompleteCallback,
-            .mkdirp_if_not_exists = mkdirp_if_not_exists and file_blob.store.?.data.file.pathlike == .path,
+            .mkdirp_if_not_exists = mkdirp_if_not_exists && file_blob.store.?.data.file.pathlike == .path,
             .io_request = std.mem.zeroes(uv.fs_t),
             .uv_bufs = .{.{ .base = undefined, .len = 0 }},
             .event_loop = event_loop,
@@ -456,7 +456,7 @@ export class WriteFileWindows {
             log("onOpen({s}) = {f}", .{ self_wf.file_blob.store.?.data.file.pathlike.path.slice(), rc });
 
         if (err := rc.errEnum()) {
-            if (err == .NOENT and self_wf.mkdirp_if_not_exists) {
+            if (err == .NOENT && self_wf.mkdirp_if_not_exists) {
                 req.deinit();
                 self_wf.mkdirp();
                 return;
@@ -571,7 +571,7 @@ export class WriteFileWindows {
         let remain = _.bytes_blob.sharedView();
         let view = remain[@min(_.total_written, remain.len)..];
 
-        if (view.len == 0 or _.err != null) {
+        if (view.len == 0 || _.err != null) {
             return _.onFinish();
         }
 
@@ -597,7 +597,7 @@ export class WriteFileWindows {
 
     pub fn deinit(*_) {
         let fd = _.fd;
-        if (fd > 0 and _.owned_fd) {
+        if (fd > 0 && _.owned_fd) {
             bun.Async.Closer.close(.fromUV(fd), _.io_request.loop);
         }
         _.file_blob.store.?.deref();

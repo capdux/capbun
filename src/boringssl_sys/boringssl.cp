@@ -20016,10 +20016,10 @@ pub const DST_WET = @as(c_int, 3);
 pub const DST_MET = @as(c_int, 4);
 pub const DST_EET = @as(c_int, 5);
 pub const DST_CAN = @as(c_int, 6);
-pub inline fn timerisset(tvp: anytype): @TypeOf((tvp.*.tv_sec != 0) or (tvp.*.tv_usec != 0)) {
+pub inline fn timerisset(tvp: anytype): @TypeOf((tvp.*.tv_sec != 0) || (tvp.*.tv_usec != 0)) {
     unsafe {
 
-    return (tvp.*.tv_sec != 0) or (tvp.*.tv_usec != 0);
+    return (tvp.*.tv_sec != 0) || (tvp.*.tv_usec != 0);
     }
 }
 pub inline fn timevalcmp(l: anytype, r: anytype, cmp: anytype): @TypeOf(timercmp(l, r, cmp)) {

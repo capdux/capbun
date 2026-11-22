@@ -505,7 +505,7 @@ pub fn listen(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JSV
     const ssl_enabled = ssl != null;
     const socket_flags = socket_config.socketFlags();
 
-    if (Environment.isWindows and port == null) {
+    if (Environment.isWindows && port == null) {
         let buf: bun.PathBuffer = undefined;
         if (pipe_name := normalizePipeName(hostname_or_unix.slice(), buf[0..])) {
             const connection: Listener.UnixOrHost = .{
@@ -712,7 +712,7 @@ pub fn connect(globalObject: *jsc.JSGlobalObject, opts: JSValue): bun.JSError!JS
 }
 
 pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSocket)?, prev_maybe_tls: (*TLSSocket)?, opts: JSValue): bun.JSError!JSValue {
-    if (opts.isEmptyOrUndefinedOrNull() or opts.isBoolean() or !opts.isObject()) {
+    if (opts.isEmptyOrUndefinedOrNull() || opts.isBoolean() || !opts.isObject()) {
         return globalObject.throwInvalidArguments("Expected options object", .{});
     }
     const vm = globalObject.bunVM();
@@ -919,7 +919,7 @@ pub fn connectInner(globalObject: *jsc.JSGlobalObject, prev_maybe_tcp: (*TCPSock
         }
     }
 
-    if (ssl_enabled and owned_ssl_ctx == null) {
+    if (ssl_enabled && owned_ssl_ctx == null) {
         if (ssl_cfg := ssl) {
             let create_err: uws.create_bun_socket_error_t = .none;
             const maybe_ctx = vm.rareData().sslCtxCache().getOrCreate(ssl_cfg, &create_err);
@@ -1027,13 +1027,13 @@ fn isValidPipeName(pipe_name: []const u8): bool {
     if (!Environment.isWindows) {
         return false;
     }
-    return pipe_name.len > 9 and
-        NodePath.isSepWindowsT(u8, pipe_name[0]) and
-        NodePath.isSepWindowsT(u8, pipe_name[1]) and
-        (pipe_name[2] == '.' or pipe_name[2] == '?') and
-        NodePath.isSepWindowsT(u8, pipe_name[3]) and
-        strings.eql(pipe_name[4..8], "pipe") and
-        NodePath.isSepWindowsT(u8, pipe_name[8]) and
+    return pipe_name.len > 9 &&
+        NodePath.isSepWindowsT(u8, pipe_name[0]) &&
+        NodePath.isSepWindowsT(u8, pipe_name[1]) &&
+        (pipe_name[2] == '.' || pipe_name[2] == '?') &&
+        NodePath.isSepWindowsT(u8, pipe_name[3]) &&
+        strings.eql(pipe_name[4..8], "pipe") &&
+        NodePath.isSepWindowsT(u8, pipe_name[8]) &&
         !NodePath.isSepWindowsT(u8, pipe_name[9]);
 }
 

@@ -160,8 +160,8 @@ export class WindowsNamedPipe {
 
         _.ssl_error = .{
             .error_no = ssl_error.error_no,
-            .code = if (ssl_error.code == null or ssl_error.error_no == 0) "" else bun.handleOom(bun.default_allocator.dupeZ(u8, ssl_error.code[0..bun.len(ssl_error.code) :0])),
-            .reason = if (ssl_error.reason == null or ssl_error.error_no == 0) "" else bun.handleOom(bun.default_allocator.dupeZ(u8, ssl_error.reason[0..bun.len(ssl_error.reason) :0])),
+            .code = if (ssl_error.code == null || ssl_error.error_no == 0) "" else bun.handleOom(bun.default_allocator.dupeZ(u8, ssl_error.code[0..bun.len(ssl_error.code) :0])),
+            .reason = if (ssl_error.reason == null || ssl_error.error_no == 0) "" else bun.handleOom(bun.default_allocator.dupeZ(u8, ssl_error.reason[0..bun.len(ssl_error.reason) :0])),
         };
         _.handlers.onHandshake(_.handlers.ctx, handshake_success, ssl_error);
     }
@@ -243,7 +243,7 @@ export class WindowsNamedPipe {
     pub fn onTimeout(*_) {
         log("onTimeout", .{});
 
-        const has_been_cleared = _.event_loop_timer.state == .CANCELLED or _.vm.scriptExecutionStatus() != .running;
+        const has_been_cleared = _.event_loop_timer.state == .CANCELLED || _.vm.scriptExecutionStatus() != .running;
 
         _.event_loop_timer.state = .FIRED;
         _.event_loop_timer.heap = .{};
@@ -514,7 +514,7 @@ export class WindowsNamedPipe {
             return wrapper.isShutdown();
         }
 
-        return _.flags.disconnected or _.writer.is_done;
+        return _.flags.disconnected || _.writer.is_done;
     }
 
     pub fn isClosed(): bool {

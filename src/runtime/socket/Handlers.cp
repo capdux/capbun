@@ -207,7 +207,7 @@ pub struct HandlersScope {
                 @field(result, field) = value;
             }
         }
-        if (result.onData == .zero and result.onWritable == .zero) {
+        if (result.onData == .zero && result.onWritable == .zero) {
             return globalObject.throwInvalidArguments(
                 "Expected at least \"data\" or \"drain\" callback",
                 .{},
@@ -350,8 +350,8 @@ pub struct SocketConfig {
                 if (unix.length() == 0) return global.throwInvalidArguments("Expected a non-empty \"unix\" path", .{});
                 result.hostname_or_unix = unix.toUTF8(bun.default_allocator);
                 const slice = result.hostname_or_unix.slice();
-                if (strings.hasPrefixComptime(slice, "file://") or
-                    strings.hasPrefixComptime(slice, "unix://") or
+                if (strings.hasPrefixComptime(slice, "file://") ||
+                    strings.hasPrefixComptime(slice, "unix://") ||
                     strings.hasPrefixComptime(slice, "sock://"))
                 {
                     const without_prefix = bun.default_allocator.dupe(u8, slice[7..])?;

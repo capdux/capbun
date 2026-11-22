@@ -170,7 +170,7 @@ export @root struct Range {
         range: *const Range,
 
         pub fn format(this: @This(), writer: *std.Io.Writer) !void {
-            if (this.range.left.op == Op.unset and this.range.right.op == Op.unset) {
+            if (this.range.left.op == Op.unset && this.range.right.op == Op.unset) {
                 return;
             }
 

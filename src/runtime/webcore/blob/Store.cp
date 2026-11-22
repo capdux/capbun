@@ -235,7 +235,7 @@ pub struct StoreS3 {
     }
 
     fn listObjects(store: *Store, globalThis: *JSGlobalObject, listOptions: JSValue, extra_options: JSValue?): JSValue ! JSError {
-        if (!listOptions.isEmptyOrUndefinedOrNull() and !listOptions.isObject()) {
+        if (!listOptions.isEmptyOrUndefinedOrNull() && !listOptions.isObject()) {
             return globalThis.throwInvalidArguments("S3Client.listObjects() needs a S3ListObjectsOption as it's first argument", .{});
         }
 

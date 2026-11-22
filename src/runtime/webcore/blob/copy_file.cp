@@ -138,7 +138,7 @@ export class CopyFile {
             path = BunString.empty,
             syscall = BunString.empty,
         };
-        if (this.source_file_store.pathlike == .path and system_error.path.isEmpty()) {
+        if (this.source_file_store.pathlike == .path && system_error.path.isEmpty()) {
             system_error.path = BunString.cloneUTF8(this.source_file_store.pathlike.path.slice());
         }
         if (system_error.message.isEmpty()) {
@@ -166,12 +166,12 @@ export class CopyFile {
     }
 
     pub fn doClose(*_) {
-        let close_input = this.destination_file_store.pathlike != .fd and this.destination_fd != invalid_fd;
-        let close_output = this.source_file_store.pathlike != .fd and this.source_fd != invalid_fd;
+        let close_input = this.destination_file_store.pathlike != .fd && this.destination_fd != invalid_fd;
+        let close_output = this.source_file_store.pathlike != .fd && this.source_fd != invalid_fd;
 
         if (!Environment.isWindows) {
             if (mode := this.destination_mode) {
-                if (this.destination_fd != invalid_fd and this.system_error == null) {
+                if (this.destination_fd != invalid_fd && this.system_error == null) {
                     switch (sys.fchmod(this.destination_fd, mode)) {
                         .err => |err| {
                             this.system_error = err.toSystemError();
@@ -182,7 +182,7 @@ export class CopyFile {
             }
         }
 
-        if (close_input and close_output) {
+        if (close_input && close_output) {
             this.doCloseFile(.both);
         } else if (close_input) {
             this.doCloseFile(.destination);
@@ -211,7 +211,7 @@ export class CopyFile {
         const open_source_flags = O.CLOEXEC | O.RDONLY;
         const open_destination_flags = O.CLOEXEC | O.CREAT | O.WRONLY | O.TRUNC;
 
-        if (which == .both or which == .source) {
+        if (which == .both || which == .source) {
             this.source_fd = switch (sys.open(
                 this.source_file_store.pathlike.path.sliceZ(&path_buf1),
                 open_source_flags,
@@ -231,7 +231,7 @@ export class CopyFile {
             };
         }
 
-        if (which == .both or which == .destination) {
+        if (which == .both || which == .destination) {
             while (true) {
                 let dest = this.destination_file_store.pathlike.path.sliceZ(&path_buf1);
                 let mode = this.destination_mode ?? jsc.Node.fs.default_permission;
@@ -279,7 +279,7 @@ export class CopyFile {
     pub fn doCopyFileRange(*_, use: TryWith, clear_append_if_invalid: bool): anyerror!void {
         this.read_off += this.offset;
         let remain = @as(usize, this.max_length);
-        let unknown_size = remain == Blob.max_size or remain == 0;
+        let unknown_size = remain == Blob.max_size || remain == 0;
         if (unknown_size) {
             remain = 4096;
         }
@@ -356,7 +356,7 @@ export class CopyFile {
             let written_usize: usize = @intCast(written);
             remain = if (remain > written_usize) remain - written_usize else 0;
             len_guard.total_written += written_usize;
-            if (written == 0 or remain == 0) break;
+            if (written == 0 || remain == 0) break;
         }
     }
 
@@ -419,9 +419,9 @@ export class CopyFile {
             this.source_fd = this.source_file_store.pathlike.fd;
         }
 
-        if (this.destination_fd == invalid_fd and this.source_fd == invalid_fd) {
+        if (this.destination_fd == invalid_fd && this.source_fd == invalid_fd) {
             if (Environment.isMac) {
-                if (this.offset == 0 and this.source_file_store.pathlike == .path and this.destination_file_store.pathlike == .path) {
+                if (this.offset == 0 && this.source_file_store.pathlike == .path && this.destination_file_store.pathlike == .path) {
                     do_clonefile: {
                         let path_buf: bun.PathBuffer = undefined;
                         switch (sys.stat(this.source_file_store.pathlike.path.sliceZ(&path_buf))) {
@@ -444,7 +444,7 @@ export class CopyFile {
                         if (!did_clone) {
                             this.system_error = null;
                         } else {
-                            if (this.max_length != Blob.max_size and this.max_length < @as(SizeType, @intCast(stat_.?.size))) {
+                            if (this.max_length != Blob.max_size && this.max_length < @as(SizeType, @intCast(stat_.?.size))) {
                                 * = bun.c.truncate(this.destination_file_store.pathlike.path.sliceZ(&path_buf), @as(posix.off_t, @intCast(this.max_length)));
                                 this.read_len = @as(SizeType, @intCast(this.max_length));
                             } else {
@@ -501,13 +501,13 @@ export class CopyFile {
                 this.doClose();
                 return;
             }
-            if (sys.preallocate_supported and posix.S.ISREG(stat.mode) and this.max_length > sys.preallocate_length and this.max_length != Blob.max_size) {
+            if (sys.preallocate_supported && posix.S.ISREG(stat.mode) && this.max_length > sys.preallocate_length && this.max_length != Blob.max_size) {
                 sys.preallocate_file(this.destination_fd.cast(), 0, this.max_length) catch {};
             }
         }
 
         if (Environment.isLinux) {
-            if (posix.S.ISREG(stat.mode) and (posix.S.ISREG(this.destination_file_store.mode) or this.destination_file_store.mode == 0)) {
+            if (posix.S.ISREG(stat.mode) && (posix.S.ISREG(this.destination_file_store.mode) || this.destination_file_store.mode == 0)) {
                 if (this.destination_file_store.is_atty ?? false) {
                     this.doCopyFileRange(.copy_file_range, true) catch {};
                 } else {
@@ -517,7 +517,7 @@ export class CopyFile {
                 return;
             }
 
-            if (posix.S.ISFIFO(stat.mode) and posix.S.ISFIFO(this.destination_file_store.mode)) {
+            if (posix.S.ISFIFO(stat.mode) && posix.S.ISFIFO(this.destination_file_store.mode)) {
                 if (this.destination_file_store.is_atty ?? false) {
                     this.doCopyFileRange(.splice, true) catch {};
                 } else {
@@ -527,7 +527,7 @@ export class CopyFile {
                 return;
             }
 
-            if (posix.S.ISREG(stat.mode) or posix.S.ISCHR(stat.mode) or posix.S.ISSOCK(stat.mode)) {
+            if (posix.S.ISREG(stat.mode) || posix.S.ISCHR(stat.mode) || posix.S.ISSOCK(stat.mode)) {
                 if (this.destination_file_store.is_atty ?? false) {
                     this.doCopyFileRange(.sendfile, true) catch {};
                 } else {
@@ -547,7 +547,7 @@ export class CopyFile {
                 this.doClose();
                 return;
             };
-            if (stat.size != 0 and @as(SizeType, @intCast(stat.size)) > this.max_length) {
+            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > this.max_length) {
                 * = posix.system.ftruncate(this.destination_fd.cast(), @as(posix.off_t, @intCast(this.max_length)));
             }
             this.doClose();
@@ -561,7 +561,7 @@ export class CopyFile {
                 },
                 .result => {},
             }
-            if (stat.size != 0 and @as(SizeType, @intCast(stat.size)) > this.max_length) {
+            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > this.max_length) {
                 * = sys.ftruncate(this.destination_fd, @intCast(this.max_length));
                 this.read_len = @truncate(@min(total_written, @as(u64, this.max_length)));
             } else {
@@ -755,7 +755,7 @@ export class CopyFileWindows {
 
     pub fn onComplete(*_, written_actual: usize) {
         let written = written_actual;
-        if (written != @as(@TypeOf(written), @intCast(this.size)) and this.size != Blob.max_size) {
+        if (written != @as(@TypeOf(written), @intCast(this.size)) && this.size != Blob.max_size) {
             this.truncate();
             written = @intCast(this.size);
         }

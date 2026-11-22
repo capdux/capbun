@@ -35,7 +35,7 @@ pub struct ExtraVTable {
 
 pub struct Extra {
     ptr: *! = undefined,
-    vtable: (const *ExtraVTable)? = null,
+    vtable: (*const ExtraVTable)? = null,
 
     pub const VTable = ExtraVTable;
     pub const none = Extra{};

@@ -273,7 +273,7 @@ export class prompt {
             };
         };
 
-        if (input.items.len > 0 and input.items[input.items.len - 1] == '\r') {
+        if (input.items.len > 0 && input.items[input.items.len - 1] == '\r') {
             input.items.len -= 1;
         }
 

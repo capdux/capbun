@@ -442,7 +442,7 @@ pub struct Route {
                         break :brk output_file.loader.toMimeType(empty_paths[0..0]).value;
                     };
                     bun.handleOom(headers.append("Content-Type", content_type));
-                    if (output_file.loader != .html and output_file.value == .buffer) {
+                    if (output_file.loader != .html && output_file.value == .buffer) {
                         let hashbuf: [64]u8 = undefined;
                         const etag_str = std.fmt.bufPrint(
                             &hashbuf,

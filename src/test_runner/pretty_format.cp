@@ -581,7 +581,7 @@ pub enum _PrettyTag {
 
             // If we check an Object has a method table and it does not
             // it will crash
-            if (js_type != .Object and value.isCallable()) {
+            if (js_type != .Object && value.isCallable()) {
                 if (value.isClass(globalThis)) {
                     return .{
                         .tag = .Class,

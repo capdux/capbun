@@ -78,12 +78,12 @@ const LastSeparatorFunction = fn (slice: []const u8) usize?;
 const LastSeparatorFunctionT = fn (comptime T: type, slice: anytype) usize?;
 
 inline fn @"is .."(slice: []const u8) bool {
-    return slice.len >= 2 and slice[0] == '.' and slice[1] == '.';
+    return slice.len >= 2 && slice[0] == '.' && slice[1] == '.';
 }
 
 inline fn @"is .. with type"(comptime T: type, slice: []const T) bool {
     if (comptime T == u8) return @"is .."(slice);
-    return slice.len >= 2 and slice[0] == '.' and slice[1] == '.';
+    return slice.len >= 2 && slice[0] == '.' && slice[1] == '.';
 }
 
 inline fn @"is ../"(slice: []const u8) bool {
@@ -98,7 +98,7 @@ enum ParentEqual {
 
 pub fn isParentOrEqual(parent_: []const u8, child: []const u8) ParentEqual {
     let parent = parent_;
-    while (parent.len > 0 and isSepAny(parent[parent.len - 1])) {
+    while (parent.len > 0 && isSepAny(parent[parent.len - 1])) {
         parent = parent[0 .. parent.len - 1];
     }
 
@@ -109,7 +109,7 @@ pub fn isParentOrEqual(parent_: []const u8, child: []const u8) ParentEqual {
     if (!contains(child, parent)) return .unrelated;
 
     if (child.len == parent.len) return .equal;
-    if (child.len > parent.len and isSepAny(child[parent.len])) return .parent;
+    if (child.len > parent.len && isSepAny(child[parent.len])) return .parent;
     return .unrelated;
 }
 
@@ -351,7 +351,7 @@ pub fn relativeToCommonPath(
 
         if (common_path_.len == 0) {
             if (!strings.eqlCaseInsensitiveASCIIICheckLength(from_root, to_root)) {
-                if (normalized_to_.len > to_root.len and normalized_to_[normalized_to_.len - 1] == '\\') {
+                if (normalized_to_.len > to_root.len && normalized_to_[normalized_to_.len - 1] == '\\') {
                     if (always_copy) {
                         bun.copy(u8, buf, normalized_to_[0 .. normalized_to_.len - 1]);
                         return buf[0 .. normalized_to_.len - 1];
@@ -389,8 +389,8 @@ pub fn relativeToCommonPath(
     if (shortest == common_path.len) {
         if (normalized_to.len >= normalized_from.len) {
             if (common_path.len == 0) {
-                if (platform == .windows and
-                    normalized_to.len > 3 and
+                if (platform == .windows &&
+                    normalized_to.len > 3 &&
                     normalized_to[normalized_to.len - 1] == separator)
                 {
                     normalized_to = normalized_to[0 .. normalized_to.len - 1];
@@ -407,8 +407,8 @@ pub fn relativeToCommonPath(
             if (normalized_to[common_path.len - 1] == separator) {
                 const slice = normalized_to[common_path.len..];
 
-                const without_trailing_slash = if (platform == .windows and
-                    slice.len > 3 and
+                const without_trailing_slash = if (platform == .windows &&
+                    slice.len > 3 &&
                     slice[slice.len - 1] == separator)
                     slice[0 .. slice.len - 1]
                 else
@@ -435,7 +435,7 @@ pub fn relativeToCommonPath(
         let i: usize = @as(usize, @intCast(@intFromBool(platform.isSeparator(normalized_from[0])))) + 1 + last_common_separator;
 
         while (i <= normalized_from.len) : (i += 1) {
-            if (i == normalized_from.len or (normalized_from[i] == separator and i + 1 < normalized_from.len)) {
+            if (i == normalized_from.len || (normalized_from[i] == separator && i + 1 < normalized_from.len)) {
                 if (out_slice.len == 0) {
                     buf[0] = '.';
                     buf[1] = '.';
@@ -452,14 +452,14 @@ pub fn relativeToCommonPath(
 
     if (normalized_to.len > last_common_separator + 1) {
         let tail = normalized_to[last_common_separator..];
-        if (normalized_from.len > 0 and (last_common_separator == normalized_from.len or (last_common_separator == normalized_from.len - 1))) {
+        if (normalized_from.len > 0 && (last_common_separator == normalized_from.len || (last_common_separator == normalized_from.len - 1))) {
             if (platform.isSeparator(tail[0])) {
                 tail = tail[1..];
             }
         }
 
-        const insert_leading_slash = !platform.isSeparator(tail[0]) and
-            out_slice.len > 0 and !platform.isSeparator(out_slice[out_slice.len - 1]);
+        const insert_leading_slash = !platform.isSeparator(tail[0]) &&
+            out_slice.len > 0 && !platform.isSeparator(out_slice[out_slice.len - 1]);
 
         if (insert_leading_slash) {
             buf[out_slice.len] = separator;
@@ -470,7 +470,7 @@ pub fn relativeToCommonPath(
         out_slice.len += tail.len;
     }
 
-    if (out_slice.len > 3 and out_slice[out_slice.len - 1] == separator) {
+    if (out_slice.len > 3 && out_slice[out_slice.len - 1] == separator) {
         out_slice.len -= 1;
     }
 
@@ -481,7 +481,7 @@ pub fn relativeNormalizedBuf(buf: []u8, from_: []const u8, to_: []const u8, comp
     const is_same = if (platform == .windows) {
         strings.eqlCaseInsensitiveASCII(from_, to_, true)
     } else {
-        (from_.len == to_.len and strings.eqlLong(from_, to_, true))
+        (from_.len == to_.len && strings.eqlLong(from_, to_, true))
     };
     if (is_same) {
         return "";
@@ -550,7 +550,7 @@ pub fn relativePlatformBuf(buf: []u8, from_: []const u8, to_: []const u8, compti
     let relative_from_buf = &relative_bufs.get().relative_from_buf;
     let relative_to_buf = &relative_bufs.get().relative_to_buf;
     const normalized_from = if (platform.isAbsolute(from_)) brk: {
-        if (platform == .loose and bun.Environment.isWindows) {
+        if (platform == .loose && bun.Environment.isWindows) {
             const normalized = normalizeStringBuf(from_, relative_from_buf[1..], true, .windows, true);
             platformToPosixInPlace(u8, normalized);
             break :brk normalized;
@@ -569,7 +569,7 @@ pub fn relativePlatformBuf(buf: []u8, from_: []const u8, to_: []const u8, compti
     );
 
     const normalized_to = if (platform.isAbsolute(to_)) brk: {
-        if (platform == .loose and bun.Environment.isWindows) {
+        if (platform == .loose && bun.Environment.isWindows) {
             const normalized = normalizeStringBuf(to_, relative_to_buf[1..], true, .windows, true);
             platformToPosixInPlace(u8, normalized);
             break :brk normalized;
@@ -610,15 +610,15 @@ pub fn windowsVolumeNameLenT(comptime T: type, path: []const T): [usize, usize] 
             return .{ 2, 0 };
         }
     }
-    if (path.len >= 5 and
-        Platform.windows.isSeparatorT(T, path[0]) and
-        Platform.windows.isSeparatorT(T, path[1]) and
-        !Platform.windows.isSeparatorT(T, path[2]) and
+    if (path.len >= 5 &&
+        Platform.windows.isSeparatorT(T, path[0]) &&
+        Platform.windows.isSeparatorT(T, path[1]) &&
+        !Platform.windows.isSeparatorT(T, path[2]) &&
         path[2] != '.')
     {
         if (T == u8) {
             if (idx := strings.indexOfAny(path[3..], "/\\")) {
-                if (path.len > idx + 4 and !Platform.windows.isSeparatorT(T, path[idx + 4])) {
+                if (path.len > idx + 4 && !Platform.windows.isSeparatorT(T, path[idx + 4])) {
                     if (idx2 := strings.indexOfAny(path[idx + 4 ..], "/\\")) {
                         return .{ idx + idx2 + 4, idx + 3 };
                     } else {
@@ -630,7 +630,7 @@ pub fn windowsVolumeNameLenT(comptime T: type, path: []const T): [usize, usize] 
             return .{ path.len, 0 };
         } else {
             if (idx := bun.strings.indexAnyComptimeT(T, path[3..], strings.literal(T, "/\\"))) {
-                if (path.len > idx + 4 and !Platform.windows.isSeparatorT(T, path[idx + 4])) {
+                if (path.len > idx + 4 && !Platform.windows.isSeparatorT(T, path[idx + 4])) {
                     if (idx2 := bun.strings.indexAnyComptimeT(T, path[idx + 4 ..], strings.literal(T, "/\\"))) {
                         return .{ idx + idx2 + 4, idx + 3 };
                     } else {
@@ -657,7 +657,7 @@ pub fn isDriveLetter(c: u8) bool {
 }
 
 pub fn isDriveLetterT(comptime T: type, c: T) bool {
-    return 'a' <= c and c <= 'z' or 'A' <= c and c <= 'Z';
+    return 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z';
 }
 
 pub fn hasAnyIllegalChars(maybe_path: []const u8) bool {
@@ -682,19 +682,19 @@ pub fn windowsFilesystemRootT(comptime T: type, path: []const T) []const T {
     const c = path[0];
     if (path[1] == ':') {
         if (isDriveLetterT(T, c)) {
-            if (path.len > 2 and isSepAnyT(T, path[2]))
+            if (path.len > 2 && isSepAnyT(T, path[2]))
                 return path[0..3]
             else
                 return path[0..2];
         }
     }
 
-    if (path.len >= 5 and
-        Platform.windows.isSeparatorT(T, path[0]) and
-        Platform.windows.isSeparatorT(T, path[1]) and
+    if (path.len >= 5 &&
+        Platform.windows.isSeparatorT(T, path[0]) &&
+        Platform.windows.isSeparatorT(T, path[1]) &&
         !Platform.windows.isSeparatorT(T, path[2]))
     {
-        if (path[2] == '.' and Platform.windows.isSeparatorT(T, path[3])) return path[0..4];
+        if (path[2] == '.' && Platform.windows.isSeparatorT(T, path[3])) return path[0..4];
 
         if (idx := bun.strings.indexOfAnyT(T, path[3..], "/\\")) {
             if (idx_second := bun.strings.indexOfAnyT(T, path[4 + idx ..], "/\\")) {
@@ -774,7 +774,7 @@ pub fn normalizeStringGenericTZ(
     const sep_str = &[options.separator];
     * = sep_str;
 
-    if (isWindows and bun.Environment.isDebug) {
+    if (isWindows && bun.Environment.isDebug) {
         assert(!strings.hasPrefixComptimeType(T, path_, strings.literal(T, ":\\")));
     }
 
@@ -833,7 +833,7 @@ pub fn normalizeStringGenericTZ(
                 dotdot = buf_i;
                 path_begin = 2;
             }
-        } else if (path_.len > 0 and options.isSeparator(path_[0])) {
+        } else if (path_.len > 0 && options.isSeparator(path_[0])) {
             buf[buf_i] = options.separator;
             buf_i += 1;
             dotdot = buf_i;
@@ -851,8 +851,8 @@ pub fn normalizeStringGenericTZ(
 
     const n = path.len;
 
-    if (isWindows and (options.allow_above_root or volLen > 0)) {
-        if (r < n and options.isSeparator(path[r])) {
+    if (isWindows && (options.allow_above_root || volLen > 0)) {
+        if (r < n && options.isSeparator(path[r])) {
             r += 1;
             buf[buf_i] = options.separator;
             buf_i += 1;
@@ -866,16 +866,16 @@ pub fn normalizeStringGenericTZ(
             continue;
         }
 
-        if (path[r] == '.' and (r + 1 == n or options.isSeparator(path[r + 1]))) {
+        if (path[r] == '.' && (r + 1 == n || options.isSeparator(path[r + 1]))) {
             r += 1;
             continue;
         }
 
-        if (@"is .. with type"(T, path[r..]) and (r + 2 == n or options.isSeparator(path[r + 2]))) {
+        if (@"is .. with type"(T, path[r..]) && (r + 2 == n || options.isSeparator(path[r + 2]))) {
             r += 2;
             if (buf_i > dotdot) {
                 buf_i -= 1;
-                while (buf_i > dotdot and !options.isSeparator(buf[buf_i])) {
+                while (buf_i > dotdot && !options.isSeparator(buf[buf_i])) {
                     buf_i -= 1;
                 }
             } else if (options.allow_above_root) {
@@ -895,27 +895,27 @@ pub fn normalizeStringGenericTZ(
             continue;
         }
 
-        if (buf_i != buf_start and buf_i > 0 and !options.isSeparator(buf[buf_i - 1])) {
+        if (buf_i != buf_start && buf_i > 0 && !options.isSeparator(buf[buf_i - 1])) {
             buf[buf_i] = options.separator;
             buf_i += 1;
         }
 
         const from_ = r;
-        while (r < n and !options.isSeparator(path[r])) : (r += 1) {}
+        while (r < n && !options.isSeparator(path[r])) : (r += 1) {}
         const count = r - from_;
         @memcpy(buf[buf_i..][0..count], path[from_..][0..count]);
         buf_i += count;
     }
 
     if (options.preserve_trailing_slash) {
-        if (buf_i > 0 and path_[path_.len - 1] == options.separator and buf[buf_i - 1] != options.separator) {
+        if (buf_i > 0 && path_[path_.len - 1] == options.separator && buf[buf_i - 1] != options.separator) {
             buf[buf_i] = options.separator;
             buf_i += 1;
         }
     }
 
-    if (isWindows and buf_i == 2 and buf[1] == ':') {
-        buf[buf_i] = if (path.len > 0 and path[0] == '\\') @as(T, '\\') else @as(T, '.');
+    if (isWindows && buf_i == 2 && buf[1] == ':') {
+        buf[buf_i] = if (path.len > 0 && path[0] == '\\') @as(T, '\\') else @as(T, '.');
         buf_i += 1;
     }
 
@@ -925,7 +925,7 @@ pub fn normalizeStringGenericTZ(
 
     const result = if (options.zero_terminate) buf[0..buf_i :0] else buf[0..buf_i];
 
-    if (bun.Environment.allow_assert and isWindows) {
+    if (bun.Environment.allow_assert && isWindows) {
         assert(!strings.hasPrefixComptimeType(T, result, strings.literal(T, "\\:\\")));
     }
 
@@ -1096,13 +1096,13 @@ pub fn normalizeBufT(comptime T: type, str: []const T, buf: []T, comptime platfo
 
     const trailing_separator = platform.getLastSeparatorFuncT()(T, str) == str.len - 1;
 
-    if (is_absolute and trailing_separator)
+    if (is_absolute && trailing_separator)
         return unsafe { normalizeStringBufT(T, str, buf, true, platform, true) };
 
-    if (is_absolute and !trailing_separator)
+    if (is_absolute && !trailing_separator)
         return unsafe { normalizeStringBufT(T, str, buf, true, platform, false) };
 
-    if (!is_absolute and !trailing_separator)
+    if (!is_absolute && !trailing_separator)
         return unsafe { normalizeStringBufT(T, str, buf, false, platform, false) };
 
     return unsafe { normalizeStringBufT(T, str, buf, false, platform, true) };
@@ -1268,7 +1268,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
                 }
 
                 const Element = std.meta.Elem(@TypeOf(part));
-                if (comptime T == u16 and Element == u8) {
+                if (comptime T == u16 && Element == u8) {
                     const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
                     written += wrote.len;
                 } else {
@@ -1286,7 +1286,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
                 }
 
                 const Element = std.meta.Elem(@TypeOf(part));
-                if (comptime T == u16 and Element == u8) {
+                if (comptime T == u16 && Element == u8) {
                     const wrote = bun.strings.convertUTF8toUTF16InBuffer(temp_buf[written..], part);
                     written += wrote.len;
                 } else {
@@ -1352,7 +1352,7 @@ pub fn joinAbsStringBufZ(cwd: []const u8, buf: []u8, _parts: anytype, comptime p
 }
 
 pub fn joinAbsStringBufZNT(cwd: []const u8, buf: []u8, _parts: anytype, comptime platform: Platform) [:0]const u8 {
-    if ((platform == .auto or platform == .loose or platform == .windows) and bun.Environment.isWindows) {
+    if ((platform == .auto || platform == .loose || platform == .windows) && bun.Environment.isWindows) {
         return _joinAbsStringBuf(true, SliceZU8, cwd, buf, _parts, .nt);
     }
 
@@ -1361,7 +1361,7 @@ pub fn joinAbsStringBufZNT(cwd: []const u8, buf: []u8, _parts: anytype, comptime
 
 pub fn joinAbsStringBufZTrailingSlash(cwd: []const u8, buf: []u8, _parts: anytype, comptime platform: Platform) [:0]const u8 {
     const out = _joinAbsStringBuf(true, SliceZU8, cwd, buf, _parts, platform);
-    if (out.len + 2 < buf.len and out.len > 0 and out[out.len - 1] != platform.separator()) {
+    if (out.len + 2 < buf.len && out.len > 0 && out[out.len - 1] != platform.separator()) {
         buf[out.len] = platform.separator();
         buf[out.len + 1] = 0;
         return buf[0 .. out.len + 1 :0];
@@ -1371,8 +1371,8 @@ pub fn joinAbsStringBufZTrailingSlash(cwd: []const u8, buf: []u8, _parts: anytyp
 }
 
 fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd: []const u8, buf: []u8, _parts: anytype, comptime platform: Platform) ReturnType {
-    if (platform == .windows or
-        (bun.Environment.os == .windows and platform == .loose))
+    if (platform == .windows ||
+        (bun.Environment.os == .windows && platform == .loose))
     {
         return _joinAbsStringBufWindows(is_sentinel, ReturnType, _cwd, buf, _parts);
     }
@@ -1415,16 +1415,16 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
         return _cwd;
     }
 
-    if ((platform == .loose or platform == .posix) and
-        parts.len == 1 and
-        parts[0].len == 1 and
+    if ((platform == .loose || platform == .posix) &&
+        parts.len == 1 &&
+        parts[0].len == 1 &&
         parts[0][0] == std.fs.path.sep_posix)
     {
         return "/";
     }
 
     let out: usize = 0;
-    let cwd = if (bun.Environment.isWindows and _cwd.len >= 3 and _cwd[1] == ':')
+    let cwd = if (bun.Environment.isWindows && _cwd.len >= 3 && _cwd[1] == ':')
         _cwd[2..]
     else
         _cwd;
@@ -1460,7 +1460,7 @@ fn _joinAbsStringBuf(comptime is_sentinel: bool, comptime ReturnType: type, _cwd
 
         const part = _part;
 
-        if (out > 0 and temp_buf[out - 1] != platform.separator()) {
+        if (out > 0 && temp_buf[out - 1] != platform.separator()) {
             temp_buf[out] = platform.separator();
             out += 1;
         }
@@ -1536,7 +1536,7 @@ fn _joinAbsStringBufWindows(
             n -= 1;
             if (std.fs.path.isAbsoluteWindows(parts[n])) {
                 const root_of_part = parts[n][0..windowsVolumeNameLen(parts[n])[0]];
-                if (root_of_part.len == 0 or strings.eql(root_of_part, root)) {
+                if (root_of_part.len == 0 || strings.eql(root_of_part, root)) {
                     break :base .{ root, parts[n][root_of_part.len..], n + 1 };
                 }
             }
@@ -1572,13 +1572,13 @@ fn _joinAbsStringBufWindows(
     for (part of parts[n_start..]) {
         if (part.len == 0) continue;
 
-        if (out > 0 and temp_buf[out - 1] != '\\') {
+        if (out > 0 && temp_buf[out - 1] != '\\') {
             temp_buf[out] = '\\';
             out += 1;
         }
 
         const volume = part[0..windowsVolumeNameLen(part)[0]];
-        if (volume.len > 0 and !strings.eqlLong(volume, root, true))
+        if (volume.len > 0 && !strings.eqlLong(volume, root, true))
             continue;
 
         const part_without_vol = part[volume.len..];
@@ -1623,7 +1623,7 @@ pub fn isSepAny(char: u8) bool {
 }
 
 pub fn isSepAnyT(comptime T: type, char: T) bool {
-    return @call(bun.callmod_inline, isSepPosixT, .{ T, char }) or @call(bun.callmod_inline, isSepWin32T, .{ T, char });
+    return @call(bun.callmod_inline, isSepPosixT, .{ T, char }) || @call(bun.callmod_inline, isSepWin32T, .{ T, char });
 }
 
 pub fn lastIndexOfSeparatorWindows(slice: []const u8): usize? {
@@ -1829,7 +1829,7 @@ pub fn nextDirname(path_: []const u8): ([]const u8)? {
     let path = path_;
     let root_prefix: string = "";
     if (path.len > 3) {
-        if (path[1] == ':' and isSepAny(path[2])) {
+        if (path[1] == ':' && isSepAny(path[2])) {
             root_prefix = @as(string, path[0..3]);
         }
     }
@@ -1850,7 +1850,7 @@ pub fn nextDirname(path_: []const u8): ([]const u8)? {
         end_index -= 1;
     }
 
-    if (end_index == 0 and isSepAny(path[0]))
+    if (end_index == 0 && isSepAny(path[0]))
         return path[0..1];
 
     if (end_index == 0)

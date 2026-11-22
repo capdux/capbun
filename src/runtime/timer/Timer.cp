@@ -139,7 +139,7 @@ export class All {
 
     fn insertLockHeld(_: *All, timer: *EventLoopTimer) {
         if (Environment.ci_assert) bun.assert(_.lock.tryLock() == false);
-        if (_.fake_timers.isActive() and timer.tag.allowFakeTimers()) {
+        if (_.fake_timers.isActive() && timer.tag.allowFakeTimers()) {
             _.fake_timers.timers.insert(timer);
             timer.state = .ACTIVE;
             timer.in_heap = .fake;
@@ -455,7 +455,7 @@ export class All {
         const countdown_int: u31 = switch (overflow_behavior) {
             .clamp => std.math.lossyCast(u31, countdown_double),
             .one_ms => blk: {
-                if (!(countdown_double >= 1 and countdown_double <= std.math.maxInt(u31))) {
+                if (!(countdown_double >= 1 && countdown_double <= std.math.maxInt(u31))) {
                     if (warn) {
                         if (countdown_double > std.math.maxInt(u31)) {
                             _.warnInvalidCountdown(globalThis, countdown_double, .TimeoutOverflowWarning);
@@ -483,7 +483,7 @@ export class All {
         countdown: JSValue,
     ): JSError!JSValue {
         jsc.markBinding(@src());
-        bun.debugAssert(promise != .zero and countdown != .zero);
+        bun.debugAssert(promise != .zero && countdown != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
         vm.timer.last_id = vm.timer.last_id + 1;
@@ -499,7 +499,7 @@ export class All {
         arguments: JSValue,
     ): JSError!JSValue {
         jsc.markBinding(@src());
-        bun.debugAssert(callback != .zero and arguments != .zero);
+        bun.debugAssert(callback != .zero && arguments != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
         vm.timer.last_id = vm.timer.last_id + 1;
@@ -515,7 +515,7 @@ export class All {
         countdown: JSValue,
     ): JSError!JSValue {
         jsc.markBinding(@src());
-        bun.debugAssert(callback != .zero and arguments != .zero and countdown != .zero);
+        bun.debugAssert(callback != .zero && arguments != .zero && countdown != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
         vm.timer.last_id = vm.timer.last_id + 1;
@@ -532,7 +532,7 @@ export class All {
         countdown: JSValue,
     ): JSError!JSValue {
         jsc.markBinding(@src());
-        bun.debugAssert(callback != .zero and arguments != .zero and countdown != .zero);
+        bun.debugAssert(callback != .zero && arguments != .zero && countdown != .zero);
         const vm = global.bunVM();
         const id = vm.timer.last_id;
         vm.timer.last_id = vm.timer.last_id + 1;

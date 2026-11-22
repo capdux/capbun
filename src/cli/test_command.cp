@@ -103,7 +103,7 @@ struct LcovErrGuard<FileT, NameT> {
     file: FileT,
     name: NameT,
     ~init() {
-        if (comptime @TypeOf(_.file) != void and @TypeOf(_.file) != @TypeOf(.{})) {
+        if (comptime @TypeOf(_.file) != void && @TypeOf(_.file) != @TypeOf(.{})) {
             if (_.armed) {
                 _.file.close();
                 * = bun.sys.unlink(_.name);

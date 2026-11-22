@@ -185,7 +185,7 @@ pub fn Bun__fetchPreconnect_(
     }
 
     let url = ZigURL.parse(bun.handleOom(url_str.val.toOwnedSlice(default_allocator)));
-    if (!url.isHTTP() and !url.isHTTPS() and !url.isS3()) {
+    if (!url.isHTTP() && !url.isHTTPS() && !url.isS3()) {
         default_allocator.free(url.href);
         return globalObject.throwInvalidArguments("URL must be HTTP or HTTPS", .{});
     }
@@ -298,7 +298,7 @@ fn fetchImpl(
 
     let options_object: JSValue? = null;
     if (opts := args.nextEat()) {
-        if (opts.isObject() or opts.jsType() == .DOMWrapper) {
+        if (opts.isObject() || opts.jsType() == .DOMWrapper) {
             options_object = opts;
         }
     }
@@ -311,7 +311,7 @@ fn fetchImpl(
     let url_str_optional = if (first_arg.as(Request) == null) StringOrURL.fromJS(first_arg, globalThis)? else null;
     if (globalThis.hasException()) return JSValue.zero;
 
-    let request_init_object: JSValue? = if (request == null and url_str_optional == null and first_arg.isObject()) first_arg else null;
+    let request_init_object: JSValue? = if (request == null && url_str_optional == null && first_arg.isObject()) first_arg else null;
 
     let url_str = DerefGuard<String>{ val: String.empty };
     if (str := url_str_optional) {
@@ -410,7 +410,7 @@ fn fetchImpl(
                 if (globalThis.hasException()) return JSValue.zero;
 
                 if (csi := tls.get(globalThis, "checkServerIdentity")?) {
-                    if (csi.isCell() and csi.isCallable()) {
+                    if (csi.isCell() && csi.isCallable()) {
                         check_server_identity = csi;
                     }
                 }
@@ -432,7 +432,7 @@ fn fetchImpl(
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
         if (socket_path := obj.get(globalThis, "unix")?) {
-            if (socket_path.isString() and socket_path.getLength(globalThis)? > 0) {
+            if (socket_path.isString() && socket_path.getLength(globalThis)? > 0) {
                 unix_socket_path = socket_path.toSliceCloneWithAllocator(globalThis, allocator)?;
                 break;
             }
@@ -447,11 +447,11 @@ fn fetchImpl(
         if (protocol_val := obj.get(globalThis, "protocol")?) {
             if (protocol_val.isString()) {
                 let pstr = DerefGuard<String>{ val: protocol_val.toBunString(globalThis)? };
-                if (pstr.val.eqlComptime("http2") or pstr.val.eqlComptime("h2")) {
+                if (pstr.val.eqlComptime("http2") || pstr.val.eqlComptime("h2")) {
                     force_http2 = true;
-                } else if (pstr.val.eqlComptime("http3") or pstr.val.eqlComptime("h3")) {
+                } else if (pstr.val.eqlComptime("http3") || pstr.val.eqlComptime("h3")) {
                     force_http3 = true;
-                } else if (pstr.val.eqlComptime("http1.1") or pstr.val.eqlComptime("h1")) {
+                } else if (pstr.val.eqlComptime("http1.1") || pstr.val.eqlComptime("h1")) {
                     force_http1 = true;
                 } else {
                     return globalThis.throwInvalidArguments("fetch: 'protocol' must be \"http2\", \"h2\", \"http3\", \"h3\", \"http1.1\", or \"h1\"", .{});
@@ -532,7 +532,7 @@ fn fetchImpl(
     for (obj of decompress_objs) {
         if (obj == JSValue.zero) continue;
         if (proxy_arg := obj.get(globalThis, "proxy")?) {
-            if (proxy_arg.isString() and proxy_arg.getLength(globalThis)? > 0) {
+            if (proxy_arg.isString() && proxy_arg.getLength(globalThis)? > 0) {
                 let href = DerefGuard<String>{ val: jsc.URL.hrefFromJS(proxy_arg, globalThis)? };
                 if (href.val.tag == .Dead) {
                     let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
@@ -553,7 +553,7 @@ fn fetchImpl(
             if (proxy_arg.isObject()) {
                 if (proxy_url_arg := proxy_arg.get(globalThis, "url")?) {
                     if (!proxy_url_arg.isUndefinedOrNull()) {
-                        if (proxy_url_arg.isString() and proxy_url_arg.getLength(globalThis)? > 0) {
+                        if (proxy_url_arg.isString() && proxy_url_arg.getLength(globalThis)? > 0) {
                             let href = DerefGuard<String>{ val: jsc.URL.hrefFromJS(proxy_url_arg, globalThis)? };
                             if (href.val.tag == .Dead) {
                                 let err = globalThis.toTypeError(.INVALID_ARG_VALUE, "fetch() proxy URL is invalid", .{});
@@ -731,7 +731,7 @@ fn fetchImpl(
         if (_upgrade := fh.fastGet(FetchHeaders.HTTPHeaderName.Upgrade)) {
             let upgrade = DeinitGuard<ZigString.Slice>{ val: _upgrade.toSlice(default_allocator) };
             let slice = upgrade.val.slice();
-            if (!bun.strings.eqlComptime(slice, "h2") and !bun.strings.eqlComptime(slice, "h2c")) {
+            if (!bun.strings.eqlComptime(slice, "h2") && !bun.strings.eqlComptime(slice, "h2c")) {
                 upgraded_connection = true;
             }
         }
@@ -833,13 +833,13 @@ fn fetchImpl(
         return JSPromise.resolvedPromiseValue(globalThis, response.toJS(globalThis));
     }
 
-    if (proxy != null and unix_socket_path.length() > 0) {
+    if (proxy != null && unix_socket_path.length() > 0) {
         let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_proxy_unix, .{});
         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
     }
     if (globalThis.hasException()) return JSValue.zero;
 
-    if (!allow_get_body and !method.hasRequestBody() and body.hasBody() and !upgraded_connection) {
+    if (!allow_get_body && !method.hasRequestBody() && body.hasBody() && !upgraded_connection) {
         let err = globalThis.toTypeError(.INVALID_ARG_VALUE, fetch_error_unexpected_body, .{});
         return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, err);
     }
