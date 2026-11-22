@@ -1617,3 +1617,6 @@
 - `HotReloadEvent.cp`：`dev.graph_safety_lock` 实际类型为 `bun.safety.ThreadLock`，须实例化为 `UnlockGuard<@TypeOf(dev.graph_safety_lock)>` 而非 `UnlockGuard<bun.Mutex>`。
 - `node_fs_watcher.cp` / `path_watcher.cp`：模块内 `Mutex` 类型在 struct 字段/变量处应显式使用 `bun.Mutex`，避免 `cpc` 将 `Mutex` 降级为内置 `CpBareMutex` 引发 `*threading.Mutex` 与 `*CpBareMutex` 类型不匹配。
 - 上游工单跟进：投递 `task-bun-20261122-local-alias-raii-drop` 与 `task-bun-20261122-raii-errinit-or-move-disarm` 以解决局部类型别名漏注入 `__cp_deinit` 及推动 `~errinit()`/`move` 自动撤防支持。
+
+## [2026-11-22 Wave #32] RAII 改造与 `unsafe {}` 经验
+- `RuntimeTranspilerCache.cp`：`TraceGuard` 字段类型不能写 `@TypeOf(bun.perf.trace(""))`，否则会触发 `generated_perf_trace_events.zig` 编译期空事件名校验报错；应指定真实已注册事件名 `bun.perf.trace("RuntimeTranspilerCache.fromFile")` 或使用泛型 `TraceGuard<T>`。

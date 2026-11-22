@@ -12,6 +12,13 @@ pub const Index = bun.ast.Index;
 
 const RunningType = if (Environment.isDebug) bool else u0;
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
 @root struct DeferredBatchTask {
     running: RunningType = if (Environment.isDebug) false else 0,
 
@@ -23,7 +30,9 @@ const RunningType = if (Environment.isDebug) bool else u0;
     }
 
     pub fn getBundleV2(*_): *bun.BundleV2 {
-        return @alignCast(@fieldParentPtr("drain_defer_task", _));
+        unsafe {
+            return @alignCast(@fieldParentPtr("drain_defer_task", _));
+        }
     }
 
     pub fn schedule(*_) {
@@ -41,7 +50,7 @@ const RunningType = if (Environment.isDebug) bool else u0;
     }
 
     pub fn runOnJSThread(*_) {
-        defer _.deinit();
+        const _guard = DeinitGuard<DeferredBatchTask>{ ptr: unsafe { _ } };
         let bv2 = _.getBundleV2();
         let is_err = false;
         if (completion := bv2.completion) {

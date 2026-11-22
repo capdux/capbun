@@ -2091,3 +2091,7 @@
 
 ## [2026-11-22 Wave #31] RAII `~init()` 与 `unsafe {}` 改造（3-defer 首批 60 模块）
 - `Assets`, `HmrSocket`, `HotReloadEvent`, `SourceMapStore`, `base64`, `bun.js`, `fmt`, `BundleThread`, `analyze_transpiled_module`, `findImportedFilesInCSSOrder`, `args`, `filter_arg`, `filter_run`, `open`, `test_command`, `array_list`, `rules`, `color_js`, `MiniEventLoop`, `elf`, `dispatch`, `PackageJSONEditor`, `updatePackageJSONAndInstall`, `md/parser`, `external_shared`, `router`, `Archive`, `SubprocessPipeReader`, `csrf_jsc`, `html_rewriter`, `codecs`, `myers_diff`, `node_assert_binding`, `node_fs_watcher`, `node_os`, `node_process`, `path_watcher`, `parse_args`, `win_watcher`, `NodeHTTPResponse`, `ssl_wrapper`, `ByteStream`, `FormData`, `copy_file`, `read_file`, `HostProcess`, `IOWriter`, `cat`, `cp`, `seq`, `shell`, `CondExpr`, `braces`, `NewReader`, `MySQLRequestQueue`, `StandaloneModuleGraph`, `unicode`, `visible`, `string`, `File`, `diff_format`, `toBeEmpty`, `toBeTypeOf`, `toHaveBeenCalledWith`, `toHaveBeenNthCalledWith`, `toIncludeRepeated`, `toMatchSnapshot`, `toThrowErrorMatchingSnapshot` (ratio `0.658 ~ 1.185`)
+
+## [2026-11-22 Wave #32] RAII `~init()` 与 `unsafe {}` 改造（3-defer 清零 7 模块 + 2-defer 首批 6 模块）
+- 3-defer 收尾 (7): `Debugger`, `ModuleLoader`, `js_parser`, `BunHeapProfiler`, `RuntimeTranspilerCache`, `main_test`, `channel` (ratio `0.987 ~ 1.18`)
+- 2-defer 首批 (6): `posix_event_loop`, `boringssl`, `brotli`, `memory`, `DeferredBatchTask`, `Graph` (ratio `0.907 ~ 1.173`)

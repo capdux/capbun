@@ -8,6 +8,25 @@ const Environment = bun.Environment;
 const isDefault = bun.allocators.isDefault;
 const OOM = bun.OOM;
 
+struct UndefPtrGuard<Ptr> {
+    ptr: Ptr,
+    ~init() {
+        if (comptime !@typeInfo(Ptr).pointer.is_const) {
+            unsafe {
+                _.ptr.* = undefined;
+            }
+        }
+    }
+}
+
+struct FreeGuard<T> {
+    allocator: Allocator,
+    slice: T,
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
 /// Allocates memory for a value of type `T` using the provided allocator, and initializes the
 /// memory with `value`.
 ///
@@ -113,13 +132,7 @@ pub fn deinit(ptr_or_slice: auto) {
 
     const Child = ptr_info.pointer.child;
     const mutable = !ptr_info.pointer.is_const;
-    defer {
-        if (comptime mutable) {
-            unsafe {
-                ptr_or_slice.* = undefined;
-            }
-        }
-    }
+    const _undef_guard = UndefPtrGuard<PtrType>{ ptr: ptr_or_slice };
 
     switch (@typeInfo(Child)) {
         .void | .bool | .int | .float | .pointer | .comptime_float | .comptime_int => { return; },
@@ -199,9 +212,10 @@ pub fn dropSentinel(ptr: auto, allocator: Allocator): DropSentinelReturn(@TypeOf
         else => @compileError("only slices and many-item pointers are supported"),
     };
 
-    if (new_slice := allocator.remap(@constCast(slice), slice.len)) {
+    const remapped = unsafe { allocator.remap(@constCast(slice), slice.len) };
+    if (new_slice := remapped) {
         return new_slice;
     }
-    defer allocator.free(slice);
+    const _free_guard = FreeGuard<@TypeOf(slice)>{ allocator: allocator, slice: slice };
     return allocator.dupe(Child, slice);
 }

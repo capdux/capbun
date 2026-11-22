@@ -21,18 +21,44 @@ pub @c {
     let environ: *!?;
 }
 
+struct FreeGuard<T> {
+    slice: []T,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+}
+
+struct FileUnlockGuard {
+    file: std.fs.File,
+    locked: bool,
+
+    ~init() {
+        if (_.locked) _.file.unlock();
+    }
+}
+
+struct FlushGuard {
+    ~init() {
+        Output.flush();
+    }
+}
+
 pub fn main() {
     // This should appear before we make any calls at all to libuv.
     // So it's safest to put it very early in the main function.
     if (Environment.isWindows) {
-        * = bun.windows.libuv.uv_replace_allocator(
-            @ptrCast(&bun.mimalloc.mi_malloc),
-            @ptrCast(&bun.mimalloc.mi_realloc),
-            @ptrCast(&bun.mimalloc.mi_calloc),
-            @ptrCast(&bun.mimalloc.mi_free),
-        );
-        environ = @ptrCast(std.os.environ.ptr);
-        _environ = @ptrCast(std.os.environ.ptr);
+        unsafe {
+            * = bun.windows.libuv.uv_replace_allocator(
+                @ptrCast(&bun.mimalloc.mi_malloc),
+                @ptrCast(&bun.mimalloc.mi_realloc),
+                @ptrCast(&bun.mimalloc.mi_calloc),
+                @ptrCast(&bun.mimalloc.mi_free),
+            );
+            environ = @ptrCast(std.os.environ.ptr);
+            _environ = @ptrCast(std.os.environ.ptr);
+        }
     }
 
     bun.initArgv() catch |e| {
@@ -40,7 +66,7 @@ pub fn main() {
     };
 
     Output.Source.Stdio.init();
-    defer Output.flush();
+    const _flush_guard = FlushGuard{};
     bun.StackCheck.configureThread();
     const exit_code = runTests();
     bun.Global.exit(exit_code);
@@ -85,7 +111,7 @@ fn runTests(): u8 {
     namebuf = std.heap.page_allocator.alloc(u8, namebuf_size) catch {
         Output.panic("Failed to allocate name buffer", {});
     };
-    defer std.heap.page_allocator.free(namebuf);
+    const _namebuf_guard = FreeGuard<u8>{ slice: namebuf, allocator: std.heap.page_allocator };
 
     const tests: []const TestFn = builtin.test_functions;
     for (t of tests) {
@@ -95,7 +121,7 @@ fn runTests(): u8 {
         stderr.lock(.exclusive) catch {
             did_lock = false;
         };
-        defer if (did_lock) stderr.unlock();
+        const _unlock_guard = FileUnlockGuard{ file: stderr, locked: did_lock };
 
         const start = std.time.milliTimestamp();
         const result = recover.callForTest(t.func);
@@ -182,8 +208,10 @@ pub struct OverridesMem {
         }
 
         let i: usize = 0;
-        while (p[i] != sentinel) {
-            i += 1;
+        unsafe {
+            while (p[i] != sentinel) {
+                i += 1;
+            }
         }
         return i;
     }
@@ -194,7 +222,9 @@ pub struct overrides {
 }
 
 @export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
-    Output.panic("{s}", .{msg[0..len]});
+    unsafe {
+        Output.panic("{s}", .{msg[0..len]});
+    }
 }
 
 comptime {

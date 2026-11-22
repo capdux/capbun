@@ -113,6 +113,14 @@ struct OutputCodeGuard {
     }
 }
 
+struct TraceGuard {
+    trace: @TypeOf(bun.perf.trace("RuntimeTranspilerCache.fromFile")),
+
+    ~init() {
+        _.trace.end();
+    }
+}
+
 pub struct CacheMetadata {
     cache_version: u32 = expected_version,
     output_encoding: RuntimeTranspilerCache.Encoding = RuntimeTranspilerCache.Encoding.none,
@@ -272,8 +280,7 @@ pub struct RuntimeTranspilerCache {
             output_code: OutputCode,
             exports_kind: bun.ast.ExportsKind,
         )! {
-            let _trace = bun.perf.trace("RuntimeTranspilerCache.save");
-            defer _trace.end();
+            const _trace = TraceGuard{ trace: bun.perf.trace("RuntimeTranspilerCache.save") };
 
             // atomically write to a tmpfile and then move it to the final destination
             let tmpname_buf: bun.PathBuffer = undefined;
@@ -379,7 +386,9 @@ pub struct RuntimeTranspilerCache {
                 }
             }
 
-            guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())))?;
+            unsafe {
+                guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())))?;
+            }
             guard.finished = true;
         }
 
@@ -599,8 +608,7 @@ pub struct RuntimeTranspilerCache {
         output_code_allocator: std.mem.Allocator,
         esm_record_allocator: std.mem.Allocator,
     ): Entry! {
-        let _trace = bun.perf.trace("RuntimeTranspilerCache.fromFile");
-        defer _trace.end();
+        const _trace = TraceGuard{ trace: bun.perf.trace("RuntimeTranspilerCache.fromFile") };
 
         let cache_file_path_buf: bun.PathBuffer = undefined;
         const cache_file_path = getCacheFilePath(&cache_file_path_buf, input_hash)?;
@@ -676,8 +684,7 @@ pub struct RuntimeTranspilerCache {
         source_code: bun.String,
         exports_kind: bun.ast.ExportsKind,
     )! {
-        let _trace = bun.perf.trace("RuntimeTranspilerCache.toFile");
-        defer _trace.end();
+        const _trace = TraceGuard{ trace: bun.perf.trace("RuntimeTranspilerCache.toFile") };
 
         let cache_file_path_buf: bun.PathBuffer = undefined;
         const output_code: Entry.OutputCode = switch (source_code.encoding()) {

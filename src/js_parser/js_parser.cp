@@ -278,7 +278,7 @@ pub struct InlinedEnumValue {
 
     static fn encode(decoded: Decoded): InlinedEnumValue {
         const encoded: InlinedEnumValue = { raw_data: switch (decoded) {
-            .string ptr => @as(u48, @truncate(@intFromPtr(ptr))),
+            .string ptr => unsafe { @as(u48, @truncate(@intFromPtr(ptr))) },
             .number num => @as(u64, @bitCast(purifyNaN(num))) + double_encode_offset,
         } };
         if (Environment.allow_assert) {
@@ -295,7 +295,7 @@ pub struct InlinedEnumValue {
         if (encoded.raw_data > 0x0000FFFFFFFFFFFF) {
             return { number: @bitCast(encoded.raw_data - double_encode_offset) };
         } else {
-            return { string: @ptrFromInt(encoded.raw_data) };
+            return { string: unsafe { @ptrFromInt(encoded.raw_data) } };
         }
     }
 }
@@ -424,13 +424,28 @@ pub struct DeclaredSymbolList {
     }
 
     static fn fromSlice(allocator: std.mem.Allocator, entries: []const DeclaredSymbol): DeclaredSymbolList! {
-        let res = DeclaredSymbolList.initCapacity(allocator, entries.len)?;
-        errdefer res.deinit(allocator);
+        let res_guard = OptValDeinitWithAllocGuard<DeclaredSymbolList>{
+            val: DeclaredSymbolList.initCapacity(allocator, entries.len)?,
+            allocator: allocator,
+        };
         for (entry of entries) {
-            res.appendAssumeCapacity(entry);
+            res_guard.val.?.appendAssumeCapacity(entry);
         }
 
+        const res = res_guard.val.?;
+        res_guard.val = null;
         return res;
+    }
+}
+
+struct OptValDeinitWithAllocGuard<T> {
+    val: T?,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit(_.allocator);
+        }
     }
 }
 
@@ -616,8 +631,15 @@ pub enum StrictModeKind: u4 {
     }
 }
 
+struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
+    }
+}
+
 pub fn printmem(comptime format: string, args: auto) {
-    defer Output.flush();
+    const _flush_guard = OutputFlushGuard{};
+    * = _flush_guard;
     Output.initTest();
     Output.print(format, args);
 }
@@ -650,7 +672,7 @@ pub fn NewBatcher(comptime Type: type): type {
         }
 
         pub fn eat(this: *@This(), value: Type): *Type {
-            return @ptrCast(&this.head.eat1(value).ptr);
+            return unsafe { @ptrCast(&this.head.eat1(value).ptr) };
         }
 
         pub fn eat1(this: *@This(), value: Type): []Type {

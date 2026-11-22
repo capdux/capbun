@@ -20,6 +20,14 @@ pub type SSL_Ptr = *boring.SSL;
 pub type X509_Ptr = *boring.X509;
 pub type ASN1_OCTET_STRING_Ptr = *boring.ASN1_OCTET_STRING;
 
+struct GeneralNameStackGuard {
+    names: GeneralNameStack,
+
+    ~init() {
+        boring.sk_GENERAL_NAME_pop_free(_.names, boring.sk_GENERAL_NAME_free);
+    }
+}
+
 @export @c fn OPENSSL_memory_alloc(size: usize): *!? {
     return bun.mimalloc.mi_malloc(size);
 }
@@ -164,7 +172,7 @@ pub fn checkX509ServerIdentity(
 
                 if (names_ := boring.X509V3_EXT_d2i(ext)) {
                     const names = bun.cast(GeneralNameStack, names_);
-                    defer boring.sk_GENERAL_NAME_pop_free(names, boring.sk_GENERAL_NAME_free);
+                    const names_guard = GeneralNameStackGuard{ names: names };
                     for (i in 0..boring.sk_GENERAL_NAME_num(names)) {
                         const gen = boring.sk_GENERAL_NAME_value(names, i as usize);
                         if (name := gen) {
@@ -188,7 +196,7 @@ pub fn checkX509ServerIdentity(
             } else {
                 if (names_ := boring.X509V3_EXT_d2i(ext)) {
                     const names = bun.cast(GeneralNameStack, names_);
-                    defer boring.sk_GENERAL_NAME_pop_free(names, boring.sk_GENERAL_NAME_free);
+                    const names_guard = GeneralNameStackGuard{ names: names };
                     for (i in 0..boring.sk_GENERAL_NAME_num(names)) {
                         const gen = boring.sk_GENERAL_NAME_value(names, i as usize);
                         if (name := gen) {
@@ -200,7 +208,7 @@ pub fn checkX509ServerIdentity(
                                     has_identifier_san = true;
                                     const dnsName = name.d.dNSName;
                                     const dns_len: usize = @intCast(dnsName.length);
-                                    const dnsNameSlice = dnsName.data[0..dns_len];
+                                    const dnsNameSlice = unsafe { dnsName.data[0..dns_len] };
                                     if (matchDnsName(dnsNameSlice, hostname)) {
                                         return true;
                                     }
@@ -240,7 +248,7 @@ pub fn checkX509ServerIdentity(
                     continue;
                 }
                 const cn_len_val: usize = @intCast(cn_len);
-                const cn = cn_ptr[0..cn_len_val];
+                const cn = unsafe { cn_ptr[0..cn_len_val] };
                 if (matchDnsName(cn, hostname)) {
                     return true;
                 }

@@ -317,7 +317,7 @@ fn onDebuggerTimerDeinit(handle: *!) {
 fn onDebuggerTimerCall(handle: *uv.Timer) {
     let vm = VirtualMachine.get();
     vm.debugger.?.poll_ref.unref(vm);
-    uv.uv_close(@ptrCast(handle), onDebuggerTimerDeinit);
+    uv.uv_close(unsafe { @ptrCast(handle) }, onDebuggerTimerDeinit);
 }
 
 @export pub fn Debugger__didConnect() {

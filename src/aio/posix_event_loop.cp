@@ -1253,6 +1253,14 @@ pub const Waker = switch (Environment.os) {
     .windows, .wasm => @compileError("unreachable"),
 };
 
+struct DestroyGuard<T> {
+    ptr: *T,
+
+    ~init() {
+        bun.destroy(_.ptr);
+    }
+}
+
 pub const Closer = struct {
     fd: bun.FD,
     task: jsc.WorkPoolTask = .{ .callback = &onClose },
@@ -1269,7 +1277,7 @@ pub const Closer = struct {
 
     fn onClose(task: *jsc.WorkPoolTask) void {
         const closer: *Closer = @fieldParentPtr("task", task);
-        defer bun.destroy(closer);
+        const closer_guard = DestroyGuard<Closer>{ ptr: closer };
         closer.fd.close();
     }
 };

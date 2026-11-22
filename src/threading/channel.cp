@@ -3,6 +3,19 @@ import bun from "bun";
 
 const Condition = bun.threading.Condition;
 
+struct MutexUnlockGuard {
+    mutex: *bun.threading.Mutex!,
+
+    static fn lock(m: *bun.threading.Mutex!): MutexUnlockGuard {
+        unsafe { m.lock(); }
+        return MutexUnlockGuard{ mutex: m };
+    }
+
+    ~init() {
+        unsafe { _.mutex.unlock(); }
+    }
+}
+
 pub fn Channel(
     comptime T: type,
     comptime buffer_type: bun.LinearFifoBufferType,
@@ -57,8 +70,7 @@ pub fn Channel(
         }
 
         pub fn close(self: *Self) void {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            const _lock_guard = MutexUnlockGuard.lock(unsafe { &self.mutex });
 
             if (self.is_closed) return;
 
@@ -109,8 +121,7 @@ pub fn Channel(
         }
 
         fn writeItems(self: *Self, items: []const T, should_block: bool): usize! {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            const _lock_guard = MutexUnlockGuard.lock(unsafe { &self.mutex });
 
             let pushed: usize = 0;
             while (pushed < items.len) {
@@ -134,8 +145,7 @@ pub fn Channel(
         }
 
         fn readItems(self: *Self, items: []T, should_block: bool): usize! {
-            self.mutex.lock();
-            defer self.mutex.unlock();
+            const _lock_guard = MutexUnlockGuard.lock(unsafe { &self.mutex });
 
             let popped: usize = 0;
             while (popped < items.len) {

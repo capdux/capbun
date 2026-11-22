@@ -60,7 +60,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const OwnedSlice = struct {
@@ -176,6 +176,17 @@ pub fn __cp_deinit(self: *OutputCodeGuard) void {
                     _ = self.code.deinit(self.allocator);
                 }
             }
+    }
+};
+
+pub const TraceGuard = struct {
+    trace: @TypeOf(bun.perf.trace("RuntimeTranspilerCache.fromFile")),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *TraceGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.trace.end();
     }
 };
 
@@ -353,11 +364,10 @@ pub fn getCacheDir(buf: *bun.PathBuffer) !PathZ {
     }
 
 pub fn fromFile(input_hash: u64, feature_hash: u64, input_stat_size: u64, sourcemap_allocator: std.mem.Allocator, output_code_allocator: std.mem.Allocator, esm_record_allocator: std.mem.Allocator) !Entry {
-            var _trace = bun.perf.trace("RuntimeTranspilerCache.fromFile");
+            var _trace = TraceGuard{ .trace = bun.perf.trace("RuntimeTranspilerCache.fromFile") };
             _ = &_trace;
-            defer {
-            _ = _trace.end();
-            }
+            var ___trace_moved = false; _ = &___trace_moved;
+            defer if (!___trace_moved) { ___trace_moved = true; const __T = @TypeOf(_trace); if (@typeInfo(__T) == .optional) { if (_trace) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace; _drop_val.__cp_deinit(); } };
             var cache_file_path_buf: bun.PathBuffer = undefined;
             _ = &cache_file_path_buf;
             const cache_file_path = try getCacheFilePath((&cache_file_path_buf), input_hash);
@@ -402,11 +412,10 @@ pub fn isEligible(path: *const bun.fs.Path) bool {
     }
 
 pub fn toFile(input_byte_length: u64, input_hash: u64, features_hash: u64, sourcemap: []const u8, esm_record: []const u8, source_code: bun.String, exports_kind: bun.ast.ExportsKind) !void {
-            var _trace = bun.perf.trace("RuntimeTranspilerCache.toFile");
+            var _trace = TraceGuard{ .trace = bun.perf.trace("RuntimeTranspilerCache.toFile") };
             _ = &_trace;
-            defer {
-            _ = _trace.end();
-            }
+            var ___trace_moved = false; _ = &___trace_moved;
+            defer if (!___trace_moved) { ___trace_moved = true; const __T = @TypeOf(_trace); if (@typeInfo(__T) == .optional) { if (_trace) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace; _drop_val.__cp_deinit(); } };
             var cache_file_path_buf: bun.PathBuffer = undefined;
             _ = &cache_file_path_buf;
             const output_code: Entry.OutputCode = (switch (source_code.encoding()) {
@@ -517,11 +526,10 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
         }
     
     pub fn save(destination_dir: bun.FD, destination_path: bun.PathString, input_byte_length: u64, input_hash: u64, features_hash: u64, sourcemap: []const u8, esm_record: []const u8, output_code: OutputCode, exports_kind: bun.ast.ExportsKind) !void {
-                var _trace = bun.perf.trace("RuntimeTranspilerCache.save");
+                var _trace = TraceGuard{ .trace = bun.perf.trace("RuntimeTranspilerCache.save") };
                 _ = &_trace;
-                defer {
-                _ = _trace.end();
-                }
+                var ___trace_moved = false; _ = &___trace_moved;
+                defer if (!___trace_moved) { ___trace_moved = true; const __T = @TypeOf(_trace); if (@typeInfo(__T) == .optional) { if (_trace) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _trace.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _trace; _drop_val.__cp_deinit(); } };
                 var tmpname_buf: bun.PathBuffer = undefined;
                 _ = &tmpname_buf;
                 const tmpfilename = try bun.fs.FileSystem.tmpname(std.fs.path.extension(destination_path.slice()), (&tmpname_buf), input_hash);
@@ -610,7 +618,9 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
                         position = (position + (if (comptime @typeInfo(@TypeOf(written)) == .@"enum") cp_cast_int(i32, @intFromEnum(written)) else cp_cast_int(i32, written)));
                     }
                 }
-                _ = try guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())));
+                {
+                    _ = try guard.tmpfile.finish(@ptrCast(std.fs.path.basename(destination_path.slice())));
+                }
                 guard.finished = true;
         }
     
@@ -719,8 +729,8 @@ pub fn put(self: *RuntimeTranspilerCache, output_code_bytes: []const u8, sourcem
         }
             }
         
-        pub fn byteSlice(self: @This()) []const u8 {
-                    switch (self) {
+        pub fn byteSlice(self: *const @This()) []const u8 {
+                    switch (self.*) {
         .utf8 => {
         return self.utf8;
         },
