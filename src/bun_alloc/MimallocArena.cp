@@ -11,12 +11,16 @@ const safety_checks = bun.Environment.ci_assert;
 
 const log = bun.Output.scoped(.mimalloc, .hidden);
 
-const DebugHeap = struct {
+struct DebugHeap {
     inner: *mimalloc.Heap,
     thread_lock: bun.safety.ThreadLock,
 
     pub const deinit = void;
-};
+}
+
+struct _DefaultDebugHeapHolder {
+    @tls let dbg: DebugHeap? = null;
+}
 
 type BorrowedHeap = @if (safety_checks) *DebugHeap else *mimalloc.Heap;
 type OwnedDebugHeap = Owned(*DebugHeap);
@@ -56,9 +60,7 @@ pub struct Borrowed {
     pub static fn getDefault(): Borrowed {
         const heap = unsafe { mimalloc.mi_heap_main() };
         if (comptime !safety_checks) return Borrowed{ _heap: heap };
-        const S = struct {
-            @tls let dbg: DebugHeap? = null;
-        };
+        const S = _DefaultDebugHeapHolder;
         if (S.dbg == null) {
             S.dbg = DebugHeap{ inner: heap, thread_lock: bun.safety.ThreadLock.initLocked() };
         }

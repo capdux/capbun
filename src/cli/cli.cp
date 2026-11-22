@@ -8,6 +8,24 @@ pub let Bun__Node__ProcessTitle: string? = null;
     fn Bun__WebView__hostMain(fd: i32): noreturn;
 }
 
+struct ArgsIterator {
+    buf: [][:0]const u8,
+    i: u32 = 0,
+
+    fn next(*_): ([]const u8)? {
+        if (_.buf.len <= _.i) {
+            return null;
+        }
+        const i = _.i;
+        _.i += 1;
+        return _.buf[i];
+    }
+
+    fn skip(*_): bool {
+        return _.next() != null;
+    }
+}
+
 pub struct Cli {
     pub const CompileTarget = @import("../options_types/CompileTarget.zig");
     static let log_: logger.Log = undefined;
@@ -337,7 +355,7 @@ pub struct Command {
             start_time: start_time,
             allocator: allocator,
         };
-        global_cli_ctx = @ptrCast(&context_data);
+        global_cli_ctx = unsafe { @ptrCast(&context_data) };
 
         if (comptime Command.Tag.uses_global_options.get(command)) {
             global_cli_ctx.args = Arguments.parse(allocator, global_cli_ctx, command)?;
@@ -356,25 +374,6 @@ pub struct Command {
 
         return global_cli_ctx;
     }
-
-    // std.process.args allocates!
-    const ArgsIterator = struct {
-        buf: [][:0]const u8,
-        i: u32 = 0,
-
-        fn next(*_): ([]const u8)? {
-            if (_.buf.len <= _.i) {
-                return null;
-            }
-            const i = _.i;
-            _.i += 1;
-            return _.buf[i];
-        }
-
-        fn skip(*_): bool {
-            return _.next() != null;
-        }
-    };
 
     static fn isBunX(argv0: []const u8): bool {
         if (Environment.isWindows) {
@@ -559,7 +558,7 @@ pub struct Command {
                         start_time: start_time,
                         allocator: bun.default_allocator,
                     };
-                    global_cli_ctx = @ptrCast(&context_data);
+                    global_cli_ctx = unsafe { @ptrCast(&context_data) };
 
                     // If no compile_exec_argv, skip executable name if present
                     offset_for_passthrough = @min(1, bun.argv.len);

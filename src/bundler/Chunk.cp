@@ -32,24 +32,25 @@ const PartRange = bundler.PartRange;
 const PathTemplate = bundler.PathTemplate;
 const cheapPrefixNormalizer = bundler.cheapPrefixNormalizer;
 
-pub const ChunkImport = struct {
+pub struct ChunkImport {
     chunk_index: u32,
     import_kind: ImportKind,
-};
+}
 
-pub const ChunkFlags = packed struct(u8) {
+@packed(u8) pub struct ChunkFlags {
     is_executable: bool = false,
     has_html_chunk: bool = false,
     is_browser_chunk_from_server_build: bool = false,
     _padding: u5 = 0,
-};
+}
 
-pub const ChunkOrder = struct {
+pub struct ChunkOrder {
     source_index: Index.Int = 0,
     distance: u32 = 0,
     tie_breaker: u32 = 0,
 
-    fn lessThan(_: @This(), a: ChunkOrder, b: ChunkOrder): bool {
+    static fn lessThan(ctx: ChunkOrder, a: ChunkOrder, b: ChunkOrder): bool {
+        * = ctx;
         return (a.distance < b.distance) ||
             (a.distance == b.distance && a.tie_breaker < b.tie_breaker);
     }
@@ -57,72 +58,77 @@ pub const ChunkOrder = struct {
     /// Sort so files closest to an entry point come first. If two files are
     /// equidistant to an entry point, then break the tie by sorting on the
     /// stable source index derived from the DFS over all entry points.
-    pub fn sort(a: []ChunkOrder) {
+    static fn sort(a: []ChunkOrder) {
         std.sort.pdq(ChunkOrder, a, ChunkOrder{}, lessThan);
     }
-};
+}
 
-const _CodeResult = struct {
+struct _CodeResult {
     buffer: []u8 = "",
     shifts: []SourceMap.SourceMapShifts = [],
-};
+}
 pub const CodeResult = _CodeResult;
 
-pub const ChunkOutputPiece = struct {
+pub enum ChunkOutputPieceQueryKind: u3 {
+    /// The last piece in an array uses this to indicate it is just data
+    none,
+    /// Given a source index, print the asset's output
+    asset,
+    /// Given a chunk index, print the chunk's output path
+    chunk,
+    /// Given a server component boundary index, print the chunk's output path
+    scb,
+    /// Given an HTML import index, print the manifest
+    html_import,
+}
+
+@packed(u32) pub struct ChunkOutputPieceQuery {
+    index: u29 = 0,
+    kind: ChunkOutputPieceQueryKind = .none,
+
+    pub const Kind = ChunkOutputPieceQueryKind;
+    pub const none: ChunkOutputPieceQuery = { index: 0, kind: .none };
+}
+
+pub struct ChunkOutputPiece {
     /// Pointer and length split to reduce struct size
     data_ptr: [*]const u8,
     data_len: u32,
-    query: Query = Query.none,
+    query: ChunkOutputPieceQuery = ChunkOutputPieceQuery.none,
     prefix_comma: bool = false,
 
-    pub fn data(): []const u8 {
+    pub const Query = ChunkOutputPieceQuery;
+
+    fn data(): []const u8 {
         return unsafe { _.data_ptr[0.._.data_len] };
     }
 
-    pub const Query = packed struct(u32) {
-        index: u29 = 0,
-        kind: Kind = .none,
-
-        pub const Kind = enum(u3) {
-            /// The last piece in an array uses this to indicate it is just data
-            none,
-            /// Given a source index, print the asset's output
-            asset,
-            /// Given a chunk index, print the chunk's output path
-            chunk,
-            /// Given a server component boundary index, print the chunk's output path
-            scb,
-            /// Given an HTML import index, print the manifest
-            html_import,
-        };
-
-        pub const none: Query = .{ .index = 0, .kind = .none };
-    };
-
-    pub fn init(data_slice: []const u8, query: Query): ChunkOutputPiece {
+    static fn init(data_slice: []const u8, query: ChunkOutputPieceQuery): ChunkOutputPiece {
         return {
             data_ptr: data_slice.ptr,
             data_len: @as(u32, @truncate(data_slice.len)),
             query: query,
         };
     }
-};
+}
 
-pub const ChunkEntryPoint = packed struct(u64) {
+pub const ChunkEntryPointID = u30;
+
+@packed(u64) pub struct ChunkEntryPoint {
     /// Index into `Graph.input_files`
     source_index: u32 = 0,
-    entry_point_id: ID = 0,
+    entry_point_id: ChunkEntryPointID = 0,
     is_entry_point: bool = false,
     is_html: bool = false,
 
     /// so `EntryPoint` can be a u64
-    pub const ID = u30;
-};
+    pub const ID = ChunkEntryPointID;
+}
 
 pub const ChunkImportsFromOtherChunks = std.AutoArrayHashMapUnmanaged(Index.Int, CrossChunkImport.Item.List);
 pub const ImportsFromOtherChunks = ChunkImportsFromOtherChunks;
 
-pub const ChunkJavaScriptChunk = struct {
+pub struct ChunkJavaScriptChunk {
     files_in_chunk_order: []const Index.Int = [],
     parts_in_chunk_in_order: []const PartRange = [],
 
@@ -143,7 +149,7 @@ pub const ChunkJavaScriptChunk = struct {
     module_info_bytes: ([]const u8)? = null,
     /// Unserialized ModuleInfo for deferred serialization (after chunk paths are resolved)
     module_info: (*analyze_transpiled_module.ModuleInfo)? = null,
-};
+}
 
 const CssImportOrderLayersSelf = bun.BabyList(bun.css.LayerName);
 pub struct CssImportOrderLayersVTable {
@@ -161,7 +167,7 @@ pub struct CssImportOrderLayersVTable {
 
 pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), CssImportOrderLayersVTable);
 
-pub const CssImportOrderKind = union(enum) {
+pub union(enum) CssImportOrderKind {
     /// Represents earlier imports that have been made redundant by later ones (see `isConditionalImportRedundant`)
     /// We don't want to redundantly print the rules of these redundant imports
     /// BUT, the imports may include layers.
@@ -169,41 +175,41 @@ pub const CssImportOrderKind = union(enum) {
     layers: CssImportOrderLayers,
     external_path: bun.fs.Path,
     source_index: Index,
-};
+}
 
-pub const ChunkCssImportOrderDebug = struct {
+pub struct ChunkCssImportOrderDebug {
     inner: *const ChunkCssImportOrder,
     ctx: *LinkerContext,
 
-    pub fn format(this: *const ChunkCssImportOrderDebug, writer: *std.Io.Writer): !void {
-        try writer.print("{s} = ", [ @tagName(this.inner.kind) ]);
-        switch (this.inner.kind) {
+    fn format(writer: *std.Io.Writer)! {
+        writer.print("{s} = ", [ @tagName(_.inner.kind) ])?;
+        switch (_.inner.kind) {
             .layers layers => {
-                try writer.print("[", .{});
+                writer.writeAll("[")?;
                 const l = layers.inner();
                 let i: usize = 0;
                 for (layer of l.sliceConst()) {
-                    if (i > 0) try writer.print(", ", .{});
-                    try writer.print("\"{f}\"", [ layer ]);
+                    if (i > 0) writer.writeAll(", ")?;
+                    writer.print("\"{f}\"", [ layer ])?;
                     i += 1;
                 }
 
-                try writer.print("]", .{});
+                writer.writeAll("]")?;
             },
             .external_path path => {
-                try writer.print("\"{s}\"", [ path.pretty ]);
+                writer.print("\"{s}\"", [ path.pretty ])?;
             },
             .source_index source_index => {
-                const source = this.ctx.parse_graph.input_files.items(.source)[source_index.get()];
-                try writer.print("{d} ({s})", [ source_index.get(), source.path.text ]);
+                const source = _.ctx.parse_graph.input_files.items(.source)[source_index.get()];
+                writer.print("{d} ({s})", [ source_index.get(), source.path.text ])?;
             },
         }
     }
-};
+}
 
 pub const CssImportOrderDebug = ChunkCssImportOrderDebug;
 
-pub const ChunkCssImportOrder = struct {
+pub struct ChunkCssImportOrder {
     conditions: BabyList(bun.css.ImportConditions) = {},
     condition_import_records: BabyList(ImportRecord) = {},
 
@@ -212,7 +218,7 @@ pub const ChunkCssImportOrder = struct {
     pub const Layers = CssImportOrderLayers;
     pub const CssImportOrderDebug = ChunkCssImportOrderDebug;
 
-    pub fn hash(hasher: auto) {
+    fn hash(hasher: auto) {
         // TODO: conditions, condition_import_records
 
         bun.writeAnyToHasher(hasher, std.@"meta".activeTag(_.kind));
@@ -238,15 +244,15 @@ pub const ChunkCssImportOrder = struct {
         }
     }
 
-    pub fn fmt(ctx: *LinkerContext): ChunkCssImportOrderDebug {
+    fn fmt(ctx: *LinkerContext): ChunkCssImportOrderDebug {
         return {
             inner: &_,
             ctx: ctx,
         };
     }
-};
+}
 
-pub const ChunkCssChunk = struct {
+pub struct ChunkCssChunk {
     imports_in_chunk_in_order: BabyList(ChunkCssImportOrder) = {},
     /// When creating a chunk, this is to be an uninitialized slice with
     /// length of `imports_in_chunk_in_order`
@@ -257,14 +263,14 @@ pub const ChunkCssChunk = struct {
     /// When we go through the `prepareCssAstsForChunk()` step, each import will
     /// create a shallow copy of the file's AST (just dereferencing the pointer).
     asts: []bun.css.BundlerStyleSheet = [],
-};
+}
 
-pub const ChunkContent = union(enum) {
+pub union(enum) ChunkContent {
     javascript: ChunkJavaScriptChunk,
     css: ChunkCssChunk,
     html: void,
 
-    pub fn sourcemap(default: options.SourceMapOption): options.SourceMapOption {
+    fn sourcemap(default: options.SourceMapOption): options.SourceMapOption {
         return switch (_) {
             .javascript => default,
             .css => .none, // TODO: css source maps
@@ -272,7 +278,7 @@ pub const ChunkContent = union(enum) {
         };
     }
 
-    pub fn loader(): Loader {
+    fn loader(): Loader {
         return switch (_) {
             .javascript => .js,
             .css => .css,
@@ -280,20 +286,20 @@ pub const ChunkContent = union(enum) {
         };
     }
 
-    pub fn ext(): string {
+    fn ext(): string {
         return switch (_) {
             .javascript => "js",
             .css => "css",
             .html => "html",
         };
     }
-};
+}
 
 /// TODO: rewrite this
 /// This implementation is just slow.
 /// Can we make the JSPrinter itself track this without increasing
 /// complexity a lot?
-pub const ChunkIntermediateOutput = union(enum) {
+pub union(enum) ChunkIntermediateOutput {
     /// If the chunk has references to other chunks, then "pieces" contains
     /// the contents of the chunk. Another joiner will have to be
     /// constructed later when merging the pieces together.
@@ -308,7 +314,7 @@ pub const ChunkIntermediateOutput = union(enum) {
 
     empty: void,
 
-    pub fn allocatorForSize(size: usize): std.mem.Allocator {
+    static fn allocatorForSize(size: usize): std.mem.Allocator {
         if (size >= 512 * 1024) {
             return std.heap.page_allocator;
         } else {
@@ -318,7 +324,7 @@ pub const ChunkIntermediateOutput = union(enum) {
 
     /// Count occurrences of a closing HTML tag (e.g. `</script`, `</style`) in content.
     /// Used to calculate the extra bytes needed when escaping `</` → `<\/`.
-    pub fn countClosingTags(content: []const u8, close_tag: []const u8): usize {
+    static fn countClosingTags(content: []const u8, close_tag: []const u8): usize {
         const tag_suffix = close_tag[2..];
         let count: usize = 0;
         let remaining = content;
@@ -337,7 +343,7 @@ pub const ChunkIntermediateOutput = union(enum) {
     /// Copy `content` into `dest`, escaping occurrences of `close_tag` by
     /// replacing `</` with `<\/`. Returns the number of bytes written.
     /// Caller must ensure `dest` has room for `content.len + countClosingTags(...)` bytes.
-    pub fn memcpyEscapingClosingTags(dest: []u8, content: []const u8, close_tag: []const u8): usize {
+    static fn memcpyEscapingClosingTags(dest: []u8, content: []const u8, close_tag: []const u8): usize {
         const tag_suffix = close_tag[2..];
         let remaining = content;
         let dst: usize = 0;
@@ -364,7 +370,7 @@ pub const ChunkIntermediateOutput = union(enum) {
         return dst;
     }
 
-    pub fn getSize(): usize {
+    fn getSize(): usize {
         return switch (_) {
             .pieces pieces => brk: {
                 let total: usize = 0;
@@ -378,7 +384,7 @@ pub const ChunkIntermediateOutput = union(enum) {
         };
     }
 
-    pub fn code(
+    fn code(
         *_,
         allocator_to_use: (std.mem.Allocator)?,
         parse_graph: *const Graph,
@@ -410,7 +416,7 @@ pub const ChunkIntermediateOutput = union(enum) {
     /// When `standalone_chunk_contents` is provided, chunk piece references are
     /// resolved to inline code content instead of file paths. Asset references
     /// are resolved to data: URIs from url_for_css.
-    pub fn codeStandalone(
+    fn codeStandalone(
         *_,
         allocator_to_use: (std.mem.Allocator)?,
         parse_graph: *const Graph,
@@ -439,7 +445,7 @@ pub const ChunkIntermediateOutput = union(enum) {
         };
     }
 
-    pub fn codeWithSourceMapShifts(
+    fn codeWithSourceMapShifts(
         *_,
         allocator_to_use: (std.mem.Allocator)?,
         graph: *const Graph,
@@ -658,7 +664,7 @@ pub const ChunkIntermediateOutput = union(enum) {
                             };
 
                             // normalize windows paths to '/'
-                            bun.path.platformToPosixInPlace(u8, @constCast(file_path));
+                            bun.path.platformToPosixInPlace(u8, unsafe { @constCast(file_path) });
                             const cheap_normalizer = cheapPrefixNormalizer(
                                 import_prefix,
                                 if (from_chunk_dir.len == 0 || force_absolute_path)
@@ -742,9 +748,9 @@ pub const ChunkIntermediateOutput = union(enum) {
             },
         }
     }
-};
+}
 
-pub const Chunk = struct {
+pub struct Chunk {
     pub const CodeResult = _CodeResult;
     /// This is a random string and is used to represent the output path of this
     /// chunk before the final output path has been computed. See OutputPiece
@@ -798,13 +804,13 @@ pub const Chunk = struct {
     pub const ImportsFromOtherChunks = ChunkImportsFromOtherChunks;
     pub const Content = ChunkContent;
 
-    pub inline fn isEntryPoint(): bool {
+    inline fn isEntryPoint(): bool {
         return _.entry_point.is_entry_point;
     }
 
     /// Returns the HTML closing tag that must be escaped when this chunk's content
     /// is inlined into a standalone HTML file (e.g. "</script" for JS, "</style" for CSS).
-    pub fn closingTagForContent(): []const u8 {
+    fn closingTagForContent(): []const u8 {
         return switch (_.content) {
             .javascript => "</script",
             .css => "</style",
@@ -812,7 +818,7 @@ pub const Chunk = struct {
         };
     }
 
-    pub fn getJSChunkForHTML(chunks: []Chunk): (*Chunk)? {
+    fn getJSChunkForHTML(chunks: []Chunk): (*Chunk)? {
         const entry_point_id = _.entry_point.entry_point_id;
         for (i of 0..chunks.len) {
             if (chunks[i].content == .javascript) {
@@ -824,7 +830,7 @@ pub const Chunk = struct {
         return null;
     }
 
-    pub fn getCSSChunkForHTML(chunks: []Chunk): (*Chunk)? {
+    fn getCSSChunkForHTML(chunks: []Chunk): (*Chunk)? {
         // Look up the CSS chunk via the JS chunk's css_chunks indices.
         // This correctly handles deduplicated CSS chunks that are shared
         // across multiple HTML entry points (see issue #23668).
@@ -846,10 +852,10 @@ pub const Chunk = struct {
         return null;
     }
 
-    pub inline fn entryBits(): *const AutoBitSet {
+    inline fn entryBits(): *const AutoBitSet {
         return &_.entry_bits;
     }
-};
+}
 
 pub const Flags = ChunkFlags;
 pub const Order = ChunkOrder;

@@ -199,6 +199,112 @@ pub fn parse(ctx: Command.Context) !CreateOptions {
         };
 };
 
+pub const _CreateFileCopier = struct {
+
+pub fn copy(destination_dir_: std.fs.Dir, walker: *Walker, node_: *Progress.Node, progress_: *Progress, dst_base_len: if (Environment.isWindows) usize else void, dst_buf: if (Environment.isWindows) *bun.WPathBuffer else void, src_base_len: if (Environment.isWindows) usize else void, src_buf: if (Environment.isWindows) *bun.WPathBuffer else void) !void {
+            while (try walker.next().unwrap()) |entry| {
+                if (comptime Environment.isWindows) {
+                    if (((entry.kind != .file) and (entry.kind != .directory))) {
+                        continue;
+                    }
+                    _ = @memcpy(dst_buf[dst_base_len..][0..entry.path.len], entry.path);
+                    dst_buf[cp_cast_int(usize, (dst_base_len + entry.path.len))] = 0;
+                    const dst = dst_buf[0..(dst_base_len + entry.path.len) :0];
+                    _ = @memcpy(src_buf[src_base_len..][0..entry.path.len], entry.path);
+                    src_buf[cp_cast_int(usize, (src_base_len + entry.path.len))] = 0;
+                    const src = src_buf[0..(src_base_len + entry.path.len) :0];
+                    switch (entry.kind) {
+.directory => {
+if ((bun.windows.CreateDirectoryExW(src.ptr, dst.ptr, null) == 0)) {
+                        _ = (blk_catch_2: { break :blk_catch_2 ((bun.MakePath.makePath(u16, destination_dir_, entry.path)) catch |__ce_2| { _ = &__ce_2;  }); });
+                    }
+},
+.file => {
+defer {
+                    _ = node_.completeOne();
+                    }
+                    if ((bun.windows.CopyFileW(src.ptr, dst.ptr, 0) == bun.windows.FALSE)) {
+                        if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
+                            _ = &entry_dirname;
+                            _ = (blk_catch_3: { break :blk_catch_3 ((bun.MakePath.makePath(u16, destination_dir_, entry_dirname)) catch |__ce_3| { _ = &__ce_3;  }); });
+                            if ((bun.windows.CopyFileW(src.ptr, dst.ptr, 0) != bun.windows.FALSE)) {
+                                continue;
+                            }
+                        }
+                        if (bun.windows.Win32Error.get().toSystemErrno()) |e| {
+                            _ = &e;
+                            _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                        } else {
+                            _ = Output.errGeneric("failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                        }
+                        _ = node_.end();
+                        _ = progress_.refresh();
+                        _ = Global.crash();
+                    }
+},
+else => {
+_ = unreachable;
+},
+}
+                    continue;
+                }
+                if ((entry.kind != .file)) {
+                    continue;
+                }
+                var outfile = bun.FD.fromStdFile((blk_catch_4: { break :blk_catch_4 ((destination_dir_.createFile(entry.path, .{})) catch |__ce_4| { _ = &__ce_4; break :blk_catch_4 brk: {
+                if (bun.Dirname.dirname(bun.OSPathChar, entry.path)) |entry_dirname| {
+                    _ = &entry_dirname;
+                    _ = (blk_catch_5: { break :blk_catch_5 ((bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname)) catch |__ce_5| { _ = &__ce_5;  }); });
+                }
+                break :brk (blk_catch_6: { break :blk_catch_6 ((destination_dir_.createFile(entry.path, .{})) catch |e| { _ = &e; _ = node_.end();
+                _ = progress_.refresh();
+                _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                break :blk_catch_6 Global.crash(); }); });
+}; }); }));
+                _ = &outfile;
+                var _guard_outfile = CloseGuard(bun.FD){ .ptr = (&outfile) };
+                _ = &_guard_outfile;
+                var ___guard_outfile_moved = false; _ = &___guard_outfile_moved;
+                defer if (!___guard_outfile_moved) { ___guard_outfile_moved = true; const __T = @TypeOf(_guard_outfile); if (@typeInfo(__T) == .optional) { if (_guard_outfile) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_outfile.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_outfile; _drop_val.__cp_deinit(); } };
+                defer {
+                _ = node_.completeOne();
+                }
+                var infile = try entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap();
+                _ = &infile;
+                var _guard_infile = CloseGuard(bun.FD){ .ptr = (&infile) };
+                _ = &_guard_infile;
+                var ___guard_infile_moved = false; _ = &___guard_infile_moved;
+                defer if (!___guard_infile_moved) { ___guard_infile_moved = true; const __T = @TypeOf(_guard_infile); if (@typeInfo(__T) == .optional) { if (_guard_infile) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_infile.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_infile; _drop_val.__cp_deinit(); } };
+                switch (infile.stat()) {
+.err => {
+
+},
+.result => |stat| {
+_ = outfile.chmod((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_cast_int(usize, @intFromEnum(stat.mode)) else cp_cast_int(usize, stat.mode)));
+},
+}
+                _ = (blk_catch_7: { break :blk_catch_7 ((CopyFile.copyFile(infile, outfile).unwrap()) catch |e| { _ = &e; _ = node_.end();
+                _ = progress_.refresh();
+                _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
+                break :blk_catch_7 Global.crash(); }); });
+            }
+    }
+    const Walker = @import("../sys/walker_skippable.zig");
+};
+
+pub const _CreateAnalyzer = struct {
+    ctx: Command.Context,
+    example_tag: Example.Tag,
+    entry_point: []const u8,
+    node: *Progress.Node,
+    progress: *Progress,
+
+pub fn onAnalyze(analyzer_ptr: *_CreateAnalyzer, result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result) !void {
+            _ = analyzer_ptr.node.end();
+            _ = try SourceFileProjectGenerator.generate(analyzer_ptr.ctx, analyzer_ptr.example_tag, analyzer_ptr.entry_point, result);
+    }
+};
+
 pub const ExtractInfoResult = struct {
     example_tag: Example.Tag,
     template: []const u8,
@@ -263,7 +369,7 @@ return try runOnEntryPoint(ctx, example_tag, template, (&progress), node);
 },
 .github_repository, .official => {
 const tarball_bytes: MutableString = (switch (example_tag) {
-.official => (blk_catch_2: { break :blk_catch_2 ((Example.fetch(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_2 @as(MutableString, (switch (e) {
+.official => (blk_catch_8: { break :blk_catch_8 ((Example.fetch(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_8 @as(MutableString, (switch (e) {
 error.HTTPForbidden, error.ExampleNotFound => {
 {
                 _ = node.end();
@@ -284,7 +390,7 @@ else => {
             }
 },
 })); }); }),
-.github_repository => (blk_catch_3: { break :blk_catch_3 ((Example.fetchFromGitHub(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_3 @as(MutableString, (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .HTTPForbidden)) {  _ = node.end();
+.github_repository => (blk_catch_9: { break :blk_catch_9 ((Example.fetchFromGitHub(ctx, (&env_loader), template, (&progress), node)) catch |e| { _ = &e; break :blk_catch_9 @as(MutableString, (__sw_blk_1: { const __disc_1 = e; _ = &__disc_1; if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .HTTPForbidden)) {  _ = node.end();
             _ = progress.refresh();
             _ = Output.prettyError("\n<r><red>error:<r> GitHub returned 403. This usually means GitHub is rate limiting your requests.\nTo fix this, either:<r>  <b>A) pass a <r><cyan>GITHUB_ACCESS_TOKEN<r> environment variable to bun<r>\n  <b>B)Wait a little and try again<r>\n", .{});
             break :__sw_blk_1 cp_val(Global.crash()); } } if ((!cp_has_ok_val(__disc_1) and !cp_is_null_val(__disc_1))) { const __err_v_1 = cp_unwrap_err_val(__disc_1); _ = &__err_v_1; if (cp_match_tag(__err_v_1, .GitHubRepositoryNotFound)) {  _ = node.end();
@@ -361,15 +467,15 @@ var template_parts: [1][]const u8 = .{ template };
             (if (@typeInfo(@TypeOf(node)) == .@"enum" or @typeInfo(@TypeOf(node)) == .@"union") @tagName(node) else node.name) = "Copying files";
             _ = progress.refresh();
             const abs_template_path = filesystem.abs((&template_parts));
-            const template_dir = (blk_catch_4: { break :blk_catch_4 ((std.fs.openDirAbsolute(abs_template_path, .{ .iterate = true })) catch |e| { _ = &e; _ = node.end();
+            const template_dir = (blk_catch_10: { break :blk_catch_10 ((std.fs.openDirAbsolute(abs_template_path, .{ .iterate = true })) catch |e| { _ = &e; _ = node.end();
             _ = progress.refresh();
             _ = Output.prettyErrorln("<r><red>{s}<r>: opening dir {s}", .{ @errorName(e), template });
-            break :blk_catch_4 Global.exit(1); }); });
-            _ = (blk_catch_5: { break :blk_catch_5 ((std.fs.deleteTreeAbsolute(destination)) catch |__ce_5| { _ = &__ce_5;  }); });
-            const destination_dir__ = (blk_catch_6: { break :blk_catch_6 ((std.fs.cwd().makeOpenPath(destination, .{})) catch |e| { _ = &e; _ = node.end();
+            break :blk_catch_10 Global.exit(1); }); });
+            _ = (blk_catch_11: { break :blk_catch_11 ((std.fs.deleteTreeAbsolute(destination)) catch |__ce_11| { _ = &__ce_11;  }); });
+            const destination_dir__ = (blk_catch_12: { break :blk_catch_12 ((std.fs.cwd().makeOpenPath(destination, .{})) catch |e| { _ = &e; _ = node.end();
             _ = progress.refresh();
             _ = Output.prettyErrorln("<r><red>{s}<r>: creating dir {s}", .{ @errorName(e), destination });
-            break :blk_catch_6 Global.exit(1); }); });
+            break :blk_catch_12 Global.exit(1); }); });
             var destination_buf: if (Environment.isWindows) bun.WPathBuffer else void = undefined;
             _ = &destination_buf;
             const dst_without_trailing_slash: if (Environment.isWindows) []const u8 else void = (if (comptime Environment.isWindows) strings.withoutTrailingSlash(destination) else @as(void, undefined));
@@ -392,99 +498,9 @@ var template_parts: [1][]const u8 = .{ template };
             _ = &_guard_walker;
             var ___guard_walker_moved = false; _ = &___guard_walker_moved;
             defer if (!___guard_walker_moved) { ___guard_walker_moved = true; const __T = @TypeOf(_guard_walker); if (@typeInfo(__T) == .optional) { if (_guard_walker) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_walker.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_walker; _drop_val.__cp_deinit(); } };
-            const FileCopier = struct {
-
-pub fn copy(destination_dir_: std.fs.Dir, walker: *Walker, node_: *Progress.Node, progress_: *Progress, dst_base_len: if (Environment.isWindows) usize else void, dst_buf: if (Environment.isWindows) *bun.WPathBuffer else void, src_base_len: if (Environment.isWindows) usize else void, src_buf: if (Environment.isWindows) *bun.WPathBuffer else void) !void {
-            while (try walker.next().unwrap()) |entry| {
-                if (comptime Environment.isWindows) {
-                    if (((entry.kind != .file) and (entry.kind != .directory))) {
-                        continue;
-                    }
-                    _ = @memcpy(dst_buf[dst_base_len..][0..entry.path.len], entry.path);
-                    dst_buf[cp_cast_int(usize, (dst_base_len + entry.path.len))] = 0;
-                    const dst = dst_buf[0..(dst_base_len + entry.path.len) :0];
-                    _ = @memcpy(src_buf[src_base_len..][0..entry.path.len], entry.path);
-                    src_buf[cp_cast_int(usize, (src_base_len + entry.path.len))] = 0;
-                    const src = src_buf[0..(src_base_len + entry.path.len) :0];
-                    switch (entry.kind) {
-.directory => {
-if ((bun.windows.CreateDirectoryExW(src.ptr, dst.ptr, null) == 0)) {
-                        _ = (blk_catch_0: { break :blk_catch_0 ((bun.MakePath.makePath(u16, destination_dir_, entry.path)) catch |__ce_0| { _ = &__ce_0;  }); });
-                    }
-},
-.file => {
-defer {
-                    _ = node_.completeOne();
-                    }
-                    if ((bun.windows.CopyFileW(src.ptr, dst.ptr, 0) == bun.windows.FALSE)) {
-                        if (bun.Dirname.dirname(u16, entry.path)) |entry_dirname| {
-                            _ = &entry_dirname;
-                            _ = (blk_catch_1: { break :blk_catch_1 ((bun.MakePath.makePath(u16, destination_dir_, entry_dirname)) catch |__ce_1| { _ = &__ce_1;  }); });
-                            if ((bun.windows.CopyFileW(src.ptr, dst.ptr, 0) != bun.windows.FALSE)) {
-                                continue;
-                            }
-                        }
-                        if (bun.windows.Win32Error.get().toSystemErrno()) |e| {
-                            _ = &e;
-                            _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
-                        } else {
-                            _ = Output.errGeneric("failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
-                        }
-                        _ = node_.end();
-                        _ = progress_.refresh();
-                        _ = Global.crash();
-                    }
-},
-else => {
-_ = unreachable;
-},
-}
-                    continue;
-                }
-                if ((entry.kind != .file)) {
-                    continue;
-                }
-                var outfile = bun.FD.fromStdFile((blk_catch_2: { break :blk_catch_2 ((destination_dir_.createFile(entry.path, .{})) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 brk: {
-                if (bun.Dirname.dirname(bun.OSPathChar, entry.path)) |entry_dirname| {
-                    _ = &entry_dirname;
-                    _ = (blk_catch_3: { break :blk_catch_3 ((bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname)) catch |__ce_3| { _ = &__ce_3;  }); });
-                }
-                break :brk (blk_catch_4: { break :blk_catch_4 ((destination_dir_.createFile(entry.path, .{})) catch |e| { _ = &e; _ = node_.end();
-                _ = progress_.refresh();
-                _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
-                break :blk_catch_4 Global.crash(); }); });
-}; }); }));
-                _ = &outfile;
-                var _guard_outfile = CloseGuard(bun.FD){ .ptr = (&outfile) };
-                _ = &_guard_outfile;
-                var ___guard_outfile_moved = false; _ = &___guard_outfile_moved;
-                defer if (!___guard_outfile_moved) { ___guard_outfile_moved = true; const __T = @TypeOf(_guard_outfile); if (@typeInfo(__T) == .optional) { if (_guard_outfile) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_outfile.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_outfile; _drop_val.__cp_deinit(); } };
-                defer {
-                _ = node_.completeOne();
-                }
-                var infile = try entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap();
-                _ = &infile;
-                var _guard_infile = CloseGuard(bun.FD){ .ptr = (&infile) };
-                _ = &_guard_infile;
-                var ___guard_infile_moved = false; _ = &___guard_infile_moved;
-                defer if (!___guard_infile_moved) { ___guard_infile_moved = true; const __T = @TypeOf(_guard_infile); if (@typeInfo(__T) == .optional) { if (_guard_infile) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_infile.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_infile; _drop_val.__cp_deinit(); } };
-                switch (infile.stat()) {
-.err => {
-
-},
-.result => |stat| {
-_ = outfile.chmod((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_cast_int(usize, @intFromEnum(stat.mode)) else cp_cast_int(usize, stat.mode)));
-},
-}
-                _ = (blk_catch_5: { break :blk_catch_5 ((CopyFile.copyFile(infile, outfile).unwrap()) catch |e| { _ = &e; _ = node_.end();
-                _ = progress_.refresh();
-                _ = Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{}) });
-                break :blk_catch_5 Global.crash(); }); });
-            }
-    }
-};
+            const FileCopier = _CreateFileCopier;
             _ = try FileCopier.copy(destination_dir, (&walker_), node, (&progress), (if (comptime Environment.isWindows) (dst_without_trailing_slash.len + 1) else @as(void, undefined)), (if (comptime Environment.isWindows) (&destination_buf) else @as(void, undefined)), (if (comptime Environment.isWindows) (src_without_trailing_slash.len + 1) else @as(void, undefined)), (if (comptime Environment.isWindows) (&template_path_buf) else @as(void, undefined)));
-            package_json_file = (blk_catch_7: { break :blk_catch_7 ((destination_dir.openFile("package.json", .{ .mode = .read_write })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 null; }); });
+            package_json_file = (blk_catch_13: { break :blk_catch_13 ((destination_dir.openFile("package.json", .{ .mode = .read_write })) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 null; }); });
             _ = read_package_json: {
             if (package_json_file) |pkg| {
                 _ = &pkg;
@@ -494,12 +510,12 @@ _ = outfile.chmod((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_ca
                 }
                 var stat_ok = true;
                 _ = &stat_ok;
-                const stat = (blk_catch_8: { break :blk_catch_8 ((pkg.stat()) catch |e| { _ = &e; _ = node.end();
+                const stat = (blk_catch_14: { break :blk_catch_14 ((pkg.stat()) catch |e| { _ = &e; _ = node.end();
                 _ = progress.refresh();
                 package_json_file = null;
                 _ = Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e) });
                 stat_ok = false;
-                break :blk_catch_8 std.mem.zeroes(std.fs.File.Stat); }); });
+                break :blk_catch_14 std.mem.zeroes(std.fs.File.Stat); }); });
                 if ((!stat_ok)) {
                     break :read_package_json;
                 }
@@ -516,19 +532,19 @@ _ = outfile.chmod((if (comptime @typeInfo(@TypeOf(stat.mode)) == .@"enum") cp_ca
                 const prev_file_pos = (if (comptime Environment.isWindows) try pkg.getPos() else 0);
                 var pread_ok = true;
                 _ = &pread_ok;
-                _ = (blk_catch_9: { break :blk_catch_9 ((pkg.preadAll(package_json_contents.list.items, 0)) catch |e| { _ = &e; package_json_file = null;
+                _ = (blk_catch_15: { break :blk_catch_15 ((pkg.preadAll(package_json_contents.list.items, 0)) catch |e| { _ = &e; package_json_file = null;
                 _ = node.end();
                 _ = progress.refresh();
                 _ = Output.prettyErrorln("Error reading package.json: <r><red>{s}", .{ @errorName(e) });
                 pread_ok = false;
-                break :blk_catch_9 0; }); });
+                break :blk_catch_15 0; }); });
                 if ((!pread_ok)) {
                     break :read_package_json;
                 }
                 if (comptime Environment.isWindows) {
                     _ = try pkg.seekTo(prev_file_pos);
                 }
-                _ = (blk_catch_10: { break :blk_catch_10 ((std.posix.ftruncate(pkg.handle, 0)) catch |__ce_10| { _ = &__ce_10;  }); });
+                _ = (blk_catch_16: { break :blk_catch_16 ((std.posix.ftruncate(pkg.handle, 0)) catch |__ce_16| { _ = &__ce_16;  }); });
                 _ = initializeStore();
             }
 };
@@ -557,12 +573,12 @@ _ = unreachable;
                 var ___guard_parent_dir_moved = false; _ = &___guard_parent_dir_moved;
                 defer if (!___guard_parent_dir_moved) { ___guard_parent_dir_moved = true; const __T = @TypeOf(_guard_parent_dir); if (@typeInfo(__T) == .optional) { if (_guard_parent_dir) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_parent_dir.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_parent_dir; _drop_val.__cp_deinit(); } };
                 if (comptime Environment.isWindows) {
-                    _ = (blk_catch_11: { break :blk_catch_11 ((parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{})) catch |__ce_11| { _ = &__ce_11;  }); });
+                    _ = (blk_catch_17: { break :blk_catch_17 ((parent_dir.copyFile("gitignore", parent_dir, ".gitignore", .{})) catch |__ce_17| { _ = &__ce_17;  }); });
                 } else {
-                    _ = (blk_catch_12: { break :blk_catch_12 ((std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0)) catch |__ce_12| { _ = &__ce_12;  }); });
+                    _ = (blk_catch_18: { break :blk_catch_18 ((std.posix.linkat(parent_dir.fd, "gitignore", parent_dir.fd, ".gitignore", 0)) catch |__ce_18| { _ = &__ce_18;  }); });
                 }
-                _ = (blk_catch_13: { break :blk_catch_13 ((std.posix.unlinkat(parent_dir.fd, "gitignore", 0)) catch |__ce_13| { _ = &__ce_13;  }); });
-                _ = (blk_catch_14: { break :blk_catch_14 ((std.posix.unlinkat(parent_dir.fd, ".npmignore", 0)) catch |__ce_14| { _ = &__ce_14;  }); });
+                _ = (blk_catch_19: { break :blk_catch_19 ((std.posix.unlinkat(parent_dir.fd, "gitignore", 0)) catch |__ce_19| { _ = &__ce_19;  }); });
+                _ = (blk_catch_20: { break :blk_catch_20 ((std.posix.unlinkat(parent_dir.fd, ".npmignore", 0)) catch |__ce_20| { _ = &__ce_20;  }); });
             }
             var start_command: []const u8 = "bun dev";
             _ = &start_command;
@@ -575,9 +591,9 @@ _ = unreachable;
                 const source = (&logger.Source.initPathString("package.json", package_json_contents.list.items));
                 var parse_ok = true;
                 _ = &parse_ok;
-                var package_json_expr = (blk_catch_15: { break :blk_catch_15 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |__ce_15| { _ = &__ce_15; package_json_file = null;
+                var package_json_expr = (blk_catch_21: { break :blk_catch_21 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |__ce_21| { _ = &__ce_21; package_json_file = null;
                 parse_ok = false;
-                break :blk_catch_15 undefined; }); });
+                break :blk_catch_21 undefined; }); });
                 _ = &package_json_expr;
                 if ((!parse_ok)) {
                     break :process_package_json;
@@ -629,10 +645,9 @@ _ = unreachable;
                 }
                 const E = js_ast.E;
                 _ = &E;
-                const InjectionPrefill = CreateInjectionPrefill;
-                InjectionPrefill.bun_macro_relay_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous(InjectionPrefill.bun_macro_relay_properties[0..]);
-                InjectionPrefill.bun_macros_relay_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous((&InjectionPrefill.bun_macros_relay_object_properties));
-                InjectionPrefill.bun_macros_relay_only_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous((&InjectionPrefill.bun_macros_relay_only_object_properties));
+                prefill_bun_macro_relay_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous(prefill_bun_macro_relay_properties[0..]);
+                prefill_bun_macros_relay_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous((&prefill_bun_macros_relay_object_properties));
+                prefill_bun_macros_relay_only_object.properties = js_ast.G.Property.List.fromBorrowedSliceDangerous((&prefill_bun_macros_relay_only_object_properties));
                 package_json_expr.data.e_object.is_single_line = false;
                 package_json_expr.data.e_object.properties = js_ast.G.Property.List.moveFromList((&properties_list));
                 {
@@ -660,7 +675,7 @@ _ = unreachable;
                                         continue;
                                     }
                                     if (strings.contains(script, "react-scripts build")) {
-                                        (if (@typeInfo(@TypeOf(scripts_properties[@as(usize, @intCast(script_property_i))])) == .@"enum") @intFromEnum(scripts_properties[@as(usize, @intCast(script_property_i))]) else scripts_properties[@as(usize, @intCast(script_property_i))].value) = InjectionPrefill.npx_react_scripts_build;
+                                        (if (@typeInfo(@TypeOf(scripts_properties[@as(usize, @intCast(script_property_i))])) == .@"enum") @intFromEnum(scripts_properties[@as(usize, @intCast(script_property_i))]) else scripts_properties[@as(usize, @intCast(script_property_i))].value) = prefill_npx_react_scripts_build;
                                     }
                                     scripts_properties[cp_cast_int(usize, script_property_out_i)] = scripts_properties[@as(usize, @intCast(script_property_i))];
                                     script_property_out_i = (script_property_out_i + 1);
@@ -736,26 +751,26 @@ else => {
                 _ = &package_json_writer;
                 var write_ok = true;
                 _ = &write_ok;
-                _ = (blk_catch_16: { break :blk_catch_16 ((JSPrinter.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), package_json_expr, source, .{ .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                _ = (blk_catch_22: { break :blk_catch_22 ((JSPrinter.printJSON(@TypeOf((&package_json_writer)), (&package_json_writer), package_json_expr, source, .{ .mangled_props = null })) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
                 package_json_file = null;
                 write_ok = false;
-                break :blk_catch_16 (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)); }); });
+                break :blk_catch_22 (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)); }); });
                 if ((!write_ok)) {
                     break :process_package_json;
                 }
                 const written = package_json_writer.ctx.getWritten();
                 const void_ok: void = undefined;
-                _ = (blk_catch_17: { break :blk_catch_17 ((bun.sys.File.writeAll(.{ .handle = file }, written).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                _ = (blk_catch_23: { break :blk_catch_23 ((bun.sys.File.writeAll(.{ .handle = file }, written).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
                 package_json_file = null;
                 write_ok = false;
-                break :blk_catch_17 void_ok; }); });
+                break :blk_catch_23 void_ok; }); });
                 if ((!write_ok)) {
                     break :process_package_json;
                 }
-                _ = (blk_catch_18: { break :blk_catch_18 ((file.truncate((if (comptime @typeInfo(@TypeOf(written.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(written.len)) else cp_cast_int(i32, written.len))).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
+                _ = (blk_catch_24: { break :blk_catch_24 ((file.truncate((if (comptime @typeInfo(@TypeOf(written.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(written.len)) else cp_cast_int(i32, written.len))).unwrap()) catch |e| { _ = &e; _ = Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
                 package_json_file = null;
                 write_ok = false;
-                break :blk_catch_18 void_ok; }); });
+                break :blk_catch_24 void_ok; }); });
                 if ((!write_ok)) {
                     break :process_package_json;
                 }
@@ -772,9 +787,9 @@ else => {
                     _ = GitHandler.spawn(destination, PATH, create_options.verbose);
                 } else {
                     if (create_options.verbose) {
-                        create_options.skip_git = (blk_catch_19: { break :blk_catch_19 ((GitHandler.run(destination, PATH, true)) catch |__ce_19| { _ = &__ce_19; break :blk_catch_19 @as(bool, false); }); });
+                        create_options.skip_git = (blk_catch_25: { break :blk_catch_25 ((GitHandler.run(destination, PATH, true)) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 @as(bool, false); }); });
                     } else {
-                        create_options.skip_git = (blk_catch_20: { break :blk_catch_20 ((GitHandler.run(destination, PATH, false)) catch |__ce_20| { _ = &__ce_20; break :blk_catch_20 @as(bool, false); }); });
+                        create_options.skip_git = (blk_catch_26: { break :blk_catch_26 ((GitHandler.run(destination, PATH, false)) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 @as(bool, false); }); });
                     }
                 }
             }
@@ -886,24 +901,13 @@ else => {
                     const open = @import("./open.zig");
                     _ = open.openURL("http://localhost:3000/");
                     _ = try child.spawn();
-                    _ = (blk_catch_21: { break :blk_catch_21 ((child.wait()) catch |__ce_21| { _ = &__ce_21;  }); });
+                    _ = (blk_catch_27: { break :blk_catch_27 ((child.wait()) catch |__ce_27| { _ = &__ce_27;  }); });
                 }
             }
     }
 
 pub fn runOnEntryPoint(ctx: Command.Context, example_tag: Example.Tag, entry_point: []const u8, progress: *Progress, node: *Progress.Node) !void {
-            const Analyzer = struct {
-    ctx: Command.Context,
-    example_tag: Example.Tag,
-    entry_point: []const u8,
-    node: *Progress.Node,
-    progress: *Progress,
-
-pub fn onAnalyze(self: *@This(), result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result) anyerror!void {
-            _ = self.node.end();
-            _ = try SourceFileProjectGenerator.generate(self.ctx, self.example_tag, self.entry_point, result);
-    }
-};
+            const Analyzer = _CreateAnalyzer;
             var analyzer = Analyzer{ .ctx = ctx, .example_tag = example_tag, .entry_point = entry_point, .progress = progress, .node = node };
             _ = &analyzer;
             var fetcher = bun.bundle_v2.BundleV2.DependenciesScanner{ .ctx = (&analyzer), .entry_points = (&.{ analyzer.entry_point }), .onFetch = (blk: {
@@ -1096,27 +1100,27 @@ pub fn fetchAllLocalAndRemote(ctx: Command.Context, node: ?*Progress.Node, env_l
                     var parts: [1][]const u8 = .{ home_dir };
                     _ = &parts;
                     const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 0)] = (blk_catch_23: { break :blk_catch_23 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 bun.invalid_fd.stdDir(); }); });
+                    folders[cp_cast_int(usize, 0)] = (blk_catch_29: { break :blk_catch_29 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_29| { _ = &__ce_29; break :blk_catch_29 bun.invalid_fd.stdDir(); }); });
                 }
                 {
                     var parts: [2][]const u8 = .{ filesystem.top_level_dir, BUN_CREATE_DIR };
                     _ = &parts;
                     const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 1)] = (blk_catch_24: { break :blk_catch_24 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_24| { _ = &__ce_24; break :blk_catch_24 bun.invalid_fd.stdDir(); }); });
+                    folders[cp_cast_int(usize, 1)] = (blk_catch_30: { break :blk_catch_30 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_30| { _ = &__ce_30; break :blk_catch_30 bun.invalid_fd.stdDir(); }); });
                 }
                 if (env_loader.map.get(bun.env_var.HOME.key())) |home_dir| {
                     _ = &home_dir;
                     var parts: [2][]const u8 = .{ home_dir, BUN_CREATE_DIR };
                     _ = &parts;
                     const outdir_path = filesystem.absBuf((&parts), (&home_dir_buf));
-                    folders[cp_cast_int(usize, 2)] = (blk_catch_25: { break :blk_catch_25 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_25| { _ = &__ce_25; break :blk_catch_25 bun.invalid_fd.stdDir(); }); });
+                    folders[cp_cast_int(usize, 2)] = (blk_catch_31: { break :blk_catch_31 ((std.fs.cwd().openDir(outdir_path, .{})) catch |__ce_31| { _ = &__ce_31; break :blk_catch_31 bun.invalid_fd.stdDir(); }); });
                 }
                 for (cp_iter_slice(folders)) |folder| {
                     _ = &folder;
                     if ((folder.fd != bun.invalid_fd.cast())) {
                         var iter = folder.iterate();
                         _ = &iter;
-                        loop: while ((blk_catch_26: { break :blk_catch_26 ((iter.next()) catch |__ce_26| { _ = &__ce_26; break :blk_catch_26 null; }); })) |entry_| {
+                        loop: while ((blk_catch_32: { break :blk_catch_32 ((iter.next()) catch |__ce_32| { _ = &__ce_32; break :blk_catch_32 null; }); })) |entry_| {
                             const entry: std.fs.Dir.Entry = entry_;
                             switch (entry.kind) {
 .directory => {
@@ -1130,7 +1134,7 @@ inline for (skip_dirs) |skip_dir| {
                             _ = bun.copy(u8, home_dir_buf[((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1)..], "package.json");
                             home_dir_buf[cp_cast_int(usize, (((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1) + "package.json".len))] = 0;
                             const path: [:0]u8 = home_dir_buf[0..(((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name).len + 1) + "package.json".len) :0];
-                            _ = (blk_catch_27: { break :blk_catch_27 ((folder.accessZ(path, .{ .mode = .read_only })) catch |__ce_27| { _ = &__ce_27; continue; }); });
+                            _ = (blk_catch_33: { break :blk_catch_33 ((folder.accessZ(path, .{ .mode = .read_only })) catch |__ce_33| { _ = &__ce_33; continue; }); });
                             _ = try examples.append(Example{ .name = try filesystem.filename_store.append(@TypeOf((if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)), (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name)), .version = "", .local = true, .description = "" });
                             continue :loop;
 },
@@ -1281,7 +1285,7 @@ return error.HTTPError;
             _ = refresher.refresh();
             _ = initializeStore();
             const source = (&logger.Source.initPathString("package.json", mutable.list.items));
-            var expr = (blk_catch_30: { break :blk_catch_30 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; _ = progress.end();
+            var expr = (blk_catch_36: { break :blk_catch_36 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; _ = progress.end();
             _ = refresher.refresh();
             if ((ctx.log.errors > 0)) {
                 _ = try ctx.log.print(Output.errorWriter());
@@ -1349,7 +1353,7 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
             if (Output.enable_ansi_colors_stdout) {
                 async_http.client.progress_node = progress_node;
             }
-            const response = (blk_catch_33: { break :blk_catch_33 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_33 (__sw_blk_11: { const __disc_11 = e; _ = &__disc_11; if ((!cp_has_ok_val(__disc_11) and !cp_is_null_val(__disc_11))) { const __err_v_11 = cp_unwrap_err_val(__disc_11); _ = &__err_v_11; if (cp_match_tag(__err_v_11, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
+            const response = (blk_catch_39: { break :blk_catch_39 ((async_http.sendSync()) catch |e| { _ = &e; break :blk_catch_39 (__sw_blk_11: { const __disc_11 = e; _ = &__disc_11; if ((!cp_has_ok_val(__disc_11) and !cp_is_null_val(__disc_11))) { const __err_v_11 = cp_unwrap_err_val(__disc_11); _ = &__err_v_11; if (cp_match_tag(__err_v_11, .WouldBlock)) {  _ = Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
             break :__sw_blk_11 cp_val(Global.exit(1)); } } {  _ = Output.prettyErrorln("<r><red>{s}<r> while trying to fetch examples list. Please try again", .{ @errorName(e) });
             break :__sw_blk_11 cp_val(Global.exit(1)); }  unreachable; }); }); });
             if ((response.status_code != 200)) {
@@ -1358,7 +1362,7 @@ pub fn fetchAll(ctx: Command.Context, env_loader: *DotEnv.Loader, progress_node:
             }
             _ = initializeStore();
             const source = (&logger.Source.initPathString("examples.json", mutable.list.items));
-            const examples_object = (blk_catch_34: { break :blk_catch_34 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; if ((ctx.log.errors > 0)) {
+            const examples_object = (blk_catch_40: { break :blk_catch_40 ((JSON.parseUTF8(source, ctx.log, ctx.allocator)) catch |e| { _ = &e; if ((ctx.log.errors > 0)) {
                 _ = try ctx.log.print(Output.errorWriter());
                 _ = Global.exit(1);
             } else {
@@ -1437,8 +1441,8 @@ pub const GitHandler = struct {
 
 pub fn spawn(destination: []const u8, PATH: []const u8, verbose: bool) void {
             git_success = std.atomic.Value(u32).init(0);
-            git_thread = (blk_catch_35: { break :blk_catch_35 ((std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e) });
-            break :blk_catch_35 Global.exit(1); }); });
+            git_thread = (blk_catch_41: { break :blk_catch_41 ((std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose })) catch |e| { _ = &e; _ = Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e) });
+            break :blk_catch_41 Global.exit(1); }); });
     }
 
 pub fn spawnThread(destination: []const u8, PATH: []const u8, verbose: bool) void {
@@ -1446,14 +1450,14 @@ pub fn spawnThread(destination: []const u8, PATH: []const u8, verbose: bool) voi
             defer {
             _ = Output.flush();
             }
-            const outcome = (if (verbose) (blk_catch_36: { break :blk_catch_36 ((run(destination, PATH, true)) catch |__ce_36| { _ = &__ce_36; break :blk_catch_36 @as(bool, false); }); }) else (blk_catch_37: { break :blk_catch_37 ((run(destination, PATH, false)) catch |__ce_37| { _ = &__ce_37; break :blk_catch_37 @as(bool, false); }); }));
+            const outcome = (if (verbose) (blk_catch_42: { break :blk_catch_42 ((run(destination, PATH, true)) catch |__ce_42| { _ = &__ce_42; break :blk_catch_42 @as(bool, false); }); }) else (blk_catch_43: { break :blk_catch_43 ((run(destination, PATH, false)) catch |__ce_43| { _ = &__ce_43; break :blk_catch_43 @as(bool, false); }); }));
             _ = git_success.store((if (outcome) 1 else 2), .release);
             _ = Futex.wake((&git_success), 1);
     }
 
 pub fn wait() bool {
             while ((git_success.load(.acquire) == 0)) {
-                _ = (blk_catch_38: { break :blk_catch_38 ((Futex.wait((&git_success), 0, 1000)) catch |__ce_38| { _ = &__ce_38; continue; }); });
+                _ = (blk_catch_44: { break :blk_catch_44 ((Futex.wait((&git_success), 0, 1000)) catch |__ce_44| { _ = &__ce_44; continue; }); });
             }
             const outcome = (git_success.load(.acquire) == 1);
             _ = git_thread.join();
@@ -1480,7 +1484,7 @@ pub fn run(destination: []const u8, PATH: []const u8, comptime verbose: bool) !b
                     process.stdout_behavior = .Inherit;
                     process.stderr_behavior = .Inherit;
                     _ = try process.spawnAndWait();
-                    _ = (blk_catch_39: { break :blk_catch_39 ((process.kill()) catch |__ce_39| { _ = &__ce_39;  }); });
+                    _ = (blk_catch_45: { break :blk_catch_45 ((process.kill()) catch |__ce_45| { _ = &__ce_45;  }); });
                 }
                 _ = Output.prettyError("\n", .{});
                 _ = Output.printStartEnd(git_start, std.time.nanoTimestamp());
@@ -1504,197 +1508,43 @@ var progress_bufs: [2][1024]u8 = .{ @as([1024]u8, undefined), @as([1024]u8, unde
 var progress_buf_index: usize = 0;
 const BUN_CREATE_DIR = ".bun-create";
 var home_dir_buf: bun.PathBuffer = undefined;
-const CreateInjectionPrefill = struct {
-    const dependencies_string = "dependencies";
-    const dev_dependencies_string = "devDependencies";
-    const bun_string = "bun";
-    const macros_string = "macros";
-    const bun_macros_relay_path = "bun-macro-relay";
-
-    var dependencies_e_string = js_ast.E.String.init(dependencies_string);
-    var devDependencies_e_string = js_ast.E.String.init(dev_dependencies_string);
-    var bun_e_string = js_ast.E.String.init(bun_string);
-    var macros_e_string = js_ast.E.String.init(macros_string);
-    var react_relay_string = js_ast.E.String.init("react-relay");
-    var bun_macros_relay_path_string = js_ast.E.String.init("bun-macro-relay");
-    var babel_plugin_relay_macro = js_ast.E.String.init("babel-plugin-relay/macro");
-    var babel_plugin_relay_macro_js = js_ast.E.String.init("babel-plugin-relay/macro.js");
-    var graphql_string = js_ast.E.String.init("graphql");
-
-    var npx_react_scripts_build_str = js_ast.E.String.init("npx react-scripts build");
-
-    pub const npx_react_scripts_build = js_ast.Expr{ .data = .{ .e_string = &npx_react_scripts_build_str }, .loc = logger.Loc.Empty };
-
-    var bun_macro_relay_properties: [1]js_ast.G.Property = .{
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &graphql_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_string = &bun_macros_relay_path_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-    };
-
-    var bun_macro_relay_object = js_ast.E.Object{
-        .properties = undefined,
-    };
-
-    var bun_macros_relay_object_properties: [3]js_ast.G.Property = .{
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &react_relay_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macro_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &babel_plugin_relay_macro,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macro_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &babel_plugin_relay_macro_js,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macro_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-    };
-
-    var bun_macros_relay_object = js_ast.E.Object{
-        .properties = undefined,
-    };
-
-    var bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
-    var bun_macros_relay_only_object_properties: [1]js_ast.G.Property = .{
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &bun_macros_relay_only_object_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macros_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-    };
-    var bun_macros_relay_only_object = js_ast.E.Object{ .properties = undefined };
-
-    var bun_only_macros_string = js_ast.E.String.init("bun");
-    var bun_only_macros_relay_property = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_only_macros_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_object = &bun_macros_relay_only_object,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    var bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
-    var bun_framework_next_version = js_ast.E.String.init("latest");
-    var bun_framework_next_property = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_framework_next_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_framework_next_version,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    var bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
-    var bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
-
-    var bun_macro_relay_dependency = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_macro_relay_dependency_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_macro_relay_dependency_version,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    var refresh_runtime_string = js_ast.E.String.init("react-refresh");
-    var refresh_runtime_version = js_ast.E.String.init("0.10.0");
-    var react_refresh_dependency = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &refresh_runtime_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_string = &refresh_runtime_version,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    var dev_dependencies_key = js_ast.Expr{
-        .data = .{
-            .e_string = &devDependencies_e_string,
-        },
-        .loc = logger.Loc.Empty,
-    };
-    var dependencies_key = js_ast.Expr{
-        .data = .{ .e_string = &dependencies_e_string },
-        .loc = logger.Loc.Empty,
-    };
-
-    pub const bun_bun_for_nextjs_task: string = "bun bun --use next";
-};
+const prefill_dependencies_string = "dependencies";
+const prefill_dev_dependencies_string = "devDependencies";
+const prefill_bun_string = "bun";
+const prefill_macros_string = "macros";
+const prefill_bun_macros_relay_path = "bun-macro-relay";
+var prefill_dependencies_e_string = js_ast.E.String.init(prefill_dependencies_string);
+var prefill_devDependencies_e_string = js_ast.E.String.init(prefill_dev_dependencies_string);
+var prefill_bun_e_string = js_ast.E.String.init(prefill_bun_string);
+var prefill_macros_e_string = js_ast.E.String.init(prefill_macros_string);
+var prefill_react_relay_string = js_ast.E.String.init("react-relay");
+var prefill_bun_macros_relay_path_string = js_ast.E.String.init("bun-macro-relay");
+var prefill_babel_plugin_relay_macro = js_ast.E.String.init("babel-plugin-relay/macro");
+var prefill_babel_plugin_relay_macro_js = js_ast.E.String.init("babel-plugin-relay/macro.js");
+var prefill_graphql_string = js_ast.E.String.init("graphql");
+var prefill_npx_react_scripts_build_str = js_ast.E.String.init("npx react-scripts build");
+const prefill_npx_react_scripts_build = js_ast.Expr{ .data = .{ .e_string = (&prefill_npx_react_scripts_build_str) }, .loc = logger.Loc.Empty };
+var prefill_bun_macro_relay_properties: [1]js_ast.G.Property = .{ js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_graphql_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_macros_relay_path_string) }, .loc = logger.Loc.Empty } } };
+var prefill_bun_macro_relay_object = js_ast.E.Object{ .properties = undefined };
+var prefill_bun_macros_relay_object_properties: [3]js_ast.G.Property = .{ js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_react_relay_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_object = (&prefill_bun_macro_relay_object) }, .loc = logger.Loc.Empty } }, js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_babel_plugin_relay_macro) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_object = (&prefill_bun_macro_relay_object) }, .loc = logger.Loc.Empty } }, js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_babel_plugin_relay_macro_js) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_object = (&prefill_bun_macro_relay_object) }, .loc = logger.Loc.Empty } } };
+var prefill_bun_macros_relay_object = js_ast.E.Object{ .properties = undefined };
+var prefill_bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
+var prefill_bun_macros_relay_only_object_properties: [1]js_ast.G.Property = .{ js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_macros_relay_only_object_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_object = (&prefill_bun_macros_relay_object) }, .loc = logger.Loc.Empty } } };
+var prefill_bun_macros_relay_only_object = js_ast.E.Object{ .properties = undefined };
+var prefill_bun_only_macros_string = js_ast.E.String.init("bun");
+var prefill_bun_only_macros_relay_property = js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_only_macros_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_object = (&prefill_bun_macros_relay_only_object) }, .loc = logger.Loc.Empty } };
+var prefill_bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
+var prefill_bun_framework_next_version = js_ast.E.String.init("latest");
+var prefill_bun_framework_next_property = js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_framework_next_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_framework_next_version) }, .loc = logger.Loc.Empty } };
+var prefill_bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
+var prefill_bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
+var prefill_bun_macro_relay_dependency = js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_macro_relay_dependency_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_string = (&prefill_bun_macro_relay_dependency_version) }, .loc = logger.Loc.Empty } };
+var prefill_refresh_runtime_string = js_ast.E.String.init("react-refresh");
+var prefill_refresh_runtime_version = js_ast.E.String.init("0.10.0");
+var prefill_react_refresh_dependency = js_ast.G.Property{ .key = js_ast.Expr{ .data = .{ .e_string = (&prefill_refresh_runtime_string) }, .loc = logger.Loc.Empty }, .value = js_ast.Expr{ .data = .{ .e_string = (&prefill_refresh_runtime_version) }, .loc = logger.Loc.Empty } };
+var prefill_dev_dependencies_key = js_ast.Expr{ .data = .{ .e_string = (&prefill_devDependencies_e_string) }, .loc = logger.Loc.Empty };
+var prefill_dependencies_key = js_ast.Expr{ .data = .{ .e_string = (&prefill_dependencies_e_string) }, .loc = logger.Loc.Empty };
+const prefill_bun_bun_for_nextjs_task: []const u8 = "bun bun --use next";
 const Commands = .{ (&.{ "" }), (&.{ "" }), (&.{ "" }) };
 var example_url: URL = undefined;
 var app_name_buf: [512]u8 = undefined;
@@ -1745,7 +1595,7 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         }
         const npm_args: usize = (if ((npm_client != null)) 2 else 0);
         const total = (count + npm_args);
-        var argv = (blk_catch_40: { break :blk_catch_40 ((allocator.alloc(string, total)) catch |__ce_40| { _ = &__ce_40; return; }); });
+        var argv = (blk_catch_46: { break :blk_catch_46 ((allocator.alloc(string, total)) catch |__ce_46| { _ = &__ce_46; return; }); });
         _ = &argv;
         if (npm_client) |client| {
             _ = &client;
@@ -1785,5 +1635,5 @@ pub fn execTask(allocator: std.mem.Allocator, task_: []const u8, cwd: []const u8
         defer {
         _ = Output.enableBuffering();
         }
-        _ = (blk_catch_41: { break :blk_catch_41 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = cwd, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |__ce_41| { _ = &__ce_41; return; }); });
+        _ = (blk_catch_47: { break :blk_catch_47 ((bun.spawnSync((&.{ .argv = argv, .envp = null, .cwd = cwd, .stderr = .inherit, .stdout = .inherit, .stdin = .inherit, .windows = (if (Environment.isWindows) .{ .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)) } else @as(void, undefined)) }))) catch |__ce_47| { _ = &__ce_47; return; }); });
 }

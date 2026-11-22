@@ -258,6 +258,24 @@ pub fn fromJS(config: JSValue, global: *jsc.JSGlobalObject) !UserOptions {
     }
 };
 
+pub const StringRefList = struct {
+    strings: std.ArrayListUnmanaged(ZigString.Slice),
+
+pub fn track(self: *StringRefList, str: ZigString.Slice) []const u8 {
+            _ = bun.handleOom(self.strings.append(bun.default_allocator, str));
+            return str.slice();
+    }
+
+pub fn free(self: *StringRefList) void {
+            for (self.strings.items) |item| {
+                _ = &item;
+                _ = item.deinit();
+            }
+            _ = self.strings.clearAndFree(bun.default_allocator);
+    }
+    pub const empty: StringRefList = StringRefList{ .strings = .{} };
+};
+
 pub const SplitBundlerOptions = struct {
     plugin: ?*Plugin = null,
     client: BuildConfigSubset = BuildConfigSubset{  },
@@ -320,6 +338,56 @@ return global.throwValue(e);
     pub const empty: SplitBundlerOptions = SplitBundlerOptions{ .plugin = null, .client = BuildConfigSubset{  }, .server = BuildConfigSubset{  }, .ssr = BuildConfigSubset{  } };
 };
 
+pub const BuildConfigSubset = struct {
+    loader: ?bun.schema.api.LoaderMap = null,
+    ignoreDCEAnnotations: ?bool = null,
+    conditions: bun.StringArrayHashMapUnmanaged(void) = .{},
+    drop: bun.StringArrayHashMapUnmanaged(void) = .{},
+    env: bun.schema.api.DotEnvBehavior = ._none,
+    env_prefix: ?[]const u8 = null,
+    define: bun.schema.api.StringMap = bun.schema.api.StringMap{ .keys = empty_str_slices[0..0], .values = empty_str_slices[0..0] },
+    source_map: bun.schema.api.SourceMapMode = .external,
+    minify_syntax: ?bool = null,
+    minify_identifiers: ?bool = null,
+    minify_whitespace: ?bool = null,
+
+pub fn fromJS(global: *jsc.JSGlobalObject, js_options: JSValue) bun.JSError!BuildConfigSubset {
+            var options = BuildConfigSubset{  };
+            _ = &options;
+            if (try js_options.getOptional(global, "sourcemap", JSValue)) |val| {
+                _ = &val;
+                if (try bun.schema.api.SourceMapMode.fromJS(global, val)) |sourcemap| {
+                    _ = &sourcemap;
+                    options.source_map = sourcemap;
+                } else {
+                    return bun.jsc.Node.validators.throwErrInvalidArgType(global, "sourcemap", .{}, "\"inline\" | \"external\" | \"linked\"", val);
+                }
+            }
+            if (try js_options.getOptional(global, "minify", JSValue)) |minify_options| {
+                _ = &minify_options;
+                if ((minify_options.isBoolean() and minify_options.asBoolean())) {
+                    options.minify_syntax = minify_options.asBoolean();
+                    options.minify_identifiers = minify_options.asBoolean();
+                    options.minify_whitespace = minify_options.asBoolean();
+                } else {
+                    if (try minify_options.getBooleanLoose(global, "whitespace")) |value| {
+                        _ = &value;
+                        options.minify_whitespace = value;
+                    }
+                    if (try minify_options.getBooleanLoose(global, "syntax")) |value| {
+                        _ = &value;
+                        options.minify_syntax = value;
+                    }
+                    if (try minify_options.getBooleanLoose(global, "identifiers")) |value| {
+                        _ = &value;
+                        options.minify_identifiers = value;
+                    }
+                }
+            }
+            return options;
+    }
+};
+
 pub const BakeFileSystemRouterType = struct {
     root: []const u8,
     prefix: []const u8,
@@ -349,77 +417,6 @@ pub const BakeReactFastRefresh = struct {
     import_source: []const u8 = "react-refresh/runtime",
 };
 
-pub const api_name = "app";
-pub const StringRefList = struct {
-    strings: std.ArrayListUnmanaged(ZigString.Slice),
-
-pub fn track(al: *StringRefList, str: ZigString.Slice) []const u8 {
-            _ = bun.handleOom(al.strings.append(bun.default_allocator, str));
-            return str.slice();
-    }
-
-pub fn free(al: *StringRefList) void {
-            for (al.strings.items) |item| {
-                _ = &item;
-                _ = item.deinit();
-            }
-            _ = al.strings.clearAndFree(bun.default_allocator);
-    }
-    pub const empty: StringRefList = .{ .strings = .{} };
-};
-const BuildConfigSubset = struct {
-    loader: ?bun.schema.api.LoaderMap = null,
-    ignoreDCEAnnotations: ?bool = null,
-    conditions: bun.StringArrayHashMapUnmanaged(void) = .{},
-    drop: bun.StringArrayHashMapUnmanaged(void) = .{},
-    env: bun.schema.api.DotEnvBehavior = ._none,
-    env_prefix: ?[]const u8 = null,
-    define: bun.schema.api.StringMap = .{ .keys = (&.{}), .values = (&.{}) },
-    source_map: bun.schema.api.SourceMapMode = .external,
-    minify_syntax: ?bool = null,
-    minify_identifiers: ?bool = null,
-    minify_whitespace: ?bool = null,
-
-pub fn fromJS(global: *jsc.JSGlobalObject, js_options: JSValue) bun.JSError!BuildConfigSubset {
-            var options = BuildConfigSubset{  };
-            _ = &options;
-            if (try js_options.getOptional(global, "sourcemap", JSValue)) |val| {
-                _ = &val;
-                _ = brk: {
-                if (try bun.schema.api.SourceMapMode.fromJS(global, val)) |sourcemap| {
-                    _ = &sourcemap;
-                    options.source_map = sourcemap;
-                    break :brk;
-                }
-                return bun.jsc.Node.validators.throwErrInvalidArgType(global, "sourcemap", .{}, "\"inline\" | \"external\" | \"linked\"", val);
-};
-            }
-            if (try js_options.getOptional(global, "minify", JSValue)) |minify_options| {
-                _ = &minify_options;
-                _ = brk: {
-                if ((minify_options.isBoolean() and minify_options.asBoolean())) {
-                    options.minify_syntax = minify_options.asBoolean();
-                    options.minify_identifiers = minify_options.asBoolean();
-                    options.minify_whitespace = minify_options.asBoolean();
-                    break :brk;
-                }
-                if (try minify_options.getBooleanLoose(global, "whitespace")) |value| {
-                    _ = &value;
-                    options.minify_whitespace = value;
-                }
-                if (try minify_options.getBooleanLoose(global, "syntax")) |value| {
-                    _ = &value;
-                    options.minify_syntax = value;
-                }
-                if (try minify_options.getBooleanLoose(global, "identifiers")) |value| {
-                    _ = &value;
-                    options.minify_identifiers = value;
-                }
-};
-            }
-            return options;
-    }
-};
 pub const Framework = struct {
     is_built_in_react: bool,
     file_system_router_types: []FileSystemRouterType,
@@ -428,7 +425,12 @@ pub const Framework = struct {
     built_in_modules: bun.StringArrayHashMapUnmanaged(BuiltInModule) = .{},
 
 pub fn react(arena: std.mem.Allocator) !Framework {
-            return .{ .is_built_in_react = true, .server_components = .{ .separate_ssr_graph = true, .server_runtime_import = "react-server-dom-bun/server" }, .react_fast_refresh = .{}, .file_system_router_types = try arena.dupe(FileSystemRouterType, (&.{ .{ .root = "pages", .prefix = "/", .entry_client = "bun-framework-react/client.tsx", .entry_server = "bun-framework-react/server.tsx", .ignore_underscores = true, .ignore_dirs = (&.{ "node_modules", ".git" }), .extensions = (&.{ ".tsx", ".jsx" }), .style = .nextjs_pages, .allow_layouts = true } })), .built_in_modules = (blk_catch_0: { break :blk_catch_0 ((bun.StringArrayHashMapUnmanaged(BuiltInModule).init(arena, (&.{ "bun-framework-react/client.tsx", "bun-framework-react/server.tsx", "bun-framework-react/ssr.tsx" }), (if (Environment.codegen_embed) (&.{ .{ .code = @embedFile("./bun-framework-react/client.tsx") }, .{ .code = @embedFile("./bun-framework-react/server.tsx") }, .{ .code = @embedFile("./bun-framework-react/ssr.tsx") } }) else (&.{ .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/client.tsx") }, .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/server.tsx") }, .{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/ssr.tsx") } })))) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); }) };
+            const default_ignore_dirs: [2][]const u8 = .{ "node_modules", ".git" };
+            const default_exts: [2][]const u8 = .{ ".tsx", ".jsx" };
+            const default_fsr: [1]FileSystemRouterType = .{ FileSystemRouterType{ .root = "pages", .prefix = "/", .entry_client = "bun-framework-react/client.tsx", .entry_server = "bun-framework-react/server.tsx", .ignore_underscores = true, .ignore_dirs = (&default_ignore_dirs), .extensions = (&default_exts), .style = .nextjs_pages, .allow_layouts = true } };
+            const mod_keys: [3][]const u8 = .{ "bun-framework-react/client.tsx", "bun-framework-react/server.tsx", "bun-framework-react/ssr.tsx" };
+            const mod_vals: [3]BuiltInModule = (if (Environment.codegen_embed) .{ BuiltInModule{ .code = @embedFile("./bun-framework-react/client.tsx") }, BuiltInModule{ .code = @embedFile("./bun-framework-react/server.tsx") }, BuiltInModule{ .code = @embedFile("./bun-framework-react/ssr.tsx") } } else .{ BuiltInModule{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/client.tsx") }, BuiltInModule{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/server.tsx") }, BuiltInModule{ .code = bun.runtimeEmbedFile(.src, "bake/bun-framework-react/ssr.tsx") } });
+            return Framework{ .is_built_in_react = true, .server_components = ServerComponents{ .separate_ssr_graph = true, .server_runtime_import = "react-server-dom-bun/server" }, .react_fast_refresh = ReactFastRefresh{  }, .file_system_router_types = try arena.dupe(FileSystemRouterType, (&default_fsr)), .built_in_modules = (blk_catch_2: { break :blk_catch_2 ((bun.StringArrayHashMapUnmanaged(BuiltInModule).init(arena, (&mod_keys), (&mod_vals))) catch |e| { _ = &e; break :blk_catch_2 bun.handleOom(e); }); }) };
     }
 
 pub fn auto(arena: std.mem.Allocator, resolver: *bun.resolver.Resolver, file_system_router_types: []FileSystemRouterType) !Framework {
@@ -441,11 +443,11 @@ pub fn auto(arena: std.mem.Allocator, resolver: *bun.resolver.Resolver, file_sys
             }
             if (resolveOrNull(resolver, "react-refresh/runtime")) |rfr| {
                 _ = &rfr;
-                fw.react_fast_refresh = .{ .import_source = rfr };
+                fw.react_fast_refresh = ReactFastRefresh{ .import_source = rfr };
             } else {
-                if (resolveOrNull(resolver, "react")) |_| {
-                    fw.react_fast_refresh = .{ .import_source = "react-refresh/runtime/index.js" };
-                    _ = try fw.built_in_modules.put(arena, "react-refresh/runtime/index.js", (if (Environment.codegen_embed) .{ .code = @embedFile("node-fallbacks/react-refresh.js") } else .{ .code = bun.runtimeEmbedFile(.codegen, "node-fallbacks/react-refresh.js") }));
+                if ((resolveOrNull(resolver, "react") != null)) {
+                    fw.react_fast_refresh = ReactFastRefresh{ .import_source = "react-refresh/runtime/index.js" };
+                    _ = try fw.built_in_modules.put(arena, "react-refresh/runtime/index.js", (if (Environment.codegen_embed) BuiltInModule{ .code = @embedFile("node-fallbacks/react-refresh.js") } else BuiltInModule{ .code = bun.runtimeEmbedFile(.codegen, "node-fallbacks/react-refresh.js") }));
                 }
             }
             return fw;
@@ -455,26 +457,26 @@ pub fn addReactInstallCommandNote(log: *bun.logger.Log) !void {
             _ = try log.addMsg(.{ .kind = .note, .data = try bun.logger.rangeData(null, bun.logger.Range.none, (("Install the built in react integration with \"" ++ react_install_command) ++ "\"")).cloneLineText(log.clone_line_text, log.msgs.allocator) });
     }
 
-pub fn resolve(f: Framework, server: *bun.resolver.Resolver, client: *bun.resolver.Resolver, arena: Allocator) !Framework {
-            var clone = f;
+pub fn resolve(self: Framework, server: *bun.resolver.Resolver, client: *bun.resolver.Resolver, arena: Allocator) !Framework {
+            var clone = self;
             _ = &clone;
             var had_errors: bool = false;
             _ = &had_errors;
             if (clone.react_fast_refresh) |*react_fast_refresh| {
                 _ = &react_fast_refresh;
-                _ = f.resolveHelper(client, (&(react_fast_refresh.*).import_source), (&had_errors), "react refresh runtime");
+                _ = self.resolveHelper(client, (&(react_fast_refresh.*).import_source), (&had_errors), "react refresh runtime");
             }
             if (clone.server_components) |*sc| {
                 _ = &sc;
-                _ = f.resolveHelper(server, (&(sc.*).server_runtime_import), (&had_errors), "server components runtime");
+                _ = self.resolveHelper(server, (&(sc.*).server_runtime_import), (&had_errors), "server components runtime");
             }
-            for (clone.file_system_router_types) |*fsr| {
+            for (cp_mut_slice(&clone.file_system_router_types)) |*fsr| {
                 _ = &fsr;
-                fsr.root = try arena.dupe(u8, bun.path.joinAbs(server.fs.top_level_dir, .auto, fsr.root));
-                if ((fsr.entry_client != null)) {
-                    _ = f.resolveHelper(client, (&fsr.entry_client.?), (&had_errors), "client side entrypoint");
+                (fsr.*).root = try arena.dupe(u8, bun.path.joinAbs(server.fs.top_level_dir, .auto, (fsr.*).root));
+                if (((fsr.*).entry_client != null)) {
+                    _ = self.resolveHelper(client, (&(fsr.*).entry_client.?), (&had_errors), "client side entrypoint");
                 }
-                _ = f.resolveHelper(client, (&fsr.entry_server), (&had_errors), "server side entrypoint");
+                _ = self.resolveHelper(client, (&(fsr.*).entry_server), (&had_errors), "server side entrypoint");
             }
             if (had_errors) {
                 return error.ModuleNotFound;
@@ -482,8 +484,8 @@ pub fn resolve(f: Framework, server: *bun.resolver.Resolver, client: *bun.resolv
             return clone;
     }
 
-pub inline fn resolveHelper(f: *const Framework, r: *bun.resolver.Resolver, path: *[]const u8, had_errors: *bool, desc: []const u8) void {
-            if (f.built_in_modules.get(path.*)) |mod| {
+pub inline fn resolveHelper(self: Framework, r: *bun.resolver.Resolver, path: *[]const u8, had_errors: *bool, desc: []const u8) void {
+            if (self.built_in_modules.get(path.*)) |mod| {
                 _ = &mod;
                 switch (mod) {
 .import => |p| {
@@ -495,7 +497,7 @@ path.* = p;
 }
                 return;
             }
-            var result = (blk_catch_1: { break :blk_catch_1 ((r.resolve(r.fs.top_level_dir, path.*, .stmt)) catch |e| { _ = &e; _ = bun.Output.err(e, "Failed to resolve '{s}' for framework ({s})", .{ path.*, desc });
+            var result = (blk_catch_3: { break :blk_catch_3 ((r.resolve(r.fs.top_level_dir, path.*, .stmt)) catch |e| { _ = &e; _ = bun.Output.err(e, "Failed to resolve '{s}' for framework ({s})", .{ path.*, desc });
             had_errors.* = true;
             return; }); });
             _ = &result;
@@ -503,7 +505,7 @@ path.* = p;
     }
 
 pub inline fn resolveOrNull(r: *bun.resolver.Resolver, path: []const u8) ?[]const u8 {
-            return ((blk_catch_2: { break :blk_catch_2 ((r.resolve(r.fs.top_level_dir, path, .stmt)) catch |__ce_2| { _ = &__ce_2; _ = r.log.reset();
+            return ((blk_catch_4: { break :blk_catch_4 ((r.resolve(r.fs.top_level_dir, path, .stmt)) catch |__ce_4| { _ = &__ce_4; _ = r.log.reset();
             return null; }); }).pathConst()).?.text;
     }
 
@@ -511,15 +513,15 @@ pub fn fromJS(opts: JSValue, global: *jsc.JSGlobalObject, refs: *StringRefList, 
             return frameworkFromJS(opts, global, refs, bundler_options, arena);
     }
 
-pub fn initTranspiler(framework: *Framework, arena: std.mem.Allocator, log: *bun.logger.Log, mode: Mode, renderer: Graph, out: *bun.transpiler.Transpiler, bundler_options: *const BuildConfigSubset) !void {
+pub fn initTranspiler(self: *Framework, arena: std.mem.Allocator, log: *bun.logger.Log, mode: Mode, renderer: Graph, out: *bun.transpiler.Transpiler, bundler_options: *const BuildConfigSubset) !void {
             const source_map: bun.options.SourceMapOption = (switch (mode) {
 .development => .external,
 else => .none,
 });
-            return initTranspilerWithOptions(framework, arena, log, mode, renderer, out, bundler_options, source_map, null, null, null);
+            return self.initTranspilerWithOptions(arena, log, mode, renderer, out, bundler_options, source_map, null, null, null);
     }
 
-pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator, log: *bun.logger.Log, mode: Mode, renderer: Graph, out: *bun.transpiler.Transpiler, bundler_options: *const BuildConfigSubset, source_map: bun.options.SourceMapOption, minify_whitespace: ?bool, minify_syntax: ?bool, minify_identifiers: ?bool) !void {
+pub fn initTranspilerWithOptions(self: *Framework, arena: std.mem.Allocator, log: *bun.logger.Log, mode: Mode, renderer: Graph, out: *bun.transpiler.Transpiler, bundler_options: *const BuildConfigSubset, source_map: bun.options.SourceMapOption, minify_whitespace: ?bool, minify_syntax: ?bool, minify_identifiers: ?bool) !void {
             const JSAst = bun.ast;
             var ast_memory_allocator: JSAst.ASTMemoryAllocator = undefined;
             _ = &ast_memory_allocator;
@@ -539,7 +541,7 @@ pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator
 .client => DevServer.client_prefix,
 .server, .ssr => "",
 });
-            out.options.entry_points = (&.{});
+            out.options.entry_points = empty_str_slices[0..0];
             out.options.log = log;
             out.options.output_format = (switch (mode) {
 .development => .internal_bake_dev,
@@ -549,17 +551,20 @@ pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator
             out.options.hot_module_reloading = (mode == .development);
             out.options.code_splitting = (mode != .development);
             out.options.output_dir = "";
-            out.options.react_fast_refresh = (((mode == .development) and (renderer == .client)) and (framework.react_fast_refresh != null));
-            out.options.server_components = (framework.server_components != null);
+            out.options.react_fast_refresh = (((mode == .development) and (renderer == .client)) and (self.react_fast_refresh != null));
+            out.options.server_components = (self.server_components != null);
             out.options.conditions = try bun.options.ESMConditions.init(arena, out.options.target.defaultConditions(), out.options.target.isServerSide(), bundler_options.conditions.keys());
-            if (((renderer == .server) and (framework.server_components != null))) {
-                _ = try out.options.conditions.appendSlice((&.{ "react-server" }));
+            if (((renderer == .server) and (self.server_components != null))) {
+                const rs_cond: [1][]const u8 = .{ "react-server" };
+                _ = try out.options.conditions.appendSlice((&rs_cond));
             }
             if ((mode == .development)) {
-                _ = try out.options.conditions.appendSlice((&.{ "development" }));
+                const dev_cond: [1][]const u8 = .{ "development" };
+                _ = try out.options.conditions.appendSlice((&dev_cond));
             }
             if (((renderer == .server) or (renderer == .ssr))) {
-                _ = try out.options.conditions.appendSlice((&.{ "node" }));
+                const node_cond: [1][]const u8 = .{ "node" };
+                _ = try out.options.conditions.appendSlice((&node_cond));
             }
             out.options.production = (mode != .development);
             out.options.tree_shaking = (mode != .development);
@@ -567,7 +572,7 @@ pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator
             out.options.minify_identifiers = ((minify_identifiers) orelse ((mode != .development)));
             out.options.minify_whitespace = ((minify_whitespace) orelse ((mode != .development)));
             out.options.css_chunking = true;
-            out.options.framework = framework;
+            out.options.framework = self;
             out.options.inline_entrypoint_import_meta_main = true;
             if (bundler_options.ignoreDCEAnnotations) |ignore| {
                 _ = &ignore;
@@ -587,13 +592,16 @@ pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator
 .server, .ssr => .server,
 }));
             if (((bundler_options.define.keys.len + bundler_options.drop.count()) > 0)) {
-                for (bundler_options.define.keys, bundler_options.define.values) |k, v| {
+                var def_idx: usize = 0;
+                _ = &def_idx;
+                for (cp_iter_slice(bundler_options.define.keys)) |k| {
                     _ = &k;
-                    _ = &v;
+                    const v = bundler_options.define.values[@as(usize, @intCast(def_idx))];
+                    def_idx = (def_idx + 1);
                     const parsed = try bun.options.Define.Data.parse(k, v, false, false, log, arena);
                     _ = try out.options.define.insert(arena, k, parsed);
                 }
-                for (bundler_options.drop.keys()) |drop_item| {
+                for (cp_iter_slice(bundler_options.drop.keys())) |drop_item| {
                     _ = &drop_item;
                     if ((drop_item.len > 0)) {
                         const parsed = try bun.options.Define.Data.parse(drop_item, "", true, true, log, arena);
@@ -608,21 +616,67 @@ pub fn initTranspilerWithOptions(framework: *Framework, arena: std.mem.Allocator
             }
             out.resolver.opts = out.options;
     }
-    pub const none: Framework = .{ .is_built_in_react = false, .file_system_router_types = (&.{}), .server_components = null, .react_fast_refresh = null, .built_in_modules = .empty };
+    const none: Framework = Framework{ .is_built_in_react = false, .file_system_router_types = empty_fsr_types[0..0], .server_components = null, .react_fast_refresh = null, .built_in_modules = .empty };
     pub const FileSystemRouterType = BakeFileSystemRouterType;
-    pub const BuiltInModule = BakeBuiltInModule;
-    pub const ServerComponents = BakeServerComponents;
+    const BuiltInModule = BakeBuiltInModule;
+    const ServerComponents = BakeServerComponents;
     const ReactFastRefresh = BakeReactFastRefresh;
-    pub const react_install_command = "bun i react@experimental react-dom@experimental react-server-dom-bun react-refresh@experimental";
+    const react_install_command = "bun i react@experimental react-dom@experimental react-server-dom-bun react-refresh@experimental";
 };
+
 pub const HmrRuntime = struct {
     code: [:0]const u8,
     line_count: u32,
 
 pub fn init(code: [:0]const u8) HmrRuntime {
-            return .{ .code = code, .line_count = @intCast(std.mem.count(u8, code, "\n")) };
+            return HmrRuntime{ .code = code, .line_count = @intCast(std.mem.count(u8, code, "\n")) };
     }
 };
+
+pub const PatternBuffer = struct {
+    bytes: bun.PathBuffer,
+    i: std.math.IntFittingRange(0, @sizeOf(bun.PathBuffer)),
+
+pub fn prepend(self: *PatternBuffer, chunk: []const u8) void {
+            _ = bun.assert((self.i >= chunk.len));
+            self.i = (self.i - @as(@TypeOf(PatternBuffer.empty.i), @intCast(chunk.len)));
+            _ = @memcpy(self.slice()[0..chunk.len], chunk);
+    }
+
+pub fn prependPart(self: *PatternBuffer, part: FrameworkRouter.Part) void {
+            switch (part) {
+.text => |text| {
+_ = bun.assert(((text.len == 0) or (text[0] != 47)));
+            _ = self.prepend(text);
+            _ = self.prepend("/");
+},
+.param => |name| {
+_ = self.prepend(name);
+            _ = self.prepend("/:");
+},
+.catch_all => |name| {
+_ = self.prepend(name);
+            _ = self.prepend("/:");
+},
+.catch_all_optional => |name| {
+_ = self.prepend(name);
+            _ = self.prepend("/:");
+},
+.group => {
+
+},
+}
+    }
+
+pub fn slice(self: *PatternBuffer) []u8 {
+            return self.bytes[self.i..];
+    }
+    pub const empty: PatternBuffer = PatternBuffer{ .bytes = undefined, .i = @sizeOf(bun.PathBuffer) };
+};
+
+pub const api_name = "app";
+var empty_str_slices: [0][]const u8 = undefined;
+var empty_fsr_types: [0]BakeFileSystemRouterType = undefined;
 pub const Mode = enum {
     development,
     production_dynamic,
@@ -647,38 +701,6 @@ pub const Graph = enum(u2) {
 };
 pub const server_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/server"), .contents = "", .index = bun.ast.Index.bake_server_data };
 pub const client_virtual_source: bun.logger.Source = .{ .path = bun.fs.Path.initForKitBuiltIn("bun", "bake/client"), .contents = "", .index = bun.ast.Index.bake_client_data };
-pub const PatternBuffer = struct {
-    bytes: bun.PathBuffer,
-    i: std.math.IntFittingRange(0, @sizeOf(bun.PathBuffer)),
-
-pub fn prepend(pb: *PatternBuffer, chunk: []const u8) void {
-            _ = bun.assert((pb.i >= chunk.len));
-            pb.i = (pb.i - @as(@TypeOf(pb.i), @intCast(chunk.len)));
-            _ = @memcpy(pb.slice()[0..chunk.len], chunk);
-    }
-
-pub fn prependPart(pb: *PatternBuffer, part: FrameworkRouter.Part) void {
-            switch (part) {
-.text => |text| {
-_ = bun.assert(((text.len == 0) or (text[0] != 47)));
-            _ = pb.prepend(text);
-            _ = pb.prepend("/");
-},
-.param, .catch_all, .catch_all_optional => |name| {
-_ = pb.prepend(name);
-            _ = pb.prepend("/:");
-},
-.group => {
-
-},
-}
-    }
-
-pub fn slice(pb: *PatternBuffer) []u8 {
-            return pb.bytes[pb.i..];
-    }
-    pub const empty: PatternBuffer = .{ .bytes = undefined, .i = @sizeOf(bun.PathBuffer) };
-};
 const Allocator = std.mem.Allocator;
 const bun = @import("bun");
 const Environment = bun.Environment;

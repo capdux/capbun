@@ -35,20 +35,20 @@ export enum TokenFormat {
     }
 }
 
-pub const GenerateOptions = struct {
+pub struct GenerateOptions {
     secret: []const u8,
     expires_in_ms: u64 = DEFAULT_EXPIRATION_MS,
     encoding: TokenFormat = .base64url,
     algorithm: jsc.API.Bun.Crypto.EVP.Algorithm = DEFAULT_ALGORITHM,
-};
+}
 
-pub const VerifyOptions = struct {
+pub struct VerifyOptions {
     token: []const u8,
     secret: []const u8,
     max_age_ms: u64 = DEFAULT_EXPIRATION_MS,
     encoding: TokenFormat = .base64url,
     algorithm: jsc.API.Bun.Crypto.EVP.Algorithm = DEFAULT_ALGORITHM,
-};
+}
 
 pub fn generate(options: GenerateOptions, out_buffer: *[u8; 512]): ![]u8 {
     let nonce: [u8; 16] = [0; 16];

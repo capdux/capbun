@@ -81,11 +81,11 @@ pub struct NextBundle {
     promise: DeferredPromise,
 }
 
-pub const TestingBatchEvents = union(enum) {
-    disabled,
-    enable_after_bundle,
+pub union(enum) TestingBatchEvents {
+    disabled: void,
+    enable_after_bundle: void,
     enabled: TestingBatch,
-};
+}
 
 
 pub const IncrementalResult_empty: IncrementalResult = .{
@@ -1608,17 +1608,17 @@ fn ensureRouteIsBundled(
     }
 }
 
-const ReqOrSaved = union(enum) {
+union(enum) ReqOrSaved {
     req: *Request,
     saved: bun.jsc.API.SavedRequest,
 
-    pub fn method(this: *const @This()): bun.http.Method {
-        return switch (this.*) {
-            .req => |req| bun.http.Method.which(req.method()) ?? .POST,
-            .saved => |saved| saved.request.method,
+    fn method(): bun.http.Method {
+        return switch (_) {
+            .req r => bun.http.Method.which(r.method()) ?? .POST,
+            .saved saved => saved.request.method,
         };
     }
-};
+}
 
 fn deferRequest(
     dev: *DevServer,
@@ -2146,10 +2146,37 @@ pub fn onSrcRequest(_: *DevServer, req: *uws.Request, resp: auto) {
     // }
 }
 
-const DevResponse = union(enum) {
+/// Sometimes we will call `await bundleNewRoute()` and this will either
+/// resolve with the args for the route, or reject with data
+struct DeferredRequestPromiseResponse {
+    promise: bun.jsc.JSPromise.Strong,
+    global: *bun.jsc.JSGlobalObject,
+}
+
+/// Does not include `aborted` because branching on that value
+/// has no meaningful purpose, so it is excluded.
+enum DeferredRequestHandlerKind {
+    server_handler,
+    bundled_html_page,
+}
+
+union(enum) DeferredRequestHandler {
+    /// For a .framework route. This says to call and render the page.
+    server_handler: bun.jsc.API.SavedRequest,
+    /// For a .html route. Serve the bundled HTML page.
+    bundled_html_page: ResponseAndMethod,
+    /// Do nothing and free this node. To simplify lifetimes,
+    /// the `DeferredRequest` is not freed upon abortion. Which
+    /// is okay since most requests do not abort.
+    aborted: void,
+
+    const Kind = DeferredRequestHandlerKind;
+}
+
+union(enum) DevResponse {
     http: AnyResponse,
     promise: DeferredRequest.PromiseResponse,
-};
+}
 
 /// When requests are waiting on a bundle, the relevant request information is
 /// prepared and stored in a linked list.
@@ -2206,30 +2233,9 @@ pub struct DeferredRequest {
         }
     }
 
-    /// Sometimes we will call `await bundleNewRoute()` and this will either
-    /// resolve with the args for the route, or reject with data
-    const PromiseResponse = struct {
-        promise: bun.jsc.JSPromise.Strong,
-        global: *bun.jsc.JSGlobalObject,
-    };
+    const PromiseResponse = DeferredRequestPromiseResponse;
 
-    const Handler = union(enum) {
-        /// For a .framework route. This says to call and render the page.
-        server_handler: bun.jsc.API.SavedRequest,
-        /// For a .html route. Serve the bundled HTML page.
-        bundled_html_page: ResponseAndMethod,
-        /// Do nothing and free this node. To simplify lifetimes,
-        /// the `DeferredRequest` is not freed upon abortion. Which
-        /// is okay since most requests do not abort.
-        aborted,
-
-        /// Does not include `aborted` because branching on that value
-        /// has no meaningful purpose, so it is excluded.
-        const Kind = enum {
-            server_handler,
-            bundled_html_page,
-        };
-    };
+    const Handler = DeferredRequestHandler;
 
     static fn onAbortWrapper(opaque_ptr: *!) {
         const self: *DeferredRequest = unsafe { @ptrCast(@alignCast(opaque_ptr)) };
@@ -4124,20 +4130,22 @@ pub fn emitMemoryVisualizerMessage(dev: *DevServer) {
     dev.publish(.memory_visualizer, payload.items, .binary);
 }
 
+@c struct MemoryVisualizerFields {
+    incremental_graph_client: u32,
+    incremental_graph_server: u32,
+    js_code: u32,
+    source_maps: u32,
+    assets: u32,
+    other: u32,
+    devserver_tracked: u32,
+    process_used: u32,
+    system_used: u32,
+    system_total: u32,
+}
+
 pub fn writeMemoryVisualizerMessage(dev: *DevServer, payload: *std.array_list.Managed(u8))! {
     const w = payload.writer();
-    const Fields = extern struct {
-        incremental_graph_client: u32,
-        incremental_graph_server: u32,
-        js_code: u32,
-        source_maps: u32,
-        assets: u32,
-        other: u32,
-        devserver_tracked: u32,
-        process_used: u32,
-        system_used: u32,
-        system_total: u32,
-    };
+    const Fields = MemoryVisualizerFields;
     const cost = dev.memoryCostDetailed();
     const system_total = bun.api.node.os.totalmem();
     try w.writeStruct(Fields{
@@ -4571,11 +4579,13 @@ pub fn numSubscribers(dev: *DevServer, topic: HmrTopic): u32 {
     }
 }
 
-const SafeFileId = packed struct(u32) {
+enum SafeFileIdUnused: u1 { unused = 0 }
+
+@packed(u32) struct SafeFileId {
     side: bake.Side,
     index: u30,
-    unused: enum(u1) { unused = 0 } = .unused,
-};
+    unused: SafeFileIdUnused = .unused,
+}
 
 /// Interface function for FrameworkRouter
 pub fn getFileIdForRouter(dev: *DevServer, abs_path: []const u8, associated_route: Route.Index, file_kind: Route.FileKind): !OpaqueFileId {
@@ -4702,11 +4712,23 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
     Output.note("Dumped incremental bundler graph to {f}", .{bun.fmt.quote(filepath)});
 }
 
-const RouteIndexAndRecurseFlag = packed struct(u32) {
+@packed(u32) struct RouteIndexAndRecurseFlag {
     route_index: Route.Index,
     /// Set true for layout
     should_recurse_when_visiting: bool,
-};
+}
+
+enum EntryPointListFlagsUnused: u4 { unused = 0 }
+
+@packed(u8) pub struct EntryPointListFlags {
+    client: bool = false,
+    server: bool = false,
+    ssr: bool = false,
+    /// When this is set, also set .client = true
+    css: bool = false,
+
+    unused: EntryPointListFlagsUnused = .unused,
+}
 
 /// Bake needs to specify which graph (client/server/ssr) each entry point is.
 /// File paths are always absolute paths. Files may be bundled for multiple
@@ -4716,15 +4738,7 @@ pub struct EntryPointList {
 
     pub const empty: EntryPointList = EntryPointList_empty;
 
-    pub const Flags = packed struct(u8) {
-        client: bool = false,
-        server: bool = false,
-        ssr: bool = false,
-        /// When this is set, also set .client = true
-        css: bool = false,
-
-        unused: enum(u4) { unused = 0 } = .unused,
-    };
+    const Flags = EntryPointListFlags;
 
     fn deinit(*_, alloc: Allocator) {
         _.set.deinit(alloc);

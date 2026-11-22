@@ -31,7 +31,7 @@ import bun from "bun";
 const options = bun.options;
 const OutputFile = options.OutputFile;
 
-pub const CapacityResult = struct { u32, u32 };
+pub type CapacityResult = [u32, u32];
 
 @root struct OutputFileList {
     output_files: std.array_list.Managed(options.OutputFile),

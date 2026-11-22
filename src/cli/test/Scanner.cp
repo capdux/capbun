@@ -13,11 +13,11 @@ const StringOrTinyString = strings.StringOrTinyString;
 
 const log = bun.Output.scoped(.jest, .hidden);
 const Fifo = bun.LinearFifo(ScanEntry, .Dynamic);
-const ScanEntry = struct {
+struct ScanEntry {
     relative_dir: bun.FD,
     dir_path: []const u8,
     name: StringOrTinyString,
-};
+}
 
 pub type Error = anyerror;
 type PathSlice = []const u8;

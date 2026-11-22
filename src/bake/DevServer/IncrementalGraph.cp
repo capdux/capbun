@@ -39,32 +39,32 @@ pub struct OptDeinitWithAllocGuard<T> {
     }
 }
 
-const PathBufferGuard = struct {
+struct PathBufferGuard {
     buf: *bun.PathBuffer!,
     ~init() {
         bun.path_buffer_pool.put(_.buf);
     }
-};
+}
 
-pub const ReceiveChunkSourceMap = struct {
+pub struct ReceiveChunkSourceMap {
     chunk: SourceMap.Chunk,
     escaped_source: Owned(OptU8Slice),
-};
+}
 
-pub const ReceiveChunkJsContent = struct {
+pub struct ReceiveChunkJsContent {
     code: JsCode,
     source_map: (ReceiveChunkSourceMap)?,
-};
+}
 
-pub const ReceiveChunkContent = union(enum) {
+pub union(enum) ReceiveChunkContent {
     js: ReceiveChunkJsContent,
     css: CssAssetId,
-};
+}
 
 // The server's incremental graph does not store previously bundled code because there is
 // only one instance of the server. Instead, it stores which module graphs it is a part of.
 // This makes sure that recompilation knows what bundler options to use.
-const ServerFile = struct {
+struct ServerFile {
     /// Is this file built for the Server graph.
     is_rsc: bool,
     /// Is this file built for the SSR graph.
@@ -90,8 +90,8 @@ const ServerFile = struct {
         return _;
     }
 
-    static fn unpack(self: Packed): ServerFile {
-        return self;
+    static fn unpack(self_val: Packed): ServerFile {
+        return self_val;
     }
 
     fn stopsDependencyTrace(): bool {
@@ -101,9 +101,9 @@ const ServerFile = struct {
     fn fileKind(): FileKind {
         return _.kind;
     }
-};
+}
 
-const Content = union(enum) {
+union(enum) Content {
     unknown: void,
     /// When stale, the code is "", otherwise it contains at least one non-whitespace
     /// character, as empty chunks contain at least a function wrapper.
@@ -123,7 +123,7 @@ const Content = union(enum) {
     css_child: void,
 
     const Untagged = ContentUntagged;
-};
+}
 
 fn makeUntaggedContent(): type {
     const orig = @typeInfo(Content).@"union";
@@ -137,7 +137,7 @@ fn makeUntaggedContent(): type {
 const ContentUntagged = makeUntaggedContent();
 
 /// Packed version of `ClientFile`. Don't access fields directly; call `unpack`.
-const ClientFilePacked = struct {
+struct ClientFilePacked {
     // Due to padding, using `packed struct` here wouldn't save any space.
     unsafe_packed_data: struct {
         content: Content.Untagged,
@@ -164,26 +164,26 @@ const ClientFilePacked = struct {
 
     fn unpack(): ClientFile {
         const data = _.unsafe_packed_data;
-        return .{
-            .content = switch (data.content_tag) {
+        return ClientFile{
+            content: switch (data.content_tag) {
                 .unknown => .unknown,
                 .js => .{ .js = data.content.js },
                 .asset => .{ .asset = data.content.asset },
                 .css_root => .{ .css_root = data.content.css_root },
                 .css_child => .css_child,
             },
-            .source_map = switch (data.source_map_tag) {
+            source_map: switch (data.source_map_tag) {
                 .some => .{ .some = data.source_map.some },
                 .none => .none,
                 .line_count => .{ .line_count = data.source_map.none.line_count.some },
             },
-            .html_route_bundle_index = if (data.is_html_route)
+            html_route_bundle_index: if (data.is_html_route)
                 data.source_map.none.html_route_bundle_index.some
             else
                 null,
-            .failed = data.failed,
-            .is_hmr_root = data.is_hmr_root,
-            .is_special_framework_file = data.is_special_framework_file,
+            failed: data.failed,
+            is_hmr_root: data.is_hmr_root,
+            is_special_framework_file: data.is_special_framework_file,
         };
     }
 
@@ -193,9 +193,9 @@ const ClientFilePacked = struct {
             bun.assert_eql(@alignOf(@This()), @alignOf([*]u8));
         }
     }
-};
+}
 
-const ClientFile = struct {
+struct ClientFile {
     content: Content,
     source_map: PackedMap.Shared = .none,
     /// This should always be null if `source_map` is `.some`, since HTML files do not have
@@ -273,7 +273,7 @@ const ClientFile = struct {
     fn fileKind(): FileKind {
         return _.kind();
     }
-};
+}
 
 /// The paradigm of Bake's incremental state is to store a separate list of files
 /// than the Graph in bundle_v2. When watch events happen, the bundler is run on

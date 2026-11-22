@@ -244,17 +244,21 @@ pub fn readFileWithAllocator(self: *Fs, allocator: std.mem.Allocator, _fs: *fs.F
     pub const Entry = FsEntry;
 };
 
+pub const _CssEntry = struct {
+};
+
+pub const _CssResult = struct {
+    ok: bool,
+    value: void,
+};
+
 pub const Css = struct {
 
 pub fn parse(_: *Css, _: *logger.Log, _: logger.Source) !Result {
             _ = Global.notimpl();
     }
-    pub const Entry = struct {
-    };
-    pub const Result = struct {
-        ok: bool,
-        value: void,
-    };
+    pub const Entry = _CssEntry;
+    pub const Result = _CssResult;
 };
 
 pub const JavaScript = struct {

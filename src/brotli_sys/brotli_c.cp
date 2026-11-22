@@ -267,13 +267,21 @@ pub extern fn BrotliEncoderEstimatePeakMemoryUsage(quality: c_int, lgwin: c_int,
 pub extern fn BrotliEncoderGetPreparedDictionarySize(dictionary: (*const BrotliEncoderPreparedDictionary)?): usize;
 pub extern fn BrotliEncoderVersion(): u32;
 
+pub enum _BrotliEncoderOperation: c_uint {
+    process = 0,
+    flush = 1,
+    finish = 2,
+    emit_metadata = 3,
+}
+
+pub struct _BrotliEncoderCompressionResult {
+    success: bool = false,
+    has_more: bool = false,
+    output: string = "",
+}
+
 export @opaque class BrotliEncoder {
-    pub const Operation = enum(c_uint) {
-        process = 0,
-        flush = 1,
-        finish = 2,
-        emit_metadata = 3,
-    };
+    pub const Operation = _BrotliEncoderOperation;
 
     pub static fn createInstance(alloc_func: brotli_alloc_func, free_func: brotli_free_func, opaque_ctx: *!?): (*BrotliEncoder)? {
         unsafe { return BrotliEncoderCreateInstance(alloc_func, free_func, opaque_ctx); }
@@ -297,11 +305,7 @@ export @opaque class BrotliEncoder {
         return "";
     }
 
-    pub const CompressionResult = struct {
-        success: bool = false,
-        has_more: bool = false,
-        output: string = "",
-    };
+    pub const CompressionResult = _BrotliEncoderCompressionResult;
 
     // https://github.com/google/brotli/blob/2ad58d8603294f5ee33d23bb725e0e6a17c1de50/go/cbrotli/writer.go#L23-L40
     pub fn compressStream(*_, op: Operation, data: []const u8): CompressionResult {

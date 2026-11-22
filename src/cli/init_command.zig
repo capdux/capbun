@@ -349,6 +349,103 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const _InitAssets = struct {
+
+pub fn create(comptime asset_name: []const u8, args: anytype) !void {
+            const is_template = ((comptime (@TypeOf(args) != @TypeOf(null))) and (@typeInfo(@TypeOf(args)).@"struct".fields.len > 0));
+            return createFull(asset_name, asset_name, "", is_template, args);
+    }
+
+pub fn createWithContents(comptime asset_name: []const u8, comptime contents: []const u8, args: anytype) !void {
+            const is_template = ((comptime (@TypeOf(args) != @TypeOf(null))) and (@typeInfo(@TypeOf(args)).@"struct".fields.len > 0));
+            return createFullWithContents(asset_name, contents, "", is_template, args);
+    }
+
+pub fn createNew(filename: [:0]const u8, contents: []const u8) !void {
+            var file = try bun.sys.File.makeOpen(filename, ((bun.O.CREAT | bun.O.EXCL) | bun.O.WRONLY), 438).unwrap();
+            _ = &file;
+            var file_guard = CloseGuard(bun.sys.File){ .ptr = (blk: {
+            break :blk (&file);
+
+}) };
+            _ = &file_guard;
+            var __file_guard_moved = false; _ = &__file_guard_moved;
+            defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
+            _ = try file.writeAll(contents).unwrap();
+            _ = Output.prettyln(" + <r><d>{s}<r>", .{ filename });
+            _ = Output.flush();
+    }
+
+pub fn createFull(comptime asset_name: []const u8, filename: []const u8, comptime message_suffix: []const u8, comptime is_template: bool, args: anytype) !void {
+            var file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
+            _ = &file;
+            var file_guard = CloseGuard(std.fs.File){ .ptr = (blk: {
+            break :blk (&file);
+
+}) };
+            _ = &file_guard;
+            var __file_guard_moved = false; _ = &__file_guard_moved;
+            defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
+            var file_w = file.writerStreaming(&.{});
+            _ = &file_w;
+            const file_i = (&file_w.interface);
+            if (comptime @hasDecl(_InitAssets, asset_name)) {
+                const asset = @field(_InitAssets, asset_name);
+                if (comptime is_template) {
+                    _ = try file_i.print(asset, args);
+                } else {
+                    _ = try file_i.writeAll(asset);
+                }
+                _ = Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
+                _ = Output.flush();
+            } else {
+                _ = @compileError(("missing asset: " ++ asset_name));
+            }
+    }
+
+pub fn createFullWithContents(filename: []const u8, comptime contents: []const u8, comptime message_suffix: []const u8, comptime is_template: bool, args: anytype) !void {
+            var file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
+            _ = &file;
+            var file_guard = CloseGuard(std.fs.File){ .ptr = (blk: {
+            break :blk (&file);
+
+}) };
+            _ = &file_guard;
+            var __file_guard_moved = false; _ = &__file_guard_moved;
+            defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
+            var file_w = file.writerStreaming(&.{});
+            _ = &file_w;
+            var file_i = (&file_w.interface);
+            _ = &file_i;
+            if (comptime is_template) {
+                _ = try file_i.print(contents, args);
+            } else {
+                _ = try file_i.writeAll(contents);
+            }
+            _ = Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
+            _ = Output.flush();
+    }
+    const @".gitignore" = @embedFile("init/gitignore.default");
+    const @"tsconfig.json" = @embedFile("init/tsconfig.default.json");
+    const @"README.md" = @embedFile("init/README.default.md");
+    const @"README2.md" = @embedFile("init/README2.default.md");
+};
+
+pub const _PackageJSONFields = struct {
+    name: []const u8 = "project",
+    type: []const u8 = "module",
+    object: *js_ast.E.Object = undefined,
+    entry_point: stringZ = "",
+    @"private": bool = true,
+};
+
+pub const _InitSteps = struct {
+    write_gitignore: bool,
+    write_package_json: bool,
+    write_tsconfig: bool,
+    write_readme: bool,
+};
+
 pub const InitCommand = struct {
 
 pub fn prompt(alloc: std.mem.Allocator, comptime label: []const u8, default: []const u8) ![:0]const u8 {
@@ -823,12 +920,8 @@ else => {
 
 },
 }
-            const Steps = struct {
-    write_gitignore: bool,
-    write_package_json: bool,
-    write_tsconfig: bool,
-    write_readme: bool,
-};
+            const Steps = _InitSteps;
+            _ = &Steps;
             var steps = Steps{ .write_package_json = true, .write_tsconfig = true, .write_gitignore = (!minimal), .write_readme = (!minimal) };
             _ = &steps;
             steps.write_gitignore = (steps.write_gitignore and (!existsZ(".gitignore")));
@@ -1056,94 +1149,8 @@ else => {
 },
 }
     }
-    const Assets = struct {
-    
-    pub fn create(comptime asset_name: []const u8, args: anytype) !void {
-                const is_template = ((comptime (@TypeOf(args) != @TypeOf(null))) and (@typeInfo(@TypeOf(args)).@"struct".fields.len > 0));
-                return createFull(asset_name, asset_name, "", is_template, args);
-        }
-    
-    pub fn createWithContents(comptime asset_name: []const u8, comptime contents: []const u8, args: anytype) !void {
-                const is_template = ((comptime (@TypeOf(args) != @TypeOf(null))) and (@typeInfo(@TypeOf(args)).@"struct".fields.len > 0));
-                return createFullWithContents(asset_name, contents, "", is_template, args);
-        }
-    
-    pub fn createNew(filename: [:0]const u8, contents: []const u8) !void {
-                var file = try bun.sys.File.makeOpen(filename, ((bun.O.CREAT | bun.O.EXCL) | bun.O.WRONLY), 438).unwrap();
-                _ = &file;
-                var file_guard = CloseGuard(bun.sys.File){ .ptr = (blk: {
-                break :blk (&file);
-    
-    }) };
-                _ = &file_guard;
-                var __file_guard_moved = false; _ = &__file_guard_moved;
-                defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
-                _ = try file.writeAll(contents).unwrap();
-                _ = Output.prettyln(" + <r><d>{s}<r>", .{ filename });
-                _ = Output.flush();
-        }
-    
-    pub fn createFull(comptime asset_name: []const u8, filename: []const u8, comptime message_suffix: []const u8, comptime is_template: bool, args: anytype) !void {
-                var file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
-                _ = &file;
-                var file_guard = CloseGuard(std.fs.File){ .ptr = (blk: {
-                break :blk (&file);
-    
-    }) };
-                _ = &file_guard;
-                var __file_guard_moved = false; _ = &__file_guard_moved;
-                defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
-                var file_w = file.writerStreaming(&.{});
-                _ = &file_w;
-                const file_i = (&file_w.interface);
-                if (comptime @hasDecl(Assets, asset_name)) {
-                    const asset = @field(Assets, asset_name);
-                    if (comptime is_template) {
-                        _ = try file_i.print(asset, args);
-                    } else {
-                        _ = try file_i.writeAll(asset);
-                    }
-                    _ = Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
-                    _ = Output.flush();
-                } else {
-                    _ = @compileError(("missing asset: " ++ asset_name));
-                }
-        }
-    
-    pub fn createFullWithContents(filename: []const u8, comptime contents: []const u8, comptime message_suffix: []const u8, comptime is_template: bool, args: anytype) !void {
-                var file = try std.fs.cwd().createFile(filename, .{ .truncate = true });
-                _ = &file;
-                var file_guard = CloseGuard(std.fs.File){ .ptr = (blk: {
-                break :blk (&file);
-    
-    }) };
-                _ = &file_guard;
-                var __file_guard_moved = false; _ = &__file_guard_moved;
-                defer if (!__file_guard_moved) { __file_guard_moved = true; const __T = @TypeOf(file_guard); if (@typeInfo(__T) == .optional) { if (file_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { file_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = file_guard; _drop_val.__cp_deinit(); } };
-                var file_w = file.writerStreaming(&.{});
-                _ = &file_w;
-                var file_i = (&file_w.interface);
-                _ = &file_i;
-                if (comptime is_template) {
-                    _ = try file_i.print(contents, args);
-                } else {
-                    _ = try file_i.writeAll(contents);
-                }
-                _ = Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
-                _ = Output.flush();
-        }
-        const @".gitignore" = @embedFile("init/gitignore.default");
-        const @"tsconfig.json" = @embedFile("init/tsconfig.default.json");
-        const @"README.md" = @embedFile("init/README.default.md");
-        const @"README2.md" = @embedFile("init/README2.default.md");
-    };
-    const PackageJSONFields = struct {
-        name: []const u8 = "project",
-        type: []const u8 = "module",
-        object: *js_ast.E.Object = undefined,
-        entry_point: stringZ = "",
-        @"private": bool = true,
-    };
+    const Assets = _InitAssets;
+    const PackageJSONFields = _PackageJSONFields;
 };
 
 pub const DependencyNeeded = struct {
@@ -1160,6 +1167,12 @@ pub const DependencyGroup = struct {
     pub const shadcn = DependencyGroup{ .dependencies = (&shadcn_deps), .devDependencies = (&tailwind_dev_deps) };
 };
 
+pub const TemplateFile = struct {
+    path: [:0]const u8,
+    contents: [:0]const u8,
+    can_skip_if_exists: bool = false,
+};
+
 const string = []const u8;
 const stringZ = [:0]const u8;
 const empty_deps: []const DependencyNeeded = &.{};
@@ -1169,11 +1182,6 @@ const react_dev_deps: [3]DependencyNeeded = .{ DependencyNeeded{ .name = "@types
 const tailwind_deps: [3]DependencyNeeded = .{ DependencyNeeded{ .name = "tailwindcss", .version = "^4" }, DependencyNeeded{ .name = "react", .version = "^19" }, DependencyNeeded{ .name = "react-dom", .version = "^19" } };
 const tailwind_dev_deps: [4]DependencyNeeded = .{ DependencyNeeded{ .name = "bun-plugin-tailwind", .version = "latest" }, DependencyNeeded{ .name = "@types/react", .version = "^19" }, DependencyNeeded{ .name = "@types/react-dom", .version = "^19" }, DependencyNeeded{ .name = "@types/bun", .version = "latest" } };
 const shadcn_deps: [11]DependencyNeeded = .{ DependencyNeeded{ .name = "class-variance-authority", .version = "latest" }, DependencyNeeded{ .name = "clsx", .version = "latest" }, DependencyNeeded{ .name = "tailwind-merge", .version = "latest" }, DependencyNeeded{ .name = "tw-animate-css", .version = "latest" }, DependencyNeeded{ .name = "lucide-react", .version = "^1" }, DependencyNeeded{ .name = "@radix-ui/react-label", .version = "latest" }, DependencyNeeded{ .name = "@radix-ui/react-select", .version = "latest" }, DependencyNeeded{ .name = "@radix-ui/react-slot", .version = "latest" }, DependencyNeeded{ .name = "tailwindcss", .version = "^4" }, DependencyNeeded{ .name = "react", .version = "^19" }, DependencyNeeded{ .name = "react-dom", .version = "^19" } };
-pub const TemplateFile = struct {
-    path: [:0]const u8,
-    contents: [:0]const u8,
-    can_skip_if_exists: bool = false,
-};
 const empty_template_files: []const TemplateFile = &.{};
 const agent_rule = @embedFile("./init/rule.md");
 const cursor_rule = TemplateFile{ .path = ".cursor/rules/use-bun-instead-of-node-vite-npm-pnpm.mdc", .contents = agent_rule };

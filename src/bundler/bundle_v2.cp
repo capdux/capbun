@@ -182,6 +182,191 @@ pub struct BundleBakeOptions {
     plugins: (*jsc.API.JSBundler.Plugin)?,
 }
 
+struct ReachableFileVisitor {
+    reachable: std.array_list.Managed(Index),
+    visited: bun.bit_set.DynamicBitSet,
+    all_import_records: []ImportRecord.List,
+    all_loaders: []const Loader,
+    all_urls_for_css: []const []const u8,
+    redirects: []u32,
+    redirect_map: PathToSourceIndexMap,
+    dynamic_import_entry_points: *std.AutoArrayHashMap(Index.Int, void),
+    /// Files which are Server Component Boundaries
+    scb_bitset: bun.bit_set.DynamicBitSetUnmanaged?,
+    scb_list: ServerComponentBoundary.List.Slice,
+
+    /// Files which are imported by JS and inlined in CSS
+    additional_files_imported_by_js_and_inlined_in_css: *bun.bit_set.DynamicBitSetUnmanaged,
+    /// Files which are imported by CSS and inlined in CSS
+    additional_files_imported_by_css_and_inlined: *bun.bit_set.DynamicBitSetUnmanaged,
+
+    const MAX_REDIRECTS: usize = 64;
+
+    // Find all files reachable from all entry points. This order should be
+    // deterministic given that the entry point order is deterministic, since the
+    // returned order is the postorder of the graph traversal and import record
+    // order within a given file is deterministic.
+    static fn visit(v: *@This(), source_index: Index, was_dynamic_import: bool, comptime check_dynamic_imports: bool) {
+        if (source_index.isInvalid()) return;
+
+        if (v.visited.isSet(source_index.get())) {
+            if (comptime check_dynamic_imports) {
+                if (was_dynamic_import) {
+                    v.dynamic_import_entry_points.put(source_index.get(), undefined) catch unreachable;
+                }
+            }
+            return;
+        }
+        v.visited.set(source_index.get());
+
+        if (scb_bitset := v.scb_bitset) {
+            if (scb_bitset.isSet(source_index.get())) {
+                const scb_index = v.scb_list.getIndex(source_index.get()).?;
+                v.visit(Index.init(v.scb_list.list.items(.reference_source_index)[scb_index]), false, check_dynamic_imports);
+                v.visit(Index.init(v.scb_list.list.items(.ssr_source_index)[scb_index]), false, check_dynamic_imports);
+            }
+        }
+
+        const is_js = v.all_loaders[source_index.get()].isJavaScriptLike();
+        const is_css = v.all_loaders[source_index.get()].isCSS();
+
+        const import_record_list_id = source_index;
+        // when there are no import records, v index will be invalid
+        if (import_record_list_id.get() < v.all_import_records.len) {
+            const import_records = v.all_import_records[import_record_list_id.get()].slice();
+            for (*import_record of import_records) {
+                let other_source = import_record.source_index;
+                if (other_source.isValid()) {
+                    let redirect_count: usize = 0;
+                    while (redirect_id := getRedirectId(v.redirects[other_source.get()])) : (redirect_count += 1) {
+                        let other_import_records = v.all_import_records[other_source.get()].slice();
+                        const other_import_record = &other_import_records[redirect_id];
+                        import_record.source_index = other_import_record.source_index;
+                        import_record.path = other_import_record.path;
+                        other_source = other_import_record.source_index;
+                        if (redirect_count == MAX_REDIRECTS) {
+                            import_record.path.is_disabled = true;
+                            import_record.source_index = Index.invalid;
+                            break;
+                        }
+
+                        // Handle redirects to a builtin or external module
+                        // https://github.com/oven-sh/bun/issues/3764
+                        if (!other_source.isValid()) {
+                            break;
+                        }
+                    }
+
+                    // Mark if the file is imported by JS and its URL is inlined for CSS
+                    const is_inlined = import_record.source_index.isValid() && v.all_urls_for_css[import_record.source_index.get()].len > 0;
+                    if (is_js && is_inlined) {
+                        v.additional_files_imported_by_js_and_inlined_in_css.set(import_record.source_index.get());
+                    } else if (is_css && is_inlined) {
+                        v.additional_files_imported_by_css_and_inlined.set(import_record.source_index.get());
+                    }
+
+                    v.visit(import_record.source_index, check_dynamic_imports && import_record.kind == .dynamic, check_dynamic_imports);
+                }
+            }
+
+            // Redirects replace the source file with another file
+            if (redirect_id := getRedirectId(v.redirects[source_index.get()])) {
+                const redirect_source_index = v.all_import_records[source_index.get()].slice()[redirect_id].source_index.get();
+                v.visit(Index.source(redirect_source_index), was_dynamic_import, check_dynamic_imports);
+                return;
+            }
+        }
+
+        // Each file must come after its dependencies
+        v.reachable.append(source_index) catch unreachable;
+        if (comptime check_dynamic_imports) {
+            if (was_dynamic_import) {
+                v.dynamic_import_entry_points.put(source_index.get(), undefined) catch unreachable;
+            }
+        }
+    }
+}
+
+pub struct DependenciesScannerResult_ {
+    dependencies: bun.StringSet,
+    reachable_files: []const Index,
+    bundle_v2: *BundleV2,
+}
+
+pub struct DependenciesScanner_ {
+    ctx: *!,
+    entry_points: []const []const u8,
+
+    onFetch: *const fn (
+        ctx: *!,
+        result: *DependenciesScannerResult_,
+    ) anyerror!void,
+
+    pub const Result = DependenciesScannerResult_;
+}
+
+pub struct BuildResult_ {
+    output_files: std.array_list.Managed(options.OutputFile),
+    metafile: ([]const u8)? = null,
+    metafile_markdown: ([]const u8)? = null,
+
+    fn deinit(*_) {
+        for (*output_file of _.output_files.items) {
+            output_file.deinit();
+        }
+
+        _.output_files.clearAndFree();
+
+        if (mf := _.metafile) {
+            bun.default_allocator.free(mf);
+            _.metafile = null;
+        }
+
+        if (md := _.metafile_markdown) {
+            bun.default_allocator.free(md);
+            _.metafile_markdown = null;
+        }
+    }
+}
+
+pub union(enum) BundleResult_ {
+    pending: void,
+    @"err": anyerror,
+    value: BuildResult_,
+
+    fn deinit(*_) {
+        switch (_.*) {
+            .value *value => {
+                value.deinit();
+            },
+            else => {},
+        }
+    }
+}
+
+pub struct ResolveImportRecordCtx_ {
+    import_records: *ImportRecord.List,
+    source: *const Logger.Source,
+    loader: Loader,
+    target: options.Target,
+}
+
+pub struct ResolveImportRecordResult_ {
+    resolve_queue: BundleV2.ResolveQueue,
+    last_error: anyerror?,
+}
+
+pub struct PatchImportRecordsCtx_ {
+    source_index: Index,
+    source_path: []const u8,
+    loader: Loader,
+    target: options.Target,
+    redirect_import_record_index: u32 = std.math.maxInt(u32),
+    /// When true, always save source indices regardless of dev_server/loader.
+    /// Used for barrel un-deferral where records must always be connected.
+    force_save: bool = false,
+}
+
 pub struct BundleV2 {
     transpiler: *Transpiler,
     /// When Server Component is enabled, this is used for the client bundles
@@ -346,111 +531,6 @@ pub struct BundleV2 {
     pub inline fn pathToSourceIndexMap(*_, target: options.Target): *PathToSourceIndexMap {
         return _.graph.pathToSourceIndexMap(target);
     }
-
-    const ReachableFileVisitor = struct {
-        reachable: std.array_list.Managed(Index),
-        visited: bun.bit_set.DynamicBitSet,
-        all_import_records: []ImportRecord.List,
-        all_loaders: []const Loader,
-        all_urls_for_css: []const []const u8,
-        redirects: []u32,
-        redirect_map: PathToSourceIndexMap,
-        dynamic_import_entry_points: *std.AutoArrayHashMap(Index.Int, void),
-        /// Files which are Server Component Boundaries
-        scb_bitset: bun.bit_set.DynamicBitSetUnmanaged?,
-        scb_list: ServerComponentBoundary.List.Slice,
-
-        /// Files which are imported by JS and inlined in CSS
-        additional_files_imported_by_js_and_inlined_in_css: *bun.bit_set.DynamicBitSetUnmanaged,
-        /// Files which are imported by CSS and inlined in CSS
-        additional_files_imported_by_css_and_inlined: *bun.bit_set.DynamicBitSetUnmanaged,
-
-        const MAX_REDIRECTS: usize = 64;
-
-        // Find all files reachable from all entry points. This order should be
-        // deterministic given that the entry point order is deterministic, since the
-        // returned order is the postorder of the graph traversal and import record
-        // order within a given file is deterministic.
-        static fn visit(v: *@This(), source_index: Index, was_dynamic_import: bool, comptime check_dynamic_imports: bool) {
-            if (source_index.isInvalid()) return;
-
-            if (v.visited.isSet(source_index.get())) {
-                if (comptime check_dynamic_imports) {
-                    if (was_dynamic_import) {
-                        v.dynamic_import_entry_points.put(source_index.get(), undefined) catch unreachable;
-                    }
-                }
-                return;
-            }
-            v.visited.set(source_index.get());
-
-            if (scb_bitset := v.scb_bitset) {
-                if (scb_bitset.isSet(source_index.get())) {
-                    const scb_index = v.scb_list.getIndex(source_index.get()).?;
-                    v.visit(Index.init(v.scb_list.list.items(.reference_source_index)[scb_index]), false, check_dynamic_imports);
-                    v.visit(Index.init(v.scb_list.list.items(.ssr_source_index)[scb_index]), false, check_dynamic_imports);
-                }
-            }
-
-            const is_js = v.all_loaders[source_index.get()].isJavaScriptLike();
-            const is_css = v.all_loaders[source_index.get()].isCSS();
-
-            const import_record_list_id = source_index;
-            // when there are no import records, v index will be invalid
-            if (import_record_list_id.get() < v.all_import_records.len) {
-                const import_records = v.all_import_records[import_record_list_id.get()].slice();
-                for (*import_record of import_records) {
-                    let other_source = import_record.source_index;
-                    if (other_source.isValid()) {
-                        let redirect_count: usize = 0;
-                        while (redirect_id := getRedirectId(v.redirects[other_source.get()])) : (redirect_count += 1) {
-                            let other_import_records = v.all_import_records[other_source.get()].slice();
-                            const other_import_record = &other_import_records[redirect_id];
-                            import_record.source_index = other_import_record.source_index;
-                            import_record.path = other_import_record.path;
-                            other_source = other_import_record.source_index;
-                            if (redirect_count == MAX_REDIRECTS) {
-                                import_record.path.is_disabled = true;
-                                import_record.source_index = Index.invalid;
-                                break;
-                            }
-
-                            // Handle redirects to a builtin or external module
-                            // https://github.com/oven-sh/bun/issues/3764
-                            if (!other_source.isValid()) {
-                                break;
-                            }
-                        }
-
-                        // Mark if the file is imported by JS and its URL is inlined for CSS
-                        const is_inlined = import_record.source_index.isValid() && v.all_urls_for_css[import_record.source_index.get()].len > 0;
-                        if (is_js && is_inlined) {
-                            v.additional_files_imported_by_js_and_inlined_in_css.set(import_record.source_index.get());
-                        } else if (is_css && is_inlined) {
-                            v.additional_files_imported_by_css_and_inlined.set(import_record.source_index.get());
-                        }
-
-                        v.visit(import_record.source_index, check_dynamic_imports && import_record.kind == .dynamic, check_dynamic_imports);
-                    }
-                }
-
-                // Redirects replace the source file with another file
-                if (redirect_id := getRedirectId(v.redirects[source_index.get()])) {
-                    const redirect_source_index = v.all_import_records[source_index.get()].slice()[redirect_id].source_index.get();
-                    v.visit(Index.source(redirect_source_index), was_dynamic_import, check_dynamic_imports);
-                    return;
-                }
-            }
-
-            // Each file must come after its dependencies
-            v.reachable.append(source_index) catch unreachable;
-            if (comptime check_dynamic_imports) {
-                if (was_dynamic_import) {
-                    v.dynamic_import_entry_points.put(source_index.get(), undefined) catch unreachable;
-                }
-            }
-        }
-    };
 
     fn findReachableFiles(*_): ![]Index {
         let trace = bun.perf.trace("Bundler.findReachableFiles");
@@ -1594,21 +1674,7 @@ pub struct BundleV2 {
         return @as(Index.Int, @intCast(source_index));
     }
 
-    pub const DependenciesScanner = struct {
-        ctx: *!,
-        entry_points: []const []const u8,
-
-        onFetch: *const fn (
-            ctx: *!,
-            result: *DependenciesScanner.Result,
-        ) anyerror!void,
-
-        pub const Result = struct {
-            dependencies: bun.StringSet,
-            reachable_files: []const Index,
-            bundle_v2: *BundleV2,
-        };
-    };
+    pub const DependenciesScanner = DependenciesScanner_;
 
     fn getAllDependencies(*_, reachable_files: []const Index, fetcher: *const DependenciesScanner)! {
 
@@ -1947,44 +2013,8 @@ pub struct BundleV2 {
     pub const createAndScheduleCompletionTask = @import("../bundler_jsc/JSBundleCompletionTask.zig").createAndScheduleCompletionTask;
     pub const generateFromJavaScript = @import("../bundler_jsc/JSBundleCompletionTask.zig").generateFromJavaScript;
 
-    pub const BuildResult = struct {
-        output_files: std.array_list.Managed(options.OutputFile),
-        metafile: ([]const u8)? = null,
-        metafile_markdown: ([]const u8)? = null,
-
-        fn deinit(*_) {
-            for (*output_file of _.output_files.items) {
-                output_file.deinit();
-            }
-
-            _.output_files.clearAndFree();
-
-            if (mf := _.metafile) {
-                bun.default_allocator.free(mf);
-                _.metafile = null;
-            }
-
-            if (md := _.metafile_markdown) {
-                bun.default_allocator.free(md);
-                _.metafile_markdown = null;
-            }
-        }
-    };
-
-    pub const Result = union(enum) {
-        pending: void,
-        @"err": anyerror,
-        value: BuildResult,
-
-        fn deinit(*_) {
-            switch (_.*) {
-                .value => |*value| {
-                    value.deinit();
-                },
-                else => {},
-            }
-        }
-    };
+    pub const BuildResult = BuildResult_;
+    pub const Result = BundleResult_;
 
     pub const JSBundleCompletionTask = @import("../bundler_jsc/JSBundleCompletionTask.zig").JSBundleCompletionTask;
 
@@ -2998,17 +3028,8 @@ pub struct BundleV2 {
         return resolve_result.resolve_queue;
     }
 
-    pub const ResolveImportRecordCtx = struct {
-        import_records: *ImportRecord.List,
-        source: *const Logger.Source,
-        loader: Loader,
-        target: options.Target,
-    };
-
-    pub const ResolveImportRecordResult = struct {
-        resolve_queue: ResolveQueue,
-        last_error: anyerror?,
-    };
+    pub const ResolveImportRecordCtx = ResolveImportRecordCtx_;
+    pub const ResolveImportRecordResult = ResolveImportRecordResult_;
 
     /// Resolve all unresolved import records for a module. Skips records that
     /// are already resolved (valid source_index), unused, or internal.
@@ -3569,16 +3590,7 @@ pub struct BundleV2 {
         return diff;
     }
 
-    pub const PatchImportRecordsCtx = struct {
-        source_index: Index,
-        source_path: []const u8,
-        loader: Loader,
-        target: options.Target,
-        redirect_import_record_index: u32 = std.math.maxInt(u32),
-        /// When true, always save source indices regardless of dev_server/loader.
-        /// Used for barrel un-deferral where records must always be connected.
-        force_save: bool = false,
-    };
+    pub const PatchImportRecordsCtx = PatchImportRecordsCtx_;
 
     /// Patch source_index on import records from pathToSourceIndexMap and
     /// resolve_tasks_waiting_for_import_source_index. Called after
@@ -4006,6 +4018,43 @@ pub struct ExportData {
     data: ImportTracker = {},
 }
 
+@packed(u8) pub struct JSMetaFlags_ {
+    /// This is true if this file is affected by top-level await, either by having
+    /// a top-level await inside this file or by having an import/export statement
+    /// that transitively imports such a file. It is forbidden to call "require()"
+    /// on these files since they are evaluated asynchronously.
+    is_async_or_has_async_dependency: bool = false,
+
+    /// If true, we need to insert "var exports = {};". This is the case for ESM
+    /// files when the import namespace is captured via "import * as" and also
+    /// when they are the target of a "require()" call.
+    needs_exports_variable: bool = false,
+
+    /// If true, the "__export(exports, { ... })" call will be force-included even
+    /// if there are no parts that reference "exports". Otherwise this call will
+    /// be removed due to the tree shaking pass. This is used when for entry point
+    /// files when code related to the current output format needs to reference
+    /// the "exports" variable.
+    force_include_exports_for_entry_point: bool = false,
+
+    /// This is set when we need to pull in the "__export" symbol in to the part
+    /// at "nsExportPartIndex". This can't be done in "createExportsForFile"
+    /// because of concurrent map hazards. Instead, it must be done later.
+    needs_export_symbol_from_runtime: bool = false,
+
+    /// Wrapped files must also ensure that their dependencies are wrapped. This
+    /// flag is used during the traversal that enforces this invariant, and is used
+    /// to detect when the fixed point has been reached.
+    did_wrap_dependencies: bool = false,
+
+    /// When a converted CommonJS module is import() dynamically
+    /// We need ensure that the "default" export is set to the equivalent of module.exports
+    /// (unless a "default" export already exists)
+    needs_synthetic_default_export: bool = false,
+
+    wrap: WrapKind = WrapKind.none,
+}
+
 pub struct JSMeta {
     /// This is only for TypeScript files. If an import symbol is in this map, it
     /// means the import couldn't be found and doesn't actually exist. This is not
@@ -4085,48 +4134,13 @@ pub struct JSMeta {
 
     flags: Flags = {},
 
-    pub const Flags = packed struct(u8) {
-        /// This is true if this file is affected by top-level await, either by having
-        /// a top-level await inside this file or by having an import/export statement
-        /// that transitively imports such a file. It is forbidden to call "require()"
-        /// on these files since they are evaluated asynchronously.
-        is_async_or_has_async_dependency: bool = false,
-
-        /// If true, we need to insert "var exports = {};". This is the case for ESM
-        /// files when the import namespace is captured via "import * as" and also
-        /// when they are the target of a "require()" call.
-        needs_exports_variable: bool = false,
-
-        /// If true, the "__export(exports, { ... })" call will be force-included even
-        /// if there are no parts that reference "exports". Otherwise this call will
-        /// be removed due to the tree shaking pass. This is used when for entry point
-        /// files when code related to the current output format needs to reference
-        /// the "exports" variable.
-        force_include_exports_for_entry_point: bool = false,
-
-        /// This is set when we need to pull in the "__export" symbol in to the part
-        /// at "nsExportPartIndex". This can't be done in "createExportsForFile"
-        /// because of concurrent map hazards. Instead, it must be done later.
-        needs_export_symbol_from_runtime: bool = false,
-
-        /// Wrapped files must also ensure that their dependencies are wrapped. This
-        /// flag is used during the traversal that enforces this invariant, and is used
-        /// to detect when the fixed point has been reached.
-        did_wrap_dependencies: bool = false,
-
-        /// When a converted CommonJS module is import() dynamically
-        /// We need ensure that the "default" export is set to the equivalent of module.exports
-        /// (unless a "default" export already exists)
-        needs_synthetic_default_export: bool = false,
-
-        wrap: WrapKind = WrapKind.none,
-    };
+    pub const Flags = JSMetaFlags_;
 }
 
-pub const AdditionalFile = union(enum) {
+pub union(enum) AdditionalFile {
     source_index: Index.Int,
     output_file: Index.Int,
-};
+}
 
 pub struct EntryPoint {
     /// This may be an absolute path or a relative path. If absolute, it will
@@ -4231,11 +4245,13 @@ pub struct ImportTracker {
         probably_typescript_type,
     };
 
-    pub const Iterator = struct {
-        status: Status = Status.no_match,
-        value: ImportTracker = {},
-        import_data: []ImportData = [],
-    };
+    pub const Iterator = ImportTrackerIterator_;
+}
+
+pub struct ImportTrackerIterator_ {
+    status: ImportTracker.Status = ImportTracker.Status.no_match,
+    value: ImportTracker = {},
+    import_data: []ImportData = [],
 }
 
 pub const PathTemplate = options.PathTemplate;
@@ -4243,20 +4259,22 @@ pub const PathTemplate = options.PathTemplate;
 pub const Chunk = @import("./Chunk.zig").Chunk;
 pub const ChunkImport = @import("./Chunk.zig").ChunkImport;
 
+pub struct CrossChunkImportItem_ {
+    export_alias: string = "",
+    ref: Ref = Ref.None,
+
+    pub const List = bun.BabyList(CrossChunkImportItem_);
+
+    fn lessThan(_: void, a: CrossChunkImportItem_, b: CrossChunkImportItem_): bool {
+        return strings.order(a.export_alias, b.export_alias) == .lt;
+    }
+}
+
 pub struct CrossChunkImport {
     chunk_index: Index.Int = 0,
-    sorted_import_items: CrossChunkImport.Item.List = undefined,
+    sorted_import_items: CrossChunkImportItem_.List = undefined,
 
-    pub const Item = struct {
-        export_alias: string = "",
-        ref: Ref = Ref.None,
-
-        pub const List = bun.BabyList(Item);
-
-        fn lessThan(_: void, a: CrossChunkImport.Item, b: CrossChunkImport.Item): bool {
-            return strings.order(a.export_alias, b.export_alias) == .lt;
-        }
-    };
+    pub const Item = CrossChunkImportItem_;
 
     fn lessThan(_: void, a: CrossChunkImport, b: CrossChunkImport): bool {
         return std.math.order(a.chunk_index, b.chunk_index) == .lt;
@@ -4338,52 +4356,56 @@ pub struct HtmlCompileResult {
     script_injection_offset: u32,
 }
 
-pub const CompileResult = union(enum) {
+const _empty_compile_result = CompileResult{
+    javascript: JavaScriptCompileResult{
+        source_index: 0,
+        result: js_printer.PrintResult{
+            result: {
+                code: "",
+            },
+        },
+    },
+};
+
+pub union(enum) CompileResult {
     pub const DeclInfo = CompileResultDeclInfo;
 
     javascript: JavaScriptCompileResult,
     css: CssCompileResult,
     html: HtmlCompileResult,
 
-    pub const empty = CompileResult{
-        javascript: {
-            source_index: 0,
-            result: js_printer.PrintResult{
-                result: {
-                    code: "",
-                },
-            },
-        },
-    };
+    pub const empty = _empty_compile_result;
 
-    pub fn code(): []const u8 {
+    fn code(): []const u8 {
         return switch (_) {
-            .javascript => |r| r.code(),
-            .css => |*c| switch (c.result) {
-                .result => |v| v,
+            .javascript r => r.code(),
+            .css c => switch (c.result) {
+                .result v => v,
                 .err => "",
             },
-            .html => |*c| c.code,
+            .html c => c.code,
         };
     }
 
-    pub fn sourceMapChunk(): SourceMap.Chunk? {
+    fn sourceMapChunk(): SourceMap.Chunk? {
         return switch (_) {
-            .javascript => |r| switch (r.result) {
-                .result => |r2| r2.source_map,
+            .javascript r => switch (r.result) {
+                .result r2 => r2.source_map,
                 else => null,
             },
-            .css => |*c| c.source_map,
+            .css c => c.source_map,
             .html => null,
         };
     }
 
-    pub fn sourceIndex(): Index.Int {
+    fn sourceIndex(): Index.Int {
         return switch (_) {
-            inline else => |*r| r.source_index,
+            .javascript r => r.source_index,
+            .css c => c.source_index,
+            .html h => h.source_index,
         };
     }
-};
+}
 
 pub struct CompileResultForSourceMap {
     source_map_chunk: SourceMap.Chunk,

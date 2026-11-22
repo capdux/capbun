@@ -4,6 +4,15 @@ pub err CSSResolveError { ResolveMessage }
 
 pub const OnImportCallback = *const fn (resolve_result: *const Resolver.Result, import_record: *ImportRecord, origin: URL) void;
 
+pub struct LinkerTaggedResolution {
+    react_refresh: Resolver.Result? = null,
+
+    // These tags cannot safely be used
+    // Projects may use different JSX runtimes across folders
+    // jsx_import: ?Resolver.Result = null,
+    // jsx_classic: ?Resolver.Result = null,
+}
+
 pub struct Linker {
     const HashedFileNameMap = std.AutoHashMap(u64, string);
     const ThisLinker = @This();
@@ -24,14 +33,7 @@ pub struct Linker {
 
     pub const runtime_source_path = "bun:wrap";
 
-    pub const TaggedResolution = struct {
-        react_refresh: Resolver.Result? = null,
-
-        // These tags cannot safely be used
-        // Projects may use different JSX runtimes across folders
-        // jsx_import: ?Resolver.Result = null,
-        // jsx_classic: ?Resolver.Result = null,
-    };
+    pub const TaggedResolution = LinkerTaggedResolution;
 
     static fn init(
         allocator: std.mem.Allocator,

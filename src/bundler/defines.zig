@@ -77,6 +77,23 @@ pub fn __cp_errdeinit(self: *@This()) void {
     };
 }
 
+pub const DefineDataFlags = packed struct(u8) {
+    _padding: u3 = 0,
+    valueless: bool = false,
+    can_be_removed_if_unused: bool = false,
+    call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
+    method_call_must_be_replaced_with_undefined: bool = false,
+};
+
+pub const DefineDataOptions = struct {
+    original_name: ?[]const u8 = null,
+    value: js_ast.Expr.Data,
+    valueless: bool = false,
+    can_be_removed_if_unused: bool = false,
+    call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
+    method_call_must_be_replaced_with_undefined: bool = false,
+};
+
 pub const DefineData = struct {
     value: js_ast.Expr.Data,
     original_name_ptr: ?[*]const u8 = null,
@@ -188,25 +205,8 @@ pub fn fromInput(defines: RawDefines, drop: []const []const u8, log: *logger.Log
             }
             return user_defines;
     }
-    pub const Flags = packed struct(u8) {
-            _padding: u3 = 0,
-    
-            valueless: bool = false,
-    
-            can_be_removed_if_unused: bool = false,
-    
-            call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
-    
-            method_call_must_be_replaced_with_undefined: bool = false,
-        };
-    pub const Options = struct {
-        original_name: ?[]const u8 = null,
-        value: js_ast.Expr.Data,
-        valueless: bool = false,
-        can_be_removed_if_unused: bool = false,
-        call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
-        method_call_must_be_replaced_with_undefined: bool = false,
-    };
+    pub const Flags = DefineDataFlags;
+    pub const Options = DefineDataOptions;
 };
 
 pub const DotDefine = struct {

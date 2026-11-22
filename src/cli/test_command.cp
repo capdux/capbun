@@ -239,6 +239,40 @@ pub fn writeTestStatusLine(comptime status: bun_test.Execution.Result, writer: a
     }
 }
 
+struct JunitMetrics {
+    test_cases: u32 = 0,
+    assertions: u32 = 0,
+    failures: u32 = 0,
+    skipped: u32 = 0,
+    elapsed_time: u64 = 0,
+
+    fn add(*_, other: *const JunitMetrics) {
+        _.test_cases += other.test_cases;
+        _.assertions += other.assertions;
+        _.failures += other.failures;
+        _.skipped += other.skipped;
+    }
+}
+
+struct JunitSuiteInfo {
+    name: string,
+    offset_of_attributes: usize,
+    metrics: JunitMetrics = {},
+    is_file_suite: bool = false,
+    line_number: u32 = 0,
+
+    fn deinit(*_, allocator: std.mem.Allocator) {
+        if (!_.is_file_suite && _.name.len > 0) {
+            allocator.free(_.name);
+        }
+    }
+}
+
+struct JunitPropertiesList {
+    ci: string,
+    commit: string,
+}
+
 // Remaining TODOs:
 // - Add stdout/stderr to the JUnit report
 // - Add timestamp field to the JUnit report
@@ -285,34 +319,8 @@ pub struct JunitReporter {
         return null;
     }
 
-    const SuiteInfo = struct {
-        name: string,
-        offset_of_attributes: usize,
-        metrics: Metrics = {},
-        is_file_suite: bool = false,
-        line_number: u32 = 0,
-
-        fn deinit(*_, allocator: std.mem.Allocator) {
-            if (!_.is_file_suite && _.name.len > 0) {
-                allocator.free(_.name);
-            }
-        }
-    };
-
-    const Metrics = struct {
-        test_cases: u32 = 0,
-        assertions: u32 = 0,
-        failures: u32 = 0,
-        skipped: u32 = 0,
-        elapsed_time: u64 = 0,
-
-        fn add(*_, other: *const Metrics) {
-            _.test_cases += other.test_cases;
-            _.assertions += other.assertions;
-            _.failures += other.failures;
-            _.skipped += other.skipped;
-        }
-    };
+    const SuiteInfo = JunitSuiteInfo;
+    const Metrics = JunitMetrics;
 
     static fn init(): *JunitReporter {
         return JunitReporter.new(
@@ -344,10 +352,7 @@ pub struct JunitReporter {
     }
 
     fn generatePropertiesList(*_)! {
-        const PropertiesList = struct {
-            ci: string,
-            commit: string,
-        };
+        const PropertiesList = JunitPropertiesList;
         let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
         const _guard_arena = DeinitGuard<std.heap.ArenaAllocator>{ ptr: &arena_ };
         let stack = std.heap.stackFallback(1024, arena_.allocator());

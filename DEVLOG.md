@@ -1638,3 +1638,8 @@
 - `boringssl.cp`：C-FFI 函数指针类型别名中的 `?*const anyopaque` 与 `?*anyopaque` 须严格区分（`(*const !)?` 与 `OptVoidPtr`），防止丢弃 `const` 限定符；`@opaque pub struct` 实例方法须显式标注 `*_` 并直接传 `_` 而非 `&_`，避免按值传参 `opaque` 或取二级指针；`[*c](*Type)?` 须通过顶层 `Opt_Type` 别名防止折叠为 `?[*c]Type`。
 - `LinkerContext.cp`：将 `pub const LinkerContext = struct` 拆升 11 个嵌套结构体并转为 `pub struct LinkerContext` 后，完整启用了 `~init()`/`~errinit()` 自动析构注入；`j.pushStatic` 多行 `\\` 字符串改为单行 `\n` 字符串。
 - `ffi.cp`：`[bun.MAX_PATH_BYTES]u8` 提取顶层常量 `max_path_bytes`；`TCC.Error!void` 提取 `TccRelocateReturn` 避免实参被拆为两个参数。
+
+## [2026-11-22 Wave #38] 旧式 `struct`/`union` 纯 CP 化经验
+- `FrameworkRouter.cp`：空结构体（如 `EncodedPatternEffectiveURLContext`）上的 `hash`/`eql` 实例方法若未引用 `_`，`cpc` 会生成无 `self` 的静态函数导致 `std.ArrayHashMap` 报错；须在函数体内 `const _ctx = _; * = _ctx;` 显式保留接收者形参。
+- `bundle_v2.cp`：`pub union(enum)` 内的 `switch` 分支不可写 `.css *c =>` 或 `inline else *r =>`（`cpc` 语法不接受 `*` 前缀捕获），须写为 `.css c =>` 或显式列出各分支；`Chunk.cp` 中 `writer.print("[", [])` 须改为 `writer.writeAll("[")` 避免 `[]` 被生成成 `&.{}`。
+- `c_ares.cp`：`@c pub struct struct_hostent` 内不应嵌入 `comptime` 类型构造子 `Sig = struct { ... }`，应将其提升至模块顶层再以 `pub const` 引用，确保 `extern struct` 完整闭合生成。

@@ -57,6 +57,11 @@ pub enum SourceColorDepth {
     @"16m",
 }
 
+struct TermPair {
+    name: []const u8,
+    depth: SourceColorDepth,
+}
+
 const depth_16: SourceColorDepth = @enumFromInt(1);
 const depth_256: SourceColorDepth = @enumFromInt(2);
 const depth_16m: SourceColorDepth = .@"16m";
@@ -232,10 +237,6 @@ pub struct Source {
                 lazy_color_depth = depth_256;
                 return;
             }
-            const TermPair = struct {
-                name: []const u8,
-                depth: ColorDepth,
-            };
             const pairs: [17]TermPair = [
                 TermPair{ name: "st", depth: depth_16 },
                 TermPair{ name: "hurd", depth: depth_16 },

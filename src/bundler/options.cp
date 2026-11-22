@@ -136,15 +136,17 @@ pub union(enum) AllowUnresolved {
     }
 }
 
+pub struct _ExternalModulesWildcardPattern {
+    prefix: string,
+    suffix: string,
+}
+
 pub struct ExternalModules {
     node_modules: std.BufSet,
     abs_paths: std.BufSet,
     patterns: []const WildcardPattern,
 
-    pub const WildcardPattern = struct {
-        prefix: string,
-        suffix: string,
-    };
+    pub const WildcardPattern = _ExternalModulesWildcardPattern;
 
     static fn isNodeBuiltin(str: string): bool {
         return bun.jsc.ModuleLoader.HardcodedModule.Alias.has(str, .node, {});
@@ -971,11 +973,11 @@ pub enum Loader: u8 {
     }
 }
 
-pub const SpecifierParts = struct {
+pub struct SpecifierParts {
     file_path: string,
     specifier: string,
     query: string,
-};
+}
 
 pub fn normalizeSpecifier(
     jsc_vm: *bun.jsc.VirtualMachine,
@@ -1412,11 +1414,13 @@ pub struct JSXPragma {
     }
 }
 
+struct _JSXRuntimeDevelopmentPair {
+    runtime: api.JsxRuntime,
+    development: bool?,
+}
+
 pub struct JSX {
-    const RuntimeDevelopmentPair = struct {
-        runtime: JSX.Runtime,
-        development: bool?,
-    };
+    const RuntimeDevelopmentPair = _JSXRuntimeDevelopmentPair;
 
     pub const RuntimeMap = bun.ComptimeStringMap(RuntimeDevelopmentPair, [ 
         [ "classic", RuntimeDevelopmentPair{ runtime: .classic, development: null } ],
@@ -1430,16 +1434,20 @@ pub struct JSX {
     pub const Runtime = api.JsxRuntime;
 }
 
+pub struct _DefaultUserDefinesNodeEnv {
+    const Key = "process.env.NODE_ENV";
+    const Value = "\"development\"";
+}
+
+pub struct _DefaultUserDefinesProcessBrowserDefine {
+    const Key = "process.browser";
+    const Value = []string{ "false", "true" };
+}
+
 pub struct DefaultUserDefines {
     // This must be globally scoped so it doesn't disappear
-    pub const NodeEnv = struct {
-        pub const Key = "process.env.NODE_ENV";
-        pub const Value = "\"development\"";
-    };
-    pub const ProcessBrowserDefine = struct {
-        pub const Key = "process.browser";
-        pub const Value = []string{ "false", "true" };
-    };
+    pub const NodeEnv = _DefaultUserDefinesNodeEnv;
+    pub const ProcessBrowserDefine = _DefaultUserDefinesProcessBrowserDefine;
 }
 
 pub fn definesFromTransformOptions(
@@ -1609,7 +1617,75 @@ const node_modules_default_loader_ext = [
     ".html",
 ];
 
-const _nm_esm = BundleOptions.Defaults.NodeModules.ModuleExtensionOrder;
+pub struct _BundleOptionsDefaultsNodeModules {
+    const ExtensionOrder = [
+        ".jsx",
+        ".cjs",
+        ".js",
+        ".mjs",
+        ".mts",
+        ".tsx",
+        ".ts",
+        ".cts",
+        ".json",
+    ];
+
+    const ModuleExtensionOrder = [
+        ".mjs",
+        ".jsx",
+        ".mts",
+        ".js",
+        ".cjs",
+        ".tsx",
+        ".ts",
+        ".cts",
+        ".json",
+    ];
+}
+
+pub struct _BundleOptionsDefaults {
+    const ExtensionOrder = [
+        ".tsx",
+        ".ts",
+        ".jsx",
+        ".cts",
+        ".cjs",
+        ".js",
+        ".mjs",
+        ".mts",
+        ".json",
+    ];
+
+    const MainFieldExtensionOrder = [
+        ".js",
+        ".cjs",
+        ".cts",
+        ".tsx",
+        ".ts",
+        ".jsx",
+        ".json",
+    ];
+
+    const ModuleExtensionOrder = [
+        ".tsx",
+        ".jsx",
+        ".mts",
+        ".ts",
+        ".mjs",
+        ".js",
+        ".cts",
+        ".cjs",
+        ".json",
+    ];
+
+    const CSSExtensionOrder = [
+        ".css",
+    ];
+
+    const NodeModules = _BundleOptionsDefaultsNodeModules;
+}
+
+const _nm_esm = _BundleOptionsDefaults.NodeModules.ModuleExtensionOrder;
 const _nm_default = BundleOptions.Defaults.NodeModules.ExtensionOrder;
 const _esm_ext = BundleOptions.Defaults.ModuleExtensionOrder;
 const _default_ext = BundleOptions.Defaults.ExtensionOrder;
@@ -1619,6 +1695,11 @@ const default_nm_default: []const string = &_nm_default;
 const default_esm: []const string = &_esm_ext;
 const default_ext: []const string = &_default_ext;
 const default_main_field_ext: []const string = &_main_field_ext;
+
+pub struct _ResolveFileExtensionsGroup {
+    esm: []const string = default_esm,
+    default: []const string = default_ext,
+}
 
 pub struct ResolveFileExtensions {
     node_modules: Group = {
@@ -1639,10 +1720,7 @@ pub struct ResolveFileExtensions {
         };
     }
 
-    pub const Group = struct {
-        esm: []const string = default_esm,
-        default: []const string = default_ext,
-    };
+    pub const Group = _ResolveFileExtensionsGroup;
 }
 
 pub fn loadersFromTransformOptions(allocator: std.mem.Allocator, _loaders: api.LoaderMap?, target: Target): std.mem.Allocator.Error!bun.StringArrayHashMap(Loader) {
@@ -1993,71 +2071,7 @@ pub struct BundleOptions {
         package_path,
     };
 
-    pub const Defaults = struct {
-        pub const ExtensionOrder = [
-            ".tsx",
-            ".ts",
-            ".jsx",
-            ".cts",
-            ".cjs",
-            ".js",
-            ".mjs",
-            ".mts",
-            ".json",
-        ];
-
-        pub const MainFieldExtensionOrder = [
-            ".js",
-            ".cjs",
-            ".cts",
-            ".tsx",
-            ".ts",
-            ".jsx",
-            ".json",
-        ];
-
-        pub const ModuleExtensionOrder = [
-            ".tsx",
-            ".jsx",
-            ".mts",
-            ".ts",
-            ".mjs",
-            ".js",
-            ".cts",
-            ".cjs",
-            ".json",
-        ];
-
-        pub const CSSExtensionOrder = [
-            ".css",
-        ];
-
-        pub const NodeModules = struct {
-            pub const ExtensionOrder = [
-                ".jsx",
-                ".cjs",
-                ".js",
-                ".mjs",
-                ".mts",
-                ".tsx",
-                ".ts",
-                ".cts",
-                ".json",
-            ];
-
-            pub const ModuleExtensionOrder = [
-                ".mjs",
-                ".jsx",
-                ".mts",
-                ".js",
-                ".cjs",
-                ".tsx",
-                ".ts",
-                ".cts",
-                ".json",
-            ];
-        };
-    };
+    pub const Defaults = _BundleOptionsDefaults;
 
     static fn fromApi(
         allocator: std.mem.Allocator,
@@ -2284,11 +2298,13 @@ pub struct TransformResult {
     }
 }
 
+struct _EnvEntry {
+    key: string,
+    value: string,
+}
+
 pub struct Env {
-    const Entry = struct {
-        key: string,
-        value: string,
-    };
+    const Entry = _EnvEntry;
     const List = std.MultiArrayList(Entry);
 
     behavior: api.DotEnvBehavior = api.DotEnvBehavior.disable,
@@ -2592,6 +2608,22 @@ pub struct RouteConfig {
 
 // GlobalCache imported at top
 
+pub struct _PathTemplatePlaceholder {
+    dir: []const u8 = "",
+    name: []const u8 = "",
+    ext: []const u8 = "",
+    hash: u64? = null,
+    target: []const u8 = "",
+
+    const map = bun.ComptimeStringMap(std.@"meta".FieldEnum(_PathTemplatePlaceholder), [
+        [ "dir", .dir ],
+        [ "name", .name ],
+        [ "ext", .ext ],
+        [ "hash", .hash ],
+        [ "target", .target ],
+    ]);
+}
+
 pub struct PathTemplate {
     data: string = "",
     placeholder: Placeholder = {},
@@ -2669,21 +2701,7 @@ pub struct PathTemplate {
         writeReplacingSlashesOnWindows(writer, remain)?;
     }
 
-    pub const Placeholder = struct {
-        dir: []const u8 = "",
-        name: []const u8 = "",
-        ext: []const u8 = "",
-        hash: u64? = null,
-        target: []const u8 = "",
-
-        pub const map = bun.ComptimeStringMap(std.@"meta".FieldEnum(Placeholder), [
-            [ "dir", .dir ],
-            [ "name", .name ],
-            [ "ext", .ext ],
-            [ "hash", .hash ],
-            [ "target", .target ],
-        ]);
-    };
+    pub const Placeholder = _PathTemplatePlaceholder;
 
     pub const chunk = PathTemplate{
         data: "./chunk-[hash].[ext]",

@@ -61,6 +61,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Frame = @import("./Frame.zig");
@@ -102,12 +110,6 @@ pub fn uninstall() void {
     pub const should_abort = (&abort_should_abort);
 };
 
-const string = []const u8;
-const OptCStr = ?CStr;
-var abort_should_abort: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
-var abort_prev_int: if (Environment.isPosix) bun.sys.Sigaction else void = undefined;
-var abort_prev_term: if (Environment.isPosix) bun.sys.Sigaction else void = undefined;
-const CStr = @TypeOf(@as([:0]const u8, "").ptr);
 pub const Coordinator = struct {
     vm: *jsc.VirtualMachine,
     reporter: *CommandLineReporter,
@@ -134,38 +136,39 @@ pub const Coordinator = struct {
     windows_job: if (Environment.isWindows) ?std.os.windows.HANDLE else void = (if (Environment.isWindows) null else ({
 })),
 
-pub fn isDone(self: @This()) bool {
+pub fn isDone(self: Coordinator) bool {
             return (((self.files_done >= self.files.len) or self.bailed) and (self.live_workers == 0));
     }
 
-pub fn hasUndispatchedFiles(self: @This()) bool {
+pub fn hasUndispatchedFiles(self: Coordinator) bool {
             const workers = self.workers;
-            for (workers) |*w| {
+            for (cp_mut_slice(&workers)) |*w| {
                 _ = &w;
-                if ((!w.range.isEmpty())) {
+                if ((!(w.*).range.isEmpty())) {
                     return true;
                 }
             }
             return false;
     }
 
-pub fn findStealVictim(self: *@This()) ?*Worker {
+pub fn findStealVictim(self: *Coordinator) ?*Worker {
             var victim: ?*Worker = null;
             _ = &victim;
             var most: u32 = 0;
             _ = &most;
             const workers = self.workers;
-            for (workers) |*v| {
-                _ = &v;
-                if ((v.range.len() > most)) {
-                    most = v.range.len();
-                    victim = v;
+            var i: usize = 0;
+            _ = &i;
+            while ((i < workers.len)) : (i = (i + 1)) {
+                if ((workers[@as(usize, @intCast(i))].range.len() > most)) {
+                    most = workers[@as(usize, @intCast(i))].range.len();
+                    victim = (&workers[@as(usize, @intCast(i))]);
                 }
             }
             return victim;
     }
 
-pub fn drive(self: *@This()) void {
+pub fn drive(self: *Coordinator) void {
             _ = self.spawnWorker();
             while ((!self.isDone())) {
                 if (AbortHandler.should_abort.load(.acquire)) {
@@ -188,12 +191,12 @@ pub fn drive(self: *@This()) void {
             }
     }
 
-pub fn abortAll(self: *@This()) noreturn {
+pub fn abortAll(self: *Coordinator) noreturn {
             _ = AbortHandler.uninstall();
             const spawned_workers = self.workers[0..self.spawned_count];
-            for (spawned_workers) |*w| {
+            for (cp_mut_slice(&spawned_workers)) |*w| {
                 _ = &w;
-                if (w.process) |p| {
+                if ((w.*).process) |p| {
                     _ = &p;
                     if (Environment.isPosix) {
                         const pid = p.pid;
@@ -210,7 +213,7 @@ pub fn abortAll(self: *@This()) noreturn {
             _ = bun.Global.exit(130);
     }
 
-pub fn spawnWorker(self: *@This()) bool {
+pub fn spawnWorker(self: *Coordinator) bool {
             _ = bun.assert((self.spawned_count < self.parallel_limit));
             var w = (&self.workers[@as(usize, @intCast(self.spawned_count))]);
             _ = &w;
@@ -226,7 +229,7 @@ pub fn spawnWorker(self: *@This()) bool {
             return true;
     }
 
-pub fn maybeScaleUp(self: *@This()) void {
+pub fn maybeScaleUp(self: *Coordinator) void {
             if ((self.spawned_count >= self.parallel_limit)) {
                 return;
             }
@@ -235,15 +238,15 @@ pub fn maybeScaleUp(self: *@This()) void {
             }
             const now = std.time.milliTimestamp();
             const spawned_workers = self.workers[0..self.spawned_count];
-            for (spawned_workers) |*w| {
+            for (cp_mut_slice(&spawned_workers)) |*w| {
                 _ = &w;
-                if ((!w.alive)) {
+                if ((!(w.*).alive)) {
                     continue;
                 }
-                if ((w.inflight == null)) {
+                if (((w.*).inflight == null)) {
                     return;
                 }
-                if (((now - w.dispatched_at) < self.scale_up_after_ms)) {
+                if (((now - (w.*).dispatched_at) < self.scale_up_after_ms)) {
                     return;
                 }
             }
@@ -255,7 +258,7 @@ pub fn maybeScaleUp(self: *@This()) void {
             }
     }
 
-pub fn assignWork(self: *@This(), w: *Worker) void {
+pub fn assignWork(self: *Coordinator, w: *Worker) void {
             if (self.bailed) {
                 return w.shutdown();
             }
@@ -277,7 +280,7 @@ pub fn assignWork(self: *@This(), w: *Worker) void {
             _ = w.shutdown();
     }
 
-pub fn bailOut(self: *@This()) void {
+pub fn bailOut(self: *Coordinator) void {
             if (self.bailed) {
                 return;
             }
@@ -286,19 +289,19 @@ pub fn bailOut(self: *@This()) void {
             _ = Output.prettyError("\nBailed out after {d} failure{s}<r>\n", .{ self.bail, (if ((self.bail == 1)) "" else "s") });
             _ = Output.flush();
             const spawned_workers = self.workers[0..self.spawned_count];
-            for (spawned_workers) |*other| {
+            for (cp_mut_slice(&spawned_workers)) |*other| {
                 _ = &other;
-                if ((other.alive and (other.inflight == null))) {
-                    _ = other.shutdown();
+                if (((other.*).alive and ((other.*).inflight == null))) {
+                    _ = (other.*).shutdown();
                 }
             }
     }
 
-pub fn relPath(self: *@This(), file_idx: u32) []const u8 {
+pub fn relPath(self: *Coordinator, file_idx: u32) []const u8 {
             return bun.path.relative(bun.fs.FileSystem.instance.top_level_dir, self.files[@as(usize, @intCast(file_idx))].slice());
     }
 
-pub fn ensureHeader(self: *@This(), file_idx: u32) void {
+pub fn ensureHeader(self: *Coordinator, file_idx: u32) void {
             if (self.dots) {
                 return;
             }
@@ -309,14 +312,14 @@ pub fn ensureHeader(self: *@This(), file_idx: u32) void {
             _ = (blk_catch_2: { break :blk_catch_2 ((Output.errorWriter().print("\n{s}:\n", .{ self.relPath(file_idx) })) catch |__ce_2| { _ = &__ce_2;  }); });
     }
 
-pub fn breakDots(self: *@This()) void {
+pub fn breakDots(self: *Coordinator) void {
             if (self.last_printed_dot) {
                 _ = (blk_catch_3: { break :blk_catch_3 ((Output.errorWriter().writeByte(10)) catch |__ce_3| { _ = &__ce_3;  }); });
                 self.last_printed_dot = false;
             }
     }
 
-pub fn flushCaptured(self: *@This(), w: *Worker) void {
+pub fn flushCaptured(self: *Coordinator, w: *Worker) void {
             if ((w.captured.items.len == 0)) {
                 return;
             }
@@ -332,7 +335,7 @@ pub fn flushCaptured(self: *@This(), w: *Worker) void {
             _ = w.captured.clearRetainingCapacity();
     }
 
-pub fn onFrame(self: *@This(), w: *Worker, kind: Frame.Kind, rd: *Frame.Reader) void {
+pub fn onFrame(self: *Coordinator, w: *Worker, kind: Frame.Kind, rd: *Frame.Reader) void {
             switch (kind) {
 .ready => {
 _ = self.assignWorkOrRetry(w);
@@ -362,9 +365,9 @@ const idx = rd.u32_();
 .file_done => {
 var nums: [9]u32 = undefined;
             _ = &nums;
-            for (&nums) |*n| {
+            for (cp_mut_slice(&nums)) |*n| {
                 _ = &n;
-                n.* = rd.u32_();
+                (n.*) = rd.u32_();
             }
             const idx = nums[0];
             const pass = nums[1];
@@ -400,12 +403,7 @@ var nums: [9]u32 = undefined;
 },
 .repeat_bufs => {
 const rep = self.reporter;
-            inline for (.{
-                    &rep.failures_to_repeat_buf,
-                    &rep.skips_to_repeat_buf,
-                    &rep.todos_to_repeat_buf,
-                }) |dest| {
-                _ = &dest;
+            inline for (.{ (&rep.failures_to_repeat_buf), (&rep.skips_to_repeat_buf), (&rep.todos_to_repeat_buf) }) |dest| {
                 _ = bun.handleOom(dest.appendSlice(bun.default_allocator, rd.str()));
             }
 },
@@ -423,12 +421,12 @@ const path = rd.str();
 }
     }
 
-pub fn onWorkerExit(self: *@This(), w: *Worker, status: bun.spawn.Status) void {
+pub fn onWorkerExit(self: *Coordinator, w: *Worker, status: bun.spawn.Status) void {
             w.exit_status = status;
             _ = self.tryReap(w);
     }
 
-pub fn tryReap(self: *@This(), w: *Worker) void {
+pub fn tryReap(self: *Coordinator, w: *Worker) void {
             const status = ((w.exit_status) orelse { return; });
             if ((!w.ipc.done)) {
                 return;
@@ -437,14 +435,14 @@ pub fn tryReap(self: *@This(), w: *Worker) void {
             _ = self.reapWorker(w, status);
     }
 
-pub fn reapWorker(self: *@This(), w: *Worker, status: bun.spawn.Status) void {
+pub fn reapWorker(self: *Coordinator, w: *Worker, status: bun.spawn.Status) void {
             self.live_workers = (self.live_workers - 1);
             _ = self.flushCaptured(w);
             if (w.inflight) |idx| {
                 _ = &idx;
                 _ = self.breakDots();
                 _ = self.ensureHeader(idx);
-                const panicked = isPanicStatus(status);
+                const panicked = Coordinator.isPanicStatus(status);
                 _ = self.accountCrash(idx, status);
                 _ = Output.flush();
                 w.inflight = null;
@@ -462,6 +460,14 @@ pub fn reapWorker(self: *@This(), w: *Worker, status: bun.spawn.Status) void {
                 w.out = .{ .role = .stdout, .worker = w };
                 w.err = .{ .role = .stderr, .worker = w };
                 w.process = null;
+                var start_ok = true;
+                _ = &start_ok;
+                _ = (blk_catch_7: { break :blk_catch_7 ((w.start()) catch |e| { _ = &e; _ = Output.err(e, "failed to respawn test worker", .{});
+                start_ok = false;
+                break :blk_catch_7 {}; }); });
+                if (start_ok) {
+                    respawned = true;
+                }
             }
             if ((!respawned)) {
                 if (((!self.bailed) and (self.live_workers == 0))) {
@@ -474,11 +480,11 @@ pub fn reapWorker(self: *@This(), w: *Worker, status: bun.spawn.Status) void {
             }
     }
 
-pub fn accountCrash(self: *@This(), file_idx: u32, status: bun.spawn.Status) void {
+pub fn accountCrash(self: *Coordinator, file_idx: u32, status: bun.spawn.Status) void {
             _ = self.breakDots();
             var buf: [32]u8 = undefined;
             _ = &buf;
-            _ = Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>(worker crashed: {s})<r>\n", .{ self.relPath(file_idx), describeStatus((&buf), status) });
+            _ = Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>(worker crashed: {s})<r>\n", .{ self.relPath(file_idx), Coordinator.describeStatus((&buf), status) });
             self.reporter.summary().fail = (self.reporter.summary().fail + 1);
             self.reporter.summary().files = (self.reporter.summary().files + 1);
             _ = bun.handleOom(self.crashed_files.append(bun.default_allocator, file_idx));
@@ -508,19 +514,19 @@ pub fn describeStatus(buf: []u8, status: bun.spawn.Status) []const u8 {
 });
     }
 
-pub fn abortOnWorkerPanic(self: *@This(), file_idx: u32, status: bun.spawn.Status) void {
+pub fn abortOnWorkerPanic(self: *Coordinator, file_idx: u32, status: bun.spawn.Status) void {
             _ = self.breakDots();
             var buf: [32]u8 = undefined;
             _ = &buf;
-            _ = Output.prettyError(("\n<red>error<r>: a test worker process crashed with <b>{s}<r> while running <b>{s}<r>.\n" ++ "This indicates a bug in Bun || in a native addon, not in the test itself. Aborting.\n"), .{ describeStatus((&buf), status), self.relPath(file_idx) });
+            _ = Output.prettyError(("\n<red>error<r>: a test worker process crashed with <b>{s}<r> while running <b>{s}<r>.\n" ++ "This indicates a bug in Bun || in a native addon, not in the test itself. Aborting.\n"), .{ Coordinator.describeStatus((&buf), status), self.relPath(file_idx) });
             _ = Output.flush();
             const spawned_workers = self.workers[0..self.spawned_count];
-            for (spawned_workers) |*other| {
+            for (cp_mut_slice(&spawned_workers)) |*other| {
                 _ = &other;
-                if ((!other.alive)) {
+                if ((!(other.*).alive)) {
                     continue;
                 }
-                if (other.process) |p| {
+                if ((other.*).process) |p| {
                     _ = &p;
                     if (Environment.isPosix) {
                         const pid = p.pid;
@@ -537,11 +543,11 @@ pub fn abortOnWorkerPanic(self: *@This(), file_idx: u32, status: bun.spawn.Statu
             _ = self.abortQueuedFiles("aborted: worker panicked");
     }
 
-pub fn abortQueuedFiles(self: *@This(), reason: []const u8) void {
+pub fn abortQueuedFiles(self: *Coordinator, reason: []const u8) void {
             const workers = self.workers;
-            for (workers) |*w| {
+            for (cp_mut_slice(&workers)) |*w| {
                 _ = &w;
-                while (w.range.popFront()) |idx| {
+                while ((w.*).range.popFront()) |idx| {
                     _ = Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>({s})<r>\n", .{ self.relPath(idx), reason });
                     self.reporter.summary().fail = (self.reporter.summary().fail + 1);
                     self.reporter.summary().files = (self.reporter.summary().files + 1);
@@ -552,7 +558,7 @@ pub fn abortQueuedFiles(self: *@This(), reason: []const u8) void {
             _ = Output.flush();
     }
 
-pub fn assignWorkOrRetry(self: *@This(), w: *Worker) void {
+pub fn assignWorkOrRetry(self: *Coordinator, w: *Worker) void {
             _ = self.assignWork(w);
     }
 
@@ -572,6 +578,13 @@ pub fn createWindowsKillOnCloseJob() ?std.os.windows.HANDLE {
     }
     pub const AbortHandler = CoordinatorAbortHandler;
 };
+
+const string = []const u8;
+const OptCStr = ?CStr;
+var abort_should_abort: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+var abort_prev_int: if (Environment.isPosix) bun.sys.Sigaction else void = undefined;
+var abort_prev_term: if (Environment.isPosix) bun.sys.Sigaction else void = undefined;
+const CStr = @TypeOf(@as([:0]const u8, "").ptr);
 const CommandLineReporter = test_command.CommandLineReporter;
 const Environment = bun.Environment;
 const Output = bun.Output;

@@ -25,6 +25,27 @@ pub struct DestroyGuard<T> {
     }
 }
 
+@packed(u8) pub struct DefineDataFlags {
+    _padding: u3 = 0,
+
+    valueless: bool = false,
+
+    can_be_removed_if_unused: bool = false,
+
+    call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
+
+    method_call_must_be_replaced_with_undefined: bool = false,
+}
+
+pub struct DefineDataOptions {
+    original_name: ([]const u8)? = null,
+    value: js_ast.Expr.Data,
+    valueless: bool = false,
+    can_be_removed_if_unused: bool = false,
+    call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
+    method_call_must_be_replaced_with_undefined: bool = false,
+}
+
 pub struct DefineData {
     value: js_ast.Expr.Data,
 
@@ -34,26 +55,9 @@ pub struct DefineData {
 
     flags: Flags = {},
 
-    pub const Flags = packed struct(u8) {
-        _padding: u3 = 0,
+    pub const Flags = DefineDataFlags;
 
-        valueless: bool = false,
-
-        can_be_removed_if_unused: bool = false,
-
-        call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
-
-        method_call_must_be_replaced_with_undefined: bool = false,
-    };
-
-    pub const Options = struct {
-        original_name: ([]const u8)? = null,
-        value: js_ast.Expr.Data,
-        valueless: bool = false,
-        can_be_removed_if_unused: bool = false,
-        call_can_be_unwrapped_if_unused: js_ast.E.CallUnwrap = .never,
-        method_call_must_be_replaced_with_undefined: bool = false,
-    };
+    pub const Options = DefineDataOptions;
 
     static fn init(options: Options): DefineData {
         let name_ptr: ([*]const u8)? = null;

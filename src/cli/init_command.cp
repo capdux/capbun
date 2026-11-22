@@ -21,6 +21,109 @@ pub struct PathBufferGuard<T> {
     }
 };
 
+struct _InitAssets {
+    // "known" assets
+    const @".gitignore" = @embedFile("init/gitignore.default");
+    const @"tsconfig.json" = @embedFile("init/tsconfig.default.json");
+    const @"README.md" = @embedFile("init/README.default.md");
+    const @"README2.md" = @embedFile("init/README2.default.md");
+
+    /// Create a new asset file, overriding anything that already exists. Known
+    /// assets will have their contents pre-populated; otherwise the file will be empty.
+    static fn create(comptime asset_name: []const u8, args: auto)! {
+        const is_template = comptime (@TypeOf(args) != @TypeOf(null)) && @typeInfo(@TypeOf(args)).@"struct".fields.len > 0;
+        return createFull(asset_name, asset_name, "", is_template, args);
+    }
+
+    static fn createWithContents(comptime asset_name: []const u8, comptime contents: []const u8, args: auto)! {
+        const is_template = comptime (@TypeOf(args) != @TypeOf(null)) && @typeInfo(@TypeOf(args)).@"struct".fields.len > 0;
+        return createFullWithContents(asset_name, contents, "", is_template, args);
+    }
+
+    static fn createNew(filename: [:0]const u8, contents: []const u8)! {
+        let file = bun.sys.File.makeOpen(filename, bun.O.CREAT | bun.O.EXCL | bun.O.WRONLY, 0o666).unwrap()?;
+        let file_guard = CloseGuard<bun.sys.File>{ ptr: unsafe { &file } };
+
+        file.writeAll(contents).unwrap()?;
+
+        Output.prettyln(" + <r><d>{s}<r>", .{ filename});
+        Output.flush();
+    }
+
+    static fn createFull(
+        /// name of possibly-existing asset
+        comptime asset_name: []const u8,
+        /// name of asset file to create
+        filename: []const u8,
+        /// optionally add a suffix to the end of the `+ filename` message. Must have a leading space.
+        comptime message_suffix: []const u8,
+        /// Treat the asset as a format string, using `args` to populate it. Only applies to known assets.
+        comptime is_template: bool,
+        /// Format arguments
+        args: auto,
+    )! {
+        let file = std.fs.cwd().createFile(filename, { truncate: true })?;
+        let file_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &file } };
+        let file_w = file.writerStreaming([]);
+        const file_i = &file_w.interface;
+
+        // Write contents of known assets to the new file. Template assets get formatted.
+        if (comptime @hasDecl(_InitAssets, asset_name)) {
+            const asset = @field(_InitAssets, asset_name);
+            if (comptime is_template) {
+                file_i.print(asset, args)?;
+            } else {
+                file_i.writeAll(asset)?;
+            }
+            Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
+            Output.flush();
+        } else {
+            @compileError("missing asset: " ++ asset_name);
+        }
+    }
+
+    static fn createFullWithContents(
+        /// name of asset file to create
+        filename: []const u8,
+        comptime contents: []const u8,
+        /// optionally add a suffix to the end of the `+ filename` message. Must have a leading space.
+        comptime message_suffix: []const u8,
+        /// Treat the asset as a format string, using `args` to populate it. Only applies to known assets.
+        comptime is_template: bool,
+        /// Format arguments
+        args: auto,
+    )! {
+        let file = std.fs.cwd().createFile(filename, { truncate: true })?;
+        let file_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &file } };
+        let file_w = file.writerStreaming([]);
+        let file_i = &file_w.interface;
+
+        if (comptime is_template) {
+            file_i.print(contents, args)?;
+        } else {
+            file_i.writeAll(contents)?;
+        }
+
+        Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
+        Output.flush();
+    }
+}
+
+struct _PackageJSONFields {
+    name: string = "project",
+    type: string = "module",
+    object: *js_ast.E.Object = undefined,
+    entry_point: stringZ = "",
+    @"private": bool = true,
+}
+
+struct _InitSteps {
+    write_gitignore: bool,
+    write_package_json: bool,
+    write_tsconfig: bool,
+    write_readme: bool,
+}
+
 pub struct InitCommand {
     static fn prompt(
         alloc: std.mem.Allocator,
@@ -247,93 +350,7 @@ pub struct InitCommand {
         return selection;
     }
 
-    const Assets = struct {
-        // "known" assets
-        const @".gitignore" = @embedFile("init/gitignore.default");
-        const @"tsconfig.json" = @embedFile("init/tsconfig.default.json");
-        const @"README.md" = @embedFile("init/README.default.md");
-        const @"README2.md" = @embedFile("init/README2.default.md");
-
-        /// Create a new asset file, overriding anything that already exists. Known
-        /// assets will have their contents pre-populated; otherwise the file will be empty.
-        static fn create(comptime asset_name: []const u8, args: auto)! {
-            const is_template = comptime (@TypeOf(args) != @TypeOf(null)) && @typeInfo(@TypeOf(args)).@"struct".fields.len > 0;
-            return createFull(asset_name, asset_name, "", is_template, args);
-        }
-
-        static fn createWithContents(comptime asset_name: []const u8, comptime contents: []const u8, args: auto)! {
-            const is_template = comptime (@TypeOf(args) != @TypeOf(null)) && @typeInfo(@TypeOf(args)).@"struct".fields.len > 0;
-            return createFullWithContents(asset_name, contents, "", is_template, args);
-        }
-
-        static fn createNew(filename: [:0]const u8, contents: []const u8)! {
-            let file = bun.sys.File.makeOpen(filename, bun.O.CREAT | bun.O.EXCL | bun.O.WRONLY, 0o666).unwrap()?;
-            let file_guard = CloseGuard<bun.sys.File>{ ptr: unsafe { &file } };
-
-            file.writeAll(contents).unwrap()?;
-
-            Output.prettyln(" + <r><d>{s}<r>", .{ filename});
-            Output.flush();
-        }
-
-        static fn createFull(
-            /// name of possibly-existing asset
-            comptime asset_name: []const u8,
-            /// name of asset file to create
-            filename: []const u8,
-            /// optionally add a suffix to the end of the `+ filename` message. Must have a leading space.
-            comptime message_suffix: []const u8,
-            /// Treat the asset as a format string, using `args` to populate it. Only applies to known assets.
-            comptime is_template: bool,
-            /// Format arguments
-            args: auto,
-        )! {
-            let file = std.fs.cwd().createFile(filename, { truncate: true })?;
-            let file_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &file } };
-            let file_w = file.writerStreaming([]);
-            const file_i = &file_w.interface;
-
-            // Write contents of known assets to the new file. Template assets get formatted.
-            if (comptime @hasDecl(Assets, asset_name)) {
-                const asset = @field(Assets, asset_name);
-                if (comptime is_template) {
-                    file_i.print(asset, args)?;
-                } else {
-                    file_i.writeAll(asset)?;
-                }
-                Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
-                Output.flush();
-            } else {
-                @compileError("missing asset: " ++ asset_name);
-            }
-        }
-
-        static fn createFullWithContents(
-            /// name of asset file to create
-            filename: []const u8,
-            comptime contents: []const u8,
-            /// optionally add a suffix to the end of the `+ filename` message. Must have a leading space.
-            comptime message_suffix: []const u8,
-            /// Treat the asset as a format string, using `args` to populate it. Only applies to known assets.
-            comptime is_template: bool,
-            /// Format arguments
-            args: auto,
-        )! {
-            let file = std.fs.cwd().createFile(filename, { truncate: true })?;
-            let file_guard = CloseGuard<std.fs.File>{ ptr: unsafe { &file } };
-            let file_w = file.writerStreaming([]);
-            let file_i = &file_w.interface;
-
-            if (comptime is_template) {
-                file_i.print(contents, args)?;
-            } else {
-                file_i.writeAll(contents)?;
-            }
-
-            Output.prettyln(" + <r><d>{s}{s}<r>", .{ filename, message_suffix });
-            Output.flush();
-        }
-    };
+    const Assets = _InitAssets;
 
     // TODO: unicode case folding
     static fn normalizePackageName(allocator: std.mem.Allocator, input: []const u8): ![]const u8 {
@@ -365,13 +382,7 @@ pub struct InitCommand {
         return normalized;
     }
 
-    const PackageJSONFields = struct {
-        name: string = "project",
-        type: string = "module",
-        object: *js_ast.E.Object = undefined,
-        entry_point: stringZ = "",
-        @"private": bool = true,
-    };
+    const PackageJSONFields = _PackageJSONFields;
 
     static fn exec(alloc: std.mem.Allocator, init_args: [][:0]const u8)! {
         // --minimal is a special preset to create only empty package.json + tsconfig.json
@@ -624,12 +635,7 @@ pub struct InitCommand {
             else => {},
         }
 
-        const Steps = struct {
-            write_gitignore: bool,
-            write_package_json: bool,
-            write_tsconfig: bool,
-            write_readme: bool,
-        };
+        const Steps = _InitSteps;
 
         let steps = Steps{
             write_package_json: true,
@@ -984,11 +990,11 @@ pub enum ReactTemplateChoice {
     }
 }
 
-pub const TemplateFile = struct {
+pub struct TemplateFile {
     path: [:0]const u8,
     contents: [:0]const u8,
     can_skip_if_exists: bool = false,
-};
+}
 
 const empty_template_files: []const TemplateFile = [];
 

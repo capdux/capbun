@@ -324,6 +324,40 @@ pub fn begin(self: *RunAllTestsContext) void {
     }
 };
 
+pub const JunitMetrics = struct {
+    test_cases: u32 = 0,
+    assertions: u32 = 0,
+    failures: u32 = 0,
+    skipped: u32 = 0,
+    elapsed_time: u64 = 0,
+
+pub fn add(self: *JunitMetrics, other: *const JunitMetrics) void {
+            self.test_cases = (self.test_cases + other.test_cases);
+            self.assertions = (self.assertions + other.assertions);
+            self.failures = (self.failures + other.failures);
+            self.skipped = (self.skipped + other.skipped);
+    }
+};
+
+pub const JunitSuiteInfo = struct {
+    name: []const u8,
+    offset_of_attributes: usize,
+    metrics: JunitMetrics = .{},
+    is_file_suite: bool = false,
+    line_number: u32 = 0,
+
+pub fn deinit(self: *JunitSuiteInfo, allocator: std.mem.Allocator) void {
+            if (((!self.is_file_suite) and (self.name.len > 0))) {
+                _ = allocator.free(self.name);
+            }
+    }
+};
+
+pub const JunitPropertiesList = struct {
+    ci: []const u8,
+    commit: []const u8,
+};
+
 pub const JunitReporter = struct {
     contents: std.ArrayListUnmanaged(u8) = .{},
     total_metrics: Metrics = .{},
@@ -388,10 +422,8 @@ pub fn deinit(self: *JunitReporter) void {
     }
 
 pub fn generatePropertiesList(self: *JunitReporter) !void {
-            const PropertiesList = struct {
-    ci: []const u8,
-    commit: []const u8,
-};
+            const PropertiesList = JunitPropertiesList;
+            _ = &PropertiesList;
             var arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
             _ = &arena_;
             var _guard_arena = DeinitGuard(std.heap.ArenaAllocator){ .ptr = (&arena_) };
@@ -722,33 +754,8 @@ _ = Output.err(error.JUnitReportFailed, "Failed to write JUnit report to {s}\n{f
 },
 }
     }
-    const SuiteInfo = struct {
-        name: []const u8,
-        offset_of_attributes: usize,
-        metrics: Metrics = .{},
-        is_file_suite: bool = false,
-        line_number: u32 = 0,
-    
-    pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-                if (((!self.is_file_suite) and (self.name.len > 0))) {
-                    _ = allocator.free(self.name);
-                }
-        }
-    };
-    const Metrics = struct {
-        test_cases: u32 = 0,
-        assertions: u32 = 0,
-        failures: u32 = 0,
-        skipped: u32 = 0,
-        elapsed_time: u64 = 0,
-    
-    pub fn add(self: *@This(), other: *const Metrics) void {
-                self.test_cases = (self.test_cases + other.test_cases);
-                self.assertions = (self.assertions + other.assertions);
-                self.failures = (self.failures + other.failures);
-                self.skipped = (self.skipped + other.skipped);
-        }
-    };
+    const SuiteInfo = JunitSuiteInfo;
+    const Metrics = JunitMetrics;
     pub const new = bun.TrivialNew(JunitReporter);
 };
 

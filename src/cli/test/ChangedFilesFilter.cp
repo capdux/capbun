@@ -90,7 +90,7 @@ struct GitResultGuard {
     }
 }
 
-pub const Result = struct {
+pub struct Result {
     /// The filtered list of test files. Slice of the original `test_files`
     /// allocation, owned by the caller.
     test_files: []bun.PathString,
@@ -104,7 +104,7 @@ pub const Result = struct {
     /// files that would not otherwise be loaded when a subset of tests runs.
     /// Owned by the caller; each element is individually allocated.
     module_graph_files: []const []const u8 = &.{},
-};
+}
 
 /// Filter `test_files` in place to only the entries whose module graph
 /// reaches a changed file. On success, `test_files` is compacted (preserving
@@ -458,12 +458,12 @@ fn getChangedFiles(
     return set;
 }
 
-pub const GitResult = struct {
+pub struct GitResult {
     ok: bool,
     spawn_failed: bool = false,
     stdout: std.array_list.Managed(u8),
     stderr: std.array_list.Managed(u8),
-};
+}
 
 fn runGit(
     allocator: std.mem.Allocator,

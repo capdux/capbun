@@ -70,6 +70,11 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const Open = @import("./open.zig");
 pub const bun = @import("bun");
+pub const _ReadmeInfo = struct {
+    filename: []const u8,
+    contents: []const u8,
+};
+
 pub const PublishCommand = struct {
 
 pub fn Context(comptime directory_publish: bool) type {
@@ -1038,10 +1043,7 @@ pub fn constructPublishRequestBody(comptime directory_publish: bool, ctx: *const
             NeedAuth,
         });
     const GetOTPError = (OOM || error{});
-    pub const ReadmeInfo = struct {
-        filename: []const u8,
-        contents: []const u8,
-    };
+    pub const ReadmeInfo = _ReadmeInfo;
 };
 
 pub fn DeinitGuard(comptime T: type) type {

@@ -66,6 +66,45 @@ struct UnrunnableFile {
     loader: bun.options.Loader,
 }
 
+pub enum _RunFilter {
+    script,
+    bin,
+    all,
+    bun_js,
+    all_plus_bun_js,
+    script_and_descriptions,
+    script_exclude,
+}
+
+/// One pending remote-image download. Lives on the heap so its
+/// `async_http.task` (embedded in ThreadPool.Task) has a stable
+/// address — HTTPThread.schedule does @fieldParentPtr on that task,
+/// so moving the struct would break the worker's callback.
+struct _RemoteImageDownload {
+    // Assigned immediately after the struct literal in
+    // prefetchRemoteImages (can't be set in the literal because
+    // AsyncHTTP.init needs a pointer to response_buffer, which only
+    // has a stable address once the owning struct is live).
+    async_http: bun.http.AsyncHTTP,
+    response_buffer: bun.MutableString,
+    url: []const u8,
+    done: *DoneChannel,
+
+    const DoneChannel = bun.threading.Channel(u32, { Static: 256 });
+
+    fn onDone(*_, async_http: *bun.http.AsyncHTTP, _: bun.http.HTTPClientResult) {
+        // Mirror sendSyncCallback from AsyncHTTP.zig: the worker's
+        // ThreadlocalAsyncHTTP is about to be freed, so copy its
+        // mutated state back into our owned AsyncHTTP before writing
+        // to the channel.
+        async_http.real.?.* = async_http.*;
+        async_http.real.?.response_buffer = async_http.response_buffer;
+        // Channel payload is a placeholder tick — the main thread
+        // walks `downloads[]` to read per-task state after N wakeups.
+        _.done.writeItem(0) catch {};
+    }
+}
+
 let find_shell_buf: bun.PathBuffer = undefined;
 
 fn findShellRun(PATH_: string, cwd_: string): stringZ? {
@@ -822,7 +861,7 @@ pub struct RunCommand {
         return out_bun_path;
     }
 
-    pub const Filter = enum { script, bin, all, bun_js, all_plus_bun_js, script_and_descriptions, script_exclude };
+    pub const Filter = _RunFilter;
     const DirInfo = @import("../resolver/dir_info.zig");
     static fn configureEnvForRun(
         ctx: Command.Context,
@@ -1316,34 +1355,7 @@ pub struct RunCommand {
         Output.flush();
     }
 
-    /// One pending remote-image download. Lives on the heap so its
-    /// `async_http.task` (embedded in ThreadPool.Task) has a stable
-    /// address — HTTPThread.schedule does @fieldParentPtr on that task,
-    /// so moving the struct would break the worker's callback.
-    const RemoteImageDownload = struct {
-        // Assigned immediately after the struct literal in
-        // prefetchRemoteImages (can't be set in the literal because
-        // AsyncHTTP.init needs a pointer to response_buffer, which only
-        // has a stable address once the owning struct is live).
-        async_http: bun.http.AsyncHTTP,
-        response_buffer: bun.MutableString,
-        url: []const u8,
-        done: *DoneChannel,
-
-        const DoneChannel = bun.threading.Channel(u32, { Static: 256 });
-
-        fn onDone(*_, async_http: *bun.http.AsyncHTTP, _: bun.http.HTTPClientResult) {
-            // Mirror sendSyncCallback from AsyncHTTP.zig: the worker's
-            // ThreadlocalAsyncHTTP is about to be freed, so copy its
-            // mutated state back into our owned AsyncHTTP before writing
-            // to the channel.
-            async_http.real.?.* = async_http.*;
-            async_http.real.?.response_buffer = async_http.response_buffer;
-            // Channel payload is a placeholder tick — the main thread
-            // walks `downloads[]` to read per-task state after N wakeups.
-            _.done.writeItem(0) catch {};
-        }
-    };
+    const RemoteImageDownload = _RemoteImageDownload;
 
     /// Parse `contents` once with an ImageUrlCollector, download every
     /// http(s) image URL it finds to a temp file, and populate `out_map`

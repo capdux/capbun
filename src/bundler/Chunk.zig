@@ -61,20 +61,110 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-const Message = anyopaque;
+const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") return ti.@"struct".field_types[idx]; return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") return @field(v, ti.@"struct".field_names[idx]); return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return ti.@"struct".field_types[n - offset_from_end]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const n = ti.@"struct".field_names.len; return @field(v, ti.@"struct".field_names[n - offset_from_end]); } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const types = ti.@"struct".field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const names = ti.@"struct".field_names; const types = ti.@"struct".field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const HTMLImportManifest = @import("./HTMLImportManifest.zig");
 pub const analyze_transpiled_module = @import("./analyze_transpiled_module.zig");
 pub const options = @import("./options.zig");
 pub const bun = @import("bun");
+pub const ChunkOutputPieceQueryKind = enum(u3) {
+    none,
+    asset,
+    chunk,
+    scb,
+    html_import,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ChunkImport = struct {
+    chunk_index: u32,
+    import_kind: ImportKind,
+};
+
+pub const ChunkFlags = packed struct(u8) {
+    is_executable: bool = false,
+    has_html_chunk: bool = false,
+    is_browser_chunk_from_server_build: bool = false,
+    _padding: u5 = 0,
+};
+
+pub const ChunkOrder = struct {
+    source_index: Index.Int = 0,
+    distance: u32 = 0,
+    tie_breaker: u32 = 0,
+
+pub fn lessThan(ctx: ChunkOrder, a: ChunkOrder, b: ChunkOrder) bool {
+            _ = &ctx;
+            return ((a.distance < b.distance) or ((a.distance == b.distance) and (a.tie_breaker < b.tie_breaker)));
+    }
+
+pub fn sort(a: []ChunkOrder) void {
+            _ = std.sort.pdq(ChunkOrder, a, ChunkOrder{  }, lessThan);
+    }
+};
+
+pub const _CodeResult = struct {
+    buffer: []u8 = "",
+    shifts: []SourceMap.SourceMapShifts = &.{},
+};
+
+pub const ChunkOutputPieceQuery = packed struct(u32) {
+    index: u29 = 0,
+    kind: ChunkOutputPieceQueryKind = .none,
+    pub const Kind = ChunkOutputPieceQueryKind;
+    pub const none: ChunkOutputPieceQuery = .{ .index = 0, .kind = .none };
+};
+
+pub const ChunkOutputPiece = struct {
+    data_ptr: [*]const u8,
+    data_len: u32,
+    query: ChunkOutputPieceQuery = ChunkOutputPieceQuery.none,
+    prefix_comma: bool = false,
+
+pub fn data(self: *const ChunkOutputPiece) []const u8 {
+            return (blk: {
+            break :blk self.data_ptr[0..self.data_len];
+
+});
+    }
+
+pub fn init(data_slice: []const u8, query: ChunkOutputPieceQuery) ChunkOutputPiece {
+            return .{ .data_ptr = data_slice.ptr, .data_len = @as(u32, @truncate(data_slice.len)), .query = query };
+    }
+    pub const Query = ChunkOutputPieceQuery;
+};
+
+pub const ChunkEntryPoint = packed struct(u64) {
+    source_index: u32 = 0,
+    entry_point_id: ChunkEntryPointID = 0,
+    is_entry_point: bool = false,
+    is_html: bool = false,
+    pub const ID = ChunkEntryPointID;
+};
+
+pub const ChunkJavaScriptChunk = struct {
+    files_in_chunk_order: []const Index.Int = &.{},
+    parts_in_chunk_in_order: []const PartRange = &.{},
+    exports_to_other_chunks: std.ArrayHashMapUnmanaged(Ref, string, Ref.ArrayHashCtx, false) = .{},
+    imports_from_other_chunks: ChunkImportsFromOtherChunks = .{},
+    cross_chunk_prefix_stmts: BabyList(Stmt) = .{},
+    cross_chunk_suffix_stmts: BabyList(Stmt) = .{},
+    css_chunks: []u32 = &.{},
+    module_info_bytes: ?[]const u8 = null,
+    module_info: ?*analyze_transpiled_module.ModuleInfo = null,
+};
+
 pub const CssImportOrderLayersVTable = struct {
 
 pub fn copy(v: *const CssImportOrderLayersSelf, allocator: std.mem.Allocator) CssImportOrderLayersSelf {
@@ -87,147 +177,33 @@ pub fn deinit(v: *CssImportOrderLayersSelf, a: std.mem.Allocator) void {
     pub const Self = CssImportOrderLayersSelf;
 };
 
-const string = []const u8;
-const Loader = options.Loader;
-const FeatureFlags = bun.FeatureFlags;
-const ImportKind = bun.ImportKind;
-const ImportRecord = bun.ImportRecord;
-const Output = bun.Output;
-const SourceMap = bun.SourceMap;
-const StringJoiner = bun.StringJoiner;
-const default_allocator = bun.default_allocator;
-const renamer = bun.renamer;
-const strings = bun.strings;
-const AutoBitSet = bun.bit_set.AutoBitSet;
-const BabyList = bun.collections.BabyList;
-const js_ast = bun.ast;
-const Stmt = js_ast.Stmt;
-const bundler = bun.bundle_v2;
-const BundleV2 = bundler.BundleV2;
-const CompileResult = bundler.CompileResult;
-const CrossChunkImport = bundler.CrossChunkImport;
-const Graph = bundler.Graph;
-const LinkerContext = bundler.LinkerContext;
-const LinkerGraph = bundler.LinkerGraph;
-const PartRange = bundler.PartRange;
-const PathTemplate = bundler.PathTemplate;
-const cheapPrefixNormalizer = bundler.cheapPrefixNormalizer;
-pub const ChunkImport = struct {
-    chunk_index: u32,
-    import_kind: ImportKind,
-};
-pub const ChunkFlags = packed struct(u8) {
-    is_executable: bool = false,
-    has_html_chunk: bool = false,
-    is_browser_chunk_from_server_build: bool = false,
-    _padding: u5 = 0,
-};
-pub const ChunkOrder = struct {
-    source_index: Index.Int = 0,
-    distance: u32 = 0,
-    tie_breaker: u32 = 0,
-
-pub fn lessThan(self: @This(), a: ChunkOrder, b: ChunkOrder) bool {
-        _ = self;
-            return ((a.distance < b.distance) or ((a.distance == b.distance) and (a.tie_breaker < b.tie_breaker)));
-    }
-
-pub fn sort(a: []ChunkOrder) void {
-            _ = std.sort.pdq(ChunkOrder, a, ChunkOrder{  }, lessThan);
-    }
-};
-const _CodeResult = struct {
-    buffer: []u8 = "",
-    shifts: []SourceMap.SourceMapShifts = &.{},
-};
-pub const CodeResult = _CodeResult;
-pub const ChunkOutputPiece = struct {
-    data_ptr: [*]const u8,
-    data_len: u32,
-    query: Query = Query.none,
-    prefix_comma: bool = false,
-
-pub fn data(self: @This()) []const u8 {
-            return (blk: {
-            break :blk self.data_ptr[0..self.data_len];
-
-});
-    }
-
-pub fn init(data_slice: []const u8, query: Query) ChunkOutputPiece {
-            return .{ .data_ptr = data_slice.ptr, .data_len = @as(u32, @truncate(data_slice.len)), .query = query };
-    }
-    pub const Query = packed struct(u32) {
-            index: u29 = 0,
-            kind: Kind = .none,
-    
-            pub const Kind = enum(u3) {
-                /// The last piece in an array uses this to indicate it is just data
-                none,
-                /// Given a source index, print the asset's output
-                asset,
-                /// Given a chunk index, print the chunk's output path
-                chunk,
-                /// Given a server component boundary index, print the chunk's output path
-                scb,
-                /// Given an HTML import index, print the manifest
-                html_import,
-            };
-    
-            pub const none: Query = .{ .index = 0, .kind = .none };
-        };
-};
-pub const ChunkEntryPoint = packed struct(u64) {
-    /// Index into `Graph.input_files`
-    source_index: u32 = 0,
-    entry_point_id: ID = 0,
-    is_entry_point: bool = false,
-    is_html: bool = false,
-
-    /// so `EntryPoint` can be a u64
-    pub const ID = u30;
-};
-pub const ChunkImportsFromOtherChunks = std.AutoArrayHashMapUnmanaged(Index.Int, CrossChunkImport.Item.List);
-pub const ImportsFromOtherChunks = ChunkImportsFromOtherChunks;
-pub const ChunkJavaScriptChunk = struct {
-    files_in_chunk_order: []const Index.Int = &.{},
-    parts_in_chunk_in_order: []const PartRange = &.{},
-    exports_to_other_chunks: std.ArrayHashMapUnmanaged(Ref,string,Ref.ArrayHashCtx,false) = .{},
-    imports_from_other_chunks: ChunkImportsFromOtherChunks = .{},
-    cross_chunk_prefix_stmts: BabyList(Stmt) = .{},
-    cross_chunk_suffix_stmts: BabyList(Stmt) = .{},
-    css_chunks: []u32 = &.{},
-    module_info_bytes: ?[]const u8 = null,
-    module_info: ?*analyze_transpiled_module.ModuleInfo = null,
-};
-const CssImportOrderLayersSelf = bun.BabyList(bun.css.LayerName);
-pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), CssImportOrderLayersVTable);
 pub const CssImportOrderKind = union(enum) {
     layers: CssImportOrderLayers,
     external_path: bun.fs.Path,
     source_index: Index,
 };
+
 pub const ChunkCssImportOrderDebug = struct {
     inner: *const ChunkCssImportOrder,
     ctx: *LinkerContext,
 
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
+pub fn format(self: ChunkCssImportOrderDebug, writer: *std.Io.Writer) !void {
             _ = try writer.print("{s} = ", .{ @tagName(self.inner.kind) });
             switch (self.inner.kind) {
 .layers => |layers| {
-_ = try writer.print("[", .{});
+_ = try writer.writeAll("[");
             const l = layers.inner();
             var i: usize = 0;
             _ = &i;
             for (cp_iter_slice(l.sliceConst())) |layer| {
                 _ = &layer;
                 if ((i > 0)) {
-                    _ = try writer.print(", ", .{});
+                    _ = try writer.writeAll(", ");
                 }
                 _ = try writer.print("\"{f}\"", .{ layer });
                 i = (i + 1);
             }
-            _ = try writer.print("]", .{});
+            _ = try writer.writeAll("]");
 },
 .external_path => |path| {
 _ = try writer.print("\"{s}\"", .{ path.pretty });
@@ -239,13 +215,13 @@ const source = self.ctx.parse_graph.input_files.items(.source)[@as(usize, @intCa
 }
     }
 };
-pub const CssImportOrderDebug = ChunkCssImportOrderDebug;
+
 pub const ChunkCssImportOrder = struct {
     conditions: BabyList(bun.css.ImportConditions) = .{},
     condition_import_records: BabyList(ImportRecord) = .{},
     kind: CssImportOrderKind,
 
-pub fn hash(self: @This(), hasher: anytype) void {
+pub fn hash(self: ChunkCssImportOrder, hasher: anytype) void {
             _ = bun.writeAnyToHasher(hasher, std.@"meta".activeTag(self.kind));
             switch (self.kind) {
 .layers => |layers| {
@@ -276,22 +252,24 @@ _ = bun.writeAnyToHasher(hasher, idx);
 }
     }
 
-pub fn fmt(self: @This(), ctx: *LinkerContext) ChunkCssImportOrderDebug {
+pub fn fmt(self: ChunkCssImportOrder, ctx: *LinkerContext) ChunkCssImportOrderDebug {
             return .{ .inner = (&self), .ctx = ctx };
     }
     pub const Layers = CssImportOrderLayers;
     pub const CssImportOrderDebug = ChunkCssImportOrderDebug;
 };
+
 pub const ChunkCssChunk = struct {
     imports_in_chunk_in_order: BabyList(ChunkCssImportOrder) = .{},
     asts: []bun.css.BundlerStyleSheet = &.{},
 };
+
 pub const ChunkContent = union(enum) {
     javascript: ChunkJavaScriptChunk,
     css: ChunkCssChunk,
     html: void,
 
-pub fn sourcemap(self: @This(), default: options.SourceMapOption) options.SourceMapOption {
+pub fn sourcemap(self: ChunkContent, default: options.SourceMapOption) options.SourceMapOption {
             return (switch (self) {
 .javascript => default,
 .css => .none,
@@ -299,7 +277,7 @@ pub fn sourcemap(self: @This(), default: options.SourceMapOption) options.Source
 });
     }
 
-pub fn loader(self: @This()) Loader {
+pub fn loader(self: ChunkContent) Loader {
             return (switch (self) {
 .javascript => .js,
 .css => .css,
@@ -307,14 +285,15 @@ pub fn loader(self: @This()) Loader {
 });
     }
 
-pub fn ext(self: @This()) []const u8 {
-            return (switch (self) {
+pub fn ext(self: *const ChunkContent) []const u8 {
+            return (switch (self.*) {
 .javascript => "js",
 .css => "css",
 .html => "html",
 });
     }
 };
+
 pub const ChunkIntermediateOutput = union(enum) {
     pieces: bun.BabyList(ChunkOutputPiece),
     joiner: StringJoiner,
@@ -370,7 +349,7 @@ pub fn memcpyEscapingClosingTags(dest: []u8, content: []const u8, close_tag: []c
             return dst;
     }
 
-pub fn getSize(self: @This()) usize {
+pub fn getSize(self: ChunkIntermediateOutput) usize {
             return (switch (self) {
 .pieces => |pieces| brk: {
             var total: usize = 0;
@@ -386,19 +365,19 @@ pub fn getSize(self: @This()) usize {
 });
     }
 
-pub fn code(self: *@This(), allocator_to_use: ?std.mem.Allocator, parse_graph: *const Graph, linker_graph: *const LinkerGraph, import_prefix: []const u8, chunk: *Chunk, chunks: []Chunk, display_size: ?*usize, force_absolute_path: bool, enable_source_map_shifts: bool) bun.OOM!CodeResult {
+pub fn code(self: *ChunkIntermediateOutput, allocator_to_use: ?std.mem.Allocator, parse_graph: *const Graph, linker_graph: *const LinkerGraph, import_prefix: []const u8, chunk: *Chunk, chunks: []Chunk, display_size: ?*usize, force_absolute_path: bool, enable_source_map_shifts: bool) bun.OOM!CodeResult {
             return (switch (enable_source_map_shifts) {
 inline else => |source_map_shifts| self.codeWithSourceMapShifts(allocator_to_use, parse_graph, linker_graph, import_prefix, chunk, chunks, display_size, force_absolute_path, source_map_shifts, null),
 });
     }
 
-pub fn codeStandalone(self: *@This(), allocator_to_use: ?std.mem.Allocator, parse_graph: *const Graph, linker_graph: *const LinkerGraph, import_prefix: []const u8, chunk: *Chunk, chunks: []Chunk, display_size: ?*usize, force_absolute_path: bool, enable_source_map_shifts: bool, standalone_chunk_contents: ?[]const ?[]const u8) bun.OOM!CodeResult {
+pub fn codeStandalone(self: *ChunkIntermediateOutput, allocator_to_use: ?std.mem.Allocator, parse_graph: *const Graph, linker_graph: *const LinkerGraph, import_prefix: []const u8, chunk: *Chunk, chunks: []Chunk, display_size: ?*usize, force_absolute_path: bool, enable_source_map_shifts: bool, standalone_chunk_contents: ?[]const ?[]const u8) bun.OOM!CodeResult {
             return (switch (enable_source_map_shifts) {
 inline else => |source_map_shifts| self.codeWithSourceMapShifts(allocator_to_use, parse_graph, linker_graph, import_prefix, chunk, chunks, display_size, force_absolute_path, source_map_shifts, standalone_chunk_contents),
 });
     }
 
-pub fn codeWithSourceMapShifts(self: *@This(), allocator_to_use: ?std.mem.Allocator, graph: *const Graph, linker_graph: *const LinkerGraph, import_prefix: []const u8, chunk: *Chunk, chunks: []Chunk, display_size: ?*usize, force_absolute_path: bool, comptime enable_source_map_shifts: bool, standalone_chunk_contents: ?[]const ?[]const u8) bun.OOM!CodeResult {
+pub fn codeWithSourceMapShifts(self: *ChunkIntermediateOutput, allocator_to_use: ?std.mem.Allocator, graph: *const Graph, linker_graph: *const LinkerGraph, import_prefix: []const u8, chunk: *Chunk, chunks: []Chunk, display_size: ?*usize, force_absolute_path: bool, comptime enable_source_map_shifts: bool, standalone_chunk_contents: ?[]const ?[]const u8) bun.OOM!CodeResult {
             const additional_files = graph.input_files.items(.additional_files);
             const unique_key_for_additional_files = graph.input_files.items(.unique_key_for_additional_file);
             const relative_platform_buf = bun.path_buffer_pool.get();
@@ -435,7 +414,7 @@ const index = piece.query.index;
 .chunk => {
 if (scc[@as(usize, @intCast(index))]) |content| {
                         _ = &content;
-                        count = (count + (content.len + countClosingTags(content, chunks[@as(usize, @intCast(index))].closingTagForContent())));
+                        count = (count + (content.len + ChunkIntermediateOutput.countClosingTags(content, chunks[@as(usize, @intCast(index))].closingTagForContent())));
                         continue;
                     }
 },
@@ -482,7 +461,7 @@ else => {
                 amt.* = count;
             }
             const debug_id_len = (if ((enable_source_map_shifts and FeatureFlags.source_map_debug_id)) std.fmt.count("\n//# debugId={f}\n", .{ bun.SourceMap.DebugIDFormatter{ .id = chunk.isolated_hash } }) else 0);
-            const total_buf = try ((allocator_to_use) orelse (allocatorForSize(count))).alloc(u8, (count + debug_id_len));
+            const total_buf = try ((allocator_to_use) orelse (ChunkIntermediateOutput.allocatorForSize(count))).alloc(u8, (count + debug_id_len));
             var remain = total_buf;
             _ = &remain;
             for (cp_iter_slice(pieces.slice())) |piece| {
@@ -527,7 +506,7 @@ else => {
                             _ = shifts.appendAssumeCapacity(shift);
                         }
                         if ((piece.query.kind == .chunk)) {
-                            const written = memcpyEscapingClosingTags(remain, content, chunks[@as(usize, @intCast(index))].closingTagForContent());
+                            const written = ChunkIntermediateOutput.memcpyEscapingClosingTags(remain, content, chunks[@as(usize, @intCast(index))].closingTagForContent());
                             remain = remain[written..];
                         } else {
                             _ = @memcpy(remain[0..content.len], content);
@@ -576,7 +555,10 @@ else => {
 },
 else => unreachable,
 });
-                _ = bun.path.platformToPosixInPlace(u8, @constCast(file_path));
+                _ = bun.path.platformToPosixInPlace(u8, (blk: {
+                break :blk @constCast(file_path);
+
+}));
                 const cheap_normalizer = cheapPrefixNormalizer(import_prefix, (if (((from_chunk_dir.len == 0) or force_absolute_path)) file_path else bun.path.relativePlatformBuf(relative_platform_buf, from_chunk_dir, file_path, .posix, false)));
                 if ((cheap_normalizer[0].len > 0)) {
                     _ = @memcpy(remain[0..cheap_normalizer[0].len], cheap_normalizer[0]);
@@ -611,7 +593,7 @@ else => unreachable,
 .joiner => |joiner_val| {
 var joiner = joiner_val;
             _ = &joiner;
-            const allocator = ((allocator_to_use) orelse (allocatorForSize(joiner.len)));
+            const allocator = ((allocator_to_use) orelse (ChunkIntermediateOutput.allocatorForSize(joiner.len)));
             if (display_size) |amt| {
                 _ = &amt;
                 amt.* = joiner.len;
@@ -631,9 +613,10 @@ return .{ .buffer = "", .shifts = &.{} };
 }
     }
 };
+
 pub const Chunk = struct {
     unique_key: []const u8 = "",
-    files_with_parts_in_chunk: std.AutoArrayHashMapUnmanaged(Index.Int,usize) = .{},
+    files_with_parts_in_chunk: std.AutoArrayHashMapUnmanaged(Index.Int, usize) = .{},
     entry_bits: AutoBitSet = undefined,
     final_rel_path: []const u8 = "",
     template: PathTemplate = .{},
@@ -648,11 +631,11 @@ pub const Chunk = struct {
     metafile_chunk_json: []const u8 = "",
     flags: ChunkFlags = .{},
 
-pub inline fn isEntryPoint(self: @This()) bool {
+pub inline fn isEntryPoint(self: Chunk) bool {
             return self.entry_point.is_entry_point;
     }
 
-pub fn closingTagForContent(self: @This()) []const u8 {
+pub fn closingTagForContent(self: *const Chunk) []const u8 {
             return (switch (self.content) {
 .javascript => "</script",
 .css => "</style",
@@ -660,13 +643,13 @@ pub fn closingTagForContent(self: @This()) []const u8 {
 });
     }
 
-pub fn getJSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
+pub fn getJSChunkForHTML(self: *const Chunk, chunks: []Chunk) ?*Chunk {
             const entry_point_id = self.entry_point.entry_point_id;
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_0 = chunks.len;
-                while (i < __end_0) : (i += 1) {
+                const __end_6 = chunks.len;
+                while (i < __end_6) : (i += 1) {
                     if ((chunks[@as(usize, @intCast(i))].content == .javascript)) {
                         if ((chunks[@as(usize, @intCast(i))].entry_point.entry_point_id == entry_point_id)) {
                             return (&chunks[@as(usize, @intCast(i))]);
@@ -677,7 +660,7 @@ pub fn getJSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
             return null;
     }
 
-pub fn getCSSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
+pub fn getCSSChunkForHTML(self: *const Chunk, chunks: []Chunk) ?*Chunk {
             if (self.getJSChunkForHTML(chunks)) |js_chunk| {
                 _ = &js_chunk;
                 const css_chunk_indices = js_chunk.content.javascript.css_chunks;
@@ -689,8 +672,8 @@ pub fn getCSSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_1 = chunks.len;
-                while (i < __end_1) : (i += 1) {
+                const __end_7 = chunks.len;
+                while (i < __end_7) : (i += 1) {
                     if ((chunks[@as(usize, @intCast(i))].content == .css)) {
                         if ((chunks[@as(usize, @intCast(i))].entry_point.entry_point_id == entry_point_id)) {
                             return (&chunks[@as(usize, @intCast(i))]);
@@ -701,7 +684,7 @@ pub fn getCSSChunkForHTML(self: @This(), chunks: []Chunk) ?*Chunk {
             return null;
     }
 
-pub inline fn entryBits(self: @This()) *const AutoBitSet {
+pub inline fn entryBits(self: *const Chunk) *const AutoBitSet {
             return (&self.entry_bits);
     }
     pub const CodeResult = _CodeResult;
@@ -717,6 +700,39 @@ pub inline fn entryBits(self: @This()) *const AutoBitSet {
     pub const ImportsFromOtherChunks = ChunkImportsFromOtherChunks;
     pub const Content = ChunkContent;
 };
+
+const string = []const u8;
+const Loader = options.Loader;
+const FeatureFlags = bun.FeatureFlags;
+const ImportKind = bun.ImportKind;
+const ImportRecord = bun.ImportRecord;
+const Output = bun.Output;
+const SourceMap = bun.SourceMap;
+const StringJoiner = bun.StringJoiner;
+const default_allocator = bun.default_allocator;
+const renamer = bun.renamer;
+const strings = bun.strings;
+const AutoBitSet = bun.bit_set.AutoBitSet;
+const BabyList = bun.collections.BabyList;
+const js_ast = bun.ast;
+const Stmt = js_ast.Stmt;
+const bundler = bun.bundle_v2;
+const BundleV2 = bundler.BundleV2;
+const CompileResult = bundler.CompileResult;
+const CrossChunkImport = bundler.CrossChunkImport;
+const Graph = bundler.Graph;
+const LinkerContext = bundler.LinkerContext;
+const LinkerGraph = bundler.LinkerGraph;
+const PartRange = bundler.PartRange;
+const PathTemplate = bundler.PathTemplate;
+const cheapPrefixNormalizer = bundler.cheapPrefixNormalizer;
+pub const CodeResult = _CodeResult;
+pub const ChunkEntryPointID = u30;
+pub const ChunkImportsFromOtherChunks = std.AutoArrayHashMapUnmanaged(Index.Int, CrossChunkImport.Item.List);
+pub const ImportsFromOtherChunks = ChunkImportsFromOtherChunks;
+const CssImportOrderLayersSelf = bun.BabyList(bun.css.LayerName);
+pub const CssImportOrderLayers = bun.ptr.Cow(bun.BabyList(bun.css.LayerName), CssImportOrderLayersVTable);
+pub const CssImportOrderDebug = ChunkCssImportOrderDebug;
 pub const Flags = ChunkFlags;
 pub const Order = ChunkOrder;
 pub const IntermediateOutput = ChunkIntermediateOutput;

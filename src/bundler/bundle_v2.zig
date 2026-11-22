@@ -64,13 +64,13 @@ fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .poi
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 const Message = struct { __cp_no_message_sentinel: void = {} };
 fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
-pub fn CpUnpackElemType(comptime __T: type, comptime idx: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const s = ti.@"struct"; return if (@hasField(@TypeOf(s), "fields")) s.fields[idx].type else s.field_types[idx]; } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{idx})); }
-pub fn cp_unpack_elem(v: anytype, comptime idx: usize) CpUnpackElemType(@TypeOf(v), idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and idx < m.array.len) { return cp_msg_to_val(m.array[idx]); } } return ""; } else if (comptime __T == Message) { if (v == .array and idx < v.array.len) { return cp_msg_to_val(v.array[idx]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[idx]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[idx]; } else if (comptime (@typeInfo(__T) == .array)) { return v[idx]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const s = ti.@"struct"; return @field(v, if (@hasField(@TypeOf(s), "fields")) s.fields[idx].name else s.field_names[idx]); } return @field(v, std.fmt.comptimePrint("{d}", .{idx})); } }
-pub fn CpUnpackTailType(comptime __T: type, comptime offset_from_end: usize) type { if (__T == ?Message or __T == Message) return []const u8; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__T).pointer.child).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const s = ti.@"struct"; if (@hasField(@TypeOf(s), "fields")) { const n = s.fields.len; return s.fields[n - offset_from_end].type; } else { const n = s.field_names.len; return s.field_types[n - offset_from_end]; } } return @FieldType(__T, std.fmt.comptimePrint("{d}", .{1})); }
-pub fn cp_unpack_tail(v: anytype, comptime offset_from_end: usize) CpUnpackTailType(@TypeOf(v), offset_from_end) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= offset_from_end) { return cp_msg_to_val(m.array[m.array.len - offset_from_end]); } } return ""; } else if (comptime __T == Message) { if (v == .array and v.array.len >= offset_from_end) { return cp_msg_to_val(v.array[v.array.len - offset_from_end]); } return ""; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[v.*.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[v.len - offset_from_end]; } else if (comptime (@typeInfo(__T) == .array)) { return v[v.len - offset_from_end]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const s = ti.@"struct"; if (@hasField(@TypeOf(s), "fields")) { const n = s.fields.len; return @field(v, s.fields[n - offset_from_end].name); } else { const n = s.field_names.len; return @field(v, s.field_names[n - offset_from_end]); } } return @field(v, std.fmt.comptimePrint("{d}", .{0})); } }
-pub fn CpUnpackSliceType(comptime __T: type, comptime start_idx: usize) type { if (__T == ?Message or __T == Message) return []const Message; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice) return __T; if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice) return @typeInfo(__T).pointer.child; if (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__T).pointer.child).array.child; if (@typeInfo(__T) == .array) return []const @typeInfo(__T).array.child; const ti = @typeInfo(__T); if (ti == .@"struct") { const s = ti.@"struct"; if (@hasField(@TypeOf(s), "fields")) { const fields = s.fields; if (fields.len == 0) return []const i32; const Elem = if (start_idx < fields.len) fields[start_idx].type else fields[0].type; return []const CpValType(Elem); } else { const types = s.field_types; if (types.len == 0) return []const i32; const Elem = if (start_idx < types.len) types[start_idx] else types[0]; return []const CpValType(Elem); } } return []const i32; }
-pub fn cp_unpack_slice(v: anytype, comptime start_idx: usize, comptime suffix_len: usize) CpUnpackSliceType(@TypeOf(v), start_idx) { const __T = @TypeOf(v); if (comptime __T == ?Message) { if (v) |m| { if (m == .array and m.array.len >= start_idx + suffix_len) { return m.array[start_idx .. m.array.len - suffix_len]; } } return &[_]Message{}; } else if (comptime __T == Message) { if (v == .array and v.array.len >= start_idx + suffix_len) { return v.array[start_idx .. v.array.len - suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .pointer and @typeInfo(@typeInfo(__T).pointer.child).pointer.size == .slice)) { return v.*[start_idx .. v.*.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .array)) { return v[start_idx .. v.len - suffix_len]; } else if (comptime (@typeInfo(__T) == .array)) { return v[start_idx .. v.len - suffix_len]; } else { const ti = @typeInfo(__T); if (ti == .@"struct") { const s = ti.@"struct"; if (@hasField(@TypeOf(s), "fields")) { const fields = s.fields; const end = fields.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < fields.len) CpValType(fields[start_idx].type) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, fields[f_idx].name)); } return buf; } else { const names = s.field_names; const types = s.field_types; const end = names.len - suffix_len; const count = if (end > start_idx) end - start_idx else 0; const Elem = if (start_idx < types.len) CpValType(types[start_idx]) else i32; const buf = std.heap.page_allocator.alloc(Elem, count) catch unreachable; inline for (start_idx..end, 0..) |f_idx, out_idx| { buf[out_idx] = cp_val(@field(v, names[f_idx])); } return buf; } } return &[_]i32{}; } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and @typeInfo(@typeInfo(__T).pointer.child) == .array and @typeInfo(@typeInfo(__T).pointer.child).array.child == u8)) { return val[0..]; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const PathToSourceIndexMap = @import("./PathToSourceIndexMap.zig");
 pub const barrel_imports = @import("./barrel_imports.zig");
@@ -208,6 +208,165 @@ pub const BundleBakeOptions = struct {
     plugins: ?*jsc.API.JSBundler.Plugin,
 };
 
+pub const ReachableFileVisitor = struct {
+    reachable: std.array_list.Managed(Index),
+    visited: bun.bit_set.DynamicBitSet,
+    all_import_records: []ImportRecord.List,
+    all_loaders: []const Loader,
+    all_urls_for_css: []const []const u8,
+    redirects: []u32,
+    redirect_map: PathToSourceIndexMap,
+    dynamic_import_entry_points: *std.AutoArrayHashMap(Index.Int, void),
+    scb_bitset: ?bun.bit_set.DynamicBitSetUnmanaged,
+    scb_list: ServerComponentBoundary.List.Slice,
+    additional_files_imported_by_js_and_inlined_in_css: *bun.bit_set.DynamicBitSetUnmanaged,
+    additional_files_imported_by_css_and_inlined: *bun.bit_set.DynamicBitSetUnmanaged,
+
+pub fn visit(v: *@This(), source_index: Index, was_dynamic_import: bool, comptime check_dynamic_imports: bool) void {
+            if (source_index.isInvalid()) {
+                return;
+            }
+            if (v.visited.isSet(source_index.get())) {
+                if (comptime check_dynamic_imports) {
+                    if (was_dynamic_import) {
+                        _ = ((v.dynamic_import_entry_points.put(source_index.get(), undefined)) catch unreachable);
+                    }
+                }
+                return;
+            }
+            _ = v.visited.set(source_index.get());
+            if (v.scb_bitset) |scb_bitset| {
+                _ = &scb_bitset;
+                if (scb_bitset.isSet(source_index.get())) {
+                    const scb_index = (v.scb_list.getIndex(source_index.get())).?;
+                    _ = v.visit(Index.init(v.scb_list.list.items(.reference_source_index)[@as(usize, @intCast(scb_index))]), false, check_dynamic_imports);
+                    _ = v.visit(Index.init(v.scb_list.list.items(.ssr_source_index)[@as(usize, @intCast(scb_index))]), false, check_dynamic_imports);
+                }
+            }
+            const is_js = v.all_loaders[@as(usize, @intCast(source_index.get()))].isJavaScriptLike();
+            const is_css = v.all_loaders[@as(usize, @intCast(source_index.get()))].isCSS();
+            const import_record_list_id = source_index;
+            if ((import_record_list_id.get() < v.all_import_records.len)) {
+                const import_records = v.all_import_records[@as(usize, @intCast(import_record_list_id.get()))].slice();
+                for (cp_mut_slice(&import_records)) |*import_record| {
+                    _ = &import_record;
+                    var other_source = (import_record.*).source_index;
+                    _ = &other_source;
+                    if (other_source.isValid()) {
+                        var redirect_count: usize = 0;
+                        _ = &redirect_count;
+                        while (getRedirectId(v.redirects[@as(usize, @intCast(other_source.get()))])) |redirect_id| : (redirect_count = (redirect_count + 1)) {
+                            var other_import_records = v.all_import_records[@as(usize, @intCast(other_source.get()))].slice();
+                            _ = &other_import_records;
+                            const other_import_record = (&other_import_records[@as(usize, @intCast(redirect_id))]);
+                            (import_record.*).source_index = other_import_record.source_index;
+                            (import_record.*).path = other_import_record.path;
+                            other_source = other_import_record.source_index;
+                            if ((redirect_count == MAX_REDIRECTS)) {
+                                (import_record.*).path.is_disabled = true;
+                                (import_record.*).source_index = Index.invalid;
+                                break;
+                            }
+                            if ((!other_source.isValid())) {
+                                break;
+                            }
+                        }
+                        const is_inlined = ((import_record.*).source_index.isValid() and (v.all_urls_for_css[@as(usize, @intCast((import_record.*).source_index.get()))].len > 0));
+                        if ((is_js and is_inlined)) {
+                            _ = v.additional_files_imported_by_js_and_inlined_in_css.set((import_record.*).source_index.get());
+                        } else {
+                            if ((is_css and is_inlined)) {
+                                _ = v.additional_files_imported_by_css_and_inlined.set((import_record.*).source_index.get());
+                            }
+                        }
+                        _ = v.visit((import_record.*).source_index, (check_dynamic_imports and ((import_record.*).kind == .dynamic)), check_dynamic_imports);
+                    }
+                }
+                if (getRedirectId(v.redirects[@as(usize, @intCast(source_index.get()))])) |redirect_id| {
+                    _ = &redirect_id;
+                    const redirect_source_index = v.all_import_records[@as(usize, @intCast(source_index.get()))].slice()[@as(usize, @intCast(redirect_id))].source_index.get();
+                    _ = v.visit(Index.source(redirect_source_index), was_dynamic_import, check_dynamic_imports);
+                    return;
+                }
+            }
+            _ = ((v.reachable.append(source_index)) catch unreachable);
+            if (comptime check_dynamic_imports) {
+                if (was_dynamic_import) {
+                    _ = ((v.dynamic_import_entry_points.put(source_index.get(), undefined)) catch unreachable);
+                }
+            }
+    }
+    const MAX_REDIRECTS: usize = 64;
+};
+
+pub const DependenciesScannerResult_ = struct {
+    dependencies: bun.StringSet,
+    reachable_files: []const Index,
+    bundle_v2: *BundleV2,
+};
+
+pub const DependenciesScanner_ = struct {
+    ctx: *anyopaque,
+    entry_points: []const []const u8,
+    onFetch: *const fn (*anyopaque, *DependenciesScannerResult_) anyerror!void,
+    pub const Result = DependenciesScannerResult_;
+};
+
+pub const BuildResult_ = struct {
+    output_files: std.array_list.Managed(options.OutputFile),
+    metafile: ?[]const u8 = null,
+    metafile_markdown: ?[]const u8 = null,
+
+pub fn deinit(self: *BuildResult_) void {
+            for (self.output_files.items) |*output_file| {
+                _ = &output_file;
+                _ = (output_file.*).deinit();
+            }
+            _ = self.output_files.clearAndFree();
+            if (self.metafile) |mf| {
+                _ = &mf;
+                _ = bun.default_allocator.free(mf);
+                self.metafile = null;
+            }
+            if (self.metafile_markdown) |md| {
+                _ = &md;
+                _ = bun.default_allocator.free(md);
+                self.metafile_markdown = null;
+            }
+    }
+};
+
+pub const BundleResult_ = union(enum) {
+    pending: void,
+    @"err": anyerror,
+    value: BuildResult_,
+
+pub fn deinit(self: *BundleResult_) void {
+        _ = self;
+    }
+};
+
+pub const ResolveImportRecordCtx_ = struct {
+    import_records: *ImportRecord.List,
+    source: *const Logger.Source,
+    loader: Loader,
+    target: options.Target,
+};
+
+pub const ResolveImportRecordResult_ = struct {
+    resolve_queue: BundleV2.ResolveQueue,
+    last_error: ?anyerror,
+};
+
+pub const PatchImportRecordsCtx_ = struct {
+    source_index: Index,
+    source_path: []const u8,
+    loader: Loader,
+    target: options.Target,
+    redirect_import_record_index: u32 = std.math.maxInt(u32),
+    force_save: bool = false,
+};
+
 pub const BundleV2 = struct {
     transpiler: *Transpiler,
     client_transpiler: ?*Transpiler,
@@ -258,7 +417,7 @@ _ = @panic("No JavaScript event loop for transpiler plugins to run on");
 
 pub fn ensureClientTranspiler(self: *BundleV2) void {
             if ((self.client_transpiler == null)) {
-                _ = (blk_catch_0: { break :blk_catch_0 ((self.initializeClientTranspiler()) catch |e| { _ = &e; break :blk_catch_0 @as(*Transpiler, std.debug.panic("Failed to initialize client transpiler: {s}", .{ @errorName(e) })); }); });
+                _ = (blk_catch_3: { break :blk_catch_3 ((self.initializeClientTranspiler()) catch |e| { _ = &e; break :blk_catch_3 @as(*Transpiler, std.debug.panic("Failed to initialize client transpiler: {s}", .{ @errorName(e) })); }); });
             }
     }
 
@@ -298,7 +457,7 @@ pub inline fn transpilerForTarget(self: *BundleV2, target: options.Target) *Tran
                         _ = &ct;
                         return ct;
                     }
-                    return (blk_catch_1: { break :blk_catch_1 ((self.initializeClientTranspiler()) catch |e| { _ = &e; break :blk_catch_1 @as(*Transpiler, std.debug.panic("Failed to initialize client transpiler: {s}", .{ @errorName(e) })); }); });
+                    return (blk_catch_4: { break :blk_catch_4 ((self.initializeClientTranspiler()) catch |e| { _ = &e; break :blk_catch_4 @as(*Transpiler, std.debug.panic("Failed to initialize client transpiler: {s}", .{ @errorName(e) })); }); });
                 }
                 return self.transpiler;
             }
@@ -400,8 +559,8 @@ for (self.graph.entry_points.items) |entry_point| {
             {
                 var index: i32 = 0;
                 _ = &index;
-                const __end_2 = all_urls_for_css.len;
-                while (index < __end_2) : (index += 1) {
+                const __end_4 = all_urls_for_css.len;
+                while (index < __end_4) : (index += 1) {
                     const url_for_css = all_urls_for_css[@as(usize, @intCast(index))];
                     if ((url_for_css.len > 0)) {
                         if ((additional_files_imported_by_css_and_inlined.isSet(@intCast(index)) and (!additional_files_imported_by_js_and_inlined_in_css.isSet(@intCast(index))))) {
@@ -450,8 +609,8 @@ pub fn scanForSecondaryPaths(self: *BundleV2) void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_4 = ast_import_records.len;
-                while (i < __end_4) : (i += 1) {
+                const __end_6 = ast_import_records.len;
+                while (i < __end_6) : (i += 1) {
                     var ast_import_record_list = (&ast_import_records[@as(usize, @intCast(i))]);
                     _ = &ast_import_record_list;
                     const target = targets[@as(usize, @intCast(i))];
@@ -502,7 +661,7 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                         break :brk ((Fs.Path.init(path_primary.text).loader((&transpiler.options.loaders))) orelse (options.Loader.file));
 };
                         path_primary.pretty = bun.handleOom(self.allocator().dupe(u8, path_primary.text));
-                        const idx = (blk_catch_2: { break :blk_catch_2 ((self.enqueueParseTask((&file_map_result), (&.{ .path = path_primary, .contents = "" }), loader, import_record.original_target)) catch |oom_err| { _ = &oom_err; break :blk_catch_2 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                        const idx = (blk_catch_5: { break :blk_catch_5 ((self.enqueueParseTask((&file_map_result), (&.{ .path = path_primary, .contents = "" }), loader, import_record.original_target)) catch |oom_err| { _ = &oom_err; break :blk_catch_5 @as(Index.Int, bun.handleOom(oom_err)); }); });
                         entry.value_ptr.* = idx;
                         const record: *ImportRecord = (&self.graph.ast.items(.import_records)[@as(usize, @intCast(import_record.importer_source_index))].slice()[@as(usize, @intCast(import_record.import_record_index))]);
                         record.source_index = Index.init(idx);
@@ -518,7 +677,7 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
             var resolve_result: _resolver.Result = undefined;
             _ = &resolve_result;
             while (true) {
-                resolve_result = (blk_catch_3: { break :blk_catch_3 ((transpiler.resolver.resolve(source_dir, import_record.specifier, import_record.kind)) catch |e| { _ = &e; if ((e == error.ModuleNotFound)) {
+                resolve_result = (blk_catch_6: { break :blk_catch_6 ((transpiler.resolver.resolve(source_dir, import_record.specifier, import_record.kind)) catch |e| { _ = &e; if ((e == error.ModuleNotFound)) {
                     if (self.transpiler.options.dev_server) |dev| {
                         _ = &dev;
                         if ((!had_busted_dir_cache)) {
@@ -527,7 +686,7 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                                 continue;
                             }
                         }
-                        _ = (blk_catch_4: { break :blk_catch_4 ((dev.directory_watchers.trackResolutionFailure(import_record.source_file, import_record.specifier, target.bakeGraph(), self.graph.input_files.items(.loader)[@as(usize, @intCast(import_record.importer_source_index))])) catch |oom_err| { _ = &oom_err; break :blk_catch_4 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_7: { break :blk_catch_7 ((dev.directory_watchers.trackResolutionFailure(import_record.source_file, import_record.specifier, target.bakeGraph(), self.graph.input_files.items(.loader)[@as(usize, @intCast(import_record.importer_source_index))])) catch |oom_err| { _ = &oom_err; break :blk_catch_7 bun.handleOom(oom_err); }); });
                         self.graph.ast.items(.parts)[@as(usize, @intCast(import_record.importer_source_index))].len = 0;
                     }
                 }
@@ -541,7 +700,7 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                 source = (&self.graph.input_files.items(.source)[@as(usize, @intCast(import_record.importer_source_index))]);
                 handles_import_errors = record.flags.handles_import_errors;
                 record.path.is_disabled = true;
-                __sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
+                __sw_blk_8: { const __disc_8 = e; _ = &__disc_8; if ((!cp_has_ok_val(__disc_8) and !cp_is_null_val(__disc_8))) { const __err_v_8 = cp_unwrap_err_val(__disc_8); _ = &__err_v_8; if (cp_match_tag(__err_v_8, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
                 const path_to_use = import_record.specifier;
                 if (((!handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
                     if (isPackagePath(import_record.specifier)) {
@@ -553,7 +712,7 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                     } else {
                         _ = ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\"", .{ path_to_use }, import_record.kind)) catch unreachable);
                     }
-                } break :__sw_blk_6; } } {   break :__sw_blk_6; }  }
+                } break :__sw_blk_8; } } {   break :__sw_blk_8; }  }
                 return; }); });
                 break;
             }
@@ -588,13 +747,13 @@ pub fn runResolver(self: *BundleV2, import_record: bun.jsc.API.JSBundler.Resolve
                 }
                 break :brk ((path.loader((&transpiler.options.loaders))) orelse (options.Loader.file));
 };
-                const idx = (blk_catch_8: { break :blk_catch_8 ((self.enqueueParseTask((&resolve_result), (&.{ .path = path.*, .contents = "" }), loader, import_record.original_target)) catch |oom_err| { _ = &oom_err; break :blk_catch_8 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                const idx = (blk_catch_11: { break :blk_catch_11 ((self.enqueueParseTask((&resolve_result), (&.{ .path = path.*, .contents = "" }), loader, import_record.original_target)) catch |oom_err| { _ = &oom_err; break :blk_catch_11 @as(Index.Int, bun.handleOom(oom_err)); }); });
                 entry.value_ptr.* = idx;
                 out_source_index = Index.init(idx);
                 if ((resolve_result.path_pair.secondary != null)) {
                     const secondary = (&resolve_result.path_pair.secondary.?);
                     if ((((!secondary.is_disabled) and (secondary != path)) and (!strings.eqlLong(secondary.text, path.text, true)))) {
-                        const secondary_path_to_copy = (blk_catch_9: { break :blk_catch_9 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_9 bun.handleOom(oom_err); }); });
+                        const secondary_path_to_copy = (blk_catch_12: { break :blk_catch_12 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_12 bun.handleOom(oom_err); }); });
                         self.graph.input_files.items(.secondary_path)[cp_cast_int(usize, idx)] = secondary_path_to_copy.text;
                         self.graph.has_any_secondary_paths = true;
                     }
@@ -642,7 +801,7 @@ pub fn enqueueFileFromDevServerIncrementalGraphInvalidation(self: *BundleV2, pat
             break :blk self.transpilerForTarget(target);
 
 });
-            const result = (blk_catch_10: { break :blk_catch_10 ((t.resolveEntryPoint(path_slice)) catch |__ce_10| { _ = &__ce_10; return; }); });
+            const result = (blk_catch_13: { break :blk_catch_13 ((t.resolveEntryPoint(path_slice)) catch |__ce_13| { _ = &__ce_13; return; }); });
             var path = result.path_pair.primary;
             _ = &path;
             _ = self.incrementScanCounter();
@@ -827,7 +986,7 @@ pub fn decrementScanCounter(self: *BundleV2) void {
 
 pub fn onAfterDecrementScanCounter(self: *BundleV2) void {
             if ((self.asynchronous and self.isDone())) {
-                _ = (blk_catch_11: { break :blk_catch_11 ((self.finishFromBakeDevServer(((self.transpiler.options.dev_server) orelse (@panic("No dev server attached in asynchronous bundle job"))))) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 @as(void, bun.outOfMemory()); }); });
+                _ = (blk_catch_14: { break :blk_catch_14 ((self.finishFromBakeDevServer(((self.transpiler.options.dev_server) orelse (@panic("No dev server attached in asynchronous bundle job"))))) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 @as(void, bun.outOfMemory()); }); });
             }
     }
 
@@ -875,7 +1034,7 @@ for (cp_iter_slice(data)) |entry_point| {
                             continue;
                         }
                     }
-                    const resolved = (blk_catch_12: { break :blk_catch_12 ((self.transpiler.resolveEntryPoint(entry_point)) catch |__ce_12| { _ = &__ce_12; continue; }); });
+                    const resolved = (blk_catch_15: { break :blk_catch_15 ((self.transpiler.resolveEntryPoint(entry_point)) catch |__ce_15| { _ = &__ce_15; continue; }); });
                     _ = try self.enqueueEntryItem(resolved, true, brk: {
                     const main_target = self.transpiler.options.target;
                     if (main_target.isServerSide()) {
@@ -900,8 +1059,8 @@ const abs_paths = data.files.set.keys();
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_8 = abs_paths.len;
-                    while (i < __end_8) : (i += 1) {
+                    const __end_10 = abs_paths.len;
+                    while (i < __end_10) : (i += 1) {
                         const abs_path = abs_paths[@as(usize, @intCast(i))];
                         const flags = flags_list[@as(usize, @intCast(i))];
                         const transpiler = (if (((flags.client and (!flags.server)) and (!flags.ssr))) self.transpilerForTarget(.browser) else self.transpiler);
@@ -919,8 +1078,8 @@ const abs_paths = data.files.set.keys();
                         if (any_plugin_matched) {
                             continue;
                         }
-                        const resolved = (blk_catch_13: { break :blk_catch_13 ((transpiler.resolveEntryPoint(abs_path)) catch |e| { _ = &e; const dev = self.transpiler.options.dev_server.?;
-                        _ = (blk_catch_14: { break :blk_catch_14 ((dev.handleParseTaskFailure(e, (if (flags.client) .client else .server), abs_path, transpiler.log, self)) catch |oom_err| { _ = &oom_err; break :blk_catch_14 bun.handleOom(oom_err); }); });
+                        const resolved = (blk_catch_16: { break :blk_catch_16 ((transpiler.resolveEntryPoint(abs_path)) catch |e| { _ = &e; const dev = self.transpiler.options.dev_server.?;
+                        _ = (blk_catch_17: { break :blk_catch_17 ((dev.handleParseTaskFailure(e, (if (flags.client) .client else .server), abs_path, transpiler.log, self)) catch |oom_err| { _ = &oom_err; break :blk_catch_17 bun.handleOom(oom_err); }); });
                         _ = transpiler.log.reset();
                         continue; }); });
                         if (flags.client) {
@@ -951,7 +1110,7 @@ for (cp_iter_slice(data.files.keys())) |key| {
                     if (self.enqueueEntryPointOnResolvePluginIfNeeded(abs_path, target)) {
                         continue;
                     }
-                    const resolved = (blk_catch_15: { break :blk_catch_15 ((self.transpiler.resolveEntryPoint(abs_path)) catch |__ce_15| { _ = &__ce_15; continue; }); });
+                    const resolved = (blk_catch_18: { break :blk_catch_18 ((self.transpiler.resolveEntryPoint(abs_path)) catch |__ce_18| { _ = &__ce_18; continue; }); });
                     _ = try self.enqueueEntryItem(resolved, true, target);
                 }
 },
@@ -1024,8 +1183,8 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_13 = scbs.len;
-                while (i < __end_13) : (i += 1) {
+                const __end_15 = scbs.len;
+                while (i < __end_15) : (i += 1) {
                     const use = scbs.items(.use_directive)[@as(usize, @intCast(i))];
                     const source_id = scbs.items(.source_index)[@as(usize, @intCast(i))];
                     const ssr_index = scbs.items(.ssr_source_index)[@as(usize, @intCast(i))];
@@ -1040,8 +1199,8 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
                         {
                             var j: i32 = 0;
                             _ = &j;
-                            const __end_14 = keys.len;
-                            while (j < __end_14) : (j += 1) {
+                            const __end_16 = keys.len;
+                            while (j < __end_16) : (j += 1) {
                                 const export_name_string = keys[@as(usize, @intCast(j))];
                                 var client_item = (&client_manifest_items[@as(usize, @intCast(j))]);
                                 _ = &client_item;
@@ -1070,7 +1229,7 @@ pub fn processServerComponentManifestFiles(self: *BundleV2) OOM!void {
 pub fn enqueueParseTask(self: *BundleV2, resolve_result: *const _resolver.Result, source: *const Logger.Source, loader: Loader, known_target: options.Target) OOM!Index.Int {
             const source_index = Index.init((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))));
             _ = ((self.graph.ast.append(self.allocator(), JSAst.empty)) catch unreachable);
-            _ = (blk_catch_17: { break :blk_catch_17 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_17 bun.handleOom(oom_err); }); });
+            _ = (blk_catch_20: { break :blk_catch_20 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_20 bun.handleOom(oom_err); }); });
             var task = bun.handleOom(self.allocator().create(ParseTask));
             _ = &task;
             task.* = ParseTask.init(resolve_result, source_index, self);
@@ -1097,7 +1256,7 @@ pub fn enqueueParseTask(self: *BundleV2, resolve_result: *const _resolver.Result
 pub fn enqueueParseTask2(self: *BundleV2, source: *const Logger.Source, loader: Loader, known_target: options.Target) OOM!Index.Int {
             const source_index = Index.init((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(self.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(self.graph.ast.len)) else cp_cast_int(i32, self.graph.ast.len)))));
             _ = ((self.graph.ast.append(self.allocator(), JSAst.empty)) catch unreachable);
-            _ = (blk_catch_19: { break :blk_catch_19 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_19 bun.handleOom(oom_err); }); });
+            _ = (blk_catch_22: { break :blk_catch_22 ((self.graph.input_files.append(self.allocator(), .{ .source = source.*, .loader = loader, .side_effects = loader.sideEffects() })) catch |oom_err| { _ = &oom_err; break :blk_catch_22 bun.handleOom(oom_err); }); });
             var task = bun.handleOom(self.allocator().create(ParseTask));
             _ = &task;
             task.* = .{ .ctx = self, .path = source.path, .contents_or_fd = .{ .contents = source.contents }, .side_effects = .has_side_effects, .jsx = (if (((known_target == .bake_server_components_ssr) and (!self.framework.?.server_components.?.separate_ssr_graph))) self.transpiler.options.jsx else self.transpilerForTarget(known_target).options.jsx), .source_index = source_index, .module_type = .unknown, .emit_decorator_metadata = false, .package_version = "", .loader = loader, .tree_shaking = self.linker.options.tree_shaking, .known_target = known_target };
@@ -1193,7 +1352,7 @@ pub fn generateFromCLI(transpiler: *Transpiler, alloc: std.mem.Allocator, event_
                 return .{ .output_files = std.array_list.Managed(options.OutputFile).init(alloc), .metafile = null, .metafile_markdown = null };
             }
             const output_files = try bundle.linker.generateChunksInParallel(chunks, false);
-            const metafile: ?[]const u8 = (if (bundle.linker.options.metafile) (blk_catch_20: { break :blk_catch_20 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&bundle.linker), chunks)) catch |e| { _ = &e; break :blk_catch_20 blk: {
+            const metafile: ?[]const u8 = (if (bundle.linker.options.metafile) (blk_catch_23: { break :blk_catch_23 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&bundle.linker), chunks)) catch |e| { _ = &e; break :blk_catch_23 blk: {
             _ = bun.Output.warn("Failed to generate metafile: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
@@ -1207,7 +1366,7 @@ pub fn scanModuleGraphFromCLI(transpiler: *Transpiler, alloc: std.mem.Allocator,
             if (bundle.transpiler.log.hasErrors()) {
                 return error.BuildFailed;
             }
-            _ = (blk_catch_21: { break :blk_catch_21 ((bundle.enqueueEntryPoints(.normal, entry_points)) catch |e| { _ = &e; _ = bundle.waitForParse();
+            _ = (blk_catch_24: { break :blk_catch_24 ((bundle.enqueueEntryPoints(.normal, entry_points)) catch |e| { _ = &e; _ = bundle.waitForParse();
             return e; }); });
             _ = bundle.waitForParse();
             return bundle;
@@ -1249,8 +1408,8 @@ pub fn addServerComponentBoundariesAsExtraEntryPoints(self: *BundleV2) !void {
                 {
                     var i: i32 = 0;
                     _ = &i;
-                    const __end_17 = scbs.list.len;
-                    while (i < __end_17) : (i += 1) {
+                    const __end_19 = scbs.list.len;
+                    while (i < __end_19) : (i += 1) {
                         const original_index = scbs.list.items(.source_index)[@as(usize, @intCast(i))];
                         const ssr_index = scbs.list.items(.ssr_source_index)[@as(usize, @intCast(i))];
                         _ = self.graph.entry_points.appendAssumeCapacity(Index.init(original_index));
@@ -1304,7 +1463,7 @@ pub fn processFilesToCopy(self: *BundleV2, reachable_files: []const Index) !void
 };
                         const loader = loaders[@as(usize, @intCast(index))];
                         _ = ((additional_output_files.append(options.OutputFile.init(.{ .source_index = .init(index), .data = .{ .buffer = .{ .data = source.contents, .allocator = file_allocators[@as(usize, @intCast(index))] } }, .size = source.contents.len, .output_path = output_path, .input_path = bun.handleOom(bun.default_allocator.dupe(u8, source.path.text)), .input_loader = .file, .output_kind = .asset, .loader = loader, .hash = content_hashes_for_additional_files[@as(usize, @intCast(index))], .side = .client, .entry_point_index = null, .is_executable = false }))) catch unreachable);
-                        _ = (blk_catch_23: { break :blk_catch_23 ((additional_files[@as(usize, @intCast(index))].append(self.allocator(), AdditionalFile{ .output_file = @as(u32, @truncate((additional_output_files.items.len - 1))) })) catch |oom_err| { _ = &oom_err; break :blk_catch_23 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_26: { break :blk_catch_26 ((additional_files[@as(usize, @intCast(index))].append(self.allocator(), AdditionalFile{ .output_file = @as(u32, @truncate((additional_output_files.items.len - 1))) })) catch |oom_err| { _ = &oom_err; break :blk_catch_26 bun.handleOom(oom_err); }); });
                     }
                 }
                 self.graph.additional_output_files = additional_output_files.moveToUnmanaged();
@@ -1361,7 +1520,7 @@ const source = (&bundle.graph.input_files.items(.source)[@as(usize, @intCast(loa
                 _ = bundle.graph.pool.schedule(load.parse_task);
                 return;
             }
-            _ = (blk_catch_24: { break :blk_catch_24 ((log.addErrorFmt(source, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(source.path.pretty), bun.fmt.quote(source.path.namespace) })) catch |__ce_24| { _ = &__ce_24;  }); });
+            _ = (blk_catch_27: { break :blk_catch_27 ((log.addErrorFmt(source, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(source.path.pretty), bun.fmt.quote(source.path.namespace) })) catch |__ce_27| { _ = &__ce_27;  }); });
             _ = bundle.decrementScanCounter();
 },
 .success => |code| {
@@ -1391,7 +1550,7 @@ const should_copy_for_bundling = code.loader.shouldCopyForBundling();
                 if ((!bundle.shouldAddWatcherPlugin(load.namespace, load.path))) {
                     break :add_watchers;
                 }
-                const fd = (if (bun.Watcher.requires_file_descriptors) (switch (bun.sys.open((&(blk_catch_26: { break :blk_catch_26 ((std.posix.toPosixPath(load.path)) catch |__ce_26| { _ = &__ce_26; break :add_watchers; }); })), bun.Watcher.watch_open_flags, 0)) {
+                const fd = (if (bun.Watcher.requires_file_descriptors) (switch (bun.sys.open((&(blk_catch_29: { break :blk_catch_29 ((std.posix.toPosixPath(load.path)) catch |__ce_29| { _ = &__ce_29; break :add_watchers; }); })), bun.Watcher.watch_open_flags, 0)) {
 .result => |fd| fd,
 .err => break :add_watchers,
 }) else bun.invalid_fd);
@@ -1406,7 +1565,7 @@ if (bundle.transpiler.options.dev_server) |dev| {
                 var msg_mut = msg;
                 _ = &msg_mut;
                 const temp_log: Logger.Log = .{ .clone_line_text = false, .errors = @intFromBool((msg.kind == .err)), .warnings = @intFromBool((msg.kind == .warn)), .msgs = std.array_list.Managed(Logger.Msg).fromOwnedSlice(bundle.allocator(), (&msg_mut)[0..1]) };
-                _ = (blk_catch_27: { break :blk_catch_27 ((dev.handleParseTaskFailure(error.Plugin, load.bakeGraph(), source.path.keyForIncrementalGraph(), (&temp_log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_27 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_30: { break :blk_catch_30 ((dev.handleParseTaskFailure(error.Plugin, load.bakeGraph(), source.path.keyForIncrementalGraph(), (&temp_log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_30 bun.handleOom(oom_err); }); });
             } else {
                 _ = bun.handleOom(log.msgs.append(msg));
                 log.errors = (log.errors + @intFromBool((msg.kind == .err)));
@@ -1448,11 +1607,11 @@ pub fn onResolve(resolve: *bun.jsc.API.JSBundler.Resolve, bundle: *BundleV2) voi
 if (strings.eqlComptime(resolve.import_record.namespace, "file")) {
                 if ((resolve.import_record.kind == .entry_point_build)) {
                     const target = resolve.import_record.original_target;
-                    const resolved = (blk_catch_28: { break :blk_catch_28 ((bundle.transpilerForTarget(target).resolveEntryPoint(resolve.import_record.specifier)) catch |__ce_28| { _ = &__ce_28; return; }); });
-                    const source_index = (blk_catch_29: { break :blk_catch_29 ((bundle.enqueueEntryItem(resolved, true, target)) catch |__ce_29| { _ = &__ce_29; return; }); });
+                    const resolved = (blk_catch_31: { break :blk_catch_31 ((bundle.transpilerForTarget(target).resolveEntryPoint(resolve.import_record.specifier)) catch |__ce_31| { _ = &__ce_31; return; }); });
+                    const source_index = (blk_catch_32: { break :blk_catch_32 ((bundle.enqueueEntryItem(resolved, true, target)) catch |__ce_32| { _ = &__ce_32; return; }); });
                     if (source_index) |idx| {
                         _ = &idx;
-                        _ = (blk_catch_30: { break :blk_catch_30 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_30 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_33: { break :blk_catch_33 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_33 bun.handleOom(oom_err); }); });
                     }
                     return;
                 }
@@ -1461,10 +1620,10 @@ if (strings.eqlComptime(resolve.import_record.namespace, "file")) {
             }
             const log = bundle.logForResolutionFailures(resolve.import_record.source_file, resolve.import_record.original_target.bakeGraph());
             if ((resolve.import_record.kind == .entry_point_build)) {
-                _ = (blk_catch_31: { break :blk_catch_31 ((log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_31| { _ = &__ce_31;  }); });
+                _ = (blk_catch_34: { break :blk_catch_34 ((log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_34| { _ = &__ce_34;  }); });
             } else {
                 const source = (&bundle.graph.input_files.items(.source)[@as(usize, @intCast(resolve.import_record.importer_source_index))]);
-                _ = (blk_catch_32: { break :blk_catch_32 ((log.addRangeErrorFmt(source, resolve.import_record.range, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_32| { _ = &__ce_32;  }); });
+                _ = (blk_catch_35: { break :blk_catch_35 ((log.addRangeErrorFmt(source, resolve.import_record.range, bun.default_allocator, "Module not found {f} in namespace {f}", .{ bun.fmt.quote(resolve.import_record.specifier), bun.fmt.quote(resolve.import_record.namespace) })) catch |__ce_35| { _ = &__ce_35;  }); });
             }
 },
 .success => |result| {
@@ -1478,10 +1637,10 @@ var out_source_index: ?Index = null;
                 } else {
                     path.namespace = result.namespace;
                 }
-                const existing = (blk_catch_33: { break :blk_catch_33 ((bundle.pathToSourceIndexMap(resolve.import_record.original_target).getOrPutPath(bundle.allocator(), (&path))) catch |oom_err| { _ = &oom_err; break :blk_catch_33 bun.handleOom(oom_err); }); });
+                const existing = (blk_catch_36: { break :blk_catch_36 ((bundle.pathToSourceIndexMap(resolve.import_record.original_target).getOrPutPath(bundle.allocator(), (&path))) catch |oom_err| { _ = &oom_err; break :blk_catch_36 bun.handleOom(oom_err); }); });
                 if ((!existing.found_existing)) {
                     const free_items: [2][]const u8 = .{ result.namespace, result.path };
-                    _ = (blk_catch_34: { break :blk_catch_34 ((bundle.free_list.appendSlice((&free_items))) catch |__ce_34| { _ = &__ce_34;  }); });
+                    _ = (blk_catch_37: { break :blk_catch_37 ((bundle.free_list.appendSlice((&free_items))) catch |__ce_37| { _ = &__ce_37;  }); });
                     path = bun.handleOom(bundle.pathWithPrettyInitialized(path, resolve.import_record.original_target));
                     existing.key_ptr.* = path.text;
                     const source_index = Index.init((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(bundle.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(bundle.graph.ast.len)) else cp_cast_int(i32, bundle.graph.ast.len)))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (comptime @typeInfo(@TypeOf(bundle.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(bundle.graph.ast.len)) else cp_cast_int(i32, bundle.graph.ast.len)))) else cp_cast_int(u32, (if (comptime @typeInfo(@TypeOf(bundle.graph.ast.len)) == .@"enum") cp_cast_int(i32, @intFromEnum(bundle.graph.ast.len)) else cp_cast_int(i32, bundle.graph.ast.len)))));
@@ -1520,16 +1679,16 @@ var out_source_index: ?Index = null;
             if (out_source_index) |source_index| {
                 _ = &source_index;
                 if ((resolve.import_record.kind == .entry_point_build)) {
-                    _ = (blk_catch_38: { break :blk_catch_38 ((bundle.graph.entry_points.append(bundle.allocator(), source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_38 bun.handleOom(oom_err); }); });
-                    _ = (blk_catch_39: { break :blk_catch_39 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_39 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_41: { break :blk_catch_41 ((bundle.graph.entry_points.append(bundle.allocator(), source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_41 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_42: { break :blk_catch_42 ((bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier)) catch |oom_err| { _ = &oom_err; break :blk_catch_42 bun.handleOom(oom_err); }); });
                 } else {
                     const source_import_records = (&bundle.graph.ast.items(.import_records)[@as(usize, @intCast(resolve.import_record.importer_source_index))]);
                     if ((source_import_records.len <= resolve.import_record.import_record_index)) {
-                        const entry = (blk_catch_40: { break :blk_catch_40 ((bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(bundle.allocator(), resolve.import_record.importer_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_40 bun.handleOom(oom_err); }); });
+                        const entry = (blk_catch_43: { break :blk_catch_43 ((bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(bundle.allocator(), resolve.import_record.importer_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_43 bun.handleOom(oom_err); }); });
                         if ((!entry.found_existing)) {
                             entry.value_ptr.* = .{};
                         }
-                        _ = (blk_catch_41: { break :blk_catch_41 ((entry.value_ptr.append(bundle.allocator(), .{ .to_source_index = source_index, .import_record_index = resolve.import_record.import_record_index })) catch |oom_err| { _ = &oom_err; break :blk_catch_41 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_44: { break :blk_catch_44 ((entry.value_ptr.append(bundle.allocator(), .{ .to_source_index = source_index, .import_record_index = resolve.import_record.import_record_index })) catch |oom_err| { _ = &oom_err; break :blk_catch_44 bun.handleOom(oom_err); }); });
                     } else {
                         const import_record: *ImportRecord = (&source_import_records.slice()[@as(usize, @intCast(resolve.import_record.import_record_index))]);
                         import_record.source_index = source_index;
@@ -1645,11 +1804,11 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
             }
             var output_files = try self.linker.generateChunksInParallel(chunks, false);
             _ = &output_files;
-            const metafile: ?[]const u8 = (if (self.linker.options.metafile) (blk_catch_43: { break :blk_catch_43 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&self.linker), chunks)) catch |e| { _ = &e; break :blk_catch_43 blk: {
+            const metafile: ?[]const u8 = (if (self.linker.options.metafile) (blk_catch_46: { break :blk_catch_46 ((LinkerContext.MetafileBuilder.generate(bun.default_allocator, (&self.linker), chunks)) catch |e| { _ = &e; break :blk_catch_46 blk: {
             _ = bun.Output.warn("Failed to generate metafile: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
-            const metafile_markdown: ?[]const u8 = (if (((self.linker.options.metafile_markdown_path.len > 0) and (metafile != null))) (blk_catch_44: { break :blk_catch_44 ((LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?)) catch |e| { _ = &e; break :blk_catch_44 blk: {
+            const metafile_markdown: ?[]const u8 = (if (((self.linker.options.metafile_markdown_path.len > 0) and (metafile != null))) (blk_catch_47: { break :blk_catch_47 ((LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?)) catch |e| { _ = &e; break :blk_catch_47 blk: {
             _ = bun.Output.warn("Failed to generate metafile markdown: {s}", .{ @errorName(e) });
             break :blk null;
 }; }); }) else null);
@@ -1671,7 +1830,7 @@ pub fn runFromJSInNewThread(self: *BundleV2, entry_points: []const []const u8) !
 
 pub fn writeMetafileOutput(output_files: *std.array_list.Managed(options.OutputFile), outdir: []const u8, file_path: []const u8, content: []const u8, output_kind: jsc.API.BuildArtifact.OutputKind) !void {
             if ((outdir.len > 0)) {
-                var root_dir = (blk_catch_45: { break :blk_catch_45 ((bun.FD.cwd().stdDir().makeOpenPath(outdir, .{})) catch |e| { _ = &e; _ = bun.Output.warn("Failed to open output directory '{s}': {s}", .{ outdir, @errorName(e) });
+                var root_dir = (blk_catch_48: { break :blk_catch_48 ((bun.FD.cwd().stdDir().makeOpenPath(outdir, .{})) catch |e| { _ = &e; _ = bun.Output.warn("Failed to open output directory '{s}': {s}", .{ outdir, @errorName(e) });
                 return; }); });
                 _ = &root_dir;
                 var _guard_root_dir = CloseGuard(@TypeOf(root_dir)){ .ptr = (blk: {
@@ -1684,15 +1843,15 @@ pub fn writeMetafileOutput(output_files: *std.array_list.Managed(options.OutputF
                 if (std.fs.path.dirname(file_path)) |parent| {
                     _ = &parent;
                     if ((parent.len > 0)) {
-                        _ = (blk_catch_46: { break :blk_catch_46 ((root_dir.makePath(parent)) catch |__ce_46| { _ = &__ce_46;  }); });
+                        _ = (blk_catch_49: { break :blk_catch_49 ((root_dir.makePath(parent)) catch |__ce_49| { _ = &__ce_49;  }); });
                     }
                 }
                 var path_buf: bun.PathBuffer = undefined;
                 _ = &path_buf;
-                _ = (blk_catch_47: { break :blk_catch_47 ((jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
+                _ = (blk_catch_50: { break :blk_catch_50 ((jsc.Node.fs.NodeFS.writeFileWithPathBuffer((&path_buf), .{ .data = .{ .buffer = .{ .buffer = .{ .ptr = (blk: {
                 break :blk @constCast(content.ptr);
 
-}), .len = @as(u32, @truncate(content.len)), .byte_len = @as(u32, @truncate(content.len)) } } }, .encoding = .buffer, .mode = 420, .dirfd = bun.FD.fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(file_path) } } }).unwrap()) catch |e| { _ = &e; break :blk_catch_47 bun.Output.warn("Failed to write metafile to '{s}': {s}", .{ file_path, @errorName(e) }); }); });
+}), .len = @as(u32, @truncate(content.len)), .byte_len = @as(u32, @truncate(content.len)) } } }, .encoding = .buffer, .mode = 420, .dirfd = bun.FD.fromStdDir(root_dir), .file = .{ .path = .{ .string = bun.PathString.init(file_path) } } }).unwrap()) catch |e| { _ = &e; break :blk_catch_50 bun.Output.warn("Failed to write metafile to '{s}': {s}", .{ file_path, @errorName(e) }); }); });
             }
             const is_json = (output_kind == .@"metafile-json");
             _ = try output_files.append(options.OutputFile.init(.{ .loader = (if (is_json) .json else .file), .input_loader = (if (is_json) .json else .file), .input_path = bun.handleOom(bun.default_allocator.dupe(u8, (if (is_json) "metafile.json" else "metafile.md"))), .output_path = bun.handleOom(bun.default_allocator.dupe(u8, file_path)), .data = .{ .saved = content.len }, .output_kind = output_kind, .is_executable = false, .side = null, .entry_point_index = null }));
@@ -1835,8 +1994,8 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             {
                 var idx: i32 = 0;
                 _ = &idx;
-                const __end_26 = js_reachable_files.len;
-                while (idx < __end_26) : (idx += 1) {
+                const __end_28 = js_reachable_files.len;
+                while (idx < __end_28) : (idx += 1) {
                     const source_index = js_reachable_files[@as(usize, @intCast(idx))];
                     js_part_ranges[cp_cast_int(usize, idx)] = .{ .source_index = source_index, .part_index_begin = 0, .part_index_end = parts[@as(usize, @intCast(source_index.get()))].len };
                 }
@@ -1911,12 +2070,12 @@ pub fn enqueueOnLoadPluginIfNeeded(self: *BundleV2, parse: *ParseTask) bool {
                 return true;
             }
             if (bun.strings.eqlComptime(parse.path.namespace, "dataurl")) {
-                const maybe_data_url = (blk_catch_50: { break :blk_catch_50 ((DataURL.parse(parse.path.text)) catch |__ce_50| { _ = &__ce_50; return false; }); });
+                const maybe_data_url = (blk_catch_53: { break :blk_catch_53 ((DataURL.parse(parse.path.text)) catch |__ce_53| { _ = &__ce_53; return false; }); });
                 if ((maybe_data_url == null)) {
                     return false;
                 }
                 const data_url = maybe_data_url.?;
-                const maybe_decoded = (blk_catch_51: { break :blk_catch_51 ((data_url.decodeData(bun.default_allocator)) catch |__ce_51| { _ = &__ce_51; return false; }); });
+                const maybe_decoded = (blk_catch_54: { break :blk_catch_54 ((data_url.decodeData(bun.default_allocator)) catch |__ce_54| { _ = &__ce_54; return false; }); });
                 _ = bun.handleOom(self.free_list.append(maybe_decoded));
                 parse.contents_or_fd = .{ .contents = maybe_decoded };
                 parse.loader = (switch (data_url.decodeMimeType().category) {
@@ -2088,12 +2247,12 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &target;
                 if ((import_record.tag == .bake_resolve_to_ssr_graph)) {
                     if ((self.framework == null)) {
-                        _ = (blk_catch_52: { break :blk_catch_52 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_52| { _ = &__ce_52; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_55: { break :blk_catch_55 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "The 'bunBakeGraph' import attribute cannot be used outside of a Bun Bake bundle", .{})) catch |__ce_55| { _ = &__ce_55; @panic("unexpected log error"); }); });
                         continue;
                     }
                     const is_supported = ((self.framework.?.server_components != null) and self.framework.?.server_components.?.separate_ssr_graph);
                     if ((!is_supported)) {
-                        _ = (blk_catch_53: { break :blk_catch_53 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_53| { _ = &__ce_53; @panic("unexpected log error"); }); });
+                        _ = (blk_catch_56: { break :blk_catch_56 ((self.logForResolutionFailures(source.path.text, .ssr).addErrorFmt(source, import_record.range.loc, self.allocator(), "Framework does not have a separate SSR graph to put this import into", .{})) catch |__ce_56| { _ = &__ce_56; @panic("unexpected log error"); }); });
                         continue;
                     }
                     transpiler = (blk: {
@@ -2125,7 +2284,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             import_record.source_index = .init(id);
                             continue;
                         }
-                        const resolve_entry = (blk_catch_54: { break :blk_catch_54 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_54 bun.handleOom(oom_err); }); });
+                        const resolve_entry = (blk_catch_57: { break :blk_catch_57 ((resolve_queue.getOrPut(path_primary.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_57 bun.handleOom(oom_err); }); });
                         if (resolve_entry.found_existing) {
                             import_record.path = resolve_entry.value_ptr.*.path;
                             continue;
@@ -2159,7 +2318,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 _ = &resolve_result;
                 const dummy_resolve_result: _resolver.Result = undefined;
                 inner: while (true) {
-                    resolve_result = (blk_catch_55: { break :blk_catch_55 ((transpiler.resolver.resolveWithFramework(source_dir, import_record.path.text, import_record.kind)) catch |e| { _ = &e; break :blk_catch_55 blk_res: {
+                    resolve_result = (blk_catch_58: { break :blk_catch_58 ((transpiler.resolver.resolveWithFramework(source_dir, import_record.path.text, import_record.kind)) catch |e| { _ = &e; break :blk_catch_58 blk_res: {
                     const log = self.logForResolutionFailures(source.path.text, bake_graph);
                     if ((e == error.ModuleNotFound)) {
                         if ((self.bun_watcher != null)) {
@@ -2172,25 +2331,25 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             }
                             if (self.transpiler.options.dev_server) |dev| {
                                 _ = &dev;
-                                _ = (blk_catch_56: { break :blk_catch_56 ((dev.directory_watchers.trackResolutionFailure(source.path.text, import_record.path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_56 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_59: { break :blk_catch_59 ((dev.directory_watchers.trackResolutionFailure(source.path.text, import_record.path.text, ctx.target.bakeGraph(), loader)) catch |oom_err| { _ = &oom_err; break :blk_catch_59 bun.handleOom(oom_err); }); });
                             }
                         }
                     }
                     import_record.path.is_disabled = true;
-                    __sw_blk_28: { const __disc_28 = e; _ = &__disc_28; if ((!cp_has_ok_val(__disc_28) and !cp_is_null_val(__disc_28))) { const __err_v_28 = cp_unwrap_err_val(__disc_28); _ = &__err_v_28; if (cp_match_tag(__err_v_28, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
+                    __sw_blk_30: { const __disc_30 = e; _ = &__disc_30; if ((!cp_has_ok_val(__disc_30) and !cp_is_null_val(__disc_30))) { const __err_v_30 = cp_unwrap_err_val(__disc_30); _ = &__err_v_30; if (cp_match_tag(__err_v_30, .ModuleNotFound)) {  const addError = Logger.Log.addResolveErrorWithTextDupe;
                     if (((!import_record.flags.handles_import_errors) and (!self.transpiler.options.ignore_module_resolution_errors))) {
                         last_error = e;
                         if (isPackagePath(import_record.path.text)) {
                             if (((ctx.target == .browser) and options.ExternalModules.isNodeBuiltin(import_record.path.text))) {
-                                _ = (blk_catch_57: { break :blk_catch_57 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_57 bun.handleOom(oom_err); }); });
+                                _ = (blk_catch_60: { break :blk_catch_60 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Node.js builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". To use Node.js builtins, set target to 'node' or 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
                             } else {
                                 if (((!ctx.target.isBun()) and strings.eqlComptime(import_record.path.text, "bun"))) {
-                                    _ = (blk_catch_58: { break :blk_catch_58 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_58 bun.handleOom(oom_err); }); });
+                                    _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
                                 } else {
                                     if (((!ctx.target.isBun()) and strings.hasPrefixComptime(import_record.path.text, "bun:"))) {
-                                        _ = (blk_catch_59: { break :blk_catch_59 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_59 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_62: { break :blk_catch_62 ((addError(log, source, import_record.range, self.allocator(), "Browser build cannot {s} Bun builtin: \"{s}\"{s}", .{ import_record.kind.errorLabel(), import_record.path.text, (if ((self.transpiler.options.dev_server == null)) ". When bundling for Bun, set target to 'bun'" else "") }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
                                     } else {
-                                        _ = (blk_catch_60: { break :blk_catch_60 ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ import_record.path.text }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_60 bun.handleOom(oom_err); }); });
+                                        _ = (blk_catch_63: { break :blk_catch_63 ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?", .{ import_record.path.text }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
                                     }
                                 }
                             }
@@ -2207,9 +2366,9 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             }
                             break :brk specifier_to_use;
 } else import_record.path.text);
-                            _ = (blk_catch_61: { break :blk_catch_61 ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_61 bun.handleOom(oom_err); }); });
+                            _ = (blk_catch_64: { break :blk_catch_64 ((addError(log, source, import_record.range, self.allocator(), "Could not resolve: \"{s}\"", .{ specifier_to_use }, import_record.kind)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
                         }
-                    } break :__sw_blk_28; } } {  last_error = e; break :__sw_blk_28; }  }
+                    } break :__sw_blk_30; } } {  last_error = e; break :__sw_blk_30; }  }
                     had_resolve_error = true;
                     break :blk_res dummy_resolve_result;
 }; }); });
@@ -2239,7 +2398,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                     _ = brk: {
                     if (((path.loader((&self.transpiler.options.loaders)) == .html) and ((import_record.loader == null) or (import_record.loader.? == .html)))) {
                         const log = self.logForResolutionFailures(source.path.text, bake_graph);
-                        _ = (blk_catch_62: { break :blk_catch_62 ((log.addRangeErrorFmt(source, import_record.range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_62 bun.handleOom(oom_err); }); });
+                        _ = (blk_catch_65: { break :blk_catch_65 ((log.addRangeErrorFmt(source, import_record.range, self.allocator(), "Browser builds cannot import HTML files.", .{})) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
                         continue;
                     }
                     if ((loader == .css)) {
@@ -2253,7 +2412,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                             const hash = ((dev_server.assets.getHash(path.text)) orelse (@panic("cached asset not found")));
                             import_record.path.text = path.text;
                             import_record.path.namespace = "file";
-                            import_record.path.pretty = (blk_catch_63: { break :blk_catch_63 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_63 bun.handleOom(oom_err); }); });
+                            import_record.path.pretty = (blk_catch_66: { break :blk_catch_66 ((std.fmt.allocPrint(self.allocator(), (bun.bake.DevServer.asset_prefix ++ "/{s}{s}"), .{ (&std.fmt.bytesToHex(std.mem.asBytes((&hash)), .lower)), std.fs.path.extension(path.text) })) catch |oom_err| { _ = &oom_err; break :blk_catch_66 bun.handleOom(oom_err); }); });
                             import_record.path.is_disabled = false;
                         } else {
                             import_record.path.text = path.text;
@@ -2288,7 +2447,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 if (is_html_entrypoint) {
                     import_record.kind = .html_manifest;
                 }
-                const resolve_entry = (blk_catch_64: { break :blk_catch_64 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_64 bun.handleOom(oom_err); }); });
+                const resolve_entry = (blk_catch_67: { break :blk_catch_67 ((resolve_queue.getOrPut(path.text)) catch |oom_err| { _ = &oom_err; break :blk_catch_67 bun.handleOom(oom_err); }); });
                 if (resolve_entry.found_existing) {
                     import_record.path = resolve_entry.value_ptr.*.path;
                     continue;
@@ -2312,7 +2471,7 @@ const src = (if (is_server) bake.server_virtual_source else bake.client_virtual_
                 if ((resolve_result.path_pair.secondary != null)) {
                     const secondary = (&resolve_result.path_pair.secondary.?);
                     if ((((!secondary.is_disabled) and (secondary != path)) and (!strings.eqlLong(secondary.text, path.text, true)))) {
-                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_65: { break :blk_catch_65 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_65 bun.handleOom(oom_err); }); });
+                        resolve_task.secondary_path_for_commonjs_interop = (blk_catch_68: { break :blk_catch_68 ((secondary.dupeAlloc(self.allocator())) catch |oom_err| { _ = &oom_err; break :blk_catch_68 bun.handleOom(oom_err); }); });
                     }
                 }
                 if (is_html_entrypoint) {
@@ -2413,8 +2572,8 @@ pub fn patchImportRecordSourceIndices(self: *BundleV2, import_records: *ImportRe
             {
                 var i: i32 = 0;
                 _ = &i;
-                const __end_30 = records_slice.len;
-                while (i < __end_30) : (i += 1) {
+                const __end_32 = records_slice.len;
+                while (i < __end_32) : (i += 1) {
                     var record = (&records_slice[@as(usize, @intCast(i))]);
                     _ = &record;
                     if (path_to_source_index_map.getPath((&record.path))) |source_index| {
@@ -2564,7 +2723,7 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
             if (((result.unique_key_for_additional_file.len > 0) and result.loader.shouldCopyForBundling())) {
                 if (bundle.transpiler.options.dev_server) |dev| {
                     _ = &dev;
-                    _ = (blk_catch_73: { break :blk_catch_73 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_73 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_76: { break :blk_catch_76 ((dev.putOrOverwriteAsset((&result.source.path), (&.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents))), result.content_hash_for_additional_file)) catch |oom_err| { _ = &oom_err; break :blk_catch_76 bun.handleOom(oom_err); }); });
                 }
             }
             graph.input_files.items(.loader)[cp_cast_int(usize, result.source.index.get())] = result.loader;
@@ -2610,20 +2769,20 @@ _ = ((result.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreach
                 var ssr_index: Index.Int = undefined;
                 _ = &ssr_index;
                 if (bundle.framework.?.server_components.?.separate_ssr_graph) {
-                    reference_source_index = (blk_catch_75: { break :blk_catch_75 ((bundle.enqueueServerComponentGeneratedFile(.{ .client_reference_proxy = .{ .other_source = result.source, .named_exports = result.ast.named_exports } }, result.source)) catch |oom_err| { _ = &oom_err; break :blk_catch_75 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    reference_source_index = (blk_catch_78: { break :blk_catch_78 ((bundle.enqueueServerComponentGeneratedFile(.{ .client_reference_proxy = .{ .other_source = result.source, .named_exports = result.ast.named_exports } }, result.source)) catch |oom_err| { _ = &oom_err; break :blk_catch_78 @as(Index.Int, bun.handleOom(oom_err)); }); });
                     const ssr_source = (&result.source);
                     ssr_source.path.pretty = ssr_source.path.text;
                     ssr_source.path = bun.handleOom(bundle.pathWithPrettyInitialized(ssr_source.path, .bake_server_components_ssr));
-                    ssr_index = (blk_catch_76: { break :blk_catch_76 ((bundle.enqueueParseTask2(ssr_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .bake_server_components_ssr)) catch |oom_err| { _ = &oom_err; break :blk_catch_76 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    ssr_index = (blk_catch_79: { break :blk_catch_79 ((bundle.enqueueParseTask2(ssr_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .bake_server_components_ssr)) catch |oom_err| { _ = &oom_err; break :blk_catch_79 @as(Index.Int, bun.handleOom(oom_err)); }); });
                 } else {
                     const server_source = (&result.source);
                     server_source.path.pretty = server_source.path.text;
                     server_source.path = bun.handleOom(bundle.pathWithPrettyInitialized(server_source.path, bundle.transpiler.options.target));
-                    reference_source_index = (blk_catch_77: { break :blk_catch_77 ((bundle.enqueueParseTask2(server_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .browser)) catch |oom_err| { _ = &oom_err; break :blk_catch_77 @as(Index.Int, bun.handleOom(oom_err)); }); });
+                    reference_source_index = (blk_catch_80: { break :blk_catch_80 ((bundle.enqueueParseTask2(server_source, graph.input_files.items(.loader)[@as(usize, @intCast(result.source.index.get()))], .browser)) catch |oom_err| { _ = &oom_err; break :blk_catch_80 @as(Index.Int, bun.handleOom(oom_err)); }); });
                     ssr_index = Index.invalid.get();
                 }
-                _ = (blk_catch_78: { break :blk_catch_78 ((graph.pathToSourceIndexMap(result.ast.target).put(bundle.allocator(), result.source.path.text, reference_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_78 bun.handleOom(oom_err); }); });
-                _ = (blk_catch_79: { break :blk_catch_79 ((graph.server_component_boundaries.put(bundle.allocator(), result.source.index.get(), result.use_directive, reference_source_index, ssr_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_79 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_81: { break :blk_catch_81 ((graph.pathToSourceIndexMap(result.ast.target).put(bundle.allocator(), result.source.path.text, reference_source_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_81 bun.handleOom(oom_err); }); });
+                _ = (blk_catch_82: { break :blk_catch_82 ((graph.server_component_boundaries.put(bundle.allocator(), result.source.index.get(), result.use_directive, reference_source_index, ssr_index)) catch |oom_err| { _ = &oom_err; break :blk_catch_82 bun.handleOom(oom_err); }); });
             }
 },
 .err => |*e| {
@@ -2633,7 +2792,7 @@ if (comptime Environment.enable_logs) {
             if (process_log) {
                 if (bundle.transpiler.options.dev_server) |dev_server| {
                     _ = &dev_server;
-                    _ = (blk_catch_80: { break :blk_catch_80 ((dev_server.handleParseTaskFailure(e.err, e.target.bakeGraph(), graph.input_files.items(.source)[@as(usize, @intCast(e.source_index.get()))].path.text, (&e.log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_80 bun.handleOom(oom_err); }); });
+                    _ = (blk_catch_83: { break :blk_catch_83 ((dev_server.handleParseTaskFailure(e.err, e.target.bakeGraph(), graph.input_files.items(.source)[@as(usize, @intCast(e.source_index.get()))].path.text, (&e.log), bundle)) catch |oom_err| { _ = &oom_err; break :blk_catch_83 bun.handleOom(oom_err); }); });
                 } else {
                     if ((e.log.msgs.items.len > 0)) {
                         _ = ((e.log.cloneToWithRecycled(bundle.transpiler.log, true)) catch unreachable);
@@ -2657,170 +2816,19 @@ pub fn bustDirCache(vm: *BundleV2, path: []const u8) bool {
             return vm.transpiler.resolver.bustDirCache(path);
     }
     pub const BakeOptions = BundleBakeOptions;
-    const ReachableFileVisitor = struct {
-        reachable: std.array_list.Managed(Index),
-        visited: bun.bit_set.DynamicBitSet,
-        all_import_records: []ImportRecord.List,
-        all_loaders: []const Loader,
-        all_urls_for_css: []const []const u8,
-        redirects: []u32,
-        redirect_map: PathToSourceIndexMap,
-        dynamic_import_entry_points: *std.AutoArrayHashMap(Index.Int, void),
-        scb_bitset: ?bun.bit_set.DynamicBitSetUnmanaged,
-        scb_list: ServerComponentBoundary.List.Slice,
-        additional_files_imported_by_js_and_inlined_in_css: *bun.bit_set.DynamicBitSetUnmanaged,
-        additional_files_imported_by_css_and_inlined: *bun.bit_set.DynamicBitSetUnmanaged,
-    
-    pub fn visit(v: *@This(), source_index: Index, was_dynamic_import: bool, comptime check_dynamic_imports: bool) void {
-                if (source_index.isInvalid()) {
-                    return;
-                }
-                if (v.visited.isSet(source_index.get())) {
-                    if (comptime check_dynamic_imports) {
-                        if (was_dynamic_import) {
-                            _ = ((v.dynamic_import_entry_points.put(source_index.get(), undefined)) catch unreachable);
-                        }
-                    }
-                    return;
-                }
-                _ = v.visited.set(source_index.get());
-                if (v.scb_bitset) |scb_bitset| {
-                    _ = &scb_bitset;
-                    if (scb_bitset.isSet(source_index.get())) {
-                        const scb_index = (v.scb_list.getIndex(source_index.get())).?;
-                        _ = v.visit(Index.init(v.scb_list.list.items(.reference_source_index)[@as(usize, @intCast(scb_index))]), false, check_dynamic_imports);
-                        _ = v.visit(Index.init(v.scb_list.list.items(.ssr_source_index)[@as(usize, @intCast(scb_index))]), false, check_dynamic_imports);
-                    }
-                }
-                const is_js = v.all_loaders[@as(usize, @intCast(source_index.get()))].isJavaScriptLike();
-                const is_css = v.all_loaders[@as(usize, @intCast(source_index.get()))].isCSS();
-                const import_record_list_id = source_index;
-                if ((import_record_list_id.get() < v.all_import_records.len)) {
-                    const import_records = v.all_import_records[@as(usize, @intCast(import_record_list_id.get()))].slice();
-                    for (cp_mut_slice(&import_records)) |*import_record| {
-                        _ = &import_record;
-                        var other_source = (import_record.*).source_index;
-                        _ = &other_source;
-                        if (other_source.isValid()) {
-                            var redirect_count: usize = 0;
-                            _ = &redirect_count;
-                            while (getRedirectId(v.redirects[@as(usize, @intCast(other_source.get()))])) |redirect_id| : (redirect_count = (redirect_count + 1)) {
-                                var other_import_records = v.all_import_records[@as(usize, @intCast(other_source.get()))].slice();
-                                _ = &other_import_records;
-                                const other_import_record = (&other_import_records[@as(usize, @intCast(redirect_id))]);
-                                (import_record.*).source_index = other_import_record.source_index;
-                                (import_record.*).path = other_import_record.path;
-                                other_source = other_import_record.source_index;
-                                if ((redirect_count == MAX_REDIRECTS)) {
-                                    (import_record.*).path.is_disabled = true;
-                                    (import_record.*).source_index = Index.invalid;
-                                    break;
-                                }
-                                if ((!other_source.isValid())) {
-                                    break;
-                                }
-                            }
-                            const is_inlined = ((import_record.*).source_index.isValid() and (v.all_urls_for_css[@as(usize, @intCast((import_record.*).source_index.get()))].len > 0));
-                            if ((is_js and is_inlined)) {
-                                _ = v.additional_files_imported_by_js_and_inlined_in_css.set((import_record.*).source_index.get());
-                            } else {
-                                if ((is_css and is_inlined)) {
-                                    _ = v.additional_files_imported_by_css_and_inlined.set((import_record.*).source_index.get());
-                                }
-                            }
-                            _ = v.visit((import_record.*).source_index, (check_dynamic_imports and ((import_record.*).kind == .dynamic)), check_dynamic_imports);
-                        }
-                    }
-                    if (getRedirectId(v.redirects[@as(usize, @intCast(source_index.get()))])) |redirect_id| {
-                        _ = &redirect_id;
-                        const redirect_source_index = v.all_import_records[@as(usize, @intCast(source_index.get()))].slice()[@as(usize, @intCast(redirect_id))].source_index.get();
-                        _ = v.visit(Index.source(redirect_source_index), was_dynamic_import, check_dynamic_imports);
-                        return;
-                    }
-                }
-                _ = ((v.reachable.append(source_index)) catch unreachable);
-                if (comptime check_dynamic_imports) {
-                    if (was_dynamic_import) {
-                        _ = ((v.dynamic_import_entry_points.put(source_index.get(), undefined)) catch unreachable);
-                    }
-                }
-        }
-        const MAX_REDIRECTS: usize = 64;
-    };
     const logScanCounter = bun.Output.scoped(.scan_counter, .visible);
-    pub const DependenciesScanner = struct {
-        ctx: *anyopaque,
-        entry_points: []const []const u8,
-        onFetch: *const fn (*anyopaque, *DependenciesScanner.Result) anyerror!void,
-        pub const Result = struct {
-            dependencies: bun.StringSet,
-            reachable_files: []const Index,
-            bundle_v2: *BundleV2,
-        };
-    };
+    pub const DependenciesScanner = DependenciesScanner_;
     pub const JSBundleThread = @import("../bundler_jsc/JSBundleCompletionTask.zig").JSBundleThread;
     pub const createAndScheduleCompletionTask = @import("../bundler_jsc/JSBundleCompletionTask.zig").createAndScheduleCompletionTask;
     pub const generateFromJavaScript = @import("../bundler_jsc/JSBundleCompletionTask.zig").generateFromJavaScript;
-    pub const BuildResult = struct {
-        output_files: std.array_list.Managed(options.OutputFile),
-        metafile: ?[]const u8 = null,
-        metafile_markdown: ?[]const u8 = null,
-    
-    pub fn deinit(self: *@This()) void {
-                for (self.output_files.items) |*output_file| {
-                    _ = &output_file;
-                    _ = (output_file.*).deinit();
-                }
-                _ = self.output_files.clearAndFree();
-                if (self.metafile) |mf| {
-                    _ = &mf;
-                    _ = bun.default_allocator.free(mf);
-                    self.metafile = null;
-                }
-                if (self.metafile_markdown) |md| {
-                    _ = &md;
-                    _ = bun.default_allocator.free(md);
-                    self.metafile_markdown = null;
-                }
-        }
-    };
-    pub const Result = union(enum) {
-        pending: void,
-        @"err": anyerror,
-        value: BuildResult,
-    
-    pub fn deinit(self: *@This()) void {
-                switch (self.*) {
-    .value => |*value| {
-    _ = value.deinit();
-    },
-    else => {
-    
-    },
-    }
-        }
-    };
+    pub const BuildResult = BuildResult_;
+    pub const Result = BundleResult_;
     pub const JSBundleCompletionTask = @import("../bundler_jsc/JSBundleCompletionTask.zig").JSBundleCompletionTask;
     const applyBarrelOptimization = barrel_imports.applyBarrelOptimization;
     const scheduleBarrelDeferredImports = barrel_imports.scheduleBarrelDeferredImports;
-    pub const ResolveImportRecordCtx = struct {
-        import_records: *ImportRecord.List,
-        source: *const Logger.Source,
-        loader: Loader,
-        target: options.Target,
-    };
-    pub const ResolveImportRecordResult = struct {
-        resolve_queue: ResolveQueue,
-        last_error: ?anyerror,
-    };
-    pub const PatchImportRecordsCtx = struct {
-        source_index: Index,
-        source_path: []const u8,
-        loader: Loader,
-        target: options.Target,
-        redirect_import_record_index: u32 = std.math.maxInt(u32),
-        force_save: bool = false,
-    };
+    pub const ResolveImportRecordCtx = ResolveImportRecordCtx_;
+    pub const ResolveImportRecordResult = ResolveImportRecordResult_;
+    pub const PatchImportRecordsCtx = PatchImportRecordsCtx_;
     const ResolveQueue = bun.StringHashMap(*ParseTask);
 };
 
@@ -2834,6 +2842,16 @@ pub const ExportData = struct {
     data: ImportTracker = .{},
 };
 
+pub const JSMetaFlags_ = packed struct(u8) {
+    is_async_or_has_async_dependency: bool = false,
+    needs_exports_variable: bool = false,
+    force_include_exports_for_entry_point: bool = false,
+    needs_export_symbol_from_runtime: bool = false,
+    did_wrap_dependencies: bool = false,
+    needs_synthetic_default_export: bool = false,
+    wrap: WrapKind = WrapKind.none,
+};
+
 pub const JSMeta = struct {
     probably_typescript_type: RefVoidMap = .{},
     imports_to_bind: RefImportData = .{},
@@ -2845,42 +2863,12 @@ pub const JSMeta = struct {
     wrapper_part_index: Index = Index.invalid,
     entry_point_part_index: Index = Index.invalid,
     flags: Flags = .{},
-    pub const Flags = packed struct(u8) {
-            /// This is true if this file is affected by top-level await, either by having
-            /// a top-level await inside this file or by having an import/export statement
-            /// that transitively imports such a file. It is forbidden to call "require()"
-            /// on these files since they are evaluated asynchronously.
-            is_async_or_has_async_dependency: bool = false,
-    
-            /// If true, we need to insert "var exports = {};". This is the case for ESM
-            /// files when the import namespace is captured via "import * as" and also
-            /// when they are the target of a "require()" call.
-            needs_exports_variable: bool = false,
-    
-            /// If true, the "__export(exports, { ... })" call will be force-included even
-            /// if there are no parts that reference "exports". Otherwise this call will
-            /// be removed due to the tree shaking pass. This is used when for entry point
-            /// files when code related to the current output format needs to reference
-            /// the "exports" variable.
-            force_include_exports_for_entry_point: bool = false,
-    
-            /// This is set when we need to pull in the "__export" symbol in to the part
-            /// at "nsExportPartIndex". This can't be done in "createExportsForFile"
-            /// because of concurrent map hazards. Instead, it must be done later.
-            needs_export_symbol_from_runtime: bool = false,
-    
-            /// Wrapped files must also ensure that their dependencies are wrapped. This
-            /// flag is used during the traversal that enforces this invariant, and is used
-            /// to detect when the fixed point has been reached.
-            did_wrap_dependencies: bool = false,
-    
-            /// When a converted CommonJS module is import() dynamically
-            /// We need ensure that the "default" export is set to the equivalent of module.exports
-            /// (unless a "default" export already exists)
-            needs_synthetic_default_export: bool = false,
-    
-            wrap: WrapKind = WrapKind.none,
-        };
+    pub const Flags = JSMetaFlags_;
+};
+
+pub const AdditionalFile = union(enum) {
+    source_index: Index.Int,
+    output_file: Index.Int,
 };
 
 pub const EntryPoint = struct {
@@ -2970,16 +2958,28 @@ pub const ImportTracker = struct {
             /// This is a missing re-export in a TypeScript file, so it's probably a type
             probably_typescript_type,
         };
-    pub const Iterator = struct {
-        status: Status = Status.no_match,
-        value: ImportTracker = .{},
-        import_data: []ImportData = &.{},
-    };
+    pub const Iterator = ImportTrackerIterator_;
+};
+
+pub const ImportTrackerIterator_ = struct {
+    status: ImportTracker.Status = ImportTracker.Status.no_match,
+    value: ImportTracker = .{},
+    import_data: []ImportData = &.{},
+};
+
+pub const CrossChunkImportItem_ = struct {
+    export_alias: []const u8 = "",
+    ref: Ref = Ref.None,
+
+pub fn lessThan(_: void, a: CrossChunkImportItem_, b: CrossChunkImportItem_) bool {
+            return (strings.order(a.export_alias, b.export_alias) == .lt);
+    }
+    pub const List = bun.BabyList(CrossChunkImportItem_);
 };
 
 pub const CrossChunkImport = struct {
     chunk_index: Index.Int = 0,
-    sorted_import_items: CrossChunkImport.Item.List = undefined,
+    sorted_import_items: CrossChunkImportItem_.List = undefined,
 
 pub fn lessThan(_: void, a: CrossChunkImport, b: CrossChunkImport) bool {
             return (std.math.order(a.chunk_index, b.chunk_index) == .lt);
@@ -3015,15 +3015,7 @@ pub fn sortedCrossChunkImports(list: *List, chunks: []Chunk, imports_from_other_
             const sort_ctx: void = undefined;
             _ = std.sort.pdq(CrossChunkImport, result.items, sort_ctx, CrossChunkImport.lessThan);
     }
-    pub const Item = struct {
-        export_alias: []const u8 = "",
-        ref: Ref = Ref.None,
-    
-    pub fn lessThan(_: void, a: CrossChunkImport.Item, b: CrossChunkImport.Item) bool {
-                return (strings.order(a.export_alias, b.export_alias) == .lt);
-        }
-        pub const List = bun.BabyList(Item);
-    };
+    pub const Item = CrossChunkImportItem_;
     pub const List = std.array_list.Managed(CrossChunkImport);
 };
 
@@ -3056,6 +3048,44 @@ pub const HtmlCompileResult = struct {
     source_index: Index.Int,
     code: []const u8,
     script_injection_offset: u32,
+};
+
+pub const CompileResult = union(enum) {
+    javascript: JavaScriptCompileResult,
+    css: CssCompileResult,
+    html: HtmlCompileResult,
+
+pub fn code(self: *const CompileResult) []const u8 {
+            return (switch (self.*) {
+.javascript => |r| r.code(),
+.css => |c| (switch (c.result) {
+.result => |v| v,
+.err => "",
+}),
+.html => |c| c.code,
+});
+    }
+
+pub fn sourceMapChunk(self: CompileResult) ?SourceMap.Chunk {
+            return (switch (self) {
+.javascript => |r| (switch (r.result) {
+.result => |r2| r2.source_map,
+else => null,
+}),
+.css => |c| c.source_map,
+.html => null,
+});
+    }
+
+pub fn sourceIndex(self: CompileResult) Index.Int {
+            return (switch (self) {
+.javascript => |r| r.source_index,
+.css => |c| c.source_index,
+.html => |h| h.source_index,
+});
+    }
+    pub const DeclInfo = CompileResultDeclInfo;
+    pub const empty = _empty_compile_result;
 };
 
 pub const CompileResultForSourceMap = struct {
@@ -3160,48 +3190,10 @@ pub const WrapKind = enum(u2) {
     cjs,
     esm,
 };
-pub const AdditionalFile = union(enum) {
-    source_index: Index.Int,
-    output_file: Index.Int,
-};
 pub const PathTemplate = options.PathTemplate;
 pub const Chunk = @import("./Chunk.zig").Chunk;
 pub const ChunkImport = @import("./Chunk.zig").ChunkImport;
-pub const CompileResult = union(enum) {
-    javascript: JavaScriptCompileResult,
-    css: CssCompileResult,
-    html: HtmlCompileResult,
-
-pub fn code(self: *const @This()) []const u8 {
-            return (switch (self.*) {
-.javascript => |r| r.code(),
-.css => |*c| (switch (c.result) {
-.result => |v| v,
-.err => "",
-}),
-.html => |*c| c.code,
-});
-    }
-
-pub fn sourceMapChunk(self: @This()) ?SourceMap.Chunk {
-            return (switch (self) {
-.javascript => |r| (switch (r.result) {
-.result => |r2| r2.source_map,
-else => null,
-}),
-.css => |*c| c.source_map,
-.html => null,
-});
-    }
-
-pub fn sourceIndex(self: @This()) Index.Int {
-            return (switch (self) {
-inline else => |*r| r.source_index,
-});
-    }
-    pub const DeclInfo = CompileResultDeclInfo;
-    pub const empty = CompileResult{ .javascript = .{ .source_index = 0, .result = js_printer.PrintResult{ .result = .{ .code = "" } } } };
-};
+const _empty_compile_result = CompileResult{ .javascript = JavaScriptCompileResult{ .source_index = 0, .result = js_printer.PrintResult{ .result = .{ .code = "" } } } };
 pub const AstBuilder = @import("./AstBuilder.zig").AstBuilder;
 pub const ExternalFreeCallback = @typeInfo(@FieldType(CacheEntry.ExternalFreeFunction, "function")).optional.child;
 pub const Part = js_ast.Part;
@@ -3283,7 +3275,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             var path_clone = path;
             _ = &path_clone;
             if ((target == .bake_server_components_ssr)) {
-                path_clone.pretty = (blk_catch_84: { break :blk_catch_84 ((std.fmt.bufPrint(buf, "ssr:{s}", .{ rel })) catch |__ce_84| { _ = &__ce_84; break :blk_catch_84 buf[0..]; }); });
+                path_clone.pretty = (blk_catch_87: { break :blk_catch_87 ((std.fmt.bufPrint(buf, "ssr:{s}", .{ rel })) catch |__ce_87| { _ = &__ce_87; break :blk_catch_87 buf[0..]; }); });
             } else {
                 path_clone.pretty = rel;
             }
@@ -3293,7 +3285,7 @@ pub fn genericPathWithPrettyInitialized(path: Fs.Path, target: options.Target, t
             _ = &path_clone;
             const NamespaceAlt = std.fmt.Alt(string, fmtEscapedNamespace);
             _ = &NamespaceAlt;
-            path_clone.pretty = (blk_catch_85: { break :blk_catch_85 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_85| { _ = &__ce_85; break :blk_catch_85 buf[0..]; }); });
+            path_clone.pretty = (blk_catch_88: { break :blk_catch_88 ((std.fmt.bufPrint(buf, "{s}{f}:{s}", .{ (if ((target == .bake_server_components_ssr)) "ssr:" else ""), NamespaceAlt{ .data = path.namespace }, path.text })) catch |__ce_88| { _ = &__ce_88; break :blk_catch_88 buf[0..]; }); });
             return path_clone.dupeAllocFixPretty(allocator);
         }
 }

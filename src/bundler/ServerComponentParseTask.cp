@@ -29,21 +29,24 @@ const bundler = bun.bundle_v2;
 const AstBuilder = bundler.AstBuilder;
 const BundleV2 = bundler.BundleV2;
 
+pub struct _ReferenceProxy {
+    other_source: Logger.Source,
+    named_exports: JSAst.NamedExports,
+}
+
+pub struct _ClientEntryWrapper {
+    path: []const u8,
+}
+
 pub union(enum) Data {
     /// Generate server-side code for a "use client" module. Given the
     /// client ast, a "reference proxy" is created with identical exports.
-    client_reference_proxy: ReferenceProxy,
+    client_reference_proxy: _ReferenceProxy,
 
-    client_entry_wrapper: ClientEntryWrapper,
+    client_entry_wrapper: _ClientEntryWrapper,
 
-    pub const ReferenceProxy = struct {
-        other_source: Logger.Source,
-        named_exports: JSAst.NamedExports,
-    };
-
-    pub const ClientEntryWrapper = struct {
-        path: []const u8,
-    };
+    pub const ReferenceProxy = _ReferenceProxy;
+    pub const ClientEntryWrapper = _ClientEntryWrapper;
 }
 
 fn taskCallbackWrap(thread_pool_task: *ThreadPoolLib.Task) {

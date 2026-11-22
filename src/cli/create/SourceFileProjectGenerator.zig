@@ -67,6 +67,43 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const linker = @import("../../bundler/linker.zig");
 pub const create_command = @import("../create_command.zig");
 pub const bun = @import("bun");
+pub const Reason = enum {
+    shadcn,
+    bun,
+    css,
+    tsc,
+    build,
+    html,
+    npm,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const TemplateTag = enum {
+    ReactTailwindSpa,
+    ReactSpa,
+    ReactShadcnSpa,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+
+pub fn logger(self: TemplateTag) TemplateLogger {
+            const self_tag = self;
+            return TemplateLogger{ .template = self_tag };
+    }
+
+pub fn label(self: TemplateTag) []const u8 {
+            return (switch (self) {
+.ReactTailwindSpa => "React + Tailwind",
+.ReactSpa => "React",
+.ReactShadcnSpa => "React + shadcn/ui + Tailwind",
+});
+    }
+};
+
 pub fn FreeGuard(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -94,211 +131,75 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const SourceFileProjectGenerator = @This();
-const enable_shadcn_ui = true;
-const TemplateFile = struct {
+pub const TemplateFile = struct {
     name: []const u8,
     content: []const u8,
     reason: Reason,
     overwrite: bool = true,
 };
-const Reason = enum {
-    shadcn,
-    bun,
-    css,
-    tsc,
-    build,
-    html,
-    npm,
+
+pub const ReactTailwindSpa = struct {
+    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .build }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "bunfig.toml", .content = shared_bunfig_toml, .reason = .bun, .overwrite = false }, TemplateFile{ .name = "package.json", .content = shared_package_json, .reason = .npm, .overwrite = false } });
+    const init_files: []const TemplateFile = &.{};
 };
-const ReactTailwindSpa = struct {
-    pub const files = &[_]TemplateFile{
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts",
-                .content = shared_build_ts,
-                .reason = .build,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css",
-                .content = @embedFile("projects/react-tailwind-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
-                .reason = .css,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html",
-                .content = shared_html,
-                .reason = .html,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx",
-                .content = shared_client_tsx,
-                .reason = .bun,
-            },
-            .{
-                .name = "bunfig.toml",
-                .content = shared_bunfig_toml,
-                .reason = .bun,
-                .overwrite = false,
-            },
-            .{
-                .name = "package.json",
-                .content = shared_package_json,
-                .reason = .npm,
-                .overwrite = false,
-            },
-        };
-    pub const init_files = &[_]TemplateFile{};
+
+pub const ReactSpa = struct {
+    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .build }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css, .overwrite = false }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "package.json", .content = @embedFile("projects/react-spa/package.json"), .reason = .npm, .overwrite = false } });
 };
+
+pub const ReactShadcnSpa = struct {
+    const files: []const TemplateFile = (&.{ TemplateFile{ .name = "lib/utils.ts", .content = @embedFile("projects/react-shadcn-spa/lib/utils.ts"), .reason = .shadcn }, TemplateFile{ .name = "index.css", .content = @embedFile("projects/react-shadcn-spa/styles/index.css"), .reason = .shadcn }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts", .content = shared_build_ts, .reason = .bun }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx", .content = shared_client_tsx, .reason = .bun }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css", .content = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"), .reason = .css }, TemplateFile{ .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html", .content = shared_html, .reason = .html }, TemplateFile{ .name = "styles/globals.css", .content = @embedFile("projects/react-shadcn-spa/styles/globals.css"), .reason = .shadcn }, TemplateFile{ .name = "bunfig.toml", .content = shared_bunfig_toml, .reason = .bun, .overwrite = false }, TemplateFile{ .name = "package.json", .content = shared_package_json, .reason = .npm, .overwrite = false }, TemplateFile{ .name = "tsconfig.json", .content = @embedFile("projects/react-shadcn-spa/tsconfig.json"), .reason = .tsc, .overwrite = false }, TemplateFile{ .name = "components.json", .content = @embedFile("projects/react-shadcn-spa/components.json"), .reason = .shadcn, .overwrite = false } });
+};
+
+pub const TemplateLogger = struct {
+    has_written_initial_message: bool = false,
+    template: TemplateTag,
+
+pub fn file(self: *TemplateLogger, template_file: *const TemplateFile, name: []const u8, max_name_len: usize) void {
+            self.has_written_initial_message = true;
+            _ = Output.pretty(" <green>create<r>  ", .{});
+            _ = Output.pretty("{s}", .{ name });
+            const name_len = name.len;
+            var padding: usize = (max_name_len - name_len);
+            _ = &padding;
+            while ((padding > 0)) : (padding = (padding - 1)) {
+                _ = Output.pretty(" ", .{});
+            }
+            _ = Output.prettyln("   <d>{s}<r>", .{ @tagName(template_file.reason) });
+    }
+
+pub fn ifNew(self: *TemplateLogger) void {
+            if ((!self.has_written_initial_message)) {
+                return;
+            }
+            _ = Output.prettyln("<r><d>--------------------------------<r>\n✨ <b>{s}<r> project configured\n\n<b><cyan>Development<r><d> - frontend dev server with hot reload<r>\n\n  <cyan><b>bun dev<r>\n\n<b><green>Production<r><d> - build optimized assets<r>\n\n  <green><b>bun run build<r>\n\n<blue>Happy bunning! 🐇<r>", .{ self.template.label() });
+    }
+};
+
+pub const ReactShadcnSpaPayload = struct {
+    components: bun.StringSet,
+};
+
+pub const Template = union(TemplateTag) {
+    ReactTailwindSpa: void,
+    ReactSpa: void,
+    ReactShadcnSpa: ReactShadcnSpaPayload,
+
+pub fn logger(self: Template) TemplateLogger {
+            const self_tag = std.meta.activeTag(self);
+            return TemplateLogger{ .template = self_tag };
+    }
+    pub const Tag = TemplateTag;
+    pub const Logger = TemplateLogger;
+};
+
+const SourceFileProjectGenerator = @This();
+const enable_shadcn_ui = true;
 const shared_build_ts = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts");
 const shared_client_tsx = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx");
 const shared_html = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html");
 const shared_package_json = @embedFile("projects/react-shadcn-spa/package.json");
 const shared_bunfig_toml = @embedFile("projects/react-shadcn-spa/bunfig.toml");
-const ReactSpa = struct {
-    pub const files = &[_]TemplateFile{
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts",
-                .content = shared_build_ts,
-                .reason = .build,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css",
-                .content = @embedFile("projects/react-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
-                .reason = .css,
-                .overwrite = false,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html",
-                .content = shared_html,
-                .reason = .html,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx",
-                .content = shared_client_tsx,
-                .reason = .bun,
-            },
-            .{
-                .name = "package.json",
-                .content = @embedFile("projects/react-spa/package.json"),
-                .reason = .npm,
-                .overwrite = false,
-            },
-        };
-};
-const ReactShadcnSpa = struct {
-    pub const files = &[_]TemplateFile{
-            .{
-                .name = "lib/utils.ts",
-                .content = @embedFile("projects/react-shadcn-spa/lib/utils.ts"),
-                .reason = .shadcn,
-            },
-            .{
-                .name = "index.css",
-                .content = @embedFile("projects/react-shadcn-spa/styles/index.css"),
-                .reason = .shadcn,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.build.ts",
-                .content = shared_build_ts,
-                .reason = .bun,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.client.tsx",
-                .content = shared_client_tsx,
-                .reason = .bun,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css",
-                .content = @embedFile("projects/react-shadcn-spa/REPLACE_ME_WITH_YOUR_APP_FILE_NAME.css"),
-                .reason = .css,
-            },
-            .{
-                .name = "REPLACE_ME_WITH_YOUR_APP_FILE_NAME.html",
-                .content = shared_html,
-                .reason = .html,
-            },
-            .{
-                .name = "styles/globals.css",
-                .content = @embedFile("projects/react-shadcn-spa/styles/globals.css"),
-                .reason = .shadcn,
-            },
-            .{
-                .name = "bunfig.toml",
-                .content = shared_bunfig_toml,
-                .reason = .bun,
-                .overwrite = false,
-            },
-            .{
-                .name = "package.json",
-                .content = shared_package_json,
-                .reason = .npm,
-                .overwrite = false,
-            },
-            .{
-                .name = "tsconfig.json",
-                .content = @embedFile("projects/react-shadcn-spa/tsconfig.json"),
-                .reason = .tsc,
-                .overwrite = false,
-            },
-            .{
-                .name = "components.json",
-                .content = @embedFile("projects/react-shadcn-spa/components.json"),
-                .reason = .shadcn,
-                .overwrite = false,
-            },
-        };
-};
-pub const Template = union(Tag) {
-    ReactTailwindSpa: void,
-    ReactSpa: void,
-    ReactShadcnSpa: struct {
-        components: bun.StringSet,
-    },
-
-pub fn logger(self: @This()) Logger {
-            return Logger{ .template = self };
-    }
-    pub const Tag = enum {
-            ReactTailwindSpa,
-            ReactSpa,
-            ReactShadcnSpa,
-    
-            pub fn logger(self: Tag) Logger {
-                return Logger{ .template = self };
-            }
-    
-            pub fn label(self: Tag) []const u8 {
-                return switch (self) {
-                    .ReactTailwindSpa => "React + Tailwind",
-                    .ReactSpa => "React",
-                    .ReactShadcnSpa => "React + shadcn/ui + Tailwind",
-                };
-            }
-        };
-    pub const Logger = struct {
-        has_written_initial_message: bool = false,
-        template: Tag,
-    
-    pub fn file(self: *@This(), template_file: *const TemplateFile, name: []const u8, max_name_len: usize) void {
-                self.has_written_initial_message = true;
-                _ = Output.pretty(" <green>create<r>  ", .{});
-                _ = Output.pretty("{s}", .{ name });
-                const name_len = name.len;
-                var padding: usize = (max_name_len - name_len);
-                _ = &padding;
-                while ((padding > 0)) : (padding = (padding - 1)) {
-                    _ = Output.pretty(" ", .{});
-                }
-                _ = Output.prettyln("   <d>{s}<r>", .{ @tagName(template_file.reason) });
-        }
-    
-    pub fn ifNew(self: *@This()) void {
-                if ((!self.has_written_initial_message)) {
-                    return;
-                }
-                _ = Output.prettyln("<r><d>--------------------------------<r>\n✨ <b>{s}<r> project configured\n\n<b><cyan>Development<r><d> - frontend dev server with hot reload<r>\n\n  <cyan><b>bun dev<r>\n\n<b><green>Production<r><d> - build optimized assets<r>\n\n  <green><b>bun run build<r>\n\n<blue>Happy bunning! 🐇<r>", .{ self.template.label() });
-        }
-    };
-};
 const Example = create_command.Example;
 const Environment = bun.Environment;
 const Global = bun.Global;
@@ -510,7 +411,7 @@ const current = @field(SourceFileProjectGenerator, @tagName(active));
         inline for (0..files.len) |index| {
             _ = &index;
             const file = (&files[@as(usize, @intCast(index))]);
-            const file_name = try stringWithReplacements((if (@typeInfo(@TypeOf(file)) == .@"enum" or @typeInfo(@TypeOf(file)) == .@"union") @tagName(file) else file.name), basename, normalized_name, react_component_export, allocator);
+            const file_name = try stringWithReplacements(file.name, basename, normalized_name, react_component_export, allocator);
             if ((file.overwrite or (!bun.sys.exists(file_name)))) {
                 switch (createFile(file_name, try stringWithReplacements(file.content, basename, normalized_name, react_component_export, default_allocator))) {
 .result => |is_new| {

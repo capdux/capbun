@@ -70,6 +70,44 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const libarchive_mod = @import("../libarchive/libarchive.zig");
 pub const bun = @import("bun");
+pub const IgnoreKind = enum {
+    default,
+    @".npmignore",
+    @".gitignore",
+    @"package.json",
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const FailReason = enum {
+    read,
+    open,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _BinInfoType = enum {
+    file,
+    dir,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const _TarballNameFormatterStyle = enum {
+    normalize,
+    raw,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
 pub const DefaultIgnorePattern = struct {
     pattern: []const u8,
     can_override: bool,
@@ -83,6 +121,14 @@ pub const ExcludedInfo = struct {
 pub const TarballDest = struct {
     dest: stringZ,
     dir_end: usize,
+};
+
+pub const PatternFlags = packed struct(u8) {
+    rel_path: bool,
+    dirs_only: bool,
+    @"leading **/": bool,
+    negated: bool,
+    _: u4 = 0,
 };
 
 pub const Pattern = struct {
@@ -252,6 +298,98 @@ pub fn deinit(self: IgnorePatterns, allocator: std.mem.Allocator) void {
     }
     pub const Kind = IgnoreKind;
     pub const List = std.ArrayListUnmanaged(IgnorePatterns);
+};
+
+pub const _PackContextStats = struct {
+    unpacked_size: usize = 0,
+    total_files: usize = 0,
+    ignored_files: usize = 0,
+    ignored_directories: usize = 0,
+    packed_size: usize = 0,
+    bundled_deps: usize = 0,
+};
+
+pub const _BundledDep = struct {
+    name: []const u8,
+    was_packed: bool = false,
+    from_root_package_json: bool,
+};
+
+pub const _PackContext = struct {
+    manager: *PackageManager,
+    allocator: std.mem.Allocator,
+    command_ctx: Command.Context,
+    lockfile: ?*Lockfile,
+    bundled_deps: std.ArrayListUnmanaged(_BundledDep) = .{},
+    stats: _PackContextStats = .{},
+
+pub fn printSummary(stats: _PackContextStats, maybe_shasum: ?sha.SHA1.Digest, maybe_integrity: ?sha.SHA512.Digest, log_level: LogLevel) void {
+            if (((log_level != .silent) and (log_level != .quiet))) {
+                _ = Output.prettyln("\n<r><b><blue>Total files<r>: {d}", .{ stats.total_files });
+                if (maybe_shasum) |shasum| {
+                    _ = &shasum;
+                    _ = Output.prettyln("<b><blue>Shasum<r>: {s}", .{ std.fmt.bytesToHex(shasum, .lower) });
+                }
+                if (maybe_integrity) |integrity| {
+                    _ = &integrity;
+                    _ = Output.prettyln("<b><blue>Integrity<r>: {f}", .{ bun.fmt.integrity(integrity, .short) });
+                }
+                _ = Output.prettyln("<b><blue>Unpacked size<r>: {f}", .{ bun.fmt.size(stats.unpacked_size, .{ .space_between_number_and_unit = false }) });
+                if ((stats.packed_size > 0)) {
+                    _ = Output.pretty("<b><blue>Packed size<r>: {f}\n", .{ bun.fmt.size(stats.packed_size, .{ .space_between_number_and_unit = false }) });
+                }
+                if ((stats.bundled_deps > 0)) {
+                    _ = Output.pretty("<b><blue>Bundled deps<r>: {d}\n", .{ stats.bundled_deps });
+                }
+            }
+    }
+    const Stats = _PackContextStats;
+};
+
+pub const _PackListEntry = struct {
+    subpath: stringZ,
+    size: usize = 0,
+};
+
+pub const _PackQueueItem = struct {
+    path: stringZ,
+    optional: bool = false,
+};
+
+pub const _PackQueueContext = struct {
+
+pub fn lessThan(_: void, a: _PackQueueItem, b: _PackQueueItem) std.math.Order {
+            return strings.order(a.path, b.path);
+    }
+};
+
+pub const _BinInfo = struct {
+    path: [:0]const u8,
+    type: _BinInfoType,
+    const Type = _BinInfoType;
+};
+
+pub const _TarballNameFormatter = struct {
+    package_name: []const u8,
+    package_version: []const u8,
+    style: _TarballNameFormatterStyle,
+
+pub fn format(self: _TarballNameFormatter, writer: *std.Io.Writer) !void {
+            if ((self.style == .raw)) {
+                return writer.print("{s}-{s}.tgz", .{ self.package_name, self.package_version });
+            }
+            if ((self.package_name[0] == 64)) {
+                if ((self.package_name.len > 1)) {
+                    if (strings.indexOfChar(self.package_name, 47)) |slash| {
+                        _ = &slash;
+                        return writer.print("{s}-{s}-{s}.tgz", .{ self.package_name[1..][0..(slash - 1)], self.package_name[(slash + 1)..], self.package_version });
+                    }
+                }
+                return writer.print("{s}-{s}.tgz", .{ self.package_name[1..], self.package_version });
+            }
+            return writer.print("{s}-{s}.tgz", .{ self.package_name, self.package_version });
+    }
+    pub const Style = _TarballNameFormatterStyle;
 };
 
 pub const PackCommand = struct {
@@ -2049,104 +2187,18 @@ pub fn isSpecialFileOrVariant(filename: []const u8, comptime name: []const u8) c
             }
             return ((filename[@as(usize, @intCast(name.len))] == 46) and stringsEql(filename[0..name.len], name));
     }
-    pub const Context = struct {
-        manager: *PackageManager,
-        allocator: std.mem.Allocator,
-        command_ctx: Command.Context,
-        lockfile: ?*Lockfile,
-        bundled_deps: std.ArrayListUnmanaged(BundledDep) = .{},
-        stats: Stats = .{},
-    
-    pub fn printSummary(stats: Stats, maybe_shasum: ?sha.SHA1.Digest, maybe_integrity: ?sha.SHA512.Digest, log_level: LogLevel) void {
-                if (((log_level != .silent) and (log_level != .quiet))) {
-                    _ = Output.prettyln("\n<r><b><blue>Total files<r>: {d}", .{ stats.total_files });
-                    if (maybe_shasum) |shasum| {
-                        _ = &shasum;
-                        _ = Output.prettyln("<b><blue>Shasum<r>: {s}", .{ std.fmt.bytesToHex(shasum, .lower) });
-                    }
-                    if (maybe_integrity) |integrity| {
-                        _ = &integrity;
-                        _ = Output.prettyln("<b><blue>Integrity<r>: {f}", .{ bun.fmt.integrity(integrity, .short) });
-                    }
-                    _ = Output.prettyln("<b><blue>Unpacked size<r>: {f}", .{ bun.fmt.size(stats.unpacked_size, .{ .space_between_number_and_unit = false }) });
-                    if ((stats.packed_size > 0)) {
-                        _ = Output.pretty("<b><blue>Packed size<r>: {f}\n", .{ bun.fmt.size(stats.packed_size, .{ .space_between_number_and_unit = false }) });
-                    }
-                    if ((stats.bundled_deps > 0)) {
-                        _ = Output.pretty("<b><blue>Bundled deps<r>: {d}\n", .{ stats.bundled_deps });
-                    }
-                }
-        }
-        const Stats = struct {
-            unpacked_size: usize = 0,
-            total_files: usize = 0,
-            ignored_files: usize = 0,
-            ignored_directories: usize = 0,
-            packed_size: usize = 0,
-            bundled_deps: usize = 0,
-        };
-    };
-    pub const BundledDep = struct {
-        name: []const u8,
-        was_packed: bool = false,
-        from_root_package_json: bool,
-    };
+    pub const Context = _PackContext;
+    pub const BundledDep = _BundledDep;
     const package_prefix = "package/";
-    const PackListEntry = struct {
-        subpath: stringZ,
-        size: usize = 0,
-    };
+    const PackListEntry = _PackListEntry;
     const PackList = std.ArrayListUnmanaged(PackListEntry);
-    const PackQueueContext = struct {
-    
-    pub fn lessThan(_: void, a: PackQueueItem, b: PackQueueItem) std.math.Order {
-                return strings.order(a.path, b.path);
-        }
-    };
-    const PackQueueItem = struct {
-        path: stringZ,
-        optional: bool = false,
-    };
+    const PackQueueContext = _PackQueueContext;
+    const PackQueueItem = _PackQueueItem;
     const PackQueue = std.PriorityQueue(PackQueueItem, void, PackQueueContext.lessThan);
-    const DirInfo = struct {
-            std.fs.Dir, // the dir
-            string, // the dir subpath
-            usize, // dir depth. used to shrink ignore stack
-        };
-    const BinInfo = struct {
-        path: [:0]const u8,
-        type: Type,
-        const Type = enum {
-                    file,
-                    dir,
-                };
-    };
+    const DirInfo = struct { std.fs.Dir, []const u8, usize };
+    const BinInfo = _BinInfo;
     const BufferedFileReader = bun.deprecated.BufferedReader((1024 * 512), File.Reader);
-    const TarballNameFormatter = struct {
-        package_name: []const u8,
-        package_version: []const u8,
-        style: Style,
-    
-    pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-                if ((self.style == .raw)) {
-                    return writer.print("{s}-{s}.tgz", .{ self.package_name, self.package_version });
-                }
-                if ((self.package_name[0] == 64)) {
-                    if ((self.package_name.len > 1)) {
-                        if (strings.indexOfChar(self.package_name, 47)) |slash| {
-                            _ = &slash;
-                            return writer.print("{s}-{s}-{s}.tgz", .{ self.package_name[1..][0..(slash - 1)], self.package_name[(slash + 1)..], self.package_version });
-                        }
-                    }
-                    return writer.print("{s}-{s}.tgz", .{ self.package_name[1..], self.package_version });
-                }
-                return writer.print("{s}-{s}.tgz", .{ self.package_name, self.package_version });
-        }
-        pub const Style = enum {
-                    normalize,
-                    raw,
-                };
-    };
+    const TarballNameFormatter = _TarballNameFormatter;
     const stringsEql = (if (Environment.isLinux) strings.eqlComptime else strings.eqlCaseInsensitiveASCIIICheckLength);
 };
 
@@ -2634,23 +2686,6 @@ pub fn __cp_deinit(self: *EntryInfoListGuard) void {
 
 const string = []const u8;
 const stringZ = [:0]const u8;
-pub const IgnoreKind = enum {
-    default,
-    @".npmignore",
-    @".gitignore",
-    @"package.json",
-};
-pub const FailReason = enum {
-    read,
-    open,
-};
-pub const PatternFlags = packed struct(u8) {
-    rel_path: bool,
-    dirs_only: bool,
-    @"leading **/": bool,
-    negated: bool,
-    _: u4 = 0,
-};
 const root_default_ignore_patterns = .{ "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "bun.lock" };
 const default_ignore_patterns = .{ DefaultIgnorePattern{ .pattern = ".*.swp", .can_override = true }, DefaultIgnorePattern{ .pattern = "._*", .can_override = true }, DefaultIgnorePattern{ .pattern = ".DS_Store", .can_override = true }, DefaultIgnorePattern{ .pattern = ".git", .can_override = false }, DefaultIgnorePattern{ .pattern = ".gitignore", .can_override = true }, DefaultIgnorePattern{ .pattern = ".hg", .can_override = false }, DefaultIgnorePattern{ .pattern = ".npmignore", .can_override = true }, DefaultIgnorePattern{ .pattern = ".npmrc", .can_override = false }, DefaultIgnorePattern{ .pattern = ".lock-wscript", .can_override = true }, DefaultIgnorePattern{ .pattern = ".svn", .can_override = true }, DefaultIgnorePattern{ .pattern = ".wafpickle-*", .can_override = true }, DefaultIgnorePattern{ .pattern = "CVS", .can_override = true }, DefaultIgnorePattern{ .pattern = "npm-debug.log", .can_override = true }, DefaultIgnorePattern{ .pattern = ".env.production", .can_override = true }, DefaultIgnorePattern{ .pattern = "bunfig.toml", .can_override = true } };
 const libarchive = libarchive_mod.lib;

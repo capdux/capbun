@@ -67,6 +67,14 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -89,6 +97,55 @@ pub fn Pattern(kind: InsertKind) type {
 .@"static" => FrameworkRouter.StaticPattern,
 });
     }
+};
+
+pub const PartTag = enum(u3) {
+    text,
+    param,
+    catch_all_optional,
+    catch_all,
+    group,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const ParsedPatternKind = enum {
+    page,
+    layout,
+    extra,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const StyleUiOrRoutes = enum {
+    ui,
+    routes,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const StyleNextRoutingConvention = enum {
+    app,
+    pages,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
+};
+
+pub const RouteFileKind = enum {
+    page,
+    layout,
+    pub fn get(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn has(__cp_s: []const u8) bool { return std.meta.stringToEnum(@This(), __cp_s) != null; }
+    pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
+    pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
 pub fn DeinitGuard(comptime T: type) type {
@@ -203,19 +260,127 @@ pub fn print(log: *const TinyLog, rel_path: []const u8) void {
     pub const empty: TinyLog = .{ .cursor_at = std.math.maxInt(u32), .cursor_len = 0, .msg = .{} };
 };
 
+pub const PartSerializedHeader = packed struct(u32) {
+    tag: PartTag,
+    len: u29,
+};
+
+pub const Part = union(PartTag) {
+    text: []const u8,
+    param: []const u8,
+    catch_all_optional: []const u8,
+    catch_all: []const u8,
+    group: []const u8,
+
+pub fn writeAsSerialized(self: Part, writer: anytype) !void {
+            switch (self) {
+.text => |text| {
+_ = bun.assert((text.len > 0));
+            _ = bun.assert((bun.strings.indexOfChar(text, 47) == null));
+},
+else => {
+
+},
+}
+            const payload = (switch (self) {
+.text => |t| t,
+.param => |t| t,
+.catch_all_optional => |t| t,
+.catch_all => |t| t,
+.group => |t| t,
+});
+            _ = try writer.writeInt(u32, @bitCast(SerializedHeader{ .tag = std.meta.activeTag(self), .len = @intCast(payload.len) }), .little);
+            _ = try writer.writeAll(payload);
+    }
+
+pub fn eql(self: Part, b: Part) bool {
+            if ((std.meta.activeTag(self) != std.meta.activeTag(b))) {
+                return false;
+            }
+            return (switch (self) {
+.text => |p| bun.strings.eql(p, b.text),
+.param => |p| bun.strings.eql(p, b.param),
+.catch_all_optional => |p| bun.strings.eql(p, b.catch_all_optional),
+.catch_all => |p| bun.strings.eql(p, b.catch_all),
+.group => |p| bun.strings.eql(p, b.group),
+});
+    }
+
+pub fn format(self: Part, writer: *std.Io.Writer) !void {
+            _ = try writer.writeAll("Part \"");
+            _ = try self.toStringForInternalUse(writer);
+            _ = try writer.writeAll("\"");
+    }
+
+pub fn toStringForInternalUse(self: Part, writer: anytype) !void {
+            switch (self) {
+.text => |text| {
+_ = try writer.print("/{s}", .{ text });
+},
+.param => |param_name| {
+_ = try writer.print("/:{s}", .{ param_name });
+},
+.group => |label| {
+_ = try writer.print("/({s})", .{ label });
+},
+.catch_all => |param_name| {
+_ = try writer.print("/:*{s}", .{ param_name });
+},
+.catch_all_optional => |param_name| {
+_ = try writer.print("/:*?{s}", .{ param_name });
+},
+}
+    }
+    const SerializedHeader = PartSerializedHeader;
+};
+
 pub const ParsedPattern = struct {
     parts: []const Part,
     kind: Kind,
-    pub const Kind = enum {
-            /// Can be navigated to. Pages can have children, which allows having
-            /// nested routes exactly how Remix allows them.
-            page,
-            /// Is not considered when resolving navigations, but is still a valid
-            /// node in the route tree.
-            layout,
-            /// Another file related to a route
-            extra,
-        };
+    const Kind = ParsedPatternKind;
+};
+
+pub const EncodedPatternIterator = struct {
+    pattern: EncodedPattern,
+    offset: usize,
+
+pub fn readWithSize(self: EncodedPatternIterator) struct { Part, usize } {
+            const header: Part.SerializedHeader = @bitCast(mem.readInt(u32, self.pattern.data[self.offset..][0..@sizeOf(u32)], .little));
+            return .{ (switch (header.tag) {
+inline else => |tag| @unionInit(Part, @tagName(tag), self.pattern.data[(self.offset + @sizeOf(u32))..][0..header.len]),
+}), (@sizeOf(u32) + header.len) };
+    }
+
+pub fn peek(self: EncodedPatternIterator) Part {
+            return self.readWithSize()[0];
+    }
+
+pub fn next(self: *EncodedPatternIterator) ?Part {
+            if ((self.offset >= self.pattern.data.len)) {
+                return null;
+            }
+            const tuple = self.readWithSize();
+            const part = tuple[0];
+            const len = tuple[1];
+            self.offset = (self.offset + len);
+            return part;
+    }
+};
+
+pub const EncodedPatternEffectiveURLContext = struct {
+
+pub fn hash(self: EncodedPatternEffectiveURLContext, p: EncodedPattern) u32 {
+            const _ctx = self;
+            _ = &_ctx;
+            return @truncate(p.effectiveURLHash());
+    }
+
+pub fn eql(self: EncodedPatternEffectiveURLContext, a: EncodedPattern, b: EncodedPattern, n: usize) bool {
+            const _ctx = self;
+            _ = &_ctx;
+            _ = &n;
+            return (a.effectiveURLHash() == b.effectiveURLHash());
+    }
 };
 
 pub const EncodedPattern = struct {
@@ -341,45 +506,35 @@ _ = continue;
             }
             return (i == path.len);
     }
-    pub const root: EncodedPattern = .{ .data = (&.{}) };
-    const Iterator = struct {
-        pattern: EncodedPattern,
-        offset: usize,
-    
-    pub fn readWithSize(it: Iterator) struct { Part, usize } {
-                const header: Part.SerializedHeader = @bitCast(mem.readInt(u32, it.pattern.data[it.offset..][0..@sizeOf(u32)], .little));
-                return .{ (switch (header.tag) {
-    inline else => |tag| @unionInit(Part, @tagName(tag), it.pattern.data[(it.offset + @sizeOf(u32))..][0..header.len]),
-    }), (@sizeOf(u32) + header.len) };
-        }
-    
-    pub fn peek(it: Iterator) Part {
-                return it.readWithSize()[0];
-        }
-    
-    pub fn next(it: *Iterator) ?Part {
-                if ((it.offset >= it.pattern.data.len)) {
-                    return null;
-                }
-                const tuple = it.readWithSize();
-                const part = tuple[0];
-                const len = tuple[1];
-                it.offset = (it.offset + len);
-                return part;
-        }
-    };
-    pub const EffectiveURLContext = struct {
-    
-    pub fn hash(self: @This(), p: EncodedPattern) u32 {
-            _ = self;
-                return @truncate(p.effectiveURLHash());
-        }
-    
-    pub fn eql(self: @This(), a: EncodedPattern, b: EncodedPattern, _: usize) bool {
-            _ = self;
-                return (a.effectiveURLHash() == b.effectiveURLHash());
-        }
-    };
+    const root: EncodedPattern = EncodedPattern{ .data = empty_encoded_pattern_bytes[0..0] };
+    const Iterator = EncodedPatternIterator;
+    const EffectiveURLContext = EncodedPatternEffectiveURLContext;
+};
+
+pub const StaticPatternIterator = struct {
+    pattern: StaticPattern,
+    offset: usize,
+
+pub fn readWithSize(self: StaticPatternIterator) struct { Part, usize } {
+            const next_i = ((bun.strings.indexOfCharPos(self.pattern.route_path, 47, (self.offset + 1))) orelse (self.pattern.route_path.len));
+            const text = self.pattern.route_path[(self.offset + 1)..next_i];
+            return .{ Part{ .text = text }, (text.len + 1) };
+    }
+
+pub fn peek(self: StaticPatternIterator) Part {
+            return self.readWithSize()[0];
+    }
+
+pub fn next(self: *StaticPatternIterator) ?Part {
+            if ((self.offset >= self.pattern.route_path.len)) {
+                return null;
+            }
+            const tuple = self.readWithSize();
+            const part = tuple[0];
+            const len = tuple[1];
+            self.offset = (self.offset + len);
+            return part;
+    }
 };
 
 pub const StaticPattern = struct {
@@ -388,31 +543,86 @@ pub const StaticPattern = struct {
 pub fn iterate(p: StaticPattern) Iterator {
             return .{ .pattern = p, .offset = 0 };
     }
-    const Iterator = struct {
-        pattern: StaticPattern,
-        offset: usize,
-    
-    pub fn readWithSize(it: Iterator) struct { Part, usize } {
-                const next_i = ((bun.strings.indexOfCharPos(it.pattern.route_path, 47, (it.offset + 1))) orelse (it.pattern.route_path.len));
-                const text = it.pattern.route_path[(it.offset + 1)..next_i];
-                return .{ .{ .text = text }, (text.len + 1) };
-        }
-    
-    pub fn peek(it: Iterator) Part {
-                return it.readWithSize()[0];
-        }
-    
-    pub fn next(it: *Iterator) ?Part {
-                if ((it.offset >= it.pattern.route_path.len)) {
-                    return null;
-                }
-                const tuple = it.readWithSize();
-                const part = tuple[0];
-                const len = tuple[1];
-                it.offset = (it.offset + len);
-                return part;
-        }
-    };
+    const Iterator = StaticPatternIterator;
+};
+
+pub const Style = union(enum) {
+    nextjs_pages: void,
+    nextjs_app_ui: void,
+    nextjs_app_routes: void,
+    javascript_defined: jsc.Strong.Optional,
+
+pub fn fromJS(value: JSValue, global: *jsc.JSGlobalObject) !Style {
+            return FrameworkRouter.styleFromJS(value, global);
+    }
+
+pub fn deinit(self: *Style) void {
+            if ((self.* == .javascript_defined)) {
+                _ = self.javascript_defined.deinit();
+            }
+    }
+
+pub fn parse(self: Style, file_path: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator) !?ParsedPattern {
+            return FrameworkRouter.styleParse(self, file_path, ext, log, allow_layouts, arena_alloc);
+    }
+
+pub fn parseNextJsPages(file_path_raw: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator) !?ParsedPattern {
+            return FrameworkRouter.parseNextJsPagesImpl(file_path_raw, ext, log, allow_layouts, arena_alloc);
+    }
+
+pub fn parseNextJsApp(file_path_raw: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator, comptime extract: UiOrRoutes) !?ParsedPattern {
+            return FrameworkRouter.parseNextJsAppImpl(file_path_raw, ext, log, allow_layouts, arena_alloc, extract);
+    }
+    const map = bun.ComptimeStringMap(Style, .{ .{ "nextjs-pages", .nextjs_pages }, .{ "nextjs-app-ui", .nextjs_app_ui }, .{ "nextjs-app-routes", .nextjs_app_routes } });
+    const error_message = "'style' must be either \"nextjs-pages\", \"nextjs-app-ui\", \"nextjs-app-routes\", or a function.";
+    const UiOrRoutes = StyleUiOrRoutes;
+    const NextRoutingConvention = StyleNextRoutingConvention;
+};
+
+pub const Route = struct {
+    part: Part,
+    type: Type.Index,
+    parent: Index.Optional,
+    first_child: Route.Index.Optional,
+    prev_sibling: Route.Index.Optional,
+    next_sibling: Route.Index.Optional,
+    file_page: OpaqueFileId.Optional = .none,
+    file_layout: OpaqueFileId.Optional = .none,
+    bundle: bun.bake.DevServer.RouteBundle.Index.Optional = .none,
+
+pub inline fn filePtr(self: *Route, file_kind: FileKind) *OpaqueFileId.Optional {
+            return (&(switch (file_kind) {
+inline else => |kind| @field(self, ("file_" ++ @tagName(kind))),
+}));
+    }
+    pub const FileKind = RouteFileKind;
+    pub const Index = bun.GenericIndex(u31, Route);
+};
+
+pub const Type = struct {
+    abs_root: []const u8,
+    prefix: []const u8 = "/",
+    ignore_underscores: bool = false,
+    ignore_dirs: []const []const u8 = (&default_type_ignore_dirs),
+    extensions: []const []const u8,
+    style: Style,
+    allow_layouts: bool,
+    client_file: OpaqueFileId.Optional,
+    server_file: OpaqueFileId,
+    server_file_string: jsc.Strong.Optional,
+
+pub fn rootRouteIndex(type_index: Index) Route.Index {
+            return Route.Index.init(type_index.get());
+    }
+    pub const Index = bun.GenericIndex(u8, Type);
+};
+
+pub const Serialized = struct {
+};
+
+pub const MatchedParamsEntry = struct {
+    key: []const u8,
+    value: []const u8,
 };
 
 pub const MatchedParams = struct {
@@ -442,11 +652,14 @@ pub fn toJS(self: MatchedParams, global: *jsc.JSGlobalObject) JSValue {
             }
             return obj;
     }
-    pub const max_count = 64;
-    pub const Entry = struct {
-        key: []const u8,
-        value: []const u8,
-    };
+    const max_count = 64;
+    const Entry = MatchedParamsEntry;
+};
+
+pub const InsertionContextVTable = struct {
+    getFileIdForRouter: *const fn (*void, []const u8, Route.Index, Route.FileKind) bun.OOM!OpaqueFileId,
+    onRouterSyntaxError: *const fn (*void, []const u8, TinyLog) bun.OOM!void,
+    onRouterCollisionError: *const fn (*void, []const u8, OpaqueFileId, Route.FileKind) bun.OOM!void,
 };
 
 pub const InsertionContext = struct {
@@ -491,11 +704,12 @@ pub fn onRouterCollisionError(opaque_ctx: *void, rel_path: []const u8, other_id:
 
 }), .vtable = (comptime (&.{ .getFileIdForRouter = (&wrapper.getFileIdForRouter), .onRouterSyntaxError = (&wrapper.onRouterSyntaxError), .onRouterCollisionError = (&wrapper.onRouterCollisionError) })) };
     }
-    const VTable = struct {
-        getFileIdForRouter: *const fn (*void, []const u8, Route.Index, Route.FileKind) bun.OOM!OpaqueFileId,
-        onRouterSyntaxError: *const fn (*void, []const u8, TinyLog) bun.OOM!void,
-        onRouterCollisionError: *const fn (*void, []const u8, OpaqueFileId, Route.FileKind) bun.OOM!void,
-    };
+    const VTable = InsertionContextVTable;
+};
+
+pub const JSFrameworkRouterStoredParseError = struct {
+    rel_path: []const u8,
+    log: TinyLog,
 };
 
 pub const JSFrameworkRouter = struct {
@@ -752,13 +966,10 @@ pub fn fileIdToJS(jsfr: *JSFrameworkRouter, global: *JSGlobalObject, id: OpaqueF
             const file_id = file_id_opt.?;
             return jsfr.files.items[@as(usize, @intCast(file_id.get()))].toJS(global);
     }
-    pub const js = jsc.Codegen.JSFrameworkFileSystemRouter;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
-    pub const StoredParseError = struct {
-        rel_path: []const u8,
-        log: TinyLog,
-    };
+    const js = jsc.Codegen.JSFrameworkFileSystemRouter;
+    const toJS = js.toJS;
+    const fromJS = js.fromJS;
+    const StoredParseError = JSFrameworkRouterStoredParseError;
     const validators = bun.jsc.Node.validators;
 };
 
@@ -1115,155 +1326,8 @@ _ = unreachable;
 }
 pub const OpaqueFileId = bun.GenericIndex(u32, opaque {});
 const PatternParseError = error{InvalidRoutePattern};
-pub const Part = union(enum(u3)) {
-    /// Does not contain slashes. One per slash.
-    text: []const u8,
-    param: []const u8,
-    /// Must be the last part of the pattern
-    catch_all_optional: []const u8,
-    /// Must be the last part of the pattern
-    catch_all: []const u8,
-    /// Does not affect URL matching, but does affect hierarchy.
-    group: []const u8,
-
-    const SerializedHeader = packed struct(u32) {
-        tag: @typeInfo(Part).@"union".tag_type.?,
-        len: u29,
-    };
-
-    pub fn writeAsSerialized(part: Part, writer: anytype) !void {
-        switch (part) {
-            .text => |text| {
-                bun.assert(text.len > 0);
-                bun.assert(bun.strings.indexOfChar(text, '/') == null);
-            },
-            else => {},
-        }
-        const payload = switch (part) {
-            inline else => |t| t,
-        };
-        try writer.writeInt(u32, @bitCast(SerializedHeader{
-            .tag = std.meta.activeTag(part),
-            .len = @intCast(payload.len),
-        }), .little);
-        try writer.writeAll(payload);
-    }
-
-    pub fn eql(a: Part, b: Part) bool {
-        if (std.meta.activeTag(a) != std.meta.activeTag(b))
-            return false;
-        return switch (a) {
-            inline else => |payload, tag| bun.strings.eql(
-                payload,
-                @field(b, @tagName(tag)),
-            ),
-        };
-    }
-
-    pub fn format(part: Part, writer: *std.Io.Writer) !void {
-        try writer.writeAll("Part \"");
-        try part.toStringForInternalUse(writer);
-        try writer.writeAll("\"");
-    }
-
-    fn toStringForInternalUse(part: Part, writer: anytype) !void {
-        switch (part) {
-            .text => |text| try writer.print("/{s}", .{text}),
-            .param => |param_name| try writer.print("/:{s}", .{param_name}),
-            .group => |label| try writer.print("/({s})", .{label}),
-            .catch_all => |param_name| try writer.print("/:*{s}", .{param_name}),
-            .catch_all_optional => |param_name| try writer.print("/:*?{s}", .{param_name}),
-        }
-    }
-};
-pub const Style = union(enum) {
-    nextjs_pages,
-    nextjs_app_ui,
-    nextjs_app_routes,
-    javascript_defined: jsc.Strong.Optional,
-
-    pub const map = bun.ComptimeStringMap(Style, .{
-        .{ "nextjs-pages", .nextjs_pages },
-        .{ "nextjs-app-ui", .nextjs_app_ui },
-        .{ "nextjs-app-routes", .nextjs_app_routes },
-    });
-    pub const error_message = "'style' must be either \"nextjs-pages\", \"nextjs-app-ui\", \"nextjs-app-routes\", or a function.";
-
-    pub const UiOrRoutes = enum { ui, routes };
-    pub const NextRoutingConvention = enum { app, pages };
-
-    pub fn fromJS(value: JSValue, global: *jsc.JSGlobalObject) !Style {
-        return FrameworkRouter.styleFromJS(value, global);
-    }
-
-    pub fn deinit(style: *Style) void {
-        switch (style.*) {
-            .javascript_defined => |*strong| strong.deinit(),
-            else => {},
-        }
-    }
-
-    pub fn parse(style: Style, file_path: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator) !?ParsedPattern {
-        return FrameworkRouter.styleParse(style, file_path, ext, log, allow_layouts, arena_alloc);
-    }
-
-    pub fn parseNextJsPages(file_path_raw: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator) !?ParsedPattern {
-        return FrameworkRouter.parseNextJsPagesImpl(file_path_raw, ext, log, allow_layouts, arena_alloc);
-    }
-
-    pub fn parseNextJsApp(
-        file_path_raw: []const u8,
-        ext: []const u8,
-        log: *TinyLog,
-        allow_layouts: bool,
-        arena_alloc: Allocator,
-        comptime extract: UiOrRoutes,
-    ) !?ParsedPattern {
-        return FrameworkRouter.parseNextJsAppImpl(file_path_raw, ext, log, allow_layouts, arena_alloc, extract);
-    }
-};
-pub const Route = struct {
-    part: Part,
-    type: Type.Index,
-    parent: Index.Optional,
-    first_child: Route.Index.Optional,
-    prev_sibling: Route.Index.Optional,
-    next_sibling: Route.Index.Optional,
-    file_page: OpaqueFileId.Optional = .none,
-    file_layout: OpaqueFileId.Optional = .none,
-    bundle: bun.bake.DevServer.RouteBundle.Index.Optional = .none,
-
-pub inline fn filePtr(r: *Route, file_kind: FileKind) *OpaqueFileId.Optional {
-            return (&(switch (file_kind) {
-inline else => |kind| @field(r, ("file_" ++ @tagName(kind))),
-}));
-    }
-    pub const FileKind = enum {
-            page,
-            layout,
-            // not_found,
-        };
-    pub const Index = bun.GenericIndex(u31, Route);
-};
-pub const Type = struct {
-    abs_root: []const u8,
-    prefix: []const u8 = "/",
-    ignore_underscores: bool = false,
-    ignore_dirs: []const []const u8 = (&.{ ".git", "node_modules" }),
-    extensions: []const []const u8,
-    style: Style,
-    allow_layouts: bool,
-    client_file: OpaqueFileId.Optional,
-    server_file: OpaqueFileId,
-    server_file_string: jsc.Strong.Optional,
-
-pub fn rootRouteIndex(type_index: Index) Route.Index {
-            return Route.Index.init(type_index.get());
-    }
-    pub const Index = bun.GenericIndex(u8, Type);
-};
-pub const Serialized = struct {
-};
+var empty_encoded_pattern_bytes: [0]u8 = undefined;
+const default_type_ignore_dirs: [2][]const u8 = .{ ".git", "node_modules" };
 const StaticRouteMap = bun.StringArrayHashMapUnmanaged(Route.Index);
 const DynamicRouteMap = std.ArrayHashMapUnmanaged(EncodedPattern, Route.Index, EncodedPattern.EffectiveURLContext, true);
 const strings = bun.strings;

@@ -108,7 +108,7 @@ pub fn findImportedPartsInJSOrder(
     chunk.content.javascript.parts_in_chunk_in_order = parts_in_chunk_order;
 }
 
-const FindImportedPartsVisitor = struct {
+struct FindImportedPartsVisitor {
     entry_bits: *const AutoBitSet,
     flags: []const JSMeta.Flags,
     parts: []BabyList(Part),
@@ -223,7 +223,7 @@ const FindImportedPartsVisitor = struct {
             }
         }
     }
-};
+}
 
 pub const BitSet = bun.bit_set.DynamicBitSetUnmanaged;
 

@@ -1,17 +1,17 @@
 type string = []const u8;
 type stringZ = [:0]const u8;
 
-pub const IgnoreKind = enum {
+pub enum IgnoreKind {
     default,
     @".npmignore",
     @".gitignore",
     @"package.json",
-};
+}
 
-pub const FailReason = enum {
+pub enum FailReason {
     read,
     open,
-};
+}
 
 pub struct DefaultIgnorePattern {
     pattern: string,
@@ -28,13 +28,13 @@ pub struct TarballDest {
     dir_end: usize,
 }
 
-pub const PatternFlags = packed struct(u8) {
+@packed(u8) pub struct PatternFlags {
     rel_path: bool,
     dirs_only: bool,
     @"leading **/": bool,
     negated: bool,
     _: u4 = 0,
-};
+}
 
 pub struct Pattern {
     glob: CowString,
@@ -265,65 +265,140 @@ pub struct IgnorePatterns {
     }
 }
 
-pub struct PackCommand {
-    pub const Context = struct {
-        manager: *PackageManager,
-        allocator: std.mem.Allocator,
-        command_ctx: Command.Context,
+struct _PackContextStats {
+    unpacked_size: usize = 0,
+    total_files: usize = 0,
+    ignored_files: usize = 0,
+    ignored_directories: usize = 0,
+    packed_size: usize = 0,
+    bundled_deps: usize = 0,
+}
 
-        // `bun pack` does not require a lockfile, but
-        // it's possible we will need it for finding
-        // workspace versions. This is the only valid lockfile
-        // pointer in this file. `manager.lockfile` is incorrect
-        lockfile: (*Lockfile)?,
+pub struct _BundledDep {
+    name: string,
+    was_packed: bool = false,
+    from_root_package_json: bool,
+}
 
-        bundled_deps: std.ArrayListUnmanaged(BundledDep) = {},
+pub struct _PackContext {
+    manager: *PackageManager,
+    allocator: std.mem.Allocator,
+    command_ctx: Command.Context,
 
-        stats: Stats = {},
+    // `bun pack` does not require a lockfile, but
+    // it's possible we will need it for finding
+    // workspace versions. This is the only valid lockfile
+    // pointer in this file. `manager.lockfile` is incorrect
+    lockfile: (*Lockfile)?,
 
-        const Stats = struct {
-            unpacked_size: usize = 0,
-            total_files: usize = 0,
-            ignored_files: usize = 0,
-            ignored_directories: usize = 0,
-            packed_size: usize = 0,
-            bundled_deps: usize = 0,
-        };
+    bundled_deps: std.ArrayListUnmanaged(_BundledDep) = {},
 
-        static fn printSummary(
-            stats: Stats,
-            maybe_shasum: sha.SHA1.Digest?,
-            maybe_integrity: sha.SHA512.Digest?,
-            log_level: LogLevel,
-        ) {
-            if (log_level != .silent && log_level != .quiet) {
-                Output.prettyln("\n<r><b><blue>Total files<r>: {d}", .{stats.total_files});
-                if (shasum := maybe_shasum) {
-                    Output.prettyln("<b><blue>Shasum<r>: {s}", .{std.fmt.bytesToHex(shasum, .lower)});
-                }
-                if (integrity := maybe_integrity) {
-                    Output.prettyln("<b><blue>Integrity<r>: {f}", .{bun.fmt.integrity(integrity, .short)});
-                }
-                Output.prettyln("<b><blue>Unpacked size<r>: {f}", .{
-                    bun.fmt.size(stats.unpacked_size, { space_between_number_and_unit: false }),
+    stats: _PackContextStats = {},
+
+    const Stats = _PackContextStats;
+
+    static fn printSummary(
+        stats: _PackContextStats,
+        maybe_shasum: sha.SHA1.Digest?,
+        maybe_integrity: sha.SHA512.Digest?,
+        log_level: LogLevel,
+    ) {
+        if (log_level != .silent && log_level != .quiet) {
+            Output.prettyln("\n<r><b><blue>Total files<r>: {d}", .{stats.total_files});
+            if (shasum := maybe_shasum) {
+                Output.prettyln("<b><blue>Shasum<r>: {s}", .{std.fmt.bytesToHex(shasum, .lower)});
+            }
+            if (integrity := maybe_integrity) {
+                Output.prettyln("<b><blue>Integrity<r>: {f}", .{bun.fmt.integrity(integrity, .short)});
+            }
+            Output.prettyln("<b><blue>Unpacked size<r>: {f}", .{
+                bun.fmt.size(stats.unpacked_size, { space_between_number_and_unit: false }),
+            });
+            if (stats.packed_size > 0) {
+                Output.pretty("<b><blue>Packed size<r>: {f}\n", .{
+                    bun.fmt.size(stats.packed_size, { space_between_number_and_unit: false }),
                 });
-                if (stats.packed_size > 0) {
-                    Output.pretty("<b><blue>Packed size<r>: {f}\n", .{
-                        bun.fmt.size(stats.packed_size, { space_between_number_and_unit: false }),
-                    });
-                }
-                if (stats.bundled_deps > 0) {
-                    Output.pretty("<b><blue>Bundled deps<r>: {d}\n", .{stats.bundled_deps});
-                }
+            }
+            if (stats.bundled_deps > 0) {
+                Output.pretty("<b><blue>Bundled deps<r>: {d}\n", .{stats.bundled_deps});
             }
         }
-    };
+    }
+}
 
-    pub const BundledDep = struct {
-        name: string,
-        was_packed: bool = false,
-        from_root_package_json: bool,
-    };
+struct _PackListEntry {
+    subpath: stringZ,
+    size: usize = 0,
+}
+
+struct _PackQueueItem {
+    path: stringZ,
+    optional: bool = false,
+}
+
+struct _PackQueueContext {
+    static fn lessThan(_: void, a: _PackQueueItem, b: _PackQueueItem): std.math.Order {
+        return strings.order(a.path, b.path);
+    }
+}
+
+enum _BinInfoType {
+    file,
+    dir,
+}
+
+struct _BinInfo {
+    path: [:0]const u8,
+    type: _BinInfoType,
+
+    const Type = _BinInfoType;
+}
+
+pub enum _TarballNameFormatterStyle {
+    normalize,
+    raw,
+}
+
+struct _TarballNameFormatter {
+    package_name: string,
+    package_version: string,
+    style: _TarballNameFormatterStyle,
+
+    pub const Style = _TarballNameFormatterStyle;
+
+    fn format(writer: *std.Io.Writer)! {
+        if (_.style == .raw) {
+            return writer.print("{s}-{s}.tgz", .{ _.package_name, _.package_version });
+        }
+
+        if (_.package_name[0] == '@') {
+            if (_.package_name.len > 1) {
+                if (slash := strings.indexOfChar(_.package_name, '/')) {
+                    return writer.print("{s}-{s}-{s}.tgz", .{
+                        _.package_name[1..][0 .. slash - 1],
+                        _.package_name[slash + 1 ..],
+                        _.package_version,
+                    });
+                }
+            }
+
+            return writer.print("{s}-{s}.tgz", .{
+                _.package_name[1..],
+                _.package_version,
+            });
+        }
+
+        return writer.print("{s}-{s}.tgz", .{
+            _.package_name,
+            _.package_version,
+        });
+    }
+}
+
+pub struct PackCommand {
+    pub const Context = _PackContext;
+
+    pub const BundledDep = _BundledDep;
 
     static fn execWithManager(ctx: Command.Context, manager: *PackageManager)! {
         if (manager.options.log_level != .silent && manager.options.log_level != .quiet) {
@@ -448,30 +523,16 @@ pub struct PackCommand {
 
 
 
-    const PackListEntry = struct {
-        subpath: stringZ,
-        size: usize = 0,
-    };
+    const PackListEntry = _PackListEntry;
     const PackList = std.ArrayListUnmanaged(PackListEntry);
 
-    const PackQueueContext = struct {
-        fn lessThan(_: void, a: PackQueueItem, b: PackQueueItem): std.math.Order {
-            return strings.order(a.path, b.path);
-        }
-    };
+    const PackQueueContext = _PackQueueContext;
 
-    const PackQueueItem = struct {
-        path: stringZ,
-        optional: bool = false,
-    };
+    const PackQueueItem = _PackQueueItem;
 
     const PackQueue = std.PriorityQueue(PackQueueItem, void, PackQueueContext.lessThan);
 
-    const DirInfo = struct {
-        std.fs.Dir, // the dir
-        string, // the dir subpath
-        usize, // dir depth. used to shrink ignore stack
-    };
+    type DirInfo = [std.fs.Dir, string, usize];
 
     static fn iterateIncludedProjectTree(
         allocator: std.mem.Allocator,
@@ -1212,15 +1273,7 @@ pub struct PackCommand {
         Global.crash();
     }
 
-    const BinInfo = struct {
-        path: [:0]const u8,
-        type: Type,
-
-        const Type = enum {
-            file,
-            dir,
-        };
-    };
+    const BinInfo = _BinInfo;
 
     static fn getPackageBins(
         allocator: std.mem.Allocator,
@@ -2304,44 +2357,7 @@ pub struct PackCommand {
         };
     }
 
-    const TarballNameFormatter = struct {
-        package_name: string,
-        package_version: string,
-        style: Style,
-
-        pub const Style = enum {
-            normalize,
-            raw,
-        };
-
-        fn format(writer: *std.Io.Writer)! {
-            if (_.style == .raw) {
-                return writer.print("{s}-{s}.tgz", .{ _.package_name, _.package_version });
-            }
-
-            if (_.package_name[0] == '@') {
-                if (_.package_name.len > 1) {
-                    if (slash := strings.indexOfChar(_.package_name, '/')) {
-                        return writer.print("{s}-{s}-{s}.tgz", .{
-                            _.package_name[1..][0 .. slash - 1],
-                            _.package_name[slash + 1 ..],
-                            _.package_version,
-                        });
-                    }
-                }
-
-                return writer.print("{s}-{s}.tgz", .{
-                    _.package_name[1..],
-                    _.package_version,
-                });
-            }
-
-            return writer.print("{s}-{s}.tgz", .{
-                _.package_name,
-                _.package_version,
-            });
-        }
-    };
+    const TarballNameFormatter = _TarballNameFormatter;
 
     static fn archivePackageJSON(
         ctx: *Context,

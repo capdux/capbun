@@ -152,6 +152,11 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const TermPair = struct {
+    name: []const u8,
+    depth: SourceColorDepth,
+};
+
 pub const Source = struct {
     stdout_buffer: [4096]u8,
     stderr_buffer: [4096]u8,
@@ -273,10 +278,6 @@ pub fn getColorDepthOnce() void {
                     lazy_color_depth = depth_256;
                     return;
                 }
-                const TermPair = struct {
-    name: []const u8,
-    depth: ColorDepth,
-};
                 const pairs: [17]TermPair = .{ TermPair{ .name = "st", .depth = depth_16 }, TermPair{ .name = "hurd", .depth = depth_16 }, TermPair{ .name = "eterm", .depth = depth_16 }, TermPair{ .name = "gnome", .depth = depth_16 }, TermPair{ .name = "kterm", .depth = depth_16 }, TermPair{ .name = "mosh", .depth = depth_16m }, TermPair{ .name = "putty", .depth = depth_16 }, TermPair{ .name = "cons25", .depth = depth_16 }, TermPair{ .name = "cygwin", .depth = depth_16 }, TermPair{ .name = "dtterm", .depth = depth_16 }, TermPair{ .name = "mlterm", .depth = depth_16 }, TermPair{ .name = "console", .depth = depth_16 }, TermPair{ .name = "jfbterm", .depth = depth_16 }, TermPair{ .name = "konsole", .depth = depth_16 }, TermPair{ .name = "terminator", .depth = depth_16m }, TermPair{ .name = "xterm-ghostty", .depth = depth_16m }, TermPair{ .name = "rxvt-unicode-24bit", .depth = depth_16m } };
                 inline for (pairs) |pair| {
                     if (strings.eqlComptime(term, (if (@typeInfo(@TypeOf(pair)) == .@"enum" or @typeInfo(@TypeOf(pair)) == .@"union") @tagName(pair) else pair.name))) {

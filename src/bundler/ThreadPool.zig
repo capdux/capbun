@@ -59,6 +59,11 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const Logger = @import("../logger/logger.zig");
@@ -260,130 +265,135 @@ pub fn getWorker(self: *ThreadPool, id: std.Thread.Id) *Worker {
             return entry.value_ptr.*;
     }
     const debug = Output.scoped(.ThreadPool, .visible);
-    pub const Worker = struct {
-        heap: ThreadLocalArena,
-        allocator: std.mem.Allocator,
-        ctx: *BundleV2,
-        data: WorkerData = undefined,
-        quit: bool = false,
-        ast_memory_allocator: js_ast.ASTMemoryAllocator = undefined,
-        has_created: bool = false,
-        thread: ?*ThreadPoolLib.Thread = null,
-        deinit_task: ThreadPoolLib.Task = .{ .callback = deinitCallback },
-        temporary_arena: bun.ArenaAllocator = undefined,
-        stmt_list: LinkerContext.StmtList = undefined,
-    
-    pub fn deinitCallback(task: *ThreadPoolLib.Task) void {
-                _ = debug("Worker.deinit()", .{});
-                var worker: *Worker = (blk: {
-                break :blk @alignCast(@fieldParentPtr("deinit_task", task));
-    
-    });
-                _ = &worker;
-                _ = worker.deinit();
-        }
-    
-    pub fn deinitSoon(self: *@This()) void {
-                if (self.thread) |thread| {
-                    _ = &thread;
-                    _ = thread.pushIdleTask((&self.deinit_task));
+    pub const Worker = Worker_;
+};
+
+pub const WorkerData_ = struct {
+    log: *Logger.Log,
+    estimated_input_lines_of_code: usize = 0,
+    transpiler: Transpiler,
+    other_transpiler: ?Transpiler = null,
+};
+
+pub const Worker_ = struct {
+    heap: ThreadLocalArena,
+    allocator: std.mem.Allocator,
+    ctx: *BundleV2,
+    data: WorkerData_ = undefined,
+    quit: bool = false,
+    ast_memory_allocator: js_ast.ASTMemoryAllocator = undefined,
+    has_created: bool = false,
+    thread: ?*ThreadPoolLib.Thread = null,
+    deinit_task: ThreadPoolLib.Task = .{ .callback = deinitCallback },
+    temporary_arena: bun.ArenaAllocator = undefined,
+    stmt_list: LinkerContext.StmtList = undefined,
+
+pub fn deinitCallback(task: *ThreadPoolLib.Task) void {
+            _ = debug("Worker.deinit()", .{});
+            var worker: *Worker_ = (blk: {
+            break :blk @alignCast(@fieldParentPtr("deinit_task", task));
+
+});
+            _ = &worker;
+            _ = worker.deinit();
+    }
+
+pub fn deinitSoon(self: *Worker_) void {
+            if (self.thread) |thread| {
+                _ = &thread;
+                _ = thread.pushIdleTask((&self.deinit_task));
+            }
+    }
+
+pub fn deinit(self: *Worker_) void {
+            if (self.has_created) {
+                _ = self.heap.deinit();
+            }
+            _ = bun.default_allocator.destroy(self);
+    }
+
+pub fn get(ctx: *BundleV2) *Worker_ {
+            var worker = ctx.graph.pool.getWorker(std.Thread.getCurrentId());
+            _ = &worker;
+            if ((!worker.has_created)) {
+                _ = worker.create(ctx);
+            }
+            _ = worker.ast_memory_allocator.push();
+            if (comptime FeatureFlags.help_catch_memory_issues) {
+                _ = worker.heap.helpCatchMemoryIssues();
+            }
+            return worker;
+    }
+
+pub fn unget(self: *Worker_) void {
+            if (comptime FeatureFlags.help_catch_memory_issues) {
+                _ = self.heap.helpCatchMemoryIssues();
+            }
+            _ = self.ast_memory_allocator.pop();
+    }
+
+pub fn init(worker: *Worker_, v2: *BundleV2) void {
+            worker.ctx = v2;
+    }
+
+pub fn create(self: *Worker_, ctx: *BundleV2) void {
+            var trace = bun.perf.trace("Bundler.Worker.create");
+            _ = &trace;
+            var trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
+            break :blk (&trace);
+
+}) };
+            _ = &trace_guard;
+            var __trace_guard_moved = false; _ = &__trace_guard_moved;
+            defer if (!__trace_guard_moved) { __trace_guard_moved = true; const __T = @TypeOf(trace_guard); if (@typeInfo(__T) == .optional) { if (trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = trace_guard; _drop_val.__cp_deinit(); } };
+            self.has_created = true;
+            _ = Output.Source.configureThread();
+            self.heap = ThreadLocalArena.init();
+            self.allocator = self.heap.allocator();
+            const allocator = self.allocator;
+            self.ast_memory_allocator = .{ .allocator = self.allocator };
+            _ = self.ast_memory_allocator.reset();
+            self.data = WorkerData_{ .log = bun.handleOom(allocator.create(Logger.Log)), .transpiler = undefined };
+            self.data.log.* = Logger.Log.init(allocator);
+            self.ctx = ctx;
+            self.temporary_arena = bun.ArenaAllocator.init(self.allocator);
+            self.stmt_list = LinkerContext.StmtList.init(self.allocator);
+            _ = self.initializeTranspiler((&self.data.transpiler), ctx.transpiler, allocator);
+            _ = debug("Worker.create()", .{});
+    }
+
+pub fn initializeTranspiler(self: *Worker_, transpiler: *Transpiler, src: *Transpiler, allocator: std.mem.Allocator) void {
+            transpiler.* = src.*;
+            _ = transpiler.setLog(self.data.log);
+            _ = transpiler.setAllocator(allocator);
+            transpiler.linker.resolver = (&transpiler.resolver);
+            transpiler.macro_context = js_ast.Macro.MacroContext.init(transpiler);
+            transpiler.resolver.caches = CacheSet.Set.init(allocator);
+    }
+
+pub fn transpilerForTarget(self: *Worker_, target: bun.options.Target) *Transpiler {
+            if (((target == .browser) and (self.data.transpiler.options.target != target))) {
+                if ((self.data.other_transpiler != null)) {
+                    const other_ptr = (&self.data.other_transpiler.?);
+                    _ = bun.debugAssert((other_ptr.options.target == target));
+                    return other_ptr;
                 }
-        }
-    
-    pub fn deinit(self: *@This()) void {
-                if (self.has_created) {
-                    _ = self.heap.deinit();
-                }
-                _ = bun.default_allocator.destroy(self);
-        }
-    
-    pub fn get(ctx: *BundleV2) *Worker {
-                var worker = ctx.graph.pool.getWorker(std.Thread.getCurrentId());
-                _ = &worker;
-                if ((!worker.has_created)) {
-                    _ = worker.create(ctx);
-                }
-                _ = worker.ast_memory_allocator.push();
-                if (comptime FeatureFlags.help_catch_memory_issues) {
-                    _ = worker.heap.helpCatchMemoryIssues();
-                }
-                return worker;
-        }
-    
-    pub fn unget(self: *@This()) void {
-                if (comptime FeatureFlags.help_catch_memory_issues) {
-                    _ = self.heap.helpCatchMemoryIssues();
-                }
-                _ = self.ast_memory_allocator.pop();
-        }
-    
-    pub fn init(worker: *Worker, v2: *BundleV2) void {
-                worker.ctx = v2;
-        }
-    
-    pub fn create(self: *@This(), ctx: *BundleV2) void {
-                var trace = bun.perf.trace("Bundler.Worker.create");
-                _ = &trace;
-                var trace_guard = EndGuard(@TypeOf(trace)){ .ptr = (blk: {
-                break :blk (&trace);
-    
-    }) };
-                _ = &trace_guard;
-                var __trace_guard_moved = false; _ = &__trace_guard_moved;
-                defer if (!__trace_guard_moved) { __trace_guard_moved = true; const __T = @TypeOf(trace_guard); if (@typeInfo(__T) == .optional) { if (trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = trace_guard; _drop_val.__cp_deinit(); } };
-                self.has_created = true;
-                _ = Output.Source.configureThread();
-                self.heap = ThreadLocalArena.init();
-                self.allocator = self.heap.allocator();
-                const allocator = self.allocator;
-                self.ast_memory_allocator = .{ .allocator = self.allocator };
-                _ = self.ast_memory_allocator.reset();
-                self.data = WorkerData{ .log = bun.handleOom(allocator.create(Logger.Log)), .transpiler = undefined };
-                self.data.log.* = Logger.Log.init(allocator);
-                self.ctx = ctx;
-                self.temporary_arena = bun.ArenaAllocator.init(self.allocator);
-                self.stmt_list = LinkerContext.StmtList.init(self.allocator);
-                _ = self.initializeTranspiler((&self.data.transpiler), ctx.transpiler, allocator);
-                _ = debug("Worker.create()", .{});
-        }
-    
-    pub fn initializeTranspiler(self: *@This(), transpiler: *Transpiler, src: *Transpiler, allocator: std.mem.Allocator) void {
-                transpiler.* = src.*;
-                _ = transpiler.setLog(self.data.log);
-                _ = transpiler.setAllocator(allocator);
-                transpiler.linker.resolver = (&transpiler.resolver);
-                transpiler.macro_context = js_ast.Macro.MacroContext.init(transpiler);
-                transpiler.resolver.caches = CacheSet.Set.init(allocator);
-        }
-    
-    pub fn transpilerForTarget(self: *@This(), target: bun.options.Target) *Transpiler {
-                if (((target == .browser) and (self.data.transpiler.options.target != target))) {
-                    if ((self.data.other_transpiler != null)) {
-                        const other_ptr = (&self.data.other_transpiler.?);
-                        _ = bun.debugAssert((other_ptr.options.target == target));
-                        return other_ptr;
-                    }
-                    self.data.other_transpiler = undefined;
-                    const other = (&self.data.other_transpiler.?);
-                    _ = self.initializeTranspiler(other, self.ctx.client_transpiler.?, self.allocator);
-                    _ = bun.debugAssert((other.options.target == target));
-                    return other;
-                }
-                return (&self.data.transpiler);
-        }
-    
-    pub fn run(self: *@This(), ctx: *BundleV2) void {
-                if ((!self.has_created)) {
-                    _ = self.create(ctx);
-                }
-        }
-        pub const WorkerData = struct {
-            log: *Logger.Log,
-            estimated_input_lines_of_code: usize = 0,
-            transpiler: Transpiler,
-            other_transpiler: ?Transpiler = null,
-        };
-    };
+                self.data.other_transpiler = undefined;
+                const other = (&self.data.other_transpiler.?);
+                _ = self.initializeTranspiler(other, self.ctx.client_transpiler.?, self.allocator);
+                _ = bun.debugAssert((other.options.target == target));
+                return other;
+            }
+            return (&self.data.transpiler);
+    }
+
+pub fn run(self: *Worker_, ctx: *BundleV2) void {
+            if ((!self.has_created)) {
+                _ = self.create(ctx);
+            }
+    }
+    const debug = Output.scoped(.ThreadPool, .visible);
+    pub const WorkerData = WorkerData_;
 };
 
 var io_thread_pool: ThreadPoolLib = undefined;

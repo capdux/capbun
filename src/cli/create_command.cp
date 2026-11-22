@@ -205,197 +205,304 @@ struct CreateOptions {
 
 const BUN_CREATE_DIR = ".bun-create";
 let home_dir_buf: bun.PathBuffer = undefined;
-const CreateInjectionPrefill = struct {
-    const dependencies_string = "dependencies";
-    const dev_dependencies_string = "devDependencies";
-    const bun_string = "bun";
-    const macros_string = "macros";
-    const bun_macros_relay_path = "bun-macro-relay";
+const prefill_dependencies_string = "dependencies";
+const prefill_dev_dependencies_string = "devDependencies";
+const prefill_bun_string = "bun";
+const prefill_macros_string = "macros";
+const prefill_bun_macros_relay_path = "bun-macro-relay";
 
-    let dependencies_e_string = js_ast.E.String.init(dependencies_string);
-    let devDependencies_e_string = js_ast.E.String.init(dev_dependencies_string);
-    let bun_e_string = js_ast.E.String.init(bun_string);
-    let macros_e_string = js_ast.E.String.init(macros_string);
-    let react_relay_string = js_ast.E.String.init("react-relay");
-    let bun_macros_relay_path_string = js_ast.E.String.init("bun-macro-relay");
-    let babel_plugin_relay_macro = js_ast.E.String.init("babel-plugin-relay/macro");
-    let babel_plugin_relay_macro_js = js_ast.E.String.init("babel-plugin-relay/macro.js");
-    let graphql_string = js_ast.E.String.init("graphql");
+let prefill_dependencies_e_string = js_ast.E.String.init(prefill_dependencies_string);
+let prefill_devDependencies_e_string = js_ast.E.String.init(prefill_dev_dependencies_string);
+let prefill_bun_e_string = js_ast.E.String.init(prefill_bun_string);
+let prefill_macros_e_string = js_ast.E.String.init(prefill_macros_string);
+let prefill_react_relay_string = js_ast.E.String.init("react-relay");
+let prefill_bun_macros_relay_path_string = js_ast.E.String.init("bun-macro-relay");
+let prefill_babel_plugin_relay_macro = js_ast.E.String.init("babel-plugin-relay/macro");
+let prefill_babel_plugin_relay_macro_js = js_ast.E.String.init("babel-plugin-relay/macro.js");
+let prefill_graphql_string = js_ast.E.String.init("graphql");
 
-    let npx_react_scripts_build_str = js_ast.E.String.init("npx react-scripts build");
+let prefill_npx_react_scripts_build_str = js_ast.E.String.init("npx react-scripts build");
 
-    pub const npx_react_scripts_build = js_ast.Expr{ .data = .{ .e_string = &npx_react_scripts_build_str }, .loc = logger.Loc.Empty };
+const prefill_npx_react_scripts_build = js_ast.Expr{ .data = .{ .e_string = &prefill_npx_react_scripts_build_str }, .loc = logger.Loc.Empty };
 
-    let bun_macro_relay_properties: [1]js_ast.G.Property = .{
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &graphql_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_string = &bun_macros_relay_path_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-    };
-
-    let bun_macro_relay_object = js_ast.E.Object{
-        .properties = undefined,
-    };
-
-    let bun_macros_relay_object_properties: [3]js_ast.G.Property = .{
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &react_relay_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macro_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &babel_plugin_relay_macro,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macro_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &babel_plugin_relay_macro_js,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macro_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-    };
-
-    let bun_macros_relay_object = js_ast.E.Object{
-        .properties = undefined,
-    };
-
-    let bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
-    let bun_macros_relay_only_object_properties: [1]js_ast.G.Property = .{
-        js_ast.G.Property{
-            .key = js_ast.Expr{
-                .data = .{
-                    .e_string = &bun_macros_relay_only_object_string,
-                },
-                .loc = logger.Loc.Empty,
-            },
-            .value = js_ast.Expr{
-                .data = .{
-                    .e_object = &bun_macros_relay_object,
-                },
-                .loc = logger.Loc.Empty,
-            },
-        },
-    };
-    let bun_macros_relay_only_object = js_ast.E.Object{ .properties = undefined };
-
-    let bun_only_macros_string = js_ast.E.String.init("bun");
-    let bun_only_macros_relay_property = js_ast.G.Property{
+let prefill_bun_macro_relay_properties: [1]js_ast.G.Property = .{
+    js_ast.G.Property{
         .key = js_ast.Expr{
             .data = .{
-                .e_string = &bun_only_macros_string,
+                .e_string = &prefill_graphql_string,
             },
             .loc = logger.Loc.Empty,
         },
         .value = js_ast.Expr{
             .data = .{
-                .e_object = &bun_macros_relay_only_object,
+                .e_string = &prefill_bun_macros_relay_path_string,
             },
             .loc = logger.Loc.Empty,
         },
-    };
-
-    let bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
-    let bun_framework_next_version = js_ast.E.String.init("latest");
-    let bun_framework_next_property = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_framework_next_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_framework_next_version,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    let bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
-    let bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
-
-    let bun_macro_relay_dependency = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_macro_relay_dependency_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_string = &bun_macro_relay_dependency_version,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    let refresh_runtime_string = js_ast.E.String.init("react-refresh");
-    let refresh_runtime_version = js_ast.E.String.init("0.10.0");
-    let react_refresh_dependency = js_ast.G.Property{
-        .key = js_ast.Expr{
-            .data = .{
-                .e_string = &refresh_runtime_string,
-            },
-            .loc = logger.Loc.Empty,
-        },
-        .value = js_ast.Expr{
-            .data = .{
-                .e_string = &refresh_runtime_version,
-            },
-            .loc = logger.Loc.Empty,
-        },
-    };
-
-    let dev_dependencies_key = js_ast.Expr{
-        .data = .{
-            .e_string = &devDependencies_e_string,
-        },
-        .loc = logger.Loc.Empty,
-    };
-    let dependencies_key = js_ast.Expr{
-        .data = .{ .e_string = &dependencies_e_string },
-        .loc = logger.Loc.Empty,
-    };
-
-    pub const bun_bun_for_nextjs_task: string = "bun bun --use next";
+    },
 };
+
+let prefill_bun_macro_relay_object = js_ast.E.Object{
+    .properties = undefined,
+};
+
+let prefill_bun_macros_relay_object_properties: [3]js_ast.G.Property = .{
+    js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &prefill_react_relay_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_object = &prefill_bun_macro_relay_object,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    },
+    js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &prefill_babel_plugin_relay_macro,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_object = &prefill_bun_macro_relay_object,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    },
+    js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &prefill_babel_plugin_relay_macro_js,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_object = &prefill_bun_macro_relay_object,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    },
+};
+
+let prefill_bun_macros_relay_object = js_ast.E.Object{
+    .properties = undefined,
+};
+
+let prefill_bun_macros_relay_only_object_string = js_ast.E.String.init("macros");
+let prefill_bun_macros_relay_only_object_properties: [1]js_ast.G.Property = .{
+    js_ast.G.Property{
+        .key = js_ast.Expr{
+            .data = .{
+                .e_string = &prefill_bun_macros_relay_only_object_string,
+            },
+            .loc = logger.Loc.Empty,
+        },
+        .value = js_ast.Expr{
+            .data = .{
+                .e_object = &prefill_bun_macros_relay_object,
+            },
+            .loc = logger.Loc.Empty,
+        },
+    },
+};
+let prefill_bun_macros_relay_only_object = js_ast.E.Object{ .properties = undefined };
+
+let prefill_bun_only_macros_string = js_ast.E.String.init("bun");
+let prefill_bun_only_macros_relay_property = js_ast.G.Property{
+    .key = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_bun_only_macros_string,
+        },
+        .loc = logger.Loc.Empty,
+    },
+    .value = js_ast.Expr{
+        .data = .{
+            .e_object = &prefill_bun_macros_relay_only_object,
+        },
+        .loc = logger.Loc.Empty,
+    },
+};
+
+let prefill_bun_framework_next_string = js_ast.E.String.init("bun-framework-next");
+let prefill_bun_framework_next_version = js_ast.E.String.init("latest");
+let prefill_bun_framework_next_property = js_ast.G.Property{
+    .key = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_bun_framework_next_string,
+        },
+        .loc = logger.Loc.Empty,
+    },
+    .value = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_bun_framework_next_version,
+        },
+        .loc = logger.Loc.Empty,
+    },
+};
+
+let prefill_bun_macro_relay_dependency_string = js_ast.E.String.init("bun-macro-relay");
+let prefill_bun_macro_relay_dependency_version = js_ast.E.String.init("latest");
+
+let prefill_bun_macro_relay_dependency = js_ast.G.Property{
+    .key = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_bun_macro_relay_dependency_string,
+        },
+        .loc = logger.Loc.Empty,
+    },
+    .value = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_bun_macro_relay_dependency_version,
+        },
+        .loc = logger.Loc.Empty,
+    },
+};
+
+let prefill_refresh_runtime_string = js_ast.E.String.init("react-refresh");
+let prefill_refresh_runtime_version = js_ast.E.String.init("0.10.0");
+let prefill_react_refresh_dependency = js_ast.G.Property{
+    .key = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_refresh_runtime_string,
+        },
+        .loc = logger.Loc.Empty,
+    },
+    .value = js_ast.Expr{
+        .data = .{
+            .e_string = &prefill_refresh_runtime_version,
+        },
+        .loc = logger.Loc.Empty,
+    },
+};
+
+let prefill_dev_dependencies_key = js_ast.Expr{
+    .data = .{
+        .e_string = &prefill_devDependencies_e_string,
+    },
+    .loc = logger.Loc.Empty,
+};
+let prefill_dependencies_key = js_ast.Expr{
+    .data = .{ .e_string = &prefill_dependencies_e_string },
+    .loc = logger.Loc.Empty,
+};
+
+const prefill_bun_bun_for_nextjs_task: string = "bun bun --use next";
+
+struct _CreateFileCopier {
+    const Walker = @import("../sys/walker_skippable.zig");
+    static fn copy(
+        destination_dir_: std.fs.Dir,
+        walker: *Walker,
+        node_: *Progress.Node,
+        progress_: *Progress,
+        dst_base_len: if (Environment.isWindows) usize else void,
+        dst_buf: if (Environment.isWindows) *bun.WPathBuffer else void,
+        src_base_len: if (Environment.isWindows) usize else void,
+        src_buf: if (Environment.isWindows) *bun.WPathBuffer else void,
+    )! {
+        while (entry := walker.next().unwrap()?) {
+            if (comptime Environment.isWindows) {
+                if (entry.kind != .file && entry.kind != .directory) continue;
+
+                @memcpy(dst_buf[dst_base_len..][0..entry.path.len], entry.path);
+                dst_buf[dst_base_len + entry.path.len] = 0;
+                const dst = dst_buf[0 .. dst_base_len + entry.path.len :0];
+
+                @memcpy(src_buf[src_base_len..][0..entry.path.len], entry.path);
+                src_buf[src_base_len + entry.path.len] = 0;
+                const src = src_buf[0 .. src_base_len + entry.path.len :0];
+
+                switch (entry.kind) {
+                    .directory => {
+                        if (bun.windows.CreateDirectoryExW(src.ptr, dst.ptr, null) == 0) {
+                            bun.MakePath.makePath(u16, destination_dir_, entry.path) catch {};
+                        }
+                    },
+                    .file => {
+                        defer node_.completeOne();
+                        if (bun.windows.CopyFileW(src.ptr, dst.ptr, 0) == bun.windows.FALSE) {
+                            if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
+                                bun.MakePath.makePath(u16, destination_dir_, entry_dirname) catch {};
+                                if (bun.windows.CopyFileW(src.ptr, dst.ptr, 0) != bun.windows.FALSE) {
+                                    continue;
+                                }
+                            }
+
+                            if (e := bun.windows.Win32Error.get().toSystemErrno()) {
+                                Output.err(e, "failed to copy file {f}", .{
+                                    bun.fmt.fmtOSPath(entry.path, .{}),
+                                });
+                            } else {
+                                Output.errGeneric("failed to copy file {f}", .{
+                                    bun.fmt.fmtOSPath(entry.path, .{}),
+                                });
+                            }
+                            node_.end();
+                            progress_.refresh();
+                            Global.crash();
+                        }
+                    },
+                    else => unreachable,
+                }
+
+                continue;
+            }
+            if (entry.kind != .file) continue;
+
+            let outfile = bun.FD.fromStdFile(destination_dir_.createFile(entry.path, .{}) catch brk: {
+                if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
+                    bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
+                }
+                break :brk destination_dir_.createFile(entry.path, .{}) catch |e| {
+                    node_.end();
+                    progress_.refresh();
+                    Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{})});
+                    Global.crash();
+                };
+            });
+            const _guard_outfile = CloseGuard<bun.FD>{ ptr: &outfile };
+            defer node_.completeOne();
+
+            let infile = entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap()?;
+            const _guard_infile = CloseGuard<bun.FD>{ ptr: &infile };
+
+            // Assumption: you only really care about making sure something that was executable is still executable
+            switch (infile.stat()) {
+                .err => {},
+                .result => |stat| {
+                    * = outfile.chmod(usize(stat.mode));
+                },
+            }
+
+            CopyFile.copyFile(infile, outfile).unwrap() catch |e| {
+                node_.end();
+                progress_.refresh();
+                Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{})});
+                Global.crash();
+            };
+        }
+    }
+}
+
+struct _CreateAnalyzer {
+    ctx: Command.Context,
+    example_tag: Example.Tag,
+    entry_point: []const u8,
+    node: *Progress.Node,
+    progress: *Progress,
+    static fn onAnalyze(analyzer_ptr: *_CreateAnalyzer, result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result)! {
+        analyzer_ptr.node.end();
+
+        SourceFileProjectGenerator.generate(analyzer_ptr.ctx, analyzer_ptr.example_tag, analyzer_ptr.entry_point, result)?;
+    }
+}
 
 pub struct ExtractInfoResult {
     example_tag: Example.Tag,
@@ -665,100 +772,7 @@ pub struct CreateCommand {
                 let walker_ = Walker.walk(.fromStdDir(template_dir), ctx.allocator, skip_files, skip_dirs)?;
                 const _guard_walker = DeinitGuard<Walker>{ ptr: &walker_ };
 
-                const FileCopier = struct {
-                    static fn copy(
-                        destination_dir_: std.fs.Dir,
-                        walker: *Walker,
-                        node_: *Progress.Node,
-                        progress_: *Progress,
-                        dst_base_len: if (Environment.isWindows) usize else void,
-                        dst_buf: if (Environment.isWindows) *bun.WPathBuffer else void,
-                        src_base_len: if (Environment.isWindows) usize else void,
-                        src_buf: if (Environment.isWindows) *bun.WPathBuffer else void,
-                    )! {
-                        while (entry := walker.next().unwrap()?) {
-                            if (comptime Environment.isWindows) {
-                                if (entry.kind != .file && entry.kind != .directory) continue;
-
-                                @memcpy(dst_buf[dst_base_len..][0..entry.path.len], entry.path);
-                                dst_buf[dst_base_len + entry.path.len] = 0;
-                                const dst = dst_buf[0 .. dst_base_len + entry.path.len :0];
-
-                                @memcpy(src_buf[src_base_len..][0..entry.path.len], entry.path);
-                                src_buf[src_base_len + entry.path.len] = 0;
-                                const src = src_buf[0 .. src_base_len + entry.path.len :0];
-
-                                switch (entry.kind) {
-                                    .directory => {
-                                        if (bun.windows.CreateDirectoryExW(src.ptr, dst.ptr, null) == 0) {
-                                            bun.MakePath.makePath(u16, destination_dir_, entry.path) catch {};
-                                        }
-                                    },
-                                    .file => {
-                                        defer node_.completeOne();
-                                        if (bun.windows.CopyFileW(src.ptr, dst.ptr, 0) == bun.windows.FALSE) {
-                                            if (entry_dirname := bun.Dirname.dirname(u16, entry.path)) {
-                                                bun.MakePath.makePath(u16, destination_dir_, entry_dirname) catch {};
-                                                if (bun.windows.CopyFileW(src.ptr, dst.ptr, 0) != bun.windows.FALSE) {
-                                                    continue;
-                                                }
-                                            }
-
-                                            if (e := bun.windows.Win32Error.get().toSystemErrno()) {
-                                                Output.err(e, "failed to copy file {f}", .{ 
-                                                    bun.fmt.fmtOSPath(entry.path, .{}),
-                                                });
-                                            } else {
-                                                Output.errGeneric("failed to copy file {f}", .{ 
-                                                    bun.fmt.fmtOSPath(entry.path, .{}),
-                                                });
-                                            }
-                                            node_.end();
-                                            progress_.refresh();
-                                            Global.crash();
-                                        }
-                                    },
-                                    else => unreachable,
-                                }
-
-                                continue;
-                            }
-                            if (entry.kind != .file) continue;
-
-                            let outfile = bun.FD.fromStdFile(destination_dir_.createFile(entry.path, .{}) catch brk: {
-                                if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
-                                    bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
-                                }
-                                break :brk destination_dir_.createFile(entry.path, .{}) catch |e| {
-                                    node_.end();
-                                    progress_.refresh();
-                                    Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{})});
-                                    Global.crash();
-                                };
-                            });
-                            const _guard_outfile = CloseGuard<bun.FD>{ ptr: &outfile };
-                            defer node_.completeOne();
-
-                            let infile = entry.dir.openat(entry.basename, bun.O.RDONLY, 0).unwrap()?;
-                            const _guard_infile = CloseGuard<bun.FD>{ ptr: &infile };
-
-                            // Assumption: you only really care about making sure something that was executable is still executable
-                            switch (infile.stat()) {
-                                .err => {},
-                                .result => |stat| {
-                                    * = outfile.chmod(usize(stat.mode));
-                                },
-                            }
-
-                            CopyFile.copyFile(infile, outfile).unwrap() catch |e| {
-                                node_.end();
-                                progress_.refresh();
-                                Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{})});
-                                Global.crash();
-                            };
-                        }
-                    }
-                };
+                const FileCopier = _CreateFileCopier;
 
                 try FileCopier.copy(
                     destination_dir,
@@ -1080,14 +1094,12 @@ pub struct CreateCommand {
 
                 const E = js_ast.E;
 
-                const InjectionPrefill = CreateInjectionPrefill;
-
-                InjectionPrefill.bun_macro_relay_object.properties = js_ast.G.Property.List
-                    .fromBorrowedSliceDangerous(InjectionPrefill.bun_macro_relay_properties[0..]);
-                InjectionPrefill.bun_macros_relay_object.properties = js_ast.G.Property.List
-                    .fromBorrowedSliceDangerous(&InjectionPrefill.bun_macros_relay_object_properties);
-                InjectionPrefill.bun_macros_relay_only_object.properties = js_ast.G.Property.List
-                    .fromBorrowedSliceDangerous(&InjectionPrefill.bun_macros_relay_only_object_properties);
+                prefill_bun_macro_relay_object.properties = js_ast.G.Property.List
+                    .fromBorrowedSliceDangerous(prefill_bun_macro_relay_properties[0..]);
+                prefill_bun_macros_relay_object.properties = js_ast.G.Property.List
+                    .fromBorrowedSliceDangerous(&prefill_bun_macros_relay_object_properties);
+                prefill_bun_macros_relay_only_object.properties = js_ast.G.Property.List
+                    .fromBorrowedSliceDangerous(&prefill_bun_macros_relay_only_object_properties);
 
                 // if (needs_to_inject_dev_dependency and dev_dependencies == null) {
                 //     var e_object = try ctx.allocator.create(E.Object);
@@ -1329,7 +1341,7 @@ pub struct CreateCommand {
                                     }
 
                                     if (strings.contains(script, "react-scripts build")) {
-                                        scripts_properties[script_property_i].value = InjectionPrefill.npx_react_scripts_build;
+                                        scripts_properties[script_property_i].value = prefill_npx_react_scripts_build;
                                     }
 
                                     scripts_properties[script_property_out_i] = scripts_properties[script_property_i];
@@ -1625,18 +1637,7 @@ pub struct CreateCommand {
     }
 
     static fn runOnEntryPoint(ctx: Command.Context, example_tag: Example.Tag, entry_point: []const u8, progress: *Progress, node: *Progress.Node)! {
-        const Analyzer = struct {
-            ctx: Command.Context,
-            example_tag: Example.Tag,
-            entry_point: []const u8,
-            node: *Progress.Node,
-            progress: *Progress,
-            static fn onAnalyze(this: *@This(), result: *bun.bundle_v2.BundleV2.DependenciesScanner.Result): anyerror!void {
-                this.node.end();
-
-                SourceFileProjectGenerator.generate(this.ctx, this.example_tag, this.entry_point, result)?;
-            }
-        };
+        const Analyzer = _CreateAnalyzer;
 
         let analyzer = Analyzer{
             ctx: ctx,

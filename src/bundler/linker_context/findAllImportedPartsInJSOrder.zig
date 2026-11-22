@@ -95,7 +95,7 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const FindImportedPartsVisitor = struct {
+pub const FindImportedPartsVisitor = struct {
     entry_bits: *const AutoBitSet,
     flags: []const JSMeta.Flags,
     parts: []BabyList(Part),
@@ -120,7 +120,7 @@ pub fn appendOrExtendRange(ranges: *std.array_list.Managed(PartRange), source_in
             _ = ((ranges.append(.{ .source_index = Index.init(source_index), .part_index_begin = part_index, .part_index_end = (part_index + 1) })) catch unreachable);
     }
 
-pub fn visit(self: *@This(), source_index: Index.Int, comptime with_code_splitting: bool, comptime with_scb: bool) void {
+pub fn visit(self: *FindImportedPartsVisitor, source_index: Index.Int, comptime with_code_splitting: bool, comptime with_scb: bool) void {
             if ((source_index == (if (@typeInfo(@TypeOf(Index.invalid)) == .@"enum") @intFromEnum(Index.invalid) else Index.invalid.value))) {
                 return;
             }
@@ -133,7 +133,7 @@ pub fn visit(self: *@This(), source_index: Index.Int, comptime with_code_splitti
             const can_be_split = (self.flags[@as(usize, @intCast(source_index))].wrap == .none);
             const parts = self.parts[@as(usize, @intCast(source_index))].slice();
             if (((can_be_split and is_file_in_chunk) and parts[@as(usize, @intCast(js_ast.namespace_export_part_index))].is_live)) {
-                _ = appendOrExtendRange((&self.part_ranges), source_index, js_ast.namespace_export_part_index);
+                _ = FindImportedPartsVisitor.appendOrExtendRange((&self.part_ranges), source_index, js_ast.namespace_export_part_index);
             }
             const records = self.import_records[@as(usize, @intCast(source_index))].slice();
             var part_index: u32 = 0;
@@ -158,7 +158,7 @@ pub fn visit(self: *@This(), source_index: Index.Int, comptime with_code_splitti
                     is_file_in_chunk = true;
                     if (((can_be_split and (part_index != js_ast.namespace_export_part_index)) and self.c.shouldIncludePart(source_index, part))) {
                         const js_parts = (if ((source_index == (if (@typeInfo(@TypeOf(Index.runtime)) == .@"enum") @intFromEnum(Index.runtime) else Index.runtime.value))) (&self.parts_prefix) else (&self.part_ranges));
-                        _ = appendOrExtendRange(js_parts, source_index, part_index);
+                        _ = FindImportedPartsVisitor.appendOrExtendRange(js_parts, source_index, part_index);
                     }
                 }
             }
@@ -173,6 +173,7 @@ pub fn visit(self: *@This(), source_index: Index.Int, comptime with_code_splitti
             }
     }
 };
+
 pub const BitSet = bun.bit_set.DynamicBitSetUnmanaged;
 const BabyList = bun.BabyList;
 const ImportRecord = bun.ImportRecord;
@@ -219,8 +220,8 @@ pub fn findAllImportedPartsInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
         {
             var index: i32 = 0;
             _ = &index;
-            const __end_0 = chunks.len;
-            while (index < __end_0) : (index += 1) {
+            const __end_2 = chunks.len;
+            while (index < __end_2) : (index += 1) {
                 const chunk = (&chunks[@as(usize, @intCast(index))]);
                 switch (chunk.content) {
 .javascript => {

@@ -23,30 +23,28 @@ pub fn findImportedCSSFilesInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
         const all_import_records = ctx.graph.ast.items(.import_records);
         const all_loaders = ctx.parse_graph.input_files.items(.loader);
         const all_parts = ctx.graph.ast.items(.parts);
-        const visit = struct {
-
-pub fn visit(c: *LinkerContext, import_records: []const BabyList(ImportRecord), parts: []const Part.List, loaders: []const Loader, temp: std.mem.Allocator, visits: *BitSet, o: *BabyList(Index), source_index: Index, is_css: bool) void {
-            if (visits.isSet(source_index.get())) {
-                return;
-            }
-            _ = visits.set(source_index.get());
-            const records: []ImportRecord = import_records[@as(usize, @intCast(source_index.get()))].slice();
-            const p = (&parts[@as(usize, @intCast(source_index.get()))]);
-            for (cp_iter_slice(p.sliceConst())) |part| {
-                _ = &part;
-                for (cp_iter_slice(part.import_record_indices.sliceConst())) |import_record_index| {
-                    _ = &import_record_index;
-                    const record = (&records[@as(usize, @intCast(import_record_index))]);
-                    if (record.source_index.isValid()) {
-                        _ = visit(c, import_records, parts, loaders, temp, visits, o, record.source_index, loaders[@as(usize, @intCast(record.source_index.get()))].isCSS());
-                    }
-                }
-            }
-            if ((is_css and source_index.isValid())) {
-                _ = bun.handleOom(o.append(temp, source_index));
-            }
-    }
-}.visit;
         _ = visit(ctx, all_import_records, all_parts, all_loaders, temp_allocator, (&visited), (&order), entry_point, false);
         return order;
+}
+
+pub fn visit(c: *LinkerContext, import_records: []const BabyList(ImportRecord), parts: []const Part.List, loaders: []const Loader, temp: std.mem.Allocator, visits: *BitSet, o: *BabyList(Index), source_index: Index, is_css: bool) void {
+        if (visits.isSet(source_index.get())) {
+            return;
+        }
+        _ = visits.set(source_index.get());
+        const records: []ImportRecord = import_records[@as(usize, @intCast(source_index.get()))].slice();
+        const p = (&parts[@as(usize, @intCast(source_index.get()))]);
+        for (cp_iter_slice(p.sliceConst())) |part| {
+            _ = &part;
+            for (cp_iter_slice(part.import_record_indices.sliceConst())) |import_record_index| {
+                _ = &import_record_index;
+                const record = (&records[@as(usize, @intCast(import_record_index))]);
+                if (record.source_index.isValid()) {
+                    _ = visit(c, import_records, parts, loaders, temp, visits, o, record.source_index, loaders[@as(usize, @intCast(record.source_index.get()))].isCSS());
+                }
+            }
+        }
+        if ((is_css and source_index.isValid())) {
+            _ = bun.handleOom(o.append(temp, source_index));
+        }
 }

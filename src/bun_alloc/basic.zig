@@ -6,12 +6,7 @@ const string = []const u8;
 
 fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub const bun = @import("bun");
-const Environment = @import("../bun_core/env.zig");
-const mimalloc = bun.mimalloc;
-const Alignment = std.mem.Alignment;
-const Allocator = std.mem.Allocator;
-const log = bun.Output.scoped(.mimalloc, .hidden);
-const MimallocAllocator = struct {
+pub const MimallocAllocator = struct {
 
 pub fn alignedAlloc(len: usize, alignment: Alignment) ?[*]u8 {
             if (Environment.enable_logs) {
@@ -26,7 +21,9 @@ pub fn alignedAlloc(len: usize, alignment: Alignment) ?[*]u8 {
                     }
                 }
             }
-            return @as(?[*]u8, @ptrCast(ptr));
+            {
+                return @as(?[*]u8, @ptrCast(ptr));
+            }
     }
 
 pub fn alignedAllocSize(ptr: [*]u8) usize {
@@ -49,13 +46,14 @@ pub fn resize_with_default_allocator(ptr: *anyopaque, buf: []u8, alignment: Alig
 pub fn remap_with_default_allocator(ptr: *anyopaque, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
             _ = &ptr;
             _ = &ret_addr;
-            return @ptrCast(mimalloc.mi_realloc_aligned(buf.ptr, new_len, alignment.toByteUnits()));
+            {
+                return @ptrCast(mimalloc.mi_realloc_aligned(buf.ptr, new_len, alignment.toByteUnits()));
+            }
     }
     const free_with_default_allocator = mimalloc_free;
 };
-const c_allocator_vtable = (&Allocator.VTable{ .alloc = (&MimallocAllocator.alloc_with_default_allocator), .resize = (&MimallocAllocator.resize_with_default_allocator), .remap = (&MimallocAllocator.remap_with_default_allocator), .free = (&MimallocAllocator.free_with_default_allocator) });
-pub const c_allocator = Allocator{ .ptr = memory_allocator_tags.default_allocator_tag_ptr, .vtable = c_allocator_vtable };
-const ZAllocator = struct {
+
+pub const ZAllocator = struct {
 
 pub fn alignedAlloc(len: usize, alignment: Alignment) ?[*]u8 {
             _ = log("ZAllocator.alignedAlloc: {d}\n", .{ len });
@@ -68,7 +66,9 @@ pub fn alignedAlloc(len: usize, alignment: Alignment) ?[*]u8 {
                     }
                 }
             }
-            return @as(?[*]u8, @ptrCast(ptr));
+            {
+                return @as(?[*]u8, @ptrCast(ptr));
+            }
     }
 
 pub fn alignedAllocSize(ptr: [*]u8) usize {
@@ -96,12 +96,27 @@ pub fn resize_with_z_allocator(ptr: *anyopaque, buf: []u8, alignment: Alignment,
     }
     const free_with_z_allocator = mimalloc_free;
 };
-const memory_allocator_tags = struct {
+
+pub const memory_allocator_tags = struct {
     const default_allocator_tag: usize = 51254006028;
-    pub const default_allocator_tag_ptr: *anyopaque = @ptrFromInt(default_allocator_tag);
+    const default_allocator_tag_ptr: *anyopaque = (blk: {
+            break :blk @ptrFromInt(default_allocator_tag);
+    
+    });
     const z_allocator_tag: usize = 740041173696803;
-    pub const z_allocator_tag_ptr: *anyopaque = @ptrFromInt(z_allocator_tag);
+    const z_allocator_tag_ptr: *anyopaque = (blk: {
+            break :blk @ptrFromInt(z_allocator_tag);
+    
+    });
 };
+
+const Environment = @import("../bun_core/env.zig");
+const mimalloc = bun.mimalloc;
+const Alignment = std.mem.Alignment;
+const Allocator = std.mem.Allocator;
+const log = bun.Output.scoped(.mimalloc, .hidden);
+const c_allocator_vtable = (&Allocator.VTable{ .alloc = (&MimallocAllocator.alloc_with_default_allocator), .resize = (&MimallocAllocator.resize_with_default_allocator), .remap = (&MimallocAllocator.remap_with_default_allocator), .free = (&MimallocAllocator.free_with_default_allocator) });
+pub const c_allocator = Allocator{ .ptr = memory_allocator_tags.default_allocator_tag_ptr, .vtable = c_allocator_vtable };
 const z_allocator_vtable = Allocator.VTable{ .alloc = (&ZAllocator.alloc_with_z_allocator), .resize = (&ZAllocator.resize_with_z_allocator), .remap = (&Allocator.noRemap), .free = (&ZAllocator.free_with_z_allocator) };
 pub const z_allocator = Allocator{ .ptr = memory_allocator_tags.z_allocator_tag_ptr, .vtable = (&z_allocator_vtable) };
 

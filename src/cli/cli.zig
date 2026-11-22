@@ -61,7 +61,7 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const ShellCompletions = @import("./shell_completions.zig");
 pub const Arguments = @import("./Arguments.zig");
@@ -73,6 +73,24 @@ pub const fs = @import("../resolver/fs.zig");
 pub const options = @import("../bundler/options.zig");
 pub const Install = @import("../install/install.zig");
 pub const bun = @import("bun");
+pub const ArgsIterator = struct {
+    buf: [][:0]const u8,
+    i: u32 = 0,
+
+pub fn next(self: *ArgsIterator) ?[]const u8 {
+            if ((self.buf.len <= self.i)) {
+                return null;
+            }
+            const i = self.i;
+            self.i = (self.i + 1);
+            return self.buf[@as(usize, @intCast(i))];
+    }
+
+pub fn skip(self: *ArgsIterator) bool {
+            return (self.next() != null);
+    }
+};
+
 pub const Cli = struct {
     pub var log_: logger.Log = undefined;
     pub var cmd: ?Command.Tag = null;
@@ -281,7 +299,10 @@ pub fn get() Context {
 pub fn createContextData(allocator: std.mem.Allocator, log: *logger.Log, comptime command: Command.Tag) anyerror!Context {
             Cli.cmd = command;
             context_data = .{ .args = std.mem.zeroes(api.TransformOptions), .log = log, .start_time = start_time, .allocator = allocator };
-            global_cli_ctx = @ptrCast((&context_data));
+            global_cli_ctx = (blk: {
+            break :blk @ptrCast((&context_data));
+
+});
             if (comptime Command.Tag.uses_global_options.get(command)) {
                 global_cli_ctx.args = try Arguments.parse(allocator, global_cli_ctx, command);
             }
@@ -484,7 +505,10 @@ pub fn start(allocator: std.mem.Allocator, log: *logger.Log) !void {
                         break :brk result;
                     }
                     context_data = .{ .args = std.mem.zeroes(api.TransformOptions), .log = log, .start_time = start_time, .allocator = bun.default_allocator };
-                    global_cli_ctx = @ptrCast((&context_data));
+                    global_cli_ctx = (blk: {
+                    break :blk @ptrCast((&context_data));
+
+});
                     offset_for_passthrough = @min(1, bun.argv.len);
                     break :brk global_cli_ctx;
 };
@@ -1191,23 +1215,6 @@ pub fn @"bun info"(allocator: std.mem.Allocator, log: *logger.Log) !void {
     pub const HotReload = ctx_types.HotReload;
     pub const Debugger = ctx_types.Debugger;
     pub const init = createContextData;
-    const ArgsIterator = struct {
-        buf: [][:0]const u8,
-        i: u32 = 0,
-    
-    pub fn next(self: *@This()) ?[]const u8 {
-                if ((self.buf.len <= self.i)) {
-                    return null;
-                }
-                const i = self.i;
-                self.i = (self.i + 1);
-                return self.buf[@as(usize, @intCast(i))];
-        }
-    
-    pub fn skip(self: *@This()) bool {
-                return (self.next() != null);
-        }
-    };
     const default_completions_list: [17][]const u8 = .{ "build", "install", "add", "run", "update", "link", "unlink", "remove", "create", "bun", "upgrade", "discord", "test", "pm", "x", "repl", "info" };
     const reject_list: [20][]const u8 = (default_completions_list ++ .{ "build", "completions", "help" });
     pub const Tag = @import("../options_types/CommandTag.zig").Tag;

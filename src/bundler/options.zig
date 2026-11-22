@@ -458,8 +458,7 @@ else => false,
 });
     }
 
-pub fn forFileName(self: Loader, filename: []const u8, obj: anytype) ?Loader {
-        _ = self;
+pub fn forFileName(filename: []const u8, obj: anytype) ?Loader {
             const ext = std.fs.path.extension(filename);
             if (((ext.len == 0) or ((ext.len == 1) and (ext[0] == 46)))) {
                 return null;
@@ -704,6 +703,11 @@ for (cp_iter_slice(pats)) |p| {
     pub const default: AllowUnresolved = .all;
 };
 
+pub const _ExternalModulesWildcardPattern = struct {
+    prefix: []const u8,
+    suffix: []const u8,
+};
+
 pub const ExternalModules = struct {
     node_modules: std.BufSet,
     abs_paths: std.BufSet,
@@ -761,10 +765,7 @@ else => {
             result.patterns = bun.handleOom(patterns.toOwnedSlice());
             return result;
     }
-    pub const WildcardPattern = struct {
-        prefix: []const u8,
-        suffix: []const u8,
-    };
+    pub const WildcardPattern = _ExternalModulesWildcardPattern;
     const default_wildcard_patterns: [1]WildcardPattern = .{ WildcardPattern{ .prefix = "/bun:", .suffix = "" } };
     const NodeBuiltinPatternsRaw = .{ "_http_agent", "_http_client", "_http_common", "_http_incoming", "_http_outgoing", "_http_server", "_stream_duplex", "_stream_passthrough", "_stream_readable", "_stream_transform", "_stream_wrap", "_stream_writable", "_tls_common", "_tls_wrap", "assert", "async_hooks", "buffer", "child_process", "cluster", "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns", "domain", "events", "fs", "http", "http2", "https", "inspector", "module", "net", "os", "path", "perf_hooks", "process", "punycode", "querystring", "readline", "repl", "stream", "string_decoder", "sys", "test", "timers", "tls", "trace_events", "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib" };
     pub const NodeBuiltinPatterns = (NodeBuiltinPatternsRaw ++ brk: {
@@ -784,6 +785,12 @@ else => {
     });
     pub const BunNodeBuiltinPatternsCompat = .{ "_http_agent", "_http_client", "_http_common", "_http_incoming", "_http_outgoing", "_http_server", "_stream_duplex", "_stream_passthrough", "_stream_readable", "_stream_transform", "_stream_wrap", "_stream_writable", "_tls_common", "_tls_wrap", "assert", "async_hooks", "child_process", "cluster", "console", "constants", "crypto", "dgram", "diagnostics_channel", "dns", "domain", "events", "http", "http2", "https", "inspector", "module", "net", "os", "perf_hooks", "punycode", "querystring", "readline", "repl", "stream", "string_decoder", "sys", "timers", "tls", "trace_events", "tty", "url", "util", "v8", "vm", "wasi", "worker_threads", "zlib" };
     pub const NodeBuiltinsMap = bun.ComptimeStringMap(void, .{ .{ "_http_agent", .{} }, .{ "_http_client", .{} }, .{ "_http_common", .{} }, .{ "_http_incoming", .{} }, .{ "_http_outgoing", .{} }, .{ "_http_server", .{} }, .{ "_stream_duplex", .{} }, .{ "_stream_passthrough", .{} }, .{ "_stream_readable", .{} }, .{ "_stream_transform", .{} }, .{ "_stream_wrap", .{} }, .{ "_stream_writable", .{} }, .{ "_tls_common", .{} }, .{ "_tls_wrap", .{} }, .{ "assert", .{} }, .{ "async_hooks", .{} }, .{ "buffer", .{} }, .{ "child_process", .{} }, .{ "cluster", .{} }, .{ "console", .{} }, .{ "constants", .{} }, .{ "crypto", .{} }, .{ "dgram", .{} }, .{ "diagnostics_channel", .{} }, .{ "dns", .{} }, .{ "domain", .{} }, .{ "events", .{} }, .{ "fs", .{} }, .{ "http", .{} }, .{ "http2", .{} }, .{ "https", .{} }, .{ "inspector", .{} }, .{ "module", .{} }, .{ "net", .{} }, .{ "os", .{} }, .{ "path", .{} }, .{ "perf_hooks", .{} }, .{ "process", .{} }, .{ "punycode", .{} }, .{ "querystring", .{} }, .{ "readline", .{} }, .{ "repl", .{} }, .{ "stream", .{} }, .{ "string_decoder", .{} }, .{ "sys", .{} }, .{ "timers", .{} }, .{ "tls", .{} }, .{ "trace_events", .{} }, .{ "tty", .{} }, .{ "url", .{} }, .{ "util", .{} }, .{ "v8", .{} }, .{ "vm", .{} }, .{ "wasi", .{} }, .{ "worker_threads", .{} }, .{ "zlib", .{} } });
+};
+
+pub const SpecifierParts = struct {
+    file_path: []const u8,
+    specifier: []const u8,
+    query: []const u8,
 };
 
 pub const LoaderResult = struct {
@@ -1058,25 +1065,49 @@ pub fn fromApi(jsx: api.Jsx, allocator: std.mem.Allocator) !JSXPragma {
     pub const Defaults = JSXDefaults;
 };
 
+pub const _JSXRuntimeDevelopmentPair = struct {
+    runtime: api.JsxRuntime,
+    development: ?bool,
+};
+
 pub const JSX = struct {
-    const RuntimeDevelopmentPair = struct {
-        runtime: JSX.Runtime,
-        development: ?bool,
-    };
+    const RuntimeDevelopmentPair = _JSXRuntimeDevelopmentPair;
     pub const RuntimeMap = bun.ComptimeStringMap(RuntimeDevelopmentPair, .{ .{ "classic", RuntimeDevelopmentPair{ .runtime = .classic, .development = null } }, .{ "automatic", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } }, .{ "react", RuntimeDevelopmentPair{ .runtime = .classic, .development = null } }, .{ "react-jsx", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } }, .{ "react-jsxdev", RuntimeDevelopmentPair{ .runtime = .automatic, .development = true } } });
     pub const Pragma = JSXPragma;
     pub const Runtime = api.JsxRuntime;
 };
 
+pub const _DefaultUserDefinesNodeEnv = struct {
+    const Key = "process.env.NODE_ENV";
+    const Value = "\"development\"";
+};
+
+pub const _DefaultUserDefinesProcessBrowserDefine = struct {
+    const Key = "process.browser";
+    const Value = []string{ "false", "true" };
+};
+
 pub const DefaultUserDefines = struct {
-    pub const NodeEnv = struct {
-        pub const Key = "process.env.NODE_ENV";
-        pub const Value = "\"development\"";
-    };
-    pub const ProcessBrowserDefine = struct {
-        pub const Key = "process.browser";
-        pub const Value = []string{ "false", "true" };
-    };
+    pub const NodeEnv = _DefaultUserDefinesNodeEnv;
+    pub const ProcessBrowserDefine = _DefaultUserDefinesProcessBrowserDefine;
+};
+
+pub const _BundleOptionsDefaultsNodeModules = struct {
+    const ExtensionOrder = .{ ".jsx", ".cjs", ".js", ".mjs", ".mts", ".tsx", ".ts", ".cts", ".json" };
+    const ModuleExtensionOrder = .{ ".mjs", ".jsx", ".mts", ".js", ".cjs", ".tsx", ".ts", ".cts", ".json" };
+};
+
+pub const _BundleOptionsDefaults = struct {
+    const ExtensionOrder = .{ ".tsx", ".ts", ".jsx", ".cts", ".cjs", ".js", ".mjs", ".mts", ".json" };
+    const MainFieldExtensionOrder = .{ ".js", ".cjs", ".cts", ".tsx", ".ts", ".jsx", ".json" };
+    const ModuleExtensionOrder = .{ ".tsx", ".jsx", ".mts", ".ts", ".mjs", ".js", ".cts", ".cjs", ".json" };
+    const CSSExtensionOrder = .{ ".css" };
+    const NodeModules = _BundleOptionsDefaultsNodeModules;
+};
+
+pub const _ResolveFileExtensionsGroup = struct {
+    esm: []const []const u8 = default_esm,
+    default: []const []const u8 = default_ext,
 };
 
 pub const ResolveFileExtensions = struct {
@@ -1096,10 +1127,7 @@ pub fn kind(self: *const ResolveFileExtensions, kind_: bun.ImportKind, is_node_m
 else => self.group(is_node_modules).default,
 });
     }
-    pub const Group = struct {
-        esm: []const []const u8 = default_esm,
-        default: []const []const u8 = default_ext,
-    };
+    pub const Group = _ResolveFileExtensionsGroup;
 };
 
 pub const BundleOptions = struct {
@@ -1350,16 +1378,7 @@ else => {
             absolute_path,
             package_path,
         };
-    pub const Defaults = struct {
-        pub const ExtensionOrder = .{ ".tsx", ".ts", ".jsx", ".cts", ".cjs", ".js", ".mjs", ".mts", ".json" };
-        pub const MainFieldExtensionOrder = .{ ".js", ".cjs", ".cts", ".tsx", ".ts", ".jsx", ".json" };
-        pub const ModuleExtensionOrder = .{ ".tsx", ".jsx", ".mts", ".ts", ".mjs", ".js", ".cts", ".cjs", ".json" };
-        pub const CSSExtensionOrder = .{ ".css" };
-        pub const NodeModules = struct {
-            pub const ExtensionOrder = .{ ".jsx", ".cjs", ".js", ".mjs", ".mts", ".tsx", ".ts", ".cts", ".json" };
-            pub const ModuleExtensionOrder = .{ ".mjs", ".jsx", ".mts", ".js", ".cjs", ".tsx", ".ts", ".cts", ".json" };
-        };
-    };
+    pub const Defaults = _BundleOptionsDefaults;
 };
 
 pub const TransformOptions = struct {
@@ -1430,6 +1449,11 @@ else => {
             }
             return TransformResult{ .outbase = outbase, .output_files = output_files, .errors = try errors.toOwnedSlice(), .warnings = try warnings.toOwnedSlice() };
     }
+};
+
+pub const _EnvEntry = struct {
+    key: []const u8,
+    value: []const u8,
 };
 
 pub const Env = struct {
@@ -1514,10 +1538,7 @@ pub fn getOrPutValue(self: *Env, key: []const u8, value: []const u8) !void {
             }
             _ = try self.defaults.append(self.allocator, .{ .key = key, .value = value });
     }
-    const Entry = struct {
-        key: []const u8,
-        value: []const u8,
-    };
+    const Entry = _EnvEntry;
     const List = std.MultiArrayList(Entry);
 };
 
@@ -1662,6 +1683,15 @@ router.possible_dirs = router_.dir;
     pub const DefaultExtensions = .{ "tsx", "ts", "mjs", "jsx", "js" };
 };
 
+pub const _PathTemplatePlaceholder = struct {
+    dir: []const u8 = "",
+    name: []const u8 = "",
+    ext: []const u8 = "",
+    hash: ?u64 = null,
+    target: []const u8 = "",
+    const map = bun.ComptimeStringMap(std.@"meta".FieldEnum(_PathTemplatePlaceholder), .{ .{ "dir", .dir }, .{ "name", .name }, .{ "ext", .ext }, .{ "hash", .hash }, .{ "target", .target } });
+};
+
 pub const PathTemplate = struct {
     data: []const u8 = "",
     placeholder: Placeholder = .{},
@@ -1749,14 +1779,7 @@ _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, self.placeholder.tar
             }
             _ = try PathTemplate.writeReplacingSlashesOnWindows(writer, remain);
     }
-    pub const Placeholder = struct {
-        dir: []const u8 = "",
-        name: []const u8 = "",
-        ext: []const u8 = "",
-        hash: ?u64 = null,
-        target: []const u8 = "",
-        pub const map = bun.ComptimeStringMap(std.@"meta".FieldEnum(Placeholder), .{ .{ "dir", .dir }, .{ "name", .name }, .{ "ext", .ext }, .{ "hash", .hash }, .{ "target", .target } });
-    };
+    pub const Placeholder = _PathTemplatePlaceholder;
     pub const chunk = PathTemplate{ .data = "./chunk-[hash].[ext]", .placeholder = .{ .name = "chunk", .ext = "js", .dir = "" } };
     pub const chunkWithTarget = PathTemplate{ .data = "[dir]/[target]/chunk-[hash].[ext]", .placeholder = .{ .name = "chunk", .ext = "js", .dir = "" } };
     pub const file = PathTemplate{ .data = "[dir]/[name].[ext]", .placeholder = .{} };
@@ -1787,11 +1810,6 @@ const URL = url_pkg.URL;
 const MacroRemap = package_json_pkg.MacroMap;
 const PackageJSON = package_json_pkg.PackageJSON;
 const ConditionsMap = package_json_pkg.ESModule.ConditionsMap;
-pub const SpecifierParts = struct {
-    file_path: []const u8,
-    specifier: []const u8,
-    query: []const u8,
-};
 pub const GetLoaderAndVirtualSourceErr = error{BlobNotFound};
 const default_loaders_posix = .{ .{ ".jsx", .jsx }, .{ ".json", .json }, .{ ".js", .jsx }, .{ ".mjs", .js }, .{ ".cjs", .js }, .{ ".css", .css }, .{ ".ts", .ts }, .{ ".tsx", .tsx }, .{ ".mts", .ts }, .{ ".cts", .ts }, .{ ".toml", .toml }, .{ ".yaml", .yaml }, .{ ".yml", .yaml }, .{ ".wasm", .wasm }, .{ ".node", .napi }, .{ ".txt", .text }, .{ ".text", .text }, .{ ".html", .html }, .{ ".jsonc", .jsonc }, .{ ".json5", .json5 }, .{ ".md", .md }, .{ ".markdown", .md } };
 const default_loaders_win32 = (default_loaders_posix ++ .{ .{ ".sh", .bunsh } });
@@ -1801,7 +1819,7 @@ const default_loader_ext_bun = .{ ".node", ".html" };
 const default_loader_ext = .{ ".jsx", ".json", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".mts", ".cts", ".toml", ".yaml", ".yml", ".wasm", ".txt", ".text", ".jsonc", ".json5" };
 const default_loader_ext_browser = .{ ".html" };
 const node_modules_default_loader_ext = .{ ".jsx", ".js", ".cjs", ".mjs", ".ts", ".mts", ".toml", ".yaml", ".yml", ".txt", ".json", ".jsonc", ".json5", ".css", ".tsx", ".cts", ".wasm", ".text", ".html" };
-const _nm_esm = BundleOptions.Defaults.NodeModules.ModuleExtensionOrder;
+const _nm_esm = _BundleOptionsDefaults.NodeModules.ModuleExtensionOrder;
 const _nm_default = BundleOptions.Defaults.NodeModules.ExtensionOrder;
 const _esm_ext = BundleOptions.Defaults.ModuleExtensionOrder;
 const _default_ext = BundleOptions.Defaults.ExtensionOrder;

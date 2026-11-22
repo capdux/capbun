@@ -62,15 +62,15 @@ pub const RecordKind = enum(u8) {
     _padding: u5 = 0,
 }
 
-pub const AllocatedSlice = struct {
+pub struct AllocatedSlice {
     slice: []const u8,
     allocator: std.mem.Allocator,
-};
+}
 
-pub const Owner = union(enum) {
-    module_info,
+pub union(enum) Owner {
+    module_info: void,
     allocated_slice: AllocatedSlice,
-};
+}
 
 struct RemReader {
     rem: []const u8,
@@ -207,12 +207,12 @@ pub struct StringContext {
     }
 }
 
-pub const LocalNameToModuleName = struct {
+pub struct LocalNameToModuleName {
     module_name: StringID,
     import_name: StringID,
     record_kinds_idx: usize,
     is_namespace: bool,
-};
+}
 
 pub struct ModuleInfo {
     /// all strings in wtf-8. index in hashmap = StringID

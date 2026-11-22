@@ -158,6 +158,9 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const EmptySortCtx = struct {
+};
+
 pub const ImportedByGuard = struct {
     map: *bun.StringHashMap(StringList),
     allocator: std.mem.Allocator,
@@ -181,6 +184,22 @@ const StringJoiner = bun.StringJoiner;
 const Chunk = bun.bundle_v2.Chunk;
 const Index = bun.bundle_v2.Index;
 const LinkerContext = bun.bundle_v2.LinkerContext;
+
+pub fn sortInputFileInfoByBytes(_: EmptySortCtx, a: InputFileInfo, b: InputFileInfo) bool {
+        return (a.bytes_in_output > b.bytes_in_output);
+}
+
+pub fn sortModuleSizeByBytes(_: EmptySortCtx, a: ModuleSize, b: ModuleSize) bool {
+        return (a.bytes > b.bytes);
+}
+
+pub fn sortImportedByCount(_: EmptySortCtx, a: ImportedByInfo, b: ImportedByInfo) bool {
+        return (a.count > b.count);
+}
+
+pub fn sortPathOnlyLex(_: EmptySortCtx, a: PathOnly, b: PathOnly) bool {
+        return std.mem.lessThan(u8, a.path, b.path);
+}
 
 pub fn generateChunkJson(allocator: std.mem.Allocator, c: *const LinkerContext, chunk: *const Chunk, chunks: []const Chunk) ![]const u8 {
         var json = std.array_list.Managed(u8).init(allocator);
@@ -693,14 +712,7 @@ pub fn generateMarkdown(allocator: std.mem.Allocator, metafile_json: []const u8)
         }
         _ = try writer.writeAll("\n## Largest Modules by Output Contribution\n\n");
         _ = try writer.writeAll("Modules sorted by bytes contributed to the output bundle. Large modules may indicate bloat.\n\n");
-        const EmptySortCtx = struct {
-};
-        _ = std.mem.sort(InputFileInfo, input_files.items, EmptySortCtx{  }, (struct {
-
-pub fn lessThan(_: EmptySortCtx, a: InputFileInfo, b: InputFileInfo) bool {
-            return (a.bytes_in_output > b.bytes_in_output);
-    }
-}).lessThan);
+        _ = std.mem.sort(InputFileInfo, input_files.items, EmptySortCtx{  }, sortInputFileInfoByBytes);
         _ = try writer.writeAll("| Output Bytes | % of Total | Module | Format |\n");
         _ = try writer.writeAll("|--------------|------------|--------|--------|\n");
         const max_to_show: usize = 20;
@@ -844,12 +856,7 @@ pub fn lessThan(_: EmptySortCtx, a: InputFileInfo, b: InputFileInfo) bool {
                             }
                         }
                     }
-                    _ = std.mem.sort(ModuleSize, module_sizes.items, EmptySortCtx{  }, (struct {
-
-pub fn lessThan(_: EmptySortCtx, a: ModuleSize, b: ModuleSize) bool {
-            return (a.bytes > b.bytes);
-    }
-}).lessThan);
+                    _ = std.mem.sort(ModuleSize, module_sizes.items, EmptySortCtx{  }, sortModuleSizeByBytes);
                     const max_modules: usize = 15;
                     var i_ms: usize = 0;
                     _ = &i_ms;
@@ -883,12 +890,7 @@ pub fn lessThan(_: EmptySortCtx, a: ModuleSize, b: ModuleSize) bool {
         while (ib_iter.next()) |entry| {
             _ = try highly_imported.append(allocator, ImportedByInfo{ .path = entry.key_ptr.*, .count = entry.value_ptr.items.len });
         }
-        _ = std.mem.sort(ImportedByInfo, highly_imported.items, EmptySortCtx{  }, (struct {
-
-pub fn lessThan(_: EmptySortCtx, a: ImportedByInfo, b: ImportedByInfo) bool {
-            return (a.count > b.count);
-    }
-}).lessThan);
+        _ = std.mem.sort(ImportedByInfo, highly_imported.items, EmptySortCtx{  }, sortImportedByCount);
         if ((highly_imported.items.len > 0)) {
             _ = try writer.writeAll("### Most Commonly Imported Modules\n\n");
             _ = try writer.writeAll("Modules imported by many files. Extracting these to shared chunks may help.\n\n");
@@ -945,12 +947,7 @@ pub fn lessThan(_: EmptySortCtx, a: ImportedByInfo, b: ImportedByInfo) bool {
         while (path_iter.next()) |entry| {
             _ = try sorted_paths.append(allocator, PathOnly{ .path = entry.key_ptr.* });
         }
-        _ = std.mem.sort(PathOnly, sorted_paths.items, EmptySortCtx{  }, (struct {
-
-pub fn lessThan(_: EmptySortCtx, a: PathOnly, b: PathOnly) bool {
-            return std.mem.lessThan(u8, a.path, b.path);
-    }
-}).lessThan);
+        _ = std.mem.sort(PathOnly, sorted_paths.items, EmptySortCtx{  }, sortPathOnlyLex);
         for (sorted_paths.items) |sp| {
             _ = &sp;
             const input_path = sp.path;

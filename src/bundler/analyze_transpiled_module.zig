@@ -134,6 +134,16 @@ pub const Flags = packed struct(u8) {
     _padding: u5 = 0,
 };
 
+pub const AllocatedSlice = struct {
+    slice: []const u8,
+    allocator: std.mem.Allocator,
+};
+
+pub const Owner = union(enum) {
+    module_info: void,
+    allocated_slice: AllocatedSlice,
+};
+
 pub const RemReader = struct {
     rem: []const u8,
 
@@ -251,6 +261,13 @@ pub fn hash(self: StringContext, s: []const u8) u32 {
 pub fn eql(self: StringContext, fetch_key: []const u8, item_key: StringMapKey, item_i: usize) bool {
             return bun.strings.eqlLong(fetch_key, self.strings_buf[@intFromEnum(item_key)..][0..self.strings_lens[@as(usize, @intCast(item_i))]], true);
     }
+};
+
+pub const LocalNameToModuleName = struct {
+    module_name: StringID,
+    import_name: StringID,
+    record_kinds_idx: usize,
+    is_namespace: bool,
 };
 
 pub const ModuleInfo = struct {
@@ -505,22 +522,8 @@ pub const RecordKind = enum(u8) {
         };
     }
 };
-pub const AllocatedSlice = struct {
-    slice: []const u8,
-    allocator: std.mem.Allocator,
-};
-pub const Owner = union(enum) {
-    module_info,
-    allocated_slice: AllocatedSlice,
-};
 pub const StringMapKey = enum(u32) {
     _,
-};
-pub const LocalNameToModuleName = struct {
-    module_name: StringID,
-    import_name: StringID,
-    record_kinds_idx: usize,
-    is_namespace: bool,
 };
 pub const StringID = enum(u32) {
     star_default = std.math.maxInt(u32),

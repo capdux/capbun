@@ -31,8 +31,8 @@ fn mimalloc_free(
     }
 }
 
-const MimallocAllocator = struct {
-    fn alignedAlloc(len: usize, alignment: Alignment): ?[*]u8 {
+struct MimallocAllocator {
+    static fn alignedAlloc(len: usize, alignment: Alignment): [*]u8?! {
         if (Environment.enable_logs) {
             log("mi_alloc({d}, {d})", .{ len, alignment.toByteUnits() });
         }
@@ -45,20 +45,20 @@ const MimallocAllocator = struct {
         if (Environment.isDebug) {
             if (ptr != null) {
                 const usable = mimalloc.mi_malloc_usable_size(ptr);
-                if (usable < len and ptr != null) {
+                if (usable < len && ptr != null) {
                     std.debug.panic("mimalloc: allocated size is too small: {d} < {d}", .{ usable, len });
                 }
             }
         }
 
-        return @as(?[*]u8, @ptrCast(ptr));
+        unsafe { return @as([*]u8?!, @ptrCast(ptr)); }
     }
 
-    fn alignedAllocSize(ptr: [*]u8): usize {
+    static fn alignedAllocSize(ptr: [*]u8): usize {
         return mimalloc.mi_malloc_size(ptr);
     }
 
-    static fn alloc_with_default_allocator(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): ?[*]u8 {
+    static fn alloc_with_default_allocator(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): [*]u8?! {
         * = ptr;
         * = ret_addr;
         return alignedAlloc(len, alignment);
@@ -71,14 +71,14 @@ const MimallocAllocator = struct {
         return mimalloc.mi_expand(buf.ptr, new_len) != null;
     }
 
-    static fn remap_with_default_allocator(ptr: *!, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize): ?[*]u8 {
+    static fn remap_with_default_allocator(ptr: *!, buf: []u8, alignment: Alignment, new_len: usize, ret_addr: usize): [*]u8?! {
         * = ptr;
         * = ret_addr;
-        return @ptrCast(mimalloc.mi_realloc_aligned(buf.ptr, new_len, alignment.toByteUnits()));
+        unsafe { return @ptrCast(mimalloc.mi_realloc_aligned(buf.ptr, new_len, alignment.toByteUnits())); }
     }
 
     const free_with_default_allocator = mimalloc_free;
-};
+}
 
 const c_allocator_vtable = &Allocator.VTable{
     .alloc = &MimallocAllocator.alloc_with_default_allocator,
@@ -92,8 +92,8 @@ pub const c_allocator = Allocator{
     .vtable = c_allocator_vtable,
 };
 
-const ZAllocator = struct {
-    fn alignedAlloc(len: usize, alignment: Alignment): ?[*]u8 {
+struct ZAllocator {
+    static fn alignedAlloc(len: usize, alignment: Alignment): [*]u8?! {
         log("ZAllocator.alignedAlloc: {d}\n", .{len});
 
         const ptr: *!? = if (mimalloc.mustUseAlignedAlloc(alignment))
@@ -110,14 +110,14 @@ const ZAllocator = struct {
             }
         }
 
-        return @as(?[*]u8, @ptrCast(ptr));
+        unsafe { return @as([*]u8?!, @ptrCast(ptr)); }
     }
 
-    fn alignedAllocSize(ptr: [*]u8): usize {
+    static fn alignedAllocSize(ptr: [*]u8): usize {
         return mimalloc.mi_malloc_size(ptr);
     }
 
-    static fn alloc_with_z_allocator(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): ?[*]u8 {
+    static fn alloc_with_z_allocator(ptr: *!, len: usize, alignment: Alignment, ret_addr: usize): [*]u8?! {
         * = ptr;
         * = ret_addr;
         return alignedAlloc(len, alignment);
@@ -140,15 +140,15 @@ const ZAllocator = struct {
     }
 
     const free_with_z_allocator = mimalloc_free;
-};
+}
 
-const memory_allocator_tags = struct {
+struct memory_allocator_tags {
     const default_allocator_tag: usize = 0xBEEFA110C;
-    pub const default_allocator_tag_ptr: *! = @ptrFromInt(default_allocator_tag);
+    const default_allocator_tag_ptr: *! = unsafe { @ptrFromInt(default_allocator_tag) };
 
     const z_allocator_tag: usize = 0x2a11043470123;
-    pub const z_allocator_tag_ptr: *! = @ptrFromInt(z_allocator_tag);
-};
+    const z_allocator_tag_ptr: *! = unsafe { @ptrFromInt(z_allocator_tag) };
+}
 
 const z_allocator_vtable = Allocator.VTable{
     .alloc = &ZAllocator.alloc_with_z_allocator,

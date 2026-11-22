@@ -96,7 +96,20 @@ pub struct TinyLog {
 }
 
 
-pub const Part = union(enum(u3)) {
+pub enum PartTag: u3 {
+    text,
+    param,
+    catch_all_optional,
+    catch_all,
+    group,
+}
+
+@packed(u32) struct PartSerializedHeader {
+    tag: PartTag,
+    len: u29,
+}
+
+pub union(PartTag) Part {
     /// Does not contain slashes. One per slash.
     text: []const u8,
     param: []const u8,
@@ -107,80 +120,137 @@ pub const Part = union(enum(u3)) {
     /// Does not affect URL matching, but does affect hierarchy.
     group: []const u8,
 
-    const SerializedHeader = packed struct(u32) {
-        tag: @typeInfo(Part).@"union".tag_type.?,
-        len: u29,
-    };
+    const SerializedHeader = PartSerializedHeader;
 
-    pub fn writeAsSerialized(part: Part, writer: anytype) !void {
-        switch (part) {
-            .text => |text| {
+    fn writeAsSerialized(writer: auto): ! {
+        switch (_) {
+            .text text => {
                 bun.assert(text.len > 0);
                 bun.assert(bun.strings.indexOfChar(text, '/') == null);
             },
             else => {},
         }
-        const payload = switch (part) {
-            inline else => |t| t,
+        const payload = switch (_) {
+            .text t => t,
+            .param t => t,
+            .catch_all_optional t => t,
+            .catch_all t => t,
+            .group t => t,
         };
-        try writer.writeInt(u32, @bitCast(SerializedHeader{
-            .tag = std.meta.activeTag(part),
-            .len = @intCast(payload.len),
-        }), .little);
-        try writer.writeAll(payload);
+        writer.writeInt(u32, @bitCast(SerializedHeader{
+            tag: std.meta.activeTag(_),
+            len: @intCast(payload.len),
+        }), .little)?;
+        writer.writeAll(payload)?;
     }
 
-    pub fn eql(a: Part, b: Part) bool {
-        if (std.meta.activeTag(a) != std.meta.activeTag(b))
+    fn eql(b: Part): bool {
+        if (std.meta.activeTag(_) != std.meta.activeTag(b))
             return false;
-        return switch (a) {
-            inline else => |payload, tag| bun.strings.eql(
-                payload,
-                @field(b, @tagName(tag)),
-            ),
+        return switch (_) {
+            .text p => bun.strings.eql(p, b.text),
+            .param p => bun.strings.eql(p, b.param),
+            .catch_all_optional p => bun.strings.eql(p, b.catch_all_optional),
+            .catch_all p => bun.strings.eql(p, b.catch_all),
+            .group p => bun.strings.eql(p, b.group),
         };
     }
 
-    pub fn format(part: Part, writer: *std.Io.Writer) !void {
-        try writer.writeAll("Part \"");
-        try part.toStringForInternalUse(writer);
-        try writer.writeAll("\"");
+    fn format(writer: *std.Io.Writer): ! {
+        writer.writeAll("Part \"")?;
+        _.toStringForInternalUse(writer)?;
+        writer.writeAll("\"")?;
     }
 
-    fn toStringForInternalUse(part: Part, writer: anytype) !void {
-        switch (part) {
-            .text => |text| try writer.print("/{s}", .{text}),
-            .param => |param_name| try writer.print("/:{s}", .{param_name}),
-            .group => |label| try writer.print("/({s})", .{label}),
-            .catch_all => |param_name| try writer.print("/:*{s}", .{param_name}),
-            .catch_all_optional => |param_name| try writer.print("/:*?{s}", .{param_name}),
+    fn toStringForInternalUse(writer: auto): ! {
+        switch (_) {
+            .text text => writer.print("/{s}", .{text})?,
+            .param param_name => writer.print("/:{s}", .{param_name})?,
+            .group label => writer.print("/({s})", .{label})?,
+            .catch_all param_name => writer.print("/:*{s}", .{param_name})?,
+            .catch_all_optional param_name => writer.print("/:*?{s}", .{param_name})?,
         }
     }
-};
+}
 
+pub enum ParsedPatternKind {
+    /// Can be navigated to. Pages can have children, which allows having
+    /// nested routes exactly how Remix allows them.
+    page,
+    /// Is not considered when resolving navigations, but is still a valid
+    /// node in the route tree.
+    layout,
+    /// Another file related to a route
+    extra,
+}
 
 pub struct ParsedPattern {
     parts: []const Part,
     kind: Kind,
 
-    pub const Kind = enum {
-        /// Can be navigated to. Pages can have children, which allows having
-        /// nested routes exactly how Remix allows them.
-        page,
-        /// Is not considered when resolving navigations, but is still a valid
-        /// node in the route tree.
-        layout,
-        /// Another file related to a route
-        extra,
-    };
+    const Kind = ParsedPatternKind;
 }
 
+
+struct EncodedPatternIterator {
+    pattern: EncodedPattern,
+    offset: usize,
+
+    fn readWithSize(): [Part, usize] {
+        const header: Part.SerializedHeader = @bitCast(mem.readInt(
+            u32,
+            _.pattern.data[_.offset..][0..@sizeOf(u32)],
+            .little,
+        ));
+        return [
+            switch (header.tag) {
+                inline else => |tag| @unionInit(
+                    Part,
+                    @tagName(tag),
+                    _.pattern.data[_.offset + @sizeOf(u32) ..][0..header.len],
+                ),
+            },
+            @sizeOf(u32) + header.len,
+        ];
+    }
+
+    fn peek(): Part {
+        return _.readWithSize()[0];
+    }
+
+    fn next(*_): Part? {
+        if (_.offset >= _.pattern.data.len)
+            return null;
+        const tuple = _.readWithSize();
+        const part = tuple[0];
+        const len = tuple[1];
+        _.offset += len;
+        return part;
+    }
+}
+
+pub struct EncodedPatternEffectiveURLContext {
+    fn hash(p: EncodedPattern): u32 {
+        const _ctx = _;
+        * = _ctx;
+        return @truncate(p.effectiveURLHash());
+    }
+
+    fn eql(a: EncodedPattern, b: EncodedPattern, n: usize): bool {
+        const _ctx = _;
+        * = _ctx;
+        * = n;
+        return a.effectiveURLHash() == b.effectiveURLHash();
+    }
+}
+
+let empty_encoded_pattern_bytes: [0]u8 = undefined;
 
 pub struct EncodedPattern {
     data: []const u8,
 
     /// `/` is represented by zero bytes
-    pub const root: EncodedPattern = .{ .data = &.{} };
+    const root: EncodedPattern = EncodedPattern{ data: empty_encoded_pattern_bytes[0..0] };
 
     static fn patternSerializedLength(parts: []const Part): usize {
         let size: usize = 0;
@@ -214,42 +284,7 @@ pub struct EncodedPattern {
         return it.peek();
     }
 
-    const Iterator = struct {
-        pattern: EncodedPattern,
-        offset: usize,
-
-        pub fn readWithSize(it: Iterator) struct { Part, usize } {
-            const header: Part.SerializedHeader = @bitCast(mem.readInt(
-                u32,
-                it.pattern.data[it.offset..][0..@sizeOf(u32)],
-                .little,
-            ));
-            return .{
-                switch (header.tag) {
-                    inline else => |tag| @unionInit(
-                        Part,
-                        @tagName(tag),
-                        it.pattern.data[it.offset + @sizeOf(u32) ..][0..header.len],
-                    ),
-                },
-                @sizeOf(u32) + header.len,
-            };
-        }
-
-        pub fn peek(it: Iterator) Part {
-            return it.readWithSize()[0];
-        }
-
-        pub fn next(it: *Iterator) ?Part {
-            if (it.offset >= it.pattern.data.len)
-                return null;
-            const tuple = it.readWithSize();
-            const part = tuple[0];
-            const len = tuple[1];
-            it.offset += len;
-            return part;
-        }
-    };
+    const Iterator = EncodedPatternIterator;
 
     static fn effectiveURLHash(k: EncodedPattern): usize {
         // The strategy is to write all bytes, then hash them. Avoiding
@@ -334,17 +369,33 @@ pub struct EncodedPattern {
         return i == path.len;
     }
 
-    pub const EffectiveURLContext = struct {
-        fn hash(_: @This(), p: EncodedPattern) u32 {
-            return @truncate(p.effectiveURLHash());
-        }
-
-        fn eql(_: @This(), a: EncodedPattern, b: EncodedPattern, _: usize) bool {
-            return a.effectiveURLHash() == b.effectiveURLHash();
-        }
-    };
+    const EffectiveURLContext = EncodedPatternEffectiveURLContext;
 }
 
+struct StaticPatternIterator {
+    pattern: StaticPattern,
+    offset: usize,
+
+    fn readWithSize(): [Part, usize] {
+        const next_i = bun.strings.indexOfCharPos(_.pattern.route_path, '/', _.offset + 1) ?? _.pattern.route_path.len;
+        const text = _.pattern.route_path[_.offset + 1 .. next_i];
+        return [ Part{ text: text }, text.len + 1 ];
+    }
+
+    fn peek(): Part {
+        return _.readWithSize()[0];
+    }
+
+    fn next(*_): Part? {
+        if (_.offset >= _.pattern.route_path.len)
+            return null;
+        const tuple = _.readWithSize();
+        const part = tuple[0];
+        const len = tuple[1];
+        _.offset += len;
+        return part;
+    }
+}
 
 struct StaticPattern {
     route_path: []const u8,
@@ -353,79 +404,57 @@ struct StaticPattern {
         return { pattern: p, offset: 0 };
     }
 
-    const Iterator = struct {
-        pattern: StaticPattern,
-        offset: usize,
-
-        pub fn readWithSize(it: Iterator) struct { Part, usize } {
-            const next_i = bun.strings.indexOfCharPos(it.pattern.route_path, '/', it.offset + 1) orelse it.pattern.route_path.len;
-            const text = it.pattern.route_path[it.offset + 1 .. next_i];
-            return .{ .{ .text = text }, text.len + 1 };
-        }
-
-        pub fn peek(it: Iterator) Part {
-            return it.readWithSize()[0];
-        }
-
-        pub fn next(it: *Iterator) ?Part {
-            if (it.offset >= it.pattern.route_path.len)
-                return null;
-            const tuple = it.readWithSize();
-            const part = tuple[0];
-            const len = tuple[1];
-            it.offset += len;
-            return part;
-        }
-    };
+    const Iterator = StaticPatternIterator;
 }
 
+pub enum StyleUiOrRoutes { ui, routes }
+pub enum StyleNextRoutingConvention { app, pages }
 
-pub const Style = union(enum) {
-    nextjs_pages,
-    nextjs_app_ui,
-    nextjs_app_routes,
+pub union(enum) Style {
+    nextjs_pages: void,
+    nextjs_app_ui: void,
+    nextjs_app_routes: void,
     javascript_defined: jsc.Strong.Optional,
 
-    pub const map = bun.ComptimeStringMap(Style, .{
+    const map = bun.ComptimeStringMap(Style, .{
         .{ "nextjs-pages", .nextjs_pages },
         .{ "nextjs-app-ui", .nextjs_app_ui },
         .{ "nextjs-app-routes", .nextjs_app_routes },
     });
-    pub const error_message = "'style' must be either \"nextjs-pages\", \"nextjs-app-ui\", \"nextjs-app-routes\", or a function.";
+    const error_message = "'style' must be either \"nextjs-pages\", \"nextjs-app-ui\", \"nextjs-app-routes\", or a function.";
 
-    pub const UiOrRoutes = enum { ui, routes };
-    pub const NextRoutingConvention = enum { app, pages };
+    const UiOrRoutes = StyleUiOrRoutes;
+    const NextRoutingConvention = StyleNextRoutingConvention;
 
-    pub fn fromJS(value: JSValue, global: *jsc.JSGlobalObject) !Style {
+    static fn fromJS(value: JSValue, global: *jsc.JSGlobalObject): !Style {
         return FrameworkRouter.styleFromJS(value, global);
     }
 
-    pub fn deinit(style: *Style) void {
-        switch (style.*) {
-            .javascript_defined => |*strong| strong.deinit(),
-            else => {},
+    fn deinit(*_) {
+        if (_.* == .javascript_defined) {
+            _.javascript_defined.deinit();
         }
     }
 
-    pub fn parse(style: Style, file_path: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator) !?ParsedPattern {
-        return FrameworkRouter.styleParse(style, file_path, ext, log, allow_layouts, arena_alloc);
+    fn parse(file_path: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator): !(ParsedPattern?) {
+        return FrameworkRouter.styleParse(_, file_path, ext, log, allow_layouts, arena_alloc);
     }
 
-    pub fn parseNextJsPages(file_path_raw: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator) !?ParsedPattern {
+    static fn parseNextJsPages(file_path_raw: []const u8, ext: []const u8, log: *TinyLog, allow_layouts: bool, arena_alloc: Allocator): !(ParsedPattern?) {
         return FrameworkRouter.parseNextJsPagesImpl(file_path_raw, ext, log, allow_layouts, arena_alloc);
     }
 
-    pub fn parseNextJsApp(
+    static fn parseNextJsApp(
         file_path_raw: []const u8,
         ext: []const u8,
         log: *TinyLog,
         allow_layouts: bool,
         arena_alloc: Allocator,
         comptime extract: UiOrRoutes,
-    ) !?ParsedPattern {
+    ): !(ParsedPattern?) {
         return FrameworkRouter.parseNextJsAppImpl(file_path_raw, ext, log, allow_layouts, arena_alloc, extract);
     }
-};
+}
 
 static fn styleFromJS(value: JSValue, global: *jsc.JSGlobalObject): !Style {
     if (value.isString()) {
@@ -641,7 +670,13 @@ static fn parseNextJsLikeRouteSegment(
 /// would match up if a different insertion order was picked.
 
 
-pub const Route = struct {
+pub enum RouteFileKind {
+    page,
+    layout,
+    // not_found,
+}
+
+pub struct Route {
     part: Part,
     type: Type.Index,
 
@@ -659,27 +694,24 @@ pub const Route = struct {
     /// Only used by DevServer, if this route is 1. navigatable & 2. has been requested at least once
     bundle: bun.bake.DevServer.RouteBundle.Index.Optional = .none,
 
-    inline fn filePtr(r: *Route, file_kind: FileKind) *OpaqueFileId.Optional {
+    inline fn filePtr(*_, file_kind: FileKind): *OpaqueFileId.Optional {
         return &switch (file_kind) {
-            inline else => |kind| @field(r, "file_" ++ @tagName(kind)),
+            inline else => |kind| @field(_, "file_" ++ @tagName(kind)),
         };
     }
 
-    pub const FileKind = enum {
-        page,
-        layout,
-        // not_found,
-    };
+    pub const FileKind = RouteFileKind;
 
     pub const Index = bun.GenericIndex(u31, Route);
-};
+}
 
+const default_type_ignore_dirs: [2][]const u8 = [ ".git", "node_modules" ];
 
-pub const Type = struct {
+pub struct Type {
     abs_root: []const u8,
     prefix: []const u8 = "/",
     ignore_underscores: bool = false,
-    ignore_dirs: []const []const u8 = &.{ ".git", "node_modules" },
+    ignore_dirs: []const []const u8 = &default_type_ignore_dirs,
     extensions: []const []const u8,
     style: Style,
     allow_layouts: bool,
@@ -690,32 +722,33 @@ pub const Type = struct {
     /// `FrameworkRouter` itself does not use this value.
     server_file_string: jsc.Strong.Optional,
 
-    pub fn rootRouteIndex(type_index: Index) Route.Index {
+    static fn rootRouteIndex(type_index: Index): Route.Index {
         return Route.Index.init(type_index.get());
     }
 
     pub const Index = bun.GenericIndex(u8, Type);
-};
+}
 
 
-pub const Serialized = struct {
+pub struct Serialized {
     // TODO:
-};
+}
 
 
 const StaticRouteMap = bun.StringArrayHashMapUnmanaged(Route.Index);
 const DynamicRouteMap = std.ArrayHashMapUnmanaged(EncodedPattern, Route.Index, EncodedPattern.EffectiveURLContext, true);
 
+pub struct MatchedParamsEntry {
+    key: []const u8,
+    value: []const u8,
+}
 
 pub struct MatchedParams {
-    pub const max_count = 64;
+    const max_count = 64;
 
     params: bun.BoundedArray(Entry, max_count),
 
-    pub const Entry = struct {
-        key: []const u8,
-        value: []const u8,
-    };
+    const Entry = MatchedParamsEntry;
 
     /// Convert the matched params to a JavaScript object
     /// Returns null if there are no params
@@ -741,14 +774,16 @@ pub struct MatchedParams {
 }
 
 
+struct InsertionContextVTable {
+    getFileIdForRouter: *const fn (*void, abs_path: []const u8, associated_route: Route.Index, kind: Route.FileKind) bun.OOM!OpaqueFileId,
+    onRouterSyntaxError: *const fn (*void, rel_path: []const u8, fail: TinyLog) bun.OOM!void,
+    onRouterCollisionError: *const fn (*void, rel_path: []const u8, other_id: OpaqueFileId, file_kind: Route.FileKind) bun.OOM!void,
+}
+
 pub struct InsertionContext {
     opaque_ctx: *void,
     vtable: *const VTable,
-    const VTable = struct {
-        getFileIdForRouter: *const fn (*void, abs_path: []const u8, associated_route: Route.Index, kind: Route.FileKind) bun.OOM!OpaqueFileId,
-        onRouterSyntaxError: *const fn (*void, rel_path: []const u8, fail: TinyLog) bun.OOM!void,
-        onRouterCollisionError: *const fn (*void, rel_path: []const u8, other_id: OpaqueFileId, file_kind: Route.FileKind) bun.OOM!void,
-    };
+    const VTable = InsertionContextVTable;
     static fn wrap(comptime T: type, ctx: *T): InsertionContext {
         const wrapper = struct {
             fn getFileIdForRouter(opaque_ctx: *void, abs_path: []const u8, associated_route: Route.Index, kind: Route.FileKind): bun.OOM!OpaqueFileId {
@@ -778,18 +813,20 @@ pub struct InsertionContext {
 }
 
 
+pub struct JSFrameworkRouterStoredParseError {
+    // Owned by bun.default_allocator
+    rel_path: []const u8,
+    log: TinyLog,
+}
+
 pub struct JSFrameworkRouter {
-    pub const js = jsc.Codegen.JSFrameworkFileSystemRouter;
-    pub const toJS = js.toJS;
-    pub const fromJS = js.fromJS;
+    const js = jsc.Codegen.JSFrameworkFileSystemRouter;
+    const toJS = js.toJS;
+    const fromJS = js.fromJS;
 
     files: std.ArrayListUnmanaged(bun.String),
     router: FrameworkRouter,
-    pub const StoredParseError = struct {
-        // Owned by bun.default_allocator
-        rel_path: []const u8,
-        log: TinyLog,
-    };
+    const StoredParseError = JSFrameworkRouterStoredParseError;
     stored_parse_errors: std.ArrayListUnmanaged(StoredParseError),
 
     const validators = bun.jsc.Node.validators;

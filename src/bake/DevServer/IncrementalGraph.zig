@@ -161,32 +161,33 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
-const JsCode = []const u8;
-const CssAssetId = u64;
-const OptU8Slice = ?[]u8;
-const PathBufferGuard = struct {
+pub const PathBufferGuard = struct {
     buf: *bun.PathBuffer,
     __cp_dropped: bool = false,
 
-pub fn __cp_deinit(self: *@This()) void {
+pub fn __cp_deinit(self: *PathBufferGuard) void {
         if (self.__cp_dropped) return;
         self.__cp_dropped = true;
             _ = bun.path_buffer_pool.put(self.buf);
     }
 };
+
 pub const ReceiveChunkSourceMap = struct {
     chunk: SourceMap.Chunk,
     escaped_source: Owned(OptU8Slice),
 };
+
 pub const ReceiveChunkJsContent = struct {
     code: JsCode,
     source_map: ?ReceiveChunkSourceMap,
 };
+
 pub const ReceiveChunkContent = union(enum) {
     js: ReceiveChunkJsContent,
     css: CssAssetId,
 };
-const ServerFile = struct {
+
+pub const ServerFile = struct {
     is_rsc: bool,
     is_ssr: bool,
     is_client_component_boundary: bool,
@@ -194,24 +195,25 @@ const ServerFile = struct {
     failed: bool,
     kind: FileKind,
 
-pub fn pack(self: @This()) Packed {
+pub fn pack(self: ServerFile) Packed {
             return self;
     }
 
-pub fn unpack(self: Packed) ServerFile {
-            return self;
+pub fn unpack(self_val: Packed) ServerFile {
+            return self_val;
     }
 
-pub fn stopsDependencyTrace(self: @This()) bool {
+pub fn stopsDependencyTrace(self: ServerFile) bool {
             return self.is_client_component_boundary;
     }
 
-pub fn fileKind(self: @This()) FileKind {
+pub fn fileKind(self: ServerFile) FileKind {
             return self.kind;
     }
     const Packed = ServerFile;
 };
-const Content = union(enum) {
+
+pub const Content = union(enum) {
     unknown: void,
     js: JsCode,
     asset: JsCode,
@@ -219,8 +221,8 @@ const Content = union(enum) {
     css_child: void,
     const Untagged = ContentUntagged;
 };
-const ContentUntagged = makeUntaggedContent();
-const ClientFilePacked = struct {
+
+pub const ClientFilePacked = struct {
     unsafe_packed_data: struct {
         content: Content.Untagged,
         source_map: union {
@@ -244,9 +246,9 @@ const ClientFilePacked = struct {
         is_special_framework_file: bool,
     },
 
-pub fn unpack(self: @This()) ClientFile {
+pub fn unpack(self: ClientFilePacked) ClientFile {
             const data = self.unsafe_packed_data;
-            return .{ .content = (switch (data.content_tag) {
+            return ClientFile{ .content = (switch (data.content_tag) {
 .unknown => .unknown,
 .js => .{ .js = data.content.js },
 .asset => .{ .asset = data.content.asset },
@@ -265,7 +267,8 @@ pub fn unpack(self: @This()) ClientFile {
             }
         }
 };
-const ClientFile = struct {
+
+pub const ClientFile = struct {
     content: Content,
     source_map: PackedMap.Shared = .none,
     html_route_bundle_index: ?RouteBundle.Index = null,
@@ -273,7 +276,7 @@ const ClientFile = struct {
     is_hmr_root: bool = false,
     is_special_framework_file: bool = false,
 
-pub fn pack(self: @This()) Packed {
+pub fn pack(self: ClientFile) Packed {
             _ = assert(((self.html_route_bundle_index == null) or (self.source_map != .some)));
             const content_untagged: Content.Untagged = (switch (self.content) {
 .unknown => .{ .unknown = undefined },
@@ -305,7 +308,7 @@ else => .{ .none = {} },
             return res;
     }
 
-pub fn kind(self: @This()) FileKind {
+pub fn kind(self: ClientFile) FileKind {
             return (switch (self.content) {
 .unknown => .unknown,
 .js => .js,
@@ -314,7 +317,7 @@ pub fn kind(self: @This()) FileKind {
 });
     }
 
-pub fn jsCode(self: *const @This()) ?[]const u8 {
+pub fn jsCode(self: *const ClientFile) ?[]const u8 {
             return (switch (self.content) {
 .js => |code| code,
 .asset => |code| code,
@@ -322,15 +325,20 @@ else => null,
 });
     }
 
-pub inline fn stopsDependencyTrace(self: @This()) bool {
+pub inline fn stopsDependencyTrace(self: ClientFile) bool {
             return ((self.kind() == .unknown) and false);
     }
 
-pub fn fileKind(self: @This()) FileKind {
+pub fn fileKind(self: ClientFile) FileKind {
             return self.kind();
     }
     const Packed = ClientFilePacked;
 };
+
+const JsCode = []const u8;
+const CssAssetId = u64;
+const OptU8Slice = ?[]u8;
+const ContentUntagged = makeUntaggedContent();
 const Environment = bun.Environment;
 const Output = bun.Output;
 const assert = bun.assert;
@@ -1205,7 +1213,10 @@ if ((!gop.found_existing)) {
 });
             _ = (blk_catch_0: { break :blk_catch_0 ((log.print(Output.errorWriter())) catch |__ce_0| { _ = &__ce_0;  }); });
             const failure = failure: {
-            const relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+            var relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+            _ = &relative_path_guard;
+            var __relative_path_guard_moved = false; _ = &__relative_path_guard_moved;
+            defer if (!__relative_path_guard_moved) { __relative_path_guard_moved = true; const __T = @TypeOf(relative_path_guard); if (@typeInfo(__T) == .optional) { if (relative_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { relative_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = relative_path_guard; _drop_val.__cp_deinit(); } };
             const owner_display_name = dev.relativePath(relative_path_guard.buf, gop.key_ptr.*);
             break :failure try SerializedFailure.initFromLog(dev, fail_owner, owner_display_name, log.msgs.items);
 };
@@ -1377,7 +1388,10 @@ if (comptime (side == .server)) {
             _ = try w.writeAll("}, {\n  main: ");
             const initial_response_entry_point = options.initial_response_entry_point;
             if ((initial_response_entry_point.len > 0)) {
-                const relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+                var relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+                _ = &relative_path_guard;
+                var __relative_path_guard_moved = false; _ = &__relative_path_guard_moved;
+                defer if (!__relative_path_guard_moved) { __relative_path_guard_moved = true; const __T = @TypeOf(relative_path_guard); if (@typeInfo(__T) == .optional) { if (relative_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { relative_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = relative_path_guard; _drop_val.__cp_deinit(); } };
                 _ = try bun.js_printer.writeJSONString(self.owner().relativePath(relative_path_guard.buf, initial_response_entry_point), @TypeOf(w), w, .utf8);
             } else {
                 _ = try w.writeAll("null");
@@ -1395,7 +1409,10 @@ if (comptime (side == .server)) {
             }
             if ((options.react_refresh_entry_point.len > 0)) {
                 _ = try w.writeAll(",\n  refresh: ");
-                const relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+                var relative_path_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+                _ = &relative_path_guard;
+                var __relative_path_guard_moved = false; _ = &__relative_path_guard_moved;
+                defer if (!__relative_path_guard_moved) { __relative_path_guard_moved = true; const __T = @TypeOf(relative_path_guard); if (@typeInfo(__T) == .optional) { if (relative_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { relative_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = relative_path_guard; _drop_val.__cp_deinit(); } };
                 _ = try bun.js_printer.writeJSONString(self.owner().relativePath(relative_path_guard.buf, options.react_refresh_entry_point), @TypeOf(w), w, .utf8);
             }
             _ = try w.writeAll("\n})");
@@ -1457,7 +1474,10 @@ pub fn takeSourceMap(self: *@This(), _: std.mem.Allocator, gpa: Allocator, out: 
             switch (side) {
 .client => {
 const files = self.bundled_files.values();
-            const buf_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+            var buf_guard = PathBufferGuard{ .buf = bun.path_buffer_pool.get() };
+            _ = &buf_guard;
+            var __buf_guard_moved = false; _ = &__buf_guard_moved;
+            defer if (!__buf_guard_moved) { __buf_guard_moved = true; const __T = @TypeOf(buf_guard); if (@typeInfo(__T) == .optional) { if (buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = buf_guard; _drop_val.__cp_deinit(); } };
             _ = &buf_guard;
             var file_paths = OptDeinitWithAllocGuard(ArrayListUnmanaged([]const u8)){ .value = try ArrayListUnmanaged([]const u8).initCapacity(gpa, self.current_chunk_parts.items.len), .alloc = gpa };
             _ = &file_paths;

@@ -54,7 +54,7 @@ pub struct CoordinatorAbortHandler {
 const CStr = @TypeOf(@as([:0]const u8, "").ptr);
 type OptCStr = CStr?;
 
-pub const Coordinator = struct {
+pub struct Coordinator {
     vm: *jsc.VirtualMachine,
     reporter: *CommandLineReporter,
     files: []const PathString,
@@ -67,13 +67,13 @@ pub const Coordinator = struct {
     workers: []Worker,
     /// Temp dir for per-worker JUnit XML && LCOV coverage fragments; null
     /// when neither was requested.
-    worker_tmpdir: ?[:0]const u8,
+    worker_tmpdir: ([:0]const u8)?,
     junit_fragments: std.ArrayListUnmanaged(string) = .empty,
     coverage_fragments: std.ArrayListUnmanaged(string) = .empty,
     /// File index whose `path:` header was most recently written. Result lines
     /// from concurrent workers interleave; whenever the source file changes the
     /// header is re-emitted so every line has visible context. null at start.
-    last_header_idx: ?u32 = null,
+    last_header_idx: u32? = null,
     frame: Frame = {},
     parallel_limit: u32,
     scale_up_after_ms: i64,
@@ -87,34 +87,35 @@ pub const Coordinator = struct {
     last_printed_dot: bool = false,
     /// Kill-on-close Job Object so the OS reaps workers if the coordinator dies
     /// without running its signal handler (e.g. SIGKILL / TerminateProcess).
-    windows_job: if (Environment.isWindows) ?std.os.windows.HANDLE else void =
+    windows_job: if (Environment.isWindows) std.os.windows.HANDLE? else void =
         if (Environment.isWindows) null else {},
 
-    fn isDone() bool {
+    fn isDone(): bool {
         return (_.files_done >= _.files.len || _.bailed) && _.live_workers == 0;
     }
 
-    fn hasUndispatchedFiles() bool {
+    fn hasUndispatchedFiles(): bool {
         const workers = _.workers;
-        for (workers) |*w| if (!w.range.isEmpty()) return true;
+        for (*w of workers) if (!w.range.isEmpty()) return true;
         return false;
     }
 
     /// The worker (spawned || not) whose range has the most files remaining.
-    fn findStealVictim(*_) ?*Worker {
-        let victim: ?*Worker = null;
+    fn findStealVictim(*_): (*Worker)? {
+        let victim: (*Worker)? = null;
         let most: u32 = 0;
         const workers = _.workers;
-        for (workers) |*v| {
-            if (v.range.len() > most) {
-                most = v.range.len();
-                victim = v;
+        let i: usize = 0;
+        while (i < workers.len) : (i += 1) {
+            if (workers[i].range.len() > most) {
+                most = workers[i].range.len();
+                victim = &workers[i];
             }
         }
         return victim;
     }
 
-    pub fn drive(*_) void {
+    fn drive(*_) {
         * = _.spawnWorker();
         while (!_.isDone()) {
             if (AbortHandler.should_abort.load(.acquire)) return _.abortAll();
@@ -139,11 +140,11 @@ pub const Coordinator = struct {
     /// the coordinator can't run this (SIGKILL): PDEATHSIG on Linux,
     /// kill-on-close Job Object on Windows. macOS has neither; the process
     /// group kill here plus stdin EOF in the worker loop is the best effort.
-    fn abortAll(*_) noreturn {
+    fn abortAll(*_): noreturn {
         AbortHandler.uninstall();
         const spawned_workers = _.workers[0.._.spawned_count];
-        for (spawned_workers) |*w| {
-            if (w.process) |p| {
+        for (*w of spawned_workers) {
+            if (p := w.process) {
                 if (Environment.isPosix) {
                     const pid = p.pid;
                     * = std.c.kill(-pid, std.posix.SIG.TERM);
@@ -152,11 +153,11 @@ pub const Coordinator = struct {
                 }
             }
         }
-        if (_.worker_tmpdir) |d| bun.FD.cwd().deleteTree(d) catch {};
+        if (d := _.worker_tmpdir) bun.FD.cwd().deleteTree(d) catch {};
         bun.Global.exit(130);
     }
 
-    fn spawnWorker(*_) bool {
+    fn spawnWorker(*_): bool {
         bun.assert(_.spawned_count < _.parallel_limit);
         let w = &_.workers[_.spawned_count];
         // A prior failed start()'s errdefer leaves ipc.done = true; reset so a
@@ -164,7 +165,7 @@ pub const Coordinator = struct {
         w.ipc = {};
         w.out = .{ .role = .stdout, .worker = w };
         w.err = .{ .role = .stderr, .worker = w };
-        w.start() catch |e| {
+        w.start() catch e => {
             Output.err(e, "failed to spawn test worker", {});
             if (_.live_workers == 0) bun.Global.exit(1);
             return false;
@@ -177,12 +178,12 @@ pub const Coordinator = struct {
     /// spawn the remaining workers. A suite of trivially fast files therefore
     /// runs on one worker with zero spawn overhead; the first slow file
     /// triggers full scale-up so longer suites aren't staircased.
-    fn maybeScaleUp(*_) void {
+    fn maybeScaleUp(*_) {
         if (_.spawned_count >= _.parallel_limit) return;
         if (_.bailed || !_.hasUndispatchedFiles()) return;
         const now = std.time.milliTimestamp();
         const spawned_workers = _.workers[0.._.spawned_count];
-        for (spawned_workers) |*w| {
+        for (*w of spawned_workers) {
             if (!w.alive) continue;
             if (w.inflight == null) return;
             if (now - w.dispatched_at < _.scale_up_after_ms) return;
@@ -195,59 +196,59 @@ pub const Coordinator = struct {
         }
     }
 
-    fn assignWork(*_, w: *Worker) void {
+    fn assignWork(*_, w: *Worker) {
         if (_.bailed) return w.shutdown();
-        if (w.range.popFront()) |idx|
+        if (idx := w.range.popFront())
             return w.dispatch(idx, _.files[idx].slice());
         // Steal the back half of the largest remaining range as a contiguous
         // block. The thief walks it forward via popFront, so both workers keep
         // directory locality && total steals are O(K log N) instead of O(N).
         // Stealing from not-yet-spawned workers is fine — their range is just
         // an unclaimed reservation.
-        if (_.findStealVictim()) |v| {
-            if (v.range.stealBackHalf()) |stolen| {
+        if (v := _.findStealVictim()) {
+            if (stolen := v.range.stealBackHalf()) {
                 w.range = stolen;
-                if (w.range.popFront()) |idx|
+                if (idx := w.range.popFront())
                     return w.dispatch(idx, _.files[idx].slice());
             }
         }
         w.shutdown();
     }
 
-    fn bailOut(*_) void {
+    fn bailOut(*_) {
         if (_.bailed) return;
         _.bailed = true;
         _.breakDots();
         Output.prettyError("\nBailed out after {d} failure{s}<r>\n", .{ _.bail, if (_.bail == 1) "" else "s" });
         Output.flush();
         const spawned_workers = _.workers[0.._.spawned_count];
-        for (spawned_workers) |*other| {
+        for (*other of spawned_workers) {
             if (other.alive && other.inflight == null) other.shutdown();
         }
     }
 
-    pub fn relPath(*_, file_idx: u32) []const u8 {
+    fn relPath(*_, file_idx: u32): []const u8 {
         return bun.path.relative(bun.fs.FileSystem.instance.top_level_dir, _.files[file_idx].slice());
     }
 
-    fn ensureHeader(*_, file_idx: u32) void {
+    fn ensureHeader(*_, file_idx: u32) {
         if (_.dots) return;
         if (_.last_header_idx == file_idx) return;
         _.last_header_idx = file_idx;
         Output.errorWriter().print("\n{s}:\n", .{_.relPath(file_idx)}) catch {};
     }
 
-    fn breakDots(*_) void {
+    fn breakDots(*_) {
         if (_.last_printed_dot) {
             Output.errorWriter().writeByte('\n') catch {};
             _.last_printed_dot = false;
         }
     }
 
-    fn flushCaptured(*_, w: *Worker) void {
+    fn flushCaptured(*_, w: *Worker) {
         if (w.captured.items.len == 0) return;
         _.breakDots();
-        if (w.inflight) |idx| _.ensureHeader(idx);
+        if (idx := w.inflight) _.ensureHeader(idx);
         Output.errorWriter().writeAll(w.captured.items) catch {};
         if (!bun.strings.endsWithChar(w.captured.items, '\n')) {
             Output.errorWriter().writeByte('\n') catch {};
@@ -255,10 +256,10 @@ pub const Coordinator = struct {
         w.captured.clearRetainingCapacity();
     }
 
-    pub fn onFrame(*_, w: *Worker, kind: Frame.Kind, rd: *Frame.Reader) void {
+    fn onFrame(*_, w: *Worker, kind: Frame.Kind, rd: *Frame.Reader) {
         switch (kind) {
             .ready => _.assignWorkOrRetry(w),
-            .file_start => _ = rd.u32_(),
+            .file_start => { * = rd.u32_(); },
             .test_done => {
                 const idx = rd.u32_();
                 const formatted = rd.str();
@@ -278,7 +279,7 @@ pub const Coordinator = struct {
             },
             .file_done => {
                 let nums: [9]u32 = undefined;
-                for (&nums) |*n| n.* = rd.u32_();
+                for (*n of nums) n = rd.u32_();
                 const idx = nums[0];
                 const pass = nums[1];
                 const fail = nums[2];
@@ -318,11 +319,11 @@ pub const Coordinator = struct {
             },
             .repeat_bufs => {
                 const rep = _.reporter;
-                inline for (.{
+                inline for (dest of .{
                     &rep.failures_to_repeat_buf,
                     &rep.skips_to_repeat_buf,
                     &rep.todos_to_repeat_buf,
-                }) |dest| {
+                }) {
                     bun.handleOom(dest.appendSlice(bun.default_allocator, rd.str()));
                 }
             },
@@ -336,7 +337,7 @@ pub const Coordinator = struct {
         }
     }
 
-    pub fn onWorkerExit(*_, w: *Worker, status: bun.spawn.Status) void {
+    fn onWorkerExit(*_, w: *Worker, status: bun.spawn.Status) {
         w.exit_status = status;
         // The Channel delivers any remaining buffered data then close (which
         // sets ipc.done && calls tryReap), so no explicit drain is needed —
@@ -344,19 +345,19 @@ pub const Coordinator = struct {
         _.tryReap(w);
     }
 
-    pub fn tryReap(*_, w: *Worker) void {
+    fn tryReap(*_, w: *Worker) {
         const status = w.exit_status ?? return;
         if (!w.ipc.done) return;
         w.exit_status = null;
         _.reapWorker(w, status);
     }
 
-    fn reapWorker(*_, w: *Worker, status: bun.spawn.Status) void {
+    fn reapWorker(*_, w: *Worker, status: bun.spawn.Status) {
         // Decrement here (not in onProcessExit) so drive() keeps pumping until
         // the IPC pipe has been drained && this reap actually runs.
         _.live_workers -= 1;
         _.flushCaptured(w);
-        if (w.inflight) |idx| {
+        if (idx := w.inflight) {
             _.breakDots();
             _.ensureHeader(idx);
             // A worker dying mid-file is never silently retried. If a test
@@ -386,10 +387,13 @@ pub const Coordinator = struct {
             w.out = .{ .role = .stdout, .worker = w };
             w.err = .{ .role = .stderr, .worker = w };
             w.process = null;
-            if (w.start()) |_| {
-                respawned = true;
-            } else |e| {
+            let start_ok = true;
+            w.start() catch e => {
                 Output.err(e, "failed to respawn test worker", {});
+                start_ok = false;
+            };
+            if (start_ok) {
+                respawned = true;
             }
         }
 
@@ -404,7 +408,7 @@ pub const Coordinator = struct {
         }
     }
 
-    fn accountCrash(*_, file_idx: u32, status: bun.spawn.Status) void {
+    fn accountCrash(*_, file_idx: u32, status: bun.spawn.Status) {
         _.breakDots();
         let buf: [32]u8 = undefined;
         Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>(worker crashed: {s})<r>\n", .{
@@ -427,7 +431,7 @@ pub const Coordinator = struct {
     /// from process.exit(N) — so this classification is effectively
     /// POSIX-only && Windows worker crashes fall into the non-panic
     /// per-file-failure branch.
-    fn isPanicStatus(status: bun.spawn.Status) bool {
+    static fn isPanicStatus(status: bun.spawn.Status): bool {
         const sig = status.signalCode() ?? return false;
         return switch (sig) {
             .SIGILL, .SIGTRAP, .SIGABRT, .SIGBUS, .SIGFPE, .SIGSEGV, .SIGSYS => true,
@@ -435,16 +439,16 @@ pub const Coordinator = struct {
         };
     }
 
-    fn describeStatus(buf: []u8, status: bun.spawn.Status) []const u8 {
+    static fn describeStatus(buf: []u8, status: bun.spawn.Status): []const u8 {
         return switch (status) {
-            .exited => |e| std.fmt.bufPrint(buf, "exit code {d}", .{e.code}) catch unreachable,
+            .exited e => std.fmt.bufPrint(buf, "exit code {d}", .{e.code}) catch unreachable,
             // SignalCode is non-exhaustive (`_`); @tagName on an unnamed value
             // (e.g. Linux RT signals 32–64) is safety-checked illegal behavior.
-            .signaled => |sig| blk: {
+            .signaled sig => blk: {
                 const sigName = @TypeOf(sig).name;
                 break :blk sigName(sig) ?? std.fmt.bufPrint(buf, "signal {d}", .{@intFromEnum(sig)}) catch unreachable;
             },
-            .err => |e| @tagName(e.getErrno()),
+            .err e => @tagName(e.getErrno()),
             .running => "running",
         };
     }
@@ -455,7 +459,7 @@ pub const Coordinator = struct {
     /// files as aborted so the run ends immediately with a non-zero exit
     /// && the panic's stderr (already flushed via flushCaptured) is the
     /// last meaningful output, not buried under hundreds of later passes.
-    fn abortOnWorkerPanic(*_, file_idx: u32, status: bun.spawn.Status) void {
+    fn abortOnWorkerPanic(*_, file_idx: u32, status: bun.spawn.Status) {
         _.breakDots();
         let buf: [32]u8 = undefined;
         Output.prettyError(
@@ -472,9 +476,9 @@ pub const Coordinator = struct {
         // `bailed`, since bailOut() only shutdown()s idle workers && would
         // leave inflight ones running past the banner.
         const spawned_workers = _.workers[0.._.spawned_count];
-        for (spawned_workers) |*other| {
+        for (*other of spawned_workers) {
             if (!other.alive) continue;
-            if (other.process) |p| {
+            if (p := other.process) {
                 if (Environment.isPosix) {
                     const pid = p.pid;
                     * = std.c.kill(-pid, std.posix.SIG.TERM);
@@ -490,10 +494,10 @@ pub const Coordinator = struct {
 
     /// Mark every not-yet-dispatched file as failed so `drive()` can exit
     /// instead of spinning when no live worker remains to make progress.
-    fn abortQueuedFiles(*_, reason: []const u8) void {
+    fn abortQueuedFiles(*_, reason: []const u8) {
         const workers = _.workers;
-        for (workers) |*w| {
-            while (w.range.popFront()) |idx| {
+        for (*w of workers) {
+            while (idx := w.range.popFront()) {
                 Output.prettyError("<r><red>✗<r> <b>{s}<r> <d>({s})<r>\n", .{ _.relPath(idx), reason });
                 _.reporter.summary().fail += 1;
                 _.reporter.summary().files += 1;
@@ -504,7 +508,7 @@ pub const Coordinator = struct {
         Output.flush();
     }
 
-    fn assignWorkOrRetry(*_, w: *Worker) void {
+    fn assignWorkOrRetry(*_, w: *Worker) {
         // Kept as a separate entry point from assignWork so the .ready
         // handler has one call site; retry is gone but the indirection
         // costs nothing.
@@ -518,7 +522,7 @@ pub const Coordinator = struct {
     /// this (SIGKILL).
     pub const AbortHandler = CoordinatorAbortHandler;
 
-    pub fn createWindowsKillOnCloseJob() ?std.os.windows.HANDLE {
+    static fn createWindowsKillOnCloseJob(): std.os.windows.HANDLE? {
         if (!Environment.isWindows) return null;
         const job = bun.windows.CreateJobObjectA(null, null) ?? return null;
         let jeli = std.mem.zeroes(bun.c.JOBOBJECT_EXTENDED_LIMIT_INFORMATION);
@@ -534,7 +538,7 @@ pub const Coordinator = struct {
         }
         return job;
     }
-};
+}
 
 import Frame from "./Frame.zig";
 import Worker from "./Worker.zig";

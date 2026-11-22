@@ -206,7 +206,7 @@ const pure_global_identifier_define = &defines.IdentifierDefine{
     value: { e_undefined: {} },
 };
 
-const identifiers = struct {
+struct identifiers {
     const nan_val = js_ast.E.Number{ value: std.math.nan(f64) };
 
     const inf_val = js_ast.E.Number{ value: std.math.inf(f64) };
@@ -225,7 +225,7 @@ const identifiers = struct {
     pub const Infinity = &defines.IdentifierDefine{
         value: js_ast.Expr.Data{ e_number: inf_val },
     };
-};
+}
 
 enum PureGlobalIdentifierValue {
     NaN,

@@ -23,56 +23,6 @@ pub fn findImportedCSSFilesInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
     const all_loaders = ctx.parse_graph.input_files.items(.loader);
     const all_parts = ctx.graph.ast.items(.parts);
 
-    const visit = struct {
-        fn visit(
-            c: *LinkerContext,
-            import_records: []const BabyList(ImportRecord),
-            parts: []const Part.List,
-            loaders: []const Loader,
-            temp: std.mem.Allocator,
-            visits: *BitSet,
-            o: *BabyList(Index),
-            source_index: Index,
-            is_css: bool,
-        ) {
-            if (visits.isSet(source_index.get())) return;
-            visits.set(source_index.get());
-
-            const records: []ImportRecord = import_records[source_index.get()].slice();
-            const p = &parts[source_index.get()];
-
-            // Iterate over each part in the file in order
-            for (part of p.sliceConst()) {
-                // Traverse any files imported by this part. Note that CommonJS calls
-                // to "require()" count as imports too, sort of as if the part has an
-                // ESM "import" statement in it. This may seem weird because ESM imports
-                // are a compile-time concept while CommonJS imports are a run-time
-                // concept. But we don't want to manipulate <style> tags at run-time so
-                // this is the only way to do it.
-                for (import_record_index of part.import_record_indices.sliceConst()) {
-                    const record = &records[import_record_index];
-                    if (record.source_index.isValid()) {
-                        visit(
-                            c,
-                            import_records,
-                            parts,
-                            loaders,
-                            temp,
-                            visits,
-                            o,
-                            record.source_index,
-                            loaders[record.source_index.get()].isCSS(),
-                        );
-                    }
-                }
-            }
-
-            if (is_css && source_index.isValid()) {
-                bun.handleOom(o.append(temp, source_index));
-            }
-        }
-    }.visit;
-
     // Include all files reachable from the entry point
     visit(
         ctx,
@@ -87,6 +37,54 @@ pub fn findImportedCSSFilesInJSOrder(ctx: *LinkerContext, temp_allocator: std.me
     );
 
     return order;
+}
+
+fn visit(
+    c: *LinkerContext,
+    import_records: []const BabyList(ImportRecord),
+    parts: []const Part.List,
+    loaders: []const Loader,
+    temp: std.mem.Allocator,
+    visits: *BitSet,
+    o: *BabyList(Index),
+    source_index: Index,
+    is_css: bool,
+) {
+    if (visits.isSet(source_index.get())) return;
+    visits.set(source_index.get());
+
+    const records: []ImportRecord = import_records[source_index.get()].slice();
+    const p = &parts[source_index.get()];
+
+    // Iterate over each part in the file in order
+    for (part of p.sliceConst()) {
+        // Traverse any files imported by this part. Note that CommonJS calls
+        // to "require()" count as imports too, sort of as if the part has an
+        // ESM "import" statement in it. This may seem weird because ESM imports
+        // are a compile-time concept while CommonJS imports are a run-time
+        // concept. But we don't want to manipulate <style> tags at run-time so
+        // this is the only way to do it.
+        for (import_record_index of part.import_record_indices.sliceConst()) {
+            const record = &records[import_record_index];
+            if (record.source_index.isValid()) {
+                visit(
+                    c,
+                    import_records,
+                    parts,
+                    loaders,
+                    temp,
+                    visits,
+                    o,
+                    record.source_index,
+                    loaders[record.source_index.get()].isCSS(),
+                );
+            }
+        }
+    }
+
+    if (is_css && source_index.isValid()) {
+        bun.handleOom(o.append(temp, source_index));
+    }
 }
 
 pub const BitSet = bun.bit_set.DynamicBitSetUnmanaged;

@@ -231,12 +231,15 @@ pub struct Fs {
     }
 }
 
+pub struct _CssEntry {}
+pub struct _CssResult {
+    ok: bool,
+    value: void,
+}
+
 pub struct Css {
-    pub const Entry = struct {};
-    pub const Result = struct {
-        ok: bool,
-        value: void,
-    };
+    pub const Entry = _CssEntry;
+    pub const Result = _CssResult;
     pub static fn parse(_: *Css, _: *logger.Log, _: logger.Source): !Result {
         Global.notimpl();
     }

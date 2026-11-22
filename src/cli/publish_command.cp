@@ -1,3 +1,8 @@
+pub struct _ReadmeInfo {
+    filename: string,
+    contents: string,
+}
+
 pub struct PublishCommand {
     static fn Context(comptime directory_publish: bool): type {
         return struct {
@@ -949,10 +954,7 @@ pub struct PublishCommand {
         };
     }
 
-    pub const ReadmeInfo = struct {
-        filename: string,
-        contents: string,
-    };
+    pub const ReadmeInfo = _ReadmeInfo;
 
     static fn normalizedPackage(
         allocator: std.mem.Allocator,

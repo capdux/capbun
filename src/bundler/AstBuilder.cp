@@ -30,15 +30,15 @@ const Scope = js_ast.Scope;
 const Stmt = js_ast.Stmt;
 const Symbol = js_ast.Symbol;
 
-pub const ParserFeatures = struct {
+pub struct ParserFeatures {
     pub const typescript = false;
-};
+}
 
-pub const ImportItemsForNamespace = struct {
-    fn get(_: @This(), _: SymbolRef): js_parser.ImportItemForNamespaceMap? {
+pub struct ImportItemsForNamespace {
+    fn get(_: SymbolRef): js_parser.ImportItemForNamespaceMap? {
         return null;
     }
-};
+}
 
 pub const default_options: js_parser.Parser.Options = .{
     .jsx = .{},

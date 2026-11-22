@@ -201,140 +201,145 @@ pub struct ThreadPool {
         return entry.value_ptr.*;
     }
 
-    pub const Worker = struct {
-        heap: ThreadLocalArena,
+    pub const Worker = Worker_;
+}
 
-        /// Thread-local memory allocator
-        /// All allocations are freed in `deinit` at the very end of bundling.
-        allocator: std.mem.Allocator,
+pub struct WorkerData_ {
+    log: *Logger.Log,
+    estimated_input_lines_of_code: usize = 0,
+    transpiler: Transpiler,
+    other_transpiler: Transpiler? = null,
+}
 
-        ctx: *BundleV2,
+pub struct Worker_ {
+    const debug = Output.scoped(.ThreadPool, .visible);
+    heap: ThreadLocalArena,
 
-        data: WorkerData = undefined,
-        quit: bool = false,
+    /// Thread-local memory allocator
+    /// All allocations are freed in `deinit` at the very end of bundling.
+    allocator: std.mem.Allocator,
 
-        ast_memory_allocator: js_ast.ASTMemoryAllocator = undefined,
-        has_created: bool = false,
-        thread: (*ThreadPoolLib.Thread)? = null,
+    ctx: *BundleV2,
 
-        deinit_task: ThreadPoolLib.Task = { callback: deinitCallback },
+    data: WorkerData_ = undefined,
+    quit: bool = false,
 
-        temporary_arena: bun.ArenaAllocator = undefined,
-        stmt_list: LinkerContext.StmtList = undefined,
+    ast_memory_allocator: js_ast.ASTMemoryAllocator = undefined,
+    has_created: bool = false,
+    thread: (*ThreadPoolLib.Thread)? = null,
 
-        static fn deinitCallback(task: *ThreadPoolLib.Task) {
-            debug("Worker.deinit()", .{});
-            let worker: *Worker = unsafe { @alignCast(@fieldParentPtr("deinit_task", task)) };
-            worker.deinit();
+    deinit_task: ThreadPoolLib.Task = { callback: deinitCallback },
+
+    temporary_arena: bun.ArenaAllocator = undefined,
+    stmt_list: LinkerContext.StmtList = undefined,
+
+    pub const WorkerData = WorkerData_;
+
+    static fn deinitCallback(task: *ThreadPoolLib.Task) {
+        debug("Worker.deinit()", .{});
+        let worker: *Worker_ = unsafe { @alignCast(@fieldParentPtr("deinit_task", task)) };
+        worker.deinit();
+    }
+
+    fn deinitSoon(*_) {
+        if (thread := _.thread) {
+            thread.pushIdleTask(&_.deinit_task);
+        }
+    }
+
+    fn deinit(*_) {
+        if (_.has_created) {
+            _.heap.deinit();
         }
 
-        fn deinitSoon(*_) {
-            if (thread := _.thread) {
-                thread.pushIdleTask(&_.deinit_task);
-            }
+        bun.default_allocator.destroy(_);
+    }
+
+    static fn get(ctx: *BundleV2): *Worker_ {
+        let worker = ctx.graph.pool.getWorker(std.Thread.getCurrentId());
+        if (!worker.has_created) {
+            worker.create(ctx);
         }
 
-        fn deinit(*_) {
-            if (_.has_created) {
-                _.heap.deinit();
-            }
+        worker.ast_memory_allocator.push();
 
-            bun.default_allocator.destroy(_);
+        if (comptime FeatureFlags.help_catch_memory_issues) {
+            worker.heap.helpCatchMemoryIssues();
         }
 
-        static fn get(ctx: *BundleV2): *Worker {
-            let worker = ctx.graph.pool.getWorker(std.Thread.getCurrentId());
-            if (!worker.has_created) {
-                worker.create(ctx);
-            }
+        return worker;
+    }
 
-            worker.ast_memory_allocator.push();
-
-            if (comptime FeatureFlags.help_catch_memory_issues) {
-                worker.heap.helpCatchMemoryIssues();
-            }
-
-            return worker;
+    fn unget(*_) {
+        if (comptime FeatureFlags.help_catch_memory_issues) {
+            _.heap.helpCatchMemoryIssues();
         }
 
-        fn unget(*_) {
-            if (comptime FeatureFlags.help_catch_memory_issues) {
-                _.heap.helpCatchMemoryIssues();
-            }
+        _.ast_memory_allocator.pop();
+    }
 
-            _.ast_memory_allocator.pop();
-        }
+    static fn init(worker: *Worker_, v2: *BundleV2) {
+        worker.ctx = v2;
+    }
 
-        pub const WorkerData = struct {
-            log: *Logger.Log,
-            estimated_input_lines_of_code: usize = 0,
-            transpiler: Transpiler,
-            other_transpiler: Transpiler? = null,
+    fn create(*_, ctx: *BundleV2) {
+        let trace = bun.perf.trace("Bundler.Worker.create");
+        const trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
+
+        _.has_created = true;
+        Output.Source.configureThread();
+        _.heap = ThreadLocalArena.init();
+        _.allocator = _.heap.allocator();
+
+        const allocator = _.allocator;
+
+        _.ast_memory_allocator = { allocator: _.allocator };
+        _.ast_memory_allocator.reset();
+
+        _.data = WorkerData_{
+            log: bun.handleOom(allocator.create(Logger.Log)),
+            transpiler: undefined,
         };
+        _.data.log.* = Logger.Log.init(allocator);
+        _.ctx = ctx;
+        _.temporary_arena = bun.ArenaAllocator.init(_.allocator);
+        _.stmt_list = LinkerContext.StmtList.init(_.allocator);
+        _.initializeTranspiler(&_.data.transpiler, ctx.transpiler, allocator);
 
-        static fn init(worker: *Worker, v2: *BundleV2) {
-            worker.ctx = v2;
-        }
+        debug("Worker.create()", .{});
+    }
 
-        fn create(*_, ctx: *BundleV2) {
-            let trace = bun.perf.trace("Bundler.Worker.create");
-            const trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
+    fn initializeTranspiler(*_, transpiler: *Transpiler, src: *Transpiler, allocator: std.mem.Allocator) {
+        transpiler.* = src.*;
+        transpiler.setLog(_.data.log);
+        transpiler.setAllocator(allocator);
+        transpiler.linker.resolver = &transpiler.resolver;
+        transpiler.macro_context = js_ast.Macro.MacroContext.init(transpiler);
+        transpiler.resolver.caches = CacheSet.Set.init(allocator);
+    }
 
-            _.has_created = true;
-            Output.Source.configureThread();
-            _.heap = ThreadLocalArena.init();
-            _.allocator = _.heap.allocator();
-
-            const allocator = _.allocator;
-
-            _.ast_memory_allocator = { allocator: _.allocator };
-            _.ast_memory_allocator.reset();
-
-            _.data = WorkerData{
-                log: bun.handleOom(allocator.create(Logger.Log)),
-                transpiler: undefined,
-            };
-            _.data.log.* = Logger.Log.init(allocator);
-            _.ctx = ctx;
-            _.temporary_arena = bun.ArenaAllocator.init(_.allocator);
-            _.stmt_list = LinkerContext.StmtList.init(_.allocator);
-            _.initializeTranspiler(&_.data.transpiler, ctx.transpiler, allocator);
-
-            debug("Worker.create()", .{});
-        }
-
-        fn initializeTranspiler(*_, transpiler: *Transpiler, src: *Transpiler, allocator: std.mem.Allocator) {
-            transpiler.* = src.*;
-            transpiler.setLog(_.data.log);
-            transpiler.setAllocator(allocator);
-            transpiler.linker.resolver = &transpiler.resolver;
-            transpiler.macro_context = js_ast.Macro.MacroContext.init(transpiler);
-            transpiler.resolver.caches = CacheSet.Set.init(allocator);
-        }
-
-        fn transpilerForTarget(*_, target: bun.options.Target): *Transpiler {
-            if (target == .browser && _.data.transpiler.options.target != target) {
-                if (_.data.other_transpiler != null) {
-                    const other_ptr = &_.data.other_transpiler.?;
-                    bun.debugAssert(other_ptr.options.target == target);
-                    return other_ptr;
-                }
-                _.data.other_transpiler = undefined;
-                const other = &_.data.other_transpiler.?;
-                _.initializeTranspiler(other, _.ctx.client_transpiler.?, _.allocator);
-                bun.debugAssert(other.options.target == target);
-                return other;
+    fn transpilerForTarget(*_, target: bun.options.Target): *Transpiler {
+        if (target == .browser && _.data.transpiler.options.target != target) {
+            if (_.data.other_transpiler != null) {
+                const other_ptr = &_.data.other_transpiler.?;
+                bun.debugAssert(other_ptr.options.target == target);
+                return other_ptr;
             }
-
-            return &_.data.transpiler;
+            _.data.other_transpiler = undefined;
+            const other = &_.data.other_transpiler.?;
+            _.initializeTranspiler(other, _.ctx.client_transpiler.?, _.allocator);
+            bun.debugAssert(other.options.target == target);
+            return other;
         }
 
-        fn run(*_, ctx: *BundleV2) {
-            if (!_.has_created) {
-                _.create(ctx);
-            }
+        return &_.data.transpiler;
+    }
+
+    fn run(*_, ctx: *BundleV2) {
+        if (!_.has_created) {
+            _.create(ctx);
         }
-    };
+    }
 }
 
 pub const Ref = bun.ast.Ref;
