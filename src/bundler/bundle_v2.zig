@@ -268,6 +268,67 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn HelpCatchMemoryIssuesGuard(comptime T: type) type {
+    return struct {
+        bundle: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (comptime FeatureFlags.help_catch_memory_issues) {
+                    _ = self.bundle.graph.heap.helpCatchMemoryIssues();
+                }
+        }
+    };
+}
+
+pub fn DecrementScanCounterGuard(comptime T: type) type {
+    return struct {
+        bundle: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.bundle.decrementScanCounter();
+        }
+    };
+}
+
+pub const OutOfMemoryErrGuard = struct {
+    __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *OutOfMemoryErrGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            _ = bun.outOfMemory();
+    }
+};
+
+pub fn ScanCounterDiffGuard(comptime T: type, comptime Gr: type) type {
+    return struct {
+        bundle: *T,
+        graph: *Gr,
+        diff: *i32,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                const d = (blk: {
+                break :blk self.diff.*;
+
+});
+                _ = BundleV2.logScanCounter("in parse task .pending_items += {d} = {d}\n", .{ d, (@as(i32, @intCast(self.graph.pending_items)) + d) });
+                self.graph.pending_items = @intCast((@as(i32, @intCast(self.graph.pending_items)) + d));
+                if ((d < 0)) {
+                    _ = self.bundle.onAfterDecrementScanCounter();
+                }
+        }
+    };
+}
+
 pub const WaitingResolveTask = struct {
     to_source_index: Index,
     import_record_index: u32,
@@ -1589,13 +1650,10 @@ pub fn onLoad(load: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) void {
             _ = &_guard_load;
             var ___guard_load_moved = false; _ = &___guard_load_moved;
             defer if (!___guard_load_moved) { ___guard_load_moved = true; const __T = @TypeOf(_guard_load); if (@typeInfo(__T) == .optional) { if (_guard_load) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_load.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_load; _drop_val.__cp_deinit(); } };
-            defer {
-            {
-                if (comptime FeatureFlags.help_catch_memory_issues) {
-                    _ = bundle.graph.heap.helpCatchMemoryIssues();
-                }
-            }
-            }
+            var _guard_heap_issues = HelpCatchMemoryIssuesGuard(BundleV2){ .bundle = bundle };
+            _ = &_guard_heap_issues;
+            var ___guard_heap_issues_moved = false; _ = &___guard_heap_issues_moved;
+            defer if (!___guard_heap_issues_moved) { ___guard_heap_issues_moved = true; const __T = @TypeOf(_guard_heap_issues); if (@typeInfo(__T) == .optional) { if (_guard_heap_issues) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_heap_issues.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_heap_issues; _drop_val.__cp_deinit(); } };
             const log = bundle.transpiler.log;
             switch ((if (@typeInfo(@TypeOf(load)) == .@"enum") @intFromEnum(load) else load.value).consume()) {
 .no_match => {
@@ -1675,17 +1733,15 @@ pub fn onResolve(resolve: *bun.jsc.API.JSBundler.Resolve, bundle: *BundleV2) voi
             _ = &_guard_resolve;
             var ___guard_resolve_moved = false; _ = &___guard_resolve_moved;
             defer if (!___guard_resolve_moved) { ___guard_resolve_moved = true; const __T = @TypeOf(_guard_resolve); if (@typeInfo(__T) == .optional) { if (_guard_resolve) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_resolve.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_resolve; _drop_val.__cp_deinit(); } };
-            defer {
-            _ = bundle.decrementScanCounter();
-            }
+            var _guard_scan_counter = DecrementScanCounterGuard(BundleV2){ .bundle = bundle };
+            _ = &_guard_scan_counter;
+            var ___guard_scan_counter_moved = false; _ = &___guard_scan_counter_moved;
+            defer if (!___guard_scan_counter_moved) { ___guard_scan_counter_moved = true; const __T = @TypeOf(_guard_scan_counter); if (@typeInfo(__T) == .optional) { if (_guard_scan_counter) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_scan_counter.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_scan_counter; _drop_val.__cp_deinit(); } };
             _ = debug("onResolve: ({s}:{s}, {s})", .{ resolve.import_record.namespace, resolve.import_record.specifier, @tagName((if (@typeInfo(@TypeOf(resolve)) == .@"enum") @intFromEnum(resolve) else resolve.value)) });
-            defer {
-            {
-                if (comptime FeatureFlags.help_catch_memory_issues) {
-                    _ = bundle.graph.heap.helpCatchMemoryIssues();
-                }
-            }
-            }
+            var _guard_heap_issues = HelpCatchMemoryIssuesGuard(BundleV2){ .bundle = bundle };
+            _ = &_guard_heap_issues;
+            var ___guard_heap_issues_moved = false; _ = &___guard_heap_issues_moved;
+            defer if (!___guard_heap_issues_moved) { ___guard_heap_issues_moved = true; const __T = @TypeOf(_guard_heap_issues); if (@typeInfo(__T) == .optional) { if (_guard_heap_issues) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_heap_issues.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_heap_issues; _drop_val.__cp_deinit(); } };
             switch ((if (@typeInfo(@TypeOf(resolve)) == .@"enum") @intFromEnum(resolve) else resolve.value).consume()) {
 .no_match => {
 if (strings.eqlComptime(resolve.import_record.namespace, "file")) {
@@ -1959,7 +2015,7 @@ pub fn startFromBakeDevServer(self: *BundleV2, bake_entry_points: bake.DevServer
             return ctx;
     }
 
-pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun.OOM!void {
+pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun.JSError!void {
             const start = (&dev_server.current_bundle.?.start_data);
             _ = self.graph.heap.helpCatchMemoryIssues();
             _ = try self.cloneAST();
@@ -2066,11 +2122,10 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             break :blk @as([]Index.Int, @ptrCast(js_reachable_files));
 
 }));
-            errdefer {
-            {
-                _ = bun.outOfMemory();
-            }
-            }
+            var _oom_guard_sm = OutOfMemoryErrGuard{  };
+            _ = &_oom_guard_sm;
+            var ___oom_guard_sm_moved = false; _ = &___oom_guard_sm_moved;
+            errdefer if (!___oom_guard_sm_moved) { ___oom_guard_sm_moved = true; const __T = @TypeOf(_oom_guard_sm); if (@typeInfo(__T) == .optional) { if (_oom_guard_sm) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _oom_guard_sm.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _oom_guard_sm; _drop_val.__cp_errdeinit(); } };
             _ = self.graph.heap.helpCatchMemoryIssues();
             var js_part_ranges = try self.allocator().alloc(PartRange, js_reachable_files.len);
             _ = &js_part_ranges;
@@ -2104,11 +2159,10 @@ pub fn finishFromBakeDevServer(self: *BundleV2, dev_server: *bake.DevServer) bun
             }
             _ = self.graph.heap.helpCatchMemoryIssues();
             _ = try self.linker.generateChunksInParallel(chunks, true);
-            errdefer {
-            {
-                _ = bun.outOfMemory();
-            }
-            }
+            var _oom_guard_chunks = OutOfMemoryErrGuard{  };
+            _ = &_oom_guard_chunks;
+            var ___oom_guard_chunks_moved = false; _ = &___oom_guard_chunks_moved;
+            errdefer if (!___oom_guard_chunks_moved) { ___oom_guard_chunks_moved = true; const __T = @TypeOf(_oom_guard_chunks); if (@typeInfo(__T) == .optional) { if (_oom_guard_chunks) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _oom_guard_chunks.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _oom_guard_chunks; _drop_val.__cp_errdeinit(); } };
             _ = self.graph.heap.helpCatchMemoryIssues();
             _ = try dev_server.finalizeBundle(self, (&.{ .chunks = chunks, .css_file_list = start.css_entry_points, .html_files = html_files }));
     }
@@ -2748,15 +2802,13 @@ inline .empty, .err => |data| data.source_index.get(),
             defer if (!___guard_parse_result_moved) { ___guard_parse_result_moved = true; const __T = @TypeOf(_guard_parse_result); if (@typeInfo(__T) == .optional) { if (_guard_parse_result) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_parse_result.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_parse_result; _drop_val.__cp_deinit(); } };
             var diff: i32 = -1;
             _ = &diff;
-            defer {
-            {
-                _ = logScanCounter("in parse task .pending_items += {d} = {d}\n", .{ diff, (@as(i32, @intCast(graph.pending_items)) + diff) });
-                graph.pending_items = @intCast((@as(i32, @intCast(graph.pending_items)) + diff));
-                if ((diff < 0)) {
-                    _ = bundle.onAfterDecrementScanCounter();
-                }
-            }
-            }
+            var _guard_scan_diff = ScanCounterDiffGuard(BundleV2, @TypeOf(graph.*)){ .bundle = bundle, .graph = graph, .diff = (blk: {
+            break :blk (&diff);
+
+}) };
+            _ = &_guard_scan_diff;
+            var ___guard_scan_diff_moved = false; _ = &___guard_scan_diff_moved;
+            defer if (!___guard_scan_diff_moved) { ___guard_scan_diff_moved = true; const __T = @TypeOf(_guard_scan_diff); if (@typeInfo(__T) == .optional) { if (_guard_scan_diff) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_scan_diff.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_scan_diff; _drop_val.__cp_deinit(); } };
             var resolve_queue = ResolveQueue.init(bundle.allocator());
             _ = &resolve_queue;
             var _guard_resolve_queue = DeinitGuard(ResolveQueue){ .ptr = (blk: {

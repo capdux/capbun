@@ -6,6 +6,13 @@ pub struct Result {
     processes: u32 = 0,
 }
 
+struct ProcessDerefGuard {
+    ptr: *bun.spawn.Process!,
+    ~init() {
+        _.ptr.deref();
+    }
+}
+
 @root struct ProcessAutoKiller {
     processes: std.AutoArrayHashMapUnmanaged(*bun.spawn.Process, void) = {},
     enabled: bool = false,
@@ -29,7 +36,7 @@ pub struct Result {
     fn killProcesses(*_): u32 {
         let count: u32 = 0;
         while (process := _.processes.pop()) {
-            defer process.key.deref();
+            const _process_guard = ProcessDerefGuard{ ptr: process.key };
             if (!process.key.hasExited()) {
                 log("process.kill {d}", .{ process.key.pid });
                 count += @as(u32, @intFromBool(process.key.kill(@intFromEnum(bun.SignalCode.default)) == .result));

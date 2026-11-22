@@ -1,3 +1,5 @@
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+
 pub fn AstMaybe(
     comptime parser_feature__typescript: bool,
     comptime parser_feature__jsx: JSXTransformType,
@@ -426,9 +428,8 @@ pub fn AstMaybe(
                             return p.newExpr(E.String.init(p.source.path.text), name_loc);
                         } else if (strings.eqlComptime(name, "url")) {
                             // Inline import.meta.url as file:// URL
-                            const bunstr = bun.String.fromBytes(p.source.path.text);
-                            defer bunstr.deref();
-                            const url = std.fmt.allocPrint(p.allocator, "{f}", .{jsc.URL.fileURLFromString(bunstr)}) catch unreachable;
+                            const bunstr_g = DerefGuard(bun.String){ .val = bun.String.fromBytes(p.source.path.text) };
+                            const url = std.fmt.allocPrint(p.allocator, "{f}", .{jsc.URL.fileURLFromString(bunstr_g.val)}) catch unreachable;
                             return p.newExpr(E.String.init(url), name_loc);
                         }
                     }

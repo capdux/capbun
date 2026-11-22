@@ -71,6 +71,22 @@ struct EndGuard<T> {
     }
 }
 
+struct DebugIndentGuard<T> {
+    r: *T!,
+    ~init() {
+        if (*debug := _.r.debug_logs) {
+            debug.decreaseIndent();
+        }
+    }
+}
+
+struct FlushDebugLogsErrGuard<T> {
+    r: *T!,
+    ~errinit() {
+        _.r.flushDebugLogs(.fail) catch {};
+    }
+}
+
 struct CloseFDGuard<T> {
     ptr: *T!,
     ~init() {
@@ -1096,7 +1112,7 @@ pub struct Resolver {
 
         // r.mutex.lock();
         // defer r.mutex.unlock();
-        errdefer (r.flushDebugLogs(.fail) catch {});
+        const _guard_flush_debug = FlushDebugLogsErrGuard<ThisResolver>{ r: r };
 
         // A path with a null byte cannot exist on the filesystem. Continuing
         // anyways would cause assertion failures.
@@ -1939,11 +1955,7 @@ pub struct Resolver {
             debug.increaseIndent();
         }
 
-        defer {
-            if (*debug := r.debug_logs) {
-                debug.decreaseIndent();
-            }
-        }
+        const _guard_debug_indent = DebugIndentGuard<ThisResolver>{ r: r };
 
         // First, check path overrides from the nearest enclosing TypeScript "tsconfig.json" file
 
@@ -3400,10 +3412,10 @@ pub struct Resolver {
 
     static fn loadPackageImports(r: *ThisResolver, import_path: string, dir_info: *DirInfo, kind: ast.ImportKind, global_cache: GlobalCache): MatchResult.Union {
         const package_json = dir_info.package_json.?;
+        const _guard_debug_indent = DebugIndentGuard<ThisResolver>{ r: r };
         if (*debug := r.debug_logs) {
             debug.addNoteFmt("Looking for {s} in \"imports\" map in {s}", .{ import_path, package_json.source.path.text });
             debug.increaseIndent();
-            defer debug.decreaseIndent();
         }
         const imports_map = package_json.imports.?;
 
@@ -3564,11 +3576,7 @@ pub struct Resolver {
             debug.increaseIndent();
         }
 
-        defer {
-            if (*debug := r.debug_logs) {
-                debug.decreaseIndent();
-            }
-        }
+        const _guard_debug_indent = DebugIndentGuard<ThisResolver>{ r: r };
 
         if (r.care_about_browser_field) {
             // Potentially remap using the "browser" field
@@ -3798,11 +3806,7 @@ pub struct Resolver {
             debug.addNoteFmt("Attempting to load \"{s}\" as a directory", .{path});
             debug.increaseIndent();
         }
-        defer {
-            if (*debug := r.debug_logs) {
-                debug.decreaseIndent();
-            }
-        }
+        const _guard_debug_indent = DebugIndentGuard<ThisResolver>{ r: r };
 
         const dir_info = (r.dirInfoCached(path) catch |e| {
             if (comptime Environment.isDebug) Output.prettyErrorln("err: {s} reading {s}", .{ @errorName(e), path });
@@ -3927,11 +3931,7 @@ pub struct Resolver {
             debug.addNoteFmt("Attempting to load \"{s}\" as a file", .{path});
             debug.increaseIndent();
         }
-        defer {
-            if (*debug := r.debug_logs) {
-                debug.decreaseIndent();
-            }
-        }
+        const _guard_debug_indent = DebugIndentGuard<ThisResolver>{ r: r };
 
         const dir_path = bun.strings.withoutTrailingSlashWindowsPath(Dirname.dirname(path));
 

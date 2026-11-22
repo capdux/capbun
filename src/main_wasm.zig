@@ -214,6 +214,17 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const StoreResetGuard = struct {
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *StoreResetGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = JSAst.Stmt.Data.Store.reset();
+            _ = JSAst.Expr.Data.Store.reset();
+    }
+};
+
 pub const Uint8Array = extern struct {
     ptr: ?[*]const u8 = null,
     len: usize = 0,
@@ -595,12 +606,10 @@ pub export fn getTests(opts_array: u64) callconv(.c) u64 {
         var code = Logger.Source.initPathString((if ((opts.path.len > 0)) opts.path else "my-test-file.test.tsx"), opts.contents);
         _ = &code;
         code.contents_is_recycled = true;
-        defer {
-        {
-            _ = JSAst.Stmt.Data.Store.reset();
-            _ = JSAst.Expr.Data.Store.reset();
-        }
-        }
+        var _store_guard = StoreResetGuard{  };
+        _ = &_store_guard;
+        var ___store_guard_moved = false; _ = &___store_guard_moved;
+        defer if (!___store_guard_moved) { ___store_guard_moved = true; const __T = @TypeOf(_store_guard); if (@typeInfo(__T) == .optional) { if (_store_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _store_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _store_guard; _drop_val.__cp_deinit(); } };
         var parser = (blk_catch_3: { break :blk_catch_3 ((JSParser.Parser.init(.{ .jsx = .{}, .ts = true }, (&log_), (&code), define, allocator)) catch |e| { _ = &e; break :blk_catch_3 bun.handleOom(e); }); });
         _ = &parser;
         var anaylzer = TestAnalyzer{ .items = std.array_list.Managed(api.TestResponseItem).init(allocator), .string_buffer = std.array_list.Managed(u8).init(allocator) };
@@ -647,12 +656,10 @@ pub export fn transform(opts_array: u64) callconv(.c) u64 {
         var opts = ((api.Transform.decode((&reader))) catch unreachable);
         _ = &opts;
         const loader_ = ((opts.loader) orelse (api.Loader.tsx));
-        defer {
-        {
-            _ = JSAst.Stmt.Data.Store.reset();
-            _ = JSAst.Expr.Data.Store.reset();
-        }
-        }
+        var _store_guard = StoreResetGuard{  };
+        _ = &_store_guard;
+        var ___store_guard_moved = false; _ = &___store_guard_moved;
+        defer if (!___store_guard_moved) { ___store_guard_moved = true; const __T = @TypeOf(_store_guard); if (@typeInfo(__T) == .optional) { if (_store_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _store_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _store_guard; _drop_val.__cp_deinit(); } };
         const loader: Options.Loader = (switch (loader_) {
 .jsx => Options.Loader.jsx,
 .js => Options.Loader.js,
@@ -715,12 +722,10 @@ pub export fn scan(opts_array: u64) callconv(.c) u64 {
         var opts = ((api.Scan.decode((&reader))) catch unreachable);
         _ = &opts;
         const loader_ = ((opts.loader) orelse (api.Loader.tsx));
-        defer {
-        {
-            _ = JSAst.Stmt.Data.Store.reset();
-            _ = JSAst.Expr.Data.Store.reset();
-        }
-        }
+        var _store_guard = StoreResetGuard{  };
+        _ = &_store_guard;
+        var ___store_guard_moved = false; _ = &___store_guard_moved;
+        defer if (!___store_guard_moved) { ___store_guard_moved = true; const __T = @TypeOf(_store_guard); if (@typeInfo(__T) == .optional) { if (_store_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _store_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _store_guard; _drop_val.__cp_deinit(); } };
         const loader: Options.Loader = (switch (loader_) {
 .jsx => Options.Loader.jsx,
 .js => Options.Loader.js,

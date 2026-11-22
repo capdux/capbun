@@ -112,6 +112,11 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
     return false;
 }
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 @root struct Echo {
     output: std.array_list.Managed(u8),
     state: State = .idle,
@@ -202,9 +207,9 @@ fn appendWithEscapes(output: *std.array_list.Managed(u8), input: []const u8): bo
             assert(_.state == .waiting || _.state == .waiting_write_err);
         }
 
-        if (e != null) {
-            defer e.?.deref();
-            return _.bltn().done(e.?.getErrno());
+        if (err_val := e) {
+            const _e_guard = DerefGuard<jsc.SystemError>{ val: err_val };
+            return _.bltn().done(err_val.getErrno());
         }
 
         const exit_code: ExitCode = if (_.state == .waiting_write_err) @as(ExitCode, 1) else @as(ExitCode, 0);

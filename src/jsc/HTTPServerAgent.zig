@@ -83,6 +83,32 @@ pub const RouteType = enum(u8) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const DerefGuard = struct {
+    s: *BunString,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DerefGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.s.deref();
+    }
+};
+
+pub const RoutesGuard = struct {
+    routes: *std.array_list.Managed(Route),
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *RoutesGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            for (self.routes.items) |*route| {
+                _ = &route;
+                _ = (route.*).deinit();
+            }
+            _ = self.routes.deinit();
+    }
+};
+
 pub const Route = extern struct {
     route_id: RouteId,
     path: BunString = .empty,
@@ -149,9 +175,13 @@ pub fn notifyServerStarted(self: *HTTPServerAgent, instance: jsc.API.AnyServer) 
             _ = instance.setInspectorServerID(self.next_server_id);
             var url = bun.handleOom(instance.getURLAsString());
             _ = &url;
-            defer {
-            _ = url.deref();
-            }
+            var _url_guard = DerefGuard{ .s = (blk: {
+            break :blk (&url);
+
+}) };
+            _ = &_url_guard;
+            var ___url_guard_moved = false; _ = &___url_guard_moved;
+            defer if (!___url_guard_moved) { ___url_guard_moved = true; const __T = @TypeOf(_url_guard); if (@typeInfo(__T) == .optional) { if (_url_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _url_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _url_guard; _drop_val.__cp_deinit(); } };
             _ = agent.notifyServerStarted(self.next_server_id, @intCast(instance.vm().hot_reload_counter), (&url), @floatFromInt(bun.timespec.now(.allow_mocked_time).ms()), instance.ptr.ptr());
         }
 }
@@ -169,15 +199,13 @@ pub fn notifyServerRoutesUpdated(self: HTTPServerAgent, server: jsc.API.AnyServe
             const config = server.config();
             var routes = std.array_list.Managed(Route).init(bun.default_allocator);
             _ = &routes;
-            defer {
-            {
-                for (routes.items) |*route| {
-                    _ = &route;
-                    _ = (route.*).deinit();
-                }
-                _ = routes.deinit();
-            }
-            }
+            var _routes_guard = RoutesGuard{ .routes = (blk: {
+            break :blk (&routes);
+
+}) };
+            _ = &_routes_guard;
+            var ___routes_guard_moved = false; _ = &___routes_guard_moved;
+            defer if (!___routes_guard_moved) { ___routes_guard_moved = true; const __T = @TypeOf(_routes_guard); if (@typeInfo(__T) == .optional) { if (_routes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _routes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _routes_guard; _drop_val.__cp_deinit(); } };
             var max_id: u32 = 0;
             _ = &max_id;
             switch (server.userRoutes()) {

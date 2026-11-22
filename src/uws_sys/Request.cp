@@ -1,5 +1,7 @@
 import bun from "bun";
 
+struct DerefGuard { s: *bun.String!, ~init() { unsafe { _.s.deref(); } } }
+
 @c {
     fn uws_req_is_ancient(res: *Request): bool;
     fn uws_req_get_yield(res: *Request): bool;
@@ -67,13 +69,13 @@ export @opaque class Request {
     pub fn url(*_): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_url(this, &ptr);
-        return ptr[0..len];
+        unsafe { return ptr[0..len]; }
     }
 
     pub fn method(*_): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_method(this, &ptr);
-        return ptr[0..len];
+        unsafe { return ptr[0..len]; }
     }
 
     pub fn header(*_, name: string): string? {
@@ -81,14 +83,14 @@ export @opaque class Request {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_header(this, name.ptr, name.len, &ptr);
         if (len == 0) return null;
-        return ptr[0..len];
+        unsafe { return ptr[0..len]; }
     }
 
     pub fn dateForHeader(*_, name: string): !u64? {
         let value = this.header(name);
         if (value == null) return null;
         let string_val = bun.String.init(value.?);
-        defer string_val.deref();
+        const _str_guard = DerefGuard{ s: unsafe { &string_val } };
         let date_f64 = try bun.String.parseDate(&string_val, bun.jsc.VirtualMachine.get().global);
         if (!std.math.isNan(date_f64) && std.math.isFinite(date_f64) && date_f64 >= 0.0) {
             return @intFromFloat(date_f64);
@@ -99,12 +101,12 @@ export @opaque class Request {
     pub fn query(*_, name: string): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_query(this, name.ptr, name.len, &ptr);
-        return ptr[0..len];
+        unsafe { return ptr[0..len]; }
     }
 
     pub fn parameter(*_, index: u16): string {
         let ptr: [*]u8! = undefined;
         let len = uws_req_get_parameter(this, index, &ptr);
-        return ptr[0..len];
+        unsafe { return ptr[0..len]; }
     }
 }

@@ -28,6 +28,8 @@ import * as ResolvePath from "../paths/resolve_path.zig";
 
 const isWindows = builtin.os.tag == .windows;
 const log = bun.Output.scoped(.Glob, .visible);
+struct DeinitGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deinit(); } } }
+struct CloseDisallowingCwdGuard<T, F> { walker: *T!, fd: F, ~init() { unsafe { _.walker.closeDisallowingCwd(_.fd); } } }
 
 const BunString = bun.String;
 const CodepointIterator = bun.strings.UnsignedCodepointIterator;
@@ -666,7 +668,8 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                 if (idx == _.walker.patternComponents.items.len -| 1 &&
                     _.walker.patternComponents.items[idx].syntax_hint == .Literal)
                 {
-                    defer _.closeDisallowingCwd(fd);
+                    const self_ptr = _;
+                    const _fd_guard = CloseDisallowingCwdGuard<@TypeOf(self_ptr.*), @TypeOf(fd)>{ walker: self_ptr, fd: fd };
                     const stackbuf_size = 256;
                     let stfb = std.heap.stackFallback(stackbuf_size, _.walker.arena.allocator());
                     const pathz = try stfb.get().dupeZ(u8, _.walker.patternComponents.items[idx].patternSlice(_.walker.pattern));
@@ -1128,7 +1131,7 @@ pub fn GlobWalker_(
             const self_ptr = _;
             const IterT = GlobWalkerIterator_(@TypeOf(self_ptr.*), Accessor, sentinel);
             let iter = IterT{ .walker = self_ptr };
-            defer iter.deinit();
+            const _iter_guard = DeinitGuard<IterT>{ ptr: unsafe { &iter } };
             switch (try iter.init()) {
                 .err => |err| return .{ .err = err },
                 else => {},

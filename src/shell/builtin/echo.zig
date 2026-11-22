@@ -77,6 +77,19 @@ pub const State = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
 pub const Echo = @This();
 
 output: std.array_list.Managed(u8),
@@ -191,11 +204,13 @@ pub fn onIOWriterChunk(self: *Echo, _: usize, e: ?jsc.SystemError) Yield {
         if (comptime bun.Environment.allow_assert) {
             _ = assert(((self.state == .waiting) or (self.state == .waiting_write_err)));
         }
-        if ((e != null)) {
-            defer {
-            _ = e.?.deref();
-            }
-            return self.bltn().done(e.?.getErrno());
+        if (e) |err_val| {
+            _ = &err_val;
+            var _e_guard = DerefGuard(jsc.SystemError){ .val = err_val };
+            _ = &_e_guard;
+            var ___e_guard_moved = false; _ = &___e_guard_moved;
+            defer if (!___e_guard_moved) { ___e_guard_moved = true; const __T = @TypeOf(_e_guard); if (@typeInfo(__T) == .optional) { if (_e_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _e_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _e_guard; _drop_val.__cp_deinit(); } };
+            return self.bltn().done(err_val.getErrno());
         }
         const exit_code: ExitCode = (if ((self.state == .waiting_write_err)) (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1)) else (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
         self.state = .done;

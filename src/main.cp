@@ -65,7 +65,7 @@ pub fn main() {
     };
 
     Output.Source.Stdio.init();
-    defer Output.flush();
+    const _flush_guard = OutputFlushGuard{};
     if (Environment.isX64 && Environment.enableSIMD && Environment.isPosix) {
         bun_warn_avx_missing(_bun.cli.UpgradeCommand.Bun__githubBaselineURL.ptr);
     }
@@ -80,6 +80,12 @@ pub fn main() {
 @export @c fn Bun__panic(msg: [*]const u8, len: usize): noreturn {
     unsafe {
         Output.panic("{s}", .{msg[0..len]});
+    }
+}
+
+struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
     }
 }
 

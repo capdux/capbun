@@ -120,6 +120,19 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const MemoryVisualizerGuard = struct {
+    store: *SourceMapStore,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *MemoryVisualizerGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.store.owner().emitMemoryVisualizerMessageIfNeeded();
+            }
+    }
+};
+
 pub const InitialResponseBits = packed struct(u63) {
     unused: UnusedZero = .zero,
     generation_id: u32,
@@ -490,9 +503,13 @@ pub fn sweepWeakRefs(self: *SourceMapStore, timer: *EventLoopTimer, now_ts: *con
         _ = mapLog("sweepWeakRefs", &.{});
         _ = assert((self.owner().magic == .valid));
         const now: u64 = @max(now_ts.sec, 0);
-        defer {
-        _ = self.owner().emitMemoryVisualizerMessageIfNeeded();
-        }
+        var _vis_guard = MemoryVisualizerGuard{ .store = (blk: {
+        break :blk self;
+
+}) };
+        _ = &_vis_guard;
+        var ___vis_guard_moved = false; _ = &___vis_guard_moved;
+        defer if (!___vis_guard_moved) { ___vis_guard_moved = true; const __T = @TypeOf(_vis_guard); if (@typeInfo(__T) == .optional) { if (_vis_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _vis_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _vis_guard; _drop_val.__cp_deinit(); } };
         while (self.weak_refs.readItem()) |item| {
             if ((item.expire <= now)) {
                 _ = self.unrefCount(item.key(), item.count);

@@ -601,13 +601,19 @@ pub struct Run {
     return .js_undefined;
 }
 
+struct OutputFlushGuard {
+    ~init() {
+        Output.flush();
+    }
+}
+
 noinline fn dumpBuildError(vm: *jsc.VirtualMachine)  {
     @branchHint(.cold);
 
     Output.flush();
 
     const writer = Output.errorWriterBuffered();
-    defer Output.flush();
+    const _flush_guard = OutputFlushGuard{};
 
     vm.log.print(writer) catch {};
 }

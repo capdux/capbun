@@ -416,7 +416,7 @@ pub enum AF: inet.sa_family_t {
     static fn fromJS(global: *jsc.JSGlobalObject, value: JSValue): AF! {
         if (value.isString()) {
             const fam_str = bun.String.fromJS(value, global)?;
-            defer fam_str.deref();
+            const _fam_guard = DerefGuard(bun.String){ .val = fam_str };
             if (fam_str.length() != 4) return global.throwInvalidArgumentPropertyValue("options.family", "'ipv4' or 'ipv6'", value);
 
             if (fam_str.is8Bit()) {

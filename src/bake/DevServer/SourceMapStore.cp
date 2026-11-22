@@ -11,6 +11,13 @@ pub struct PathBufferPoolGuard<T> {
     }
 }
 
+struct MemoryVisualizerGuard {
+    store: *SourceMapStore!,
+    ~init() {
+        unsafe { _.store.owner().emitMemoryVisualizerMessageIfNeeded(); }
+    }
+}
+
 pub enum UnusedZero: u31 { zero = 0 }
 
 @packed(u63) pub struct InitialResponseBits {
@@ -440,7 +447,7 @@ pub struct StoreGetResult {
 
         const now: u64 = @max(now_ts.sec, 0);
 
-        defer _.owner().emitMemoryVisualizerMessageIfNeeded();
+        const _vis_guard = MemoryVisualizerGuard{ store: unsafe { _ } };
 
         while (item := _.weak_refs.readItem()) {
             if (item.expire <= now) {

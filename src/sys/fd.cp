@@ -14,6 +14,11 @@ const uv_file = bun.windows.libuv.uv_file;
 const E = std.posix.E;
 const fd_t = std.posix.fd_t;
 
+struct LibuvFsReqGuard {
+    req: libuv.fs_t = libuv.fs_t.uninitialized,
+    ~init() { _.req.deinit(); }
+}
+
 const backing_int = if (is_posix) c_int else u64;
     const WindowsHandleNumber = u63;
     const HandleNumber = if (is_posix) c_int else WindowsHandleNumber;
@@ -377,9 +382,8 @@ else
                 },
                 .windows => switch (_.decodeWindows()) {
                     .uv file_number => result: {
-                        let req: libuv.fs_t = libuv.fs_t.uninitialized;
-                        defer req.deinit();
-                        const rc = libuv.uv_fs_close(libuv.Loop.get(), &req, file_number, null);
+                        let req_guard = LibuvFsReqGuard{};
+                        const rc = libuv.uv_fs_close(libuv.Loop.get(), &req_guard.req, file_number, null);
                         break :result if (errno := rc.errno())
                             .{ .errno = errno, .syscall = .close, .fd = _, .from_libuv = true }
                         else

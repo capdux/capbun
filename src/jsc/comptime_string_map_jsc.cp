@@ -1,18 +1,20 @@
 //! JSC bridges for `bun.ComptimeStringMap(V)`. The generic map type stays in
 //! `collections/`; only the `JSValue → V` lookup helpers live here.
 
+struct StringDerefGuard { str: bun.String, ~init() { _.str.deref(); } }
+
 /// `Map` is the `ComptimeStringMap(V, ...)` instantiation; `Map.Value` is the value type.
 pub fn fromJS(comptime Map: type, globalThis: *jsc.JSGlobalObject, input: jsc.JSValue): bun.JSError!Map.Value? {
     const str = bun.String.fromJS(input, globalThis)?;
     bun.assert(str.tag != .Dead);
-    defer str.deref();
+    const _guard = StringDerefGuard{ str: str };
     return Map.getWithEql(str, bun.String.eqlComptime);
 }
 
 pub fn fromJSCaseInsensitive(comptime Map: type, globalThis: *jsc.JSGlobalObject, input: jsc.JSValue): bun.JSError!Map.Value? {
     const str = bun.String.fromJS(input, globalThis)?;
     bun.assert(str.tag != .Dead);
-    defer str.deref();
+    const _guard = StringDerefGuard{ str: str };
     return str.inMapCaseInsensitive(Map);
 }
 

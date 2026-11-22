@@ -6,6 +6,7 @@ import { State, WriteResult } from "./Response.cp";
 import { BunSocketContextOptions } from "./SocketContext.cp";
 
 type OpaquePtr = *!?;
+struct DerefGuard { s: *bun.String!, ~init() { unsafe { _.s.deref(); } } }
 struct _h3_cb_sigs {
     @callconv("c") static fn handler(_: *Response, _: *Request, _: OpaquePtr) {}
     @callconv("c") static fn listen(_: (*ListenSocket)?, _: OpaquePtr) {}
@@ -131,7 +132,7 @@ export @opaque struct Request {
     fn dateForHeader(*_, name: string): (u64?)! {
         if (val := _.header(name)) {
             let s = bun.String.init(val);
-            defer s.deref();
+            const _s_guard = DerefGuard{ s: unsafe { &s } };
             const ms = s.parseDate(bun.jsc.VirtualMachine.get().global)?;
             if (!std.math.isNan(ms) && std.math.isFinite(ms) && ms >= 0.0) return @intFromFloat(ms);
         }

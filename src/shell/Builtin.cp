@@ -28,6 +28,7 @@ const ast = shell.AST;
 const IO = shell.Interpreter.IO;
 
 const EnvMap = shell.interpret.EnvMap;
+struct DerefGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deref(); } } }
 const ExitCode = shell.interpret.ExitCode;
 
 struct PtrDerefGuard<T> {
@@ -480,8 +481,8 @@ static fn initRedirections(
                     if (node.redirect.stdin) {
                         break :redirfd switch (ShellSyscall.openat(cmd.base.shell.cwd_fd, path, node.redirect.toFlags(), perm)) {
                             .err => |e| {
-                                const sys_err = e.toShellSystemError();
-                                defer sys_err.deref();
+                                let sys_err = e.toShellSystemError();
+                                const _err_guard = DerefGuard<@TypeOf(sys_err)>{ ptr: unsafe { &sys_err } };
                                 return cmd.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
                             },
                             .result => |f| f,
@@ -508,16 +509,16 @@ static fn initRedirections(
 
                     break :redirfd switch (result) {
                         .err => |e| {
-                            const sys_err = e.toShellSystemError();
-                            defer sys_err.deref();
+                            let sys_err = e.toShellSystemError();
+                            const _err_guard = DerefGuard<@TypeOf(sys_err)>{ ptr: unsafe { &sys_err } };
                             return cmd.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
                         },
                         .result => |f| {
                             if (bun.Environment.isWindows) {
                                 switch (f.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {
                                     .err => |e| {
-                                        const sys_err = e.toShellSystemError();
-                                        defer sys_err.deref();
+                                        let sys_err = e.toShellSystemError();
+                                        const _err_guard = DerefGuard<@TypeOf(sys_err)>{ ptr: unsafe { &sys_err } };
                                         return cmd.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
                                     },
                                     .result => |f2| break :redirfd f2,

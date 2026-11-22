@@ -66,6 +66,19 @@ pub const bun = @import("bun");
 const State = @import("./Response.zig").State;
 const WriteResult = @import("./Response.zig").WriteResult;
 const BunSocketContextOptions = @import("./SocketContext.zig").BunSocketContextOptions;
+pub const DerefGuard = struct {
+    s: *bun.String,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *DerefGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.s.deref();
+            }
+    }
+};
+
 pub const _h3_cb_sigs = struct {
 
 pub fn handler(_: *Response, _: *Request, _: OpaquePtr) callconv(.c) void {
@@ -162,9 +175,13 @@ pub fn dateForHeader(self: *Request, name: []const u8) !?u64 {
                 _ = &val;
                 var s = bun.String.init(val);
                 _ = &s;
-                defer {
-                _ = s.deref();
-                }
+                var _s_guard = DerefGuard{ .s = (blk: {
+                break :blk (&s);
+
+}) };
+                _ = &_s_guard;
+                var ___s_guard_moved = false; _ = &___s_guard_moved;
+                defer if (!___s_guard_moved) { ___s_guard_moved = true; const __T = @TypeOf(_s_guard); if (@typeInfo(__T) == .optional) { if (_s_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _s_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _s_guard; _drop_val.__cp_deinit(); } };
                 const ms = try s.parseDate(bun.jsc.VirtualMachine.get().global);
                 if ((((!std.math.isNan(ms)) and std.math.isFinite(ms)) and (ms >= 0.0))) {
                     return @intFromFloat(ms);

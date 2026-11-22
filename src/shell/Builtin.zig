@@ -161,6 +161,21 @@ pub fn fromStr(str: []const u8) ?Builtin.Kind {
     pub const DISABLED_ON_POSIX: [2]Kind = .{ .cat, .cp };
 };
 
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deref();
+                }
+        }
+    };
+}
+
 pub fn PtrDerefGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -489,10 +504,15 @@ if ((cmd.redirection_file.items.len == 0)) {
                 break :redirfd (switch (ShellSyscall.openat(cmd.base.shell.cwd_fd, path, node.redirect.toFlags(), perm)) {
 .err => |e| {
 {
-                    const sys_err = e.toShellSystemError();
-                    defer {
-                    _ = sys_err.deref();
-                    }
+                    var sys_err = e.toShellSystemError();
+                    _ = &sys_err;
+                    var _err_guard = DerefGuard(@TypeOf(sys_err)){ .ptr = (blk: {
+                    break :blk (&sys_err);
+
+}) };
+                    _ = &_err_guard;
+                    var ___err_guard_moved = false; _ = &___err_guard_moved;
+                    defer if (!___err_guard_moved) { ___err_guard_moved = true; const __T = @TypeOf(_err_guard); if (@typeInfo(__T) == .optional) { if (_err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_guard; _drop_val.__cp_deinit(); } };
                     return cmd.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
                 }
 },
@@ -507,10 +527,15 @@ pub fn onForceSyncOrIsaTTY(_: void) void {
             break :redirfd (switch (result) {
 .err => |e| {
 {
-                const sys_err = e.toShellSystemError();
-                defer {
-                _ = sys_err.deref();
-                }
+                var sys_err = e.toShellSystemError();
+                _ = &sys_err;
+                var _err_guard = DerefGuard(@TypeOf(sys_err)){ .ptr = (blk: {
+                break :blk (&sys_err);
+
+}) };
+                _ = &_err_guard;
+                var ___err_guard_moved = false; _ = &___err_guard_moved;
+                defer if (!___err_guard_moved) { ___err_guard_moved = true; const __T = @TypeOf(_err_guard); if (@typeInfo(__T) == .optional) { if (_err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_guard; _drop_val.__cp_deinit(); } };
                 return cmd.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
             }
 },
@@ -519,10 +544,15 @@ pub fn onForceSyncOrIsaTTY(_: void) void {
                 if (bun.Environment.isWindows) {
                     switch (f.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {
 .err => |e| {
-const sys_err = e.toShellSystemError();
-                    defer {
-                    _ = sys_err.deref();
-                    }
+var sys_err = e.toShellSystemError();
+                    _ = &sys_err;
+                    var _err_guard = DerefGuard(@TypeOf(sys_err)){ .ptr = (blk: {
+                    break :blk (&sys_err);
+
+}) };
+                    _ = &_err_guard;
+                    var ___err_guard_moved = false; _ = &___err_guard_moved;
+                    defer if (!___err_guard_moved) { ___err_guard_moved = true; const __T = @TypeOf(_err_guard); if (@typeInfo(__T) == .optional) { if (_err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_guard; _drop_val.__cp_deinit(); } };
                     return cmd.writeFailingError("bun: {f}: {s}", .{ sys_err.message, path });
 },
 .result => |f2| {

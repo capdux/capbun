@@ -13,6 +13,8 @@ const JSValue = jsc.JSValue;
 const Blob = webcore.Blob;
 const streams = webcore.streams;
 
+struct DerefGuard<T> { ptr: *T!, ~init() { unsafe { _.ptr.deref(); } } }
+
 @root struct ByteBlobLoader {
     offset: Blob.SizeType = 0,
     store: (*Blob.Store)? = null,
@@ -119,7 +121,7 @@ const streams = webcore.streams;
             * = _.detachStore();
             if (_.offset == 0 && _.remain == store.size() && _.content_type.len == 0) {
                 if (blob := store.toAnyBlob()) {
-                    defer store.deref();
+                    const _store_guard = DerefGuard<Blob.Store>{ ptr: store };
                     return blob;
                 }
             }

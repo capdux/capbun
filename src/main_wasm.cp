@@ -28,6 +28,13 @@ struct DeinitGuard<T> {
     }
 }
 
+struct StoreResetGuard {
+    ~init() {
+        JSAst.Stmt.Data.Store.reset();
+        JSAst.Expr.Data.Store.reset();
+    }
+}
+
 @c pub struct Uint8Array {
     ptr: ([*]const u8)? = null,
     len: usize = 0,
@@ -460,10 +467,7 @@ struct TestAnalyzer {
     let opts = bun.handleOom(api.GetTestsRequest.decode(&reader));
     let code = Logger.Source.initPathString(if (opts.path.len > 0) opts.path else "my-test-file.test.tsx", opts.contents);
     code.contents_is_recycled = true;
-    defer {
-        JSAst.Stmt.Data.Store.reset();
-        JSAst.Expr.Data.Store.reset();
-    }
+    const _store_guard = StoreResetGuard{};
 
     let parser = JSParser.Parser.init({
         jsx: {},
@@ -516,10 +520,7 @@ struct TestAnalyzer {
     let opts = api.Transform.decode(&reader) catch unreachable;
     const loader_ = opts.loader ?? api.Loader.tsx;
 
-    defer {
-        JSAst.Stmt.Data.Store.reset();
-        JSAst.Expr.Data.Store.reset();
-    }
+    const _store_guard = StoreResetGuard{};
     const loader: Options.Loader = switch (loader_) {
         .jsx => Options.Loader.jsx,
         .js => Options.Loader.js,
@@ -588,10 +589,7 @@ struct TestAnalyzer {
     let opts = api.Scan.decode(&reader) catch unreachable;
     const loader_ = opts.loader ?? api.Loader.tsx;
 
-    defer {
-        JSAst.Stmt.Data.Store.reset();
-        JSAst.Expr.Data.Store.reset();
-    }
+    const _store_guard = StoreResetGuard{};
     const loader: Options.Loader = switch (loader_) {
         .jsx => Options.Loader.jsx,
         .js => Options.Loader.js,

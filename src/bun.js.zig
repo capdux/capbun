@@ -514,6 +514,16 @@ pub fn addConditionalGlobals(self: *Run) void {
     }
 };
 
+pub const OutputFlushGuard = struct {
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *OutputFlushGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = Output.flush();
+    }
+};
+
 pub fn FreeGuard(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -572,9 +582,10 @@ pub noinline fn dumpBuildError(vm: *jsc.VirtualMachine) void {
         @branchHint(.cold);
         _ = Output.flush();
         const writer = Output.errorWriterBuffered();
-        defer {
-        _ = Output.flush();
-        }
+        var _flush_guard = OutputFlushGuard{  };
+        _ = &_flush_guard;
+        var ___flush_guard_moved = false; _ = &___flush_guard_moved;
+        defer if (!___flush_guard_moved) { ___flush_guard_moved = true; const __T = @TypeOf(_flush_guard); if (@typeInfo(__T) == .optional) { if (_flush_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _flush_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _flush_guard; _drop_val.__cp_deinit(); } };
         _ = (blk_catch_11: { break :blk_catch_11 ((vm.log.print(writer)) catch |__ce_11| { _ = &__ce_11;  }); });
 }
 

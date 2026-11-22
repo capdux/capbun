@@ -73,6 +73,19 @@ pub const AssignCtx = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub fn DerefGuard(comptime T: type) type {
+    return struct {
+        val: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.val.deref();
+        }
+    };
+}
+
 pub const AssignExpandingState = struct {
     idx: u32 = 0,
     current_expansion_result: std.array_list.Managed([:0]const u8),
@@ -172,11 +185,11 @@ pub fn childDone(self: *Assigns, child: ChildPtr, exit_code: ExitCode) Yield {
                 const value = self.state.expanding.current_expansion_result.items[0];
                 _ = self.base.leakSlice(value);
                 _ = self.state.expanding.current_expansion_result.clearAndFree();
-                const env_ref = EnvStr.initRefCounted(value);
-                defer {
-                _ = env_ref.deref();
-                }
-                _ = self.base.shell.assignVar(self.base.interpreter, EnvStr.initSlice(label), env_ref, self.ctx);
+                var env_guard = DerefGuard(EnvStr){ .val = EnvStr.initRefCounted(value) };
+                _ = &env_guard;
+                var __env_guard_moved = false; _ = &__env_guard_moved;
+                defer if (!__env_guard_moved) { __env_guard_moved = true; const __T = @TypeOf(env_guard); if (@typeInfo(__T) == .optional) { if (env_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { env_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = env_guard; _drop_val.__cp_deinit(); } };
+                _ = self.base.shell.assignVar(self.base.interpreter, EnvStr.initSlice(label), env_guard.val, self.ctx);
             } else {
                 const size = brk: {
                 var total: usize = 0;
@@ -222,11 +235,11 @@ pub fn childDone(self: *Assigns, child: ChildPtr, exit_code: ExitCode) Yield {
                 break :brk merged;
 };
                 _ = self.base.leakSlice(value);
-                const value_ref = EnvStr.initRefCounted(value);
-                defer {
-                _ = value_ref.deref();
-                }
-                _ = self.base.shell.assignVar(self.base.interpreter, EnvStr.initSlice(label), value_ref, self.ctx);
+                var value_guard = DerefGuard(EnvStr){ .val = EnvStr.initRefCounted(value) };
+                _ = &value_guard;
+                var __value_guard_moved = false; _ = &__value_guard_moved;
+                defer if (!__value_guard_moved) { __value_guard_moved = true; const __T = @TypeOf(value_guard); if (@typeInfo(__T) == .optional) { if (value_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { value_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = value_guard; _drop_val.__cp_deinit(); } };
+                _ = self.base.shell.assignVar(self.base.interpreter, EnvStr.initSlice(label), value_guard.val, self.ctx);
                 for (self.state.expanding.current_expansion_result.items) |slice| {
                     _ = &slice;
                     _ = self.base.allocator().free(slice);

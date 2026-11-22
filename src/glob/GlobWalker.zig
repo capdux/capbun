@@ -103,6 +103,37 @@ else => true,
     }
 };
 
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.ptr.deinit();
+                }
+        }
+    };
+}
+
+pub fn CloseDisallowingCwdGuard(comptime T: type, comptime F: type) type {
+    return struct {
+        walker: *T,
+        fd: F,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                {
+                    _ = self.walker.closeDisallowingCwd(self.fd);
+                }
+        }
+    };
+}
+
 pub const CursorState = struct {
     cursor: CodepointIterator.Cursor = .{},
 
@@ -712,9 +743,11 @@ return .{ .err = self.walker.handleSysErrWithPath(err, dir_path) };
             if ((active.count() == 1)) {
                 const idx: u32 = @intCast((active.findFirstSet()).?);
                 if (((idx == (self.walker.patternComponents.items.len -| 1)) and (self.walker.patternComponents.items[@as(usize, @intCast(idx))].syntax_hint == .Literal))) {
-                    defer {
-                    _ = self.closeDisallowingCwd(fd);
-                    }
+                    const self_ptr = self;
+                    var _fd_guard = CloseDisallowingCwdGuard(@TypeOf(self_ptr.*), @TypeOf(fd)){ .walker = self_ptr, .fd = fd };
+                    _ = &_fd_guard;
+                    var ___fd_guard_moved = false; _ = &___fd_guard_moved;
+                    defer if (!___fd_guard_moved) { ___fd_guard_moved = true; const __T = @TypeOf(_fd_guard); if (@typeInfo(__T) == .optional) { if (_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fd_guard; _drop_val.__cp_deinit(); } };
                     const stackbuf_size: i32 = 256;
                     var stfb = std.heap.stackFallback(stackbuf_size, self.walker.arena.allocator());
                     _ = &stfb;
@@ -1132,9 +1165,13 @@ pub fn walk(self: *@This()) !Maybe(void) {
             const IterT = GlobWalkerIterator_(@TypeOf(self_ptr.*), Accessor, sentinel);
             var iter = IterT{ .walker = self_ptr };
             _ = &iter;
-            defer {
-            _ = iter.deinit();
-            }
+            var _iter_guard = DeinitGuard(IterT){ .ptr = (blk: {
+            break :blk (&iter);
+
+}) };
+            _ = &_iter_guard;
+            var ___iter_guard_moved = false; _ = &___iter_guard_moved;
+            defer if (!___iter_guard_moved) { ___iter_guard_moved = true; const __T = @TypeOf(_iter_guard); if (@typeInfo(__T) == .optional) { if (_iter_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _iter_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _iter_guard; _drop_val.__cp_deinit(); } };
             switch (try iter.init()) {
 .err => |err| {
 return .{ .err = err };

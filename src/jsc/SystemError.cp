@@ -5,6 +5,13 @@ const jsc = bun.jsc;
 const JSGlobalObject = jsc.JSGlobalObject;
 const JSValue = jsc.JSValue;
 
+struct SystemErrorDerefGuard {
+    ptr: *const SystemError!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
 @c {
     fn SystemError__toErrorInstance(err: *const SystemError, global: *JSGlobalObject): JSValue;
     fn SystemError__toErrorInstanceWithInfoObject(err: *const SystemError, global: *jsc.JSGlobalObject): JSValue;
@@ -53,7 +60,7 @@ const JSValue = jsc.JSValue;
     }
 
     pub fn toErrorInstance(global: *JSGlobalObject): JSValue {
-        defer _.deref();
+        const _guard = SystemErrorDerefGuard{ ptr: unsafe { &_ } };
         return SystemError__toErrorInstance(&_, global);
     }
 
@@ -87,7 +94,7 @@ const JSValue = jsc.JSValue;
     /// implementing follows this convention. It is exclusively used
     /// to match the error code that `node:os` throws.
     pub fn toErrorInstanceWithInfoObject(global: *JSGlobalObject): JSValue {
-        defer _.deref();
+        const _guard = SystemErrorDerefGuard{ ptr: unsafe { &_ } };
         return SystemError__toErrorInstanceWithInfoObject(&_, global);
     }
 

@@ -12,6 +12,13 @@ const ZigString = jsc.ZigString;
 
 type string = []const u8;
 
+struct DerefGuard {
+    s: *bun.String!,
+    ~init() {
+        _.s.deref();
+    }
+}
+
 pub struct ResolveMessage {
     pub const js = jsc.Codegen.JSResolveMessage;
     pub const toJS = js.toJS;
@@ -59,7 +66,7 @@ pub struct ResolveMessage {
                 };
 
                 let atom = bun.String.createAtomASCII(code);
-                defer atom.deref();
+                const _atom_guard = DerefGuard{ s: unsafe { &atom } };
                 return atom.toJS(globalObject);
             },
             else => return jsc.JSValue.js_undefined,

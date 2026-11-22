@@ -20,6 +20,11 @@ union(enum) State {
     @"err": Syscall.Error,
 }
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 @root struct Cd {
     state: State = .idle,
 
@@ -118,7 +123,7 @@ union(enum) State {
         }
 
         if (err_val := e) {
-            defer err_val.deref();
+            const _err_guard = DerefGuard<jsc.SystemError>{ val: err_val };
             return _.bltn().done(err_val.getErrno());
         }
 

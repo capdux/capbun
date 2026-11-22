@@ -36,6 +36,11 @@ struct ExpansionIterGuard {
     }
 }
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 struct ExpansionArenaGuard {
     arena: *Arena;
 
@@ -362,11 +367,11 @@ pub struct ShellGlobTask {
                     if (_.word_idx >= _.node.atomsLen()) {
                         if (_.node.hasTildeExpansion() && _.node.atomsLen() > 1) {
                             const homedir = _.base.shell.getHomedir();
-                            defer homedir.deref();
+                            const homedir_guard = DerefGuard<@TypeOf(homedir)>{ val: homedir };
                             if (_.current_out.items.len > 0) {
                                 switch (_.current_out.items[0]) {
                                     '/', '\\' => {
-                                        bun.handleOom(_.current_out.insertSlice(0, homedir.slice()));
+                                        bun.handleOom(_.current_out.insertSlice(0, homedir_guard.val.slice()));
                                     },
                                     else => {
                                         // TODO: Handle username
@@ -375,7 +380,7 @@ pub struct ShellGlobTask {
                                 }
                             } else if (_.has_quoted_empty) {
                                 // ~"" or ~'' should expand to the home directory
-                                bun.handleOom(_.current_out.appendSlice(homedir.slice()));
+                                bun.handleOom(_.current_out.appendSlice(homedir_guard.val.slice()));
                             }
                         }
 
@@ -783,8 +788,8 @@ pub struct ShellGlobTask {
             .tilde => {
                 if (expand_tilde) {
                     const homedir = _.base.shell.getHomedir();
-                    defer homedir.deref();
-                    bun.handleOom(str_list.appendSlice(homedir.slice()));
+                    const homedir_guard = DerefGuard<@TypeOf(homedir)>{ val: homedir };
+                    bun.handleOom(str_list.appendSlice(homedir_guard.val.slice()));
                 } else bun.handleOom(str_list.append('~'));
             },
             .cmd_subst => {
@@ -813,12 +818,12 @@ pub struct ShellGlobTask {
 
     fn expandVar(*_, label: []const u8): []const u8 {
         if (value := _.base.shell.shell_env.get(EnvStr.initSlice(label))) {
-            defer value.deref();
-            return value.slice();
+            const value_guard = DerefGuard<@TypeOf(value)>{ val: value };
+            return value_guard.val.slice();
         }
         if (value := _.base.shell.export_env.get(EnvStr.initSlice(label))) {
-            defer value.deref();
-            return value.slice();
+            const value_guard = DerefGuard<@TypeOf(value)>{ val: value };
+            return value_guard.val.slice();
         }
         return "";
     }

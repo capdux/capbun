@@ -25,6 +25,13 @@ const RefCount = bun.ptr.ThreadSafeRefCount(LinuxMemFdAllocator, "ref_count", Li
 
 let memfd_counter = std.atomic.Value(usize).init(0);
 
+struct DerefGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deref(); }
+    }
+}
+
 struct AllocatorInterface {
     static fn alloc(_: *!, _: usize, _: std.mem.Alignment, _: usize): [*]u8? {
         // it should perform no allocations or resizes
@@ -39,7 +46,7 @@ struct AllocatorInterface {
     ) {
         unsafe {
             const inst: *LinuxMemFdAllocator! = @ptrCast(@alignCast(ptr));
-            defer inst.deref();
+            const _guard = DerefGuard<LinuxMemFdAllocator>{ ptr: inst };
             bun.sys.munmap(@ptrCast(@alignCast(buf))).unwrap() catch e => {
                 bun.Output.debugWarn("Failed to munmap memfd: {}", [e]);
             };

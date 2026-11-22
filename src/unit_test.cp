@@ -9,9 +9,11 @@ comptime {
     * = myers_diff;
 }
 
+struct DerefGuard { s: *bun.String!, ~init() { _.s.deref(); } }
+
 pub fn testBasicStringUsage()! {
     let s = bun.String.cloneUTF8("hi");
-    defer s.deref();
+    const _s_guard = DerefGuard{ s: &s };
     t.expect(s.tag != .Dead && s.tag != .Empty)?;
     t.expectEqual(s.length(), 2)?;
     t.expectEqualStrings(s.asUTF8().?, "hi")?;

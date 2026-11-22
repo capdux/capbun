@@ -136,6 +136,17 @@ pub const SystemFdQuotaExceededError = error{
     SystemFdQuotaExceeded,
 };
 
+pub const LibuvFsReqGuard = struct {
+    req: libuv.fs_t = libuv.fs_t.uninitialized,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *LibuvFsReqGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = self.req.deinit();
+    }
+};
+
 pub const FDHashMapPrehashed = struct {
     value: u64,
     input: FD,
@@ -385,12 +396,11 @@ else => null,
 },
 .windows => (switch (self.decodeWindows()) {
 .uv => |file_number| result: {
-            var req: libuv.fs_t = libuv.fs_t.uninitialized;
-            _ = &req;
-            defer {
-            _ = req.deinit();
-            }
-            const rc = libuv.uv_fs_close(libuv.Loop.get(), (&req), file_number, null);
+            var req_guard = LibuvFsReqGuard{  };
+            _ = &req_guard;
+            var __req_guard_moved = false; _ = &__req_guard_moved;
+            defer if (!__req_guard_moved) { __req_guard_moved = true; const __T = @TypeOf(req_guard); if (@typeInfo(__T) == .optional) { if (req_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { req_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = req_guard; _drop_val.__cp_deinit(); } };
+            const rc = libuv.uv_fs_close(libuv.Loop.get(), (&req_guard.req), file_number, null);
             break :result (if (rc.errno()) |errno| .{ .errno = errno, .syscall = .close, .fd = self, .from_libuv = true } else null);
 },
 .windows => |handle| result: {

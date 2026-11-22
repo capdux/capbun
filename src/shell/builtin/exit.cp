@@ -16,6 +16,11 @@ enum State {
     done,
 }
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 @root struct Exit {
     state: State = .idle,
 
@@ -58,7 +63,7 @@ enum State {
             assert(_.state == .waiting_io);
         }
         if (e := maybe_e) {
-            defer e.deref();
+            const _e_guard = DerefGuard<jsc.SystemError>{ val: e };
             _.state = .@"err";
             return _.next();
         }
@@ -71,7 +76,7 @@ enum State {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("exit", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("exit", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

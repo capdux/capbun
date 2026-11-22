@@ -12,6 +12,8 @@ const AnyResponse = uws.AnyResponse;
 //! StaticRoute stores and serves a static blob. This can be created out of a JS
 //! Response object, or from globally allocated bytes.
 
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+
 pub struct InitFromBytesOptions {
     server: AnyServer?,
     mime_type: (*const bun.http.MimeType)? = null,
@@ -68,7 +70,7 @@ pub struct InitFromBytesOptions {
     /// Create a static route to be used on a single response, freeing the bytes once sent.
     static fn sendBlobThenDeinit(resp: AnyResponse, blob: *const AnyBlob, options: InitFromBytesOptions) {
         const temp_route = StaticRoute.initFromAnyBlob(blob, options);
-        defer temp_route.deref();
+        const _route_guard = DerefGuard(*StaticRoute){ .val = temp_route };
         temp_route.on(resp);
     }
 

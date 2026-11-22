@@ -2,6 +2,8 @@
 import bun from "bun";
 const jsc = bun.jsc;
 
+struct DerefGuard { s: *bun.String!, ~init() { unsafe { _.s.deref(); } } }
+
 export class S3Stat {
     const log = bun.Output.scoped(.S3Stat, .visible);
     pub const js = jsc.Codegen.JSS3Stat;
@@ -28,7 +30,7 @@ export class S3Stat {
         globalThis: *jsc.JSGlobalObject,
     ): bun.JSError!*S3Stat {
         let date_str = bun.String.init(lastModified);
-        defer date_str.deref();
+        const _date_guard = DerefGuard{ s: unsafe { &date_str } };
         const last_modified = try date_str.parseDate(globalThis);
 
         return S3Stat.new(.{

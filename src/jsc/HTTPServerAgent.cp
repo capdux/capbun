@@ -19,6 +19,23 @@ pub enum RouteType: u8 {
 
 let empty_strings: [0]BunString = undefined;
 
+struct DerefGuard {
+    s: *BunString!,
+    ~init() {
+        _.s.deref();
+    }
+}
+
+struct RoutesGuard {
+    routes: *std.array_list.Managed(Route)!,
+    ~init() {
+        for (*route of _.routes.items) {
+            route.deinit();
+        }
+        _.routes.deinit();
+    }
+}
+
 @c pub struct Route {
     route_id: RouteId,
     path: BunString = .empty,
@@ -90,7 +107,7 @@ let empty_strings: [0]BunString = undefined;
             _.next_server_id = .init(_.next_server_id.get() + 1);
             instance.setInspectorServerID(_.next_server_id);
             let url = bun.handleOom(instance.getURLAsString());
-            defer url.deref();
+            const _url_guard = DerefGuard{ s: unsafe { &url } };
 
             agent.notifyServerStarted(
                 _.next_server_id,
@@ -112,12 +129,7 @@ let empty_strings: [0]BunString = undefined;
         if (agent := _.agent) {
             const config = server.config();
             let routes = std.array_list.Managed(Route).init(bun.default_allocator);
-            defer {
-                for (*route of routes.items) {
-                    route.deinit();
-                }
-                routes.deinit();
-            }
+            const _routes_guard = RoutesGuard{ routes: unsafe { &routes } };
 
             let max_id: u32 = 0;
 

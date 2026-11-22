@@ -367,6 +367,35 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub fn DebugIndentGuard(comptime T: type) type {
+    return struct {
+        r: *T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.r.debug_logs) |*debug| {
+                    _ = &debug;
+                    _ = (debug.*).decreaseIndent();
+                }
+        }
+    };
+}
+
+pub fn FlushDebugLogsErrGuard(comptime T: type) type {
+    return struct {
+        r: *T,
+        __cp_errdropped: bool = false,
+
+pub fn __cp_errdeinit(self: *@This()) void {
+            if (self.__cp_errdropped) return;
+            self.__cp_errdropped = true;
+                _ = (blk_catch_0: { break :blk_catch_0 ((self.r.flushDebugLogs(.fail)) catch |__ce_0| { _ = &__ce_0;  }); });
+        }
+    };
+}
+
 pub fn CloseFDGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -888,7 +917,7 @@ pub fn init1(allocator: std.mem.Allocator, log: *logger.Log, _fs: *Fs.FileSystem
                 resolver_Mutex = .{};
                 resolver_Mutex_loaded = true;
             }
-            return ThisResolver{ .allocator = allocator, .dir_cache = DirInfo.HashMap.init(bun.default_allocator), .mutex = (&resolver_Mutex), .caches = CacheSet.init(allocator), .opts = opts, .timer = (blk_catch_4: { break :blk_catch_4 ((Timer.start()) catch |__ce_4| { _ = &__ce_4; @panic("Timer fail"); }); }), .fs = _fs, .log = log, .extension_order = opts.extension_order.default.default, .care_about_browser_field = (opts.target == .browser) };
+            return ThisResolver{ .allocator = allocator, .dir_cache = DirInfo.HashMap.init(bun.default_allocator), .mutex = (&resolver_Mutex), .caches = CacheSet.init(allocator), .opts = opts, .timer = (blk_catch_5: { break :blk_catch_5 ((Timer.start()) catch |__ce_5| { _ = &__ce_5; @panic("Timer fail"); }); }), .fs = _fs, .log = log, .extension_order = opts.extension_order.default.default, .care_about_browser_field = (opts.target == .browser) };
     }
 
 pub fn deinit(r: *ThisResolver) void {
@@ -923,7 +952,7 @@ pub fn resolveViaTSConfigPaths(r: *ThisResolver, source_dir: []const u8, import_
             if ((!std.fs.path.isAbsolute(source_dir))) {
                 return null;
             }
-            const dir_info = (((blk_catch_5: { break :blk_catch_5 ((r.dirInfoCached(source_dir)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 null; }); })) orelse { return null; });
+            const dir_info = (((blk_catch_6: { break :blk_catch_6 ((r.dirInfoCached(source_dir)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 null; }); })) orelse { return null; });
             const tsconfig = ((dir_info.enclosing_tsconfig_json) orelse { return null; });
             if ((tsconfig.paths.count() == 0)) {
                 return null;
@@ -1005,7 +1034,7 @@ else => r.opts.extension_order.default.default,
                     if (r.debug_logs) |*debug| {
                         _ = &debug;
                         _ = (debug.*).addNote("Resolved via tsconfig.json \"paths\" before applying packages=external");
-                        _ = (blk_catch_7: { break :blk_catch_7 ((r.flushDebugLogs(.success)) catch |__ce_7| { _ = &__ce_7;  }); });
+                        _ = (blk_catch_8: { break :blk_catch_8 ((r.flushDebugLogs(.success)) catch |__ce_8| { _ = &__ce_8;  }); });
                     }
                     return .{ .success = Result{ .import_kind = kind, .path_pair = res.path_pair, .diff_case = res.diff_case, .package_json = res.package_json, .dirname_fd = res.dirname_fd, .file_fd = res.file_fd, .jsx = r.opts.jsx } };
                 }
@@ -1014,25 +1043,25 @@ else => r.opts.extension_order.default.default,
                 if (r.debug_logs) |*debug| {
                     _ = &debug;
                     _ = (debug.*).addNote("Marking this path as implicitly external");
-                    _ = (blk_catch_8: { break :blk_catch_8 ((r.flushDebugLogs(.success)) catch |__ce_8| { _ = &__ce_8;  }); });
+                    _ = (blk_catch_9: { break :blk_catch_9 ((r.flushDebugLogs(.success)) catch |__ce_9| { _ = &__ce_9;  }); });
                 }
                 return .{ .success = Result{ .import_kind = kind, .path_pair = PathPair{ .primary = Path.init(import_path) }, .module_type = (if ((!kind.isFromCSS())) .esm else .unknown), .flags = .{ .is_external = true } } };
             }
-            if ((blk_catch_9: { break :blk_catch_9 ((DataURL.parse(import_path)) catch |__ce_9| { _ = &__ce_9; return .{ .failure = error.InvalidDataURL }; }); })) |data_url| {
+            if ((blk_catch_10: { break :blk_catch_10 ((DataURL.parse(import_path)) catch |__ce_10| { _ = &__ce_10; return .{ .failure = error.InvalidDataURL }; }); })) |data_url| {
                 _ = &data_url;
                 const mime = data_url.decodeMimeType();
                 if (((((mime.category == .javascript) or (mime.category == .css)) or (mime.category == .json)) or (mime.category == .text))) {
                     if (r.debug_logs) |*debug| {
                         _ = &debug;
                         _ = (debug.*).addNote("Putting this path in the \"dataurl\" namespace");
-                        _ = (blk_catch_10: { break :blk_catch_10 ((r.flushDebugLogs(.success)) catch |__ce_10| { _ = &__ce_10;  }); });
+                        _ = (blk_catch_11: { break :blk_catch_11 ((r.flushDebugLogs(.success)) catch |__ce_11| { _ = &__ce_11;  }); });
                     }
                     return .{ .success = Result{ .path_pair = PathPair{ .primary = Path.initWithNamespace(import_path, "dataurl") } } };
                 }
                 if (r.debug_logs) |*debug| {
                     _ = &debug;
                     _ = (debug.*).addNote("Marking this \"dataurl\" as external");
-                    _ = (blk_catch_11: { break :blk_catch_11 ((r.flushDebugLogs(.success)) catch |__ce_11| { _ = &__ce_11;  }); });
+                    _ = (blk_catch_12: { break :blk_catch_12 ((r.flushDebugLogs(.success)) catch |__ce_12| { _ = &__ce_12;  }); });
                 }
                 return .{ .success = Result{ .path_pair = PathPair{ .primary = Path.initWithNamespace(import_path, "dataurl") }, .flags = .{ .is_external = true } } };
             }
@@ -1067,11 +1096,10 @@ else => r.opts.extension_order.default.default,
             if ((!std.fs.path.isAbsolute(source_dir))) {
                 break :brk Fs.FileSystem.instance.top_level_dir;
             }
-            break :brk (blk_catch_12: { break :blk_catch_12 ((source_dir_resolver.resolveCWD(source_dir)) catch |__ce_12| { _ = &__ce_12; @panic("Failed to query CWD"); }); });
+            break :brk (blk_catch_13: { break :blk_catch_13 ((source_dir_resolver.resolveCWD(source_dir)) catch |__ce_13| { _ = &__ce_13; @panic("Failed to query CWD"); }); });
 };
-            errdefer {
-            _ = (blk_catch_13: { break :blk_catch_13 ((r.flushDebugLogs(.fail)) catch |__ce_13| { _ = &__ce_13;  }); });
-            }
+            const _guard_flush_debug = FlushDebugLogsErrGuard(ThisResolver){ .r = r };
+            _ = &_guard_flush_debug;
             if (bun.strings.containsChar(import_path, 0)) {
                 _ = (blk_catch_14: { break :blk_catch_14 ((r.flushDebugLogs(.fail)) catch |__ce_14| { _ = &__ce_14;  }); });
                 return .not_found;
@@ -1739,14 +1767,10 @@ pub fn loadNodeModules(r: *ThisResolver, import_path: []const u8, kind: ast.Impo
                 _ = (debug.*).addNoteFmt("Searching for {s} in \"node_modules\" directories starting from \"{s}\"", .{ import_path, dir_info.abs_path });
                 _ = (debug.*).increaseIndent();
             }
-            defer {
-            {
-                if (r.debug_logs) |*debug| {
-                    _ = &debug;
-                    _ = (debug.*).decreaseIndent();
-                }
-            }
-            }
+            var _guard_debug_indent = DebugIndentGuard(ThisResolver){ .r = r };
+            _ = &_guard_debug_indent;
+            var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
+            defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
             if (dir_info.enclosing_tsconfig_json) |tsconfig| {
                 _ = &tsconfig;
                 if ((tsconfig.paths.count() > 0)) {
@@ -2796,13 +2820,14 @@ pub fn matchTSConfigPaths(r: *ThisResolver, tsconfig: *const TSConfigJSON, path:
 
 pub fn loadPackageImports(r: *ThisResolver, import_path: []const u8, dir_info: *DirInfo, kind: ast.ImportKind, global_cache: GlobalCache) MatchResult.Union {
             const package_json = dir_info.package_json.?;
+            var _guard_debug_indent = DebugIndentGuard(ThisResolver){ .r = r };
+            _ = &_guard_debug_indent;
+            var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
+            defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
             if (r.debug_logs) |*debug| {
                 _ = &debug;
                 _ = (debug.*).addNoteFmt("Looking for {s} in \"imports\" map in {s}", .{ import_path, package_json.source.path.text });
                 _ = (debug.*).increaseIndent();
-                defer {
-                _ = (debug.*).decreaseIndent();
-                }
             }
             const imports_map = package_json.imports.?;
             if (((import_path.len == 1) or strings.hasPrefix(import_path, "#/"))) {
@@ -2904,14 +2929,10 @@ pub fn loadFromMainField(r: *ThisResolver, path: []const u8, dir_info: *DirInfo,
                 _ = (debug.*).addNoteFmt("Found main field \"{s}\" with path \"{s}\"", .{ field, field_rel_path });
                 _ = (debug.*).increaseIndent();
             }
-            defer {
-            {
-                if (r.debug_logs) |*debug| {
-                    _ = &debug;
-                    _ = (debug.*).decreaseIndent();
-                }
-            }
-            }
+            var _guard_debug_indent = DebugIndentGuard(ThisResolver){ .r = r };
+            _ = &_guard_debug_indent;
+            var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
+            defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
             if (r.care_about_browser_field) {
                 if (dir_info.getEnclosingBrowserScope()) |browser_scope| {
                     _ = &browser_scope;
@@ -3084,14 +3105,10 @@ pub fn loadAsFileOrDirectory(r: *ThisResolver, path: []const u8, kind: ast.Impor
                 _ = (debug.*).addNoteFmt("Attempting to load \"{s}\" as a directory", .{ path });
                 _ = (debug.*).increaseIndent();
             }
-            defer {
-            {
-                if (r.debug_logs) |*debug| {
-                    _ = &debug;
-                    _ = (debug.*).decreaseIndent();
-                }
-            }
-            }
+            var _guard_debug_indent = DebugIndentGuard(ThisResolver){ .r = r };
+            _ = &_guard_debug_indent;
+            var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
+            defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
             const dir_info = (((blk_catch_70: { break :blk_catch_70 ((r.dirInfoCached(path)) catch |e| { _ = &e; if (comptime Environment.isDebug) {
                 _ = Output.prettyErrorln("err: {s} reading {s}", .{ @errorName(e), path });
             }
@@ -3180,14 +3197,10 @@ pub fn loadAsFile(r: *ThisResolver, path: []const u8, extension_order: []const [
                 _ = (debug.*).addNoteFmt("Attempting to load \"{s}\" as a file", .{ path });
                 _ = (debug.*).increaseIndent();
             }
-            defer {
-            {
-                if (r.debug_logs) |*debug| {
-                    _ = &debug;
-                    _ = (debug.*).decreaseIndent();
-                }
-            }
-            }
+            var _guard_debug_indent = DebugIndentGuard(ThisResolver){ .r = r };
+            _ = &_guard_debug_indent;
+            var ___guard_debug_indent_moved = false; _ = &___guard_debug_indent_moved;
+            defer if (!___guard_debug_indent_moved) { ___guard_debug_indent_moved = true; const __T = @TypeOf(_guard_debug_indent); if (@typeInfo(__T) == .optional) { if (_guard_debug_indent) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_debug_indent.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_debug_indent; _drop_val.__cp_deinit(); } };
             const dir_path = bun.strings.withoutTrailingSlashWindowsPath(Dirname.dirname(path));
             const dir_entry: *Fs.FileSystem.RealFS.EntriesOption = (blk_catch_71: { break :blk_catch_71 ((rfs.readDirectory(dir_path, null, r.generation, r.store_fd)) catch |__ce_71| { _ = &__ce_71; return null; }); });
             if ((std.meta.activeTag(dir_entry.*) == .err)) {

@@ -13,6 +13,8 @@ const UpgradedDuplex = uws.UpgradedDuplex;
 const us_bun_verify_error_t = uws.us_bun_verify_error_t;
 const SSLWrapper = ssl_wrapper.SSLWrapper;
 
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+
 const log = bun.Output.scoped(.WindowsNamedPipe, .visible);
 
 @packed(u8) pub struct _Flags {
@@ -275,7 +277,7 @@ export class WindowsNamedPipe {
     }
 
     fn onConnect(*_, status: uv.ReturnCode) {
-        defer _.deref();
+        const _guard = DerefGuard(*WindowsNamedPipe){ .val = _ };
         if (pipe := _.pipe) {
             * = pipe.unref();
         }

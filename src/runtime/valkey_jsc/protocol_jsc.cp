@@ -3,6 +3,8 @@
 //! `valkey/`; only the `JSGlobalObject`/`JSValue`-touching conversions live
 //! here so `valkey/` is JSC-free.
 
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+
 pub fn valkeyErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?, e: protocol.RedisError): jsc.JSValue {
     const error_code: jsc.Error = switch (e) {
         error.ConnectionClosed => .REDIS_CONNECTION_CLOSED,
@@ -94,11 +96,10 @@ pub fn respValueToJSWithOptions(resp_val: *RESPValue, globalObject: *jsc.JSGloba
             while (i < entries.len) {
                 const entry = &entries[i];
                 const js_key = (respValueToJSWithOptions(&entry.key, globalObject, {}))?;
-                let key_str = (js_key.toBunString(globalObject))?;
-                defer key_str.deref();
+                let key_guard = DerefGuard(bun.String){ .val = (js_key.toBunString(globalObject))? };
                 const js_value = (respValueToJSWithOptions(&entry.value, globalObject, options))?;
 
-                (js_obj.putMayBeIndex(globalObject, &key_str, js_value))?;
+                (js_obj.putMayBeIndex(globalObject, &key_guard.val, js_value))?;
                 i += 1;
             }
             return js_obj;

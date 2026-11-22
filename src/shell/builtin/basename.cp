@@ -12,6 +12,11 @@ enum State {
     done,
 }
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 @root struct Basename {
     state: State = .idle,
     buf: std.ArrayListUnmanaged(u8) = {},
@@ -58,7 +63,7 @@ enum State {
 
     pub fn onIOWriterChunk(*_, _: usize, maybe_e: jsc.SystemError?): Yield {
         if (e := maybe_e) {
-            defer e.deref();
+            const _e_guard = DerefGuard<jsc.SystemError>{ val: e };
             _.state = .@"err";
             return _.bltn().done(1);
         }
@@ -70,7 +75,7 @@ enum State {
     }
 
     pub inline fn bltn(*_): *Builtin {
-        const impl_: *Builtin.Impl = @alignCast(@fieldParentPtr("basename", _));
+        const impl_: *Builtin.Impl = unsafe { @alignCast(@fieldParentPtr("basename", _)) };
         return @fieldParentPtr("impl", impl_);
     }
 }

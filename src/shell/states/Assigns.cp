@@ -20,6 +20,11 @@ const EnvStr = bun.shell.interpret.EnvStr;
 const StatePtrUnion = bun.shell.interpret.StatePtrUnion;
 const log = bun.shell.interpret.log;
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 pub enum AssignCtx {
     cmd,
     shell,
@@ -176,10 +181,9 @@ pub union(enum) AssignState {
                 _.base.leakSlice(value);
                 _.state.expanding.current_expansion_result.clearAndFree();
 
-                const env_ref = EnvStr.initRefCounted(value);
-                defer env_ref.deref();
+                const env_guard = DerefGuard<EnvStr>{ val: EnvStr.initRefCounted(value) };
 
-                _.base.shell.assignVar(_.base.interpreter, EnvStr.initSlice(label), env_ref, _.ctx);
+                _.base.shell.assignVar(_.base.interpreter, EnvStr.initSlice(label), env_guard.val, _.ctx);
             } else {
                 // Multiple words, need to concatenate them together. First
                 // calculate size of the total buffer.
@@ -219,10 +223,9 @@ pub union(enum) AssignState {
                 // from here on out
                 _.base.leakSlice(value);
 
-                const value_ref = EnvStr.initRefCounted(value);
-                defer value_ref.deref();
+                const value_guard = DerefGuard<EnvStr>{ val: EnvStr.initRefCounted(value) };
 
-                _.base.shell.assignVar(_.base.interpreter, EnvStr.initSlice(label), value_ref, _.ctx);
+                _.base.shell.assignVar(_.base.interpreter, EnvStr.initSlice(label), value_guard.val, _.ctx);
                 for (slice of _.state.expanding.current_expansion_result.items) {
                     _.base.allocator().free(slice);
                 }

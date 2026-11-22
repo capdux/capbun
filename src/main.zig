@@ -54,6 +54,16 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 
 pub const builtin = @import("builtin");
 pub const _bun = @import("bun");
+pub const OutputFlushGuard = struct {
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *OutputFlushGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            _ = Output.flush();
+    }
+};
+
 pub const panic = _bun.crash_handler.panic;
 pub const std_options = std.Options{ .enable_segfault_handler = false, .cryptoRandomSeed = _bun.csprng };
 pub const io_mode = .blocking;
@@ -89,9 +99,10 @@ pub fn main() void {
         _bun.start_time = std.time.nanoTimestamp();
         _ = (blk_catch_0: { break :blk_catch_0 ((_bun.initArgv()) catch |e| { _ = &e; break :blk_catch_0 Output.panic("Failed to initialize argv: {s}\n", .{ @errorName(e) }); }); });
         _ = Output.Source.Stdio.init();
-        defer {
-        _ = Output.flush();
-        }
+        var _flush_guard = OutputFlushGuard{  };
+        _ = &_flush_guard;
+        var ___flush_guard_moved = false; _ = &___flush_guard_moved;
+        defer if (!___flush_guard_moved) { ___flush_guard_moved = true; const __T = @TypeOf(_flush_guard); if (@typeInfo(__T) == .optional) { if (_flush_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _flush_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _flush_guard; _drop_val.__cp_deinit(); } };
         if (((Environment.isX64 and Environment.enableSIMD) and Environment.isPosix)) {
             _ = bun_warn_avx_missing(_bun.cli.UpgradeCommand.Bun__githubBaselineURL.ptr);
         }

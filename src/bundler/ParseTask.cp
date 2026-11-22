@@ -72,6 +72,49 @@ struct UngetGuard<T> {
     }
 }
 
+struct TempLogCloneGuard {
+    temp: *bun.logger.Log!,
+    log: *bun.logger.Log!,
+    ~init() {
+        bun.handleOom(_.temp.cloneToWithRecycled(_.log, true));
+        _.temp.msgs.clearAndFree();
+    }
+}
+
+struct TempLogAppendGuard {
+    temp: *bun.logger.Log!,
+    log: *bun.logger.Log!,
+    source: *const Logger.Source!,
+    ~init() {
+        bun.handleOom(_.temp.appendToMaybeRecycled(_.log, _.source));
+    }
+}
+
+struct ResetStoreErrGuard {
+    transpiler: *Transpiler!,
+    ~errinit() {
+        _.transpiler.resetStore();
+    }
+}
+
+struct RunWithSourceCodeErrGuard {
+    task: *ParseTask!,
+    entry: *CacheEntry!,
+    allocator: std.mem.Allocator,
+    expected_tag: if (bun.Environment.isDebug) ContentsOrFd.Tag else void,
+    ~errinit() {
+        if (comptime bun.Environment.isDebug) {
+            if (std.meta.activeTag(_.task.contents_or_fd) != _.expected_tag) {
+                std.debug.panic("BUG: `task.contents_or_fd` changed in a way that will cause a double free or memory to leak!\n\n    Original = {s}\n    New = {s}\n", .{
+                    @tagName(_.expected_tag),
+                    @tagName(_.task.contents_or_fd),
+                });
+            }
+        }
+        if (_.task.contents_or_fd == .fd) _.entry.deinit(_.allocator);
+    }
+}
+
 const debug = Output.scoped(.ParseTask, .hidden);
 
 pub struct ContentsOrFd_Fd {
@@ -445,10 +488,7 @@ fn getAST(
             let trace = bun.perf.trace("Bundler.ParseTOML");
             const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             let temp_log = bun.logger.Log.init(allocator);
-            defer {
-                bun.handleOom(temp_log.cloneToWithRecycled(log, true));
-                temp_log.msgs.clearAndFree();
-            }
+            const _temp_log_guard = TempLogCloneGuard{ temp: unsafe { &temp_log }, log: log };
             const root = TOML.parse(source, &temp_log, allocator, false)?;
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
         },
@@ -456,10 +496,7 @@ fn getAST(
             let trace = bun.perf.trace("Bundler.ParseYAML");
             const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             let temp_log = bun.logger.Log.init(allocator);
-            defer {
-                bun.handleOom(temp_log.cloneToWithRecycled(log, true));
-                temp_log.msgs.clearAndFree();
-            }
+            const _temp_log_guard = TempLogCloneGuard{ temp: unsafe { &temp_log }, log: log };
             const root = YAML.parse(source, &temp_log, allocator)?;
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
         },
@@ -467,10 +504,7 @@ fn getAST(
             let trace = bun.perf.trace("Bundler.ParseJSON5");
             const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: &trace };
             let temp_log = bun.logger.Log.init(allocator);
-            defer {
-                bun.handleOom(temp_log.cloneToWithRecycled(log, true));
-                temp_log.msgs.clearAndFree();
-            }
+            const _temp_log_guard = TempLogCloneGuard{ temp: unsafe { &temp_log }, log: log };
             const root = JSON5.parse(source, &temp_log, allocator)?;
             return JSAst.init((js_parser.newLazyExportAST(allocator, transpiler.options.define, opts, &temp_log, root, source, "")?).?);
         },
@@ -656,9 +690,7 @@ fn getAST(
             let import_records: BabyList(ImportRecord) = {};
             const source_code = source.contents;
             let temp_log = bun.logger.Log.init(allocator);
-            defer {
-                bun.handleOom(temp_log.appendToMaybeRecycled(log, source));
-            }
+            const _temp_log_guard = TempLogAppendGuard{ temp: unsafe { &temp_log }, log: log, source: source };
 
             const css_module_suffix = ".module.css";
             const enable_css_modules = source.path.pretty.len > css_module_suffix.len &&
@@ -1180,7 +1212,7 @@ fn getSourceCode(
 
     let data = worker.data;
     const transpiler = &data.transpiler;
-    errdefer transpiler.resetStore();
+    const _reset_store_guard = ResetStoreErrGuard{ transpiler: transpiler };
     const resolver: *Resolver = &transpiler.resolver;
     let file_path = task.path;
     let loader = task.loader ?? file_path.loader(&transpiler.options.loaders) ?? options.Loader.file;
@@ -1199,7 +1231,7 @@ fn runWithSourceCode(
     const allocator = worker.allocator;
 
     let transpiler = worker.transpilerForTarget(task.known_target);
-    errdefer transpiler.resetStore();
+    const _reset_store_guard = ResetStoreErrGuard{ transpiler: transpiler };
     const resolver: *Resolver = &transpiler.resolver;
     const file_path = &task.path;
     const loader = task.loader ?? file_path.loader(&transpiler.options.loaders) ?? options.Loader.file;
@@ -1215,17 +1247,12 @@ fn runWithSourceCode(
     // allocated by `bun.default_allocator` and then freed in `BundleV2.deinit` (and also by `entry.deinit(allocator)` below).
     const debug_original_variant_check: if (bun.Environment.isDebug) ContentsOrFd.Tag else void =
         if (bun.Environment.isDebug) std.meta.activeTag(task.contents_or_fd);
-    errdefer {
-        if (comptime bun.Environment.isDebug) {
-            if (std.meta.activeTag(task.contents_or_fd) != debug_original_variant_check) {
-                std.debug.panic("BUG: `task.contents_or_fd` changed in a way that will cause a double free or memory to leak!\n\n    Original = {s}\n    New = {s}\n", .{
-                    @tagName(debug_original_variant_check),
-                    @tagName(task.contents_or_fd),
-                });
-            }
-        }
-        if (task.contents_or_fd == .fd) entry.deinit(allocator);
-    }
+    const _run_err_guard = RunWithSourceCodeErrGuard{
+        task: task,
+        entry: entry,
+        allocator: allocator,
+        expected_tag: debug_original_variant_check,
+    };
 
     const will_close_file_descriptor = task.contents_or_fd == .fd &&
         entry.fd.isValid() &&

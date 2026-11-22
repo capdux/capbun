@@ -15,6 +15,8 @@ const jsc = bun.jsc;
 const uws = bun.uws;
 const AnyResponse = uws.AnyResponse;
 type AbortFn = *const fn (*!, AnyResponse) void;
+struct DerefGuard<T> { val: T, ~init() { _.val.deref(); } }
+
 const log = bun.Output.scoped(.FileResponseStream, .hidden);
 
 @packed(u8) struct _State {
@@ -128,7 +130,7 @@ pub fn start(opts: StartOptions) {
     stream.reader.setParent(stream);
 
     stream.ref();
-    defer stream.deref();
+    const _stream_guard = DerefGuard(*FileResponseStream){ .val = stream };
 
     switch (if (opts.offset > 0)
         stream.reader.startFileOffset(stream.fd, opts.pollable, opts.offset)
@@ -174,7 +176,7 @@ fn canSendfile(resp: AnyResponse, file_type: bun.io.FileType, length: u64?): boo
 
 pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.ReadState): bool {
     _.ref();
-    defer _.deref();
+    const _self_guard = DerefGuard(*FileResponseStream){ .val = _ };
 
     if (_.state.response_done) return false;
 
@@ -205,7 +207,7 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
     switch (_.resp.write(chunk)) {
         .backpressure => {
             // release the read ref; onWritable re-takes it
-            defer _.deref();
+            const _bp_guard = DerefGuard(*FileResponseStream){ .val = _ };
             _.resp.onWritable(*FileResponseStream, onWritable, _);
             if (comptime !bun.Environment.isPosix) _.reader.pause();
             return false;
@@ -215,19 +217,19 @@ pub fn onReadChunk(_: *FileResponseStream, chunk_: []const u8, state_: bun.io.Re
 }
 
 pub fn onReaderDone(_: *FileResponseStream) {
-    defer _.deref();
+    const _guard = DerefGuard(*FileResponseStream){ .val = _ };
     _.finish();
 }
 
 pub fn onReaderError(_: *FileResponseStream, err: bun.sys.Error) {
-    defer _.deref();
+    const _guard = DerefGuard(*FileResponseStream){ .val = _ };
     _.failWith(err);
 }
 
 fn onWritable(_: *FileResponseStream, _: u64, _: AnyResponse): bool {
     log("onWritable", .{});
     _.ref();
-    defer _.deref();
+    const _guard = DerefGuard(*FileResponseStream){ .val = _ };
 
     if (_.mode == .sendfile) return _.onSendfile();
 

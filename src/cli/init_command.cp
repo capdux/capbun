@@ -21,6 +21,13 @@ pub struct PathBufferGuard<T> {
     }
 };
 
+struct CursorGuard {
+    colors: bool,
+    ~init() {
+        if (_.colors) Output.print("\x1b[?25h", {}); // show cursor
+    }
+}
+
 struct _InitAssets {
     // "known" assets
     const @".gitignore" = @embedFile("init/gitignore.default");
@@ -193,7 +200,7 @@ pub struct InitCommand {
         Output.prettyln("<r><cyan>?<r> {s}<d> - Press return to submit.<r>", .{ label});
 
         if (colors) Output.print("\x1b[?25l", .{}); // hide cursor
-        defer if (colors) Output.print("\x1b[?25h", .{}); // show cursor
+        const _cursor_guard = CursorGuard{ colors: colors };
 
         let selected: Choices = .default;
         let initial_draw = true;

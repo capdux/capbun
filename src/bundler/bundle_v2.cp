@@ -105,6 +105,41 @@ struct DestroyGuard<T> {
     }
 };
 
+struct HelpCatchMemoryIssuesGuard<T> {
+    bundle: *T!,
+    ~init() {
+        if (comptime FeatureFlags.help_catch_memory_issues) {
+            _.bundle.graph.heap.helpCatchMemoryIssues();
+        }
+    }
+};
+
+struct DecrementScanCounterGuard<T> {
+    bundle: *T!,
+    ~init() {
+        _.bundle.decrementScanCounter();
+    }
+};
+
+struct OutOfMemoryErrGuard {
+    ~errinit() {
+        bun.outOfMemory();
+    }
+};
+
+struct ScanCounterDiffGuard<T, Gr> {
+    bundle: *T!,
+    graph: *Gr!,
+    diff: *i32!,
+    ~init() {
+        const d = unsafe { _.diff.* };
+        BundleV2.logScanCounter("in parse task .pending_items += {d} = {d}\n", [ d, @as(i32, @intCast(_.graph.pending_items)) + d ]);
+        _.graph.pending_items = @intCast(@as(i32, @intCast(_.graph.pending_items)) + d);
+        if (d < 0)
+            _.bundle.onAfterDecrementScanCounter();
+    }
+};
+
 pub const Watcher = bun.jsc.hot_reloader.NewHotReloader(BundleV2, EventLoop, true);
 
 /// This assigns a concise, predictable, and unique `.pretty` attribute to a Path.
@@ -2059,11 +2094,7 @@ pub struct BundleV2 {
     static fn onLoad(load: *bun.jsc.API.JSBundler.Load, bundle: *BundleV2) {
         debug("onLoad: ({d}, {s})", [ load.source_index.get(), @tagName(load.value) ]);
         const _guard_load = DeinitGuard<bun.jsc.API.JSBundler.Load>{ ptr: unsafe { load as *bun.jsc.API.JSBundler.Load! } };
-        defer {
-            if (comptime FeatureFlags.help_catch_memory_issues) {
-                bundle.graph.heap.helpCatchMemoryIssues();
-            }
-        }
+        const _guard_heap_issues = HelpCatchMemoryIssuesGuard<BundleV2>{ bundle: bundle };
         const log = bundle.transpiler.log;
 
         // TODO: watcher
@@ -2175,14 +2206,10 @@ pub struct BundleV2 {
 
     static fn onResolve(resolve: *bun.jsc.API.JSBundler.Resolve, bundle: *BundleV2) {
         const _guard_resolve = DeinitGuard<bun.jsc.API.JSBundler.Resolve>{ ptr: unsafe { resolve as *bun.jsc.API.JSBundler.Resolve! } };
-        defer bundle.decrementScanCounter();
+        const _guard_scan_counter = DecrementScanCounterGuard<BundleV2>{ bundle: bundle };
         debug("onResolve: ({s}:{s}, {s})", [ resolve.import_record.namespace, resolve.import_record.specifier, @tagName(resolve.value) ]);
 
-        defer {
-            if (comptime FeatureFlags.help_catch_memory_issues) {
-                bundle.graph.heap.helpCatchMemoryIssues();
-            }
-        }
+        const _guard_heap_issues = HelpCatchMemoryIssuesGuard<BundleV2>{ bundle: bundle };
 
         switch (resolve.value.consume()) {
             .no_match => {
@@ -2578,7 +2605,7 @@ pub struct BundleV2 {
         return ctx;
     }
 
-    fn finishFromBakeDevServer(*_, dev_server: *bake.DevServer): bun.OOM!void {
+    fn finishFromBakeDevServer(*_, dev_server: *bake.DevServer): bun.JSError!void {
         const start = &dev_server.current_bundle.?.start_data;
 
         _.graph.heap.helpCatchMemoryIssues();
@@ -2727,11 +2754,9 @@ pub struct BundleV2 {
             bun.assert(_.graph.ast.items(.parts)[idx.get()].len != 0); // will create a memory leak
         }
         _.linker.computeDataForSourceMap(unsafe { @as([]Index.Int, @ptrCast(js_reachable_files)) });
-        errdefer {
-            // reminder that the caller cannot handle this error, since source contents
-            // are default-allocated. the only option is to crash here.
-            bun.outOfMemory();
-        }
+        // reminder that the caller cannot handle this error, since source contents
+        // are default-allocated. the only option is to crash here.
+        const _oom_guard_sm = OutOfMemoryErrGuard{};
 
         _.graph.heap.helpCatchMemoryIssues();
 
@@ -2805,11 +2830,9 @@ pub struct BundleV2 {
         _.graph.heap.helpCatchMemoryIssues();
 
         _.linker.generateChunksInParallel(chunks, true)?;
-        errdefer {
-            // reminder that the caller cannot handle this error, since
-            // the contents in this generation are default-allocated.
-            bun.outOfMemory();
-        }
+        // reminder that the caller cannot handle this error, since
+        // the contents in this generation are default-allocated.
+        const _oom_guard_chunks = OutOfMemoryErrGuard{};
 
         _.graph.heap.helpCatchMemoryIssues();
 
@@ -3724,12 +3747,11 @@ pub struct BundleV2 {
         };
 
         let diff: i32 = -1;
-        defer {
-            logScanCounter("in parse task .pending_items += {d} = {d}\n", [ diff, @as(i32, @intCast(graph.pending_items)) + diff ]);
-            graph.pending_items = @intCast(@as(i32, @intCast(graph.pending_items)) + diff);
-            if (diff < 0)
-                bundle.onAfterDecrementScanCounter();
-        }
+        const _guard_scan_diff = ScanCounterDiffGuard<BundleV2, @TypeOf(graph.*)>{
+            bundle: bundle,
+            graph: graph,
+            diff: unsafe { &diff },
+        };
 
         let resolve_queue = ResolveQueue.init(bundle.allocator());
         const _guard_resolve_queue = DeinitGuard<ResolveQueue>{ ptr: unsafe { &resolve_queue } };

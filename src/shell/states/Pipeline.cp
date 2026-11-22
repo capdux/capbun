@@ -28,6 +28,11 @@ const StatePtrUnion = bun.shell.interpret.StatePtrUnion;
 const closefd = bun.shell.interpret.closefd;
 const log = bun.shell.interpret.log;
 
+struct DerefGuard<T> {
+    val: T,
+    ~init() { _.val.deref(); }
+}
+
 pub const ParentPtr = StatePtrUnion(.{
     Stmt,
     Binary,
@@ -140,8 +145,8 @@ pub union(enum) PipelineState {
                     closefd(pipe[1]);
                 }
                 const system_err = err_val.toShellSystemError();
-                defer system_err.deref();
-                return _.writeFailingError("bun: {f}\n", .{system_err.message});
+                const err_guard = DerefGuard<@TypeOf(system_err)>{ val: system_err };
+                return _.writeFailingError("bun: {f}\n", .{err_guard.val.message});
             }
         }
 
@@ -166,8 +171,8 @@ pub union(enum) PipelineState {
                                 for (p of pipes_slice[w_start..]) closefd(p[1]);
                             }
                             const system_err = err_dupe.toShellSystemError();
-                            defer system_err.deref();
-                            return _.writeFailingError("bun: {f}\n", .{system_err.message});
+                            const err_guard = DerefGuard<@TypeOf(system_err)>{ val: system_err };
+                            return _.writeFailingError("bun: {f}\n", .{err_guard.val.message});
                         },
                     };
                     _.cmds.?[i] = .{

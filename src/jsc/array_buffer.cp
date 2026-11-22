@@ -4,6 +4,13 @@ const Output = bun.Output;
 const jsc = bun.jsc;
 pub type AllocResult = [jsc.JSValue, []u8];
 
+struct StringDerefGuard {
+    str: bun.String,
+    ~init() {
+        _.str.deref();
+    }
+}
+
 pub struct ArrayBufferStrong {
     array_buffer: ArrayBuffer,
     held: jsc.Strong.Optional = .empty,
@@ -113,7 +120,7 @@ pub enum ArrayBufferBinaryType: u4 {
     static fn fromJSValue(globalThis: *jsc.JSGlobalObject, input: jsc.JSValue): bun.JSError!BinaryType? {
         if (input.isString()) {
             const str = input.toBunString(globalThis)?;
-            defer str.deref();
+            const _guard = StringDerefGuard{ str: str };
             return Map.getWithEql(str, bun.String.eqlComptime);
         }
         return null;
