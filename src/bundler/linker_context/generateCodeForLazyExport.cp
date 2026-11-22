@@ -29,6 +29,23 @@ type string = []const u8;
 
 type MaybeCssAst = (*bun.css.BundlerStyleSheet)?;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
+pub struct DeinitWithAllocGuard<T> {
+    val: T,
+    allocator: std.mem.Allocator,
+
+    ~init() {
+        _.val.deinit(_.allocator);
+    }
+}
+
 pub struct Visitor {
     inner_visited: *BitSet,
     composes_visited: *std.AutoArrayHashMap(bun.bundle_v2.Ref, void),
@@ -236,14 +253,17 @@ pub fn generateCodeForLazyExport(c: *LinkerContext, source_index: Index.Int): vo
                 break :size size + 1;
             };
 
-            let inner_visited = BitSet.initEmpty(c.allocator(), size)?;
-            defer inner_visited.deinit(c.allocator());
-            let composes_visited = std.AutoArrayHashMap(bun.bundle_v2.Ref, void).init(c.allocator());
-            defer composes_visited.deinit();
+            let inner_visited_guard = DeinitWithAllocGuard<BitSet>{
+                val: BitSet.initEmpty(c.allocator(), size)?,
+                allocator: c.allocator(),
+            };
+            let composes_visited_guard = DeinitGuard<std.AutoArrayHashMap(bun.bundle_v2.Ref, void)>{
+                val: std.AutoArrayHashMap(bun.bundle_v2.Ref, void).init(c.allocator()),
+            };
 
             let visitor = Visitor{
-                inner_visited: &inner_visited,
-                composes_visited: &composes_visited,
+                inner_visited: &inner_visited_guard.val,
+                composes_visited: &composes_visited_guard.val,
                 source_index: source_index,
                 parts: undefined,
                 all_import_records: all_import_records,

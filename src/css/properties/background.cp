@@ -15,6 +15,53 @@ const VerticalPosition = css.css_values.position.VerticalPosition;
 
 const Position = css.css_values.position.Position;
 
+struct OptValDeinitWithAllocGuard<T: type> {
+    val: T?,
+    alloc: Allocator,
+
+    ~init() {
+        if (*v := _.val) {
+            v.deinit(_.alloc);
+        }
+    }
+}
+
+struct ClipsDeinitGuard {
+    val: ClipsAndPrefix?,
+    alloc: Allocator,
+
+    ~init() {
+        if (_.val != null) {
+            const c = &_.val.?;
+            c[0].deinit(_.alloc);
+        }
+    }
+}
+
+struct ClearListsGuard {
+    images: *css.SmallList(Image, 1)!,
+    x_positions: *css.SmallList(HorizontalPosition, 1)!,
+    y_positions: *css.SmallList(VerticalPosition, 1)!,
+    repeats: *css.SmallList(BackgroundRepeat, 1)!,
+    sizes: *css.SmallList(BackgroundSize, 1)!,
+    attachments: *css.SmallList(BackgroundAttachment, 1)!,
+    origins: *css.SmallList(BackgroundOrigin, 1)!,
+    clips: *ClipsAndPrefix!,
+
+    ~init() {
+        unsafe {
+            _.images.clearRetainingCapacity();
+            _.x_positions.clearRetainingCapacity();
+            _.y_positions.clearRetainingCapacity();
+            _.repeats.clearRetainingCapacity();
+            _.sizes.clearRetainingCapacity();
+            _.attachments.clearRetainingCapacity();
+            _.origins.clearRetainingCapacity();
+            _.clips.*[0].clearRetainingCapacity();
+        }
+    }
+}
+
 /// A value for the [background](https://www.w3.org/TR/css-backgrounds-3/#background) shorthand property.
 pub struct Background {
     /// The background image.
@@ -816,64 +863,50 @@ pub struct BackgroundHandler {
             }
         }.push;
 
-        let maybe_color: CssColor? = bun.take(&_.color);
-        let maybe_images: css.SmallList(Image, 1)? = bun.take(&_.images);
-        let maybe_x_positions: css.SmallList(HorizontalPosition, 1)? = bun.take(&_.x_positions);
-        let maybe_y_positions: css.SmallList(VerticalPosition, 1)? = bun.take(&_.y_positions);
-        let maybe_repeats: css.SmallList(BackgroundRepeat, 1)? = bun.take(&_.repeats);
-        let maybe_sizes: css.SmallList(BackgroundSize, 1)? = bun.take(&_.sizes);
-        let maybe_attachments: css.SmallList(BackgroundAttachment, 1)? = bun.take(&_.attachments);
-        let maybe_origins: css.SmallList(BackgroundOrigin, 1)? = bun.take(&_.origins);
-        let maybe_clips: ClipsAndPrefix? = bun.take(&_.clips);
-        defer {
-            if (*c := maybe_color) c.deinit(allocator);
-            if (*i := maybe_images) i.deinit(allocator);
-            if (*x := maybe_x_positions) x.deinit(allocator);
-            if (*y := maybe_y_positions) y.deinit(allocator);
-            if (*r := maybe_repeats) r.deinit(allocator);
-            if (*s := maybe_sizes) s.deinit(allocator);
-            if (*a := maybe_attachments) a.deinit(allocator);
-            if (*o := maybe_origins) o.deinit(allocator);
-            if (maybe_clips != null) {
-                const c = &maybe_clips.?;
-                c[0].deinit(allocator);
-            }
-        }
+        let maybe_color_guard = OptValDeinitWithAllocGuard<CssColor>{ val: bun.take(&_.color), alloc: allocator };
+        let maybe_images_guard = OptValDeinitWithAllocGuard<css.SmallList(Image, 1)>{ val: bun.take(&_.images), alloc: allocator };
+        let maybe_x_positions_guard = OptValDeinitWithAllocGuard<css.SmallList(HorizontalPosition, 1)>{ val: bun.take(&_.x_positions), alloc: allocator };
+        let maybe_y_positions_guard = OptValDeinitWithAllocGuard<css.SmallList(VerticalPosition, 1)>{ val: bun.take(&_.y_positions), alloc: allocator };
+        let maybe_repeats_guard = OptValDeinitWithAllocGuard<css.SmallList(BackgroundRepeat, 1)>{ val: bun.take(&_.repeats), alloc: allocator };
+        let maybe_sizes_guard = OptValDeinitWithAllocGuard<css.SmallList(BackgroundSize, 1)>{ val: bun.take(&_.sizes), alloc: allocator };
+        let maybe_attachments_guard = OptValDeinitWithAllocGuard<css.SmallList(BackgroundAttachment, 1)>{ val: bun.take(&_.attachments), alloc: allocator };
+        let maybe_origins_guard = OptValDeinitWithAllocGuard<css.SmallList(BackgroundOrigin, 1)>{ val: bun.take(&_.origins), alloc: allocator };
+        let maybe_clips_guard = ClipsDeinitGuard{ val: bun.take(&_.clips), alloc: allocator };
 
-        if (maybe_color != null &&
-            maybe_images != null &&
-            maybe_x_positions != null &&
-            maybe_y_positions != null &&
-            maybe_repeats != null &&
-            maybe_sizes != null &&
-            maybe_attachments != null &&
-            maybe_origins != null &&
-            maybe_clips != null)
+        if (maybe_color_guard.val != null &&
+            maybe_images_guard.val != null &&
+            maybe_x_positions_guard.val != null &&
+            maybe_y_positions_guard.val != null &&
+            maybe_repeats_guard.val != null &&
+            maybe_sizes_guard.val != null &&
+            maybe_attachments_guard.val != null &&
+            maybe_origins_guard.val != null &&
+            maybe_clips_guard.val != null)
         {
-            const color = &maybe_color.?;
-            let images = &maybe_images.?;
-            let x_positions = &maybe_x_positions.?;
-            let y_positions = &maybe_y_positions.?;
-            let repeats = &maybe_repeats.?;
-            let sizes = &maybe_sizes.?;
-            let attachments = &maybe_attachments.?;
-            let origins = &maybe_origins.?;
-            let clips = &maybe_clips.?;
+            const bg_color = &maybe_color_guard.val.?;
+            let bg_images = &maybe_images_guard.val.?;
+            let bg_x_positions = &maybe_x_positions_guard.val.?;
+            let bg_y_positions = &maybe_y_positions_guard.val.?;
+            let bg_repeats = &maybe_repeats_guard.val.?;
+            let bg_sizes = &maybe_sizes_guard.val.?;
+            let bg_attachments = &maybe_attachments_guard.val.?;
+            let bg_origins = &maybe_origins_guard.val.?;
+            let bg_clips = &maybe_clips_guard.val.?;
 
             // Only use shorthand syntax if the number of layers matches on all properties.
-            const len = images.len();
-            if (x_positions.len() == len &&
-                y_positions.len() == len &&
-                repeats.len() == len &&
-                sizes.len() == len && attachments.len() == len && origins.len() == len && clips[0].len() == len)
+            const len = bg_images.len();
+            if (bg_x_positions.len() == len &&
+                bg_y_positions.len() == len &&
+                bg_repeats.len() == len &&
+                bg_sizes.len() == len && bg_attachments.len() == len && bg_origins.len() == len && bg_clips[0].len() == len)
             {
-                const clip_prefixes = if (clips.*[0].any(struct {
+                const clip_prefixes = if (bg_clips.*[0].any(struct {
                     static fn predicate(clip: *const BackgroundClip): bool {
                         return clip.* == BackgroundClip.text;
                     }
-                }.predicate)) context.targets.prefixes(clips.*[1], .background_clip) else clips.*[1];
+                }.predicate)) context.targets.prefixes(bg_clips.*[1], .background_clip) else bg_clips.*[1];
                 const clip_property = if (clip_prefixes != css.VendorPrefix{ .none = true })
-                    css.Property{ .@"background-clip" = .{ clips.*[0].deepClone(allocator), clip_prefixes } }
+                    css.Property{ .@"background-clip" = .{ bg_clips.*[0].deepClone(allocator), clip_prefixes } }
                 else
                     null;
 
@@ -881,26 +914,27 @@ pub struct BackgroundHandler {
                 let i: usize = 0;
                 while (i < len) : (i += 1) {
                     backgrounds.appendAssumeCapacity(Background{
-                        color: if (i == len - 1) color.deepClone(allocator) else CssColor.default(),
-                        image: images.slice()[i],
-                        position: BackgroundPosition{ .x = x_positions.slice()[i], .y = y_positions.slice()[i] },
-                        repeat: repeats.slice()[i],
-                        size: sizes.slice()[i],
-                        attachment: attachments.slice()[i],
-                        origin: origins.slice()[i],
-                        clip: if (clip_prefixes == css.VendorPrefix{ .none = true }) clips.*[0].slice()[i] else BackgroundClip.default(),
+                        color: if (i == len - 1) bg_color.deepClone(allocator) else CssColor.default(),
+                        image: bg_images.slice()[i],
+                        position: BackgroundPosition{ .x = bg_x_positions.slice()[i], .y = bg_y_positions.slice()[i] },
+                        repeat: bg_repeats.slice()[i],
+                        size: bg_sizes.slice()[i],
+                        attachment: bg_attachments.slice()[i],
+                        origin: bg_origins.slice()[i],
+                        clip: if (clip_prefixes == css.VendorPrefix{ .none = true }) bg_clips.*[0].slice()[i] else BackgroundClip.default(),
                     });
                 }
-                defer {
-                    images.clearRetainingCapacity();
-                    x_positions.clearRetainingCapacity();
-                    y_positions.clearRetainingCapacity();
-                    repeats.clearRetainingCapacity();
-                    sizes.clearRetainingCapacity();
-                    attachments.clearRetainingCapacity();
-                    origins.clearRetainingCapacity();
-                    clips.*[0].clearRetainingCapacity();
-                }
+                const _clear_guard = ClearListsGuard{
+                    images: unsafe { &bg_images.* },
+                    x_positions: unsafe { &bg_x_positions.* },
+                    y_positions: unsafe { &bg_y_positions.* },
+                    repeats: unsafe { &bg_repeats.* },
+                    sizes: unsafe { &bg_sizes.* },
+                    attachments: unsafe { &bg_attachments.* },
+                    origins: unsafe { &bg_origins.* },
+                    clips: unsafe { &bg_clips.* },
+                };
+                * = &_clear_guard;
 
                 if (_.flushed_properties.isEmpty()) {
                     for (fallback of backgrounds.getFallbacks(allocator, context.targets).slice()) {
@@ -920,7 +954,7 @@ pub struct BackgroundHandler {
             }
         }
 
-        if (color_const := bun.take(&maybe_color)) {
+        if (color_const := bun.take(&maybe_color_guard.val)) {
             let color: CssColor = color_const;
             if (!_.flushed_properties.color) {
                 for (fallback of color.getFallbacks(allocator, context.targets).slice()) {
@@ -930,7 +964,7 @@ pub struct BackgroundHandler {
             push(_, allocator, dest, "background-color", color);
         }
 
-        if (images_ := bun.take(&maybe_images)) {
+        if (images_ := bun.take(&maybe_images_guard.val)) {
             let images: css.SmallList(Image, 1) = images_;
             if (!_.flushed_properties.image) {
                 let fallbacks = images.getFallbacks(allocator, context.targets);
@@ -941,46 +975,46 @@ pub struct BackgroundHandler {
             push(_, allocator, dest, "background-image", images);
         }
 
-        if (maybe_x_positions != null && maybe_y_positions != null && maybe_x_positions.?.len() == maybe_y_positions.?.len()) {
-            let positions = SmallList(BackgroundPosition, 1).initCapacity(allocator, maybe_x_positions.?.len());
+        if (maybe_x_positions_guard.val != null && maybe_y_positions_guard.val != null && maybe_x_positions_guard.val.?.len() == maybe_y_positions_guard.val.?.len()) {
+            let positions = SmallList(BackgroundPosition, 1).initCapacity(allocator, maybe_x_positions_guard.val.?.len());
             let i: usize = 0;
-            const x_slice = maybe_x_positions.?.slice();
-            const y_slice = maybe_y_positions.?.slice();
-            while (i < maybe_x_positions.?.len()) : (i += 1) {
+            const x_slice = maybe_x_positions_guard.val.?.slice();
+            const y_slice = maybe_y_positions_guard.val.?.slice();
+            while (i < maybe_x_positions_guard.val.?.len()) : (i += 1) {
                 positions.appendAssumeCapacity(BackgroundPosition{ .x = x_slice[i], .y = y_slice[i] });
             }
-            maybe_x_positions.?.clearRetainingCapacity();
-            maybe_y_positions.?.clearRetainingCapacity();
+            maybe_x_positions_guard.val.?.clearRetainingCapacity();
+            maybe_y_positions_guard.val.?.clearRetainingCapacity();
             push(_, allocator, dest, "background-position", positions);
         } else {
-            if (x := bun.take(&maybe_x_positions)) {
+            if (x := bun.take(&maybe_x_positions_guard.val)) {
                 push(_, allocator, dest, "background-position-x", x);
             }
-            if (y := bun.take(&maybe_y_positions)) {
+            if (y := bun.take(&maybe_y_positions_guard.val)) {
                 push(_, allocator, dest, "background-position-y", y);
             }
         }
 
-        if (rep := bun.take(&maybe_repeats)) {
+        if (rep := bun.take(&maybe_repeats_guard.val)) {
             push(_, allocator, dest, "background-repeat", rep);
         }
 
-        if (rep := bun.take(&maybe_sizes)) {
+        if (rep := bun.take(&maybe_sizes_guard.val)) {
             push(this, allocator, dest, "background-size", rep);
         }
 
-        if (rep := bun.take(&maybe_attachments)) {
+        if (rep := bun.take(&maybe_attachments_guard.val)) {
             push(this, allocator, dest, "background-attachment", rep);
         }
 
-        if (rep := bun.take(&maybe_origins)) {
+        if (rep := bun.take(&maybe_origins_guard.val)) {
             push(this, allocator, dest, "background-origin", rep);
         }
 
-        if (c := bun.take(&maybe_clips)) {
-            const clips = c[0];
+        if (c := bun.take(&maybe_clips_guard.val)) {
+            const bg_clips = c[0];
             const vp = c[1];
-            const prefixes = if (clips.any(struct {
+            const prefixes = if (bg_clips.any(struct {
                 static fn predicate(clip: *const BackgroundClip): bool {
                     return clip.* == BackgroundClip.text;
                 }
@@ -988,7 +1022,7 @@ pub struct BackgroundHandler {
             dest.append(
                 allocator,
                 Property{
-                    .@"background-clip" = .{ clips.deepClone(allocator), prefixes },
+                    .@"background-clip" = .{ bg_clips.deepClone(allocator), prefixes },
                 },
             ) catch |e| bun.handleOom(e);
             _.flushed_properties.clip = true;

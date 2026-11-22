@@ -18,6 +18,29 @@ const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Result = css.Result;
 
+struct SliceFreeGuard {
+    alloc: Allocator,
+    slice: []const u8,
+    active: bool,
+
+    ~init() {
+        if (_.active) {
+            _.alloc.free(_.slice);
+        }
+    }
+}
+
+struct OptValDeinitWithAllocGuard<T: type> {
+    val: T?,
+    alloc: Allocator,
+
+    ~init() {
+        if (*v := _.val) {
+            v.deinit(_.alloc);
+        }
+    }
+}
+
 pub fn ValidQueryCondition(comptime T: type) {
     //   fn parse_feature<'t>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i, ParserError<'i>>>;
     * = T.parseFeature;
@@ -968,10 +991,12 @@ pub fn QueryFeature(comptime FeatureId: type): type {
         }
 
         pub fn parseNameFirst(input: *css.Parser) Result(This) {
-            const name, const legacy_op = switch (MediaFeatureName(FeatureId).parse(input)) {
+            const name_pair = switch (MediaFeatureName(FeatureId).parse(input)) {
                 .err => |e| return .{ .err = e },
                 .result => |v| v,
             };
+            const name: MediaFeatureName(FeatureId) = name_pair[0];
+            const legacy_op: ?MediaFeatureComparison = name_pair[1];
 
             const operator = if (input.tryParse(consumeOperationOrColon, .{true}).asValue()) |operator| operator else return .{
                 .result = .{
@@ -1046,10 +1071,12 @@ pub fn QueryFeature(comptime FeatureId: type): type {
 
             // Skip over the feature name again.
             {
-                const feature_name, const blah = switch (MediaFeatureName(FeatureId).parse(input)) {
+                const parsed_pair = switch (MediaFeatureName(FeatureId).parse(input)) {
                     .err => |e| return .{ .err = e },
                     .result => |v| v,
                 };
+                const feature_name = parsed_pair[0];
+                const blah = parsed_pair[1];
                 _ = blah;
                 bun.debugAssert(feature_name.eql(&name));
             }
@@ -1067,15 +1094,14 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                 const LT: u8 = comptime @intFromEnum(MediaFeatureComparison.@"less-than");
                 const LTE: u8 = comptime @intFromEnum(MediaFeatureComparison.@"less-than-equal");
                 const check_val: u8 = @intFromEnum(start_operator) | @intFromEnum(end_operator);
-                switch (check_val) {
-                    GT | GT,
-                    GT | GTE,
-                    GTE | GTE,
-                    LT | LT,
-                    LT | LTE,
-                    LTE | LTE,
-                    => {},
-                    else => return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) },
+                if (check_val != (GT | GT) &&
+                    check_val != (GT | GTE) &&
+                    check_val != (GTE | GTE) &&
+                    check_val != (LT | LT) &&
+                    check_val != (LT | LTE) &&
+                    check_val != (LTE | LTE))
+                {
+                    return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
                 }
 
                 const end_value = switch (MediaFeatureValue.parse(input, name.valueType())) {
@@ -1496,21 +1522,22 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
             };
 
             let free_str = false;
-            const final_name = if (is_webkit) name: {
-                // PERF: stack buffer here?
-                free_str = true;
-                break :name bun.handleOom(std.fmt.allocPrint(input.allocator(), "-webkit-{s}", .{name}));
-            } else name;
-
-            defer if (is_webkit) {
-                // If we made an allocation let's try to free it,
-                // this only works if FeatureId doesn't hold any references to the input string.
-                // i.e. it is an enum
-                comptime {
-                    std.debug.assert(@typeInfo(FeatureId) == .@"enum");
-                }
-                input.allocator().free(final_name);
+            const _name_guard = SliceFreeGuard{
+                alloc: input.allocator(),
+                slice: if (is_webkit) name: {
+                    // PERF: stack buffer here?
+                    free_str = true;
+                    // If we made an allocation let's try to free it,
+                    // this only works if FeatureId doesn't hold any references to the input string.
+                    // i.e. it is an enum
+                    comptime {
+                        std.debug.assert(@typeInfo(FeatureId) == .@"enum");
+                    }
+                    break :name bun.handleOom(std.fmt.allocPrint(input.allocator(), "-webkit-{s}", .{name}));
+                } else name,
+                active: is_webkit,
             };
+            const final_name = _name_guard.slice;
 
             if (css.parse_utility.parseString(
                 input.allocator(),
@@ -1559,14 +1586,16 @@ fn writeMinMax(
 
     dest.delim(':', false)?;
 
-    let adjusted: MediaFeatureValue? = switch (operator.*) {
-        .@"greater-than" => value.deepClone(dest.allocator).addF32(dest.allocator, 0.001),
-        .@"less-than" => value.deepClone(dest.allocator).addF32(dest.allocator, -0.001),
-        else => null,
+    let adjusted_guard = OptValDeinitWithAllocGuard<MediaFeatureValue>{
+        val: switch (operator.*) {
+            .@"greater-than" => value.deepClone(dest.allocator).addF32(dest.allocator, 0.001),
+            .@"less-than" => value.deepClone(dest.allocator).addF32(dest.allocator, -0.001),
+            else => null,
+        },
+        alloc: dest.allocator,
     };
 
-    if (*val := adjusted) {
-        defer val.deinit(dest.allocator);
+    if (*val := adjusted_guard.val) {
         val.toCss(dest)?;
     } else {
         value.toCss(dest)?;

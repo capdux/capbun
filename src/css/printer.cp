@@ -5,6 +5,18 @@ pub const Error = css.Error;
 const Location = css.Location;
 const PrintErr = css.PrintErr;
 
+struct SliceFreeGuard {
+    alloc: std.mem.Allocator,
+    slice: []const u8,
+    active: bool,
+
+    ~init() {
+        if (_.active) {
+            _.alloc.free(_.slice);
+        }
+    }
+}
+
 /// Options that control how CSS is serialized to a string.
 pub struct PrinterOptions {
     /// Whether to minify the CSS, i.e. remove white space.
@@ -402,8 +414,12 @@ pub struct Printer {
                     struct {
                         fn writeFn(c: *Closure, s1: []const u8, replace_dots: bool) {
                             // PERF: stack fallback?
-                            const s = if (!replace_dots) s1 else replaceDots(c.printer.allocator, s1);
-                            defer if (replace_dots) c.printer.allocator.free(s);
+                            const _s_guard = SliceFreeGuard{
+                                alloc: c.printer.allocator,
+                                slice: if (!replace_dots) s1 else replaceDots(c.printer.allocator, s1),
+                                active: replace_dots,
+                            };
+                            const s = _s_guard.slice;
                             c.printer.col += @as(u32, @intCast(s.len));
                             if (c.first) {
                                 c.first = false;
@@ -430,8 +446,12 @@ pub struct Printer {
             if (css_module.config.dashed_idents) {
                 const Fn = struct {
                     fn writeFn(p: *Printer, s1: []const u8, replace_dots: bool) {
-                        const s = if (!replace_dots) s1 else replaceDots(p.allocator, s1);
-                        defer if (replace_dots) p.allocator.free(s);
+                        const _s_guard = SliceFreeGuard{
+                            alloc: p.allocator,
+                            slice: if (!replace_dots) s1 else replaceDots(p.allocator, s1),
+                            active: replace_dots,
+                        };
+                        const s = _s_guard.slice;
                         p.col += @as(u32, @intCast(s.len));
                         return css.serializer.serializeName(s, p) catch |e| css.OOM(e);
                     }

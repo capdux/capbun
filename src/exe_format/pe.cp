@@ -4,6 +4,25 @@ import std from "std";
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
+struct OptDeinitGuard<T> {
+    val: T?,
+    ~init() {
+        if (_.val != null) {
+            _.val.?.deinit();
+        }
+    }
+}
+
+struct DestroyGuard<T> {
+    ptr: (*T!)?,
+    alloc: Allocator,
+    ~init() {
+        if (_.ptr != null) {
+            _.alloc.destroy(_.ptr.?);
+        }
+    }
+}
+
 pub err Error {
     OutOfBounds,
     BadAlignment,
@@ -223,18 +242,21 @@ pub struct PEFile {
     }
 
     pub static fn init(allocator: Allocator, pe_data: []const u8): (*PEFile!)! {
-        let data = std.array_list.Managed(u8).initCapacity(allocator, pe_data.len + 64 * 1024)?;
-        errdefer data.deinit();
-        data.appendSlice(pe_data)?;
+        let data_guard = OptDeinitGuard<std.array_list.Managed(u8)>{
+            val: std.array_list.Managed(u8).initCapacity(allocator, pe_data.len + 64 * 1024)?,
+        };
+        data_guard.val.?.appendSlice(pe_data)?;
 
-        let res = allocator.create(PEFile)?;
-        errdefer allocator.destroy(res);
+        let res_guard = DestroyGuard<PEFile>{
+            ptr: allocator.create(PEFile)?,
+            alloc: allocator,
+        };
 
-        if (data.items.len < @sizeOf(DOSHeader)) {
+        if (data_guard.val.?.items.len < @sizeOf(DOSHeader)) {
             return err.InvalidPEFile;
         }
 
-        const dos_header = readDosAt(data.items, 0)?;
+        const dos_header = readDosAt(data_guard.val.?.items, 0)?;
         if (dos_header.e_magic != DOS_SIGNATURE) {
             return err.InvalidDOSSignature;
         }
@@ -242,25 +264,25 @@ pub struct PEFile {
         if (dos_header.e_lfanew < @sizeOf(DOSHeader)) {
             return err.InvalidPEFile;
         }
-        if ((dos_header.e_lfanew as usize) > data.items.len -| @sizeOf(PEHeader)) {
+        if ((dos_header.e_lfanew as usize) > data_guard.val.?.items.len -| @sizeOf(PEHeader)) {
             return err.InvalidPEFile;
         }
 
         const pe_off = dos_header.e_lfanew as usize;
-        const pe_header = readPEAt(data.items, pe_off)?;
+        const pe_header = readPEAt(data_guard.val.?.items, pe_off)?;
         if (pe_header.signature != PE_SIGNATURE) {
             return err.InvalidPESignature;
         }
 
         const optional_header_offset = pe_off + @sizeOf(PEHeader);
-        if (data.items.len < optional_header_offset + (pe_header.size_of_optional_header as usize)) {
+        if (data_guard.val.?.items.len < optional_header_offset + (pe_header.size_of_optional_header as usize)) {
             return err.InvalidPEFile;
         }
         if (pe_header.size_of_optional_header < @sizeOf(OptionalHeader64)) {
             return err.InvalidPEFile;
         }
 
-        const optional_header = readOptAt(data.items, optional_header_offset)?;
+        const optional_header = readOptAt(data_guard.val.?.items, optional_header_offset)?;
         if (optional_header.magic != OPTIONAL_HEADER_MAGIC_64) {
             return err.UnsupportedPEFormat;
         }
@@ -280,11 +302,11 @@ pub struct PEFile {
             return err.TooManySections;
         }
         const section_headers_size = @sizeOf(SectionHeader) * (num_sections as usize);
-        if (data.items.len < section_headers_offset + section_headers_size) {
+        if (data_guard.val.?.items.len < section_headers_offset + section_headers_size) {
             return err.InvalidPEFile;
         }
 
-        let first_raw = data.items.len as u32;
+        let first_raw = data_guard.val.?.items.len as u32;
         let last_file_end: u32 = 0;
         let last_va_end: u32 = 0;
 
@@ -292,7 +314,7 @@ pub struct PEFile {
         let s_idx: usize = 0;
         while (s_idx < num_sections) : (s_idx += 1) {
             const sh_off = section_headers_offset + s_idx * sh_sz;
-            const section = unsafe { std.mem.bytesAsValue(SectionHeader, data.items[sh_off..][0..sh_sz]).* };
+            const section = unsafe { std.mem.bytesAsValue(SectionHeader, data_guard.val.?.items[sh_off..][0..sh_sz]).* };
             if (section.size_of_raw_data > 0) {
                 if (section.pointer_to_raw_data < first_raw) {
                     first_raw = section.pointer_to_raw_data;
@@ -310,9 +332,10 @@ pub struct PEFile {
             }
         }
 
+        const res = res_guard.ptr.?;
         unsafe {
             res.* = PEFile{
-                data: data,
+                data: data_guard.val.?,
                 allocator: allocator,
                 dos_header_offset: 0,
                 pe_header_offset: pe_off,
@@ -324,6 +347,8 @@ pub struct PEFile {
                 last_va_end: last_va_end,
             };
         }
+        data_guard.val = null;
+        res_guard.ptr = null;
 
         return res;
     }

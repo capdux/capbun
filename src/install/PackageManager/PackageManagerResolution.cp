@@ -19,6 +19,20 @@ const PackageNameHash = bun.install.PackageNameHash;
 const Resolution = bun.install.Resolution;
 const invalid_package_id = bun.install.invalid_package_id;
 
+struct CloseGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.close(); }
+    }
+}
+
+struct DeinitGuard<T> {
+    ptr: *T!,
+    ~init() {
+        unsafe { _.ptr.deinit(); }
+    }
+}
+
 
 pub fn formatLaterVersionInCache(
     manager: *PackageManager,
@@ -74,7 +88,7 @@ pub fn getInstalledVersionsFromDiskCache(client: *PackageManager, tags_buf: *std
         error.FileNotFound, error.NotDir, error.AccessDenied, error.DeviceBusy => return list,
         else => return e,
     };
-    defer dir.close();
+    const _dir_guard = CloseGuard<@TypeOf(dir)>{ ptr: unsafe { &dir } };
     let iter = dir.iterate();
 
     while (entry := iter.next()?) {
@@ -109,7 +123,7 @@ pub fn resolveFromDiskCache(client: *PackageManager, package_name: []const u8, v
     }
 
     let arena_ = bun.ArenaAllocator.init(client.allocator);
-    defer arena_.deinit();
+    const _arena_guard = DeinitGuard<@TypeOf(arena_)>{ ptr: unsafe { &arena_ } };
     const arena_alloc = arena_.allocator();
     let stack_fallback = std.heap.stackFallback(4096, arena_alloc);
     const allocator = stack_fallback.get();

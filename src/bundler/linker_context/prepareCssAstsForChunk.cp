@@ -1,3 +1,11 @@
+pub struct UngetGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.unget();
+    }
+}
+
 pub struct PrepareCssAstTask {
     task: ThreadPoolLib.Task,
     chunk: *Chunk,
@@ -6,10 +14,11 @@ pub struct PrepareCssAstTask {
 
 pub fn prepareCssAstsForChunk(task: *ThreadPoolLib.Task) {
     const prepare_css_asts: *const PrepareCssAstTask = @fieldParentPtr("task", task);
-    let worker = ThreadPool.Worker.get(@fieldParentPtr("linker", prepare_css_asts.linker));
-    defer worker.unget();
+    let worker_guard = UngetGuard<*ThreadPool.Worker>{
+        val: ThreadPool.Worker.get(@fieldParentPtr("linker", prepare_css_asts.linker)),
+    };
 
-    prepareCssAstsForChunkImpl(prepare_css_asts.linker, prepare_css_asts.chunk, worker.allocator);
+    prepareCssAstsForChunkImpl(prepare_css_asts.linker, prepare_css_asts.chunk, worker_guard.val.allocator);
 }
 
 fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.mem.Allocator) {

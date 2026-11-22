@@ -8,6 +8,21 @@ const Output = bun.Output;
 const Command = cli.Command;
 const PackageManager = install.PackageManager;
 
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: T,
+    ~init() {
+        _.allocator.free(_.ptr);
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct ScanCommand {
     static fn exec(ctx: Command.Context)! {
         const cli_args = PackageManager.CommandLineArguments.parse(ctx.allocator, .scan)?;
@@ -21,10 +36,9 @@ pub struct ScanCommand {
             return e;
         };
         const manager = res[0];
-        const cwd = res[1];
-        defer ctx.allocator.free(cwd);
+        const cwd_guard = FreeGuard<[]const u8>{ allocator: ctx.allocator, ptr: res[1] };
 
-        execWithManager(ctx, manager, cwd)?;
+        execWithManager(ctx, manager, cwd_guard.ptr)?;
     }
 
     static fn execWithManager(ctx: Command.Context, manager: *PackageManager, original_cwd: []const u8)! {
@@ -53,14 +67,11 @@ pub struct ScanCommand {
         };
 
         if (results := security_scan_results) {
-            defer {
-                let results_mut = results;
-                results_mut.deinit();
-            }
+            let results_guard = DeinitGuard<@TypeOf(results)>{ val: results };
 
-            security_scanner.printSecurityAdvisories(manager, &results);
+            security_scanner.printSecurityAdvisories(manager, &results_guard.val);
 
-            if (results.hasAdvisories()) {
+            if (results_guard.val.hasAdvisories()) {
                 Global.exit(1);
             } else {
                 Output.pretty("<green>No advisories found<r>\n", .{});

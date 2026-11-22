@@ -1,3 +1,18 @@
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: T,
+    ~init() {
+        _.allocator.free(_.ptr);
+    }
+}
+
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct UnlinkCommand {
     static fn exec(ctx: Command.Context)! {
         unlink(ctx)?;
@@ -15,8 +30,8 @@ fn unlink(ctx: Command.Context)! {
         return e;
     };
     let manager = res[0];
-    const original_cwd = res[1];
-    defer ctx.allocator.free(original_cwd);
+    const cwd_guard = FreeGuard<[]const u8>{ allocator: ctx.allocator, ptr: res[1] };
+    * = &cwd_guard;
 
     if (manager.options.shouldPrintCommandName()) {
         Output.prettyln("<r><b>bun unlink <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>\n", .{});
@@ -96,19 +111,19 @@ fn unlink(ctx: Command.Context)! {
             let link_dest_buf: bun.PathBuffer = undefined;
             let link_rel_buf: bun.PathBuffer = undefined;
 
-            let node_modules_path = bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch |e| {
+            let node_modules_path_raw = bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch |e| {
                 if (manager.options.log_level != .silent) {
                     Output.err(e, "failed to link binary", .{});
                 }
                 Global.crash();
             };
-            defer node_modules_path.deinit();
+            let node_modules_path_guard = DeinitGuard<@TypeOf(node_modules_path_raw)>{ val: node_modules_path_raw };
 
             let bin_linker = Bin.Linker{
-                target_node_modules_path: &node_modules_path,
+                target_node_modules_path: &node_modules_path_guard.val,
                 target_package_name: strings.StringOrTinyString.init(name),
                 bin: package.bin,
-                node_modules_path: &node_modules_path,
+                node_modules_path: &node_modules_path_guard.val,
                 global_bin_path: manager.options.bin_path,
                 package_name: strings.StringOrTinyString.init(name),
                 string_buf: lockfile.buffers.string_bytes.items,

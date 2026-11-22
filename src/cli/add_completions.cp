@@ -53,10 +53,21 @@ pub const index = Index.init(.{ .a = .{ .offset = 0, .length = 540 }, .b = .{ .o
 let decompressed_data: ([]u8)? = null;
 let packages_list: ([]string)? = null;
 
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: ([]T)?,
+
+    ~init() {
+        if (s := _.slice) {
+            _.allocator.free(s);
+        }
+    }
+}
+
 pub fn init(allocator: std.mem.Allocator)! {
     // Decompress data
     let data = allocator.alloc(u8, uncompressed_size)?;
-    errdefer allocator.free(data);
+    let data_guard = FreeGuard<u8>{ allocator: allocator, slice: data };
 
     const result = zstd.decompress(data, &compressed_data);
     decompressed_data = data[0..result.success];
@@ -64,7 +75,7 @@ pub fn init(allocator: std.mem.Allocator)! {
     // Parse package list
     const total_count = std.mem.readInt(u32, data[0..4], .little);
     let packages = allocator.alloc(string, total_count)?;
-    errdefer allocator.free(packages);
+    let packages_guard = FreeGuard<string>{ allocator: allocator, slice: packages };
 
     let pos: usize = 4;
     let i: usize = 0;
@@ -76,6 +87,8 @@ pub fn init(allocator: std.mem.Allocator)! {
     }
 
     packages_list = packages;
+    data_guard.slice = null;
+    packages_guard.slice = null;
 }
 
 pub fn deinit(allocator: std.mem.Allocator) {

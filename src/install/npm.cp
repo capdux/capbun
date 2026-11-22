@@ -17,6 +17,12 @@ pub struct DeinitGuard<T> {
     }
 }
 
+pub struct StoreMemoryAllocatorPopGuard {
+    ~init() {
+        bun.ast.Stmt.Data.Store.memory_allocator.?.pop();
+    }
+}
+
 pub struct CloseValGuard<T> {
     val: T,
     ~init() {
@@ -1838,7 +1844,7 @@ pub struct PackageManifest {
     ): PackageManifest?! {
         const source = &logger.Source.initPathString(expected_name, json_buffer);
         initializeStore();
-        defer bun.ast.Stmt.Data.Store.memory_allocator.?.pop();
+        const _guard_store_pop = StoreMemoryAllocatorPopGuard{};
         let arena_ = bun.ArenaAllocator.init(allocator);
         const _guard_arena = DeinitGuard<*@TypeOf(arena_)!>{ ptr: &arena_ };
         const json = BunJSON.parseUTF8(
@@ -2215,8 +2221,8 @@ pub struct PackageManifest {
                                     switch (obj.properties.len) {
                                         0 => {},
                                         1 => {
-                                            const bin_name = obj.properties.ptr[0].key.?.asString(allocator) ?? break :bin;
-                                            const value = obj.properties.ptr[0].value.?.asString(allocator) ?? break :bin;
+                                            const bin_name = unsafe { obj.properties.ptr[0] }.key.?.asString(allocator) ?? break :bin;
+                                            const value = unsafe { obj.properties.ptr[0] }.value.?.asString(allocator) ?? break :bin;
 
                                             package_version.bin = {
                                                 tag: .named_file,

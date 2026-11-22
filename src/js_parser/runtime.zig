@@ -81,7 +81,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const RuntimeServerComponentsMode = enum {
@@ -109,6 +109,19 @@ else => false,
 });
     }
 };
+
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        inner: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.inner.deinit();
+        }
+    };
+}
 
 pub const RuntimeImportsEntry = struct {
     key: u16,
@@ -334,17 +347,16 @@ pub fn renderBackend(allocator: std.mem.Allocator, msg: *const api.FallbackMessa
         allocator: std.mem.Allocator,
     
     pub fn format(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
-                var bb = std.array_list.Managed(u8).init(self.allocator);
+                var bb = DeinitGuard(std.array_list.Managed(u8)){ .inner = std.array_list.Managed(u8).init(self.allocator) };
                 _ = &bb;
-                defer {
-                _ = bb.deinit();
-                }
-                const bb_writer = bb.writer();
+                var __bb_moved = false; _ = &__bb_moved;
+                defer if (!__bb_moved) { __bb_moved = true; const __T = @TypeOf(bb); if (@typeInfo(__T) == .optional) { if (bb) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { bb.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = bb; _drop_val.__cp_deinit(); } };
+                const bb_writer = bb.inner.writer();
                 const Encoder = schema.Writer(@TypeOf(bb_writer));
                 var encoder = Encoder.init(bb_writer);
                 _ = &encoder;
                 _ = (blk_catch_0: { break :blk_catch_0 ((self.msg.encode((&encoder))) catch |__ce_0| { _ = &__ce_0;  }); });
-                _ = (blk_catch_1: { break :blk_catch_1 ((Base64Encoder.encode(bb.items, @TypeOf(writer), writer)) catch |__ce_1| { _ = &__ce_1;  }); });
+                _ = (blk_catch_1: { break :blk_catch_1 ((Base64Encoder.encode(bb.inner.items, @TypeOf(writer), writer)) catch |__ce_1| { _ = &__ce_1;  }); });
         }
         pub const Base64Encoder = struct {
         
@@ -461,15 +473,14 @@ pub fn versionHash() u32 {
         pub const empty_bundler_feature_flags: bun.StringSet = default_empty_bundler_feature_flags;
         const hash_fields_for_runtime_transpiler = .{ .top_level_await, .auto_import_jsx, .allow_runtime, .inlining, .commonjs_named_exports, .minify_syntax, .minify_identifiers, .minify_keep_names, .dead_code_elimination, .set_breakpoint_on_first_line, .trim_unused_imports, .dont_bundle_twice, .commonjs_at_runtime, .emit_decorator_metadata, .standard_decorators, .lower_using, .repl_mode };
         pub const ReplaceableExport = union(enum) {
-                    delete: void,
-                    replace: JSAst.Expr,
-                    inject: struct {
+            delete: void,
+            replace: JSAst.Expr,
+            inject: struct {
                         name: string,
                         value: JSAst.Expr,
                     },
-        
-                    pub const Map = bun.StringArrayHashMapUnmanaged(ReplaceableExport);
-                };
+            pub const Map = bun.StringArrayHashMapUnmanaged(ReplaceableExport);
+        };
         pub const ServerComponentsMode = RuntimeServerComponentsMode;
     };
     pub const Names = struct {

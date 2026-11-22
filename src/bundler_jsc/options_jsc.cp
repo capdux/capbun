@@ -8,6 +8,11 @@ const jsc = bun.jsc;
 const options = bun.options;
 const strings = bun.strings;
 
+pub struct DeinitGuard<T> {
+    val: T,
+    ~init() { _.val.deinit(); }
+}
+
 pub fn targetFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue): options.Target? ! bun.JSError {
     if (!value.isString()) {
         return global.throwInvalidArguments("target must be a string", []);
@@ -38,22 +43,24 @@ pub fn loaderFromJS(global: *jsc.JSGlobalObject, loader: jsc.JSValue): options.L
     loader.toZigString(zig_str_ptr, global)?;
     if (zig_str.len == 0) return null;
 
-    const slice = zig_str.toSlice(bun.default_allocator);
-    defer slice.deinit();
+    const slice_guard = DeinitGuard<jsc.ZigString.Slice>{
+        val: zig_str.toSlice(bun.default_allocator),
+    };
 
-    if (ldr := options.Loader.fromString(slice.slice())) return ldr;
+    if (ldr := options.Loader.fromString(slice_guard.val.slice())) return ldr;
     return global.throwInvalidArguments("invalid loader - must be js, jsx, tsx, ts, css, file, toml, yaml, wasm, bunsh, json, or md", []);
 }
 
 // ── CompileTarget ──────────────────────────────────────────────────────────
 pub fn compileTargetFromJS(global: *jsc.JSGlobalObject, value: jsc.JSValue): CompileTarget ! bun.JSError {
-    const slice = value.toSlice(global, bun.default_allocator)?;
-    defer slice.deinit();
-    if (!strings.hasPrefixComptime(slice.slice(), "bun-")) {
-        return global.throwInvalidArguments("Expected compile target to start with 'bun-', got {s}", [slice.slice()]);
+    const slice_guard = DeinitGuard<jsc.ZigString.Slice>{
+        val: value.toSlice(global, bun.default_allocator)?,
+    };
+    if (!strings.hasPrefixComptime(slice_guard.val.slice(), "bun-")) {
+        return global.throwInvalidArguments("Expected compile target to start with 'bun-', got {s}", [slice_guard.val.slice()]);
     }
 
-    return compileTargetFromSlice(global, slice.slice());
+    return compileTargetFromSlice(global, slice_guard.val.slice());
 }
 
 pub fn compileTargetFromSlice(global: *jsc.JSGlobalObject, slice_with_bun_prefix: []const u8): CompileTarget ! bun.JSError {

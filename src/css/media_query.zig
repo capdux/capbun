@@ -81,7 +81,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("./css_parser.zig");
 pub const bun = @import("bun");
@@ -624,6 +624,38 @@ pub fn allowsRanges(self: MediaFeatureType) bool {
     }
 };
 
+pub const SliceFreeGuard = struct {
+    alloc: Allocator,
+    slice: []const u8,
+    active: bool,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *SliceFreeGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if (self.active) {
+                _ = self.alloc.free(self.slice);
+            }
+    }
+};
+
+pub fn OptValDeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        alloc: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |*v| {
+                    _ = &v;
+                    _ = (v.*).deinit(self.alloc);
+                }
+        }
+    };
+}
+
 pub const MediaList = struct {
     media_queries: ArrayList(MediaQuery) = .{},
 
@@ -745,7 +777,7 @@ pub fn alwaysMatches(self: MediaQuery) bool {
 pub fn parse(input: *css.Parser) Result(MediaQuery) {
             const Fn = struct {
 
-pub fn tryParseFn(i: *css.Parser) Result(struct{?Qualifier,?MediaType}) {
+pub fn tryParseFn(i: *css.Parser) Result(struct { ?Qualifier, ?MediaType }) {
             const qualifier = (switch (i.tryParse(Qualifier.parse, .{})) {
 .result => |vv| vv,
 .err => null,
@@ -1047,8 +1079,7 @@ pub fn tryParseFn(i: *css.Parser, self: *@This()) Result(QueryCondition) {
 
 pub fn QueryFeature(comptime FeatureId: type) type {
         return union(enum) {
-        /// A plain media feature, e.g. `(min-width: 240px)`.
-        plain: struct {
+    plain: struct {
             /// The name of the feature.
             name: MediaFeatureName(FeatureId),
             /// The feature value.
@@ -1060,9 +1091,7 @@ pub fn QueryFeature(comptime FeatureId: type) type {
 
             pub fn __generateHash() void {}
         },
-
-        /// A boolean feature, e.g. `(hover)`.
-        boolean: struct {
+    boolean: struct {
             /// The name of the feature.
             name: MediaFeatureName(FeatureId),
 
@@ -1072,9 +1101,7 @@ pub fn QueryFeature(comptime FeatureId: type) type {
 
             pub fn __generateHash() void {}
         },
-
-        /// A range, e.g. `(width > 240px)`.
-        range: struct {
+    range: struct {
             /// The name of the feature.
             name: MediaFeatureName(FeatureId),
             /// A comparator.
@@ -1088,9 +1115,7 @@ pub fn QueryFeature(comptime FeatureId: type) type {
 
             pub fn __generateHash() void {}
         },
-
-        /// An interval, e.g. `(120px < width < 240px)`.
-        interval: struct {
+    interval: struct {
             /// The name of the feature.
             name: MediaFeatureName(FeatureId),
             /// A start value.
@@ -1109,266 +1134,185 @@ pub fn QueryFeature(comptime FeatureId: type) type {
             pub fn __generateHash() void {}
         },
 
-        const This = @This();
+pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) This {
+            return (switch (self.*) {
+.plain => .{ .plain = .{ .name = (if (@typeInfo(@TypeOf(self.plain)) == .@"enum" or @typeInfo(@TypeOf(self.plain)) == .@"union") @tagName(self.plain) else self.plain.name), .value = (if (@typeInfo(@TypeOf(self.plain)) == .@"enum") @intFromEnum(self.plain) else self.plain.value).deepClone(allocator) } },
+.boolean => .{ .boolean = .{ .name = (if (@typeInfo(@TypeOf(self.boolean)) == .@"enum" or @typeInfo(@TypeOf(self.boolean)) == .@"union") @tagName(self.boolean) else self.boolean.name) } },
+.range => .{ .range = .{ .name = (if (@typeInfo(@TypeOf(self.range)) == .@"enum" or @typeInfo(@TypeOf(self.range)) == .@"union") @tagName(self.range) else self.range.name), .operator = self.range.operator, .value = (if (@typeInfo(@TypeOf(self.range)) == .@"enum") @intFromEnum(self.range) else self.range.value).deepClone(allocator) } },
+.interval => .{ .interval = .{ .name = (if (@typeInfo(@TypeOf(self.interval)) == .@"enum" or @typeInfo(@TypeOf(self.interval)) == .@"union") @tagName(self.interval) else self.interval.name), .start = self.interval.start.deepClone(allocator), .start_operator = self.interval.start_operator, .end = self.interval.end.deepClone(allocator), .end_operator = self.interval.end_operator } },
+});
+    }
 
-        pub fn deepClone(this: *const This, allocator: std.mem.Allocator) This {
-            return switch (this.*) {
-                .plain => .{
-                    .plain = .{
-                        .name = this.plain.name,
-                        .value = this.plain.value.deepClone(allocator),
-                    },
-                },
-                .boolean => .{
-                    .boolean = .{
-                        .name = this.boolean.name,
-                    },
-                },
-                .range => .{
-                    .range = .{
-                        .name = this.range.name,
-                        .operator = this.range.operator,
-                        .value = this.range.value.deepClone(allocator),
-                    },
-                },
-                .interval => .{
-                    .interval = .{
-                        .name = this.interval.name,
-                        .start = this.interval.start.deepClone(allocator),
-                        .start_operator = this.interval.start_operator,
-                        .end = this.interval.end.deepClone(allocator),
-                        .end_operator = this.interval.end_operator,
-                    },
-                },
-            };
-        }
-
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
-        }
+    }
 
-        pub fn hash(this: *const @This(), hasher: anytype) void {
-            return css.implementHash(@This(), this, hasher);
-        }
+pub fn hash(self: *const @This(), hasher: anytype) void {
+            return css.implementHash(@This(), self, hasher);
+    }
 
-        pub fn needsParens(this: *const This, parent_operator: ?Operator, targets: *const css.Targets) bool {
-            return parent_operator != .@"and" and
-                this.* == .interval and
-                targets.shouldCompileSame(.media_interval_syntax);
-        }
+pub fn needsParens(self: *const @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {
+            return (((parent_operator != .@"and") and (self.* == .interval)) and targets.shouldCompileSame(.media_interval_syntax));
+    }
 
-        pub fn toCss(this: *const This, dest: *Printer) PrintErr!void {
-            try dest.writeChar('(');
-
-            switch (this.*) {
-                .boolean => {
-                    try this.boolean.name.toCss(dest);
-                },
-                .plain => {
-                    try this.plain.name.toCss(dest);
-                    try dest.delim(':', false);
-                    try this.plain.value.toCss(dest);
-                },
-                .range => {
-                    // If range syntax is unsupported, use min/max prefix if possible.
-                    if (dest.targets.shouldCompileSame(.media_range_syntax)) {
-                        return writeMinMax(
-                            &this.range.operator,
-                            FeatureId,
-                            &this.range.name,
-                            &this.range.value,
-                            dest,
-                        );
-                    }
-                    try this.range.name.toCss(dest);
-                    try this.range.operator.toCss(dest);
-                    try this.range.value.toCss(dest);
-                },
-                .interval => |interval| {
-                    if (dest.targets.shouldCompileSame(.media_interval_syntax)) {
-                        try writeMinMax(
-                            &interval.start_operator.opposite(),
-                            FeatureId,
-                            &interval.name,
-                            &interval.start,
-                            dest,
-                        );
-                        try dest.writeStr(" and (");
-                        return writeMinMax(
-                            &interval.end_operator,
-                            FeatureId,
-                            &interval.name,
-                            &interval.end,
-                            dest,
-                        );
-                    }
-
-                    try interval.start.toCss(dest);
-                    try interval.start_operator.toCss(dest);
-                    try interval.name.toCss(dest);
-                    try interval.end_operator.toCss(dest);
-                    try interval.end.toCss(dest);
-                },
+pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
+            _ = try dest.writeChar(40);
+            switch (self.*) {
+.boolean => {
+_ = try (if (@typeInfo(@TypeOf(self.boolean)) == .@"enum" or @typeInfo(@TypeOf(self.boolean)) == .@"union") @tagName(self.boolean) else self.boolean.name).toCss(dest);
+},
+.plain => {
+_ = try (if (@typeInfo(@TypeOf(self.plain)) == .@"enum" or @typeInfo(@TypeOf(self.plain)) == .@"union") @tagName(self.plain) else self.plain.name).toCss(dest);
+            _ = try dest.delim(58, false);
+            _ = try (if (@typeInfo(@TypeOf(self.plain)) == .@"enum") @intFromEnum(self.plain) else self.plain.value).toCss(dest);
+},
+.range => {
+if (dest.targets.shouldCompileSame(.media_range_syntax)) {
+                return writeMinMax((&self.range.operator), FeatureId, (&(if (@typeInfo(@TypeOf(self.range)) == .@"enum" or @typeInfo(@TypeOf(self.range)) == .@"union") @tagName(self.range) else self.range.name)), (&(if (@typeInfo(@TypeOf(self.range)) == .@"enum") @intFromEnum(self.range) else self.range.value)), dest);
             }
+            _ = try (if (@typeInfo(@TypeOf(self.range)) == .@"enum" or @typeInfo(@TypeOf(self.range)) == .@"union") @tagName(self.range) else self.range.name).toCss(dest);
+            _ = try self.range.operator.toCss(dest);
+            _ = try (if (@typeInfo(@TypeOf(self.range)) == .@"enum") @intFromEnum(self.range) else self.range.value).toCss(dest);
+},
+.interval => |interval| {
+if (dest.targets.shouldCompileSame(.media_interval_syntax)) {
+                _ = try writeMinMax((&interval.start_operator.opposite()), FeatureId, (&(if (@typeInfo(@TypeOf(interval)) == .@"enum" or @typeInfo(@TypeOf(interval)) == .@"union") @tagName(interval) else interval.name)), (&interval.start), dest);
+                _ = try dest.writeStr(" and (");
+                return writeMinMax((&interval.end_operator), FeatureId, (&(if (@typeInfo(@TypeOf(interval)) == .@"enum" or @typeInfo(@TypeOf(interval)) == .@"union") @tagName(interval) else interval.name)), (&interval.end), dest);
+            }
+            _ = try interval.start.toCss(dest);
+            _ = try interval.start_operator.toCss(dest);
+            _ = try (if (@typeInfo(@TypeOf(interval)) == .@"enum" or @typeInfo(@TypeOf(interval)) == .@"union") @tagName(interval) else interval.name).toCss(dest);
+            _ = try interval.end_operator.toCss(dest);
+            _ = try interval.end.toCss(dest);
+},
+}
+            return dest.writeChar(41);
+    }
 
-            return dest.writeChar(')');
-        }
-
-        pub fn parse(input: *css.Parser) Result(This) {
+pub fn parse(input: *css.Parser) Result(This) {
             switch (input.tryParse(parseNameFirst, .{})) {
-                .result => |res| {
-                    return .{ .result = res };
-                },
-                .err => |e| {
-                    if (e.kind == .custom and e.kind.custom == .invalid_media_query) {
-                        return .{ .err = e };
-                    }
-                    return parseValueFirst(input);
-                },
+.result => |res| {
+return .{ .result = res };
+},
+.err => |e| {
+if (((e.kind == .custom) and (e.kind.custom == .invalid_media_query))) {
+                return .{ .err = e };
             }
+            return parseValueFirst(input);
+},
+}
             return .success;
-        }
+    }
 
-        pub fn parseNameFirst(input: *css.Parser) Result(This) {
-            const name, const legacy_op = switch (MediaFeatureName(FeatureId).parse(input)) {
-                .err => |e| return .{ .err = e },
-                .result => |v| v,
-            };
-
-            const operator = if (input.tryParse(consumeOperationOrColon, .{true}).asValue()) |operator| operator else return .{
-                .result = .{
-                    .boolean = .{ .name = name },
-                },
-            };
-
-            if (operator != null and legacy_op != null) {
+pub fn parseNameFirst(input: *css.Parser) Result(This) {
+            const name_pair = (switch (MediaFeatureName(FeatureId).parse(input)) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+            const name: MediaFeatureName(FeatureId) = name_pair[0];
+            const legacy_op: ?MediaFeatureComparison = name_pair[1];
+            const operator = (if (input.tryParse(consumeOperationOrColon, .{ true }).asValue()) |operator| operator else return .{ .result = .{ .boolean = .{ .name = name } } });
+            if (((operator != null) and (legacy_op != null))) {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
             }
-
-            const value = switch (MediaFeatureValue.parse(input, name.valueType())) {
-                .err => |e| return .{ .err = e },
-                .result => |v| v,
-            };
-            if (!value.checkType(name.valueType())) {
+            const value = (switch (MediaFeatureValue.parse(input, name.valueType())) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+            if ((!value.checkType(name.valueType()))) {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
             }
-
-            if (operator orelse legacy_op) |op| {
-                if (!name.valueType().allowsRanges()) {
+            if (((operator) orelse (legacy_op))) |op| {
+                _ = &op;
+                if ((!name.valueType().allowsRanges())) {
                     return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
                 }
-
-                return .{ .result = .{
-                    .range = .{
-                        .name = name,
-                        .operator = op,
-                        .value = value,
-                    },
-                } };
+                return .{ .result = .{ .range = .{ .name = name, .operator = op, .value = value } } };
             } else {
-                return .{ .result = .{
-                    .plain = .{
-                        .name = name,
-                        .value = value,
-                    },
-                } };
+                return .{ .result = .{ .plain = .{ .name = name, .value = value } } };
             }
-        }
+    }
 
-        pub fn parseValueFirst(input: *css.Parser) Result(This) {
-            // We need to find the feature name first so we know the type.
+pub fn parseValueFirst(input: *css.Parser) Result(This) {
             const start = input.state();
             const name = name: {
-                while (true) {
-                    if (MediaFeatureName(FeatureId).parse(input).asValue()) |result| {
-                        const name: MediaFeatureName(FeatureId) = result[0];
-                        const legacy_op: ?MediaFeatureComparison = result[1];
-                        if (legacy_op != null) {
-                            return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
-                        }
-                        break :name name;
-                    }
-                    if (input.isExhausted()) {
+            while (true) {
+                if (MediaFeatureName(FeatureId).parse(input).asValue()) |result| {
+                    _ = &result;
+                    const name: MediaFeatureName(FeatureId) = result[0];
+                    const legacy_op: ?MediaFeatureComparison = result[1];
+                    if ((legacy_op != null)) {
                         return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
                     }
+                    break :name name;
                 }
-            };
-
-            input.reset(&start);
-
-            // Now we can parse the first value.
-            const value = switch (MediaFeatureValue.parse(input, name.valueType())) {
-                .err => |e| return .{ .err = e },
-                .result => |v| v,
-            };
-            const operator = switch (consumeOperationOrColon(input, false)) {
-                .err => |e| return .{ .err = e },
-                .result => |v| v,
-            };
-
-            // Skip over the feature name again.
-            {
-                const feature_name, const blah = switch (MediaFeatureName(FeatureId).parse(input)) {
-                    .err => |e| return .{ .err = e },
-                    .result => |v| v,
-                };
-                _ = blah;
-                bun.debugAssert(feature_name.eql(&name));
-            }
-
-            if (!name.valueType().allowsRanges() or !value.checkType(name.valueType())) {
-                return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
-            }
-
-            if (input.tryParse(consumeOperationOrColon, .{false}).asValue()) |end_operator_| {
-                const start_operator = operator.?;
-                const end_operator = end_operator_.?;
-                // Start and end operators must be matching.
-                const GT: u8 = comptime @intFromEnum(MediaFeatureComparison.@"greater-than");
-                const GTE: u8 = comptime @intFromEnum(MediaFeatureComparison.@"greater-than-equal");
-                const LT: u8 = comptime @intFromEnum(MediaFeatureComparison.@"less-than");
-                const LTE: u8 = comptime @intFromEnum(MediaFeatureComparison.@"less-than-equal");
-                const check_val: u8 = @intFromEnum(start_operator) | @intFromEnum(end_operator);
-                switch (check_val) {
-                    GT | GT,
-                    GT | GTE,
-                    GTE | GTE,
-                    LT | LT,
-                    LT | LTE,
-                    LTE | LTE,
-                    => {},
-                    else => return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) },
-                }
-
-                const end_value = switch (MediaFeatureValue.parse(input, name.valueType())) {
-                    .err => |e| return .{ .err = e },
-                    .result => |v| v,
-                };
-                if (!end_value.checkType(name.valueType())) {
+                if (input.isExhausted()) {
                     return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
                 }
-
-                return .{ .result = .{
-                    .interval = .{
-                        .name = name,
-                        .start = value,
-                        .start_operator = start_operator,
-                        .end = end_value,
-                        .end_operator = end_operator,
-                    },
-                } };
+            }
+};
+            _ = input.reset((&start));
+            const value = (switch (MediaFeatureValue.parse(input, name.valueType())) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+            const operator = (switch (consumeOperationOrColon(input, false)) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+            {
+                const parsed_pair = (switch (MediaFeatureName(FeatureId).parse(input)) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+                const feature_name = parsed_pair[0];
+                const blah = parsed_pair[1];
+                _ = &blah;
+                _ = bun.debugAssert(feature_name.eql((&name)));
+            }
+            if (((!name.valueType().allowsRanges()) or (!value.checkType(name.valueType())))) {
+                return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
+            }
+            if (input.tryParse(consumeOperationOrColon, .{ false }).asValue()) |end_operator_| {
+                _ = &end_operator_;
+                const start_operator = operator.?;
+                const end_operator = end_operator_.?;
+                const GT: u8 = (comptime @intFromEnum(MediaFeatureComparison.@"greater-than"));
+                const GTE: u8 = (comptime @intFromEnum(MediaFeatureComparison.@"greater-than-equal"));
+                const LT: u8 = (comptime @intFromEnum(MediaFeatureComparison.@"less-than"));
+                const LTE: u8 = (comptime @intFromEnum(MediaFeatureComparison.@"less-than-equal"));
+                const check_val: u8 = (@intFromEnum(start_operator) | @intFromEnum(end_operator));
+                if (((((((check_val != (GT | GT)) and (check_val != (GT | GTE))) and (check_val != (GTE | GTE))) and (check_val != (LT | LT))) and (check_val != (LT | LTE))) and (check_val != (LTE | LTE)))) {
+                    return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
+                }
+                const end_value = (switch (MediaFeatureValue.parse(input, name.valueType())) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+                if ((!end_value.checkType(name.valueType()))) {
+                    return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
+                }
+                return .{ .result = .{ .interval = .{ .name = name, .start = value, .start_operator = start_operator, .end = end_value, .end_operator = end_operator } } };
             } else {
                 const final_operator = operator.?.opposite();
-                return .{ .result = .{
-                    .range = .{
-                        .name = name,
-                        .operator = final_operator,
-                        .value = value,
-                    },
-                } };
+                return .{ .result = .{ .range = .{ .name = name, .operator = final_operator, .value = value } } };
             }
-        }
-    };
+    }
+    const This = @This();
+};
 }
 
 pub fn consumeOperationOrColon(input: *css.Parser, allow_colon: bool) Result(?MediaFeatureComparison) {
@@ -1468,7 +1412,7 @@ pub fn toCssWithPrefix(self: @This(), prefix: []const u8, dest: *Printer) PrintE
 });
     }
 
-pub fn parse(input: *css.Parser) Result(struct{This,?MediaFeatureComparison}) {
+pub fn parse(input: *css.Parser) Result(struct { This, ?MediaFeatureComparison }) {
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
 return .{ .err = e };
@@ -1499,19 +1443,18 @@ return .{ .err = e };
 };
             var free_str = false;
             _ = &free_str;
-            const final_name = (if (is_webkit) name: {
+            var _name_guard = SliceFreeGuard{ .alloc = input.allocator(), .slice = (if (is_webkit) name: {
             free_str = true;
-            break :name bun.handleOom(std.fmt.allocPrint(input.allocator(), "-webkit-{s}", .{ name }));
-} else name);
-            defer {
-            if (is_webkit) {
-                comptime {
-                _ = std.debug.assert((@typeInfo(FeatureId) == .@"enum"));
+            comptime {
+            _ = std.debug.assert((@typeInfo(FeatureId) == .@"enum"));
 
 }
-                _ = input.allocator().free(final_name);
-            }
-            }
+            break :name bun.handleOom(std.fmt.allocPrint(input.allocator(), "-webkit-{s}", .{ name }));
+} else name), .active = is_webkit };
+            _ = &_name_guard;
+            var ___name_guard_moved = false; _ = &___name_guard_moved;
+            defer if (!___name_guard_moved) { ___name_guard_moved = true; const __T = @TypeOf(_name_guard); if (@typeInfo(__T) == .optional) { if (_name_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _name_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _name_guard; _drop_val.__cp_deinit(); } };
+            const final_name = _name_guard.slice;
             if (css.parse_utility.parseString(input.allocator(), FeatureId, final_name, FeatureId.parse).asValue()) |standard| {
                 _ = &standard;
                 return .{ .result = .{ .{ .standard = standard }, comparator } };
@@ -1539,17 +1482,16 @@ pub fn writeMinMax(operator: *const MediaFeatureComparison, comptime FeatureId: 
             _ = try name.toCss(dest);
         }
         _ = try dest.delim(58, false);
-        var adjusted: ?MediaFeatureValue = (switch (operator.*) {
+        var adjusted_guard = OptValDeinitWithAllocGuard(MediaFeatureValue){ .val = (switch (operator.*) {
 .@"greater-than" => value.deepClone(dest.allocator).addF32(dest.allocator, 0.001),
 .@"less-than" => value.deepClone(dest.allocator).addF32(dest.allocator, -0.001),
 else => null,
-});
-        _ = &adjusted;
-        if (adjusted) |*val| {
+}), .alloc = dest.allocator };
+        _ = &adjusted_guard;
+        var __adjusted_guard_moved = false; _ = &__adjusted_guard_moved;
+        defer if (!__adjusted_guard_moved) { __adjusted_guard_moved = true; const __T = @TypeOf(adjusted_guard); if (@typeInfo(__T) == .optional) { if (adjusted_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { adjusted_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = adjusted_guard; _drop_val.__cp_deinit(); } };
+        if (adjusted_guard.val) |*val| {
             _ = &val;
-            defer {
-            _ = (val.*).deinit(dest.allocator);
-            }
             _ = try (val.*).toCss(dest);
         } else {
             _ = try value.toCss(dest);

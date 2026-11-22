@@ -45,6 +45,22 @@ struct DerefGuard<T> {
     }
 }
 
+struct EntryPointRollbackGuard {
+    map: *EntryPointMap!,
+    index: usize,
+    armed: bool = true,
+
+    fn disarm(*_) {
+        _.armed = false;
+    }
+
+    ~init() {
+        if (_.armed) {
+            _.map.files.swapRemoveAt(_.index);
+        }
+    }
+}
+
 struct CloseGuard<T> {
     ptr: (*T)? = null,
     ~init() {
@@ -155,8 +171,12 @@ pub struct EntryPointMap {
         const k = EntryPointInputFile.init(abs_path, side);
         const gop = (_.files.getOrPut(_.allocator, k))?;
         if (!gop.found_existing) {
-            errdefer _.files.swapRemoveAt(gop.index);
+            let guard = EntryPointRollbackGuard{
+                map: _,
+                index: gop.index,
+            };
             gop.key_ptr.* = EntryPointInputFile.init((_.allocator.dupe(u8, abs_path))?, side);
+            guard.disarm();
         }
         return OpaqueFileId.init(@intCast(gop.index));
     }

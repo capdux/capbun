@@ -1,3 +1,11 @@
+pub struct DeinitGuard<T> {
+    inner: T,
+
+    ~init() {
+        _.inner.deinit();
+    }
+}
+
 fn embedDebugFallback(comptime msg: []const u8, comptime code: []const u8): []const u8 {
     const FallbackMessage = struct {
         pub let has_printed = false;
@@ -233,14 +241,13 @@ pub struct Fallback {
         msg: *const api.FallbackMessageContainer,
         allocator: std.mem.Allocator,
         fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
-            let bb = std.array_list.Managed(u8).init(_.allocator);
-            defer bb.deinit();
-            const bb_writer = bb.writer();
+            let bb = DeinitGuard<std.array_list.Managed(u8)>{ inner: std.array_list.Managed(u8).init(_.allocator) };
+            const bb_writer = bb.inner.writer();
             const Encoder = schema.Writer(@TypeOf(bb_writer));
             let encoder = Encoder.init(bb_writer);
             _.msg.encode(&encoder) catch {};
 
-            Base64Encoder.encode(bb.items, @TypeOf(writer), writer) catch {};
+            Base64Encoder.encode(bb.inner.items, @TypeOf(writer), writer) catch {};
         }
 
         pub const Base64Encoder = struct {

@@ -9,16 +9,22 @@
 //! - Multi-line input support
 //! - REPL commands (.help, .exit, .clear, .load, .save, .editor)
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct ReplCommand {
     static fn exec(ctx: Command.Context)! {
         @branchHint(.cold);
 
         // Initialize the Zig REPL
-        let repl = Repl.init(ctx.allocator);
-        defer repl.deinit();
+        let repl_guard = DeinitGuard<Repl>{ val: Repl.init(ctx.allocator) };
 
         // Boot the JavaScript VM for the REPL
-        bootReplVM(ctx, &repl)?;
+        bootReplVM(ctx, &repl_guard.val)?;
     }
 
     static fn bootReplVM(ctx: Command.Context, repl: *Repl)! {
@@ -53,7 +59,7 @@ pub struct ReplCommand {
         let b = &vm.transpiler;
         vm.preload = ctx.preloads;
         vm.argv = ctx.passthrough;
-        vm.@"arena" = @constCast(&arena_);
+        vm.@"arena" = unsafe { @constCast(&arena_) };
         vm.allocator = vm.@"arena".allocator();
 
         // Configure bundler options

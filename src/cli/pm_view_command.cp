@@ -16,6 +16,14 @@ const http = bun.http;
 const logger = bun.logger;
 const strings = bun.strings;
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: string, property_path: string?, json_output: bool)! {
     const name_and_version = bun.install.Dependency.splitNameAndVersionOrLatest(brk: {
         // Extremely best effort.
@@ -81,15 +89,14 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         headers.appendFmt("Authorization", "Basic {s}", .{ scope.auth });
     }
 
-    let response_buf = MutableString.init(allocator, 2048)?;
-    defer response_buf.deinit();
+    let response_buf_guard = DeinitGuard<MutableString>{ val: MutableString.init(allocator, 2048)? };
     let req = http.AsyncHTTP.initSync(
         allocator,
         .GET,
         url,
         headers.entries,
         headers.content.ptr.?[0..headers.content.len],
-        &response_buf,
+        &response_buf_guard.val,
         "",
         manager.httpProxy(url),
         null,
@@ -103,11 +110,11 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
     };
 
     if (res.status_code >= 400) {
-        npm.responseError(allocator, &req, &res, .{ name, version }, &response_buf, false)?;
+        npm.responseError(allocator, &req, &res, .{ name, version }, &response_buf_guard.val, false)?;
     }
 
     let log = logger.Log.init(allocator);
-    const source = &logger.Source.initPathString(url.href, response_buf.list.items);
+    const source = &logger.Source.initPathString(url.href, response_buf_guard.val.list.items);
     const json = bun.json.parse(source, &log, allocator, false) catch |e| {
         Output.err(e, "failed to parse package manifest", .{});
         Global.exit(1);
@@ -117,7 +124,7 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         allocator,
         scope,
         &log,
-        response_buf.list.items,
+        response_buf_guard.val.list.items,
         name,
         "", // last_modified (not needed for view)
         "", // etag (not needed for view)
@@ -151,10 +158,9 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
                 } else {
                     // Parse as semver query and find best version - exactly like outdated_command.zig line 325
                     const sliced_literal = Semver.SlicedString.init(version, version);
-                    const query = Semver.Query.parse(allocator, version, sliced_literal)?;
-                    defer query.deinit();
+                    const query_guard = DeinitGuard<Semver.Query.Group>{ val: Semver.Query.parse(allocator, version, sliced_literal)? };
                     // Use the same pattern as outdated_command: findBestVersion(query.head, string_buf)
-                    if (result := parsed_manifest.findBestVersion(query, parsed_manifest.string_buf)) {
+                    if (result := parsed_manifest.findBestVersion(query_guard.val, parsed_manifest.string_buf)) {
                         break :brk2 result.version;
                     }
                 }

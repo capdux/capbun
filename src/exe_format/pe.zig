@@ -38,7 +38,7 @@ fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const 
 fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
 fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
 fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
-fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else { return true; } }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
 fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
 fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
 fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
@@ -64,7 +64,7 @@ fn cp_shr(val: anytype, shift: anytype) @TypeOf(val) {
     }
     return val >> shift;
 }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
 pub const Error = error{
@@ -98,6 +98,37 @@ pub const StripMode = enum {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
+
+pub fn OptDeinitGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if ((self.val != null)) {
+                    _ = self.val.?.deinit();
+                }
+        }
+    };
+}
+
+pub fn DestroyGuard(comptime T: type) type {
+    return struct {
+        ptr: ?*T,
+        alloc: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if ((self.ptr != null)) {
+                    _ = self.alloc.destroy(self.ptr.?);
+                }
+        }
+    };
+}
 
 pub const StripOpts = struct {
     require_overlay: bool = true,
@@ -246,43 +277,41 @@ pub fn readSectionHeader(self: PEFile, idx: usize) SectionHeader {
     }
 
 pub fn init(allocator: Allocator, pe_data: []const u8) !*PEFile {
-            var data = try std.array_list.Managed(u8).initCapacity(allocator, (pe_data.len + (64 * 1024)));
-            _ = &data;
-            errdefer {
-            _ = data.deinit();
-            }
-            _ = try data.appendSlice(pe_data);
-            var res = try allocator.create(PEFile);
-            _ = &res;
-            errdefer {
-            _ = allocator.destroy(res);
-            }
-            if ((data.items.len < @sizeOf(DOSHeader))) {
+            var data_guard = OptDeinitGuard(std.array_list.Managed(u8)){ .val = try std.array_list.Managed(u8).initCapacity(allocator, (pe_data.len + (64 * 1024))) };
+            _ = &data_guard;
+            var __data_guard_moved = false; _ = &__data_guard_moved;
+            defer if (!__data_guard_moved) { __data_guard_moved = true; const __T = @TypeOf(data_guard); if (@typeInfo(__T) == .optional) { if (data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = data_guard; _drop_val.__cp_deinit(); } };
+            _ = try data_guard.val.?.appendSlice(pe_data);
+            var res_guard = DestroyGuard(PEFile){ .ptr = try allocator.create(PEFile), .alloc = allocator };
+            _ = &res_guard;
+            var __res_guard_moved = false; _ = &__res_guard_moved;
+            defer if (!__res_guard_moved) { __res_guard_moved = true; const __T = @TypeOf(res_guard); if (@typeInfo(__T) == .optional) { if (res_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { res_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = res_guard; _drop_val.__cp_deinit(); } };
+            if ((data_guard.val.?.items.len < @sizeOf(DOSHeader))) {
                 return error.InvalidPEFile;
             }
-            const dos_header = try readDosAt(data.items, 0);
+            const dos_header = try readDosAt(data_guard.val.?.items, 0);
             if ((dos_header.e_magic != DOS_SIGNATURE)) {
                 return error.InvalidDOSSignature;
             }
             if ((dos_header.e_lfanew < @sizeOf(DOSHeader))) {
                 return error.InvalidPEFile;
             }
-            if (((if (comptime @typeInfo(@TypeOf(dos_header.e_lfanew)) == .@"enum") cp_cast_int(usize, @intFromEnum(dos_header.e_lfanew)) else cp_cast_int(usize, dos_header.e_lfanew)) > (data.items.len -| @sizeOf(PEHeader)))) {
+            if (((if (comptime @typeInfo(@TypeOf(dos_header.e_lfanew)) == .@"enum") cp_cast_int(usize, @intFromEnum(dos_header.e_lfanew)) else cp_cast_int(usize, dos_header.e_lfanew)) > (data_guard.val.?.items.len -| @sizeOf(PEHeader)))) {
                 return error.InvalidPEFile;
             }
             const pe_off = (if (comptime @typeInfo(@TypeOf(dos_header.e_lfanew)) == .@"enum") cp_cast_int(usize, @intFromEnum(dos_header.e_lfanew)) else cp_cast_int(usize, dos_header.e_lfanew));
-            const pe_header = try readPEAt(data.items, pe_off);
+            const pe_header = try readPEAt(data_guard.val.?.items, pe_off);
             if ((pe_header.signature != PE_SIGNATURE)) {
                 return error.InvalidPESignature;
             }
             const optional_header_offset = (pe_off + @sizeOf(PEHeader));
-            if ((data.items.len < (optional_header_offset + (if (comptime @typeInfo(@TypeOf(pe_header.size_of_optional_header)) == .@"enum") cp_cast_int(usize, @intFromEnum(pe_header.size_of_optional_header)) else cp_cast_int(usize, pe_header.size_of_optional_header))))) {
+            if ((data_guard.val.?.items.len < (optional_header_offset + (if (comptime @typeInfo(@TypeOf(pe_header.size_of_optional_header)) == .@"enum") cp_cast_int(usize, @intFromEnum(pe_header.size_of_optional_header)) else cp_cast_int(usize, pe_header.size_of_optional_header))))) {
                 return error.InvalidPEFile;
             }
             if ((pe_header.size_of_optional_header < @sizeOf(OptionalHeader64))) {
                 return error.InvalidPEFile;
             }
-            const optional_header = try readOptAt(data.items, optional_header_offset);
+            const optional_header = try readOptAt(data_guard.val.?.items, optional_header_offset);
             if ((optional_header.magic != OPTIONAL_HEADER_MAGIC_64)) {
                 return error.UnsupportedPEFormat;
             }
@@ -300,10 +329,10 @@ pub fn init(allocator: Allocator, pe_data: []const u8) !*PEFile {
                 return error.TooManySections;
             }
             const section_headers_size = (@sizeOf(SectionHeader) * (if (comptime @typeInfo(@TypeOf(num_sections)) == .@"enum") cp_cast_int(usize, @intFromEnum(num_sections)) else cp_cast_int(usize, num_sections)));
-            if ((data.items.len < (section_headers_offset + section_headers_size))) {
+            if ((data_guard.val.?.items.len < (section_headers_offset + section_headers_size))) {
                 return error.InvalidPEFile;
             }
-            var first_raw = (if (comptime @typeInfo(@TypeOf(data.items.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(data.items.len)) else cp_cast_int(u32, data.items.len));
+            var first_raw = (if (comptime @typeInfo(@TypeOf(data_guard.val.?.items.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(data_guard.val.?.items.len)) else cp_cast_int(u32, data_guard.val.?.items.len));
             _ = &first_raw;
             var last_file_end: u32 = 0;
             _ = &last_file_end;
@@ -315,7 +344,7 @@ pub fn init(allocator: Allocator, pe_data: []const u8) !*PEFile {
             while ((s_idx < num_sections)) : (s_idx = (s_idx + 1)) {
                 const sh_off = (section_headers_offset + (s_idx * sh_sz));
                 const section = (blk: {
-                break :blk (std.mem.bytesAsValue(SectionHeader, data.items[sh_off..][0..sh_sz])).*;
+                break :blk (std.mem.bytesAsValue(SectionHeader, data_guard.val.?.items[sh_off..][0..sh_sz])).*;
 
 });
                 if ((section.size_of_raw_data > 0)) {
@@ -334,9 +363,12 @@ pub fn init(allocator: Allocator, pe_data: []const u8) !*PEFile {
                     last_va_end = va_end;
                 }
             }
+            const res = res_guard.ptr.?;
             {
-                res.* = PEFile{ .data = data, .allocator = allocator, .dos_header_offset = 0, .pe_header_offset = pe_off, .optional_header_offset = optional_header_offset, .section_headers_offset = section_headers_offset, .num_sections = num_sections, .first_raw = first_raw, .last_file_end = last_file_end, .last_va_end = last_va_end };
+                res.* = PEFile{ .data = data_guard.val.?, .allocator = allocator, .dos_header_offset = 0, .pe_header_offset = pe_off, .optional_header_offset = optional_header_offset, .section_headers_offset = section_headers_offset, .num_sections = num_sections, .first_raw = first_raw, .last_file_end = last_file_end, .last_va_end = last_va_end };
             }
+            data_guard.val = null;
+            res_guard.ptr = null;
             return res;
     }
 
@@ -526,7 +558,7 @@ pub fn addBunSection(self: *PEFile, data_to_embed: []const u8, strip: StripMode)
             _ = try self.recomputePEChecksum();
     }
 
-pub fn getBunSectionData(self: PEFile) ![]const u8 {
+pub fn getBunSectionData(self: *const PEFile) ![]const u8 {
             _ = try self.checkSectionHeadersBounds();
             var s_idx: usize = 0;
             _ = &s_idx;

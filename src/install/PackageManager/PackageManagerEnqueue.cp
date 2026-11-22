@@ -45,6 +45,14 @@ const assignRootResolution = PackageManager.assignRootResolution;
 const debug = PackageManager.debug;
 const failRootResolution = PackageManager.failRootResolution;
 
+struct FreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub fn enqueueDependencyWithMain(
     mgr: *PackageManager,
     id: DependencyID,
@@ -457,7 +465,7 @@ pub fn enqueueNetworkTask(client: *PackageManager, task: *NetworkTask) {
 }
 
 pub fn enqueuePatchTask(client: *PackageManager, task: *PatchTask) {
-    debug("Enqueue patch task: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) });
+    unsafe { debug("Enqueue patch task: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) }); }
     if (client.patch_task_fifo.writableLength() == 0) {
         client.flushPatchTaskQueue();
     }
@@ -467,7 +475,7 @@ pub fn enqueuePatchTask(client: *PackageManager, task: *PatchTask) {
 
 /// We need to calculate all the patchfile hashes at the beginning so we don't run into problems with stale hashes
 pub fn enqueuePatchTaskPre(client: *PackageManager, task: *PatchTask) {
-    debug("Enqueue patch task pre: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) });
+    unsafe { debug("Enqueue patch task pre: 0x{x} {s}", .{ @intFromPtr(task), @tagName(task.callback) }); }
     task.pre = true;
     if (client.patch_task_fifo.writableLength() == 0) {
         client.flushPatchTaskQueue();
@@ -987,7 +995,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
             }
 
             const url = mgr.allocGitHubURL(dep);
-            defer mgr.allocator.free(url);
+            const _url_guard = FreeGuard<@TypeOf(url)>{ alloc: mgr.allocator, slice: url };
             const task_id = Task.Id.forTarball(url);
             let entry = mgr.task_queue.getOrPutContext(mgr.allocator, task_id, {}) catch unreachable;
             if (!entry.found_existing) {

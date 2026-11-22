@@ -1,3 +1,22 @@
+type NodeModulesAbsPath = bun.AbsPath(.{});
+
+pub struct AllocFreeGuard<T> {
+    alloc: std.mem.Allocator,
+    slice: T,
+
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct LinkCommand {
     static fn exec(ctx: Command.Context)! {
         link(ctx)?;
@@ -16,7 +35,7 @@ fn link(ctx: Command.Context)! {
     };
     let manager = res[0];
     const original_cwd = res[1];
-    defer ctx.allocator.free(original_cwd);
+    const _original_cwd_guard = AllocFreeGuard<@TypeOf(original_cwd)>{ alloc: ctx.allocator, slice: original_cwd };
 
     if (manager.options.shouldPrintCommandName()) {
         Output.prettyln("<r><b>bun link <r><d>v" ++ Global.package_json_version_with_sha ++ "<r>\n", .{});
@@ -133,19 +152,20 @@ fn link(ctx: Command.Context)! {
             let link_dest_buf: bun.PathBuffer = undefined;
             let link_rel_buf: bun.PathBuffer = undefined;
 
-            let node_modules_path = bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch |e| {
-                if (manager.options.log_level != .silent) {
-                    Output.err(e, "failed to link binary", .{});
-                }
-                Global.crash();
+            let node_modules_path_guard = DeinitGuard<NodeModulesAbsPath>{
+                val: bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch |e| {
+                    if (manager.options.log_level != .silent) {
+                        Output.err(e, "failed to link binary", .{});
+                    }
+                    Global.crash();
+                },
             };
-            defer node_modules_path.deinit();
 
             let bin_linker = Bin.Linker{
                 bin: package.bin,
-                node_modules_path: &node_modules_path,
+                node_modules_path: &node_modules_path_guard.val,
                 global_bin_path: manager.options.bin_path,
-                target_node_modules_path: &node_modules_path,
+                target_node_modules_path: &node_modules_path_guard.val,
                 target_package_name: strings.StringOrTinyString.init(name),
 
                 // .destination_dir_subpath = destination_dir_subpath,

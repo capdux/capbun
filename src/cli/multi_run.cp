@@ -3,6 +3,14 @@ type cstr = [*:0]const u8;
 type OptCstr = cstr?;
 type ScriptsMap = *const bun.StringArrayHashMap(string);
 
+pub struct DeinitGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 pub struct ScriptConfig {
     label: []const u8,
     command: [:0]const u8,
@@ -85,12 +93,11 @@ pub struct ProcessHandle {
 
         _.start_time = std.time.Instant.now() catch null;
         let spawned: bun.spawn.process.SpawnProcessResult = brk: {
-            let arena_ = std.heap.ArenaAllocator.init(bun.default_allocator);
-            defer arena_.deinit();
+            let arena_guard = DeinitGuard<std.heap.ArenaAllocator>{ val: std.heap.ArenaAllocator.init(bun.default_allocator) };
             const original_path = _.state.env.map.get("PATH") ?? "";
             bun.handleOom(_.state.env.map.put("PATH", _.config.PATH));
             defer bun.handleOom(_.state.env.map.put("PATH", original_path));
-            const envp = _.state.env.map.createNullDelimitedEnvMap(arena_.allocator())?;
+            const envp = _.state.env.map.createNullDelimitedEnvMap(arena_guard.val.allocator())?;
             const argv_ptr: [*:null]OptCstr = unsafe { @ptrCast(&argv) };
             const spawn_res = bun.spawn.spawnProcess(&_.options, argv_ptr, envp)?;
             break :brk spawn_res.unwrap()?;

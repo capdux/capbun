@@ -67,7 +67,7 @@ fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const
 fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const css = @import("../css_parser.zig");
 pub const bun = @import("bun");
@@ -186,6 +186,65 @@ else => false,
     pub const deepClone = css_impl.deepClone;
 };
 
+pub fn OptValDeinitWithAllocGuard(comptime T: type) type {
+    return struct {
+        val: ?T,
+        alloc: Allocator,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                if (self.val) |*v| {
+                    _ = &v;
+                    _ = (v.*).deinit(self.alloc);
+                }
+        }
+    };
+}
+
+pub const ClipsDeinitGuard = struct {
+    val: ?ClipsAndPrefix,
+    alloc: Allocator,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ClipsDeinitGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            if ((self.val != null)) {
+                const c = (&self.val.?);
+                _ = c[0].deinit(self.alloc);
+            }
+    }
+};
+
+pub const ClearListsGuard = struct {
+    images: *css.SmallList(Image, 1),
+    x_positions: *css.SmallList(HorizontalPosition, 1),
+    y_positions: *css.SmallList(VerticalPosition, 1),
+    repeats: *css.SmallList(BackgroundRepeat, 1),
+    sizes: *css.SmallList(BackgroundSize, 1),
+    attachments: *css.SmallList(BackgroundAttachment, 1),
+    origins: *css.SmallList(BackgroundOrigin, 1),
+    clips: *ClipsAndPrefix,
+    __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *ClearListsGuard) void {
+        if (self.__cp_dropped) return;
+        self.__cp_dropped = true;
+            {
+                _ = self.images.clearRetainingCapacity();
+                _ = self.x_positions.clearRetainingCapacity();
+                _ = self.y_positions.clearRetainingCapacity();
+                _ = self.repeats.clearRetainingCapacity();
+                _ = self.sizes.clearRetainingCapacity();
+                _ = self.attachments.clearRetainingCapacity();
+                _ = self.origins.clearRetainingCapacity();
+                _ = self.clips.*[0].clearRetainingCapacity();
+            }
+    }
+};
+
 pub const Background = struct {
     image: Image,
     color: CssColor,
@@ -229,7 +288,7 @@ pub fn parse(input: *css.Parser) css.Result(@This()) {
                     if (input.tryParse(BackgroundPosition.parse, .{}).asValue()) |value| {
                         _ = &value;
                         position = value;
-                        size = input.tryParse(struct {
+                        size = input.tryParse((struct {
 
 pub fn parse(i: *css.Parser) css.Result(BackgroundSize) {
             if (i.expectDelim(47).asErr()) |e| {
@@ -238,7 +297,7 @@ pub fn parse(i: *css.Parser) css.Result(BackgroundSize) {
             }
             return BackgroundSize.parse(i);
     }
-}.parse, .{}).asValue();
+}).parse, .{}).asValue();
                         continue;
                     }
                 }
@@ -352,7 +411,7 @@ pub fn toCss(self: Background, dest: *Printer) PrintErr!void {
             }
     }
 
-pub fn getImage(self: Background) *const Image {
+pub fn getImage(self: *const Background) *const Image {
             return (&self.image);
     }
 
@@ -616,14 +675,14 @@ else => null,
 
 pub const BackgroundHandler = struct {
     color: ?CssColor = null,
-    images: ?css.SmallList(Image,1) = null,
+    images: ?css.SmallList(Image, 1) = null,
     has_prefix: bool = false,
-    x_positions: ?css.SmallList(HorizontalPosition,1) = null,
-    y_positions: ?css.SmallList(VerticalPosition,1) = null,
-    repeats: ?css.SmallList(BackgroundRepeat,1) = null,
-    sizes: ?css.SmallList(BackgroundSize,1) = null,
-    attachments: ?css.SmallList(BackgroundAttachment,1) = null,
-    origins: ?css.SmallList(BackgroundOrigin,1) = null,
+    x_positions: ?css.SmallList(HorizontalPosition, 1) = null,
+    y_positions: ?css.SmallList(VerticalPosition, 1) = null,
+    repeats: ?css.SmallList(BackgroundRepeat, 1) = null,
+    sizes: ?css.SmallList(BackgroundSize, 1) = null,
+    attachments: ?css.SmallList(BackgroundAttachment, 1) = null,
+    origins: ?css.SmallList(BackgroundOrigin, 1) = null,
     clips: ?ClipsAndPrefix = null,
     decls: ArrayList(Property) = undefined,
     flushed_properties: BackgroundProperty = undefined,
@@ -695,11 +754,11 @@ if (self.origins) |*origins| {
             self.origins = val.deepClone(allocator);
 },
 .@"background-clip" => |*x| {
-const val: *const SmallList(BackgroundClip,1) = (&x.*[0]);
+const val: *const SmallList(BackgroundClip, 1) = (&x.*[0]);
             const vendor_prefix: VendorPrefix = x.*[1];
             if ((self.clips != null)) {
                 const clips_and_vp = (&self.clips.?);
-                var clips: *SmallList(BackgroundClip,1) = (&clips_and_vp[0]);
+                var clips: *SmallList(BackgroundClip, 1) = (&clips_and_vp[0]);
                 _ = &clips;
                 const vp: *VendorPrefix = (&clips_and_vp[1]);
                 if (((vendor_prefix != vp.*) and (!val.eql(clips)))) {
@@ -816,12 +875,12 @@ pub fn initSmallListHelper(self: *BackgroundHandler, comptime T: type, comptime 
 
 pub fn backgroundHelper(self: *BackgroundHandler, allocator: Allocator, comptime T: type, val: *const T, property: *const Property, dest: *css.DeclarationList, context: *css.PropertyHandlerContext) void {
             _ = self.flushHelper(allocator, "images", T, val, dest, context);
-            self.has_prefix = val.any(struct {
+            self.has_prefix = val.any((struct {
 
 pub fn predicate(item: *const Image) bool {
             return item.hasVendorPrefix();
     }
-}.predicate);
+}).predicate);
             if (self.has_prefix) {
                 _ = bun.handleOom(self.decls.append(allocator, property.deepClone(allocator)));
             } else {
@@ -842,118 +901,113 @@ pub fn flush(self: *BackgroundHandler, allocator: Allocator, dest: *css.Declarat
                 return;
             }
             self.has_any = false;
-            const push = struct {
+            const push = (struct {
 
 pub fn push(handler: *BackgroundHandler, alloc: Allocator, d: *css.DeclarationList, comptime property_field_name: []const u8, val: anytype) void {
             _ = bun.handleOom(d.append(alloc, @unionInit(Property, property_field_name, val)));
             const prop = @field(BackgroundProperty, property_field_name);
             _ = bun.bits.insert(BackgroundProperty, (&handler.flushed_properties), prop);
     }
-}.push;
-            var maybe_color: ?CssColor = bun.take((&self.color));
-            _ = &maybe_color;
-            var maybe_images: ?css.SmallList(Image,1) = bun.take((&self.images));
-            _ = &maybe_images;
-            var maybe_x_positions: ?css.SmallList(HorizontalPosition,1) = bun.take((&self.x_positions));
-            _ = &maybe_x_positions;
-            var maybe_y_positions: ?css.SmallList(VerticalPosition,1) = bun.take((&self.y_positions));
-            _ = &maybe_y_positions;
-            var maybe_repeats: ?css.SmallList(BackgroundRepeat,1) = bun.take((&self.repeats));
-            _ = &maybe_repeats;
-            var maybe_sizes: ?css.SmallList(BackgroundSize,1) = bun.take((&self.sizes));
-            _ = &maybe_sizes;
-            var maybe_attachments: ?css.SmallList(BackgroundAttachment,1) = bun.take((&self.attachments));
-            _ = &maybe_attachments;
-            var maybe_origins: ?css.SmallList(BackgroundOrigin,1) = bun.take((&self.origins));
-            _ = &maybe_origins;
-            var maybe_clips: ?ClipsAndPrefix = bun.take((&self.clips));
-            _ = &maybe_clips;
-            defer {
-            {
-                if (maybe_color) |*c| {
-                    _ = &c;
-                    _ = (c.*).deinit(allocator);
-                }
-                if (maybe_images) |*i| {
-                    _ = &i;
-                    _ = (i.*).deinit(allocator);
-                }
-                if (maybe_x_positions) |*x| {
-                    _ = &x;
-                    _ = (x.*).deinit(allocator);
-                }
-                if (maybe_y_positions) |*y| {
-                    _ = &y;
-                    _ = (y.*).deinit(allocator);
-                }
-                if (maybe_repeats) |*r| {
-                    _ = &r;
-                    _ = (r.*).deinit(allocator);
-                }
-                if (maybe_sizes) |*s| {
-                    _ = &s;
-                    _ = (s.*).deinit(allocator);
-                }
-                if (maybe_attachments) |*a| {
-                    _ = &a;
-                    _ = (a.*).deinit(allocator);
-                }
-                if (maybe_origins) |*o| {
-                    _ = &o;
-                    _ = (o.*).deinit(allocator);
-                }
-                if ((maybe_clips != null)) {
-                    const c = (&maybe_clips.?);
-                    _ = c[0].deinit(allocator);
-                }
-            }
-            }
-            if ((((((((((maybe_color != null) and (maybe_images != null)) and (maybe_x_positions != null)) and (maybe_y_positions != null)) and (maybe_repeats != null)) and (maybe_sizes != null)) and (maybe_attachments != null)) and (maybe_origins != null)) and (maybe_clips != null))) {
-                const color = (&maybe_color.?);
-                var images = (&maybe_images.?);
-                _ = &images;
-                var x_positions = (&maybe_x_positions.?);
-                _ = &x_positions;
-                var y_positions = (&maybe_y_positions.?);
-                _ = &y_positions;
-                var repeats = (&maybe_repeats.?);
-                _ = &repeats;
-                var sizes = (&maybe_sizes.?);
-                _ = &sizes;
-                var attachments = (&maybe_attachments.?);
-                _ = &attachments;
-                var origins = (&maybe_origins.?);
-                _ = &origins;
-                var clips = (&maybe_clips.?);
-                _ = &clips;
-                const len = images.len();
-                if ((((((((x_positions.len() == len) and (y_positions.len() == len)) and (repeats.len() == len)) and (sizes.len() == len)) and (attachments.len() == len)) and (origins.len() == len)) and (clips[0].len() == len))) {
-                    const clip_prefixes = (if (clips.*[0].any(struct {
+}).push;
+            var maybe_color_guard = OptValDeinitWithAllocGuard(CssColor){ .val = bun.take((&self.color)), .alloc = allocator };
+            _ = &maybe_color_guard;
+            var __maybe_color_guard_moved = false; _ = &__maybe_color_guard_moved;
+            defer if (!__maybe_color_guard_moved) { __maybe_color_guard_moved = true; const __T = @TypeOf(maybe_color_guard); if (@typeInfo(__T) == .optional) { if (maybe_color_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_color_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_color_guard; _drop_val.__cp_deinit(); } };
+            var maybe_images_guard = OptValDeinitWithAllocGuard(css.SmallList(Image, 1)){ .val = bun.take((&self.images)), .alloc = allocator };
+            _ = &maybe_images_guard;
+            var __maybe_images_guard_moved = false; _ = &__maybe_images_guard_moved;
+            defer if (!__maybe_images_guard_moved) { __maybe_images_guard_moved = true; const __T = @TypeOf(maybe_images_guard); if (@typeInfo(__T) == .optional) { if (maybe_images_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_images_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_images_guard; _drop_val.__cp_deinit(); } };
+            var maybe_x_positions_guard = OptValDeinitWithAllocGuard(css.SmallList(HorizontalPosition, 1)){ .val = bun.take((&self.x_positions)), .alloc = allocator };
+            _ = &maybe_x_positions_guard;
+            var __maybe_x_positions_guard_moved = false; _ = &__maybe_x_positions_guard_moved;
+            defer if (!__maybe_x_positions_guard_moved) { __maybe_x_positions_guard_moved = true; const __T = @TypeOf(maybe_x_positions_guard); if (@typeInfo(__T) == .optional) { if (maybe_x_positions_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_x_positions_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_x_positions_guard; _drop_val.__cp_deinit(); } };
+            var maybe_y_positions_guard = OptValDeinitWithAllocGuard(css.SmallList(VerticalPosition, 1)){ .val = bun.take((&self.y_positions)), .alloc = allocator };
+            _ = &maybe_y_positions_guard;
+            var __maybe_y_positions_guard_moved = false; _ = &__maybe_y_positions_guard_moved;
+            defer if (!__maybe_y_positions_guard_moved) { __maybe_y_positions_guard_moved = true; const __T = @TypeOf(maybe_y_positions_guard); if (@typeInfo(__T) == .optional) { if (maybe_y_positions_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_y_positions_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_y_positions_guard; _drop_val.__cp_deinit(); } };
+            var maybe_repeats_guard = OptValDeinitWithAllocGuard(css.SmallList(BackgroundRepeat, 1)){ .val = bun.take((&self.repeats)), .alloc = allocator };
+            _ = &maybe_repeats_guard;
+            var __maybe_repeats_guard_moved = false; _ = &__maybe_repeats_guard_moved;
+            defer if (!__maybe_repeats_guard_moved) { __maybe_repeats_guard_moved = true; const __T = @TypeOf(maybe_repeats_guard); if (@typeInfo(__T) == .optional) { if (maybe_repeats_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_repeats_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_repeats_guard; _drop_val.__cp_deinit(); } };
+            var maybe_sizes_guard = OptValDeinitWithAllocGuard(css.SmallList(BackgroundSize, 1)){ .val = bun.take((&self.sizes)), .alloc = allocator };
+            _ = &maybe_sizes_guard;
+            var __maybe_sizes_guard_moved = false; _ = &__maybe_sizes_guard_moved;
+            defer if (!__maybe_sizes_guard_moved) { __maybe_sizes_guard_moved = true; const __T = @TypeOf(maybe_sizes_guard); if (@typeInfo(__T) == .optional) { if (maybe_sizes_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_sizes_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_sizes_guard; _drop_val.__cp_deinit(); } };
+            var maybe_attachments_guard = OptValDeinitWithAllocGuard(css.SmallList(BackgroundAttachment, 1)){ .val = bun.take((&self.attachments)), .alloc = allocator };
+            _ = &maybe_attachments_guard;
+            var __maybe_attachments_guard_moved = false; _ = &__maybe_attachments_guard_moved;
+            defer if (!__maybe_attachments_guard_moved) { __maybe_attachments_guard_moved = true; const __T = @TypeOf(maybe_attachments_guard); if (@typeInfo(__T) == .optional) { if (maybe_attachments_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_attachments_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_attachments_guard; _drop_val.__cp_deinit(); } };
+            var maybe_origins_guard = OptValDeinitWithAllocGuard(css.SmallList(BackgroundOrigin, 1)){ .val = bun.take((&self.origins)), .alloc = allocator };
+            _ = &maybe_origins_guard;
+            var __maybe_origins_guard_moved = false; _ = &__maybe_origins_guard_moved;
+            defer if (!__maybe_origins_guard_moved) { __maybe_origins_guard_moved = true; const __T = @TypeOf(maybe_origins_guard); if (@typeInfo(__T) == .optional) { if (maybe_origins_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_origins_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_origins_guard; _drop_val.__cp_deinit(); } };
+            var maybe_clips_guard = ClipsDeinitGuard{ .val = bun.take((&self.clips)), .alloc = allocator };
+            _ = &maybe_clips_guard;
+            var __maybe_clips_guard_moved = false; _ = &__maybe_clips_guard_moved;
+            defer if (!__maybe_clips_guard_moved) { __maybe_clips_guard_moved = true; const __T = @TypeOf(maybe_clips_guard); if (@typeInfo(__T) == .optional) { if (maybe_clips_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { maybe_clips_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = maybe_clips_guard; _drop_val.__cp_deinit(); } };
+            if ((((((((((maybe_color_guard.val != null) and (maybe_images_guard.val != null)) and (maybe_x_positions_guard.val != null)) and (maybe_y_positions_guard.val != null)) and (maybe_repeats_guard.val != null)) and (maybe_sizes_guard.val != null)) and (maybe_attachments_guard.val != null)) and (maybe_origins_guard.val != null)) and (maybe_clips_guard.val != null))) {
+                const bg_color = (&maybe_color_guard.val.?);
+                var bg_images = (&maybe_images_guard.val.?);
+                _ = &bg_images;
+                var bg_x_positions = (&maybe_x_positions_guard.val.?);
+                _ = &bg_x_positions;
+                var bg_y_positions = (&maybe_y_positions_guard.val.?);
+                _ = &bg_y_positions;
+                var bg_repeats = (&maybe_repeats_guard.val.?);
+                _ = &bg_repeats;
+                var bg_sizes = (&maybe_sizes_guard.val.?);
+                _ = &bg_sizes;
+                var bg_attachments = (&maybe_attachments_guard.val.?);
+                _ = &bg_attachments;
+                var bg_origins = (&maybe_origins_guard.val.?);
+                _ = &bg_origins;
+                var bg_clips = (&maybe_clips_guard.val.?);
+                _ = &bg_clips;
+                const len = bg_images.len();
+                if ((((((((bg_x_positions.len() == len) and (bg_y_positions.len() == len)) and (bg_repeats.len() == len)) and (bg_sizes.len() == len)) and (bg_attachments.len() == len)) and (bg_origins.len() == len)) and (bg_clips[0].len() == len))) {
+                    const clip_prefixes = (if (bg_clips.*[0].any((struct {
 
 pub fn predicate(clip: *const BackgroundClip) bool {
             return (clip.* == BackgroundClip.text);
     }
-}.predicate)) context.targets.prefixes(clips.*[1], .background_clip) else clips.*[1]);
-                    const clip_property = (if ((clip_prefixes != css.VendorPrefix{ .none = true })) css.Property{ .@"background-clip" = .{ clips.*[0].deepClone(allocator), clip_prefixes } } else null);
+}).predicate)) context.targets.prefixes(bg_clips.*[1], .background_clip) else bg_clips.*[1]);
+                    const clip_property = (if ((clip_prefixes != css.VendorPrefix{ .none = true })) css.Property{ .@"background-clip" = .{ bg_clips.*[0].deepClone(allocator), clip_prefixes } } else null);
                     var backgrounds = SmallList(Background, 1).initCapacity(allocator, len);
                     _ = &backgrounds;
                     var i: usize = 0;
                     _ = &i;
                     while ((i < len)) : (i = (i + 1)) {
-                        _ = backgrounds.appendAssumeCapacity(Background{ .color = (if ((i == (len - 1))) color.deepClone(allocator) else CssColor.default()), .image = images.slice()[@as(usize, @intCast(i))], .position = BackgroundPosition{ .x = x_positions.slice()[@as(usize, @intCast(i))], .y = y_positions.slice()[@as(usize, @intCast(i))] }, .repeat = repeats.slice()[@as(usize, @intCast(i))], .size = sizes.slice()[@as(usize, @intCast(i))], .attachment = attachments.slice()[@as(usize, @intCast(i))], .origin = origins.slice()[@as(usize, @intCast(i))], .clip = (if ((clip_prefixes == css.VendorPrefix{ .none = true })) clips.*[0].slice()[@as(usize, @intCast(i))] else BackgroundClip.default()) });
+                        _ = backgrounds.appendAssumeCapacity(Background{ .color = (if ((i == (len - 1))) bg_color.deepClone(allocator) else CssColor.default()), .image = bg_images.slice()[@as(usize, @intCast(i))], .position = BackgroundPosition{ .x = bg_x_positions.slice()[@as(usize, @intCast(i))], .y = bg_y_positions.slice()[@as(usize, @intCast(i))] }, .repeat = bg_repeats.slice()[@as(usize, @intCast(i))], .size = bg_sizes.slice()[@as(usize, @intCast(i))], .attachment = bg_attachments.slice()[@as(usize, @intCast(i))], .origin = bg_origins.slice()[@as(usize, @intCast(i))], .clip = (if ((clip_prefixes == css.VendorPrefix{ .none = true })) bg_clips.*[0].slice()[@as(usize, @intCast(i))] else BackgroundClip.default()) });
                     }
-                    defer {
-                    {
-                        _ = images.clearRetainingCapacity();
-                        _ = x_positions.clearRetainingCapacity();
-                        _ = y_positions.clearRetainingCapacity();
-                        _ = repeats.clearRetainingCapacity();
-                        _ = sizes.clearRetainingCapacity();
-                        _ = attachments.clearRetainingCapacity();
-                        _ = origins.clearRetainingCapacity();
-                        _ = clips.*[0].clearRetainingCapacity();
-                    }
-                    }
+                    var _clear_guard = ClearListsGuard{ .images = (blk: {
+                    break :blk (&bg_images.*);
+
+}), .x_positions = (blk: {
+                    break :blk (&bg_x_positions.*);
+
+}), .y_positions = (blk: {
+                    break :blk (&bg_y_positions.*);
+
+}), .repeats = (blk: {
+                    break :blk (&bg_repeats.*);
+
+}), .sizes = (blk: {
+                    break :blk (&bg_sizes.*);
+
+}), .attachments = (blk: {
+                    break :blk (&bg_attachments.*);
+
+}), .origins = (blk: {
+                    break :blk (&bg_origins.*);
+
+}), .clips = (blk: {
+                    break :blk (&bg_clips.*);
+
+}) };
+                    _ = &_clear_guard;
+                    var ___clear_guard_moved = false; _ = &___clear_guard_moved;
+                    defer if (!___clear_guard_moved) { ___clear_guard_moved = true; const __T = @TypeOf(_clear_guard); if (@typeInfo(__T) == .optional) { if (_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _clear_guard; _drop_val.__cp_deinit(); } };
+                    _ = (&_clear_guard);
                     if (self.flushed_properties.isEmpty()) {
                         for (cp_iter_slice(backgrounds.getFallbacks(allocator, context.targets).slice())) |fallback| {
                             _ = &fallback;
@@ -970,7 +1024,7 @@ pub fn predicate(clip: *const BackgroundClip) bool {
                     return;
                 }
             }
-            if (bun.take((&maybe_color))) |color_const| {
+            if (bun.take((&maybe_color_guard.val))) |color_const| {
                 _ = &color_const;
                 var color: CssColor = color_const;
                 _ = &color;
@@ -982,9 +1036,9 @@ pub fn predicate(clip: *const BackgroundClip) bool {
                 }
                 _ = push(self, allocator, dest, "background-color", color);
             }
-            if (bun.take((&maybe_images))) |images_| {
+            if (bun.take((&maybe_images_guard.val))) |images_| {
                 _ = &images_;
-                var images: css.SmallList(Image,1) = images_;
+                var images: css.SmallList(Image, 1) = images_;
                 _ = &images;
                 if ((!self.flushed_properties.image)) {
                     var fallbacks = images.getFallbacks(allocator, context.targets);
@@ -996,56 +1050,56 @@ pub fn predicate(clip: *const BackgroundClip) bool {
                 }
                 _ = push(self, allocator, dest, "background-image", images);
             }
-            if ((((maybe_x_positions != null) and (maybe_y_positions != null)) and (maybe_x_positions.?.len() == maybe_y_positions.?.len()))) {
-                var positions = SmallList(BackgroundPosition, 1).initCapacity(allocator, maybe_x_positions.?.len());
+            if ((((maybe_x_positions_guard.val != null) and (maybe_y_positions_guard.val != null)) and (maybe_x_positions_guard.val.?.len() == maybe_y_positions_guard.val.?.len()))) {
+                var positions = SmallList(BackgroundPosition, 1).initCapacity(allocator, maybe_x_positions_guard.val.?.len());
                 _ = &positions;
                 var i: usize = 0;
                 _ = &i;
-                const x_slice = maybe_x_positions.?.slice();
-                const y_slice = maybe_y_positions.?.slice();
-                while ((i < maybe_x_positions.?.len())) : (i = (i + 1)) {
+                const x_slice = maybe_x_positions_guard.val.?.slice();
+                const y_slice = maybe_y_positions_guard.val.?.slice();
+                while ((i < maybe_x_positions_guard.val.?.len())) : (i = (i + 1)) {
                     _ = positions.appendAssumeCapacity(BackgroundPosition{ .x = x_slice[@as(usize, @intCast(i))], .y = y_slice[@as(usize, @intCast(i))] });
                 }
-                _ = maybe_x_positions.?.clearRetainingCapacity();
-                _ = maybe_y_positions.?.clearRetainingCapacity();
+                _ = maybe_x_positions_guard.val.?.clearRetainingCapacity();
+                _ = maybe_y_positions_guard.val.?.clearRetainingCapacity();
                 _ = push(self, allocator, dest, "background-position", positions);
             } else {
-                if (bun.take((&maybe_x_positions))) |x| {
+                if (bun.take((&maybe_x_positions_guard.val))) |x| {
                     _ = &x;
                     _ = push(self, allocator, dest, "background-position-x", x);
                 }
-                if (bun.take((&maybe_y_positions))) |y| {
+                if (bun.take((&maybe_y_positions_guard.val))) |y| {
                     _ = &y;
                     _ = push(self, allocator, dest, "background-position-y", y);
                 }
             }
-            if (bun.take((&maybe_repeats))) |rep| {
+            if (bun.take((&maybe_repeats_guard.val))) |rep| {
                 _ = &rep;
                 _ = push(self, allocator, dest, "background-repeat", rep);
             }
-            if (bun.take((&maybe_sizes))) |rep| {
+            if (bun.take((&maybe_sizes_guard.val))) |rep| {
                 _ = &rep;
                 _ = push(self, allocator, dest, "background-size", rep);
             }
-            if (bun.take((&maybe_attachments))) |rep| {
+            if (bun.take((&maybe_attachments_guard.val))) |rep| {
                 _ = &rep;
                 _ = push(self, allocator, dest, "background-attachment", rep);
             }
-            if (bun.take((&maybe_origins))) |rep| {
+            if (bun.take((&maybe_origins_guard.val))) |rep| {
                 _ = &rep;
                 _ = push(self, allocator, dest, "background-origin", rep);
             }
-            if (bun.take((&maybe_clips))) |c| {
+            if (bun.take((&maybe_clips_guard.val))) |c| {
                 _ = &c;
-                const clips = c[0];
+                const bg_clips = c[0];
                 const vp = c[1];
-                const prefixes = (if (clips.any(struct {
+                const prefixes = (if (bg_clips.any((struct {
 
 pub fn predicate(clip: *const BackgroundClip) bool {
             return (clip.* == BackgroundClip.text);
     }
-}.predicate)) context.targets.prefixes(vp, css.prefixes.Feature.background_clip) else vp);
-                _ = (blk_catch_0: { break :blk_catch_0 ((dest.append(allocator, Property{ .@"background-clip" = .{ clips.deepClone(allocator), prefixes } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+}).predicate)) context.targets.prefixes(vp, css.prefixes.Feature.background_clip) else vp);
+                _ = (blk_catch_0: { break :blk_catch_0 ((dest.append(allocator, Property{ .@"background-clip" = .{ bg_clips.deepClone(allocator), prefixes } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
                 self.flushed_properties.clip = true;
             }
             _ = self.reset(allocator);

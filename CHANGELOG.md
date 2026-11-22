@@ -2095,3 +2095,6 @@
 ## [2026-11-22 Wave #32] RAII `~init()` 与 `unsafe {}` 改造（3-defer 清零 7 模块 + 2-defer 首批 6 模块）
 - 3-defer 收尾 (7): `Debugger`, `ModuleLoader`, `js_parser`, `BunHeapProfiler`, `RuntimeTranspilerCache`, `main_test`, `channel` (ratio `0.987 ~ 1.18`)
 - 2-defer 首批 (6): `posix_event_loop`, `boringssl`, `brotli`, `memory`, `DeferredBatchTask`, `Graph` (ratio `0.907 ~ 1.173`)
+
+## [2026-11-22 Wave #33] RAII `~init()` 与 `unsafe {}` 改造（2-defer 36 模块）
+- `production`, `generateCodeForLazyExport`, `prepareCssAstsForChunk`, `options_jsc`, `add_completions`, `SourceFileProjectGenerator`, `fuzzilli_command`, `link_command`, `multi_run`, `pm_view_command`, `repl_command`, `scan_command`, `unlink_command`, `media_query`, `printer`, `background`, `url`, `pe`, `encode`, `http`, `PackageManagerEnqueue`, `PackageManagerResolution`, `security_scanner`, `lifecycle_script_runner`, `Yarn`, `npm`, `toml/lexer`, `io`, `CharFreq`, `Expr`, `Symbol`, `parse`, `parseJSXElement`, `parsePrefix`, `skipTypescript`, `runtime` (ratio `0.643 ~ 1.129`)

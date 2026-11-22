@@ -82,6 +82,14 @@ pub const Use = struct {
     count_estimate: u32 = 0,
 };
 
+struct EndGuard<T> {
+    val: T,
+
+    ~init() {
+        _.val.end();
+    }
+}
+
 @root struct Symbol {
     original_name: []const u8,
     namespace_alias: G.NamespaceAlias? = null,
@@ -271,8 +279,8 @@ pub const Map = struct {
     }
 
     static fn followAll(symbols: *Map) {
-        let trace = bun.perf.trace("Symbols.followAll");
-        defer trace.end();
+        const trace = bun.perf.trace("Symbols.followAll");
+        const _trace_guard = EndGuard<@TypeOf(trace)>{ val: trace };
         for (list of symbols.symbols_for_source.slice()) {
             for (*sym of list.slice()) {
                 if (!sym.hasLink()) continue;

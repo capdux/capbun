@@ -347,3 +347,11 @@
 ### [2026-11-22 Wave #32] RAII `~init()` + `unsafe {}` 专项改造（3-defer 全清零 7 模块 + 2-defer 首批 6 模块，全仓 `zig:check` + `bun bd test` 通过）
 - 完成 3-defer 收官 7 模块（`Debugger`, `ModuleLoader`, `js_parser`, `BunHeapProfiler`, `RuntimeTranspilerCache`, `main_test`, `channel`，全仓 `>= 3`-defer 至此全部清零）与 2-defer 首批 6 模块（`posix_event_loop`, `boringssl`, `brotli`, `memory`, `DeferredBatchTask`, `Graph`）。
 - 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.907 ~ 1.18 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls）。
+
+### [2026-11-22 用户指令：固化工程实践缺陷与优化主动提单铁律]
+- 收到用户指令：将「编写 CP 代码工程实践中发现任何 `cpc` 需优化改进或缺陷漏洞，必须第一时间提炼最小复现并向 `cp_agy` 提单报告」作为铁律写入 `GEMINI.md` 并严格遵守。已写入 `GEMINI.md` 第四节。
+
+### [2026-11-22 Wave #33] RAII `~init()` + `unsafe {}` 专项改造（2-defer 36 模块，全仓 `zig:check` + `bun bd test` 通过）
+- 完成 36 个 2-defer 模块（`production`, `generateCodeForLazyExport`, `prepareCssAstsForChunk`, `options_jsc`, `add_completions`, `SourceFileProjectGenerator`, `fuzzilli_command`, `link_command`, `multi_run`, `pm_view_command`, `repl_command`, `scan_command`, `unlink_command`, `media_query`, `printer`, `background`, `url`, `pe`, `encode`, `http`, `PackageManagerEnqueue`, `PackageManagerResolution`, `security_scanner`, `lifecycle_script_runner`, `Yarn`, `npm`, `toml/lexer`, `io`, `CharFreq`, `Expr`, `Symbol`, `parse`, `parseJSXElement`, `parsePrefix`, `skipTypescript`, `runtime`）的 `~init()` RAII 析构与 `unsafe {}` 合规化。
+- 顺带修复：`media_query.cp` 元组解包 `const name, const legacy_op`、位掩码 `if` 分支、`production.cp` `EntryPointRollbackGuard` 引用传参、`io.cp` `pending_iter` 遮蔽字段规避、`static fn onUpdateEpoll/onUpdateKQueue` 与位运算优先级括号。
+- 验证：`cpc_brief.py` 四门禁全绿（膨胀率 `0.643 ~ 1.129 <= 1.2x`）；`bun run zig:check` 5/5 PASS；`bun bd test test/regression/issue/29181.test.ts test/js/bun/util/bun-file.test.ts` 8/8 PASS（460 expect() calls）。

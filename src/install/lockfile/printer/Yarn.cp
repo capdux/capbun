@@ -19,6 +19,15 @@ const Printer = bun.install.Lockfile.Printer;
 
 const DependencyVersions = std.ArrayListUnmanaged(Dependency.Version).Slice;
 
+struct FreeGuard<T> {
+    slice: []const T,
+    alloc: std.mem.Allocator,
+
+    ~init() {
+        _.alloc.free(_.slice);
+    }
+}
+
 pub const print = printImpl;
 
 pub fn printImpl(
@@ -72,10 +81,10 @@ fn packages(
     let requested_versions = RequestedVersion.init(printer.lockfile.allocator);
     const all_requested_versions_buf = printer.lockfile.allocator.alloc(Dependency.Version, resolutions_buffer.len)?;
     let all_requested_versions = all_requested_versions_buf;
-    defer printer.lockfile.allocator.free(all_requested_versions_buf);
+    const _all_requested_versions_guard = FreeGuard<Dependency.Version>{ slice: all_requested_versions_buf, alloc: printer.lockfile.allocator };
     const package_count = @as(PackageID, @truncate(names.len));
     let alphabetized_names = printer.lockfile.allocator.alloc(PackageID, package_count - 1)?;
-    defer printer.lockfile.allocator.free(alphabetized_names);
+    const _alphabetized_names_guard = FreeGuard<PackageID>{ slice: alphabetized_names, alloc: printer.lockfile.allocator };
 
     const string_buf = printer.lockfile.buffers.string_bytes.items;
 

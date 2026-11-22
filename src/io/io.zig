@@ -4,7 +4,415 @@
 const std = @import("std");
 const string = []const u8;
 
+pub fn CpResult(comptime __T: type, comptime __E: type) type {
+    return union(enum) { ok: __T, err: __E, pub const __IS_CP_RESULT = true; };
+}
+const __CpErr = struct {
+    code: i32 = 0,
+    msg: []const u8 = "",
+    cause: ?*const anyopaque = null,
+    cause_type_id: u64 = 0,
+    pub const __TYPE_ID: u64 = 0xEE00_0000_0000_0001;
+    pub fn init(__cp_code: i32, __cp_msg: []const u8) __CpErr { return __CpErr{ .code = __cp_code, .msg = __cp_msg }; }
+    pub fn with_cause(__cp_self: __CpErr, __cp_cause: anytype) __CpErr { const __CpCType = @TypeOf(__cp_cause); var __cp_ptr: ?*const anyopaque = null; var __cp_tid: u64 = 0; if (comptime @typeInfo(__CpCType) == .pointer) { __cp_ptr = @ptrCast(__cp_cause); const __CpChild = @typeInfo(__CpCType).pointer.child; if (comptime @hasDecl(__CpChild, "__TYPE_ID")) { __cp_tid = __CpChild.__TYPE_ID; } } else if (comptime (@typeInfo(__CpCType) == .@"struct" or @typeInfo(__CpCType) == .@"union") and @hasField(__CpCType, "ptr")) { __cp_ptr = @ptrCast(__cp_cause.ptr); if (comptime @hasField(__CpCType, "vtable")) { __cp_tid = __cp_cause.vtable.__type_id; } } else if (comptime @typeInfo(__CpCType) == .optional) { if (__cp_cause) |__cp_c| return __cp_self.with_cause(__cp_c); } else { if (comptime @hasDecl(__CpCType, "__TYPE_ID")) { __cp_tid = __CpCType.__TYPE_ID; } __cp_ptr = @ptrCast(&__cp_cause); } return __CpErr{ .code = __cp_self.code, .msg = __cp_self.msg, .cause = __cp_ptr, .cause_type_id = __cp_tid }; }
+    pub fn downcast(__cp_self: __CpErr, comptime __CpTarget: type) ?*const __CpTarget {
+        if (__cp_self.cause) |__cp_c| {
+            if (comptime @hasDecl(__CpTarget, "__TYPE_ID")) {
+                if (__cp_self.cause_type_id != 0 and __cp_self.cause_type_id != __CpTarget.__TYPE_ID) {
+                    return null;
+                }
+            }
+            return @ptrCast(@alignCast(__cp_c));
+        }
+        return null;
+    }
+};
+pub const Err = __CpErr;
+pub const Error = __CpErr;
+fn is_cp_result(comptime __T: type) bool {
+    return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
+}
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
+fn is_string_like(comptime __T: type) bool { if (__T == []const u8 or __T == []u8) return true; if (@typeInfo(__T) == .pointer) { const Child = @typeInfo(__T).pointer.child; if (Child == u8) return true; if (@typeInfo(Child) == .array and @typeInfo(Child).array.child == u8) return true; } return false; }
+fn to_string_slice(v: anytype) []const u8 { const __T = @TypeOf(v); if (comptime (__T == []const u8 or __T == []u8)) { return v; } else { const cp_str_slice: []const u8 = v; return cp_str_slice; } }
+fn CpValType(comptime __T: type) type { if (is_string_like(__T)) return []const u8; if (__T == comptime_int) return i32; if (__T == comptime_float) return f32; return __T; }
+fn cp_val(v: anytype) CpValType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_string_like(__T)) { return to_string_slice(v); } else if (comptime __T == comptime_int) { return @as(i32, v); } else if (comptime __T == comptime_float) { return @as(f32, v); } else { return v; } }
+fn CpUnwrapOkType(comptime __T: type) type { if (is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (@typeInfo(OkT) == .optional) return @typeInfo(OkT).optional.child; return OkT; } if (@typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (@typeInfo(Payload) == .optional) return @typeInfo(Payload).optional.child; return Payload; } if (@typeInfo(__T) == .optional) return @typeInfo(__T).optional.child; return __T; }
+fn CpUnwrapErrType(comptime __T: type) type { if (is_cp_result(__T)) return @FieldType(__T, "err"); if (@typeInfo(__T) == .error_union) return @typeInfo(__T).error_union.error_set; return anyerror; }
+fn cp_has_ok_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok != null; } else { return true; } } else if (comptime @typeInfo(__T) == .error_union) { const Payload = @typeInfo(__T).error_union.payload; if (comptime @typeInfo(Payload) == .optional) { if (v) |opt_val| return opt_val != null else |_| return false; } else { if (v) |_| return true else |_| return false; } } else if (comptime @typeInfo(__T) == .optional) { return v != null; } else if (comptime @typeInfo(__T) == .error_set) { return false; } else { return true; } }
+fn cp_unwrap_ok_val(v: anytype) CpUnwrapOkType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok.?; } else { return v.ok; } } else if (comptime @typeInfo(__T) == .error_union) { const payload = v catch unreachable; if (comptime @typeInfo(@TypeOf(payload)) == .optional) { return payload.?; } else { return payload; } } else if (comptime @typeInfo(__T) == .optional) { return v.?; } else { return v; } }
+fn cp_unwrap_err_val(v: anytype) CpUnwrapErrType(@TypeOf(v)) { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) return v.err; if (comptime @typeInfo(__T) == .error_union) { if (v) |_| unreachable else |e| return e; } return v; }
+fn cp_is_null_val(v: anytype) bool { const __T = @TypeOf(v); if (comptime is_cp_result(__T)) { if (v != .ok) return false; const OkT = @FieldType(__T, "ok"); if (comptime @typeInfo(OkT) == .optional) { return v.ok == null; } else { return false; } } else if (comptime @typeInfo(__T) == .optional) { return v == null; } else { return false; } }
+fn cp_convert_err(comptime __CpTargetErr: type, __cp_err_val: anytype) __CpTargetErr { const __CpSrcType = @TypeOf(__cp_err_val); if (comptime __CpSrcType == __CpTargetErr) { return __cp_err_val; } else if (comptime __CpTargetErr == __CpErr) { if (comptime @typeInfo(__CpSrcType) == .@"union") { return __CpErr{ .code = @intCast(@intFromEnum(std.meta.activeTag(__cp_err_val))), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"enum") { return __CpErr{ .code = @intCast(@intFromEnum(__cp_err_val)), .msg = @tagName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .error_set) { return __CpErr{ .code = 0, .msg = @errorName(__cp_err_val) }; } else if (comptime @typeInfo(__CpSrcType) == .@"struct") { var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpSrcType, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpSrcType, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpSrcType, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpSrcType); } return __CpErr.init(__err_code, __cp_m); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(@typeInfo(__CpSrcType).pointer.child) == .@"struct") { const __CpChild = @typeInfo(__CpSrcType).pointer.child; var __err_code: i32 = 0; var __cp_m: []const u8 = ""; if (comptime @hasField(__CpChild, "code")) { __err_code = @as(i32, @intCast(__cp_err_val.code)); } if (comptime @hasField(__CpChild, "msg")) { __cp_m = to_string_slice(__cp_err_val.msg); } else if (comptime @hasField(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message); } else if (comptime @hasDecl(__CpChild, "message")) { __cp_m = to_string_slice(__cp_err_val.message()); } else { __cp_m = @typeName(__CpChild); } return __CpErr.init(__err_code, __cp_m).with_cause(__cp_err_val); } else { return __CpErr{ .code = -1, .msg = "error" }; } } else if (comptime @typeInfo(__CpTargetErr) == .pointer and @typeInfo(__CpSrcType) != .pointer) { return @ptrCast(@constCast(&__cp_err_val)); } else if (comptime @typeInfo(__CpSrcType) == .pointer and @typeInfo(__CpTargetErr) != .pointer and @typeInfo(__CpSrcType).pointer.child == __CpTargetErr) { return __cp_err_val.*; } else if (comptime @typeInfo(__CpTargetErr) == .@"union" and @hasDecl(__CpTargetErr, "__from")) { return __CpTargetErr.__from(__cp_err_val); } else if (comptime @hasDecl(__CpTargetErr, "from")) { return __CpTargetErr.from(__cp_err_val); } else { return __cp_err_val; } }
+fn cp_match_tag(__cp_val: anytype, comptime __cp_tag: anytype) bool { const __T = @TypeOf(__cp_val); if (comptime @typeInfo(__T) == .@"enum") { return __cp_val == __cp_tag; } else if (comptime @typeInfo(__T) == .error_set) { return __cp_val == @field(anyerror, @tagName(__cp_tag)); } else if (comptime (__T == __CpErr or (@typeInfo(__T) == .@"struct" and @hasField(__T, "msg")))) { return std.mem.eql(u8, __cp_val.msg, @tagName(__cp_tag)); } else if (comptime @typeInfo(__T) == .@"union") { return std.meta.activeTag(__cp_val) == __cp_tag; } else { return false; } }
+fn cp_eq(a: anytype, b: anytype) bool {
+    const Ta = @TypeOf(a); const Tb = @TypeOf(b);
+    if (comptime @typeInfo(Ta) == .null and @typeInfo(Tb) == .null) return true;
+    if (comptime @typeInfo(Ta) == .null) { if (comptime @typeInfo(Tb) == .optional) return b == null; return false; }
+    if (comptime @typeInfo(Tb) == .null) { if (comptime @typeInfo(Ta) == .optional) return a == null; return false; }
+    if (comptime is_string_like(Ta) and is_string_like(Tb)) { return std.mem.eql(u8, to_string_slice(a), to_string_slice(b)); }
+    if (comptime (@typeInfo(Ta) == .int or Ta == comptime_int) and (@typeInfo(Tb) == .int or Tb == comptime_int)) { return a == b; }
+    if (comptime (@typeInfo(Ta) == .float or Ta == comptime_float) and (@typeInfo(Tb) == .float or Tb == comptime_float)) { return a == b; }
+    if (comptime @typeInfo(Ta) == .optional and @typeInfo(Tb) == .optional) { if (a) |va| { if (b) |vb| return cp_eq(va, vb); return false; } else { return b == null; } }
+    if (comptime @typeInfo(Ta) == .optional) { if (a) |va| return cp_eq(va, b); return false; }
+    if (comptime @typeInfo(Tb) == .optional) { if (b) |vb| return cp_eq(a, vb); return false; }
+    if (comptime Ta != Tb) return false;
+    return a == b;
+}
+fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+fn cp_array_lit(comptime __Elem: type, __init_slice: []const __Elem) []const __Elem { const __buf = std.heap.page_allocator.alloc(__Elem, __init_slice.len) catch unreachable; if (__init_slice.len > 0) @memcpy(__buf, __init_slice); return __buf; }
+fn CpArrayElemType(comptime __PtrT: type) type { const __S0 = @typeInfo(__PtrT).pointer.child; const __S1 = if (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one) @typeInfo(__S0).pointer.child else __S0; return @typeInfo(__S1).pointer.child; }
+fn cp_array_push(__arr_ptr: anytype, __item: anytype) void { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __SliceT = @TypeOf(__target_ptr.*); const __Elem = @typeInfo(__SliceT).pointer.child; const __old_slice = __target_ptr.*; const __new_slice = std.heap.page_allocator.alloc(__Elem, __old_slice.len + 1) catch unreachable; if (__old_slice.len > 0) @memcpy(__new_slice[0..__old_slice.len], __old_slice); __new_slice[__old_slice.len] = @as(__Elem, cp_val(__item)); __target_ptr.* = __new_slice; }
+fn cp_array_pop(__arr_ptr: anytype) ?CpArrayElemType(@TypeOf(__arr_ptr)) { const __S0 = @TypeOf(__arr_ptr.*); const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __arr_ptr.* else __arr_ptr; const __s = __target_ptr.*; if (__s.len == 0) return null; const __last = __s[__s.len - 1]; __target_ptr.* = __s[0 .. __s.len - 1]; return __last; }
+fn cp_container_clear(__cp_ptr: anytype) void { const __S0 = @TypeOf(__cp_ptr.*); if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one and @typeInfo(@typeInfo(__S0).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__S0).pointer.child, "clear"))) { __cp_ptr.*.clear(); } else { const __target_ptr = if (comptime (@typeInfo(__S0) == .pointer and @typeInfo(__S0).pointer.size == .one)) __cp_ptr.* else __cp_ptr; __target_ptr.* = __target_ptr.*[0..0]; } }
+fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
+fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
+
 pub const bun = @import("bun");
+pub fn DeinitGuard(comptime T: type) type {
+    return struct {
+        ptr: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.ptr.deinit();
+        }
+    };
+}
+
+pub const Loop = struct {
+    pending: Request.Queue = .{},
+    waker: bun.Async.Waker,
+    epoll_fd: if (Environment.isLinux) bun.FD else void = (if (Environment.isLinux) .invalid else @as(void, undefined)),
+    kqueue_fd: if (Environment.isFreeBSD) bun.FD else void = (if (Environment.isFreeBSD) .invalid else @as(void, undefined)),
+    cached_now: posix.timespec = .{ .nsec = 0, .sec = 0 },
+    active: usize = 0,
+    pub var loop: Loop = undefined;
+    pub var once: @TypeOf(std.once(load)) = std.once(load);
+
+pub fn load() void {
+            Loop.loop = Loop{ .waker = (blk_catch_0: { break :blk_catch_0 ((bun.Async.Waker.init()) catch |__ce_0| { _ = &__ce_0; @panic("failed to initialize waker"); }); }) };
+            if (comptime Environment.isLinux) {
+                Loop.loop.epoll_fd = .fromNative((blk_catch_1: { break :blk_catch_1 ((std.posix.epoll_create1((std.os.linux.EPOLL.CLOEXEC | 0))) catch |__ce_1| { _ = &__ce_1; @panic("Failed to create epoll file descriptor"); }); }));
+                {
+                    var epoll = std.mem.zeroes(std.os.linux.epoll_event);
+                    _ = &epoll;
+                    epoll.events = (((std.os.linux.EPOLL.IN | std.os.linux.EPOLL.ET) | std.os.linux.EPOLL.ERR) | std.os.linux.EPOLL.HUP);
+                    epoll.data.ptr = (blk: {
+                    break :blk @intFromPtr((&Loop.loop));
+
+});
+                    const rc = std.os.linux.epoll_ctl(Loop.loop.epoll_fd.cast(), std.os.linux.EPOLL.CTL_ADD, Loop.loop.waker.getFd().cast(), (blk: {
+                    break :blk (&epoll);
+
+}));
+                    const epoll_errno = bun.sys.getErrno(rc);
+                    switch (epoll_errno) {
+.SUCCESS => {
+
+},
+else => {
+_ = bun.Output.panic("Failed to wait on epoll {s}", .{ @tagName(epoll_errno) });
+},
+}
+                }
+            }
+            if (comptime Environment.isFreeBSD) {
+                Loop.loop.kqueue_fd = .fromNative((blk_catch_2: { break :blk_catch_2 ((std.posix.kqueue()) catch |__ce_2| { _ = &__ce_2; @panic("Failed to create kqueue"); }); }));
+                var change = std.mem.zeroes(KEvent);
+                _ = &change;
+                change.ident = @intCast(Loop.loop.waker.getFd().cast());
+                change.filter = std.c.EVFILT.READ;
+                change.flags = (std.c.EV.ADD | std.c.EV.CLEAR);
+                const rc = std.c.kevent(Loop.loop.kqueue_fd.cast(), (blk: {
+                break :blk @as([*]const KEvent, @alignCast(@ptrCast((&change))));
+
+}), 1, undefined, 0, null);
+                const kq_errno = bun.sys.getErrno(rc);
+                switch (kq_errno) {
+.SUCCESS => {
+
+},
+else => {
+_ = bun.Output.panic("Failed to register waker on kqueue: {s}", .{ @tagName(kq_errno) });
+},
+}
+            }
+            var thread = (blk_catch_3: { break :blk_catch_3 ((std.Thread.spawn(.{ .allocator = bun.default_allocator, .stack_size = ((1024 * 1024) * 2) }, onSpawnIOThread, .{})) catch |__ce_3| { _ = &__ce_3; @panic("Failed to spawn IO watcher thread"); }); });
+            _ = &thread;
+            _ = thread.detach();
+    }
+
+pub fn get() *Loop {
+            if (Environment.isWindows) {
+                _ = @panic("Do not use this API on windows");
+            }
+            _ = Loop.once.call();
+            return (blk: {
+            break :blk (&Loop.loop);
+
+});
+    }
+
+pub fn onSpawnIOThread() void {
+            _ = Loop.loop.tick();
+    }
+
+pub fn schedule(self: *Loop, request: *Request) void {
+            _ = bun.assert((!request.scheduled));
+            request.scheduled = true;
+            _ = self.pending.push(request);
+            _ = self.waker.wake();
+    }
+
+pub fn tick(self: *Loop) void {
+            _ = bun.Output.Source.configureNamedThread("IO Watcher");
+            if (comptime Environment.isLinux) {
+                _ = self.tickEpoll();
+            } else {
+                if (comptime Environment.isKqueue) {
+                    _ = self.tickKqueue();
+                } else {
+                    _ = @panic("TODO on this platform");
+                }
+            }
+    }
+
+pub fn tickEpoll(self: *Loop) void {
+            if (comptime (!Environment.isLinux)) {
+                _ = @compileError("Epoll is Linux-Only");
+            }
+            _ = self.updateNow();
+            while (true) {
+                {
+                    var pending_batch = self.pending.popBatch();
+                    _ = &pending_batch;
+                    var pending_iter = pending_batch.iterator();
+                    _ = &pending_iter;
+                    while (pending_iter.next()) |request| {
+                        request.scheduled = false;
+                        switch (request.callback(request)) {
+.readable => |readable| {
+switch (readable.poll.registerForEpoll(readable.tag, self, .poll_readable, true, readable.fd)) {
+.err => |e| {
+_ = readable.onError(readable.ctx, e);
+},
+.result => {
+self.active = (self.active + 1);
+},
+}
+},
+.writable => |writable| {
+switch (writable.poll.registerForEpoll(writable.tag, self, .poll_writable, true, writable.fd)) {
+.err => |e| {
+_ = writable.onError(writable.ctx, e);
+},
+.result => {
+self.active = (self.active + 1);
+},
+}
+},
+.close => |close| {
+_ = log("close({f}, registered={})", .{ close.fd, close.poll.flags.contains(.registered) });
+                        if (close.poll.flags.contains(.was_ever_registered)) {
+                            _ = close.poll.unregisterWithFd(self.pollfd(), close.fd);
+                            self.active = (self.active - 1);
+                        }
+                        _ = close.onDone(close.ctx);
+},
+}
+                    }
+                }
+                var events: [256]EventType = undefined;
+                _ = &events;
+                const rc = linux.epoll_wait(self.pollfd().cast(), (blk: {
+                break :blk (&events);
+
+}), @intCast(events.len), std.math.maxInt(i32));
+                const epoll_errno = bun.sys.getErrno(rc);
+                switch (epoll_errno) {
+.INTR => {
+_ = continue;
+},
+.SUCCESS => {
+
+},
+else => {
+_ = bun.Output.panic("epoll_wait: {s}", .{ @tagName(epoll_errno) });
+},
+}
+                _ = self.updateNow();
+                const current_events = events[0..rc];
+                if ((rc != 0)) {
+                    _ = log("epoll_wait({f}) = {d}", .{ self.pollfd(), rc });
+                }
+                for (cp_iter_slice(current_events)) |event| {
+                    _ = &event;
+                    const pollable: Pollable = Pollable.from(event.data.u64);
+                    if ((pollable.tag() == .empty)) {
+                        if ((event.data.ptr == (blk: {
+                        break :blk @intFromPtr((&Loop.loop));
+
+}))) {
+                            continue;
+                        }
+                    }
+                    _ = Poll.onUpdateEpoll(pollable.poll(), pollable.tag(), event);
+                }
+            }
+    }
+
+pub fn pollfd(self: Loop) bun.FD {
+            if (comptime Environment.isLinux) {
+                return self.epoll_fd;
+            }
+            if (comptime Environment.isFreeBSD) {
+                return self.kqueue_fd;
+            }
+            return self.waker.getFd();
+    }
+
+pub fn fd(self: Loop) bun.FD {
+            return self.waker.getFd();
+    }
+
+pub fn tickKqueue(self: *Loop) void {
+            if (comptime (!Environment.isKqueue)) {
+                _ = @compileError("Kqueue is macOS/FreeBSD-only");
+            }
+            _ = self.updateNow();
+            while (true) {
+                var stack_fallback = std.heap.stackFallback(@sizeOf([256]EventType), bun.default_allocator);
+                _ = &stack_fallback;
+                var events_list: std.array_list.Managed(EventType) = ((std.array_list.Managed(EventType).initCapacity(stack_fallback.get(), 256)) catch unreachable);
+                _ = &events_list;
+                var _guard_events_list = DeinitGuard(*@TypeOf(events_list)){ .ptr = (blk: {
+                break :blk (&events_list);
+
+}) };
+                _ = &_guard_events_list;
+                var ___guard_events_list_moved = false; _ = &___guard_events_list_moved;
+                defer if (!___guard_events_list_moved) { ___guard_events_list_moved = true; const __T = @TypeOf(_guard_events_list); if (@typeInfo(__T) == .optional) { if (_guard_events_list) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_events_list.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_events_list; _drop_val.__cp_deinit(); } };
+                {
+                    var pending_batch = self.pending.popBatch();
+                    _ = &pending_batch;
+                    var pending_iter = pending_batch.iterator();
+                    _ = &pending_iter;
+                    _ = bun.handleOom(events_list.ensureUnusedCapacity(pending_iter.batch.count));
+                    _ = @memset(std.mem.sliceAsBytes((blk: {
+                    break :blk events_list.items.ptr[0..events_list.capacity];
+
+})), 0);
+                    while (pending_iter.next()) |request| {
+                        switch (request.callback(request)) {
+.readable => |readable| {
+const i = events_list.items.len;
+                        _ = assert(((i + 1) <= events_list.capacity));
+                        events_list.items.len = (events_list.items.len + 1);
+                        _ = Poll.Flags.applyKQueue(.readable, readable.tag, readable.poll, readable.fd, (blk: {
+                        break :blk (&events_list.items.ptr[@as(usize, @intCast(i))]);
+
+}));
+},
+.writable => |writable| {
+const i = events_list.items.len;
+                        _ = assert(((i + 1) <= events_list.capacity));
+                        events_list.items.len = (events_list.items.len + 1);
+                        _ = Poll.Flags.applyKQueue(.writable, writable.tag, writable.poll, writable.fd, (blk: {
+                        break :blk (&events_list.items.ptr[@as(usize, @intCast(i))]);
+
+}));
+},
+.close => |close| {
+if ((close.poll.flags.contains(.poll_readable) or close.poll.flags.contains(.poll_writable))) {
+                            const i = events_list.items.len;
+                            _ = assert(((i + 1) <= events_list.capacity));
+                            events_list.items.len = (events_list.items.len + 1);
+                            _ = Poll.Flags.applyKQueue(.cancel, close.tag, close.poll, close.fd, (blk: {
+                            break :blk (&events_list.items.ptr[@as(usize, @intCast(i))]);
+
+}));
+                        }
+                        _ = close.onDone(close.ctx);
+},
+}
+                    }
+                }
+                const change_count = events_list.items.len;
+                const rc = keventCall(self.pollfd().cast(), events_list.items.ptr, @intCast(change_count), events_list.items.ptr, @intCast(events_list.capacity), null);
+                const kq_errno = bun.sys.getErrno(rc);
+                switch (kq_errno) {
+.INTR => {
+_ = continue;
+},
+.SUCCESS => {
+
+},
+else => {
+_ = bun.Output.panic("kevent failed: {s}", .{ @tagName(kq_errno) });
+},
+}
+                _ = self.updateNow();
+                _ = assert((rc <= events_list.capacity));
+                const current_events: []KEvent = (blk: {
+                break :blk events_list.items.ptr[0..@intCast(rc)];
+
+});
+                for (cp_iter_slice(current_events)) |event| {
+                    _ = &event;
+                    _ = Poll.onUpdateKQueue(event);
+                }
+            }
+    }
+
+pub fn updateNow(self: *Loop) void {
+            _ = Loop.updateTimespec((blk: {
+            break :blk (&self.cached_now);
+
+}));
+    }
+
+pub fn updateTimespec(timespec: *posix.timespec) void {
+            if (comptime Environment.isLinux) {
+                const rc = linux.clock_gettime(linux.CLOCK.MONOTONIC, timespec);
+                _ = assert((rc == 0));
+            } else {
+                if (comptime Environment.isWindows) {
+                    var sec: i64 = 0;
+                    _ = &sec;
+                    var nsec: i64 = 0;
+                    _ = &nsec;
+                    const rc = clock_gettime_monotonic((blk: {
+                    break :blk (&sec);
+
+}), (blk: {
+                    break :blk (&nsec);
+
+}));
+                    _ = assert((rc == 0));
+                    timespec.sec = @intCast(sec);
+                    timespec.nsec = @intCast(nsec);
+                } else {
+                    const updated = (blk_catch_5: { break :blk_catch_5 ((std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC)) catch |__ce_5| { _ = &__ce_5; return; }); });
+                    {
+                        timespec.* = updated;
+                    }
+                }
+            }
+    }
+};
+
 pub const Action = union(enum) {
     readable: ActionFileAction,
     writable: ActionFileAction,
@@ -19,308 +427,6 @@ pub const openForWriting = @import("./openForWriting.zig").openForWriting;
 pub const openForWritingImpl = @import("./openForWriting.zig").openForWritingImpl;
 pub const Source = @import("./source.zig").Source;
 const log = bun.Output.scoped(.loop, .visible);
-pub const Loop = struct {
-    pending: Request.Queue = .{},
-    waker: bun.Async.Waker,
-    epoll_fd: if (Environment.isLinux) bun.FD else void = if (Environment.isLinux) .invalid,
-    /// FreeBSD's `Waker` is `LinuxWaker` (an eventfd), so unlike macOS the
-    /// waker fd is NOT itself a kqueue. We create one here and register the
-    /// eventfd on it, mirroring how Linux registers the eventfd on epoll_fd.
-    kqueue_fd: if (Environment.isFreeBSD) bun.FD else void = if (Environment.isFreeBSD) .invalid,
-
-    cached_now: posix.timespec = .{
-        .nsec = 0,
-        .sec = 0,
-    },
-    active: usize = 0,
-
-    var loop: Loop = undefined;
-
-    fn load() void {
-        loop = Loop{
-            .waker = bun.Async.Waker.init() catch @panic("failed to initialize waker"),
-        };
-        if (comptime Environment.isLinux) {
-            loop.epoll_fd = .fromNative(std.posix.epoll_create1(std.os.linux.EPOLL.CLOEXEC | 0) catch @panic("Failed to create epoll file descriptor"));
-
-            {
-                var epoll = std.mem.zeroes(std.os.linux.epoll_event);
-                epoll.events = std.os.linux.EPOLL.IN | std.os.linux.EPOLL.ET | std.os.linux.EPOLL.ERR | std.os.linux.EPOLL.HUP;
-                epoll.data.ptr = @intFromPtr(&loop);
-                const rc = std.os.linux.epoll_ctl(loop.epoll_fd.cast(), std.os.linux.EPOLL.CTL_ADD, loop.waker.getFd().cast(), &epoll);
-
-                switch (bun.sys.getErrno(rc)) {
-                    .SUCCESS => {},
-                    else => |err| bun.Output.panic("Failed to wait on epoll {s}", .{@tagName(err)}),
-                }
-            }
-        }
-        if (comptime Environment.isFreeBSD) {
-            loop.kqueue_fd = .fromNative(std.posix.kqueue() catch @panic("Failed to create kqueue"));
-            var change = std.mem.zeroes(KEvent);
-            change.ident = @intCast(loop.waker.getFd().cast());
-            change.filter = std.c.EVFILT.READ;
-            change.flags = std.c.EV.ADD | std.c.EV.CLEAR;
-            const rc = std.c.kevent(loop.kqueue_fd.cast(), @as([*]const KEvent, @ptrCast(&change)), 1, undefined, 0, null);
-            switch (bun.sys.getErrno(rc)) {
-                .SUCCESS => {},
-                else => |err| bun.Output.panic("Failed to register waker on kqueue: {s}", .{@tagName(err)}),
-            }
-        }
-        var thread = std.Thread.spawn(.{
-            .allocator = bun.default_allocator,
-            .stack_size = 1024 * 1024 * 2,
-        }, onSpawnIOThread, .{}) catch @panic("Failed to spawn IO watcher thread");
-        thread.detach();
-    }
-    var once = std.once(load);
-
-    pub fn get() *Loop {
-        if (Environment.isWindows) {
-            @panic("Do not use this API on windows");
-        }
-
-        once.call();
-
-        return &loop;
-    }
-
-    pub fn onSpawnIOThread() void {
-        loop.tick();
-    }
-
-    pub fn schedule(this: *Loop, request: *Request) void {
-        bun.assert(!request.scheduled);
-        request.scheduled = true;
-        this.pending.push(request);
-        this.waker.wake();
-    }
-
-    pub fn tick(this: *Loop) void {
-        bun.Output.Source.configureNamedThread("IO Watcher");
-        if (comptime Environment.isLinux) {
-            this.tickEpoll();
-        } else if (comptime Environment.isKqueue) {
-            this.tickKqueue();
-        } else {
-            @panic("TODO on this platform");
-        }
-    }
-
-    pub fn tickEpoll(this: *Loop) void {
-        if (comptime !Environment.isLinux) {
-            @compileError("Epoll is Linux-Only");
-        }
-
-        this.updateNow();
-
-        while (true) {
-            {
-                var pending_batch = this.pending.popBatch();
-                var pending = pending_batch.iterator();
-
-                while (pending.next()) |request| {
-                    request.scheduled = false;
-                    switch (request.callback(request)) {
-                        .readable => |readable| {
-                            switch (readable.poll.registerForEpoll(readable.tag, this, .poll_readable, true, readable.fd)) {
-                                .err => |err| {
-                                    readable.onError(readable.ctx, err);
-                                },
-                                .result => {
-                                    this.active += 1;
-                                },
-                            }
-                        },
-                        .writable => |writable| {
-                            switch (writable.poll.registerForEpoll(writable.tag, this, .poll_writable, true, writable.fd)) {
-                                .err => |err| {
-                                    writable.onError(writable.ctx, err);
-                                },
-                                .result => {
-                                    this.active += 1;
-                                },
-                            }
-                        },
-                        .close => |close| {
-                            log("close({f}, registered={})", .{ close.fd, close.poll.flags.contains(.registered) });
-                            if (close.poll.flags.contains(.was_ever_registered)) {
-                                close.poll.unregisterWithFd(this.pollfd(), close.fd);
-                                this.active -= 1;
-                            }
-                            close.onDone(close.ctx);
-                        },
-                    }
-                }
-            }
-
-            var events: [256]EventType = undefined;
-
-            const rc = linux.epoll_wait(
-                this.pollfd().cast(),
-                &events,
-                @intCast(events.len),
-                std.math.maxInt(i32),
-            );
-
-            switch (bun.sys.getErrno(rc)) {
-                .INTR => continue,
-                .SUCCESS => {},
-                else => |e| bun.Output.panic("epoll_wait: {s}", .{@tagName(e)}),
-            }
-
-            this.updateNow();
-
-            const current_events: []std.os.linux.epoll_event = events[0..rc];
-            if (rc != 0) {
-                log("epoll_wait({f}) = {d}", .{ this.pollfd(), rc });
-            }
-
-            for (current_events) |event| {
-                const pollable: Pollable = Pollable.from(event.data.u64);
-                if (pollable.tag() == .empty) {
-                    if (event.data.ptr == @intFromPtr(&loop)) {
-                        continue;
-                    }
-                }
-                _ = Poll.onUpdateEpoll(pollable.poll(), pollable.tag(), event);
-            }
-        }
-    }
-
-    pub fn pollfd(this: *const Loop) bun.FD {
-        if (comptime Environment.isLinux) {
-            return this.epoll_fd;
-        }
-        if (comptime Environment.isFreeBSD) {
-            return this.kqueue_fd;
-        }
-
-        return this.waker.getFd();
-    }
-
-    pub fn fd(this: *const Loop) bun.FD {
-        return this.waker.getFd();
-    }
-
-    pub fn tickKqueue(this: *Loop) void {
-        if (comptime !Environment.isKqueue) {
-            @compileError("Kqueue is macOS/FreeBSD-only");
-        }
-
-        this.updateNow();
-
-        while (true) {
-            var stack_fallback = std.heap.stackFallback(@sizeOf([256]EventType), bun.default_allocator);
-            var events_list: std.array_list.Managed(EventType) = std.array_list.Managed(EventType).initCapacity(stack_fallback.get(), 256) catch unreachable;
-            defer events_list.deinit();
-
-            {
-                var pending_batch = this.pending.popBatch();
-                var pending = pending_batch.iterator();
-                bun.handleOom(events_list.ensureUnusedCapacity(pending.batch.count));
-                @memset(std.mem.sliceAsBytes(events_list.items.ptr[0..events_list.capacity]), 0);
-
-                while (pending.next()) |request| {
-                    switch (request.callback(request)) {
-                        .readable => |readable| {
-                            const i = events_list.items.len;
-                            assert(i + 1 <= events_list.capacity);
-                            events_list.items.len += 1;
-
-                            Poll.Flags.applyKQueue(
-                                .readable,
-                                readable.tag,
-                                readable.poll,
-                                readable.fd,
-                                &events_list.items.ptr[i],
-                            );
-                        },
-                        .writable => |writable| {
-                            const i = events_list.items.len;
-                            assert(i + 1 <= events_list.capacity);
-                            events_list.items.len += 1;
-
-                            Poll.Flags.applyKQueue(
-                                .writable,
-                                writable.tag,
-                                writable.poll,
-                                writable.fd,
-                                &events_list.items.ptr[i],
-                            );
-                        },
-
-                        .close => |close| {
-                            if (close.poll.flags.contains(.poll_readable) or close.poll.flags.contains(.poll_writable)) {
-                                const i = events_list.items.len;
-                                assert(i + 1 <= events_list.capacity);
-                                events_list.items.len += 1;
-                                Poll.Flags.applyKQueue(
-                                    .cancel,
-                                    close.tag,
-                                    close.poll,
-                                    close.fd,
-                                    &events_list.items.ptr[i],
-                                );
-                            }
-                            close.onDone(close.ctx);
-                        },
-                    }
-                }
-            }
-
-            const change_count = events_list.items.len;
-
-            const rc = keventCall(
-                this.pollfd().cast(),
-                events_list.items.ptr,
-                @intCast(change_count),
-                events_list.items.ptr,
-                @intCast(events_list.capacity),
-                null,
-            );
-
-            switch (bun.sys.getErrno(rc)) {
-                .INTR => continue,
-                .SUCCESS => {},
-                else => |e| bun.Output.panic("kevent failed: {s}", .{@tagName(e)}),
-            }
-
-            this.updateNow();
-
-            assert(rc <= events_list.capacity);
-            const current_events: []KEvent = events_list.items.ptr[0..@intCast(rc)];
-
-            for (current_events) |event| {
-                Poll.onUpdateKQueue(event);
-            }
-        }
-    }
-
-    fn updateNow(this: *Loop) void {
-        updateTimespec(&this.cached_now);
-    }
-
-    extern "c" fn clock_gettime_monotonic(sec: *i64, nsec: *i64) c_int;
-    pub fn updateTimespec(timespec: *posix.timespec) void {
-        if (comptime Environment.isLinux) {
-            const rc = linux.clock_gettime(linux.CLOCK.MONOTONIC, timespec);
-            assert(rc == 0);
-        } else if (comptime Environment.isWindows) {
-            var sec: i64 = 0;
-            var nsec: i64 = 0;
-
-            const rc = clock_gettime_monotonic(&sec, &nsec);
-            assert(rc == 0);
-
-            timespec.sec = @intCast(sec);
-            timespec.nsec = @intCast(nsec);
-        } else {
-            const updated = std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC) catch return;
-            timespec.* = updated;
-        }
-    }
-};
 const EV_EOF: u16 = (if (@hasDecl(std.c.EV, "EOF")) std.c.EV.EOF else 32768);
 const KEvent = (if (Environment.isFreeBSD) std.c.Kevent else std.posix.system.kevent64_s);
 const EventType = (if (Environment.isLinux) linux.epoll_event else KEvent);
@@ -355,7 +461,7 @@ pub fn from(int: u64) Pollable {
             return Pollable{ .value = bun.TaggedPointer.from(int) };
     }
 
-pub fn poll(self: @This()) *Poll {
+pub fn poll(self: *const @This()) *Poll {
             return self.value.get(Poll);
     }
 
@@ -366,11 +472,11 @@ pub fn tag(self: @This()) Tag {
             return @enumFromInt(self.value.data);
     }
 
-pub fn get(self: @This(), comptime t: Tag) *Tag.Type(t) {
+pub fn get(self: *const @This(), comptime t: Tag) *Tag.Type(t) {
             return self.value.get(Tag.Type(t));
     }
 
-pub fn ptr(self: @This()) *anyopaque {
+pub fn ptr(self: *const @This()) *anyopaque {
             return self.value.to();
     }
     const Tag = enum(bun.TaggedPointer.Tag) {
@@ -390,260 +496,244 @@ pub fn ptr(self: @This()) *anyopaque {
 pub const Poll = struct {
     flags: Flags.Set = Flags.Set.initEmpty(),
     generation_number: GenerationNumberInt = 0,
+    pub var generation_number_monotonic: GenerationNumberInt = 0;
 
-    const GenerationNumberInt = if (Environment.isMac and Environment.allow_assert) u64 else u0;
+pub fn unregisterWithFd(self: *@This(), watcher_fd: bun.FD, fd: bun.FD) void {
+            _ = linux.epoll_ctl(watcher_fd.cast(), linux.EPOLL.CTL_DEL, fd.cast(), null);
+            _ = self.flags.remove(.registered);
+    }
 
-    var generation_number_monotonic: GenerationNumberInt = 0;
+pub fn onUpdateKQueue(event: KEvent) void {
+            if (comptime Environment.isMac) {
+                if ((event.filter == std.c.EVFILT.MACHPORT)) {
+                    return;
+                }
+            }
+            const pollable = Pollable.from(event.udata);
+            const tag = pollable.tag();
+            switch (tag) {
+.empty => {
 
+},
+inline else => |t| {
+const poll = pollable.poll();
+            var this: *Pollable.Tag.Type(t) = (blk: {
+            break :blk @alignCast(@fieldParentPtr("io_poll", poll));
+
+});
+            _ = &this;
+            if ((event.flags == std.c.EV.ERROR)) {
+                _ = log("error({d}) = {d}", .{ event.ident, event.data });
+                _ = this.onIOError(bun.sys.Error.fromCode(@enumFromInt(event.data), .kevent));
+            } else {
+                _ = log("ready({d}) = {d}", .{ event.ident, event.data });
+                _ = this.onReady();
+            }
+},
+}
+    }
+
+pub fn onUpdateEpoll(poll: *Poll, tag: Pollable.Tag, event: linux.epoll_event) void {
+            switch (tag) {
+.empty => {
+
+},
+inline else => |t| {
+var this: *Pollable.Tag.Type(t) = (blk: {
+            break :blk @alignCast(@fieldParentPtr("io_poll", poll));
+
+});
+            _ = &this;
+            if (((event.events & linux.EPOLL.ERR) != 0)) {
+                const errno = bun.sys.getErrno(event.events);
+                _ = log("error() = {s}", .{ @tagName(errno) });
+                _ = this.onIOError(bun.sys.Error.fromCode(errno, .epoll_ctl));
+            } else {
+                _ = log("ready()", .{});
+                _ = this.onReady();
+            }
+},
+}
+    }
+
+pub fn registerForEpoll(self: *@This(), tag: Pollable.Tag, loop: *Loop, comptime flag: Flags, one_shot: bool, fd: bun.FD) bun.sys.Maybe(void) {
+            const watcher_fd = loop.pollfd();
+            _ = log("register: {s} ({f})", .{ @tagName(flag), fd });
+            _ = bun.assert((fd != bun.invalid_fd));
+            if (one_shot) {
+                _ = self.flags.insert(.one_shot);
+            }
+            if (comptime Environment.isLinux) {
+                const one_shot_flag: u32 = (if ((!self.flags.contains(.one_shot))) 0 else linux.EPOLL.ONESHOT);
+                const flags: u32 = (switch ((comptime flag)) {
+.process, .poll_readable => (((linux.EPOLL.IN | linux.EPOLL.HUP) | linux.EPOLL.ERR) | one_shot_flag),
+.poll_writable => (((linux.EPOLL.OUT | linux.EPOLL.HUP) | linux.EPOLL.ERR) | one_shot_flag),
+else => @compileError("unreachable"),
+});
+                var event = std.mem.zeroes(linux.epoll_event);
+                _ = &event;
+                event.events = flags;
+                event.data.u64 = (blk: {
+                break :blk @intFromPtr(Pollable.init(tag, self).ptr());
+
+});
+                const op: u32 = (if ((self.flags.contains(.was_ever_registered) or self.flags.contains(.needs_rearm))) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD);
+                const ctl = linux.epoll_ctl(watcher_fd.cast(), op, fd.cast(), (&event));
+                if (bun.sys.Maybe(void).errnoSys(ctl, .epoll_ctl)) |errno| {
+                    _ = &errno;
+                    return errno;
+                }
+                _ = self.flags.insert(.registered);
+                _ = self.flags.insert(.was_ever_registered);
+            } else {
+                _ = @compileError("epoll not supported on this platform");
+            }
+            _ = self.flags.insert((switch (flag) {
+.poll_readable => .poll_readable,
+.poll_process => (if (comptime Environment.isLinux) .poll_readable else .poll_process),
+.poll_writable => .poll_writable,
+else => @compileError("unreachable"),
+}));
+            _ = self.flags.remove(.needs_rearm);
+            return .success;
+    }
+    const GenerationNumberInt = (if ((Environment.isMac and Environment.allow_assert)) u64 else u0);
     pub const Tag = Pollable.Tag;
-
     pub const Flags = enum {
-        poll_readable,
-        poll_writable,
-        poll_process,
-        poll_machport,
-
-        readable,
-        writable,
-        process,
-        eof,
-        hup,
-        machport,
-
-        fifo,
-        tty,
-
-        one_shot,
-        needs_rearm,
-
-        closed,
-
-        nonblocking,
-
-        was_ever_registered,
-        ignore_updates,
-
-        cancelled,
-        registered,
-
-        pub const Set = std.EnumSet(Flags);
-        pub const Struct = std.enums.EnumFieldStruct(Flags, bool, false);
-
-        pub fn fromKQueueEvent(kqueue_event: KEvent) Flags.Set {
-            var flags = Flags.Set{};
-            if (kqueue_event.filter == std.posix.system.EVFILT.READ) {
-                flags.insert(Flags.readable);
-                log("readable", .{});
-                if (kqueue_event.flags & EV_EOF != 0) {
+            poll_readable,
+            poll_writable,
+            poll_process,
+            poll_machport,
+    
+            readable,
+            writable,
+            process,
+            eof,
+            hup,
+            machport,
+    
+            fifo,
+            tty,
+    
+            one_shot,
+            needs_rearm,
+    
+            closed,
+    
+            nonblocking,
+    
+            was_ever_registered,
+            ignore_updates,
+    
+            cancelled,
+            registered,
+    
+            pub const Set = std.EnumSet(Flags);
+            pub const Struct = std.enums.EnumFieldStruct(Flags, bool, false);
+    
+            pub fn fromKQueueEvent(kqueue_event: KEvent) Flags.Set {
+                var flags = Flags.Set{};
+                if (kqueue_event.filter == std.posix.system.EVFILT.READ) {
+                    flags.insert(Flags.readable);
+                    log("readable", .{});
+                    if (kqueue_event.flags & EV_EOF != 0) {
+                        flags.insert(Flags.hup);
+                        log("hup", .{});
+                    }
+                } else if (kqueue_event.filter == std.posix.system.EVFILT.WRITE) {
+                    flags.insert(Flags.writable);
+                    log("writable", .{});
+                    if (kqueue_event.flags & EV_EOF != 0) {
+                        flags.insert(Flags.hup);
+                        log("hup", .{});
+                    }
+                } else if (kqueue_event.filter == std.posix.system.EVFILT.PROC) {
+                    log("proc", .{});
+                    flags.insert(Flags.process);
+                } else if (comptime Environment.isMac) {
+                    if (kqueue_event.filter == std.posix.system.EVFILT.MACHPORT) {
+                        log("machport", .{});
+                        flags.insert(Flags.machport);
+                    }
+                }
+                return flags;
+            }
+    
+            pub fn fromEpollEvent(epoll: std.os.linux.epoll_event) Flags.Set {
+                var flags = Flags.Set{};
+                if (epoll.events & std.os.linux.EPOLL.IN != 0) {
+                    flags.insert(Flags.readable);
+                    log("readable", .{});
+                }
+                if (epoll.events & std.os.linux.EPOLL.OUT != 0) {
+                    flags.insert(Flags.writable);
+                    log("writable", .{});
+                }
+                if (epoll.events & std.os.linux.EPOLL.ERR != 0) {
+                    flags.insert(Flags.eof);
+                    log("eof", .{});
+                }
+                if (epoll.events & std.os.linux.EPOLL.HUP != 0) {
                     flags.insert(Flags.hup);
                     log("hup", .{});
                 }
-            } else if (kqueue_event.filter == std.posix.system.EVFILT.WRITE) {
-                flags.insert(Flags.writable);
-                log("writable", .{});
-                if (kqueue_event.flags & EV_EOF != 0) {
-                    flags.insert(Flags.hup);
-                    log("hup", .{});
+                return flags;
+            }
+    
+            pub fn applyKQueue(
+                comptime action: @Type(.enum_literal),
+                tag: Pollable.Tag,
+                poll: *Poll,
+                fd: bun.FD,
+                kqueue_event: *KEvent,
+            ) void {
+                log("register({s}, {f})", .{ @tagName(action), fd });
+                defer {
+                    switch (comptime action) {
+                        .readable => poll.flags.insert(Flags.poll_readable),
+                        .writable => poll.flags.insert(Flags.poll_writable),
+                        .cancel => {
+                            if (poll.flags.contains(Flags.poll_readable)) {
+                                poll.flags.remove(Flags.poll_readable);
+                            } else if (poll.flags.contains(Flags.poll_writable)) {
+                                poll.flags.remove(Flags.poll_writable);
+                            } else {
+                                unreachable;
+                            }
+                        },
+                        else => @compileError("unreachable"),
+                    }
+    
+                    if (comptime Environment.isMac and Environment.allow_assert and action != .cancel) {
+                        generation_number_monotonic += 1;
+                        poll.generation_number = generation_number_monotonic;
+                    }
                 }
-            } else if (kqueue_event.filter == std.posix.system.EVFILT.PROC) {
-                log("proc", .{});
-                flags.insert(Flags.process);
-            } else if (comptime Environment.isMac) {
-                if (kqueue_event.filter == std.posix.system.EVFILT.MACHPORT) {
-                    log("machport", .{});
-                    flags.insert(Flags.machport);
-                }
-            }
-            return flags;
-        }
-
-        pub fn fromEpollEvent(epoll: std.os.linux.epoll_event) Flags.Set {
-            var flags = Flags.Set{};
-            if (epoll.events & std.os.linux.EPOLL.IN != 0) {
-                flags.insert(Flags.readable);
-                log("readable", .{});
-            }
-            if (epoll.events & std.os.linux.EPOLL.OUT != 0) {
-                flags.insert(Flags.writable);
-                log("writable", .{});
-            }
-            if (epoll.events & std.os.linux.EPOLL.ERR != 0) {
-                flags.insert(Flags.eof);
-                log("eof", .{});
-            }
-            if (epoll.events & std.os.linux.EPOLL.HUP != 0) {
-                flags.insert(Flags.hup);
-                log("hup", .{});
-            }
-            return flags;
-        }
-
-        pub fn applyKQueue(
-            comptime action: @Type(.enum_literal),
-            tag: Pollable.Tag,
-            poll: *Poll,
-            fd: bun.FD,
-            kqueue_event: *KEvent,
-        ) void {
-            log("register({s}, {f})", .{ @tagName(action), fd });
-            defer {
-                switch (comptime action) {
-                    .readable => poll.flags.insert(Flags.poll_readable),
-                    .writable => poll.flags.insert(Flags.poll_writable),
-                    .cancel => {
-                        if (poll.flags.contains(Flags.poll_readable)) {
-                            poll.flags.remove(Flags.poll_readable);
-                        } else if (poll.flags.contains(Flags.poll_writable)) {
-                            poll.flags.remove(Flags.poll_writable);
-                        } else {
-                            unreachable;
-                        }
-                    },
-                    else => @compileError("unreachable"),
-                }
-
-                if (comptime Environment.isMac and Environment.allow_assert and action != .cancel) {
-                    generation_number_monotonic += 1;
-                    poll.generation_number = generation_number_monotonic;
+    
+                const one_shot_flag = std.posix.system.EV.ONESHOT;
+                const udata: usize = @intFromPtr(Pollable.init(tag, poll).ptr());
+                const filter: i16, const flags_: u16 = switch (comptime action) {
+                    .readable => .{ std.posix.system.EVFILT.READ, std.c.EV.ADD | one_shot_flag },
+                    .writable => .{ std.posix.system.EVFILT.WRITE, std.c.EV.ADD | one_shot_flag },
+                    .cancel => if (poll.flags.contains(.poll_readable))
+                        .{ std.posix.system.EVFILT.READ, std.c.EV.DELETE }
+                    else if (poll.flags.contains(.poll_writable))
+                        .{ std.posix.system.EVFILT.WRITE, std.c.EV.DELETE }
+                    else
+                        unreachable,
+                    else => @compileError("invalid action: " ++ @tagName(action)),
+                };
+                kqueue_event.* = std.mem.zeroes(KEvent);
+                kqueue_event.ident = @intCast(fd.native());
+                kqueue_event.filter = filter;
+                kqueue_event.flags = flags_;
+                kqueue_event.udata = udata;
+                if (comptime @hasField(KEvent, "ext")) {
+                    const gen: u64 = if (comptime action == .cancel) poll.generation_number else generation_number_monotonic;
+                    kqueue_event.ext = .{ gen, 0 };
                 }
             }
-
-            const one_shot_flag = std.posix.system.EV.ONESHOT;
-            const udata: usize = @intFromPtr(Pollable.init(tag, poll).ptr());
-            const filter: i16, const flags_: u16 = switch (comptime action) {
-                .readable => .{ std.posix.system.EVFILT.READ, std.c.EV.ADD | one_shot_flag },
-                .writable => .{ std.posix.system.EVFILT.WRITE, std.c.EV.ADD | one_shot_flag },
-                .cancel => if (poll.flags.contains(.poll_readable))
-                    .{ std.posix.system.EVFILT.READ, std.c.EV.DELETE }
-                else if (poll.flags.contains(.poll_writable))
-                    .{ std.posix.system.EVFILT.WRITE, std.c.EV.DELETE }
-                else
-                    unreachable,
-                else => @compileError("invalid action: " ++ @tagName(action)),
-            };
-            kqueue_event.* = std.mem.zeroes(KEvent);
-            kqueue_event.ident = @intCast(fd.native());
-            kqueue_event.filter = filter;
-            kqueue_event.flags = flags_;
-            kqueue_event.udata = udata;
-            if (comptime @hasField(KEvent, "ext")) {
-                const gen: u64 = if (comptime action == .cancel) poll.generation_number else generation_number_monotonic;
-                kqueue_event.ext = .{ gen, 0 };
-            }
-        }
-    };
-
-    pub fn unregisterWithFd(this: *Poll, watcher_fd: bun.FD, fd: bun.FD) void {
-        _ = linux.epoll_ctl(
-            watcher_fd.cast(),
-            linux.EPOLL.CTL_DEL,
-            fd.cast(),
-            null,
-        );
-        this.flags.remove(.registered);
-    }
-
-    pub fn onUpdateKQueue(
-        event: KEvent,
-    ) void {
-        if (comptime Environment.isMac) {
-            if (event.filter == std.c.EVFILT.MACHPORT)
-                return;
-        }
-
-        const pollable = Pollable.from(event.udata);
-        const tag = pollable.tag();
-        switch (tag) {
-            .empty => {},
-
-            inline else => |t| {
-                const poll = pollable.poll();
-                var this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
-                if (event.flags == std.c.EV.ERROR) {
-                    log("error({d}) = {d}", .{ event.ident, event.data });
-                    this.onIOError(bun.sys.Error.fromCode(@enumFromInt(event.data), .kevent));
-                } else {
-                    log("ready({d}) = {d}", .{ event.ident, event.data });
-                    this.onReady();
-                }
-            },
-        }
-    }
-
-    pub fn onUpdateEpoll(
-        poll: *Poll,
-        tag: Pollable.Tag,
-        event: linux.epoll_event,
-    ) void {
-        switch (tag) {
-            .empty => {},
-
-            inline else => |t| {
-                var this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
-                if (event.events & linux.EPOLL.ERR != 0) {
-                    const errno = bun.sys.getErrno(event.events);
-                    log("error() = {s}", .{@tagName(errno)});
-                    this.onIOError(bun.sys.Error.fromCode(errno, .epoll_ctl));
-                } else {
-                    log("ready()", .{});
-                    this.onReady();
-                }
-            },
-        }
-    }
-
-    pub fn registerForEpoll(this: *Poll, tag: Pollable.Tag, loop: *Loop, comptime flag: Flags, one_shot: bool, fd: bun.FD) bun.sys.Maybe(void) {
-        const watcher_fd = loop.pollfd();
-
-        log("register: {s} ({f})", .{ @tagName(flag), fd });
-
-        bun.assert(fd != bun.invalid_fd);
-
-        if (one_shot) {
-            this.flags.insert(.one_shot);
-        }
-
-        if (comptime Environment.isLinux) {
-            const one_shot_flag: u32 = if (!this.flags.contains(.one_shot)) 0 else linux.EPOLL.ONESHOT;
-
-            const flags: u32 = switch (comptime flag) {
-                .process,
-                .poll_readable,
-                => linux.EPOLL.IN | linux.EPOLL.HUP | linux.EPOLL.ERR | one_shot_flag,
-                .poll_writable => linux.EPOLL.OUT | linux.EPOLL.HUP | linux.EPOLL.ERR | one_shot_flag,
-                else => @compileError("unreachable"),
-            };
-
-            var event = linux.epoll_event{ .events = flags, .data = .{ .u64 = @intFromPtr(Pollable.init(tag, this).ptr()) } };
-
-            const op: u32 = if (this.flags.contains(.was_ever_registered) or this.flags.contains(.needs_rearm)) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD;
-
-            const ctl = linux.epoll_ctl(
-                watcher_fd.cast(),
-                op,
-                fd.cast(),
-                &event,
-            );
-
-            if (bun.sys.Maybe(void).errnoSys(ctl, .epoll_ctl)) |errno| {
-                return errno;
-            }
-            this.flags.insert(.registered);
-            this.flags.insert(.was_ever_registered);
-        } else {
-            @compileError("epoll not supported on this platform");
-        }
-
-        this.flags.insert(switch (flag) {
-            .poll_readable => .poll_readable,
-            .poll_process => if (comptime Environment.isLinux) .poll_readable else .poll_process,
-            .poll_writable => .poll_writable,
-            else => @compileError("unreachable"),
-        });
-        this.flags.remove(.needs_rearm);
-
-        return .success;
-    }
+        };
 };
 pub const retry = bun.sys.E.AGAIN;
 pub const ReadState = @import("./pipes.zig").ReadState;
@@ -663,6 +753,8 @@ const ReadFile = bun.webcore.Blob.read_file.ReadFile;
 const WriteFile = bun.webcore.Blob.write_file.WriteFile;
 const posix = std.posix;
 const linux = std.os.linux;
+
+extern "c" fn clock_gettime_monotonic(sec: *i64, nsec: *i64) callconv(.c) c_int;
 
 pub inline fn keventCall(kq: i32, changes: [*]const KEvent, nchanges: c_int, events: [*]KEvent, nevents: c_int, timeout: ?*const std.posix.timespec) isize {
         if (comptime Environment.isFreeBSD) {

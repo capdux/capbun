@@ -25,6 +25,15 @@ const Stmt = js_ast.Stmt;
 type string = []const u8;
 type stringZ = [:0]const u8;
 
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    ptr: T,
+
+    ~init() {
+        _.allocator.free(_.ptr);
+    }
+}
+
 @root struct Expr {
     loc: logger.Loc,
     data: Data,
@@ -551,7 +560,7 @@ pub inline fn asStringHash(expr: *const Expr, allocator: std.mem.Allocator, comp
         .e_string => |str| {
             if (str.isUTF8()) return hash_fn(str.data);
             const utf8_str = str.string(allocator)?;
-            defer allocator.free(utf8_str);
+            const _utf8_str_guard = FreeGuard<@TypeOf(utf8_str)>{ allocator: allocator, ptr: utf8_str };
             return hash_fn(utf8_str);
         },
         else => return null,
@@ -1072,7 +1081,7 @@ pub fn allocate(allocator: std.mem.Allocator, comptime Type: type, st: Type, loc
             if (comptime Environment.isDebug) {
                 // Sanity check: assert string is not a null ptr
                 if (st.data.len > 0 && st.isUTF8()) {
-                    bun.assert(@intFromPtr(st.data.ptr) > 0);
+                    bun.assert(unsafe { @intFromPtr(st.data.ptr) } > 0);
                 }
             }
             return Expr{
@@ -1436,7 +1445,7 @@ pub fn init(comptime Type: type, st: Type, loc: logger.Loc): Expr {
             if (comptime Environment.isDebug) {
                 // Sanity check: assert string is not a null ptr
                 if (st.data.len > 0 && st.isUTF8()) {
-                    bun.assert(@intFromPtr(st.data.ptr) > 0);
+                    bun.assert(unsafe { @intFromPtr(st.data.ptr) } > 0);
                 }
             }
             return Expr{

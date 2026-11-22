@@ -8,6 +8,9 @@ import { ClientSession } from "./ClientSession.cp";
 import { Stream } from "./Stream.cp";
 import { HTTPClient } from "../http.cp";
 
+struct DeinitWithAllocGuard<T> { val: T, alloc: std.mem.Allocator, ~init() { _.val.deinit(_.alloc); } }
+struct FreeGuard<T> { slice: []T, alloc: std.mem.Allocator, ~init() { _.alloc.free(_.slice); } }
+
 pub fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Stream): ! {
     if (client := stream.client) {
         const request = client.buildRequest(client.state.original_request_body.len());
@@ -24,50 +27,48 @@ pub fn writeRequest(session: *ClientSession, stream: *Stream, qs: *quic.Stream):
 
         let sfa = std.heap.stackFallback(2048, bun.default_allocator);
         const alloc: std.mem.Allocator = sfa.get();
-        let headers: std.ArrayListUnmanaged(bun.uws.quic.Header) = {};
-        defer headers.deinit(alloc);
-        headers.ensureTotalCapacityPrecise(alloc, request.headers.len + 4)?;
+        let headers_guard = DeinitWithAllocGuard<std.ArrayListUnmanaged(bun.uws.quic.Header)>{ val: {}, alloc: alloc };
+        headers_guard.val.ensureTotalCapacityPrecise(alloc, request.headers.len + 4)?;
 
         let name_bytes: usize = 0;
         for (h of request.headers) {
             name_bytes += h.name.len;
         }
-        const lower = alloc.alloc(u8, name_bytes)?;
-        defer alloc.free(lower);
+        const lower_guard = FreeGuard<u8>{ slice: alloc.alloc(u8, name_bytes)?, alloc: alloc };
         let lower_len: usize = 0;
 
         let authority: string = client.url.host;
-        headers.items.len = 4;
+        headers_guard.val.items.len = 4;
         for (h of request.headers) {
             if (qpack_class := bun.uws.quic.Qpack.classify(h.name)) {
                 switch (qpack_class) {
                     .forbidden => {},
                     .host => authority = h.value,
-                    .indexed(i) => headers.appendAssumeCapacity(bun.uws.quic.Header.init(i.name, h.value, i.index)),
+                    .indexed(i) => headers_guard.val.appendAssumeCapacity(bun.uws.quic.Header.init(i.name, h.value, i.index)),
                 }
             } else {
-                const dst = lower[lower_len..lower_len + h.name.len];
+                const dst = lower_guard.slice[lower_len..lower_len + h.name.len];
                 bun.strings.copyLowercase(h.name, dst);
                 lower_len += h.name.len;
-                headers.appendAssumeCapacity(bun.uws.quic.Header.init(dst, h.value, null));
+                headers_guard.val.appendAssumeCapacity(bun.uws.quic.Header.init(dst, h.value, null));
             }
         }
         if (authority.len == 0) {
             authority = session.hostname;
         }
-        headers.items[0] = bun.uws.quic.Header.init(":method", request.method, .method_get);
-        headers.items[1] = bun.uws.quic.Header.init(":scheme", "https", .scheme_https);
-        headers.items[2] = bun.uws.quic.Header.init(":authority", authority, .authority);
+        headers_guard.val.items[0] = bun.uws.quic.Header.init(":method", request.method, .method_get);
+        headers_guard.val.items[1] = bun.uws.quic.Header.init(":scheme", "https", .scheme_https);
+        headers_guard.val.items[2] = bun.uws.quic.Header.init(":authority", authority, .authority);
         let req_path: string = "/";
         if (request.path.len > 0) req_path = request.path;
-        headers.items[3] = bun.uws.quic.Header.init(":path", req_path, .path);
+        headers_guard.val.items[3] = bun.uws.quic.Header.init(":path", req_path, .path);
 
         const body = client.state.request_body;
         const has_inline_body = client.state.original_request_body == .bytes && body.len > 0;
         const is_streaming = client.state.original_request_body == .stream;
 
         const end_stream = !has_inline_body && !is_streaming;
-        if (qs.sendHeaders(headers.items, end_stream) != 0) {
+        if (qs.sendHeaders(headers_guard.val.items, end_stream) != 0) {
             return error.HTTP3HeaderEncodingError;
         }
 

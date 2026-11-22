@@ -156,7 +156,7 @@ pub @value class Lexer {
         if (this.current >= this.source.contents.len) {
             return "";
         }
-        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(this.source.contents.ptr[this.current]);
+        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { this.source.contents.ptr[this.current] });
         return if (!(cp_len + this.current > this.source.contents.len)) this.source.contents[this.current .. cp_len + this.current] else "";
     }
 
@@ -165,13 +165,13 @@ pub @value class Lexer {
             this.end = this.source.contents.len;
             return -1;
         }
-        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(this.source.contents.ptr[this.current]);
+        const cp_len = strings.wtf8ByteSequenceLengthWithInvalid(unsafe { this.source.contents.ptr[this.current] });
         const slice = if (!(cp_len + this.current > this.source.contents.len)) this.source.contents[this.current .. cp_len + this.current] else "";
 
         const code_point = switch (slice.len) {
             0 => -1,
             1 => @as(CodePoint, slice[0]),
-            else => strings.decodeWTF8RuneTMultibyte(slice.ptr[0..4], @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
+            else => strings.decodeWTF8RuneTMultibyte(unsafe { slice.ptr[0..4] }, @as(u3, @intCast(slice.len)), CodePoint, strings.unicode_replacement),
         };
 
         this.end = this.current;

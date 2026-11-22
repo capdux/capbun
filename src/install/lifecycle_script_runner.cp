@@ -7,6 +7,29 @@ pub struct TopInstallCtx {
     installer: *Store.Installer,
 }
 
+struct DeinitGuard<T> {
+    ptr: *T!,
+
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+struct SpawnScriptErrGuard {
+    sub: (*LifecycleScriptSubprocess)?,
+
+    ~init() {
+        if (s := _.sub) {
+            if (s.has_incremented_alive_count) {
+                s.has_incremented_alive_count = false;
+                // .monotonic is okay because because this value is only used by hoisted installs.
+                * = LifecycleScriptSubprocess.alive_count.fetchSub(1, .monotonic);
+            }
+            s.ensureNotInHeap();
+        }
+    }
+}
+
 pub struct LifecycleScriptSubprocess {
     package_name: string,
 
@@ -133,15 +156,7 @@ pub struct LifecycleScriptSubprocess {
             * = LifecycleScriptSubprocess.alive_count.fetchAdd(1, .monotonic);
         }
 
-        errdefer {
-            if (_.has_incremented_alive_count) {
-                _.has_incremented_alive_count = false;
-                // .monotonic is okay because because this value is only used by hoisted installs.
-                * = LifecycleScriptSubprocess.alive_count.fetchSub(1, .monotonic);
-            }
-
-            _.ensureNotInHeap();
-        }
+        let err_guard = SpawnScriptErrGuard{ sub: _ };
 
         const manager = _.manager;
         const original_script = _.scripts.items[next_script_index].?;
@@ -155,7 +170,7 @@ pub struct LifecycleScriptSubprocess {
         _.has_called_process_exit = false;
 
         let copy_script = std.array_list.Managed(u8).initCapacity(manager.allocator, original_script.len + 1)?;
-        defer copy_script.deinit();
+        const _copy_script_guard = DeinitGuard<std.array_list.Managed(u8)>{ ptr: unsafe { &copy_script } };
         bun.cli.RunCommand.replacePackageManagerRun(&copy_script, original_script)?;
         copy_script.append(0)?;
 
@@ -228,7 +243,7 @@ pub struct LifecycleScriptSubprocess {
         _.remaining_fds = 0;
         _.started_at = bun.timespec.now(.allow_mocked_time).ns();
         _.manager.active_lifecycle_scripts.insert(_);
-        const spawn_res = bun.spawn.spawnProcess(&spawn_options, @ptrCast(&argv), _.envp)?;
+        const spawn_res = unsafe { bun.spawn.spawnProcess(&spawn_options, @ptrCast(&argv), _.envp) }?;
         let spawned = spawn_res.unwrap()?;
 
         if (comptime Environment.isPosix) {
@@ -295,6 +310,7 @@ pub struct LifecycleScriptSubprocess {
             },
             .result => {},
         }
+        err_guard.sub = null;
     }
 
     fn printOutput(*_) {

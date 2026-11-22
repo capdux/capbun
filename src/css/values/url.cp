@@ -4,6 +4,13 @@ const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const UrlDependency = css.dependencies.UrlDependency;
 
+struct DeinitGuard<T> {
+    val: T,
+    ~init() {
+        _.val.deinit();
+    }
+}
+
 /// A CSS [url()](https://www.w3.org/TR/css-values-4/#urls) value and its source location.
 pub struct Url {
     /// The url string.
@@ -93,26 +100,24 @@ pub struct Url {
         const url = dest.getImportRecordUrl(s.import_record_idx)?;
 
         if (dest.minify && !import_record.flags.is_internal) {
-            let buf = std.Io.Writer.Allocating.init(dest.allocator);
-            defer buf.deinit();
+            let buf_guard = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(dest.allocator) };
             // PERF(alloc) we could use stack fallback here?
-            css.Token.toCssGeneric(css.Token{ unquoted_url: url }, &buf.writer) catch return dest.addFmtError();
+            css.Token.toCssGeneric(css.Token{ unquoted_url: url }, &buf_guard.val.writer) catch return dest.addFmtError();
 
             // If the unquoted url is longer than it would be quoted (e.g. `url("...")`)
             // then serialize as a string and choose the shorter version.
-            if (buf.written().len > url.len + 7) {
-                let buf2 = std.Io.Writer.Allocating.init(dest.allocator);
-                defer buf2.deinit();
+            if (buf_guard.val.written().len > url.len + 7) {
+                let buf2_guard = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(dest.allocator) };
                 // PERF(alloc) we could use stack fallback here?
-                css.serializer.serializeString(url, &buf2.writer) catch return dest.addFmtError();
-                if (buf2.written().len + 5 < buf.written().len) {
+                css.serializer.serializeString(url, &buf2_guard.val.writer) catch return dest.addFmtError();
+                if (buf2_guard.val.written().len + 5 < buf_guard.val.written().len) {
                     dest.writeStr("url(")?;
-                    dest.writeStr(buf2.written())?;
+                    dest.writeStr(buf2_guard.val.written())?;
                     return dest.writeChar(')');
                 }
             }
 
-            dest.writeStr(buf.written())?;
+            dest.writeStr(buf_guard.val.written())?;
         } else {
             dest.writeStr("url(")?;
             css.serializer.serializeString(url, dest) catch return dest.addFmtError();

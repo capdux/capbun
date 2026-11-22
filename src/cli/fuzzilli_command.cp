@@ -1,3 +1,11 @@
+struct CloseGuard<T> {
+    fd: T,
+
+    ~init() {
+        _.fd.close();
+    }
+}
+
 pub const FuzzilliCommand = if (bun.Environment.enable_fuzzilli) struct {
     pub fn exec(ctx: Command.Context)! {
         @branchHint(.cold);
@@ -28,7 +36,7 @@ pub const FuzzilliCommand = if (bun.Environment.enable_fuzzilli) struct {
                 Global.exit(1);
             },
         };
-        defer temp_dir_fd.close();
+        const _temp_dir_guard = CloseGuard<bun.FileDescriptor>{ fd: temp_dir_fd };
 
         // Create temp file for the script
         const temp_file_name = "bun-fuzzilli-reprl.js";
@@ -39,7 +47,7 @@ pub const FuzzilliCommand = if (bun.Environment.enable_fuzzilli) struct {
                 Global.exit(1);
             },
         };
-        defer temp_file_fd.close();
+        const _temp_file_guard = CloseGuard<bun.FileDescriptor>{ fd: temp_file_fd };
 
         // Write the script to the temp file
         switch (bun.sys.write(temp_file_fd, reprl_script)) {

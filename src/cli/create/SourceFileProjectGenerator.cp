@@ -1,5 +1,22 @@
 const SourceFileProjectGenerator = @This();
 
+struct FreeGuard<T> {
+    allocator: std.mem.Allocator,
+    slice: []T,
+
+    ~init() {
+        _.allocator.free(_.slice);
+    }
+};
+
+struct CloseGuard<T> {
+    fd: T,
+
+    ~init() {
+        _.fd.close();
+    }
+};
+
 // Generate project files based on the entry point && dependencies
 pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result: *BundleV2.DependenciesScanner.Result): ! {
     let react_component_export: []const u8 = "";
@@ -81,8 +98,8 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: string, result:
 // Create a file with given contents, returns if file was newly created
 fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool) {
     // Check if file exists && has same contents
-    if (bun.sys.File.readFrom(bun.FD.cwd(), filename, default_allocator).asValue()) |source_contents| {
-        defer default_allocator.free(source_contents);
+    if (source_contents := bun.sys.File.readFrom(bun.FD.cwd(), filename, default_allocator).asValue()) {
+        const _sc_guard = FreeGuard<u8>{ allocator: default_allocator, slice: source_contents };
         if (strings.eqlLong(source_contents, contents, true)) {
             return .{ .result = false };
         }
@@ -98,7 +115,7 @@ fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool) {
         .result => |fd| fd,
         .err => |err| return .{ .err = err },
     };
-    defer fd.close();
+    const _fd_guard = CloseGuard<@TypeOf(fd)>{ fd: fd };
 
     // Write contents
     switch (bun.sys.File.writeAll(.{ .handle = fd }, contents)) {

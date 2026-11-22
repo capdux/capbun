@@ -1,3 +1,10 @@
+pub struct ScopePopGuard<ParserPtr> {
+    p: ParserPtr,
+    ~init() {
+        _.p.popScope();
+    }
+}
+
 pub fn Parse(
     comptime parser_feature__typescript: bool,
     comptime parser_feature__jsx: JSXTransformType,
@@ -1303,7 +1310,7 @@ pub fn Parse(
                             p.lexer.next()?;
 
                             * = try p.pushScopeForParsePass(.function_args, async_range.loc);
-                            defer p.popScope();
+                            const _scope_guard = ScopePopGuard<*P>{ p: p };
 
                             let data = FnOrArrowDataParse{
                                 allow_await: .allow_expr,

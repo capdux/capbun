@@ -1620,3 +1620,7 @@
 
 ## [2026-11-22 Wave #32] RAII 改造与 `unsafe {}` 经验
 - `RuntimeTranspilerCache.cp`：`TraceGuard` 字段类型不能写 `@TypeOf(bun.perf.trace(""))`，否则会触发 `generated_perf_trace_events.zig` 编译期空事件名校验报错；应指定真实已注册事件名 `bun.perf.trace("RuntimeTranspilerCache.fromFile")` 或使用泛型 `TraceGuard<T>`。
+
+## [2026-11-22 Wave #33] RAII 改造与 `unsafe {}` 经验
+- `media_query.cp`：`const a, const b = switch (...)` 多变量解包不被 `cpc` 支持，须先绑定 `const pair = switch (...)`，再索引 `pair[0]` / `pair[1]`；`switch` 分支中的 `|` 按位或掩码会被拆分为多标签导致重复分支，须改为 `if` 掩码判断。
+- `io.cp` / `production.cp`：`static let once` 须显式标注 `@TypeOf(std.once(load))`；`if (cond) val` 缺少 `else` 分支时须补全 `else @as(void, undefined)`；`event.events & FLAG != 0` 须加括号 `(event.events & FLAG) != 0`；局部同名变量 `pending` 遮蔽 struct 字段 `_.pending` 时易被自动补全误重写为 `self.pending`，命名应避开字段名；`EntryPointRollbackGuard` 直接持有 `map: *EntryPointMap!` 传入 `_` 可避免 `unsafe { &_.files }` 风险。

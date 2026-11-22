@@ -62,11 +62,38 @@ fn cp_eq(a: anytype, b: anytype) bool {
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
 fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
 fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
-pub fn cp_string_from(val: anytype) []const u8 { const __T = @TypeOf(val); if (comptime __T == []const u8) { return val; } else if (comptime (__T == [*:0]const u8 or __T == [*:0]u8)) { return std.mem.span(val); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .slice and @typeInfo(__T).pointer.child == u8)) { return val; } else if (comptime (@typeInfo(__T) == .@"enum")) { return @tagName(val); } else if (comptime __T == bool) { return if (val) "true" else "false"; } else if (comptime (@typeInfo(__T) == .int or __T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{val}) catch "0"; } else if (comptime (@typeInfo(__T) == .float or __T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{val}) catch "0.0"; } else if (comptime (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "toString"))) { return val.toString(); } else if (comptime (@typeInfo(__T) == .pointer and @typeInfo(@typeInfo(__T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__T).pointer.child, "toString"))) { return val.toString(); } else { return @typeName(__T); } }
+pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const linker = @import("../../bundler/linker.zig");
 pub const create_command = @import("../create_command.zig");
 pub const bun = @import("bun");
+pub fn FreeGuard(comptime T: type) type {
+    return struct {
+        allocator: std.mem.Allocator,
+        slice: []T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.allocator.free(self.slice);
+        }
+    };
+}
+
+pub fn CloseGuard(comptime T: type) type {
+    return struct {
+        fd: T,
+        __cp_dropped: bool = false,
+
+pub fn __cp_deinit(self: *@This()) void {
+            if (self.__cp_dropped) return;
+            self.__cp_dropped = true;
+                _ = self.fd.close();
+        }
+    };
+}
+
 const SourceFileProjectGenerator = @This();
 const enable_shadcn_ui = true;
 const TemplateFile = struct {
@@ -227,51 +254,48 @@ pub const Template = union(Tag) {
         components: bun.StringSet,
     },
 
-    pub const Tag = enum {
-        ReactTailwindSpa,
-        ReactSpa,
-        ReactShadcnSpa,
-
-        pub fn logger(self: Tag) Logger {
+pub fn logger(self: @This()) Logger {
             return Logger{ .template = self };
-        }
-
-        pub fn label(self: Tag) []const u8 {
-            return switch (self) {
-                .ReactTailwindSpa => "React + Tailwind",
-                .ReactSpa => "React",
-                .ReactShadcnSpa => "React + shadcn/ui + Tailwind",
-            };
-        }
-    };
-
-    pub fn logger(self: Template) Logger {
-        return Logger{ .template = self };
     }
-
+    pub const Tag = enum {
+            ReactTailwindSpa,
+            ReactSpa,
+            ReactShadcnSpa,
+    
+            pub fn logger(self: Tag) Logger {
+                return Logger{ .template = self };
+            }
+    
+            pub fn label(self: Tag) []const u8 {
+                return switch (self) {
+                    .ReactTailwindSpa => "React + Tailwind",
+                    .ReactSpa => "React",
+                    .ReactShadcnSpa => "React + shadcn/ui + Tailwind",
+                };
+            }
+        };
     pub const Logger = struct {
         has_written_initial_message: bool = false,
         template: Tag,
-
-        pub fn file(this: *Logger, template_file: *const TemplateFile, name: []const u8, max_name_len: usize) void {
-            this.has_written_initial_message = true;
-            Output.pretty(" <green>create<r>  ", {});
-            Output.pretty("{s}", .{name});
-            const name_len = name.len;
-            var padding: usize = max_name_len - name_len;
-            while (padding > 0) : (padding -= 1) {
-                Output.pretty(" ", {});
-            }
-            Output.prettyln("   <d>{s}<r>", .{@tagName(template_file.reason)});
+    
+    pub fn file(self: *@This(), template_file: *const TemplateFile, name: []const u8, max_name_len: usize) void {
+                self.has_written_initial_message = true;
+                _ = Output.pretty(" <green>create<r>  ", .{});
+                _ = Output.pretty("{s}", .{ name });
+                const name_len = name.len;
+                var padding: usize = (max_name_len - name_len);
+                _ = &padding;
+                while ((padding > 0)) : (padding = (padding - 1)) {
+                    _ = Output.pretty(" ", .{});
+                }
+                _ = Output.prettyln("   <d>{s}<r>", .{ @tagName(template_file.reason) });
         }
-
-        pub fn ifNew(this: *Logger) void {
-            if (!this.has_written_initial_message) return;
-
-            Output.prettyln(
-                "<r><d>--------------------------------<r>\n✨ <b>{s}<r> project configured\n\n<b><cyan>Development<r><d> - frontend dev server with hot reload<r>\n\n  <cyan><b>bun dev<r>\n\n<b><green>Production<r><d> - build optimized assets<r>\n\n  <green><b>bun run build<r>\n\n<blue>Happy bunning! 🐇<r>",
-                .{this.template.label()},
-            );
+    
+    pub fn ifNew(self: *@This()) void {
+                if ((!self.has_written_initial_message)) {
+                    return;
+                }
+                _ = Output.prettyln("<r><d>--------------------------------<r>\n✨ <b>{s}<r> project configured\n\n<b><cyan>Development<r><d> - frontend dev server with hot reload<r>\n\n  <cyan><b>bun dev<r>\n\n<b><green>Production<r><d> - build optimized assets<r>\n\n  <green><b>bun run build<r>\n\n<blue>Happy bunning! 🐇<r>", .{ self.template.label() });
         }
     };
 };
@@ -342,9 +366,10 @@ pub fn generate(_: Command.Context, _: Example.Tag, entry_point: []const u8, res
 pub fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool) {
         if (bun.sys.File.readFrom(bun.FD.cwd(), filename, default_allocator).asValue()) |source_contents| {
             _ = &source_contents;
-            defer {
-            _ = default_allocator.free(source_contents);
-            }
+            var _sc_guard = FreeGuard(u8){ .allocator = default_allocator, .slice = source_contents };
+            _ = &_sc_guard;
+            var ___sc_guard_moved = false; _ = &___sc_guard_moved;
+            defer if (!___sc_guard_moved) { ___sc_guard_moved = true; const __T = @TypeOf(_sc_guard); if (@typeInfo(__T) == .optional) { if (_sc_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _sc_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _sc_guard; _drop_val.__cp_deinit(); } };
             if (strings.eqlLong(source_contents, contents, true)) {
                 return .{ .result = false };
             }
@@ -359,9 +384,10 @@ pub fn createFile(filename: []const u8, contents: []const u8) bun.sys.Maybe(bool
 return .{ .err = err };
 },
 });
-        defer {
-        _ = fd.close();
-        }
+        var _fd_guard = CloseGuard(@TypeOf(fd)){ .fd = fd };
+        _ = &_fd_guard;
+        var ___fd_guard_moved = false; _ = &___fd_guard_moved;
+        defer if (!___fd_guard_moved) { ___fd_guard_moved = true; const __T = @TypeOf(_fd_guard); if (@typeInfo(__T) == .optional) { if (_fd_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _fd_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _fd_guard; _drop_val.__cp_deinit(); } };
         switch (bun.sys.File.writeAll(.{ .handle = fd }, contents)) {
 .result => {
 return .{ .result = true };

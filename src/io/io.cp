@@ -13,134 +13,147 @@ pub const Source = @import("./source.zig").Source;
 
 const log = bun.Output.scoped(.loop, .visible);
 
-pub const Loop = struct {
-    pending: Request.Queue = .{},
+pub struct DeinitGuard<T> {
+    ptr: T,
+    ~init() {
+        _.ptr.deinit();
+    }
+}
+
+@c {
+    fn clock_gettime_monotonic(sec: *i64!, nsec: *i64!): c_int;
+}
+
+pub struct Loop {
+    pending: Request.Queue = {},
     waker: bun.Async.Waker,
-    epoll_fd: if (Environment.isLinux) bun.FD else void = if (Environment.isLinux) .invalid,
+    epoll_fd: if (Environment.isLinux) bun.FD else void = if (Environment.isLinux) .invalid else @as(void, undefined),
     /// FreeBSD's `Waker` is `LinuxWaker` (an eventfd), so unlike macOS the
     /// waker fd is NOT itself a kqueue. We create one here and register the
     /// eventfd on it, mirroring how Linux registers the eventfd on epoll_fd.
-    kqueue_fd: if (Environment.isFreeBSD) bun.FD else void = if (Environment.isFreeBSD) .invalid,
+    kqueue_fd: if (Environment.isFreeBSD) bun.FD else void = if (Environment.isFreeBSD) .invalid else @as(void, undefined),
 
-    cached_now: posix.timespec = .{
-        .nsec = 0,
-        .sec = 0,
+    cached_now: posix.timespec = {
+        nsec: 0,
+        sec: 0,
     },
     active: usize = 0,
 
-    let loop: Loop = undefined;
+    static let loop: Loop = undefined;
 
-    fn load() void {
-        loop = Loop{
-            .waker = bun.Async.Waker.init() catch @panic("failed to initialize waker"),
+    static fn load() {
+        Loop.loop = Loop{
+            waker: bun.Async.Waker.init() catch @panic("failed to initialize waker"),
         };
         if (comptime Environment.isLinux) {
-            loop.epoll_fd = .fromNative(std.posix.epoll_create1(std.os.linux.EPOLL.CLOEXEC | 0) catch @panic("Failed to create epoll file descriptor"));
+            Loop.loop.epoll_fd = .fromNative(std.posix.epoll_create1(std.os.linux.EPOLL.CLOEXEC | 0) catch @panic("Failed to create epoll file descriptor"));
 
             {
                 let epoll = std.mem.zeroes(std.os.linux.epoll_event);
                 epoll.events = std.os.linux.EPOLL.IN | std.os.linux.EPOLL.ET | std.os.linux.EPOLL.ERR | std.os.linux.EPOLL.HUP;
-                epoll.data.ptr = @intFromPtr(&loop);
-                const rc = std.os.linux.epoll_ctl(loop.epoll_fd.cast(), std.os.linux.EPOLL.CTL_ADD, loop.waker.getFd().cast(), &epoll);
+                epoll.data.ptr = unsafe { @intFromPtr(&Loop.loop) };
+                const rc = std.os.linux.epoll_ctl(Loop.loop.epoll_fd.cast(), std.os.linux.EPOLL.CTL_ADD, Loop.loop.waker.getFd().cast(), unsafe { &epoll });
 
-                switch (bun.sys.getErrno(rc)) {
+                const epoll_errno = bun.sys.getErrno(rc);
+                switch (epoll_errno) {
                     .SUCCESS => {},
-                    else => |err| bun.Output.panic("Failed to wait on epoll {s}", .{@tagName(err)}),
+                    else => bun.Output.panic("Failed to wait on epoll {s}", .{@tagName(epoll_errno)}),
                 }
             }
         }
         if (comptime Environment.isFreeBSD) {
-            loop.kqueue_fd = .fromNative(std.posix.kqueue() catch @panic("Failed to create kqueue"));
+            Loop.loop.kqueue_fd = .fromNative(std.posix.kqueue() catch @panic("Failed to create kqueue"));
             let change = std.mem.zeroes(KEvent);
-            change.ident = @intCast(loop.waker.getFd().cast());
+            change.ident = @intCast(Loop.loop.waker.getFd().cast());
             change.filter = std.c.EVFILT.READ;
             change.flags = std.c.EV.ADD | std.c.EV.CLEAR;
-            const rc = std.c.kevent(loop.kqueue_fd.cast(), @as([*]const KEvent, @ptrCast(&change)), 1, undefined, 0, null);
-            switch (bun.sys.getErrno(rc)) {
+            const rc = std.c.kevent(Loop.loop.kqueue_fd.cast(), unsafe { @as([*]const KEvent, @ptrCast(&change)) }, 1, undefined, 0, null);
+            const kq_errno = bun.sys.getErrno(rc);
+            switch (kq_errno) {
                 .SUCCESS => {},
-                else => |err| bun.Output.panic("Failed to register waker on kqueue: {s}", .{@tagName(err)}),
+                else => bun.Output.panic("Failed to register waker on kqueue: {s}", .{@tagName(kq_errno)}),
             }
         }
         let thread = std.Thread.spawn(.{
-            .allocator = bun.default_allocator,
-            .stack_size = 1024 * 1024 * 2,
+            allocator: bun.default_allocator,
+            stack_size: 1024 * 1024 * 2,
         }, onSpawnIOThread, .{}) catch @panic("Failed to spawn IO watcher thread");
         thread.detach();
     }
-    let once = std.once(load);
+    static let once: @TypeOf(std.once(load)) = std.once(load);
 
-    pub fn get() *Loop {
+    static fn get(): *Loop! {
         if (Environment.isWindows) {
             @panic("Do not use this API on windows");
         }
 
-        once.call();
+        Loop.once.call();
 
-        return &loop;
+        return unsafe { &Loop.loop };
     }
 
-    pub fn onSpawnIOThread() void {
-        loop.tick();
+    static fn onSpawnIOThread() {
+        Loop.loop.tick();
     }
 
-    pub fn schedule(this: *Loop, request: *Request) void {
+    fn schedule(*_, request: *Request!) {
         bun.assert(!request.scheduled);
         request.scheduled = true;
-        this.pending.push(request);
-        this.waker.wake();
+        _.pending.push(request);
+        _.waker.wake();
     }
 
-    pub fn tick(this: *Loop) void {
+    fn tick(*_) {
         bun.Output.Source.configureNamedThread("IO Watcher");
         if (comptime Environment.isLinux) {
-            this.tickEpoll();
+            _.tickEpoll();
         } else if (comptime Environment.isKqueue) {
-            this.tickKqueue();
+            _.tickKqueue();
         } else {
             @panic("TODO on this platform");
         }
     }
 
-    pub fn tickEpoll(this: *Loop) void {
+    fn tickEpoll(*_) {
         if (comptime !Environment.isLinux) {
             @compileError("Epoll is Linux-Only");
         }
 
-        this.updateNow();
+        _.updateNow();
 
         while (true) {
             {
-                let pending_batch = this.pending.popBatch();
-                let pending = pending_batch.iterator();
+                let pending_batch = _.pending.popBatch();
+                let pending_iter = pending_batch.iterator();
 
-                while (pending.next()) |request| {
+                while (request := pending_iter.next()) {
                     request.scheduled = false;
                     switch (request.callback(request)) {
-                        .readable => |readable| {
-                            switch (readable.poll.registerForEpoll(readable.tag, this, .poll_readable, true, readable.fd)) {
-                                .err => |err| {
-                                    readable.onError(readable.ctx, err);
+                        .readable readable => {
+                            switch (readable.poll.registerForEpoll(readable.tag, _, .poll_readable, true, readable.fd)) {
+                                .err e => {
+                                    readable.onError(readable.ctx, e);
                                 },
                                 .result => {
-                                    this.active += 1;
+                                    _.active += 1;
                                 },
                             }
                         },
-                        .writable => |writable| {
-                            switch (writable.poll.registerForEpoll(writable.tag, this, .poll_writable, true, writable.fd)) {
-                                .err => |err| {
-                                    writable.onError(writable.ctx, err);
+                        .writable writable => {
+                            switch (writable.poll.registerForEpoll(writable.tag, _, .poll_writable, true, writable.fd)) {
+                                .err e => {
+                                    writable.onError(writable.ctx, e);
                                 },
                                 .result => {
-                                    this.active += 1;
+                                    _.active += 1;
                                 },
                             }
                         },
-                        .close => |close| {
+                        .close close => {
                             log("close({f}, registered={})", .{ close.fd, close.poll.flags.contains(.registered) });
                             if (close.poll.flags.contains(.was_ever_registered)) {
-                                close.poll.unregisterWithFd(this.pollfd(), close.fd);
-                                this.active -= 1;
+                                close.poll.unregisterWithFd(_.pollfd(), close.fd);
+                                _.active -= 1;
                             }
                             close.onDone(close.ctx);
                         },
@@ -151,73 +164,74 @@ pub const Loop = struct {
             let events: [256]EventType = undefined;
 
             const rc = linux.epoll_wait(
-                this.pollfd().cast(),
-                &events,
+                _.pollfd().cast(),
+                unsafe { &events },
                 @intCast(events.len),
                 std.math.maxInt(i32),
             );
 
-            switch (bun.sys.getErrno(rc)) {
+            const epoll_errno = bun.sys.getErrno(rc);
+            switch (epoll_errno) {
                 .INTR => continue,
                 .SUCCESS => {},
-                else => |e| bun.Output.panic("epoll_wait: {s}", .{@tagName(e)}),
+                else => bun.Output.panic("epoll_wait: {s}", .{@tagName(epoll_errno)}),
             }
 
-            this.updateNow();
+            _.updateNow();
 
-            const current_events: []std.os.linux.epoll_event = events[0..rc];
+            const current_events = events[0..rc];
             if (rc != 0) {
-                log("epoll_wait({f}) = {d}", .{ this.pollfd(), rc });
+                log("epoll_wait({f}) = {d}", .{ _.pollfd(), rc });
             }
 
-            for (current_events) |event| {
+            for (event of current_events) {
                 const pollable: Pollable = Pollable.from(event.data.u64);
                 if (pollable.tag() == .empty) {
-                    if (event.data.ptr == @intFromPtr(&loop)) {
+                    if (event.data.ptr == unsafe { @intFromPtr(&Loop.loop) }) {
                         continue;
                     }
                 }
-                _ = Poll.onUpdateEpoll(pollable.poll(), pollable.tag(), event);
+                * = Poll.onUpdateEpoll(pollable.poll(), pollable.tag(), event);
             }
         }
     }
 
-    pub fn pollfd(this: *const Loop) bun.FD {
+    fn pollfd(): bun.FD {
         if (comptime Environment.isLinux) {
-            return this.epoll_fd;
+            return _.epoll_fd;
         }
         if (comptime Environment.isFreeBSD) {
-            return this.kqueue_fd;
+            return _.kqueue_fd;
         }
 
-        return this.waker.getFd();
+        return _.waker.getFd();
     }
 
-    pub fn fd(this: *const Loop) bun.FD {
-        return this.waker.getFd();
+    fn fd(): bun.FD {
+        return _.waker.getFd();
     }
 
-    pub fn tickKqueue(this: *Loop) void {
+    fn tickKqueue(*_) {
         if (comptime !Environment.isKqueue) {
             @compileError("Kqueue is macOS/FreeBSD-only");
         }
 
-        this.updateNow();
+        _.updateNow();
 
         while (true) {
             let stack_fallback = std.heap.stackFallback(@sizeOf([256]EventType), bun.default_allocator);
             let events_list: std.array_list.Managed(EventType) = std.array_list.Managed(EventType).initCapacity(stack_fallback.get(), 256) catch unreachable;
-            defer events_list.deinit();
+            const _guard_events_list = DeinitGuard<*@TypeOf(events_list)!>{ ptr: unsafe { &events_list } };
 
             {
-                let pending_batch = this.pending.popBatch();
-                let pending = pending_batch.iterator();
-                bun.handleOom(events_list.ensureUnusedCapacity(pending.batch.count));
-                @memset(std.mem.sliceAsBytes(events_list.items.ptr[0..events_list.capacity]), 0);
+                let pending_batch = _.pending.popBatch();
+                let pending_iter = pending_batch.iterator();
+                bun.handleOom(events_list.ensureUnusedCapacity(pending_iter.batch.count));
+                @memset(std.mem.sliceAsBytes(unsafe { events_list.items.ptr[0..events_list.capacity] }), 0);
 
-                while (pending.next()) |request| {
+                while (request := pending_iter.next()) {
                     switch (request.callback(request)) {
-                        .readable => |readable| {
+                        .readable readable => {
                             const i = events_list.items.len;
                             assert(i + 1 <= events_list.capacity);
                             events_list.items.len += 1;
@@ -227,10 +241,10 @@ pub const Loop = struct {
                                 readable.tag,
                                 readable.poll,
                                 readable.fd,
-                                &events_list.items.ptr[i],
+                                unsafe { &events_list.items.ptr[i] },
                             );
                         },
-                        .writable => |writable| {
+                        .writable writable => {
                             const i = events_list.items.len;
                             assert(i + 1 <= events_list.capacity);
                             events_list.items.len += 1;
@@ -240,11 +254,11 @@ pub const Loop = struct {
                                 writable.tag,
                                 writable.poll,
                                 writable.fd,
-                                &events_list.items.ptr[i],
+                                unsafe { &events_list.items.ptr[i] },
                             );
                         },
 
-                        .close => |close| {
+                        .close close => {
                             if (close.poll.flags.contains(.poll_readable) or close.poll.flags.contains(.poll_writable)) {
                                 const i = events_list.items.len;
                                 assert(i + 1 <= events_list.capacity);
@@ -254,7 +268,7 @@ pub const Loop = struct {
                                     close.tag,
                                     close.poll,
                                     close.fd,
-                                    &events_list.items.ptr[i],
+                                    unsafe { &events_list.items.ptr[i] },
                                 );
                             }
                             close.onDone(close.ctx);
@@ -266,7 +280,7 @@ pub const Loop = struct {
             const change_count = events_list.items.len;
 
             const rc = keventCall(
-                this.pollfd().cast(),
+                _.pollfd().cast(),
                 events_list.items.ptr,
                 @intCast(change_count),
                 events_list.items.ptr,
@@ -274,29 +288,29 @@ pub const Loop = struct {
                 null,
             );
 
-            switch (bun.sys.getErrno(rc)) {
+            const kq_errno = bun.sys.getErrno(rc);
+            switch (kq_errno) {
                 .INTR => continue,
                 .SUCCESS => {},
-                else => |e| bun.Output.panic("kevent failed: {s}", .{@tagName(e)}),
+                else => bun.Output.panic("kevent failed: {s}", .{@tagName(kq_errno)}),
             }
 
-            this.updateNow();
+            _.updateNow();
 
             assert(rc <= events_list.capacity);
-            const current_events: []KEvent = events_list.items.ptr[0..@intCast(rc)];
+            const current_events: []KEvent = unsafe { events_list.items.ptr[0..@intCast(rc)] };
 
-            for (current_events) |event| {
+            for (event of current_events) {
                 Poll.onUpdateKQueue(event);
             }
         }
     }
 
-    fn updateNow(this: *Loop) void {
-        updateTimespec(&this.cached_now);
+    fn updateNow(*_) {
+        updateTimespec(unsafe { &_.cached_now });
     }
 
-    extern "c" fn clock_gettime_monotonic(sec: *i64, nsec: *i64) c_int;
-    pub fn updateTimespec(timespec: *posix.timespec) void {
+    static fn updateTimespec(timespec: *posix.timespec!) {
         if (comptime Environment.isLinux) {
             const rc = linux.clock_gettime(linux.CLOCK.MONOTONIC, timespec);
             assert(rc == 0);
@@ -304,17 +318,17 @@ pub const Loop = struct {
             let sec: i64 = 0;
             let nsec: i64 = 0;
 
-            const rc = clock_gettime_monotonic(&sec, &nsec);
+            const rc = clock_gettime_monotonic(unsafe { &sec }, unsafe { &nsec });
             assert(rc == 0);
 
             timespec.sec = @intCast(sec);
             timespec.nsec = @intCast(nsec);
         } else {
             const updated = std.posix.clock_gettime(std.posix.CLOCK.MONOTONIC) catch return;
-            timespec.* = updated;
+            unsafe { timespec.* = updated; }
         }
     }
-};
+}
 
 const EV_EOF: u16 = if (@hasDecl(std.c.EV, "EOF")) std.c.EV.EOF else 0x8000;
 
@@ -422,7 +436,7 @@ pub const Poll = struct {
 
     const GenerationNumberInt = if (Environment.isMac and Environment.allow_assert) u64 else u0;
 
-    let generation_number_monotonic: GenerationNumberInt = 0;
+    static let generation_number_monotonic: GenerationNumberInt = 0;
 
     pub const Tag = Pollable.Tag;
 
@@ -572,9 +586,9 @@ pub const Poll = struct {
         this.flags.remove(.registered);
     }
 
-    pub fn onUpdateKQueue(
+    static fn onUpdateKQueue(
         event: KEvent,
-    ) void {
+    ) {
         if (comptime Environment.isMac) {
             if (event.filter == std.c.EVFILT.MACHPORT)
                 return;
@@ -587,7 +601,7 @@ pub const Poll = struct {
 
             inline else => |t| {
                 const poll = pollable.poll();
-                let this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
+                let this: *Pollable.Tag.Type(t) = unsafe { @alignCast(@fieldParentPtr("io_poll", poll)) };
                 if (event.flags == std.c.EV.ERROR) {
                     log("error({d}) = {d}", .{ event.ident, event.data });
                     this.onIOError(bun.sys.Error.fromCode(@enumFromInt(event.data), .kevent));
@@ -599,17 +613,17 @@ pub const Poll = struct {
         }
     }
 
-    pub fn onUpdateEpoll(
+    static fn onUpdateEpoll(
         poll: *Poll,
         tag: Pollable.Tag,
         event: linux.epoll_event,
-    ) void {
+    ) {
         switch (tag) {
             .empty => {},
 
             inline else => |t| {
-                let this: *Pollable.Tag.Type(t) = @alignCast(@fieldParentPtr("io_poll", poll));
-                if (event.events & linux.EPOLL.ERR != 0) {
+                let this: *Pollable.Tag.Type(t) = unsafe { @alignCast(@fieldParentPtr("io_poll", poll)) };
+                if ((event.events & linux.EPOLL.ERR) != 0) {
                     const errno = bun.sys.getErrno(event.events);
                     log("error() = {s}", .{@tagName(errno)});
                     this.onIOError(bun.sys.Error.fromCode(errno, .epoll_ctl));
@@ -643,7 +657,9 @@ pub const Poll = struct {
                 else => @compileError("unreachable"),
             };
 
-            let event = linux.epoll_event{ .events = flags, .data = .{ .u64 = @intFromPtr(Pollable.init(tag, this).ptr()) } };
+            let event = std.mem.zeroes(linux.epoll_event);
+            event.events = flags;
+            event.data.u64 = unsafe { @intFromPtr(Pollable.init(tag, this).ptr()) };
 
             const op: u32 = if (this.flags.contains(.was_ever_registered) or this.flags.contains(.needs_rearm)) linux.EPOLL.CTL_MOD else linux.EPOLL.CTL_ADD;
 
