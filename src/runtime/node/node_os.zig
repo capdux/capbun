@@ -521,11 +521,11 @@ pub fn cpusImplFreeBSD(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
 }
 
 pub fn cpusImplDarwin(globalThis: *jsc.JSGlobalObject) !jsc.JSValue {
-        var num_cpus: c.natural_t = (if (comptime @typeInfo(c.natural_t) == .@"enum") @as(c.natural_t, @enumFromInt(0)) else @as(c.natural_t, 0));
+        var num_cpus: c.natural_t = (if (comptime @typeInfo(c.natural_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c.natural_t, @enumFromInt(0)) else @as(c.natural_t, 0));
         _ = &num_cpus;
         var info: [*]bun.c.processor_cpu_load_info = undefined;
         _ = &info;
-        var info_size: std.c.mach_msg_type_number_t = (if (comptime @typeInfo(std.c.mach_msg_type_number_t) == .@"enum") @as(std.c.mach_msg_type_number_t, @enumFromInt(0)) else @as(std.c.mach_msg_type_number_t, 0));
+        var info_size: std.c.mach_msg_type_number_t = (if (comptime @typeInfo(std.c.mach_msg_type_number_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.c.mach_msg_type_number_t, @enumFromInt(0)) else @as(std.c.mach_msg_type_number_t, 0));
         _ = &info_size;
         if ((bun.c.host_processor_info(std.c.mach_host_self(), bun.c.PROCESSOR_CPU_LOAD_INFO, (&num_cpus), (blk: {
         break :blk @ptrCast((&info));
@@ -615,7 +615,7 @@ pub fn getPriority(global: *jsc.JSGlobalObject, pid: i32) bun.JSError!i32 {
         const result = get_process_priority(pid);
         if ((result == std.math.maxInt(i32))) {
             var e = jsc.SystemError{ .message = bun.String.static("no such process"), .code = bun.String.static("ESRCH"), .errno = (switch (bun.Environment.os) {
-else => (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(@intFromEnum(std.posix.E.SRCH))) else @as(c_int, @intFromEnum(std.posix.E.SRCH)))),
+else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.SRCH))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.SRCH))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.SRCH)))),
 .windows => libuv.UV_ESRCH,
 }), .syscall = bun.String.static("uv_os_getpriority") };
             _ = &e;
@@ -745,7 +745,7 @@ else => break :loadavg .{ 0.0, 0.0, 0.0 },
 .linux => loadavg: {
         var info: c.struct_sysinfo = undefined;
         _ = &info;
-        if ((c.sysinfo((&info)) == (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)))) {
+        if ((c.sysinfo((&info)) == (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(c_int, @intFromEnum(0)) else cp_cast_int(c_int, 0)))) {
             break :loadavg .{ (std.math.ceil(((@as(f64, @floatFromInt(info.loads[0])) / 65536.0) * 100.0)) / 100.0), (std.math.ceil(((@as(f64, @floatFromInt(info.loads[1])) / 65536.0) * 100.0)) / 100.0), (std.math.ceil(((@as(f64, @floatFromInt(info.loads[2])) / 65536.0) * 100.0)) / 100.0) };
         }
         break :loadavg .{ 0.0, 0.0, 0.0 };
@@ -1119,7 +1119,7 @@ pub fn setPriority1(global: *jsc.JSGlobalObject, pid: i32, priority: i32) !void 
         switch (errcode) {
 .SRCH => {
 var e = jsc.SystemError{ .message = bun.String.static("no such process"), .code = bun.String.static("ESRCH"), .errno = (switch (bun.Environment.os) {
-else => (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(@intFromEnum(std.posix.E.SRCH))) else @as(c_int, @intFromEnum(std.posix.E.SRCH)))),
+else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.SRCH))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.SRCH))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.SRCH)))),
 .windows => libuv.UV_ESRCH,
 }), .syscall = bun.String.static("uv_os_getpriority") };
         _ = &e;
@@ -1127,7 +1127,7 @@ else => (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt
 },
 .ACCES => {
 var e = jsc.SystemError{ .message = bun.String.static("permission denied"), .code = bun.String.static("EACCES"), .errno = (switch (bun.Environment.os) {
-else => (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(@intFromEnum(std.posix.E.ACCES))) else @as(c_int, @intFromEnum(std.posix.E.ACCES)))),
+else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.ACCES))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.ACCES))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.ACCES)))),
 .windows => libuv.UV_EACCES,
 }), .syscall = bun.String.static("uv_os_getpriority") };
         _ = &e;
@@ -1135,7 +1135,7 @@ else => (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt
 },
 .PERM => {
 var e = jsc.SystemError{ .message = bun.String.static("operation not permitted"), .code = bun.String.static("EPERM"), .errno = (switch (bun.Environment.os) {
-else => (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(@intFromEnum(std.posix.E.SRCH))) else @as(c_int, @intFromEnum(std.posix.E.SRCH)))),
+else => (-(if (comptime @typeInfo(@TypeOf(@intFromEnum(std.posix.E.SRCH))) == .@"enum") cp_cast_int(c_int, @intFromEnum(@intFromEnum(std.posix.E.SRCH))) else cp_cast_int(c_int, @intFromEnum(std.posix.E.SRCH)))),
 .windows => libuv.UV_ESRCH,
 }), .syscall = bun.String.static("uv_os_getpriority") };
         _ = &e;
@@ -1168,8 +1168,8 @@ return 0;
 .linux => {
 var info: c.struct_sysinfo = undefined;
         _ = &info;
-        if ((c.sysinfo((&info)) == (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(0)) else @as(c_int, 0)))) {
-            return (@as(u64, @bitCast(info.totalram)) *% @as(c_ulong, @bitCast((if (comptime @typeInfo(c_ulong) == .@"enum") @as(c_ulong, @enumFromInt(info.mem_unit)) else @as(c_ulong, info.mem_unit)))));
+        if ((c.sysinfo((&info)) == (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(c_int, @intFromEnum(0)) else cp_cast_int(c_int, 0)))) {
+            return (@as(u64, @bitCast(info.totalram)) *% @as(c_ulong, @bitCast((if (comptime @typeInfo(@TypeOf(info.mem_unit)) == .@"enum") cp_cast_int(c_ulong, @intFromEnum(info.mem_unit)) else cp_cast_int(c_ulong, info.mem_unit)))));
         }
         return 0;
 },

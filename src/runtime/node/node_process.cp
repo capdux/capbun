@@ -213,7 +213,7 @@ fn createExecArgv(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
         // argv omits "bun" because it could be "bun run" or "bun" and it's kind of ambiguous
         // argv also omits the script name
         args_count + 2,
-    ) catch |e| bun.handleOom(e);
+    ) catch e => bun.handleOom(e);
     const _args_guard = FreeGuard<bun.String>{ alloc: allocator, slice: args };
 
     let args_list: std.ArrayListUnmanaged(bun.String) = .initBuffer(args);

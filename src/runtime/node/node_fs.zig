@@ -639,7 +639,7 @@ _ = @compileError("UVFSRequest type not implemented");
     ref: bun.Async.KeepAlive = .{},
     tracker: jsc.Debugger.AsyncTaskTracker,
 
-pub fn create(globalObject: *jsc.JSGlobalObject, self: *jsc.Node.fs.Binding, task_args: ArgumentType, vm: *jsc.VirtualMachine) jsc.JSValue {
+pub fn create(globalObject: *jsc.JSGlobalObject, binding: *jsc.Node.fs.Binding, task_args: ArgumentType, vm: *jsc.VirtualMachine) jsc.JSValue {
             var task = bun.new(Task, .{ .promise = jsc.JSPromise.Strong.init(globalObject), .args = task_args, .result = undefined, .globalObject = globalObject, .tracker = jsc.Debugger.AsyncTaskTracker.init(vm) });
             _ = &task;
             _ = task.ref.ref(vm);
@@ -651,7 +651,7 @@ pub fn create(globalObject: *jsc.JSGlobalObject, self: *jsc.Node.fs.Binding, tas
             switch ((comptime FunctionEnum)) {
 .open => {
 const args: Arguments.Open = task.args;
-            const path = (if (bun.strings.eqlComptime(args.path.slice(), "/dev/null")) "\\\\.\\NUL" else args.path.sliceZ((&self.node_fs.sync_error_buf)));
+            const path = (if (bun.strings.eqlComptime(args.path.slice(), "/dev/null")) "\\\\.\\NUL" else args.path.sliceZ((&binding.node_fs.sync_error_buf)));
             var flags: c_int = @intFromEnum(args.flags);
             _ = &flags;
             flags = uv.O.fromBunO(flags);
@@ -738,7 +738,7 @@ const args_: Arguments.Writev = task.args;
 },
 .statfs => {
 const args_: Arguments.StatFS = task.args;
-            const path = args_.path.sliceZ((&self.node_fs.sync_error_buf));
+            const path = args_.path.sliceZ((&binding.node_fs.sync_error_buf));
             const rc = uv.uv_fs_statfs(loop, (&task.req), path.ptr, (&uv_callbackreq));
             _ = bun.debugAssert((rc == .zero));
             _ = log("uv statfs({s}) = ~~", .{ .path = path });
@@ -3305,7 +3305,7 @@ pub fn toJS(self: _ReturnReadPromise, ctx: *jsc.JSGlobalObject) bun.JSError!jsc.
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
             defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-            return jsc.JSValue.createObject2(ctx, (&fields.bytesRead), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(u52) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) == .comptime_int)) @as(u52, @enumFromInt((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) else @as(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read)))))), self.buffer_val);
+            return jsc.JSValue.createObject2(ctx, (&fields.bytesRead), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) == .@"enum") cp_cast_int(u52, @intFromEnum((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read))))) else cp_cast_int(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_read))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_read))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_read)))))), self.buffer_val);
     }
     const fields = .{ .bytesRead = jsc.ZigString.init("bytesRead"), .buffer = jsc.ZigString.init("buffer") };
 };
@@ -3320,7 +3320,7 @@ pub fn toJS(self: _ReturnWritePromise, globalObject: *jsc.JSGlobalObject) bun.JS
             _ = &_buf_guard;
             var ___buf_guard_moved = false; _ = &___buf_guard_moved;
             defer if (!___buf_guard_moved) { ___buf_guard_moved = true; const __T = @TypeOf(_buf_guard); if (@typeInfo(__T) == .optional) { if (_buf_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _buf_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _buf_guard; _drop_val.__cp_deinit(); } };
-            return jsc.JSValue.createObject2(globalObject, (&fields.bytesWritten), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(u52) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) == .comptime_int)) @as(u52, @enumFromInt((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) else @as(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written)))))), (if ((self.buffer == .buffer)) self.buffer_val else self.buffer.toJS(globalObject)));
+            return jsc.JSValue.createObject2(globalObject, (&fields.bytesWritten), (&fields.buffer), jsc.JSValue.jsNumberFromUint64((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) == .@"enum") cp_cast_int(u52, @intFromEnum((if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written))))) else cp_cast_int(u52, (if (comptime @typeInfo(@TypeOf(@min(std.math.maxInt(u52), self.bytes_written))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(std.math.maxInt(u52), self.bytes_written))) else cp_cast_int(i32, @min(std.math.maxInt(u52), self.bytes_written)))))), (if ((self.buffer == .buffer)) self.buffer_val else self.buffer.toJS(globalObject)));
     }
     const fields = .{ .bytesWritten = jsc.ZigString.init("bytesWritten"), .buffer = jsc.ZigString.init("buffer") };
 };
@@ -3501,7 +3501,7 @@ pub fn close(self: *NodeFS, args: Arguments.Close, _: Flavor) Maybe(Return.Close
 pub fn uv_close(self: *NodeFS, args: Arguments.Close, rc: i64) Maybe(Return.Close) {
         _ = self;
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .close, .fd = args.fd, .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .close, .fd = args.fd, .from_libuv = true } };
             }
             return .success;
     }
@@ -4303,7 +4303,7 @@ pub fn open(self: *NodeFS, args: Arguments.Open, _: Flavor) Maybe(Return.Open) {
 pub fn uv_open(self: *NodeFS, args: Arguments.Open, rc: i64) Maybe(Return.Open) {
             _ = (&self.sync_error_buf);
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .open, .path = args.path.slice(), .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .open, .path = args.path.slice(), .from_libuv = true } };
             }
             return Maybe(Return.Open).initResult(.fromUV((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc))));
     }
@@ -4311,7 +4311,7 @@ pub fn uv_open(self: *NodeFS, args: Arguments.Open, rc: i64) Maybe(Return.Open) 
 pub fn uv_statfs(self: *NodeFS, args: Arguments.StatFS, req: *uv.fs_t, rc: i64) Maybe(Return.StatFS) {
         _ = self;
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .open, .path = args.path.slice(), .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .open, .path = args.path.slice(), .from_libuv = true } };
             }
             const statfs_ = (req.ptrAs(UnalignedStatFS)).*;
             return Maybe(Return.StatFS).initResult(Return.StatFS.init((&statfs_), args.big_int));
@@ -4361,7 +4361,7 @@ pub fn read(self: *NodeFS, args: Arguments.Read, _: Flavor) Maybe(Return.Read) {
 pub fn uv_read(self: *NodeFS, args: Arguments.Read, rc: i64) Maybe(Return.Read) {
             _ = (&self.sync_error_buf);
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .read, .fd = args.fd, .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .read, .fd = args.fd, .from_libuv = true } };
             }
             return Maybe(Return.Read).initResult(.{ .bytes_read = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) });
     }
@@ -4369,7 +4369,7 @@ pub fn uv_read(self: *NodeFS, args: Arguments.Read, rc: i64) Maybe(Return.Read) 
 pub fn uv_readv(self: *NodeFS, args: Arguments.Readv, rc: i64) Maybe(Return.Readv) {
             _ = (&self.sync_error_buf);
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .readv, .fd = args.fd, .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .readv, .fd = args.fd, .from_libuv = true } };
             }
             return Maybe(Return.Readv).initResult(.{ .bytes_read = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) });
     }
@@ -4395,7 +4395,7 @@ pub fn write(self: *NodeFS, args: Arguments.Write, _: Flavor) Maybe(Return.Write
 pub fn uv_write(self: *NodeFS, args: Arguments.Write, rc: i64) Maybe(Return.Write) {
             _ = (&self.sync_error_buf);
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .write, .fd = args.fd, .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .write, .fd = args.fd, .from_libuv = true } };
             }
             return Maybe(Return.Write).initResult(.{ .bytes_written = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) });
     }
@@ -4403,7 +4403,7 @@ pub fn uv_write(self: *NodeFS, args: Arguments.Write, rc: i64) Maybe(Return.Writ
 pub fn uv_writev(self: *NodeFS, args: Arguments.Writev, rc: i64) Maybe(Return.Writev) {
             _ = (&self.sync_error_buf);
             if ((rc < 0)) {
-                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((0 - rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((0 - rc))) else cp_cast_int(i32, (0 - rc))), .syscall = .writev, .fd = args.fd, .from_libuv = true } };
+                return .{ .err = .{ .errno = (if (comptime @typeInfo(@TypeOf((-rc))) == .@"enum") cp_cast_int(i32, @intFromEnum((-rc))) else cp_cast_int(i32, (-rc))), .syscall = .writev, .fd = args.fd, .from_libuv = true } };
             }
             return Maybe(Return.Writev).initResult(.{ .bytes_written = (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)) });
     }

@@ -14,11 +14,11 @@ pub fn StatType(comptime big: bool): type {
         const StatTimespec = bun.timespec;
         const Float = if (big) i64 else f64;
 
-        pub inline fn init(stat_: *const Syscall.PosixStat): @This() {
+        static inline fn init(stat_: *const Syscall.PosixStat): @This() {
             return { value: stat_.* };
         }
 
-        inline fn toNanoseconds(ts: StatTimespec): u64 {
+        static inline fn toNanoseconds(ts: StatTimespec): u64 {
             if (ts.sec < 0) {
                 const ts_val: bun.timespec = {
                     sec: @intCast(ts.sec),
@@ -34,7 +34,7 @@ pub fn StatType(comptime big: bool): type {
             return ts_pos.ns();
         }
 
-        fn toTimeMS(ts: StatTimespec): Float {
+        static fn toTimeMS(ts: StatTimespec): Float {
             // On windows, Node.js purposefully misinterprets time values
             // > On win32, time is stored in uint64_t and starts from 1601-01-01.
             // > libuv calculates tv_sec and tv_nsec from it and converts to signed long,
@@ -56,7 +56,7 @@ pub fn StatType(comptime big: bool): type {
             }
         }
 
-        fn getBirthtime(stat_: *const Syscall.PosixStat): StatTimespec {
+        static fn getBirthtime(stat_: *const Syscall.PosixStat): StatTimespec {
             return stat_.birthtim;
         }
 
@@ -64,11 +64,11 @@ pub fn StatType(comptime big: bool): type {
             return statToJS(&_.value, globalObject);
         }
 
-        pub fn getConstructor(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+        pub static fn getConstructor(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
             return if (big) Bun__JSBigIntStatsObjectConstructor(globalObject) else Bun__JSStatsObjectConstructor(globalObject);
         }
 
-        fn statToJS(stat_: *const Syscall.PosixStat, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+        static fn statToJS(stat_: *const Syscall.PosixStat, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
             const aTime = stat_.atime();
             const mTime = stat_.mtime();
             const cTime = stat_.ctime();
@@ -185,7 +185,7 @@ pub union(enum) Stats {
     big: StatsBig,
     small: StatsSmall,
 
-    pub inline fn init(stat_: *const Syscall.PosixStat, big: bool): Stats {
+    static inline fn init(stat_: *const Syscall.PosixStat, big: bool): Stats {
         if (big) {
             return { big: StatsBig.init(stat_) };
         } else {

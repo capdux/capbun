@@ -803,7 +803,7 @@ struct Darwin {
             onFSEvent,
             onFSEventFlush,
             unsafe { @ptrCast(watcher) },
-        ) catch |e| return { err: {
+        ) catch e => return { err: {
             errno: @intFromEnum(if (e == error.FailedToCreateCoreFoudationSourceLoop) bun.sys.E.INVAL else bun.sys.E.NOMEM),
             syscall: .watch,
         } };

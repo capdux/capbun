@@ -76,7 +76,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             pub const deinit = @extern(*const fn (*Ctx) callconv(.c) void, .{ .name = "Bun__" ++ ctx_name ++ "__deinit" }).*;
         };
 
-        pub fn create(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) *@This() {
+        @callconv("c") pub static fn create(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue): *@This() {
             const vm = global.bunVM();
             const job = bun.new(@This(), .{
                 .vm = vm,
@@ -91,12 +91,12 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             return job;
         }
 
-        pub fn createAndSchedule(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) {
+        pub static fn createAndSchedule(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) {
             let job = create(global, ctx, callback.withAsyncContextIfNeeded(global));
-            job.schedule();
+            schedule(job);
         }
 
-        pub fn runTask(task: *jsc.WorkPoolTask) {
+        pub static fn runTask(task: *jsc.WorkPoolTask) {
             const job: *@This() = @fieldParentPtr("task", task);
             let vm = job.vm;
             defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
@@ -104,7 +104,7 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             job.ctx.runTask(vm.global);
         }
 
-        pub fn runFromJS(job: *@This()) {
+        pub static fn runFromJS(job: *@This()) {
             const _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             const vm = job.vm;
 
@@ -120,14 +120,14 @@ fn ExternCryptoJob(comptime name: []const u8): type {
             }
         }
 
-        fn deinit(job: *@This()) {
+        static fn deinit(job: *@This()) {
             job.ctx.deinit();
             job.poll.unref(job.vm);
             job.callback.deinit();
             bun.destroy(job);
         }
 
-        pub fn schedule(job: *@This()) callconv(.c) {
+        pub static fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
             jsc.WorkPool.schedule(&job.task);
         }
@@ -178,7 +178,7 @@ fn CryptoJob(comptime Ctx: type): type {
 
         ctx: Ctx,
 
-        pub fn init(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx) JSError!*@This() {
+        pub static fn init(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx): JSError!*@This() {
             const vm = global.bunVM();
             const job = bun.new(@This(), .{
                 .vm = vm,
@@ -199,12 +199,12 @@ fn CryptoJob(comptime Ctx: type): type {
             return job;
         }
 
-        pub fn initAndSchedule(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx): JSError!void {
+        pub static fn initAndSchedule(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx): JSError!void {
             let job = init(global, callback, ctx)?;
-            job.schedule();
+            schedule(job);
         }
 
-        pub fn runTask(task: *jsc.WorkPoolTask) {
+        pub static fn runTask(task: *jsc.WorkPoolTask) {
             const job: *@This() = @fieldParentPtr("task", task);
             let vm = job.vm;
             defer vm.enqueueTaskConcurrent(jsc.ConcurrentTask.create(job.any_task.task()));
@@ -212,7 +212,7 @@ fn CryptoJob(comptime Ctx: type): type {
             job.ctx.runTask(job.ctx.result);
         }
 
-        pub fn runFromJS(job: *@This()) {
+        pub static fn runFromJS(job: *@This()) {
             const _guard = DeinitGuard<@This()>{ ptr: unsafe { job } };
             const vm = job.vm;
 
@@ -225,14 +225,14 @@ fn CryptoJob(comptime Ctx: type): type {
             }
         }
 
-        fn deinit(job: *@This()) {
+        static fn deinit(job: *@This()) {
             job.ctx.deinit();
             job.poll.unref(job.vm);
             job.callback.deinit();
             bun.destroy(job);
         }
 
-        pub fn schedule(job: *@This()) callconv(.c) {
+        pub static fn schedule(job: *@This()) callconv(.c) {
             job.poll.ref(job.vm);
             jsc.WorkPool.schedule(&job.task);
         }

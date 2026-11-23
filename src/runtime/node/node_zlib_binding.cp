@@ -7,12 +7,12 @@ struct DeinitGuard<T> {
 
 fn _AsyncJob(comptime T: type): type {
     return struct {
-        pub fn runTask(task: *jsc.WorkPoolTask) void {
+        pub static fn runTask(task: *jsc.WorkPoolTask) {
             const target: *T = @fieldParentPtr("task", task);
             run(target);
         }
 
-        pub fn run(stream: *T) void {
+        pub static fn run(stream: *T) {
             const globalThis: *jsc.JSGlobalObject = stream.globalThis;
             const vm = globalThis.bunVMConcurrently();
 
@@ -119,7 +119,7 @@ pub fn CompressionStream(comptime T: type): type {
                 in_len = 0;
                 in_off = 0;
             } else {
-                const in_buf = arguments[1].asArrayBuffer(globalThis) orelse {
+                const in_buf = arguments[1].asArrayBuffer(globalThis) ?? {
                     return globalThis.ERR(.INVALID_ARG_TYPE, "The \"in\" argument must be a TypedArray or DataView", .{}).throw();
                 };
                 in_off = arguments[2].toU32();
@@ -130,7 +130,7 @@ pub fn CompressionStream(comptime T: type): type {
                 in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
 
-            const out_buf = arguments[4].asArrayBuffer(globalThis) orelse {
+            const out_buf = arguments[4].asArrayBuffer(globalThis) ?? {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
             };
             out_off = arguments[5].toU32();
@@ -174,10 +174,13 @@ pub fn CompressionStream(comptime T: type): type {
             stream.write_in_progress = false;
 
             // Clear the strong handle before we call any callbacks.
-            const this_value = stream.this_value.trySwap() orelse {
+            let this_value: jsc.JSValue = undefined;
+            if (v := stream.this_value.trySwap()) {
+                this_value = v;
+            } else {
                 debug("this_value is null in runFromJSThread", .{});
                 return;
-            };
+            }
 
             this_value.ensureStillAlive();
 
@@ -225,7 +228,7 @@ pub fn CompressionStream(comptime T: type): type {
                 in_len = 0;
                 in_off = 0;
             } else {
-                const in_buf = arguments[1].asArrayBuffer(globalThis) orelse {
+                const in_buf = arguments[1].asArrayBuffer(globalThis) ?? {
                     return globalThis.ERR(.INVALID_ARG_TYPE, "The \"in\" argument must be a TypedArray or DataView", .{}).throw();
                 };
                 in_off = arguments[2].toU32();
@@ -236,7 +239,7 @@ pub fn CompressionStream(comptime T: type): type {
                 in_slice = in_buf.byteSlice()[in_off..][0..in_len];
             }
 
-            const out_buf = arguments[4].asArrayBuffer(globalThis) orelse {
+            const out_buf = arguments[4].asArrayBuffer(globalThis) ?? {
                 return globalThis.ERR(.INVALID_ARG_TYPE, "The \"out\" argument must be a TypedArray or DataView", .{}).throw();
             };
             out_off = arguments[5].toU32();
@@ -337,10 +340,10 @@ pub fn CompressionStream(comptime T: type): type {
             // runs doWork().
             stream.write_in_progress = false;
 
-            let msg_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.msg, 0) orelse "" }));
+            let msg_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.msg, 0) ?? "" }));
             const msg_value = msg_str.transferToJS(globalThis) catch return;
             const err_value: jsc.JSValue = .jsNumber(err_.e);
-            let code_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.code, 0) orelse "" }));
+            let code_str = bun.handleOom(bun.String.createFormat("{s}", .{ std.mem.sliceTo(err_.code, 0) ?? "" }));
             const code_value = code_str.transferToJS(globalThis) catch return;
 
             const callback: jsc.JSValue = T.js.errorCallbackGetCached(this_value) ??

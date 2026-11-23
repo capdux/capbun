@@ -462,7 +462,7 @@ pub struct StatWatcher {
         }
         const globalThis = _.globalThis;
 
-        const jsvalue = statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch |e| return globalThis.reportActiveExceptionAsUnhandled(e);
+        const jsvalue = statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch e => return globalThis.reportActiveExceptionAsUnhandled(e);
         js.gc.prevStat.set(js_this, globalThis, jsvalue);
 
         _.scheduler.data.append(_);
@@ -481,7 +481,7 @@ pub struct StatWatcher {
             return;
         }
         const globalThis = _.globalThis;
-        const jsvalue = statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch |e| return globalThis.reportActiveExceptionAsUnhandled(e);
+        const jsvalue = statToJSStats(globalThis, &_.getLastStat(), _.bigint) catch e => return globalThis.reportActiveExceptionAsUnhandled(e);
         js.gc.prevStat.set(js_this, globalThis, jsvalue);
 
         const cb_args: [2]jsc.JSValue = [ jsvalue, jsvalue ];
@@ -489,7 +489,7 @@ pub struct StatWatcher {
             globalThis,
             .js_undefined,
             unsafe { &cb_args },
-        ) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
+        ) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
 
         if (_.closed) {
             return;
@@ -562,7 +562,7 @@ pub struct StatWatcher {
             globalThis,
             .js_undefined,
             unsafe { &cb_args },
-        ) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
+        ) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
     }
 
     static fn init(args: Arguments): !*StatWatcher {

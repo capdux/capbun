@@ -133,7 +133,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
         ///
         /// Returned `Diff` objects borrow from the input slices. Both `actual`
         /// and `expected` must outlive them.
-        pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Line): DiffError!DiffList(Line) {
+        pub static fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Line): DiffError!DiffList(Line) {
             // Edit graph's allocator
             let graph_stack_alloc = stackFallback(graph_initial_size, bun_allocator);
             const graph_alloc = graph_stack_alloc.get();
@@ -164,7 +164,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
             };
             trace_guard.trace.ensureTotalCapacityPrecise(max + 1)?;
 
-            for (0..max + 1) |_diff_level| {
+            for (_diff_level of 0..max + 1) {
                 const diff_level: int = @intCast(_diff_level);
                 const new_trace = trace_alloc.dupe(uint, graph_guard.slice)?;
                 trace_guard.trace.appendAssumeCapacity(new_trace);
@@ -205,7 +205,7 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
             @panic("unreachable. Diffing should always reach the end of either `actual` or `expected` first.");
         }
 
-        fn backtrack(
+        static fn backtrack(
             allocator: Allocator,
             trace: *const TraceList,
             actual: []const Line,
@@ -267,13 +267,13 @@ pub fn DifferWithEql(comptime Line: type, comptime opts: Options, comptime areLi
         }
 
         // shorthands for int casting
-        inline fn u(n: auto): uint {
+        static inline fn u(n: auto): uint {
             return @intCast(n);
         }
-        inline fn us(n: auto): usize {
+        static inline fn us(n: auto): usize {
             return @intCast(n);
         }
-        inline fn i(n: auto): int {
+        static inline fn i(n: auto): int {
             return @intCast(n);
         }
     };

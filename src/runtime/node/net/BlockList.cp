@@ -192,7 +192,7 @@ fn _compare_ipv6(l: *const sockaddr.in6, r: *const sockaddr.in6): std.math.Order
         } else {
             validators.validateString(globalThis, address_js, "address", {})?;
             validators.validateString(globalThis, family_js, "family", {})?;
-            const sa = SocketAddress.initFromAddrFamily(globalThis, address_js, family_js) catch |e| {
+            const sa = SocketAddress.initFromAddrFamily(globalThis, address_js, family_js) catch e => {
                 bun.debugAssert(e == error.JSError);
                 globalThis.clearException();
                 return jsc.JSValue.false;

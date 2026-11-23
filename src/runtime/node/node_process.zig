@@ -48,7 +48,7 @@ comptime {
 }
 comptime {
     if ((Environment.export_cpp_apis and Environment.isWindows)) {
-        _ = @export(*const Bun__Process__editWindowsEnvVar, .{ .name = "Bun__Process__editWindowsEnvVar" });
+        _ = @export((&Bun__Process__editWindowsEnvVar), .{ .name = "Bun__Process__editWindowsEnvVar" });
     }
 
 }

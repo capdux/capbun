@@ -598,7 +598,7 @@ pub fn loadavg(global: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
                 &size,
                 null,
                 0,
-            ) catch |e| switch (e) {
+            ) catch e => switch (e) {
                 else => break :loadavg [0.0, 0.0, 0.0],
             };
 
@@ -1122,7 +1122,7 @@ pub fn totalmem(): u64 {
                 &size,
                 null,
                 0,
-            ) catch |e| switch (e) {
+            ) catch e => switch (e) {
                 else => return 0,
             };
 

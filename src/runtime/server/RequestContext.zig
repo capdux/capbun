@@ -912,7 +912,7 @@ pub fn onAbort(self: *@This(), resp: *App.Response) void {
             _ = ctxLog("onAbort", .{});
             _ = assert((self.resp == resp));
             if (comptime http3) {
-                if (resp.hasResponded()) {
+                if (App.Response.hasResponded(resp)) {
                     self.resp = null;
                     self.flags.has_abort_handler = false;
                     return;
@@ -1321,7 +1321,7 @@ pub fn doRenderStream(pair: *StreamPair) void {
                 _ = response_stream.sink.destroy();
                 return req_ctx.handleReject(err_value);
             }
-            if ((resp).?.hasResponded()) {
+            if (App.Response.hasResponded(resp)) {
                 _ = streamLog("done", .{});
                 _ = response_stream.detach(globalThis);
                 req_ctx.sink = null;
@@ -1573,7 +1573,10 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
                 _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 return;
             }
-            const server = server_opt.?;
+            const server = (blk: {
+            break :blk server_opt.?;
+
+});
             const globalThis = (server).?.globalThis;
             if (response.getFetchHeaders()) |headers| {
                 _ = &headers;

@@ -87,7 +87,7 @@ fn diffChars(
     expected: []const T,
 ): bun.JSError!jsc.JSValue {
     const Differ = MyersDiff.Differ(T, { check_comma_disparity: false });
-    const diff: MyersDiff.DiffList(T) = Differ.diff(allocator, actual, expected) catch |err_val| return mapDiffError(global, err_val);
+    const diff: MyersDiff.DiffList(T) = Differ.diff(allocator, actual, expected) catch err_val => return mapDiffError(global, err_val);
     return diffListToJS(T, global, diff);
 }
 
@@ -115,10 +115,10 @@ fn diffLines(
     const diff = blk: {
         if (check_comma_disparity) {
             const Differ = MyersDiff.Differ(LineSlice(T), { check_comma_disparity: true });
-            break :blk Differ.diff(allocator, a.items, e.items) catch |err_val| return mapDiffError(global, err_val);
+            break :blk Differ.diff(allocator, a.items, e.items) catch err_val => return mapDiffError(global, err_val);
         } else {
             const Differ = MyersDiff.Differ(LineSlice(T), { check_comma_disparity: false });
-            break :blk Differ.diff(allocator, a.items, e.items) catch |err_val| return mapDiffError(global, err_val);
+            break :blk Differ.diff(allocator, a.items, e.items) catch err_val => return mapDiffError(global, err_val);
         }
     };
     return diffListToJS(LineSlice(T), global, diff);

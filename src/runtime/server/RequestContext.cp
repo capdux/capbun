@@ -754,7 +754,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             // keep-alive, so the equivalent never happens there. Drop the
             // pointer; everything else cleans up via the resolve/reject path.
             if (comptime http3) {
-                if (resp.hasResponded()) {
+                if (App.Response.hasResponded(resp)) {
                     _.resp = null;
                     _.flags.has_abort_handler = false;
                     return;
@@ -1219,7 +1219,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 return req_ctx.handleReject(err_value);
             }
 
-            if (resp.hasResponded()) {
+            if (App.Response.hasResponded(resp)) {
                 streamLog("done", .{});
                 response_stream.detach(globalThis);
                 req_ctx.sink = null;
@@ -1491,7 +1491,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 return;
             }
-            const server = server_opt.?;
+            const server = unsafe { server_opt.? };
             const globalThis = server.globalThis;
             if (headers := response.getFetchHeaders()) {
                 // first respect the headers

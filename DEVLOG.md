@@ -1789,3 +1789,5 @@
 - [Wave #105] 清零 `src/runtime/server/` 剩余 2 大文件（`RequestContext.cp`, `server.cp` -> **`src/runtime/server/` 100% `--strict` 全清**）；修复 `RequestContext.cp` `NewRequestContext` 匿名 `return struct`（防 `TaggedPointerUnion` `@typeName` 碰撞）及 `is_web_browser_navigation = @as(void, undefined)`；`zig:check` 5/5 通过。
 
 - [Wave #106] 清零 `src/runtime/webcore/*.cp` 全部 12 个报错文件（`BakeResponse`, `Body`, `fetch`, `FormData`, `prompt`, `ReadableStream`, `Request`, `Response`, `ResumableSink`, `Sink`, `streams`, `TextDecoder` -> **`src/runtime/webcore/` 100% `--strict` 全清**）；补全 `Request`/`Sink`/`ResumableSink` 53 处 `static fn`；`zig:check` 5/5 通过。
+
+- [Wave #107] 清零 `src/runtime/node/**/*.cp` 全部 13 个报错文件（`assert/myers_diff`, `net/BlockList`, `node_assert`, `node_crypto_binding`, `node_fs_binding`, `node_fs`, `node_fs_stat_watcher`, `node_os`, `node_process`, `node_zlib_binding`, `path_watcher`, `Stat`, `types` -> **`src/runtime/node/` 100% `--strict` 全清**）；同步修复 `RequestContext.cp` `hasResponded`/`unsafe server_opt.?`；`zig:check` 5/5 通过。

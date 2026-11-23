@@ -577,7 +577,7 @@ pub fn create(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c
 pub fn createAndSchedule(global: *JSGlobalObject, ctx: *Ctx, callback: JSValue) callconv(.c) void {
             var job = create(global, ctx, callback.withAsyncContextIfNeeded(global));
             _ = &job;
-            _ = job.schedule();
+            _ = schedule(job);
     }
 
 pub fn runTask(task: *jsc.WorkPoolTask) void {
@@ -668,7 +668,7 @@ pub fn init(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx) JSError
 pub fn initAndSchedule(global: *JSGlobalObject, callback: JSValue, ctx: *const Ctx) JSError!void {
             var job = try init(global, callback, ctx);
             _ = &job;
-            _ = job.schedule();
+            _ = schedule(job);
     }
 
 pub fn runTask(task: *jsc.WorkPoolTask) void {

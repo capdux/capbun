@@ -72,7 +72,7 @@ fn Bindings(comptime function_name: NodeFSFunctionEnum): type {
 
             let args_guard = OptionalDeinitGuard<Arguments>{
                 val: if (Arguments != void)
-                    Arguments.fromJS(globalObject, &slice_guard.val) catch |e| {
+                    Arguments.fromJS(globalObject, &slice_guard.val) catch e => {
                         slice_guard.armed = true;
                         return e;
                     }

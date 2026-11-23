@@ -357,7 +357,7 @@ pub struct Async {
 
             pub const heap_label = "Async" ++ bun.@"meta".typeBaseName(@typeName(ArgumentType)) ++ "UvTask";
 
-            static fn create(globalObject: *jsc.JSGlobalObject, this: *jsc.Node.fs.Binding, task_args: ArgumentType, vm: *jsc.VirtualMachine): jsc.JSValue {
+            static fn create(globalObject: *jsc.JSGlobalObject, binding: *jsc.Node.fs.Binding, task_args: ArgumentType, vm: *jsc.VirtualMachine): jsc.JSValue {
                 let task = bun.new(Task, .{
                     .promise = jsc.JSPromise.Strong.init(globalObject),
                     .args = task_args,
@@ -376,7 +376,7 @@ pub struct Async {
                 switch (comptime FunctionEnum) {
                     .open => {
                         const args: Arguments.Open = task.args;
-                        const path = if (bun.strings.eqlComptime(args.path.slice(), "/dev/null")) "\\\\.\\NUL" else args.path.sliceZ(&this.node_fs.sync_error_buf);
+                        const path = if (bun.strings.eqlComptime(args.path.slice(), "/dev/null")) "\\\\.\\NUL" else args.path.sliceZ(&binding.node_fs.sync_error_buf);
 
                         let flags: c_int = @intFromEnum(args.flags);
                         flags = uv.O.fromBunO(flags);
@@ -464,7 +464,7 @@ pub struct Async {
                     },
                     .statfs => {
                         const args_: Arguments.StatFS = task.args;
-                        const path = args_.path.sliceZ(&this.node_fs.sync_error_buf);
+                        const path = args_.path.sliceZ(&binding.node_fs.sync_error_buf);
                         const rc = uv.uv_fs_statfs(loop, &task.req, path.ptr, &uv_callbackreq);
                         bun.debugAssert(rc == .zero);
                         log("uv statfs({s}) = ~~", { path});

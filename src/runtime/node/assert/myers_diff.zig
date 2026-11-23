@@ -59,8 +59,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
-fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -249,35 +247,39 @@ pub fn diff(bun_allocator: Allocator, actual: []const Line, expected: []const Li
             var __trace_guard_moved = false; _ = &__trace_guard_moved;
             defer if (!__trace_guard_moved) { __trace_guard_moved = true; const __T = @TypeOf(trace_guard); if (@typeInfo(__T) == .optional) { if (trace_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { trace_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = trace_guard; _drop_val.__cp_deinit(); } };
             _ = try trace_guard.trace.ensureTotalCapacityPrecise((max + 1));
-            for (0..max + 1) |_diff_level| {
+            {
+                var _diff_level: i32 = 0;
                 _ = &_diff_level;
-                const diff_level: int = @intCast(_diff_level);
-                const new_trace = try trace_alloc.dupe(uint, graph_guard.slice);
-                _ = trace_guard.trace.appendAssumeCapacity(new_trace);
-                const diag_start: int = (0 - @as(int, @intCast(diff_level)));
-                const diag_end: int = @intCast(diff_level);
-                var diag_idx = diag_start;
-                _ = &diag_idx;
-                while ((diag_idx <= diag_end)) : (diag_idx = (diag_idx + 2)) {
-                    _ = assert(((diag_idx + max) >= 0));
-                    const k: uint = u((diag_idx + max));
-                    const uk = u(k);
-                    var x = (if (((diag_idx == diag_start) or ((diag_idx != diag_end) and (graph_guard.slice[@as(usize, @intCast((uk - 1)))] < graph_guard.slice[@as(usize, @intCast((uk + 1)))])))) graph_guard.slice[@as(usize, @intCast((uk + 1)))] else (graph_guard.slice[@as(usize, @intCast((uk - 1)))] + 1));
-                    _ = &x;
-                    var y: usize = blk: {
-                    const x2: int = @intCast(x);
-                    const y2: int = (x2 - diag_idx);
-                    _ = assert(((y2 >= 0) and (y2 <= MAXLEN)));
-                    break :blk @intCast(y2);
+                const __end_0 = (max + 1);
+                while (_diff_level < __end_0) : (_diff_level += 1) {
+                    const diff_level: int = @intCast(_diff_level);
+                    const new_trace = try trace_alloc.dupe(uint, graph_guard.slice);
+                    _ = trace_guard.trace.appendAssumeCapacity(new_trace);
+                    const diag_start: int = (-@as(int, @intCast(diff_level)));
+                    const diag_end: int = @intCast(diff_level);
+                    var diag_idx = diag_start;
+                    _ = &diag_idx;
+                    while ((diag_idx <= diag_end)) : (diag_idx = (diag_idx + 2)) {
+                        _ = assert(((diag_idx + max) >= 0));
+                        const k: uint = u((diag_idx + max));
+                        const uk = u(k);
+                        var x = (if (((diag_idx == diag_start) or ((diag_idx != diag_end) and (graph_guard.slice[@as(usize, @intCast((uk - 1)))] < graph_guard.slice[@as(usize, @intCast((uk + 1)))])))) graph_guard.slice[@as(usize, @intCast((uk + 1)))] else (graph_guard.slice[@as(usize, @intCast((uk - 1)))] + 1));
+                        _ = &x;
+                        var y: usize = blk: {
+                        const x2: int = @intCast(x);
+                        const y2: int = (x2 - diag_idx);
+                        _ = assert(((y2 >= 0) and (y2 <= MAXLEN)));
+                        break :blk @intCast(y2);
 };
-                    _ = &y;
-                    while ((((x < actual.len) and (y < expected.len)) and eql(actual[@as(usize, @intCast(x))], expected[@as(usize, @intCast(y))]))) {
-                        x = (x + 1);
-                        y = (y + 1);
-                    }
-                    graph_guard.slice[cp_cast_int(usize, k)] = @intCast(x);
-                    if (((x >= actual.len) and (y >= expected.len))) {
-                        return backtrack(bun_allocator, (&trace_guard.trace), actual, expected);
+                        _ = &y;
+                        while ((((x < actual.len) and (y < expected.len)) and eql(actual[@as(usize, @intCast(x))], expected[@as(usize, @intCast(y))]))) {
+                            x = (x + 1);
+                            y = (y + 1);
+                        }
+                        graph_guard.slice[cp_cast_int(usize, k)] = @intCast(x);
+                        if (((x >= actual.len) and (y >= expected.len))) {
+                            return backtrack(bun_allocator, (&trace_guard.trace), actual, expected);
+                        }
                     }
                 }
             }
@@ -431,7 +433,7 @@ pub fn split(comptime T: type, alloc: Allocator, s: []const T) Allocator.Error!S
         }
 
 }
-        const newline: T = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(10)) else @as(T, 10));
+        const newline: T = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(10)) == .int or @typeInfo(@TypeOf(10)) == .comptime_int)) @as(T, @enumFromInt(10)) else @as(T, 10));
         var it = std.mem.splitScalar(T, s, newline);
         _ = &it;
         var lines_guard = DeinitWithAllocGuard(SplitList(T)){ .alloc = alloc, .val = .{} };

@@ -797,7 +797,7 @@ pub union(enum) PathLike {
             },
             else => {
                 if (domurl := arg.@"as"(jsc.DOMURL)) {
-                    let str: bun.String = domurl.fileSystemPath() catch |e| {
+                    let str: bun.String = domurl.fileSystemPath() catch e => {
                         if (e == error.NotFileUrl) {
                             return ctx.ERR(.INVALID_URL_SCHEME, "URL must be a non-empty \"file:\" path", .{}).throw();
                         } else if (e == error.InvalidPath) {

@@ -291,10 +291,15 @@ pub fn runFromJSThread(stream: *T) void {
             var ___run_guard_moved = false; _ = &___run_guard_moved;
             defer if (!___run_guard_moved) { ___run_guard_moved = true; const __T = @TypeOf(_run_guard); if (@typeInfo(__T) == .optional) { if (_run_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _run_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _run_guard; _drop_val.__cp_deinit(); } };
             stream.write_in_progress = false;
-            const this_value = ((stream.this_value.trySwap()) orelse {
-            _ = debug("this_value is null in runFromJSThread", .{});
-            return;
-});
+            var this_value: jsc.JSValue = undefined;
+            _ = &this_value;
+            if (stream.this_value.trySwap()) |v| {
+                _ = &v;
+                this_value = v;
+            } else {
+                _ = debug("this_value is null in runFromJSThread", .{});
+                return;
+            }
             _ = this_value.ensureStillAlive();
             if ((!checkError(stream, global, this_value))) {
                 return;
