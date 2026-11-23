@@ -35,7 +35,7 @@ pub union(enum) ColumnIdentifier {
     }
 
     pub fn deinit(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .name => |*name| name.deinit(),
             else => {},
         }

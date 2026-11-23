@@ -16,7 +16,7 @@ const Int32 = int_types.Int32;
         * = reader.int4()?;
         const message = reader.readZ()?;
         unsafe {
-            this.* = { message: message };
+            _.* = { message: message };
         }
     }
 
@@ -27,7 +27,7 @@ const Int32 = int_types.Int32;
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const message = this.message.slice();
+        const message = _.message.slice();
         const count: u32 = @intCast(@sizeOf(u32) + message.len + 1);
         const b = toBytes(Int32(count));
         const header: [5]u8 = ['f', b[0], b[1], b[2], b[3]];

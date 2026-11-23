@@ -13,13 +13,13 @@ pub fn init(alloc: Allocator) EnvMap {
         return .{ .map = MapType.init(alloc) };
 }
 
-pub fn memoryCost(client: *const EnvMap) usize {
+pub fn memoryCost(self: EnvMap) usize {
         var size: usize = @sizeOf(EnvMap);
         _ = &size;
-        size = (size + std.mem.sliceAsBytes(client.map.keys()).len);
-        size = (size + std.mem.sliceAsBytes(client.map.values()).len);
-        const keys = client.map.keys();
-        const vals = client.map.values();
+        size = (size + std.mem.sliceAsBytes(self.map.keys()).len);
+        size = (size + std.mem.sliceAsBytes(self.map.values()).len);
+        const keys = self.map.keys();
+        const vals = self.map.values();
         var i: usize = 0;
         _ = &i;
         while ((i < keys.len)) : (i = (i + 1)) {
@@ -36,13 +36,13 @@ pub fn initWithCapacity(alloc: Allocator, cap: usize) EnvMap {
         return .{ .map = map };
 }
 
-pub fn deinit(client: *EnvMap) void {
-        _ = client.derefStrings();
-        _ = client.map.deinit();
+pub fn deinit(self: *EnvMap) void {
+        _ = self.derefStrings();
+        _ = self.map.deinit();
 }
 
-pub fn insert(client: *EnvMap, key: EnvStr, val: EnvStr) void {
-        const result = bun.handleOom(client.map.getOrPut(key));
+pub fn insert(self: *EnvMap, key: EnvStr, val: EnvStr) void {
+        const result = bun.handleOom(self.map.getOrPut(key));
         if ((!result.found_existing)) {
             _ = key.ref();
         } else {
@@ -52,41 +52,41 @@ pub fn insert(client: *EnvMap, key: EnvStr, val: EnvStr) void {
         result.value_ptr.* = val;
 }
 
-pub fn iterator(client: *EnvMap) MapType.Iterator {
-        return client.map.iterator();
+pub fn iterator(self: *EnvMap) MapType.Iterator {
+        return self.map.iterator();
 }
 
-pub fn clearRetainingCapacity(client: *EnvMap) void {
-        _ = client.derefStrings();
-        _ = client.map.clearRetainingCapacity();
+pub fn clearRetainingCapacity(self: *EnvMap) void {
+        _ = self.derefStrings();
+        _ = self.map.clearRetainingCapacity();
 }
 
-pub fn ensureTotalCapacity(client: *EnvMap, new_capacity: usize) void {
-        _ = bun.handleOom(client.map.ensureTotalCapacity(new_capacity));
+pub fn ensureTotalCapacity(self: *EnvMap, new_capacity: usize) void {
+        _ = bun.handleOom(self.map.ensureTotalCapacity(new_capacity));
 }
 
-pub fn get(client: *EnvMap, key: EnvStr) ?EnvStr {
-        const val = ((client.map.get(key)) orelse { return null; });
+pub fn get(self: EnvMap, key: EnvStr) ?EnvStr {
+        const val = ((self.map.get(key)) orelse { return null; });
         _ = val.ref();
         return val;
 }
 
-pub fn clone(client: *EnvMap) EnvMap {
-        var new_map: EnvMap = .{ .map = bun.handleOom(client.map.clone()) };
+pub fn clone(self: EnvMap) EnvMap {
+        var new_map: EnvMap = .{ .map = bun.handleOom(self.map.clone()) };
         _ = &new_map;
         _ = new_map.refStrings();
         return new_map;
 }
 
-pub fn cloneWithAllocator(client: *EnvMap, allocator: Allocator) EnvMap {
-        var new_map: EnvMap = .{ .map = bun.handleOom(client.map.cloneWithAllocator(allocator)) };
+pub fn cloneWithAllocator(self: EnvMap, allocator: Allocator) EnvMap {
+        var new_map: EnvMap = .{ .map = bun.handleOom(self.map.cloneWithAllocator(allocator)) };
         _ = &new_map;
         _ = new_map.refStrings();
         return new_map;
 }
 
-pub fn refStrings(client: *EnvMap) void {
-        var iter = client.map.iterator();
+pub fn refStrings(self: *EnvMap) void {
+        var iter = self.map.iterator();
         _ = &iter;
         while (iter.next()) |entry| {
             _ = entry.key_ptr.ref();
@@ -94,8 +94,8 @@ pub fn refStrings(client: *EnvMap) void {
         }
 }
 
-pub fn derefStrings(client: *EnvMap) void {
-        var iter = client.map.iterator();
+pub fn derefStrings(self: *EnvMap) void {
+        var iter = self.map.iterator();
         _ = &iter;
         while (iter.next()) |entry| {
             _ = entry.key_ptr.deref();
@@ -106,7 +106,7 @@ pub const Iterator = MapType.Iterator;
 const MapType = std.ArrayHashMap(EnvStr, EnvStr, struct {
 
 pub fn hash(self: @This(), s: EnvStr) u32 {
-            _ = &self;
+        _ = self;
             if (bun.Environment.isWindows) {
                 return bun.CaseInsensitiveASCIIStringContext.hash(undefined, s.slice());
             }
@@ -114,7 +114,7 @@ pub fn hash(self: @This(), s: EnvStr) u32 {
     }
 
 pub fn eql(self: @This(), a: EnvStr, b: EnvStr, b_index: usize) bool {
-            _ = &self;
+        _ = self;
             _ = &b_index;
             if (bun.Environment.isWindows) {
                 return bun.CaseInsensitiveASCIIStringContext.eql(undefined, a.slice(), b.slice(), undefined);

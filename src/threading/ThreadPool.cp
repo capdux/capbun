@@ -371,19 +371,19 @@ struct TopThread {
             Output.Source.configureNamedThread(named);
         }
 
-        let self = TopThread{ thread_pool: thread_pool };
-        current = unsafe { &self };
+        let thread = TopThread{ thread_pool: thread_pool };
+        current = unsafe { &thread };
         defer current = null;
 
-        unsafe { thread_pool.register(&self); }
-        const unregister_guard = UnregisterThreadGuard{ thread_pool: thread_pool, thread: unsafe { &self } };
+        unsafe { thread_pool.register(&thread); }
+        const unregister_guard = UnregisterThreadGuard{ thread_pool: thread_pool, thread: unsafe { &thread } };
         * = unregister_guard;
 
         let is_waking = false;
         while (true) {
             is_waking = unsafe { thread_pool.wait(is_waking) } catch return;
 
-            while (result := self.pop(thread_pool)) {
+            while (result := thread.pop(thread_pool)) {
                 if (result.pushed || is_waking)
                     unsafe { thread_pool.notify(is_waking); }
                 is_waking = false;
@@ -394,7 +394,7 @@ struct TopThread {
             }
 
             Output.flush();
-            self.drainIdleEvents();
+            thread.drainIdleEvents();
         }
     }
 

@@ -166,7 +166,7 @@ pub union(RESPType) RESPValue {
     BigNumber: []const u8,
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        switch (this.*) {
+        switch (_.*) {
             .SimpleString str => allocator.free(str),
             .Error str => allocator.free(str),
             .Integer => {},
@@ -305,19 +305,19 @@ pub struct ValkeyReader {
     }
 
     pub fn readByte(*_): u8 ! RedisError {
-        if (this.pos >= this.buffer.len) return error.InvalidResponse;
-        const byte = this.buffer[this.pos];
-        this.pos += 1;
+        if (_.pos >= _.buffer.len) return error.InvalidResponse;
+        const byte = _.buffer[_.pos];
+        _.pos += 1;
         return byte;
     }
 
     pub fn readUntilCRLF(*_): []const u8 ! RedisError {
-        const buffer = this.buffer[this.pos..];
+        const buffer = _.buffer[_.pos..];
         let i: usize = 0;
         for (byte of buffer) {
             if (byte == '\r' && buffer.len > i + 1 && buffer[i + 1] == '\n') {
                 const result = buffer[0..i];
-                this.pos += i + 2;
+                _.pos += i + 2;
                 return result;
             }
             i += 1;
@@ -327,12 +327,12 @@ pub struct ValkeyReader {
     }
 
     pub fn readInteger(*_): i64 ! RedisError {
-        const str = this.readUntilCRLF()?;
+        const str = _.readUntilCRLF()?;
         return std.fmt.parseInt(i64, str, 10) catch return error.InvalidInteger;
     }
 
     pub fn readDouble(*_): f64 ! RedisError {
-        const str = this.readUntilCRLF()?;
+        const str = _.readUntilCRLF()?;
 
         // Handle special values
         if (std.mem.eql(u8, str, "inf")) return std.math.inf(f64);
@@ -344,7 +344,7 @@ pub struct ValkeyReader {
     }
 
     pub fn readBoolean(*_): bool ! RedisError {
-        const str = this.readUntilCRLF()?;
+        const str = _.readUntilCRLF()?;
         if (str.len != 1) return error.InvalidBoolean;
 
         return switch (str[0]) {
@@ -355,16 +355,16 @@ pub struct ValkeyReader {
     }
 
     pub fn readVerbatimString(*_, allocator: std.mem.Allocator): VerbatimString ! RedisError {
-        const len = this.readInteger()?;
+        const len = _.readInteger()?;
         if (len < 0) return error.InvalidVerbatimString;
         const ulen = len as usize;
-        if (this.pos + ulen > this.buffer.len) return error.InvalidVerbatimString;
+        if (_.pos + ulen > _.buffer.len) return error.InvalidVerbatimString;
 
-        const content_with_format = this.buffer[this.pos .. this.pos + ulen];
-        this.pos += ulen;
+        const content_with_format = _.buffer[_.pos .. _.pos + ulen];
+        _.pos += ulen;
 
         // Expect CRLF after content
-        const crlf = this.readUntilCRLF()?;
+        const crlf = _.readUntilCRLF()?;
         if (crlf.len != 0) return error.InvalidVerbatimString;
 
         // Format should be "xxx:" followed by content
@@ -382,11 +382,11 @@ pub struct ValkeyReader {
     }
 
     pub fn readValue(*_, allocator: std.mem.Allocator): RESPValue ! RedisError {
-        return this.readValueWithDepth(allocator, 0);
+        return _.readValueWithDepth(allocator, 0);
     }
 
     fn readValueWithDepth(*_, allocator: std.mem.Allocator, depth: usize): RESPValue ! RedisError {
-        const type_byte = this.readByte()?;
+        const type_byte = _.readByte()?;
         const resp_type_opt = RESPType.fromByte(type_byte);
         if (resp_type_opt == null) return error.InvalidResponseType;
         const resp_type = resp_type_opt.?;
@@ -394,41 +394,41 @@ pub struct ValkeyReader {
         return switch (resp_type) {
             // RESP2 types
             .SimpleString => {
-                const str = this.readUntilCRLF()?;
+                const str = _.readUntilCRLF()?;
                 const owned = allocator.dupe(u8, str)?;
                 return RESPValue{ SimpleString: owned };
             },
             .Error => {
-                const str = this.readUntilCRLF()?;
+                const str = _.readUntilCRLF()?;
                 const owned = allocator.dupe(u8, str)?;
                 return RESPValue{ Error: owned };
             },
             .Integer => {
-                const int = this.readInteger()?;
+                const int = _.readInteger()?;
                 return RESPValue{ Integer: int };
             },
             .BulkString => {
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len < 0) return RESPValue{ BulkString: null };
                 const ulen = len as usize;
-                if (this.pos + ulen > this.buffer.len) return error.InvalidResponse;
-                const str = this.buffer[this.pos .. this.pos + ulen];
-                this.pos += ulen;
-                const crlf = this.readUntilCRLF()?;
+                if (_.pos + ulen > _.buffer.len) return error.InvalidResponse;
+                const str = _.buffer[_.pos .. _.pos + ulen];
+                _.pos += ulen;
+                const crlf = _.readUntilCRLF()?;
                 if (crlf.len != 0) return error.InvalidBulkString;
                 const owned = allocator.dupe(u8, str)?;
                 return RESPValue{ BulkString: owned };
             },
             .Array => {
                 if (depth >= max_nesting_depth) return error.NestingDepthExceeded;
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len < 0) return RESPValue{ Array: empty_resp_array };
                 let array = allocator.alloc(RESPValue, len as usize)?;
                 let i: usize = 0;
                 let _array_guard = SliceDeinitGuard<RESPValue>{ slice: array, count: unsafe { &i }, alloc: allocator };
                 const ulen = len as usize;
                 while (i < ulen) : (i += 1) {
-                    array[i] = this.readValueWithDepth(allocator, depth + 1)?;
+                    array[i] = _.readValueWithDepth(allocator, depth + 1)?;
                 }
                 _array_guard.slice = null;
                 return RESPValue{ Array: array };
@@ -436,35 +436,35 @@ pub struct ValkeyReader {
 
             // RESP3 types
             .Null => {
-                * = this.readUntilCRLF()?; // Read and discard CRLF
+                * = _.readUntilCRLF()?; // Read and discard CRLF
                 return null_resp_value;
             },
             .Double => {
-                const d = this.readDouble()?;
+                const d = _.readDouble()?;
                 return RESPValue{ Double: d };
             },
             .Boolean => {
-                const b = this.readBoolean()?;
+                const b = _.readBoolean()?;
                 return RESPValue{ Boolean: b };
             },
             .BlobError => {
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len < 0) return error.InvalidBlobError;
                 const ulen = len as usize;
-                if (this.pos + ulen > this.buffer.len) return error.InvalidBlobError;
-                const str = this.buffer[this.pos .. this.pos + ulen];
-                this.pos += ulen;
-                const crlf = this.readUntilCRLF()?;
+                if (_.pos + ulen > _.buffer.len) return error.InvalidBlobError;
+                const str = _.buffer[_.pos .. _.pos + ulen];
+                _.pos += ulen;
+                const crlf = _.readUntilCRLF()?;
                 if (crlf.len != 0) return error.InvalidBlobError;
                 const owned = allocator.dupe(u8, str)?;
                 return RESPValue{ BlobError: owned };
             },
             .VerbatimString => {
-                return RESPValue{ VerbatimString: this.readVerbatimString(allocator)? };
+                return RESPValue{ VerbatimString: _.readVerbatimString(allocator)? };
             },
             .Map => {
                 if (depth >= max_nesting_depth) return error.NestingDepthExceeded;
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len < 0) return error.InvalidMap;
 
                 const ulen = len as usize;
@@ -473,9 +473,9 @@ pub struct ValkeyReader {
                 let _entries_guard = SliceDeinitGuard<MapEntry>{ slice: entries, count: unsafe { &i }, alloc: allocator };
 
                 while (i < ulen) : (i += 1) {
-                    let key = this.readValueWithDepth(allocator, depth + 1)?;
+                    let key = _.readValueWithDepth(allocator, depth + 1)?;
                     let _key_guard = OptValDeinitWithAllocGuard<RESPValue>{ val: key, alloc: allocator };
-                    const value = this.readValueWithDepth(allocator, depth + 1)?;
+                    const value = _.readValueWithDepth(allocator, depth + 1)?;
                     entries[i] = MapEntry{ key: key, value: value };
                     _key_guard.val = null;
                 }
@@ -484,7 +484,7 @@ pub struct ValkeyReader {
             },
             .Set => {
                 if (depth >= max_nesting_depth) return error.NestingDepthExceeded;
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len < 0) return error.InvalidSet;
 
                 const ulen = len as usize;
@@ -492,14 +492,14 @@ pub struct ValkeyReader {
                 let i: usize = 0;
                 let _set_guard = SliceDeinitGuard<RESPValue>{ slice: set, count: unsafe { &i }, alloc: allocator };
                 while (i < ulen) : (i += 1) {
-                    set[i] = this.readValueWithDepth(allocator, depth + 1)?;
+                    set[i] = _.readValueWithDepth(allocator, depth + 1)?;
                 }
                 _set_guard.slice = null;
                 return RESPValue{ Set: set };
             },
             .Attribute => {
                 if (depth >= max_nesting_depth) return error.NestingDepthExceeded;
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len < 0) return error.InvalidAttribute;
 
                 const ulen = len as usize;
@@ -507,9 +507,9 @@ pub struct ValkeyReader {
                 let i: usize = 0;
                 let _attrs_guard = SliceDeinitGuard<MapEntry>{ slice: attrs, count: unsafe { &i }, alloc: allocator };
                 while (i < ulen) : (i += 1) {
-                    let key = this.readValueWithDepth(allocator, depth + 1)?;
+                    let key = _.readValueWithDepth(allocator, depth + 1)?;
                     let _key_guard = OptValDeinitWithAllocGuard<RESPValue>{ val: key, alloc: allocator };
-                    const value = this.readValueWithDepth(allocator, depth + 1)?;
+                    const value = _.readValueWithDepth(allocator, depth + 1)?;
                     attrs[i] = MapEntry{ key: key, value: value };
                     _key_guard.val = null;
                 }
@@ -518,7 +518,7 @@ pub struct ValkeyReader {
                 let value_ptr = allocator.create(RESPValue)?;
                 let _val_guard = OptDestroyGuard<RESPValue>{ ptr: value_ptr, alloc: allocator };
                 unsafe {
-                    value_ptr.* = this.readValueWithDepth(allocator, depth + 1)?;
+                    value_ptr.* = _.readValueWithDepth(allocator, depth + 1)?;
                 }
 
                 _val_guard.ptr = null;
@@ -530,11 +530,11 @@ pub struct ValkeyReader {
             },
             .Push => {
                 if (depth >= max_nesting_depth) return error.NestingDepthExceeded;
-                const len = this.readInteger()?;
+                const len = _.readInteger()?;
                 if (len <= 0) return error.InvalidPush;
 
                 // First element is the push type
-                let push_type = this.readValueWithDepth(allocator, depth + 1)?;
+                let push_type = _.readValueWithDepth(allocator, depth + 1)?;
                 const _push_type_guard = OptValDeinitWithAllocGuard<RESPValue>{ val: push_type, alloc: allocator };
                 let push_type_str: []const u8 = "";
 
@@ -560,7 +560,7 @@ pub struct ValkeyReader {
                 let i: usize = 0;
                 let _data_guard = SliceDeinitGuard<RESPValue>{ slice: data, count: unsafe { &i }, alloc: allocator };
                 while (i < ulen) : (i += 1) {
-                    data[i] = this.readValueWithDepth(allocator, depth + 1)?;
+                    data[i] = _.readValueWithDepth(allocator, depth + 1)?;
                 }
 
                 _data_guard.slice = null;
@@ -571,7 +571,7 @@ pub struct ValkeyReader {
                 } };
             },
             .BigNumber => {
-                const str = this.readUntilCRLF()?;
+                const str = _.readUntilCRLF()?;
                 const owned = allocator.dupe(u8, str)?;
                 return RESPValue{ BigNumber: owned };
             },
@@ -584,8 +584,8 @@ pub struct MapEntry {
     value: RESPValue,
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        this.key.deinit(allocator);
-        this.value.deinit(allocator);
+        _.key.deinit(allocator);
+        _.value.deinit(allocator);
     }
 }
 
@@ -594,8 +594,8 @@ pub struct VerbatimString {
     content: []const u8,
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        allocator.free(this.format);
-        allocator.free(this.content);
+        allocator.free(_.format);
+        allocator.free(_.content);
     }
 }
 
@@ -604,11 +604,11 @@ pub struct Push {
     data: []RESPValue,
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        allocator.free(this.kind);
-        for (*item of this.data) {
+        allocator.free(_.kind);
+        for (*item of _.data) {
             item.deinit(allocator);
         }
-        allocator.free(this.data);
+        allocator.free(_.data);
     }
 }
 
@@ -617,12 +617,12 @@ pub struct Attribute {
     value: *RESPValue,
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        for (*entry of this.attributes) {
+        for (*entry of _.attributes) {
             entry.deinit(allocator);
         }
-        allocator.free(this.attributes);
-        this.value.deinit(allocator);
-        allocator.destroy(this.value);
+        allocator.free(_.attributes);
+        _.value.deinit(allocator);
+        allocator.destroy(_.value);
     }
 }
 

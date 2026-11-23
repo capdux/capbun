@@ -92,8 +92,8 @@ export enum S3HttpSimpleTaskCallback {
     commit(fn (S3CommitResult, *!) JSTerminatedError!void),
     part(fn (S3PartResult, *!) JSTerminatedError!void),
 
-    pub fn fail(_: S3HttpSimpleTaskCallback, code: []const u8, message: []const u8, context: *!): JSTerminatedError!void {
-        switch (this) {
+    pub fn fail(code: []const u8, message: []const u8, context: *!): JSTerminatedError!void {
+        switch (_) {
             .upload(cb) => {
                 cb(.{
                     .failure = .{
@@ -153,8 +153,8 @@ export enum S3HttpSimpleTaskCallback {
         }
     }
 
-    pub fn notFound(_: S3HttpSimpleTaskCallback, code: []const u8, message: []const u8, context: *!): JSTerminatedError!void {
-        switch (this) {
+    pub fn notFound(code: []const u8, message: []const u8, context: *!): JSTerminatedError!void {
+        switch (_) {
             .download(cb) => {
                 cb(.{
                     .not_found = .{
@@ -188,7 +188,7 @@ export enum S3HttpSimpleTaskCallback {
                 }, context)?;
             },
             else => {
-                this.fail(code, message, context)?;
+                _.fail(code, message, context)?;
             },
         }
     }
@@ -218,39 +218,39 @@ export class S3HttpSimpleTask {
     poll_ref: bun.Async.KeepAlive = bun.Async.KeepAlive.init();
 
     pub fn release(*_) {
-        if (certificate := this.result.certificate_info) {
+        if (certificate := _.result.certificate_info) {
             certificate.deinit(bun.default_allocator);
         }
-        this.poll_ref.unref(this.vm);
-        this.response_buffer.deinit();
-        this.headers.deinit();
-        this.sign_result.deinit();
-        this.http.clearData();
-        if (range := this.range) {
+        _.poll_ref.unref(_.vm);
+        _.response_buffer.deinit();
+        _.headers.deinit();
+        _.sign_result.deinit();
+        _.http.clearData();
+        if (range := _.range) {
             bun.default_allocator.free(range);
         }
-        if (this.proxy_url.len > 0) {
-            bun.default_allocator.free(this.proxy_url);
+        if (_.proxy_url.len > 0) {
+            bun.default_allocator.free(_.proxy_url);
         }
-        if (*metadata := this.result.metadata) {
+        if (*metadata := _.result.metadata) {
             metadata.deinit(bun.default_allocator);
         }
     }
 
-    pub fn deinit(*_: *S3HttpSimpleTask) {
-        this.release();
-        bun.destroy(this);
+    pub fn deinit(*_) {
+        _.release();
+        bun.destroy(_);
     }
 
-    fn errorWithBody(*_: *S3HttpSimpleTask, comptime error_type: ErrorType): JSTerminatedError!void {
+    fn errorWithBody(*_, comptime error_type: ErrorType): JSTerminatedError!void {
         let code: string = "UnknownError";
         let message: string = "an unexpected error has occurred";
         let has_error_code = false;
 
-        if (req_err := this.result.fail) {
+        if (req_err := _.result.fail) {
             code = @errorName(req_err);
             has_error_code = true;
-        } else if (body := this.result.body) {
+        } else if (body := _.result.body) {
             const bytes: string = body.list.items;
             if (bytes.len > 0) {
                 message = bytes;
@@ -273,19 +273,19 @@ export class S3HttpSimpleTask {
                 code = "NoSuchKey";
                 message = "The specified key does not exist.";
             }
-            this.callback.notFound(code, message, this.callback_context)?;
+            _.callback.notFound(code, message, _.callback_context)?;
         } else {
-            this.callback.fail(code, message, this.callback_context)?;
+            _.callback.fail(code, message, _.callback_context)?;
         }
     }
 
-    fn failIfContainsError(*_: *S3HttpSimpleTask, status: u32): JSTerminatedError!bool {
+    fn failIfContainsError(*_, status: u32): JSTerminatedError!bool {
         let code: string = "UnknownError";
         let message: string = "an unexpected error has occurred";
 
-        if (req_err := this.result.fail) {
+        if (req_err := _.result.fail) {
             code = @errorName(req_err);
-        } else if (body := this.result.body) {
+        } else if (body := _.result.body) {
             const bytes: string = body.list.items;
             let has_error = false;
             if (bytes.len > 0) {
@@ -311,20 +311,20 @@ export class S3HttpSimpleTask {
             return false;
         }
 
-        this.callback.fail(code, message, this.callback_context)?;
+        _.callback.fail(code, message, _.callback_context)?;
         return true;
     }
 
-    pub fn onResponse(*_: *S3HttpSimpleTask): JSTerminatedError!void {
+    pub fn onResponse(*_): JSTerminatedError!void {
         const _guard = DeinitPtrGuard<S3HttpSimpleTask>{ ptr: unsafe { _ } };
-        if (!this.result.isSuccess()) {
-            this.errorWithBody(.failure)?;
+        if (!_.result.isSuccess()) {
+            _.errorWithBody(.failure)?;
             return;
         }
-        bun.assert(this.result.metadata != null);
-        const response = this.result.metadata.?.response;
+        bun.assert(_.result.metadata != null);
+        const response = _.result.metadata.?.response;
 
-        switch (this.callback) {
+        switch (_.callback) {
             .stat(cb) => {
                 switch (response.status_code) {
                     200 => {
@@ -337,65 +337,65 @@ export class S3HttpSimpleTask {
                                 .contentType = response.headers.get("content-type") ?? "",
                                 .size = cl_size,
                             },
-                        }, this.callback_context)?;
+                        }, _.callback_context)?;
                     },
                     404 => {
-                        this.errorWithBody(.not_found)?;
+                        _.errorWithBody(.not_found)?;
                     },
                     else => {
-                        this.errorWithBody(.failure)?;
+                        _.errorWithBody(.failure)?;
                     },
                 }
             },
             .delete(cb) => {
                 switch (response.status_code) {
                     200, 204 => {
-                        cb(.{ .success = undefined }, this.callback_context)?;
+                        cb(.{ .success = undefined }, _.callback_context)?;
                     },
                     404 => {
-                        this.errorWithBody(.not_found)?;
+                        _.errorWithBody(.not_found)?;
                     },
                     else => {
-                        this.errorWithBody(.failure)?;
+                        _.errorWithBody(.failure)?;
                     },
                 }
             },
             .listObjects(cb) => {
                 switch (response.status_code) {
                     200 => {
-                        if (body := this.result.body) {
+                        if (body := _.result.body) {
                             const success = ListObjects.parseS3ListObjectsResult(body.slice()) catch {
-                                this.errorWithBody(.failure)?;
+                                _.errorWithBody(.failure)?;
                                 return;
                             };
-                            cb(.{ .success = success }, this.callback_context)?;
+                            cb(.{ .success = success }, _.callback_context)?;
                         } else {
-                            this.errorWithBody(.failure)?;
+                            _.errorWithBody(.failure)?;
                         }
                     },
                     404 => {
-                        this.errorWithBody(.not_found)?;
+                        _.errorWithBody(.not_found)?;
                     },
                     else => {
-                        this.errorWithBody(.failure)?;
+                        _.errorWithBody(.failure)?;
                     },
                 }
             },
             .upload(cb) => {
                 switch (response.status_code) {
                     200 => {
-                        cb(.{ .success = undefined }, this.callback_context)?;
+                        cb(.{ .success = undefined }, _.callback_context)?;
                     },
                     else => {
-                        this.errorWithBody(.failure)?;
+                        _.errorWithBody(.failure)?;
                     },
                 }
             },
             .download(cb) => {
                 switch (response.status_code) {
                     200, 204, 206 => {
-                        const body = this.response_buffer;
-                        this.response_buffer = .{
+                        const body = _.response_buffer;
+                        _.response_buffer = .{
                             .allocator = bun.default_allocator,
                             .list = .{
                                 .items = &.{},
@@ -407,40 +407,40 @@ export class S3HttpSimpleTask {
                                 .etag = response.headers.get("etag") ?? "",
                                 .body = body,
                             },
-                        }, this.callback_context)?;
+                        }, _.callback_context)?;
                     },
                     404 => {
-                        this.errorWithBody(.not_found)?;
+                        _.errorWithBody(.not_found)?;
                     },
                     else => {
-                        this.errorWithBody(.failure)?;
+                        _.errorWithBody(.failure)?;
                     },
                 }
             },
             .commit(cb) => {
-                if (!(this.failIfContainsError(response.status_code)?)) {
-                    cb(.{ .success = undefined }, this.callback_context)?;
+                if (!(_.failIfContainsError(response.status_code)?)) {
+                    cb(.{ .success = undefined }, _.callback_context)?;
                 }
             },
             .part(cb) => {
-                if (!(this.failIfContainsError(response.status_code)?)) {
+                if (!(_.failIfContainsError(response.status_code)?)) {
                     if (etag := response.headers.get("etag")) {
-                        cb(.{ .etag = etag }, this.callback_context)?;
+                        cb(.{ .etag = etag }, _.callback_context)?;
                     } else {
-                        this.errorWithBody(.failure)?;
+                        _.errorWithBody(.failure)?;
                     }
                 }
             },
         }
     }
 
-    pub fn httpCallback(*_: *S3HttpSimpleTask, async_http: *bun.http.AsyncHTTP, result: bun.http.HTTPClientResult) {
+    pub fn httpCallback(*_, async_http: *bun.http.AsyncHTTP, result: bun.http.HTTPClientResult) {
         const is_done = !result.has_more;
-        this.result = result;
-        this.http = async_http.*;
-        this.response_buffer = async_http.response_buffer.*;
+        _.result = result;
+        _.http = async_http.*;
+        _.response_buffer = async_http.response_buffer.*;
         if (is_done) {
-            this.vm.eventLoop().enqueueTaskConcurrent(this.concurrent_task.from(this, .manual_deinit));
+            _.vm.eventLoop().enqueueTaskConcurrent(_.concurrent_task.from(_, .manual_deinit));
         }
     }
 }
@@ -478,7 +478,7 @@ pub fn executeSimpleS3Request(
         .storage_class = options.storage_class,
         .request_payer = options.request_payer,
     };
-    let result = this.signRequest(sign_options, false, null) catch |sign_err| {
+    let result = _.signRequest(sign_options, false, null) catch sign_err => {
         if (range_ := options.range) bun.default_allocator.free(range_);
         const error_code_and_message = getSignErrorCodeAndMessage(sign_err);
         callback.fail(error_code_and_message.code, error_code_and_message.message, callback_context)?;

@@ -1730,3 +1730,7 @@
 ### [2026-11-23] Wave #75 技术要点（`@fieldParentPtr` 接收者指针与 `cpc` 泛型移位发现）
 - `Builtin.allocator`/`eventLoop` 内部调用 `_.parentCmd()`（`@fieldParentPtr("bltn", self)`），若省略 `*_` 会被降级为按值传参，导致对栈副本取址算出错误 `Cmd` 指针并在 `yes`/`ls` 触发 `EventLoopTask.fromEventLoop` ASan SEGV；内联匿名 `struct { static fn ... }` 回调也须标注 `static fn`。
 - 排查 `src/collections/bit_set.cp` 确认 `cpc` 对 `comptime T: type` 泛型整数移位误报 `E0207`，已提炼最小复现上报 `cp_agy`（`task-bun-20261123-generic-shift-e0207`）。
+
+### [2026-11-23] Wave #77 技术要点（`Cmd` 生命周期/子进程就地构造与 `cpc` 静态/类型实参规律）
+- `Cmd.childDone` 的 `Expansion` 分支不能用 RAII `~init` 在 `return writeFailingError` 后释放 `base.allocator()` 分配的错误对象（因 `writeFailingError` 会同步触发 `Cmd.deinit -> endScope` 检查）；须先用 `bun.default_allocator` 格式化并提前 `e.deinit(_.base.allocator())`。`Cmd.initSubproc` 必须直传 `&_.exec.subproc.child` 而非临时栈数组，否则 `spawnAsync` 内同步触发 `BufferedIoClosed.close` 时 `child.stderr` 尚未赋值。
+- 实参位置传递指针类型（如 `*Child` / `*PackageInstaller`）在 CP 表达式解析中会被转为 `&T`，须改用 `@TypeOf(&val)`；`pub enum` / `pub static struct` 内静态方法必须显式标注 `static fn`（或声明 `static struct`），否则重编后将被注入 `self` 接收者参数。

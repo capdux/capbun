@@ -10,19 +10,18 @@ const int4 = int_types.int4;
     p: PortalOrPreparedStatement,
 
     pub fn writeInternal(
-        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
         writer.write("E")?;
         const length = writer.length()?;
-        if (this.p == .portal) {
-            writer.@"string"(this.p.portal)?;
+        if (_.p == .portal) {
+            writer.@"string"(_.p.portal)?;
         } else {
             const zero: [1]u8 = [0];
             writer.write(&zero)?;
         }
-        writer.int4(this.max_rows)?;
+        writer.int4(_.max_rows)?;
         length.write()?;
     }
 

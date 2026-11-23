@@ -11,17 +11,16 @@ const toBytes = std.mem.toBytes;
     data: Data = .empty,
 
     pub fn deinit(*_) {
-        this.mechanism.deinit();
-        this.data.deinit();
+        _.mechanism.deinit();
+        _.data.deinit();
     }
 
     pub fn writeInternal(
-        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const mechanism = this.mechanism.slice();
-        const data = this.data.slice();
+        const mechanism = _.mechanism.slice();
+        const data = _.data.slice();
         const count: usize = @sizeOf(u32) + mechanism.len + 1 + data.len + @sizeOf(u32);
         const b = toBytes(Int32(count));
         const header: [5]u8 = ['p', b[0], b[1], b[2], b[3]];

@@ -34,7 +34,7 @@ pub fn decode(bytes: []const u8) ?PacketHeader {
         if ((bytes.len < 4)) {
             return null;
         }
-        return PacketHeader{ .length = (((if (comptime @typeInfo(u24) == .@"enum") @as(u24, @enumFromInt(bytes[0])) else @as(u24, bytes[0])) | cp_shl((if (comptime @typeInfo(u24) == .@"enum") @as(u24, @enumFromInt(bytes[1])) else @as(u24, bytes[1])), 8)) | cp_shl((if (comptime @typeInfo(u24) == .@"enum") @as(u24, @enumFromInt(bytes[2])) else @as(u24, bytes[2])), 16)), .sequence_id = bytes[3] };
+        return PacketHeader{ .length = (((if (comptime @typeInfo(@TypeOf(bytes[0])) == .@"enum") cp_cast_int(u24, @intFromEnum(bytes[0])) else cp_cast_int(u24, bytes[0])) | cp_shl((if (comptime @typeInfo(@TypeOf(bytes[1])) == .@"enum") cp_cast_int(u24, @intFromEnum(bytes[1])) else cp_cast_int(u24, bytes[1])), 8)) | cp_shl((if (comptime @typeInfo(@TypeOf(bytes[2])) == .@"enum") cp_cast_int(u24, @intFromEnum(bytes[2])) else cp_cast_int(u24, bytes[2])), 16)), .sequence_id = bytes[3] };
 }
 
 pub fn encode(self: PacketHeader) [4]u8 {

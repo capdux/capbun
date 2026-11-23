@@ -14,6 +14,7 @@ import * as read_file_mod from "./blob/read_file.zig";
 import * as write_file_mod from "./blob/write_file.zig";
 import * as copy_file_mod from "./blob/copy_file.zig";
 import Archive from "../api/Archive.zig";
+import Image from "../image/Image.zig";
 
 const BlobStore = StoreMod.Store;
 const S3 = bun.S3;
@@ -482,7 +483,7 @@ fn writeFileWithEmptySourceToDestination(ctx: *JSGlobalObject, destination_blob:
             }
         },
         .s3 => |*s3| {
-            let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch |e| {
+            let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch e => {
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e));
             };
             const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
@@ -558,7 +559,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 write_file_promise,
                 &WriteFilePromise.run,
                 options.mkdirp_if_not_exists ?? true,
-            ) catch |e| {
+            ) catch e => {
                 if (e == error.JSTerminated) return error.JSTerminated;
             };
             return promise_value;
@@ -622,7 +623,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
         return JSPromise.resolvedPromiseValue(ctx, blob_value);
     } else if (destination_type == .s3) {
         const s3 = &destination_store.data.s3;
-        let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch |e| {
+        let aws_options = s3.getCredentialsWithOptions(options.extra_options, ctx) catch e => {
             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e));
         };
         const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
@@ -2191,7 +2192,7 @@ pub struct BlobExternalSharedDescriptor {
             NewInternalReadFileHandler(Handler, Function).run,
             _.offset,
             _.size,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         let read_file_task = read_file_mod.ReadFileTask.createOnJSThread(bun.default_allocator, global, file_read);
         read_file_task.schedule();
     }
@@ -2577,7 +2578,7 @@ pub struct BlobExternalSharedDescriptor {
 
         const store = BlobStore.init(bun.handleOom(context.joiner.done(allocator)), allocator);
         let blob = Blob.initWithStore(store, globalThis);
-        blob.content_type = std.fmt.allocPrint(bun.default_allocator, "multipart/form-data; boundary={s}", .{boundary}) catch |e| bun.handleOom(e);
+        blob.content_type = std.fmt.allocPrint(bun.default_allocator, "multipart/form-data; boundary={s}", .{boundary}) catch e => bun.handleOom(e);
         blob.content_type_allocated = true;
         blob.content_type_was_set = true;
         return blob;
@@ -2821,9 +2822,8 @@ pub struct BlobExternalSharedDescriptor {
         return toFormDataWithBytes(blob, global, unsafe { @constCast(view_) }, lifetime);
     }
 
-    fn doImage(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        * = _.size;
-        return globalThis.throwTODO("Blob.image is not yet implemented");
+    fn doImage(*_, global: *JSGlobalObject, cf: *CallFrame): JSError!JSValue {
+        return Image.fromBlobJS(global, cf.this(), cf.argument(0));
     }
 
     fn isDetached(): bool {
@@ -2871,7 +2871,7 @@ pub struct BlobExternalSharedDescriptor {
             @TypeOf(handler),
             handler,
             Handler.run,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         let read_file_task = read_file_mod.ReadFileTask.createOnJSThread(default_allocator, global, file_read);
 
         let promise = JSPromise.create(global);
@@ -3992,7 +3992,7 @@ pub struct BlobExternalSharedDescriptor {
 
         if (_.isS3()) {
             const s3 = &_.store.?.data.s3;
-            let aws_options = s3.getCredentialsWithOptions(extra_options, globalThis) catch |e| {
+            let aws_options = s3.getCredentialsWithOptions(extra_options, globalThis) catch e => {
                 return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e));
             };
             const _guard_aws = DeinitGuard<S3.S3CredentialsWithOptions>{ ptr: &aws_options };
@@ -4324,7 +4324,7 @@ pub const MmapFreeInterface = if (Environment.isPosix) struct {
         return null;
     }
     static fn free(_: *!, buf: []u8, _: std.mem.Alignment, _: usize) {
-        sys.munmap(unsafe { @ptrCast(@alignCast(buf)) }).unwrap() catch |e| {
+        sys.munmap(unsafe { @ptrCast(@alignCast(buf)) }).unwrap() catch e => {
             Output.debugWarn("Blob mmap-store munmap failed: {}", .{e});
         };
     }
@@ -4443,7 +4443,7 @@ pub fn JSDOMFile__construct_(globalThis: *JSGlobalObject, callframe: *CallFrame)
 }
 
 @export @c fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): (*Blob)? {
-    return JSDOMFile__construct_(globalThis, callframe) catch |e| {
+    return JSDOMFile__construct_(globalThis, callframe) catch e => {
         if (e == error.OutOfMemory) {
             if (globalThis.throwOutOfMemory() == error.JSError) {}
         }

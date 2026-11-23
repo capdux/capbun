@@ -10,11 +10,11 @@ import { NewWriter } from "./NewWriter.zig";
     }
 
     pub fn write(bytes: []const u8): AnyPostgresError!void {
-        this.array.appendSlice(bytes)?;
+        _.array.appendSlice(bytes)?;
     }
 
     pub fn pwrite(bytes: []const u8, i: usize): AnyPostgresError!void {
-        @memcpy(this.array.items[i..][0..bytes.len], bytes);
+        @memcpy(_.array.items[i..][0..bytes.len], bytes);
     }
 
     pub const Writer = NewWriter(@This());

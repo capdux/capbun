@@ -45,10 +45,10 @@ struct OptionalThreadId {
     }
 
     pub fn format(writer: *std.Io.Writer): ! {
-        if (this.inner == invalid_thread_id) {
+        if (_.inner == invalid_thread_id) {
             writer.writeAll("another thread")?;
         } else {
-            writer.print("thread {}", [this.inner])?;
+            writer.print("thread {}", [_.inner])?;
         }
     }
 }
@@ -79,7 +79,7 @@ struct State {
         const current_id = Thread.getCurrentId();
         // .monotonic is okay because we don't need to synchronize-with other threads; we just need
         // to make sure that only one thread succeeds in setting the value.
-        if (existing := this.thread_id.cmpxchgStrong(
+        if (existing := _.thread_id.cmpxchgStrong(
             invalid_thread_id,
             current_id,
             .monotonic,
@@ -88,7 +88,7 @@ struct State {
             return existing;
         }
         if (comptime traces_enabled) {
-            this.owner_trace = StoredTrace.capture(@returnAddress());
+            _.owner_trace = StoredTrace.capture(@returnAddress());
         }
         return current_id;
     }
@@ -97,7 +97,7 @@ struct State {
         if (comptime !traces_enabled) return;
         bun.Output.err("race condition", "`CriticalSection` first entered here:", {});
         bun.crash_handler.dumpStackTrace(
-            this.owner_trace.trace(),
+            _.owner_trace.trace(),
             { frame_count: 10, stop_at_jsc_llint: true },
         );
     }
@@ -105,11 +105,11 @@ struct State {
     /// Acquire the lock for shared (read-only) access.
     fn lockShared(*_) {
         const current_id = Thread.getCurrentId();
-        const owner_id = this.getOrBecomeOwner();
+        const owner_id = _.getOrBecomeOwner();
         if (owner_id == current_id) {
-            this.owned_count += 1;
-        } else if (this.count.fetchAdd(1, .monotonic) == State.exclusive) {
-            this.showTrace();
+            _.owned_count += 1;
+        } else if (_.count.fetchAdd(1, .monotonic) == State.exclusive) {
+            _.showTrace();
             std.debug.panic(
                 "race condition: thread {} tried to read data being modified by {}",
                 [current_id, OptionalThreadId.init(owner_id)],
@@ -120,22 +120,22 @@ struct State {
     /// Acquire the lock for exclusive (read/write) access.
     fn lockExclusive(*_) {
         const current_id = Thread.getCurrentId();
-        const owner_id = this.getOrBecomeOwner();
+        const owner_id = _.getOrBecomeOwner();
         if (owner_id == current_id) {
             // .monotonic is okay because concurrent access is an error.
-            switch (this.count.swap(State.exclusive, .monotonic)) {
+            switch (_.count.swap(State.exclusive, .monotonic)) {
                 0 | State.exclusive => {},
                 else => {
-                    this.showTrace();
+                    _.showTrace();
                     std.debug.panic(
                         "race condition: thread {} tried to modify data being read by {f}",
                         [current_id, OptionalThreadId.init(owner_id)],
                     );
                 },
             }
-            this.owned_count += 1;
+            _.owned_count += 1;
         } else {
-            this.showTrace();
+            _.showTrace();
             std.debug.panic(
                 "race condition: thread {} tried to modify data being accessed by {f}",
                 [current_id, OptionalThreadId.init(owner_id)],
@@ -148,29 +148,29 @@ struct State {
         const current_id = Thread.getCurrentId();
         // .monotonic is okay because this value shouldn't change until all locks are released, and
         // we currently hold a lock.
-        const owner_id = this.thread_id.load(.monotonic);
+        const owner_id = _.thread_id.load(.monotonic);
 
         // It's possible for this thread to be the owner (`owner_id == current_id`) and for
         // `owned_count` to be 0, if this thread originally wasn't the owner, but became the owner
         // when the original owner released all of its locks. In this case, some of the lock count
         // for this thread is still in `this.count` rather than `this.owned_count`.
-        if (owner_id == current_id && this.owned_count > 0) {
-            this.owned_count -= 1;
-            if (this.owned_count == 0) {
+        if (owner_id == current_id && _.owned_count > 0) {
+            _.owned_count -= 1;
+            if (_.owned_count == 0) {
                 // .monotonic is okay because:
                 // * If this succeeds, it means the current thread holds an exclusive lock, so
                 //   concurrent access would be an error.
                 // * If this fails, we don't care about the value.
-                * = this.count.cmpxchgStrong(State.exclusive, 0, .monotonic, .monotonic);
+                * = _.count.cmpxchgStrong(State.exclusive, 0, .monotonic, .monotonic);
                 // .monotonic is okay because another thread that loads `thread_id` should not rely
                 // on that load to synchronize-with the update to `this.count` above; other
                 // synchronization should have already been performed. (This type is not meant to
                 // provide its own synchronization, but rather assert that such synchronization has
                 // already been provided.)
-                this.thread_id.store(invalid_thread_id, .monotonic);
+                _.thread_id.store(invalid_thread_id, .monotonic);
             }
         } else {
-            switch (this.count.fetchSub(1, .monotonic)) {
+            switch (_.count.fetchSub(1, .monotonic)) {
                 // The .monotonic `fetchSub` above is okay because we don't need to synchronize-with
                 // other threads (this type is not meant to provide its own synchronization).
                 0 => std.debug.panic("called `CriticalSection.end` too many times", {}),
@@ -190,17 +190,17 @@ export @root struct CriticalSection {
     /// Marks the beginning of a critical section which accesses (and potentially modifies) shared data.
     /// Calls to this function can be nested; each must be paired with a call to `end`.
     pub fn begin(*_) {
-        if (comptime enabled) this.internal_state.lockExclusive();
+        if (comptime enabled) _.internal_state.lockExclusive();
     }
 
     /// Marks the beginning of a critical section which performs read-only accesses on shared data.
     /// Calls to this function can be nested; each must be paired with a call to `end`.
     pub fn beginReadOnly(*_) {
-        if (comptime enabled) this.internal_state.lockShared();
+        if (comptime enabled) _.internal_state.lockShared();
     }
 
     /// Marks the end of a critical section started by `begin` or `beginReadOnly`.
     pub fn end(*_) {
-        if (comptime enabled) this.internal_state.unlock();
+        if (comptime enabled) _.internal_state.unlock();
     }
 }

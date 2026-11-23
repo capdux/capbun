@@ -491,17 +491,18 @@ pub fn childDone(self: *Cmd, child: ChildPtr, exit_code: ExitCode) Yield {
         if (child.ptr.is(Expansion)) {
             _ = child.deinit();
             if ((exit_code != 0)) {
-                const e = (switch (self.state) {
+                var e = (switch (self.state) {
 .expanding_redirect => self.state.expanding_redirect.expansion.state.err,
 .expanding_args => self.state.expanding_args.expansion.state.err,
 else => @panic("Invalid state"),
 });
-                var _err_guard = DeinitWithAllocGuard(@TypeOf(e)){ .val = e, .alloc = self.base.allocator() };
-                _ = &_err_guard;
-                var ___err_guard_moved = false; _ = &___err_guard_moved;
-                defer if (!___err_guard_moved) { ___err_guard_moved = true; const __T = @TypeOf(_err_guard); if (@typeInfo(__T) == .optional) { if (_err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_guard; _drop_val.__cp_deinit(); } };
-                _ = &_err_guard;
-                return self.writeFailingError("{f}\n", .{ e });
+                _ = &e;
+                const formatted = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}\n", .{ e }));
+                defer {
+                _ = bun.default_allocator.free(formatted);
+                }
+                _ = e.deinit(self.base.allocator());
+                return self.writeFailingError("{s}", .{ formatted });
             }
             const exp: *Expansion = child.ptr.as(Expansion);
             if ((((((self.state == .expanding_args) and (exp.node.* == .simple)) and (exp.node.simple == .cmd_subst)) and (self.state.expanding_args.idx == 1)) and (self.node.name_and_args.len == 1))) {
@@ -614,13 +615,7 @@ pub fn initSubproc(self: *Cmd) Yield {
         self.exec = .{ .subproc = .{ .child = undefined, .buffered_closed = buffered_closed } };
         var did_exit_immediately = false;
         _ = &did_exit_immediately;
-        var child_out_arr: [1]*Subprocess = undefined;
-        _ = &child_out_arr;
-        const spawn_res = Subprocess.spawnAsync(self.base.eventLoop(), (&shellio), spawn_args, (blk: {
-        break :blk @ptrCast((&child_out_arr));
-
-}), (&did_exit_immediately));
-        self.exec.subproc.child = child_out_arr[0];
+        const spawn_res = Subprocess.spawnAsync(self.base.eventLoop(), (&shellio), spawn_args, (&self.exec.subproc.child), (&did_exit_immediately));
         const subproc = (switch (spawn_res) {
 .result => self.exec.subproc.child,
 .err => |*e| {

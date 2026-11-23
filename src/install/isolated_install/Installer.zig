@@ -961,9 +961,8 @@ if (((!installer.manager.options.do.run_scripts) or (self.entry_id == .root))) {
                             if ((installer.lockfile.trusted_dependencies == null)) {
                                 installer.lockfile.trusted_dependencies = .{};
                             }
-                            const void_val: void = undefined;
                             const td = (&installer.lockfile.trusted_dependencies.?);
-                            _ = try td.put(installer.manager.allocator, truncated_dep_name_hash, void_val);
+                            _ = try td.put(installer.manager.allocator, truncated_dep_name_hash, undefined);
                         }
                         if ((list.first_index != 0)) {
                             current_step_val = self.nextStep(.run_preinstall);
@@ -1554,7 +1553,7 @@ const manager = self.manager;
             return null;
     }
 
-pub fn linkDependencyBins(self: *const Installer, parent_entry_id: Store.Entry.Id) !void {
+pub fn linkDependencyBins(self: Installer, parent_entry_id: Store.Entry.Id) !void {
             const lockfile = self.lockfile;
             const store = self.store;
             const string_buf = lockfile.buffers.string_bytes.items;
@@ -1643,14 +1642,14 @@ pub fn linkDependencyBins(self: *const Installer, parent_entry_id: Store.Entry.I
             }
     }
 
-pub fn entryUsesGlobalStore(self: *const Installer, entry_id: Store.Entry.Id) bool {
+pub fn entryUsesGlobalStore(self: Installer, entry_id: Store.Entry.Id) bool {
             if ((self.global_store_path == null)) {
                 return false;
             }
             return (self.store.entries.items(.entry_hash)[@as(usize, @intCast(entry_id.get()))] != 0);
     }
 
-pub fn appendGlobalStoreEntryPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
+pub fn appendGlobalStoreEntryPath(self: Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
             _ = bun.debugAssert(self.entryUsesGlobalStore(entry_id));
             _ = buf.clear();
             _ = buf.append(self.global_store_path.?);
@@ -1664,7 +1663,7 @@ _ = buf.appendFmt("{f}.tmp-{x}", .{ Store.Entry.fmtGlobalStorePath(entry_id, sel
 }
     }
 
-pub fn commitGlobalStoreEntry(self: *const Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
+pub fn commitGlobalStoreEntry(self: Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
             if ((!self.entryUsesGlobalStore(entry_id))) {
                 return .success;
             }
@@ -1726,11 +1725,11 @@ else => false,
 });
     }
 
-pub fn appendLocalStoreEntryPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
+pub fn appendLocalStoreEntryPath(self: Installer, buf: anytype, entry_id: Store.Entry.Id) void {
             _ = buf.appendFmt((("node_modules/" ++ Store.modules_dir_name) ++ "/{f}"), .{ Store.Entry.fmtStorePath(entry_id, self.store, self.lockfile) });
     }
 
-pub fn linkProjectToGlobalStore(self: *const Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
+pub fn linkProjectToGlobalStore(self: Installer, entry_id: Store.Entry.Id) sys.Maybe(void) {
             var dest = DeinitGuard(PathAuto){ .val = .initTopLevelDir() };
             _ = &dest;
             var __dest_moved = false; _ = &__dest_moved;
@@ -1776,7 +1775,7 @@ return .initErr(err);
             return doSymlinkGlobalStore(dest.val.sliceZ(), target_abs.val.sliceZ());
     }
 
-pub fn appendStoreNodeModulesPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
+pub fn appendStoreNodeModulesPath(self: Installer, buf: anytype, entry_id: Store.Entry.Id) void {
             const string_buf = self.lockfile.buffers.string_bytes.items;
             const entries = self.store.entries.slice();
             const entry_node_ids = entries.items(.node_id);
@@ -1801,7 +1800,7 @@ _ = buf.appendFmt((("node_modules/" ++ Store.modules_dir_name) ++ "/{f}/node_mod
 }
     }
 
-pub fn appendRealStoreNodeModulesPath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
+pub fn appendRealStoreNodeModulesPath(self: Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
             if (self.entryUsesGlobalStore(entry_id)) {
                 _ = self.appendGlobalStoreEntryPath(buf, entry_id, which);
                 _ = buf.append("node_modules");
@@ -1810,7 +1809,7 @@ pub fn appendRealStoreNodeModulesPath(self: *const Installer, buf: anytype, entr
             _ = self.appendStoreNodeModulesPath(buf, entry_id);
     }
 
-pub fn appendRealStorePath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
+pub fn appendRealStorePath(self: Installer, buf: anytype, entry_id: Store.Entry.Id, which: Which) void {
             if (self.entryUsesGlobalStore(entry_id)) {
                 const string_buf = self.lockfile.buffers.string_bytes.items;
                 const node_id = self.store.entries.items(.node_id)[@as(usize, @intCast(entry_id.get()))];
@@ -1824,7 +1823,7 @@ pub fn appendRealStorePath(self: *const Installer, buf: anytype, entry_id: Store
             _ = self.appendStorePath(buf, entry_id);
     }
 
-pub fn appendStorePath(self: *const Installer, buf: anytype, entry_id: Store.Entry.Id) void {
+pub fn appendStorePath(self: Installer, buf: anytype, entry_id: Store.Entry.Id) void {
             const string_buf = self.lockfile.buffers.string_bytes.items;
             const entries = self.store.entries.slice();
             const entry_node_ids = entries.items(.node_id);

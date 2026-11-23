@@ -20,25 +20,25 @@ export struct Execute {
 
     pub fn deinit(*_)  {
         let i: usize = 0;
-        while (i < this.params.len) {
-            this.params[i].deinit();
+        while (i < _.params.len) {
+            _.params[i].deinit();
             i += 1;
         }
     }
 
-    pub fn writeInternal(_: *const Execute, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
+    pub fn writeInternal(comptime Context: type, writer: NewWriter(Context)): anyerror!void {
         let packet = writer.start(0)?;
         writer.int1(@intFromEnum(CommandType.COM_QUERY))?;
-        writer.write(this.query)?;
+        writer.write(_.query)?;
 
-        if (this.params.len > 0) {
-            writer.writeNullBitmap(this.params)?;
+        if (_.params.len > 0) {
+            writer.writeNullBitmap(_.params)?;
 
             writer.int1(1)?;
             let param_name_buf: [22]u8 = undefined;
             let i: usize = 0;
-            while (i < this.param_types.len) {
-                const param_type = this.param_types[i];
+            while (i < _.param_types.len) {
+                const param_type = _.param_types[i];
                 const param_idx = i + 1;
                 i += 1;
                 debug("New params bind flag {s} unsigned? {}", .{ @tagName(param_type.type), param_type.flags.UNSIGNED });
@@ -49,9 +49,9 @@ export struct Execute {
             }
 
             let idx: usize = 0;
-            while (idx < this.params.len) {
-                const param = &this.params[idx];
-                const param_type = this.param_types[idx];
+            while (idx < _.params.len) {
+                const param = &_.params[idx];
+                const param_type = _.param_types[idx];
                 idx += 1;
                 if (unsafe { param.* } == .empty || param_type.type == .MYSQL_TYPE_NULL) continue;
 

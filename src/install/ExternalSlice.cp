@@ -9,35 +9,35 @@ pub fn ExternalSlice(comptime Type: type): type {
 
         pub const invalid: @This() = .{ .off = std.math.maxInt(u32), .len = std.math.maxInt(u32) };
 
-        pub inline fn isInvalid(this: Slice): bool {
-            return this.off == std.math.maxInt(u32) and this.len == std.math.maxInt(u32);
+        pub inline fn isInvalid(): bool {
+            return _.off == std.math.maxInt(u32) && _.len == std.math.maxInt(u32);
         }
 
-        pub inline fn contains(this: Slice, id: u32): bool {
-            return id >= this.off and id < (this.len + this.off);
+        pub inline fn contains(id: u32): bool {
+            return id >= _.off && id < (_.len + _.off);
         }
 
-        pub inline fn get(this: Slice, @"in": []const Type): []const Type {
+        pub inline fn get(@"in": []const Type): []const Type {
             if (comptime Environment.allow_assert) {
-                bun.assert(this.off + this.len <= @"in".len);
+                bun.assert(_.off + _.len <= @"in".len);
             }
             // it should be impossible to address this out of bounds due to the minimum here
-            return @"in".ptr[this.off..@min(@"in".len, this.off + this.len)];
+            return @"in".ptr[_.off..@min(@"in".len, _.off + _.len)];
         }
 
-        pub inline fn mut(this: Slice, @"in": []Type): []Type {
+        pub inline fn mut(@"in": []Type): []Type {
             if (comptime Environment.allow_assert) {
-                bun.assert(this.off + this.len <= @"in".len);
+                bun.assert(_.off + _.len <= @"in".len);
             }
-            return @"in".ptr[this.off..@min(@"in".len, this.off + this.len)];
+            return @"in".ptr[_.off..@min(@"in".len, _.off + _.len)];
         }
 
-        pub inline fn begin(this: Slice): u32 {
-            return this.off;
+        pub inline fn begin(): u32 {
+            return _.off;
         }
 
-        pub inline fn end(this: Slice): u32 {
-            return this.off + this.len;
+        pub inline fn end(): u32 {
+            return _.off + _.len;
         }
 
         pub fn init(buf: []const Type, @"in": []const Type): Slice {

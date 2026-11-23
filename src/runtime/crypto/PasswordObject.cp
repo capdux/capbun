@@ -34,10 +34,10 @@ pub struct Argon2Params_ {
     memory_cost: u32 = std.crypto.pwhash.argon2.Params.interactive_2id.m;
     time_cost: u32 = std.crypto.pwhash.argon2.Params.interactive_2id.t;
 
-    pub fn toParams(_: Argon2Params_): std.crypto.pwhash.argon2.Params {
+    pub fn toParams(): std.crypto.pwhash.argon2.Params {
         return std.crypto.pwhash.argon2.Params{
-            .t = this.time_cost,
-            .m = this.memory_cost,
+            .t = _.time_cost,
+            .m = _.memory_cost,
             .p = 1,
         };
     }
@@ -239,7 +239,7 @@ pub struct AlgorithmDef_ {
 
     pub const default = AlgorithmEnum.argon2id;
 
-    pub fn get(pw: []const u8): AlgorithmEnum? {
+    static fn get(pw: []const u8): AlgorithmEnum? {
         if (pw[0] != '$') {
             return null;
         }
@@ -440,8 +440,8 @@ pub enum HashJobResultValue {
     err: PasswordObject.HashError,
     hash: []const u8,
 
-    pub fn toErrorInstance(_: HashJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        const err_name = @errorName(this.err);
+    pub fn toErrorInstance(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+        const err_name = @errorName(_.err);
         const error_code = formatPasswordErrorCode(err_name);
         const _err_code_guard = FreeGuard<u8>{ slice: error_code };
         const instance = globalObject.createErrorInstance("Password hashing failed with error \"{s}\"", .{ err_name });
@@ -461,22 +461,22 @@ pub struct HashJobResult_ {
     pub const new = bun.TrivialNew(@This());
     pub const Value = HashJobResultValue;
 
-    pub fn runFromJS(*_: *HashJobResult_): bun.JSError!void {
-        let promise = this.promise;
+    pub fn runFromJS(*_): bun.JSError!void {
+        let promise = _.promise;
         const _promise_guard = DeinitGuard<jsc.JSPromise.Strong>{ ptr: &promise };
-        this.promise = .{};
-        this.ref.unref(this.global.bunVM());
-        const global = this.global;
-        switch (this.value) {
+        _.promise = .{};
+        _.ref.unref(_.global.bunVM());
+        const global = _.global;
+        switch (_.value) {
             .err => {
-                const error_instance = this.value.toErrorInstance(global);
-                bun.destroy(this);
+                const error_instance = _.value.toErrorInstance(global);
+                bun.destroy(_);
                 promise.rejectWithAsyncStack(global, error_instance)?;
             },
             .hash value => {
                 const _value_guard = FreeGuard<u8>{ slice: value };
                 const js_string = jsc.ZigString.init(value).toJS(global);
-                bun.destroy(this);
+                bun.destroy(_);
                 promise.resolve(global, js_string)?;
             },
         }
@@ -496,14 +496,14 @@ pub struct HashJob_ {
     pub const new = bun.TrivialNew(@This());
     pub const Result = HashJobResult_;
 
-    pub fn release(*_: *HashJob_) {
-        this.promise.deinit();
-        bun.freeSensitive(bun.default_allocator, this.password);
-        bun.destroy(this);
+    pub fn release(*_) {
+        _.promise.deinit();
+        bun.freeSensitive(bun.default_allocator, _.password);
+        bun.destroy(_);
     }
 
-    pub fn deinit(*_: *HashJob_) {
-        this.release();
+    pub fn deinit(*_) {
+        _.release();
     }
 
     pub static fn getValue(password: []const u8, algorithm: Algorithm_Value): HashJobResultValue {
@@ -537,8 +537,8 @@ pub enum VerifyJobResultValue {
     err: PasswordObject.HashError,
     pass: bool,
 
-    pub fn toErrorInstance(_: VerifyJobResultValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        const err_name = @errorName(this.err);
+    pub fn toErrorInstance(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+        const err_name = @errorName(_.err);
         const error_code = formatPasswordErrorCode(err_name);
         const _err_code_guard = FreeGuard<u8>{ slice: error_code };
         const instance = globalObject.createErrorInstance("Password verification failed with error \"{s}\"", .{ err_name });
@@ -558,20 +558,20 @@ pub struct VerifyJobResult_ {
     pub const new = bun.TrivialNew(@This());
     pub const Value = VerifyJobResultValue;
 
-    pub fn runFromJS(*_: *VerifyJobResult_): bun.JSError!void {
-        let promise = this.promise;
+    pub fn runFromJS(*_): bun.JSError!void {
+        let promise = _.promise;
         const _promise_guard = DeinitGuard<jsc.JSPromise.Strong>{ ptr: &promise };
-        this.promise = .{};
-        this.ref.unref(this.global.bunVM());
-        const global = this.global;
-        switch (this.value) {
+        _.promise = .{};
+        _.ref.unref(_.global.bunVM());
+        const global = _.global;
+        switch (_.value) {
             .err => {
-                const error_instance = this.value.toErrorInstance(global);
-                bun.destroy(this);
+                const error_instance = _.value.toErrorInstance(global);
+                bun.destroy(_);
                 promise.rejectWithAsyncStack(global, error_instance)?;
             },
             .pass pass => {
-                bun.destroy(this);
+                bun.destroy(_);
                 promise.resolve(global, jsc.JSValue.jsBoolean(pass))?;
             },
         }
@@ -592,15 +592,15 @@ pub struct VerifyJob_ {
     pub const new = bun.TrivialNew(@This());
     pub const Result = VerifyJobResult_;
 
-    pub fn release(*_: *VerifyJob_) {
-        this.promise.deinit();
-        bun.freeSensitive(bun.default_allocator, this.password);
-        bun.freeSensitive(bun.default_allocator, this.prev_hash);
-        bun.destroy(this);
+    pub fn release(*_) {
+        _.promise.deinit();
+        bun.freeSensitive(bun.default_allocator, _.password);
+        bun.freeSensitive(bun.default_allocator, _.prev_hash);
+        bun.destroy(_);
     }
 
-    pub fn deinit(*_: *VerifyJob_) {
-        this.release();
+    pub fn deinit(*_) {
+        _.release();
     }
 
     pub static fn getValue(password: []const u8, prev_hash: []const u8, algorithm: AlgorithmEnum?): VerifyJobResultValue {

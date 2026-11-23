@@ -463,7 +463,7 @@ pub fn initWithListAllocator(input: []const u8, list: *std.ArrayListUnmanaged(u8
             {
                 switch (deflateInit2_(@as(*zStream_struct, @ptrCast(@alignCast(@as(*anyopaque, @ptrCast(@alignCast(&(zlib_reader.zlib))))))), options.level, options.method, (if ((!options.gzip)) (0 - options.windowBits) else (options.windowBits + 16)), options.memLevel, options.strategy, zlibVersion(), @sizeOf(zStream_struct))) {
 ReturnCode.Ok => {
-_ = (blk_catch_0: { break :blk_catch_0 ((zlib_reader.list.ensureTotalCapacityPrecise(list_allocator, deflateBound(@as(*zStream_struct, @ptrCast(@alignCast(@as(*anyopaque, @ptrCast(@alignCast(&(zlib_reader.zlib))))))), (if (comptime @typeInfo(uLong) == .@"enum") @as(uLong, @enumFromInt(input.len)) else @as(uLong, input.len))))) catch |__ce_0| { _ = &__ce_0; _ = zlib_reader.deinit();
+_ = (blk_catch_0: { break :blk_catch_0 ((zlib_reader.list.ensureTotalCapacityPrecise(list_allocator, deflateBound(@as(*zStream_struct, @ptrCast(@alignCast(@as(*anyopaque, @ptrCast(@alignCast(&(zlib_reader.zlib))))))), (if (comptime @typeInfo(uLong) == .@"enum" and (@typeInfo(@TypeOf(input.len)) == .int or @typeInfo(@TypeOf(input.len)) == .comptime_int)) @as(uLong, @enumFromInt(input.len)) else @as(uLong, input.len))))) catch |__ce_0| { _ = &__ce_0; _ = zlib_reader.deinit();
                 return error.OutOfMemory; }); });
                 zlib_reader.list_ptr.* = zlib_reader.list;
                 zlib_reader.zlib.avail_out = (if (comptime @typeInfo(@TypeOf(zlib_reader.list.capacity)) == .@"enum") cp_cast_int(u32, @intFromEnum(zlib_reader.list.capacity)) else cp_cast_int(u32, zlib_reader.list.capacity));

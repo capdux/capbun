@@ -226,30 +226,30 @@ pub const Task = TaggedPointerUnion(.{
     Writev,
 });
 
-pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32): void!bun.JSTerminated {
-    let global = this.global;
+pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32): void!bun.JSTerminated {
+    let global = el.global;
     const global_vm = global.vm();
 
     if (comptime Environment.isDebug) {
-        if (this.debug.js_call_count_outside_tick_queue > this.debug.drain_microtasks_count_outside_tick_queue) {
-            if (this.debug.track_last_fn_name) {
+        if (el.debug.js_call_count_outside_tick_queue > el.debug.drain_microtasks_count_outside_tick_queue) {
+            if (el.debug.track_last_fn_name) {
                 Output.panic(
                     "<b>{d} JavaScript functions<r> were called outside of the microtask queue without draining microtasks.\n\nLast function name: {f}\n\nUse EventLoop.runCallback() to run JavaScript functions outside of the microtask queue.\n\nFailing to do this can lead to a large number of microtasks being queued and not being drained, which can lead to a large amount of memory being used and application slowdown.",
                     .{
-                        this.debug.js_call_count_outside_tick_queue - this.debug.drain_microtasks_count_outside_tick_queue,
-                        this.debug.last_fn_name,
+                        el.debug.js_call_count_outside_tick_queue - el.debug.drain_microtasks_count_outside_tick_queue,
+                        el.debug.last_fn_name,
                     },
                 );
             } else {
                 Output.panic(
                     "<b>{d} JavaScript functions<r> were called outside of the microtask queue without draining microtasks. To track the last function name, set the BUN_TRACK_LAST_FN_NAME environment variable.\n\nUse EventLoop.runCallback() to run JavaScript functions outside of the microtask queue.\n\nFailing to do this can lead to a large number of microtasks being queued and not being drained, which can lead to a large amount of memory being used and application slowdown.",
-                    .{this.debug.js_call_count_outside_tick_queue - this.debug.drain_microtasks_count_outside_tick_queue},
+                    .{el.debug.js_call_count_outside_tick_queue - el.debug.drain_microtasks_count_outside_tick_queue},
                 );
             }
         }
     }
 
-    while (task := this.tasks.readItem()) {
+    while (task := el.tasks.readItem()) {
         log("run {s}", .{@tagName(task.tag())});
         defer counter.* += 1;
         switch (task.tag()) {
@@ -403,15 +403,15 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(AnyTask)) => {
                 let task_ptr: *AnyTask = task.get(AnyTask).?;
-                task_ptr.run() catch |e| reportErrorOrTerminate(global, e)?;
+                task_ptr.run() catch e => reportErrorOrTerminate(global, e)?;
             },
             @field(Task.Tag, @typeName(ManagedTask)) => {
                 let task_ptr: *ManagedTask = task.get(ManagedTask).?;
-                task_ptr.run() catch |e| reportErrorOrTerminate(global, e)?;
+                task_ptr.run() catch e => reportErrorOrTerminate(global, e)?;
             },
             @field(Task.Tag, @typeName(CppTask)) => {
                 let task_ptr: *CppTask = task.get(CppTask).?;
-                task_ptr.run(global) catch |e| reportErrorOrTerminate(global, e)?;
+                task_ptr.run(global) catch e => reportErrorOrTerminate(global, e)?;
             },
             @field(Task.Tag, @typeName(PollPendingModulesTask)) => {
                 virtual_machine.modules.onPoll();
@@ -605,7 +605,7 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
             @field(Task.Tag, @typeName(RuntimeTranspilerStore)) => {
                 let task_ptr: *RuntimeTranspilerStore = task.get(RuntimeTranspilerStore).?;
-                task_ptr.runFromJSThread(this, global, virtual_machine);
+                task_ptr.runFromJSThread(el, global, virtual_machine);
             },
             @field(Task.Tag, @typeName(ServerAllConnectionsClosedTask)) => {
                 let task_ptr: *ServerAllConnectionsClosedTask = task.get(ServerAllConnectionsClosedTask).?;
@@ -642,10 +642,10 @@ pub fn tickQueueWithCount(*_: *EventLoop, virtual_machine: *VirtualMachine, coun
             },
         }
 
-        this.drainMicrotasksWithGlobal(global, global_vm)?;
+        el.drainMicrotasksWithGlobal(global, global_vm)?;
     }
 
-    this.tasks.head = if (this.tasks.count == 0) 0 else this.tasks.head;
+    el.tasks.head = if (el.tasks.count == 0) 0 else el.tasks.head;
 }
 
 pub fn reportErrorOrTerminate(global: *jsc.JSGlobalObject, proof: bun.JSError): void!bun.JSTerminated {

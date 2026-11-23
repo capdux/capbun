@@ -7,7 +7,7 @@ import { NewReader } from "./NewReader.zig";
     command_tag: Data = .empty,
 
     pub fn deinit(*_) {
-        this.command_tag.deinit();
+        _.command_tag.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
@@ -16,7 +16,7 @@ import { NewReader } from "./NewReader.zig";
 
         const tag = reader.readZ()?;
         unsafe {
-            this.* = { command_tag: tag };
+            _.* = { command_tag: tag };
         }
     }
 

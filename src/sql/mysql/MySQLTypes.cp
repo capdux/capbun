@@ -229,8 +229,8 @@ pub enum CharacterSet: u8 {
     pub const default = CharacterSet.utf8mb4_general_ci;
 
     pub fn label(): []const u8 {
-        if (@intFromEnum(this) < 100 && @intFromEnum(this) > 0) {
-            return @tagName(this);
+        if (@intFromEnum(_) < 100 && @intFromEnum(_) > 0) {
+            return @tagName(_);
         }
 
         return "(unknown)";
@@ -274,7 +274,7 @@ pub enum FieldType: u8 {
     pub const fromJS = MySQLValue.fieldTypeFromJS;
 
     pub fn isBinaryFormatSupported(): bool {
-        return switch (this) {
+        return switch (_) {
             .MYSQL_TYPE_TINY,
             .MYSQL_TYPE_SHORT,
             .MYSQL_TYPE_LONG,

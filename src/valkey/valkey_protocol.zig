@@ -523,7 +523,7 @@ pub fn readDouble(self: *ValkeyReader) RedisError!f64 {
                 return std.math.inf(f64);
             }
             if (std.mem.eql(u8, str, "-inf")) {
-                return (0 - std.math.inf(f64));
+                return (-std.math.inf(f64));
             }
             if (std.mem.eql(u8, str, "nan")) {
                 return std.math.nan(f64);

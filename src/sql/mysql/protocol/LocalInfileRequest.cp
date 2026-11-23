@@ -10,7 +10,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
     packet_size: u24,
 
     pub fn deinit(*_)  {
-        this.filename.deinit();
+        _.filename.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
@@ -19,7 +19,7 @@ const decoderWrap = NewReaderMod.decoderWrap;
             return error.InvalidLocalInfileRequest;
         }
 
-        this.filename = reader.read(this.packet_size - 1)?;
+        _.filename = reader.read(_.packet_size - 1)?;
     }
 
     pub const decode = decoderWrap(LocalInfileRequest, decodeInternal).decode;

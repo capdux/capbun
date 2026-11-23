@@ -192,44 +192,44 @@ export struct ZstdReaderArrayList {
     }
 
     pub fn end(*_) {
-        if (this.state != .End) {
-            * = c.ZSTD_freeDStream(this.zstd);
-            this.state = .End;
+        if (_.state != .End) {
+            * = c.ZSTD_freeDStream(_.zstd);
+            _.state = .End;
         }
     }
 
     pub fn deinit(*_) {
-        let alloc = this.allocator;
-        this.end();
-        alloc.destroy(this);
+        let alloc = _.allocator;
+        _.end();
+        alloc.destroy(_);
     }
 
     pub fn readAll(*_, is_done: bool): ! {
-        defer this.list_ptr.* = this.list;
+        defer _.list_ptr.* = _.list;
 
-        if (this.state == .End || this.state == .Error) return;
+        if (_.state == .End || _.state == .Error) return;
 
-        while (this.state == .Uninitialized || this.state == .Inflating) {
-            const next_in = this.input[this.total_in..];
+        while (_.state == .Uninitialized || _.state == .Inflating) {
+            const next_in = _.input[_.total_in..];
 
             // If we have no input to process
             if (next_in.len == 0) {
                 if (is_done) {
                     // If we're in the middle of inflating and stream is done, it's truncated
-                    if (this.state == .Inflating) {
-                        this.state = .Error;
+                    if (_.state == .Inflating) {
+                        _.state = .Error;
                         return err.ZstdDecompressionError;
                     }
                     // No more input and stream is done, we can end
-                    this.end();
+                    _.end();
                 }
                 return;
             }
 
-            let unused = this.list.unusedCapacitySlice();
+            let unused = _.list.unusedCapacitySlice();
             if (unused.len < 4096) {
-                this.list.ensureUnusedCapacity(this.list_allocator, 4096)?;
-                unused = this.list.unusedCapacitySlice();
+                _.list.ensureUnusedCapacity(_.list_allocator, 4096)?;
+                unused = _.list.unusedCapacitySlice();
             }
             let in_buf = c.ZSTD_inBuffer{
                 src: if (next_in.len > 0) next_in.ptr else null,
@@ -244,29 +244,29 @@ export struct ZstdReaderArrayList {
 
             let rc: usize = 0;
             unsafe {
-                rc = c.ZSTD_decompressStream(this.zstd, *out_buf!, *in_buf!);
+                rc = c.ZSTD_decompressStream(_.zstd, *out_buf!, *in_buf!);
             }
             if (c.ZSTD_isError(rc) != 0) {
-                this.state = .Error;
+                _.state = .Error;
                 return err.ZstdDecompressionError;
             }
 
             const bytes_written = out_buf.pos;
             const bytes_read = in_buf.pos;
-            this.list.items.len += bytes_written;
-            this.total_in += bytes_read;
-            this.total_out += bytes_written;
+            _.list.items.len += bytes_written;
+            _.total_in += bytes_read;
+            _.total_out += bytes_written;
 
             if (rc == 0) {
                 // Frame is complete
-                this.state = .Uninitialized; // Reset state since frame is complete
+                _.state = .Uninitialized; // Reset state since frame is complete
 
                 // Check if there's more input (multiple frames)
-                if (this.total_in >= this.input.len) {
+                if (_.total_in >= _.input.len) {
                     // We've consumed all available input
                     if (is_done) {
                         // No more data coming, we can end the stream
-                        this.end();
+                        _.end();
                         return;
                     }
                     // Frame is complete and no more input available right now.
@@ -276,13 +276,13 @@ export struct ZstdReaderArrayList {
                 // More input available, reset for the next frame
                 // ZSTD_initDStream() safely resets the stream state without needing cleanup
                 // It's designed to be called multiple times on the same DStream object
-                * = c.ZSTD_initDStream(this.zstd);
+                * = c.ZSTD_initDStream(_.zstd);
                 continue;
             }
 
             // If rc > 0, decompressor needs more data
             if (rc > 0) {
-                this.state = .Inflating;
+                _.state = .Inflating;
             }
 
             if (bytes_read == next_in.len) {
@@ -294,7 +294,7 @@ export struct ZstdReaderArrayList {
 
                 if (is_done) {
                     // Stream is truncated - we're at EOF but need more data
-                    this.state = .Error;
+                    _.state = .Error;
                     return err.ZstdDecompressionError;
                 }
                 // Not at EOF - we can retry with more data

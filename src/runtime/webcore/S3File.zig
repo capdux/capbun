@@ -152,52 +152,52 @@ pub fn init(self: *S3BlobStatTask, promise: JSPromise.Strong, global: *JSGlobalO
             self.store = store;
     }
 
-pub fn onS3ExistsResolved(result: S3.S3StatResult, self: *S3BlobStatTask) JSTerminatedError!void {
-            var _guard_this = DeinitGuard(S3BlobStatTask){ .ptr = self };
+pub fn onS3ExistsResolved(result: S3.S3StatResult, task: *S3BlobStatTask) JSTerminatedError!void {
+            var _guard_this = DeinitGuard(S3BlobStatTask){ .ptr = task };
             _ = &_guard_this;
             var ___guard_this_moved = false; _ = &___guard_this_moved;
             defer if (!___guard_this_moved) { ___guard_this_moved = true; const __T = @TypeOf(_guard_this); if (@typeInfo(__T) == .optional) { if (_guard_this) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_this.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_this; _drop_val.__cp_deinit(); } };
             switch (result) {
 .not_found => {
-_ = try self.promise.resolve(self.global, .false);
+_ = try task.promise.resolve(task.global, .false);
 },
 .success => {
-_ = try self.promise.resolve(self.global, .true);
+_ = try task.promise.resolve(task.global, .true);
 },
 .failure => |err| {
-_ = try self.promise.reject(self.global, err.toJSWithAsyncStack(self.global, self.store.data.s3.path(), self.promise.get()));
+_ = try task.promise.reject(task.global, err.toJSWithAsyncStack(task.global, task.store.data.s3.path(), task.promise.get()));
 },
 }
     }
 
-pub fn onS3SizeResolved(result: S3.S3StatResult, self: *S3BlobStatTask) JSTerminatedError!void {
-            var _guard_this = DeinitGuard(S3BlobStatTask){ .ptr = self };
+pub fn onS3SizeResolved(result: S3.S3StatResult, task: *S3BlobStatTask) JSTerminatedError!void {
+            var _guard_this = DeinitGuard(S3BlobStatTask){ .ptr = task };
             _ = &_guard_this;
             var ___guard_this_moved = false; _ = &___guard_this_moved;
             defer if (!___guard_this_moved) { ___guard_this_moved = true; const __T = @TypeOf(_guard_this); if (@typeInfo(__T) == .optional) { if (_guard_this) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_this.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_this; _drop_val.__cp_deinit(); } };
             switch (result) {
 .success => |stat_result| {
-_ = try self.promise.resolve(self.global, JSValue.jsNumber(stat_result.size));
+_ = try task.promise.resolve(task.global, JSValue.jsNumber(stat_result.size));
 },
 .not_found, .failure => |err| {
-_ = try self.promise.reject(self.global, err.toJSWithAsyncStack(self.global, self.store.data.s3.path(), self.promise.get()));
+_ = try task.promise.reject(task.global, err.toJSWithAsyncStack(task.global, task.store.data.s3.path(), task.promise.get()));
 },
 }
     }
 
-pub fn onS3StatResolved(result: S3.S3StatResult, self: *S3BlobStatTask) JSError!void {
-            var _guard_this = DeinitGuard(S3BlobStatTask){ .ptr = self };
+pub fn onS3StatResolved(result: S3.S3StatResult, task: *S3BlobStatTask) JSError!void {
+            var _guard_this = DeinitGuard(S3BlobStatTask){ .ptr = task };
             _ = &_guard_this;
             var ___guard_this_moved = false; _ = &___guard_this_moved;
             defer if (!___guard_this_moved) { ___guard_this_moved = true; const __T = @TypeOf(_guard_this); if (@typeInfo(__T) == .optional) { if (_guard_this) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_this.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_this; _drop_val.__cp_deinit(); } };
-            const globalThis = self.global;
+            const globalThis = task.global;
             switch (result) {
 .success => |stat_result| {
 const stat_obj = try S3Stat.init(stat_result.size, stat_result.etag, stat_result.contentType, stat_result.lastModified, globalThis);
-            _ = try self.promise.resolve(globalThis, stat_obj.toJS(globalThis));
+            _ = try task.promise.resolve(globalThis, stat_obj.toJS(globalThis));
 },
 .not_found, .failure => |err| {
-_ = try self.promise.reject(globalThis, err.toJSWithAsyncStack(globalThis, self.store.data.s3.path(), self.promise.get()));
+_ = try task.promise.reject(globalThis, err.toJSWithAsyncStack(globalThis, task.store.data.s3.path(), task.promise.get()));
 },
 }
     }
@@ -795,8 +795,8 @@ pub fn constructInternalJS(globalObject: *JSGlobalObject, path: jsc.Node.PathLik
         return blob.toJS(globalObject);
 }
 
-pub fn toJSUnchecked(globalObject: *JSGlobalObject, self: *Blob) JSValue {
-        return BUN__createJSS3FileUnsafely(globalObject, self);
+pub fn toJSUnchecked(globalObject: *JSGlobalObject, blob: *Blob) JSValue {
+        return BUN__createJSS3FileUnsafely(globalObject, blob);
 }
 
 pub fn constructInternal(globalObject: *JSGlobalObject, callframe: *CallFrame) JSError!*Blob {

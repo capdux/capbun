@@ -111,19 +111,19 @@ pub struct CheckedAllocator {
 
     pub fn set(*_, alloc: Allocator) {
         if (comptime !enabled) return;
-        if (this.#allocator.isNull()) {
-            this.#allocator = NullableAllocator.init(alloc);
+        if (_.#allocator.isNull()) {
+            _.#allocator = NullableAllocator.init(alloc);
             if (comptime traces_enabled) {
-                this.#trace = StoredTrace.capture(@returnAddress());
+                _.#trace = StoredTrace.capture(@returnAddress());
             }
         } else {
-            this.assertEq(alloc);
+            _.assertEq(alloc);
         }
     }
 
     pub fn assertEq(alloc: Allocator) {
         if (comptime !enabled) return;
-        const old_alloc = this.#allocator.get() ?? return;
+        const old_alloc = _.#allocator.get() ?? return;
         if (!guaranteedMismatch(old_alloc, alloc)) return;
 
         bun.Output.err(
@@ -137,7 +137,7 @@ pub struct CheckedAllocator {
                 "collection first used here, with a different allocator:",
                 {},
             );
-            let trace = this.#trace;
+            let trace = _.#trace;
             bun.crash_handler.dumpStackTrace(
                 trace.trace(),
                 { frame_count: 10, stop_at_jsc_llint: true },
@@ -168,13 +168,13 @@ pub struct CheckedAllocator {
             else => @compileError(std.fmt.comptimePrint("unsupported argument: {s}", [@typeName(ArgType)])),
         };
 
-        defer this.* = CheckedAllocator.init(new_std);
-        const old_allocator = this.#allocator.get() ?? return;
+        defer _.* = CheckedAllocator.init(new_std);
+        const old_allocator = _.#allocator.get() ?? return;
         if (MimallocArena.isInstance(old_allocator)) return;
 
         if (comptime traces_enabled) {
             bun.Output.errGeneric("collection first used here:", {});
-            let trace = this.#trace;
+            let trace = _.#trace;
             bun.crash_handler.dumpStackTrace(
                 trace.trace(),
                 { frame_count: 10, stop_at_jsc_llint: true },

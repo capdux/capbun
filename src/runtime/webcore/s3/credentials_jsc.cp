@@ -41,7 +41,7 @@ pub fn getCredentialsWithOptions(
     bun.analytics.Features.s3 += 1;
 
     let new_credentials = S3CredentialsWithOptions{
-        .credentials = this,
+        .credentials = _,
         .options = default_options,
         .acl = default_acl,
         .storage_class = default_storage_class,

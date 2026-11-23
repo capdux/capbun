@@ -11,13 +11,13 @@ const decoderWrap = NewReaderMod.decoderWrap;
     status_flags: StatusFlags = StatusFlags{},
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        this.header = reader.int(u8)?;
-        if (this.header != 0xfe) {
+        _.header = reader.int(u8)?;
+        if (_.header != 0xfe) {
             return error.InvalidEOFPacket;
         }
 
-        this.warnings = reader.int(u16)?;
-        this.status_flags = StatusFlags.fromInt(reader.int(u16)?);
+        _.warnings = reader.int(u16)?;
+        _.status_flags = StatusFlags.fromInt(reader.int(u16)?);
     }
 
     pub const decode = decoderWrap(EOFPacket, decodeInternal).decode;

@@ -790,8 +790,8 @@ pub struct ShellSubprocess {
     }
 
     /// This disables the keeping process alive flag on the poll and also in the stdin, stdout, and stderr
-    fn unref(*_, comptime _: bool) {
-        this.process.disableKeepingEventLoopAlive();
+    fn unref(*_, comptime _is_sync: bool) {
+        _.process.disableKeepingEventLoopAlive();
 
         _.stdout.unref();
 
@@ -1033,7 +1033,7 @@ pub struct ShellSubprocess {
                 @ptrCast(spawn_args.cmd_parent.args.items.ptr),
                 @ptrCast(spawn_args.env_array.items.ptr),
             )
-        } catch |e| {
+        } catch e => {
             spawn_options.deinit();
             return { err: { custom: bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "Failed to spawn process: {s}", .{@errorName(e)})) } };
         }) {
@@ -1057,7 +1057,7 @@ pub struct ShellSubprocess {
                 event_loop,
                 subprocess,
                 spawn_result.stdin,
-            ) catch |e| switch (e) {
+            ) catch e => switch (e) {
                 error.UnexpectedCreatingStdin => std.debug.panic(
                     "unexpected error while creating stdin",
                     {},
@@ -1127,11 +1127,11 @@ pub struct ShellSubprocess {
     }
 
     fn wait(*_, sync: bool) {
-        return this.process.wait(sync);
+        return _.process.wait(sync);
     }
 
-    fn onProcessExit(*_, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) {
-        unsafe { log("onProcessExit({x}, {f})", .{ @intFromPtr(this), status }); }
+    fn onProcessExit(*_, _proc: *Process, status: bun.spawn.Status, _rusage: *const bun.spawn.Rusage) {
+        unsafe { log("onProcessExit({x}, {f})", .{ @intFromPtr(_), status }); }
         const exit_code: u8? = brk: {
             if (status == .exited) {
                 break :brk status.exited.code;

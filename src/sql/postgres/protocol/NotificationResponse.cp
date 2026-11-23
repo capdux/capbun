@@ -11,8 +11,8 @@ const int4 = types.int4;
     payload: bun.ByteList = .{},
 
     pub fn deinit(*_) {
-        this.channel.clearAndFree(bun.default_allocator);
-        this.payload.clearAndFree(bun.default_allocator);
+        _.channel.clearAndFree(bun.default_allocator);
+        _.payload.clearAndFree(bun.default_allocator);
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
@@ -23,7 +23,7 @@ const int4 = types.int4;
         let ch = reader.readZ()?;
         let pl = reader.readZ()?;
         unsafe {
-            this.* = {
+            _.* = {
                 pid: pid,
                 channel: ch.toOwned()?,
                 payload: pl.toOwned()?,

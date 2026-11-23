@@ -42,8 +42,8 @@ pub struct SASLContinueAuth {
     s: []const u8,
     i: []const u8,
 
-    pub fn iterationCount(_: *const @This()): u32! {
-        return std.fmt.parseInt(u32, this.i, 0)?;
+    pub fn iterationCount(): u32! {
+        return std.fmt.parseInt(u32, _.i, 0)?;
     }
 }
 

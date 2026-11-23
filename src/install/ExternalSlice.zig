@@ -4,6 +4,7 @@
 const std = @import("std");
 const string = []const u8;
 
+fn cp_cast_int(comptime Dest: type, val: anytype) Dest { const Src = @TypeOf(val); if (comptime Src == Dest) return val; if (comptime Src == comptime_int) { if (comptime @typeInfo(Dest).int.signedness == .unsigned and val < 0) return @as(Dest, @truncate(@as(u128, @bitCast(@as(i128, val))))) else return @as(Dest, @truncate(val)); } const src_bits = @typeInfo(Src).int.bits; const dest_bits = @typeInfo(Dest).int.bits; if (comptime @typeInfo(Src).int.signedness == @typeInfo(Dest).int.signedness) { if (comptime dest_bits >= src_bits) return @as(Dest, val) else return @truncate(val); } if (comptime @typeInfo(Src).int.signedness == .signed) { const s: i128 = if (comptime 128 >= src_bits) @as(i128, val) else @truncate(val); const u: u128 = @bitCast(s); if (comptime dest_bits >= 128) return @as(Dest, u) else return @truncate(u); } else { const u: u128 = if (comptime 128 >= src_bits) @as(u128, val) else @truncate(val); const s: i128 = @bitCast(u); if (comptime dest_bits >= 128) return @as(Dest, s) else return @truncate(s); } }
 pub const bun = @import("bun");
 pub const ExternalStringMap = extern struct {
     name: ExternalStringList = .{},
@@ -20,56 +21,44 @@ const ExternalString = Semver.ExternalString;
 
 pub fn ExternalSlice(comptime Type: type) type {
         return extern struct {
-        const Slice = @This();
+    off: u32 = 0,
+    len: u32 = 0,
 
-        const Child: type = Type;
+pub inline fn isInvalid(self: @This()) bool {
+            return ((self.off == std.math.maxInt(u32)) and (self.len == std.math.maxInt(u32)));
+    }
 
-        off: u32 = 0,
-        len: u32 = 0,
+pub inline fn contains(self: @This(), id: u32) bool {
+            return ((id >= self.off) and (id < (self.len + self.off)));
+    }
 
-        pub const invalid: @This() = .{ .off = std.math.maxInt(u32), .len = std.math.maxInt(u32) };
-
-        pub inline fn isInvalid(this: Slice) bool {
-            return this.off == std.math.maxInt(u32) and this.len == std.math.maxInt(u32);
-        }
-
-        pub inline fn contains(this: Slice, id: u32) bool {
-            return id >= this.off and id < (this.len + this.off);
-        }
-
-        pub inline fn get(this: Slice, @"in": []const Type) []const Type {
+pub inline fn get(self: *const @This(), @"in": []const Type) []const Type {
             if (comptime Environment.allow_assert) {
-                bun.assert(this.off + this.len <= @"in".len);
+                _ = bun.assert(((self.off + self.len) <= @"in".len));
             }
-            // it should be impossible to address this out of bounds due to the minimum here
-            return @"in".ptr[this.off..@min(@"in".len, this.off + this.len)];
-        }
+            return @"in".ptr[self.off..@min(@"in".len, (self.off + self.len))];
+    }
 
-        pub inline fn mut(this: Slice, @"in": []Type) []Type {
+pub inline fn mut(self: *const @This(), @"in": []Type) []Type {
             if (comptime Environment.allow_assert) {
-                bun.assert(this.off + this.len <= @"in".len);
+                _ = bun.assert(((self.off + self.len) <= @"in".len));
             }
-            return @"in".ptr[this.off..@min(@"in".len, this.off + this.len)];
-        }
+            return @"in".ptr[self.off..@min(@"in".len, (self.off + self.len))];
+    }
 
-        pub inline fn begin(this: Slice) u32 {
-            return this.off;
-        }
+pub inline fn begin(self: @This()) u32 {
+            return self.off;
+    }
 
-        pub inline fn end(this: Slice) u32 {
-            return this.off + this.len;
-        }
+pub inline fn end(self: @This()) u32 {
+            return (self.off + self.len);
+    }
 
-        pub fn init(buf: []const Type, @"in": []const Type) Slice {
-            // if (comptime Environment.allow_assert) {
-            //     bun.assert(@intFromPtr(buf.ptr) <= @intFromPtr(in.ptr));
-            //     bun.assert((@intFromPtr(in.ptr) + in.len) <= (@intFromPtr(buf.ptr) + buf.len));
-            // }
-
-            return Slice{
-                .off = @as(u32, @truncate((@intFromPtr(@"in".ptr) - @intFromPtr(buf.ptr)) / @sizeOf(Type))),
-                .len = @as(u32, @truncate(@"in".len)),
-            };
-        }
-    };
+pub fn init(buf: []const Type, @"in": []const Type) Slice {
+            return Slice{ .off = @as(u32, @truncate(((@intFromPtr(@"in".ptr) - @intFromPtr(buf.ptr)) / @sizeOf(Type)))), .len = @as(u32, @truncate(@"in".len)) };
+    }
+    const Slice = @This();
+    const Child: type = Type;
+    pub const invalid: @This() = .{ .off = std.math.maxInt(u32), .len = std.math.maxInt(u32) };
+};
 }

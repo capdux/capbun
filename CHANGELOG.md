@@ -2175,3 +2175,8 @@
 
 ### [2026-11-23] Wave #75（修复 `shell.Builtin` SEGV 与纯化 `MarkdownObject`/`copy_file`）
 - 修复 `src/shell/Builtin.cp`（`allocator(*_)`/`eventLoop(*_)` 与 `static fn onForceSyncOrIsaTTY`），纯化 `src/runtime/api/MarkdownObject.cp`（`E0305`x95/`E0307`x3）与 `src/runtime/webcore/blob/copy_file.cp`（`E0306`x214 与 `fcntl` `@as(usize, 0)`），同步 `scripts/cpc_brief.py` `zig{}` 正则，通过 `bun run zig:check`（5/5）。
+
+### [2026-11-23] Wave #76–77（Batch 3a 测试验证、修复 `Cmd.cp`/`Blob.cp` 与 70 文件 `--strict` 批量纯化）
+- 完成 Batch 3a 测试：`spawn` 39 文件 **262 pass / 0 主进程崩溃**，`shell` 合计 **479 pass** 并验证 `Builtin` 3 处 SEGV 彻底消除；
+- 修复 `src/shell/states/Cmd.cp`（`Expansion` 分支释放顺序消除 `Allocation scope leaked 30 bytes`，`initSubproc` 直传 `&_.exec.subproc.child` 消除 `BufferedIoClosed.close` SEGV）与恢复 `src/runtime/webcore/Blob.cp` `doImage`（`Image.fromBlobJS`）及清零 9 处 `E0307`；
+- 完成 `s3/*`、`crypto/*`、`install/*`、`jsc/*`、`shell/{EnvMap,subproc}.cp`、`sql/{postgres,mysql,shared}/*`、`valkey`、`zlib`/`zstd`、`watcher/*`、`threading/*`、`safety/*` 共 **70 个文件 `--strict` 纯化**，全部通过 `cpc check --strict`（0 报错）与 `bun run zig:check`（5/5）。

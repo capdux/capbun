@@ -9,11 +9,11 @@ const writeWrap = NewWriterMod.writeWrap;
     auth_response: Data = Data{ empty: undefined },
 
     pub fn deinit(*_)  {
-        this.auth_response.deinit();
+        _.auth_response.deinit();
     }
 
-    pub fn writeInternal(_: *const AuthSwitchResponse, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
-        writer.write(this.auth_response.slice())?;
+    pub fn writeInternal(comptime Context: type, writer: NewWriter(Context)): anyerror!void {
+        writer.write(_.auth_response.slice())?;
     }
 
     pub const write = writeWrap(AuthSwitchResponse, writeInternal).write;

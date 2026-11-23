@@ -1,4 +1,4 @@
-pub struct ProgressStrings {
+pub static struct ProgressStrings {
     pub const download_no_emoji_ = "Resolving";
     const download_no_emoji: string = download_no_emoji_ ++ "\n";
     const download_with_emoji: string = download_emoji ++ download_no_emoji_;
@@ -54,16 +54,16 @@ pub fn setNodeName(
 ) {
     if (Output.enable_ansi_colors_stderr) {
         if (is_first) {
-            @memcpy(this.progress_name_buf[0..emoji.len], emoji);
-            @memcpy(this.progress_name_buf[emoji.len..][0..name.len], name);
-            node.name = this.progress_name_buf[0 .. emoji.len + name.len];
+            @memcpy(_.progress_name_buf[0..emoji.len], emoji);
+            @memcpy(_.progress_name_buf[emoji.len..][0..name.len], name);
+            node.name = _.progress_name_buf[0 .. emoji.len + name.len];
         } else {
-            @memcpy(this.progress_name_buf[emoji.len..][0..name.len], name);
-            node.name = this.progress_name_buf[0 .. emoji.len + name.len];
+            @memcpy(_.progress_name_buf[emoji.len..][0..name.len], name);
+            node.name = _.progress_name_buf[0 .. emoji.len + name.len];
         }
     } else {
-        @memcpy(this.progress_name_buf[0..name.len], name);
-        node.name = this.progress_name_buf[0..name.len];
+        @memcpy(_.progress_name_buf[0..name.len], name);
+        node.name = _.progress_name_buf[0..name.len];
     }
 }
 

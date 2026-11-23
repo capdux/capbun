@@ -9,16 +9,16 @@ import error_response_jsc from "../../../sql_jsc/postgres/protocol/error_respons
     messages: std.ArrayListUnmanaged(FieldMessage) = .{},
 
     pub fn format(writer: *std.Io.Writer): void! {
-        for (message of this.messages.items) {
+        for (message of _.messages.items) {
             writer.print("{f}\n", .{message})?;
         }
     }
 
     pub fn deinit(*_) {
-        for (i of 0..this.messages.items.len) {
-            this.messages.items[i].deinit();
+        for (i of 0.._.messages.items.len) {
+            _.messages.items[i].deinit();
         }
-        this.messages.deinit(bun.default_allocator);
+        _.messages.deinit(bun.default_allocator);
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
@@ -28,7 +28,7 @@ import error_response_jsc from "../../../sql_jsc/postgres/protocol/error_respons
 
         if (remaining_bytes > 0) {
             unsafe {
-                this.* = {
+                _.* = {
                     messages: FieldMessage.decodeList(Container, reader)?,
                 };
             }

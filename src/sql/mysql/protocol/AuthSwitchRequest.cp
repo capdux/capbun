@@ -13,25 +13,25 @@ const decoderWrap = NewReaderMod.decoderWrap;
     packet_size: u24,
 
     pub fn deinit(*_)  {
-        this.plugin_name.deinit();
-        this.plugin_data.deinit();
+        _.plugin_name.deinit();
+        _.plugin_data.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        this.header = reader.int(u8)?;
-        if (this.header != 0xfe) {
+        _.header = reader.int(u8)?;
+        if (_.header != 0xfe) {
             return error.InvalidAuthSwitchRequest;
         }
 
-        const remaining = reader.read(this.packet_size - 1)?;
+        const remaining = reader.read(_.packet_size - 1)?;
         const remaining_slice = remaining.slice();
         bun.assert(remaining == .temporary);
 
         if (zero := bun.strings.indexOfChar(remaining_slice, 0)) {
-            this.plugin_name = Data{
+            _.plugin_name = Data{
                 temporary: remaining_slice[0..zero],
             };
-            this.plugin_data = Data{
+            _.plugin_data = Data{
                 temporary: remaining_slice[zero + 1 ..],
             };
             return;

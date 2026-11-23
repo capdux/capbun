@@ -479,14 +479,15 @@ pub struct ShellAsyncSubprocessDone {
         if (child.ptr.is(Expansion)) {
             child.deinit();
             if (exit_code != 0) {
-                const e = switch (_.state) {
+                let e = switch (_.state) {
                     .expanding_redirect => _.state.expanding_redirect.expansion.state.err,
                     .expanding_args => _.state.expanding_args.expansion.state.err,
                     else => @panic("Invalid state"),
                 };
-                const _err_guard = DeinitWithAllocGuard<@TypeOf(e)>{ val: e, alloc: _.base.allocator() };
-                * = _err_guard;
-                return _.writeFailingError("{f}\n", .{e});
+                const formatted = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, "{f}\n", .{e}));
+                defer bun.default_allocator.free(formatted);
+                e.deinit(_.base.allocator());
+                return _.writeFailingError("{s}", .{formatted});
             }
             // Handling this case from the shell spec:
             // "If there is no command name, but the command contained a
@@ -610,9 +611,7 @@ pub struct ShellAsyncSubprocessDone {
             .buffered_closed = buffered_closed,
         } };
         let did_exit_immediately = false;
-        let child_out_arr: [1]*Subprocess = undefined;
-        const spawn_res = Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, unsafe { @ptrCast(&child_out_arr) }, &did_exit_immediately);
-        _.exec.subproc.child = child_out_arr[0];
+        const spawn_res = Subprocess.spawnAsync(_.base.eventLoop(), &shellio, spawn_args, &_.exec.subproc.child, &did_exit_immediately);
         const subproc = switch (spawn_res) {
             .result => _.exec.subproc.child,
             .err *e => {

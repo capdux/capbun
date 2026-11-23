@@ -8,8 +8,8 @@ import { NewReader } from "./NewReader.zig";
     value: Data = .empty,
 
     pub fn deinit(*_) {
-        this.name.deinit();
-        this.value.deinit();
+        _.name.deinit();
+        _.value.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
@@ -19,7 +19,7 @@ import { NewReader } from "./NewReader.zig";
         const n = reader.readZ()?;
         const v = reader.readZ()?;
         unsafe {
-            this.* = {
+            _.* = {
                 name: n,
                 value: v,
             };

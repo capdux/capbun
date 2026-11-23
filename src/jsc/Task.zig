@@ -184,20 +184,20 @@ const ProcessWaiterThreadTask = (if (Environment.isPosix) bun.spawn.process.Wait
 const log = Output.scoped(.Task, .hidden);
 pub const Task = TaggedPointerUnion(.{ Access, AnyTask, AppendFile, ArchiveExtractTask, ArchiveBlobTask, ArchiveWriteTask, ArchiveFilesTask, AsyncGlobWalkTask, AsyncImageTask, AsyncTransformTask, bun.bake.DevServer.HotReloadEvent, bun.bundle_v2.DeferredBatchTask, shell.Interpreter.Builtin.Yes.YesTask, Chmod, Chown, Close, CopyFile, CopyFilePromiseTask, CppTask, Exists, Fchmod, FChown, Fdatasync, FetchTasklet, Fstat, FSWatchTask, Fsync, FTruncate, Futimes, GetAddrInfoRequestTask, HotReloadTask, ImmediateObject, JSCDeferredWorkTask, Lchmod, Lchown, Link, Lstat, Lutimes, ManagedTask, Mkdir, Mkdtemp, napi_async_work, NapiFinalizerTask, NativePromiseContextDeferredDerefTask, NativeBrotli, NativeZlib, NativeZstd, Open, PollPendingModulesTask, PosixSignalTask, ProcessWaiterThreadTask, Read, Readdir, ReaddirRecursive, ReadFile, ReadFileTask, Readlink, Readv, FlushPendingFileSinkTask, Realpath, RealpathNonNative, Rename, Rm, Rmdir, RuntimeTranspilerStore, S3HttpDownloadStreamingTask, S3HttpSimpleTask, ServerAllConnectionsClosedTask, ShellAsync, ShellAsyncSubprocessDone, ShellCondExprStatTask, ShellCpTask, ShellGlobTask, ShellIOReaderAsyncDeinit, ShellIOWriterAsyncDeinit, ShellIOWriter, ShellLsTask, ShellMkdirTask, ShellMvBatchedTask, ShellMvCheckTargetTask, ShellRmDirTask, ShellRmTask, ShellTouchTask, Stat, StatFS, StreamPending, Symlink, ThreadSafeFunction, TimeoutObject, Truncate, Unlink, Utimes, Write, WriteFile, WriteFileTask, Writev });
 
-pub fn tickQueueWithCount(self: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32) bun.JSTerminated!void {
-        var global = self.global;
+pub fn tickQueueWithCount(el: *EventLoop, virtual_machine: *VirtualMachine, counter: *u32) bun.JSTerminated!void {
+        var global = el.global;
         _ = &global;
         const global_vm = global.vm();
         if (comptime Environment.isDebug) {
-            if ((self.debug.js_call_count_outside_tick_queue > self.debug.drain_microtasks_count_outside_tick_queue)) {
-                if (self.debug.track_last_fn_name) {
-                    _ = Output.panic("<b>{d} JavaScript functions<r> were called outside of the microtask queue without draining microtasks.\n\nLast function name: {f}\n\nUse EventLoop.runCallback() to run JavaScript functions outside of the microtask queue.\n\nFailing to do this can lead to a large number of microtasks being queued and not being drained, which can lead to a large amount of memory being used and application slowdown.", .{ (self.debug.js_call_count_outside_tick_queue - self.debug.drain_microtasks_count_outside_tick_queue), self.debug.last_fn_name });
+            if ((el.debug.js_call_count_outside_tick_queue > el.debug.drain_microtasks_count_outside_tick_queue)) {
+                if (el.debug.track_last_fn_name) {
+                    _ = Output.panic("<b>{d} JavaScript functions<r> were called outside of the microtask queue without draining microtasks.\n\nLast function name: {f}\n\nUse EventLoop.runCallback() to run JavaScript functions outside of the microtask queue.\n\nFailing to do this can lead to a large number of microtasks being queued and not being drained, which can lead to a large amount of memory being used and application slowdown.", .{ (el.debug.js_call_count_outside_tick_queue - el.debug.drain_microtasks_count_outside_tick_queue), el.debug.last_fn_name });
                 } else {
-                    _ = Output.panic("<b>{d} JavaScript functions<r> were called outside of the microtask queue without draining microtasks. To track the last function name, set the BUN_TRACK_LAST_FN_NAME environment variable.\n\nUse EventLoop.runCallback() to run JavaScript functions outside of the microtask queue.\n\nFailing to do this can lead to a large number of microtasks being queued and not being drained, which can lead to a large amount of memory being used and application slowdown.", .{ (self.debug.js_call_count_outside_tick_queue - self.debug.drain_microtasks_count_outside_tick_queue) });
+                    _ = Output.panic("<b>{d} JavaScript functions<r> were called outside of the microtask queue without draining microtasks. To track the last function name, set the BUN_TRACK_LAST_FN_NAME environment variable.\n\nUse EventLoop.runCallback() to run JavaScript functions outside of the microtask queue.\n\nFailing to do this can lead to a large number of microtasks being queued and not being drained, which can lead to a large amount of memory being used and application slowdown.", .{ (el.debug.js_call_count_outside_tick_queue - el.debug.drain_microtasks_count_outside_tick_queue) });
                 }
             }
         }
-        while (self.tasks.readItem()) |task| {
+        while (el.tasks.readItem()) |task| {
             _ = log("run {s}", .{ @tagName(task.tag()) });
             defer {
             counter.* = (counter.* + 1);
@@ -665,7 +665,7 @@ _ = bun.markPosixOnly();
 @field(Task.Tag, @typeName(RuntimeTranspilerStore)) => {
 var task_ptr: *RuntimeTranspilerStore = (task.get(RuntimeTranspilerStore)).?;
             _ = &task_ptr;
-            _ = task_ptr.runFromJSThread(self, global, virtual_machine);
+            _ = task_ptr.runFromJSThread(el, global, virtual_machine);
 },
 @field(Task.Tag, @typeName(ServerAllConnectionsClosedTask)) => {
 var task_ptr: *ServerAllConnectionsClosedTask = (task.get(ServerAllConnectionsClosedTask)).?;
@@ -707,9 +707,9 @@ else => {
 _ = Output.panic("Unexpected Task tag: {d}", .{ @intFromEnum(task.tag()) });
 },
 }
-            _ = try self.drainMicrotasksWithGlobal(global, global_vm);
+            _ = try el.drainMicrotasksWithGlobal(global, global_vm);
         }
-        self.tasks.head = (if ((self.tasks.count == 0)) 0 else self.tasks.head);
+        el.tasks.head = (if ((el.tasks.count == 0)) 0 else el.tasks.head);
 }
 
 pub fn reportErrorOrTerminate(global: *jsc.JSGlobalObject, proof: bun.JSError) bun.JSTerminated!void {

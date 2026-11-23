@@ -21,7 +21,7 @@ struct HoistedClosure {
     fn isDone(*_): bool {
         const pm = _.manager;
         _.manager.runTasks(
-            *PackageInstaller,
+            @TypeOf(installer),
             _.installer,
             {
                 onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
@@ -62,32 +62,32 @@ pub fn installHoistedPackages(
 ): !PackageInstall.Summary {
     bun.analytics.Features.hoisted_bun_install += 1;
 
-    const original_trees = this.lockfile.buffers.trees;
-    const original_tree_dep_ids = this.lockfile.buffers.hoisted_dependencies;
+    const original_trees = _.lockfile.buffers.trees;
+    const original_tree_dep_ids = _.lockfile.buffers.hoisted_dependencies;
 
-    this.lockfile.filter(this.log, this, install_root_dependencies, workspace_filters, packages_to_install)?;
+    _.lockfile.filter(_.log, _, install_root_dependencies, workspace_filters, packages_to_install)?;
 
     defer {
-        this.lockfile.buffers.trees = original_trees;
-        this.lockfile.buffers.hoisted_dependencies = original_tree_dep_ids;
+        _.lockfile.buffers.trees = original_trees;
+        _.lockfile.buffers.hoisted_dependencies = original_tree_dep_ids;
     }
 
     let root_node: *Progress.Node = undefined;
     let download_node: Progress.Node = undefined;
     let install_node: Progress.Node = undefined;
     let scripts_node: Progress.Node = undefined;
-    const options = &this.options;
-    let progress = &this.progress;
+    const options = &_.options;
+    let progress = &_.progress;
 
     if (log_level.showProgress()) {
         progress.supports_ansi_escape_codes = Output.enable_ansi_colors_stderr;
         root_node = progress.start("", 0);
         download_node = root_node.start(ProgressStrings.download(), 0);
 
-        install_node = root_node.start(ProgressStrings.install(), this.lockfile.buffers.hoisted_dependencies.items.len);
+        install_node = root_node.start(ProgressStrings.install(), _.lockfile.buffers.hoisted_dependencies.items.len);
         scripts_node = root_node.start(ProgressStrings.script(), 0);
-        this.downloads_node = &download_node;
-        this.scripts_node = &scripts_node;
+        _.downloads_node = &download_node;
+        _.scripts_node = &scripts_node;
     }
 
     defer {
@@ -121,7 +121,7 @@ pub fn installHoistedPackages(
                 Global.crash();
             }
         }
-        break :brk bun.openDir(cwd.stdDir(), "node_modules") catch |e| {
+        break :brk bun.openDir(cwd.stdDir(), "node_modules") catch e => {
             Output.err(e, "could not open the <b>\"node_modules\"<r> directory", {});
             Global.crash();
         };
@@ -138,22 +138,22 @@ pub fn installHoistedPackages(
     let summary: PackageInstall.Summary = {};
 
     {
-        let iterator = Lockfile.Tree.Iterator(.node_modules).init(this.lockfile);
+        let iterator = Lockfile.Tree.Iterator(.node_modules).init(_.lockfile);
         if (comptime Environment.isPosix) {
             Bin.Linker.ensureUmask();
         }
         let installer: PackageInstaller = brk: {
             const trees_res = trees: {
-                const trees = this.lockfile.buffers.trees.items;
-                const completed_trees = Bitset.initEmpty(this.allocator, trees.len)?;
-                let tree_ids_to_trees_the_id_depends_on = Bitset.List.initEmpty(this.allocator, trees.len, trees.len)?;
+                const trees = _.lockfile.buffers.trees.items;
+                const completed_trees = Bitset.initEmpty(_.allocator, trees.len)?;
+                let tree_ids_to_trees_the_id_depends_on = Bitset.List.initEmpty(_.allocator, trees.len, trees.len)?;
 
                 {
                     // For each tree id, traverse through it's parents and mark all visited tree
                     // ids as dependents for the current tree parent
                     let deps_guard = DeinitWithAllocGuard<Bitset>{
-                        val: Bitset.initEmpty(this.allocator, trees.len)?,
-                        allocator: this.allocator,
+                        val: Bitset.initEmpty(_.allocator, trees.len)?,
+                        allocator: _.allocator,
                     };
                     for (_curr of trees) {
                         let curr = _curr;
@@ -198,11 +198,11 @@ pub fn installHoistedPackages(
             // These slices potentially get resized during iteration
             // so we want to make sure they're not accessible to the rest of this function
             // to make mistakes harder
-            let parts = this.lockfile.packages.slice();
+            let parts = _.lockfile.packages.slice();
 
             break :brk PackageInstaller{
-                manager: this,
-                options: &this.options,
+                manager: _,
+                options: &_.options,
                 metas: parts.items(.@"meta"),
                 bins: parts.items(.bin),
                 root_node_modules_folder: node_modules_folder,
@@ -210,12 +210,12 @@ pub fn installHoistedPackages(
                 pkg_name_hashes: parts.items(.name_hash),
                 resolutions: parts.items(.resolution),
                 pkg_dependencies: parts.items(.dependencies),
-                lockfile: this.lockfile,
+                lockfile: _.lockfile,
                 node: &install_node,
                 node_modules: {
                     path: std.array_list.Managed(u8).fromOwnedSlice(
-                        this.allocator,
-                        this.allocator.dupe(
+                        _.allocator,
+                        _.allocator.dupe(
                             u8,
                             strings.withoutTrailingSlash(FileSystem.instance.top_level_dir),
                         )?,
@@ -228,26 +228,26 @@ pub fn installHoistedPackages(
                 summary: &summary,
                 force_install: options.enable.force_install,
                 successfully_installed: Bitset.initEmpty(
-                    this.allocator,
-                    this.lockfile.packages.len,
+                    _.allocator,
+                    _.lockfile.packages.len,
                 )?,
                 command_ctx: ctx,
                 tree_ids_to_trees_the_id_depends_on: tree_ids_to_trees_the_id_depends_on,
                 completed_trees: completed_trees,
                 trees: trees: {
-                    const trees = bun.handleOom(this.allocator.alloc(TreeContext, this.lockfile.buffers.trees.items.len));
-                    for (i of 0..this.lockfile.buffers.trees.items.len) {
+                    const trees = bun.handleOom(_.allocator.alloc(TreeContext, _.lockfile.buffers.trees.items.len));
+                    for (i of 0.._.lockfile.buffers.trees.items.len) {
                         trees[i] = {
-                            binaries: Bin.PriorityQueue.init(this.allocator, {
-                                dependencies: &this.lockfile.buffers.dependencies,
-                                string_buf: &this.lockfile.buffers.string_bytes,
+                            binaries: Bin.PriorityQueue.init(_.allocator, {
+                                dependencies: &_.lockfile.buffers.dependencies,
+                                string_buf: &_.lockfile.buffers.string_bytes,
                             }),
                         };
                     }
                     break :trees trees;
                 },
-                trusted_dependencies_from_update_requests: this.findTrustedDependenciesFromUpdateRequests(),
-                seen_bin_links: bun.StringHashMap(void).init(this.allocator),
+                trusted_dependencies_from_update_requests: _.findTrustedDependenciesFromUpdateRequests(),
+                seen_bin_links: bun.StringHashMap(void).init(_.allocator),
             };
         };
 
@@ -276,9 +276,9 @@ pub fn installHoistedPackages(
 
                 // We want to minimize how often we call this function
                 // That's part of why we unroll this loop
-                if (this.pendingTaskCount() > 0) {
-                    this.runTasks(
-                        *PackageInstaller,
+                if (_.pendingTaskCount() > 0) {
+                    _.runTasks(
+                        @TypeOf(&installer_guard.val),
                         &installer_guard.val,
                         {
                             onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
@@ -291,16 +291,16 @@ pub fn installHoistedPackages(
                     )?;
                     if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
                 }
-                this.tickLifecycleScripts();
-                this.reportSlowLifecycleScripts();
+                _.tickLifecycleScripts();
+                _.reportSlowLifecycleScripts();
             }
 
             for (dependency_id of remaining) {
                 installer_guard.val.installPackage(dependency_id, log_level);
             }
 
-            this.runTasks(
-                *PackageInstaller,
+            _.runTasks(
+                @TypeOf(&installer_guard.val),
                 &installer_guard.val,
                 {
                     onExtract: PackageInstaller.installEnqueuedPackagesAfterExtraction,
@@ -313,27 +313,27 @@ pub fn installHoistedPackages(
             )?;
             if (!installer_guard.val.options.do.install_packages) return error.InstallFailed;
 
-            this.tickLifecycleScripts();
-            this.reportSlowLifecycleScripts();
+            _.tickLifecycleScripts();
+            _.reportSlowLifecycleScripts();
         }
 
-        while (this.pendingTaskCount() > 0 && installer_guard.val.options.do.install_packages) {
+        while (_.pendingTaskCount() > 0 && installer_guard.val.options.do.install_packages) {
             let closure = HoistedClosure{
                 installer: &installer_guard.val,
-                manager: this,
+                manager: _,
             };
 
             // Whenever the event loop wakes up, we need to call `runTasks`
             // If we call sleep() instead of sleepUntil(), it will wait forever until there are no more lifecycle scripts
             // which means it will not call runTasks until _all_ current lifecycle scripts have finished running
-            this.sleepUntil(&closure, &HoistedClosure.isDone);
+            _.sleepUntil(&closure, &HoistedClosure.isDone);
 
             if (e := closure.err_val) {
                 return e;
             }
         }
-        this.tickLifecycleScripts();
-        this.reportSlowLifecycleScripts();
+        _.tickLifecycleScripts();
+        _.reportSlowLifecycleScripts();
 
         for (tree of installer_guard.val.trees) {
             if (comptime Environment.allow_assert) {
@@ -344,7 +344,7 @@ pub fn installHoistedPackages(
         }
 
         // .monotonic is okay because this value is only accessed on this thread.
-        this.finished_installing.store(true, .monotonic);
+        _.finished_installing.store(true, .monotonic);
         if (log_level.showProgress()) {
             scripts_node.activate();
         }
@@ -359,10 +359,10 @@ pub fn installHoistedPackages(
         installer_guard.val.completeRemainingScripts(log_level);
 
         // .monotonic is okay because this value is only accessed on this thread.
-        while (this.pending_lifecycle_script_tasks.load(.monotonic) > 0) {
-            this.reportSlowLifecycleScripts();
+        while (_.pending_lifecycle_script_tasks.load(.monotonic) > 0) {
+            _.reportSlowLifecycleScripts();
 
-            this.sleep();
+            _.sleep();
         }
 
         if (log_level.showProgress()) {

@@ -34,29 +34,29 @@ export @root struct ThreadLock {
     pub fn lock(*_) {
         if (comptime !enabled) return;
         const current = Thread.getCurrentId();
-        if (this.owning_thread != invalid_thread_id) {
+        if (_.owning_thread != invalid_thread_id) {
             if (comptime traces_enabled) {
                 bun.Output.err("assertion failure", "`ThreadLock` was already locked here:", {});
                 bun.crash_handler.dumpStackTrace(
-                    this.locked_at.trace(),
+                    _.locked_at.trace(),
                     { frame_count: 10, stop_at_jsc_llint: true },
                 );
             }
             std.debug.panic(
                 "tried to lock `ThreadLock` on thread {}, but was already locked by thread {}",
-                [current, this.owning_thread],
+                [current, _.owning_thread],
             );
         }
-        this.owning_thread = current;
+        _.owning_thread = current;
         if (comptime traces_enabled) {
-            this.locked_at = StoredTrace.capture(@returnAddress());
+            _.locked_at = StoredTrace.capture(@returnAddress());
         }
     }
 
     pub fn unlock(*_) {
         if (comptime !enabled) return;
-        this.assertLocked();
-        this.* = ThreadLock.initUnlocked();
+        _.assertLocked();
+        _.* = ThreadLock.initUnlocked();
     }
 
     pub fn assertLocked() {
@@ -74,10 +74,10 @@ export @root struct ThreadLock {
     /// lock.
     pub fn lockOrAssert(*_) {
         if (comptime !enabled) return;
-        if (this.owning_thread == invalid_thread_id) {
-            this.lock();
+        if (_.owning_thread == invalid_thread_id) {
+            _.lock();
         } else {
-            this.assertLocked();
+            _.assertLocked();
         }
     }
 }

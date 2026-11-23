@@ -78,36 +78,36 @@ pub struct Job_ {
         }
     }
 
-    pub fn runFromJS(*_: *Job_): bun.JSError!void {
-        const _rel = ReleaseGuard<Job_>{ ptr: unsafe { this as *Job_! } };
-        if (this.vm.isShuttingDown()) {
+    pub fn runFromJS(*_): bun.JSError!void {
+        const _rel = ReleaseGuard<Job_>{ ptr: unsafe { _ as *Job_! } };
+        if (_.vm.isShuttingDown()) {
             return;
         }
 
-        const globalThis = this.vm.global;
-        const promise = this.promise.swap();
-        if (err := this.err) {
+        const globalThis = _.vm.global;
+        const promise = _.promise.swap();
+        if (err := _.err) {
             promise.rejectWithAsyncStack(globalThis, createCryptoError(globalThis, err))?;
             return;
         }
 
-        const output_slice = this.output;
-        assert(output_slice.len == @as(usize, @intCast(this.pbkdf2.length)));
+        const output_slice = _.output;
+        assert(output_slice.len == @as(usize, @intCast(_.pbkdf2.length)));
         const buffer_value = jsc.JSValue.createBuffer(globalThis, output_slice);
-        this.output = this.output[0..0];
+        _.output = _.output[0..0];
         promise.resolve(globalThis, buffer_value)?;
     }
 
-    pub fn release(*_: *Job_) {
-        this.poll.unref(this.vm);
-        this.pbkdf2.deinitAndUnprotect();
-        this.promise.deinit();
-        bun.default_allocator.free(this.output);
-        bun.destroy(this);
+    pub fn release(*_) {
+        _.poll.unref(_.vm);
+        _.pbkdf2.deinitAndUnprotect();
+        _.promise.deinit();
+        bun.default_allocator.free(_.output);
+        bun.destroy(_);
     }
 
-    pub fn deinit(*_: *Job_) {
-        this.release();
+    pub fn deinit(*_) {
+        _.release();
     }
 
     pub static fn create(vm: *jsc.VirtualMachine, globalThis: *jsc.JSGlobalObject, data: *const PBKDF2): *Job_ {

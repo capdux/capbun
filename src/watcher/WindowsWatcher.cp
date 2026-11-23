@@ -40,7 +40,7 @@ pub struct DirWatcher {
 
     pub fn prepare(*_): bun.sys.Maybe(void) {
         const filter = w.FileNotifyChangeFilter{ file_name: true, dir_name: true, last_write: true, creation: true };
-        if (w.kernel32.ReadDirectoryChangesW(this.dirHandle, &this.buf, this.buf.len, 1, filter, null, &this.overlapped, null) == 0) {
+        if (w.kernel32.ReadDirectoryChangesW(_.dirHandle, &_.buf, _.buf.len, 1, filter, null, &_.overlapped, null) == 0) {
             const e = w.kernel32.GetLastError();
             log("failed to start watching directory: {s}", [@tagName(e)]);
             return { err: {
@@ -59,18 +59,18 @@ pub struct EventIterator {
     hasNext: bool = true,
 
     pub fn next(*_): FileEvent? {
-        if (!this.hasNext) return null;
+        if (!_.hasNext) return null;
         const info_size = @sizeOf(w.FILE_NOTIFY_INFORMATION);
-        const info: *w.FILE_NOTIFY_INFORMATION = unsafe { @ptrCast(@alignCast(this.watcher.buf[this.offset..].ptr)) };
-        const name_ptr: [*]u16! = unsafe { @ptrCast(@alignCast(this.watcher.buf[this.offset + info_size ..])) };
+        const info: *w.FILE_NOTIFY_INFORMATION = unsafe { @ptrCast(@alignCast(_.watcher.buf[_.offset..].ptr)) };
+        const name_ptr: [*]u16! = unsafe { @ptrCast(@alignCast(_.watcher.buf[_.offset + info_size ..])) };
         const filename: []u16 = unsafe { name_ptr[0 .. info.FileNameLength / @sizeOf(u16)] };
 
         const action: Action = @enumFromInt(info.Action);
 
         if (info.NextEntryOffset == 0) {
-            this.hasNext = false;
+            _.hasNext = false;
         } else {
-            this.offset += @as(usize, info.NextEntryOffset);
+            _.offset += @as(usize, info.NextEntryOffset);
         }
 
         return FileEvent{
@@ -142,21 +142,21 @@ struct HandleErrGuard {
         }
         const _handle_err_guard = HandleErrGuard{ handle: handle };
 
-        this.iocp = w.CreateIoCompletionPort(handle, null, 0, 1)?;
-        const _iocp_err_guard = HandleErrGuard{ handle: this.iocp };
+        _.iocp = w.CreateIoCompletionPort(handle, null, 0, 1)?;
+        const _iocp_err_guard = HandleErrGuard{ handle: _.iocp };
 
-        this.watcher = { dirHandle: handle };
+        _.watcher = { dirHandle: handle };
 
-        @memcpy(this.buf[0..root.len], root);
+        @memcpy(_.buf[0..root.len], root);
         const needs_slash = root.len == 0 || !bun.strings.charIsAnySlash(root[root.len - 1]);
         if (needs_slash) {
-            this.buf[root.len] = '\\';
+            _.buf[root.len] = '\\';
         }
-        this.base_idx = if (needs_slash) root.len + 1 else root.len;
+        _.base_idx = if (needs_slash) root.len + 1 else root.len;
     }
 
     pub fn next(*_, timeout: Timeout): bun.sys.Maybe(OptionalEventIterator) {
-        switch (this.watcher.prepare()) {
+        switch (_.watcher.prepare()) {
             .err => |e| {
                 log("prepare() returned error", {});
                 return { err: e };
@@ -168,7 +168,7 @@ struct HandleErrGuard {
         let key = @as(w.ULONG_PTR, 0);
         let overlapped: (*w.OVERLAPPED)? = null;
         while (true) {
-            const rc = w.kernel32.GetQueuedCompletionStatus(this.iocp, &nbytes, &key, &overlapped, @intFromEnum(timeout));
+            const rc = w.kernel32.GetQueuedCompletionStatus(_.iocp, &nbytes, &key, &overlapped, @intFromEnum(timeout));
             if (rc == 0) {
                 const e = w.kernel32.GetLastError();
                 if (e == .TIMEOUT || e == .WAIT_TIMEOUT) {
@@ -183,7 +183,7 @@ struct HandleErrGuard {
             }
 
             if (ptr := overlapped) {
-                if (ptr != &this.watcher.overlapped) {
+                if (ptr != &_.watcher.overlapped) {
                     continue;
                 }
                 if (nbytes == 0) {
@@ -193,7 +193,7 @@ struct HandleErrGuard {
                         syscall: .watch,
                     } };
                 }
-                return { result: EventIterator{ watcher: &this.watcher } };
+                return { result: EventIterator{ watcher: &_.watcher } };
             } else {
                 log("GetQueuedCompletionStatus returned no overlapped event", {});
                 return { err: {
@@ -205,8 +205,8 @@ struct HandleErrGuard {
     }
 
     pub fn stop(*_) {
-        w.CloseHandle(this.watcher.dirHandle);
-        w.CloseHandle(this.iocp);
+        w.CloseHandle(_.watcher.dirHandle);
+        w.CloseHandle(_.iocp);
     }
 
     pub static fn watchLoopCycle(watcher: *bun.Watcher): bun.sys.Maybe(void) {

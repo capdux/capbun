@@ -111,7 +111,7 @@ pub const SASLContinueAuth = struct {
     s: []const u8,
     i: []const u8,
 
-pub fn iterationCount(self: *const SASLContinueAuth) !u32 {
+pub fn iterationCount(self: SASLContinueAuth) !u32 {
             return try std.fmt.parseInt(u32, self.i, 0);
     }
 };

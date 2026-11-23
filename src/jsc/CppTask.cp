@@ -12,11 +12,12 @@ pub struct CppTask {
     }
 }
 
+extern fn Bun__EventLoopTaskNoContext__performTask(task: *EventLoopTaskNoContextImpl);
+extern fn Bun__EventLoopTaskNoContext__createdInBunVm(task: *const EventLoopTaskNoContextImpl): (*VirtualMachine)?;
+
 /// A task created from C++ code that runs inside the workpool, usually via ScriptExecutionContext.
 @opaque
 pub struct EventLoopTaskNoContextImpl {
-    extern fn Bun__EventLoopTaskNoContext__performTask(task: *EventLoopTaskNoContextImpl);
-    extern fn Bun__EventLoopTaskNoContext__createdInBunVm(task: *const EventLoopTaskNoContextImpl): (*VirtualMachine)?;
 
     /// Releases task resources
     pub fn run(*_) {
@@ -37,11 +38,11 @@ pub struct ConcurrentCppTask {
     workpool_task: jsc.WorkPoolTask = { callback: &runFromWorkpool },
 
     pub static fn runFromWorkpool(task: *jsc.WorkPoolTask) {
-        const self: *ConcurrentCppTask = @fieldParentPtr("workpool_task", task);
-        // Extract all the info we need from `self` and `cpp_task` before we call functions that free them
-        const cpp_task = self.cpp_task;
+        const this_task: *ConcurrentCppTask = @fieldParentPtr("workpool_task", task);
+        // Extract all the info we need from `this_task` and `cpp_task` before we call functions that free them
+        const cpp_task = this_task.cpp_task;
         const maybe_vm = cpp_task.getVM();
-        bun.destroy(self);
+        bun.destroy(this_task);
         cpp_task.run();
         if (vm := maybe_vm) {
             vm.event_loop.unrefConcurrently();

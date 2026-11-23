@@ -10,15 +10,14 @@ const toBytes = std.mem.toBytes;
     password: Data = .empty,
 
     pub fn deinit(*_) {
-        this.password.deinit();
+        _.password.deinit();
     }
 
     pub fn writeInternal(
-        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const password = this.password.slice();
+        const password = _.password.slice();
         const count: usize = @sizeOf(u32) + password.len + 1;
         const b = toBytes(Int32(count));
         const header: [5]u8 = ['p', b[0], b[1], b[2], b[3]];

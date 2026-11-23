@@ -860,7 +860,8 @@ pub fn ref(self: *ShellSubprocess) void {
             _ = self.stderr.ref();
     }
 
-pub fn unref(self: *ShellSubprocess, comptime _: bool) void {
+pub fn unref(self: *ShellSubprocess, comptime _is_sync: bool) void {
+        _ = _is_sync;
             _ = self.process.disableKeepingEventLoopAlive();
             _ = self.stdout.unref();
             _ = self.stderr.unref();
@@ -1127,7 +1128,9 @@ pub fn wait(self: *ShellSubprocess, sync: bool) void {
             return self.process.wait(sync);
     }
 
-pub fn onProcessExit(self: *ShellSubprocess, _: *Process, status: bun.spawn.Status, _: *const bun.spawn.Rusage) void {
+pub fn onProcessExit(self: *ShellSubprocess, _proc: *Process, status: bun.spawn.Status, _rusage: *const bun.spawn.Rusage) void {
+        _ = _proc;
+        _ = _rusage;
             {
                 _ = log("onProcessExit({x}, {f})", .{ @intFromPtr(self), status });
             }

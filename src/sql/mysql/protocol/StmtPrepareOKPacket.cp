@@ -12,17 +12,17 @@ const decoderWrap = NewReaderMod.decoderWrap;
     packet_length: u24,
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        this.status = reader.int(u8)?;
-        if (this.status != 0) {
+        _.status = reader.int(u8)?;
+        if (_.status != 0) {
             return error.InvalidPrepareOKPacket;
         }
 
-        this.statement_id = reader.int(u32)?;
-        this.num_columns = reader.int(u16)?;
-        this.num_params = reader.int(u16)?;
+        _.statement_id = reader.int(u32)?;
+        _.num_columns = reader.int(u16)?;
+        _.num_params = reader.int(u16)?;
         * = reader.int(u8)?;
-        if (this.packet_length >= 12) {
-            this.warning_count = reader.int(u16)?;
+        if (_.packet_length >= 12) {
+            _.warning_count = reader.int(u16)?;
         }
     }
 

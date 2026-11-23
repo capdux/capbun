@@ -14,9 +14,9 @@ pub enum AuthMethod {
             return empty[0..0];
         }
 
-        const len = this.scrambleLength();
+        const len = _.scrambleLength();
 
-        switch (this) {
+        switch (_) {
             .mysql_native_password => @memcpy(buf[0..len], &(Auth.mysql_native_password.scramble(password, auth_data)?)),
             .caching_sha2_password => @memcpy(buf[0..len], &(Auth.caching_sha2_password.scramble(password, auth_data)?)),
             .sha256_password => @memcpy(buf[0..len], &(Auth.caching_sha2_password.scramble(password, auth_data)?)),
@@ -26,7 +26,7 @@ pub enum AuthMethod {
     }
 
     pub fn scrambleLength(): usize {
-        return switch (this) {
+        return switch (_) {
             .mysql_native_password => 20,
             .caching_sha2_password => 32,
             .sha256_password => 32,

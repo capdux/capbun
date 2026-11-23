@@ -377,37 +377,37 @@ export class S3BlobStatTask {
 
     pub const new = TrivialNew(S3BlobStatTask);
 
-    pub static fn onS3ExistsResolved(result: S3.S3StatResult, this: *S3BlobStatTask): JSTerminatedError!void {
-        const _guard_this = DeinitGuard<S3BlobStatTask>{ ptr: this };
+    pub static fn onS3ExistsResolved(result: S3.S3StatResult, task: *S3BlobStatTask): JSTerminatedError!void {
+        const _guard_this = DeinitGuard<S3BlobStatTask>{ ptr: task };
         match (result) {
             .not_found => {
-                this.promise.resolve(this.global, .false)?;
+                task.promise.resolve(task.global, .false)?;
             },
             .success => |_| {
-                this.promise.resolve(this.global, .true)?;
+                task.promise.resolve(task.global, .true)?;
             },
             .failure => |err| {
-                this.promise.reject(this.global, err.toJSWithAsyncStack(this.global, this.store.data.s3.path(), this.promise.get()))?;
+                task.promise.reject(task.global, err.toJSWithAsyncStack(task.global, task.store.data.s3.path(), task.promise.get()))?;
             },
         }
     }
 
-    pub static fn onS3SizeResolved(result: S3.S3StatResult, this: *S3BlobStatTask): JSTerminatedError!void {
-        const _guard_this = DeinitGuard<S3BlobStatTask>{ ptr: this };
+    pub static fn onS3SizeResolved(result: S3.S3StatResult, task: *S3BlobStatTask): JSTerminatedError!void {
+        const _guard_this = DeinitGuard<S3BlobStatTask>{ ptr: task };
 
         match (result) {
             .success => |stat_result| {
-                this.promise.resolve(this.global, JSValue.jsNumber(stat_result.size))?;
+                task.promise.resolve(task.global, JSValue.jsNumber(stat_result.size))?;
             },
             .not_found, .failure => |err| {
-                this.promise.reject(this.global, err.toJSWithAsyncStack(this.global, this.store.data.s3.path(), this.promise.get()))?;
+                task.promise.reject(task.global, err.toJSWithAsyncStack(task.global, task.store.data.s3.path(), task.promise.get()))?;
             },
         }
     }
 
-    pub static fn onS3StatResolved(result: S3.S3StatResult, this: *S3BlobStatTask): JSError!void {
-        const _guard_this = DeinitGuard<S3BlobStatTask>{ ptr: this };
-        const globalThis = this.global;
+    pub static fn onS3StatResolved(result: S3.S3StatResult, task: *S3BlobStatTask): JSError!void {
+        const _guard_this = DeinitGuard<S3BlobStatTask>{ ptr: task };
+        const globalThis = task.global;
         match (result) {
             .success => |stat_result| {
                 const stat_obj = S3Stat.init(
@@ -417,10 +417,10 @@ export class S3BlobStatTask {
                     stat_result.lastModified,
                     globalThis,
                 )?;
-                this.promise.resolve(globalThis, stat_obj.toJS(globalThis))?;
+                task.promise.resolve(globalThis, stat_obj.toJS(globalThis))?;
             },
             .not_found, .failure => |err| {
-                this.promise.reject(globalThis, err.toJSWithAsyncStack(globalThis, this.store.data.s3.path(), this.promise.get()))?;
+                task.promise.reject(globalThis, err.toJSWithAsyncStack(globalThis, task.store.data.s3.path(), task.promise.get()))?;
             },
         }
     }
@@ -548,7 +548,7 @@ pub fn getPresignUrlFrom(*_: *Blob, globalThis: *JSGlobalObject, extra_options: 
         .request_payer = credentialsWithOptions.request_payer,
         .content_disposition = credentialsWithOptions.content_disposition,
         .content_type = credentialsWithOptions.content_type,
-    }, false, .{ .expires = expires }) catch |sign_err| {
+    }, false, .{ .expires = expires }) catch sign_err => {
         return S3.throwSignError(sign_err, globalThis);
     };
     const _guard_result = DeinitGuard<S3.S3Credentials.SignResult>{ ptr: &result };
@@ -633,9 +633,9 @@ pub fn constructInternalJS(
 
 pub fn toJSUnchecked(
     globalObject: *JSGlobalObject,
-    this: *Blob,
+    blob: *Blob,
 ): JSValue {
-    return BUN__createJSS3FileUnsafely(globalObject, this);
+    return BUN__createJSS3FileUnsafely(globalObject, blob);
 }
 
 pub fn constructInternal(
@@ -656,7 +656,7 @@ pub fn constructInternal(
 }
 
 @c fn construct(globalObject: *JSGlobalObject, callframe: *CallFrame): (*Blob)? {
-    return constructInternal(globalObject, callframe) catch |e| {
+    return constructInternal(globalObject, callframe) catch e => {
         if (e == error.OutOfMemory) {
             * = globalObject.throwOutOfMemoryValue();
         }

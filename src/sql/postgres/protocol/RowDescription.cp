@@ -19,10 +19,10 @@ pub struct FieldsErrGuard {
     fields: []FieldDescription = [],
 
     pub fn deinit(*_) {
-        for (i of 0..this.fields.len) {
-            this.fields[i].deinit();
+        for (i of 0.._.fields.len) {
+            _.fields[i].deinit();
         }
-        bun.default_allocator.free(this.fields);
+        bun.default_allocator.free(_.fields);
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): void! {
@@ -38,7 +38,7 @@ pub struct FieldsErrGuard {
             fields_guard.initialized += 1;
         }
         unsafe {
-            this.* = { fields: fields_guard.fields };
+            _.* = { fields: fields_guard.fields };
         }
     }
 

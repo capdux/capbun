@@ -25,59 +25,59 @@ const debug = bun.Output.scoped(.MySQLConnection, .hidden);
     sequence_id: u8,
 
     pub fn deinit(*_)  {
-        this.username.deinit();
-        this.auth_response.deinit();
-        this.database.deinit();
-        this.auth_plugin_name.deinit();
+        _.username.deinit();
+        _.auth_response.deinit();
+        _.database.deinit();
+        _.auth_plugin_name.deinit();
 
-        let it = this.connect_attrs.iterator();
+        let it = _.connect_attrs.iterator();
         while (entry := it.next()) {
             unsafe {
                 bun.default_allocator.free(entry.key_ptr.*);
                 bun.default_allocator.free(entry.value_ptr.*);
             }
         }
-        this.connect_attrs.deinit(bun.default_allocator);
+        _.connect_attrs.deinit(bun.default_allocator);
     }
 
     pub fn writeInternal(*_, comptime Context: type, writer: NewWriter(Context)): anyerror!void {
-        let packet = writer.start(this.sequence_id)?;
+        let packet = writer.start(_.sequence_id)?;
 
-        this.capability_flags.CLIENT_CONNECT_ATTRS = this.connect_attrs.count() > 0;
+        _.capability_flags.CLIENT_CONNECT_ATTRS = _.connect_attrs.count() > 0;
 
-        const caps = this.capability_flags.toInt();
+        const caps = _.capability_flags.toInt();
         writer.int4(caps)?;
-        debug("Client capabilities: [{f}] 0x{x:0>8} sequence_id: {d}", .{ this.capability_flags, caps, this.sequence_id });
+        debug("Client capabilities: [{f}] 0x{x:0>8} sequence_id: {d}", .{ _.capability_flags, caps, _.sequence_id });
 
-        writer.int4(this.max_packet_size)?;
-        writer.int1(@intFromEnum(this.character_set))?;
+        writer.int4(_.max_packet_size)?;
+        writer.int1(@intFromEnum(_.character_set))?;
 
         const padding: [23]u8 = [0; 23];
         writer.write(padding[0..])?;
 
-        writer.writeZ(this.username.slice())?;
+        writer.writeZ(_.username.slice())?;
 
-        const auth_data = this.auth_response.slice();
-        if (this.capability_flags.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA) {
+        const auth_data = _.auth_response.slice();
+        if (_.capability_flags.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA) {
             writer.writeLengthEncodedString(auth_data)?;
-        } else if (this.capability_flags.CLIENT_SECURE_CONNECTION) {
+        } else if (_.capability_flags.CLIENT_SECURE_CONNECTION) {
             writer.int1(@intCast(auth_data.len))?;
             writer.write(auth_data)?;
         } else {
             writer.writeZ(auth_data)?;
         }
 
-        if (this.capability_flags.CLIENT_CONNECT_WITH_DB && this.database.slice().len > 0) {
-            writer.writeZ(this.database.slice())?;
+        if (_.capability_flags.CLIENT_CONNECT_WITH_DB && _.database.slice().len > 0) {
+            writer.writeZ(_.database.slice())?;
         }
 
-        if (this.capability_flags.CLIENT_PLUGIN_AUTH) {
-            writer.writeZ(this.auth_plugin_name.slice())?;
+        if (_.capability_flags.CLIENT_PLUGIN_AUTH) {
+            writer.writeZ(_.auth_plugin_name.slice())?;
         }
 
-        if (this.capability_flags.CLIENT_CONNECT_ATTRS) {
+        if (_.capability_flags.CLIENT_CONNECT_ATTRS) {
             let total_length: usize = 0;
-            let it = this.connect_attrs.iterator();
+            let it = _.connect_attrs.iterator();
             while (entry := it.next()) {
                 total_length += encodeLengthInt(entry.key_ptr.len).len;
                 total_length += entry.key_ptr.len;
@@ -87,7 +87,7 @@ const debug = bun.Output.scoped(.MySQLConnection, .hidden);
 
             writer.writeLengthEncodedInt(total_length)?;
 
-            it = this.connect_attrs.iterator();
+            it = _.connect_attrs.iterator();
             while (entry := it.next()) {
                 unsafe {
                     writer.writeLengthEncodedString(entry.key_ptr.*)?;
@@ -96,7 +96,7 @@ const debug = bun.Output.scoped(.MySQLConnection, .hidden);
             }
         }
 
-        if (this.capability_flags.CLIENT_ZSTD_COMPRESSION_ALGORITHM) {
+        if (_.capability_flags.CLIENT_ZSTD_COMPRESSION_ALGORITHM) {
             bun.assertf(false, "zstd compression algorithm is not supported", .{});
         }
 

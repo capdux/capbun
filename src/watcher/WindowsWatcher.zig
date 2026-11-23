@@ -371,9 +371,9 @@ _ = log("prepare() returned error", .{});
 
 },
 }
-        var nbytes = (if (comptime @typeInfo(w.DWORD) == .@"enum") @as(w.DWORD, @enumFromInt(0)) else @as(w.DWORD, 0));
+        var nbytes = (if (comptime @typeInfo(w.DWORD) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(w.DWORD, @enumFromInt(0)) else @as(w.DWORD, 0));
         _ = &nbytes;
-        var key = (if (comptime @typeInfo(w.ULONG_PTR) == .@"enum") @as(w.ULONG_PTR, @enumFromInt(0)) else @as(w.ULONG_PTR, 0));
+        var key = (if (comptime @typeInfo(w.ULONG_PTR) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(w.ULONG_PTR, @enumFromInt(0)) else @as(w.ULONG_PTR, 0));
         _ = &key;
         var overlapped: ?*w.OVERLAPPED = null;
         _ = &overlapped;

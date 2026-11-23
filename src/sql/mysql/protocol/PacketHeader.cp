@@ -17,10 +17,10 @@
 
     pub fn encode(): [4]u8 {
         return [
-            @intCast(this.length & 0xff),
-            @intCast((this.length >> 8) & 0xff),
-            @intCast((this.length >> 16) & 0xff),
-            this.sequence_id,
+            @intCast(_.length & 0xff),
+            @intCast((_.length >> 8) & 0xff),
+            @intCast((_.length >> 16) & 0xff),
+            _.sequence_id,
         ];
     }
 }

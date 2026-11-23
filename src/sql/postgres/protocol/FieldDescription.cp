@@ -25,11 +25,11 @@ pub struct ErrDeinitGuard<T> {
     binary: bool = false,
 
     pub fn typeTag(): types.Tag {
-        return @enumFromInt(@as(short, @truncate(this.type_oid)));
+        return @enumFromInt(@as(short, @truncate(_.type_oid)));
     }
 
     pub fn deinit(*_) {
-        this.name_or_index.deinit();
+        _.name_or_index.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Container: type, reader: NewReader(Container)): AnyPostgresError!void {
@@ -48,7 +48,7 @@ pub struct ErrDeinitGuard<T> {
             else => return err.UnknownFormatCode,
         };
         unsafe {
-            this.* = {
+            _.* = {
                 table_oid: table_oid,
                 column_index: column_index,
                 type_oid: type_oid,

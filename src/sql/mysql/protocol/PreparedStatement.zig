@@ -130,7 +130,7 @@ pub fn deinit(self: *Execute) void {
             }
     }
 
-pub fn writeNullBitmap(self: *const Execute, comptime Context: type, writer: NewWriter(Context)) AnyMySQLError.Error!void {
+pub fn writeNullBitmap(self: Execute, comptime Context: type, writer: NewWriter(Context)) AnyMySQLError.Error!void {
             const MYSQL_MAX_PARAMS = ((std.math.maxInt(u16) / 8) + 1);
             _ = &MYSQL_MAX_PARAMS;
             var null_bitmap_buf: [MYSQL_MAX_PARAMS]u8 = undefined;
@@ -150,7 +150,7 @@ pub fn writeNullBitmap(self: *const Execute, comptime Context: type, writer: New
             _ = try writer.write(null_bitmap);
     }
 
-pub fn writeInternal(self: *const Execute, comptime Context: type, writer: NewWriter(Context)) AnyMySQLError.Error!void {
+pub fn writeInternal(self: Execute, comptime Context: type, writer: NewWriter(Context)) AnyMySQLError.Error!void {
             _ = try writer.int1(@intFromEnum(CommandType.COM_STMT_EXECUTE));
             _ = try writer.int4(self.statement_id);
             _ = try writer.int1(self.flags);

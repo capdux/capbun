@@ -35,7 +35,7 @@ pub union(FieldType) FieldMessage {
     routine: String,
 
     pub fn format(writer: *std.Io.Writer): void! {
-        switch (this) {
+        switch (_) {
             inline else => |str| {
                 writer.print("{f}", .{str})?;
             },
@@ -43,7 +43,7 @@ pub union(FieldType) FieldMessage {
     }
 
     pub fn deinit(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             inline else => |*message| {
                 message.deref();
             },

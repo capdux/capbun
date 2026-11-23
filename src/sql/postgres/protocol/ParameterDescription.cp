@@ -29,7 +29,7 @@ fn toInt32Slice(comptime Int: type, slice: []const u8): []align(1) const Int {
         }
 
         unsafe {
-            this.* = {
+            _.* = {
                 parameters: parameters,
             };
         }

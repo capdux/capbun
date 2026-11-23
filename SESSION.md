@@ -746,6 +746,7 @@
 
 ### [2026-11-23] 向 `cp_agy` 提交泛型移位 `E0207` 工单
 - `task-bun-20261123-generic-shift-e0207` (`repro_generic_shift_e0207.cp`)：`comptime T: type` 泛型整数参数执行移位运算 `>>` / `<<` 时，`cpc` 误要求右操作数与左操作数类型完全一致，报 `E0207: expected 'MaskInt', found 'ShiftInt'`（影响 `src/collections/bit_set.cp` 7 处）。
+- **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/sema/type_infer.rs`（`<<`, `>>`, `<<|`, `<<=`, `>>=` 移位右操作数不再强制要求与左操作数同型，同时保留非整数 `E0207` 校验）；本地实测 `/data/dev/cp/cap/bin/cpc check --brief` 验证 `repro_generic_shift_e0207.cp` 与 `src/collections/bit_set.cp` 均返回 `ok (0 errors)`，已执行 `ack`。
 
 ## [2026-11-23] Wave #75：修复 `shell.Builtin` SEGV 根因、纯化 `MarkdownObject`/`copy_file` 与 `zig:check` 5/5 通过
 - 修复 `test/js/bun/shell` 3 处 ASan SEGV 共同根因：
@@ -755,3 +756,29 @@
   - `src/runtime/webcore/blob/copy_file.cp`（消除 214 处 `E0306`，`std.os.linux.fcntl` 第三参数改 `@as(usize, 0)`，`--strict` 0 报错）；
 - `scripts/cpc_brief.py` 同步 `(?<!\.)\bzig\s*\{` 正则；以上改动均通过 `cpc_brief.py` 4 项门禁与 `bun run zig:check`（5/5，30s）。
 - 推导下一阶段 Wave #76：Subagent 1 运行 `bun bd test test/js/bun/shell` 验证 SEGV 消除并继续完成 Batch 3a（`test/js/bun/spawn`）；Subagent 2（不改 `src/` 以防竞态，先做只读排查/准备）核查 `s3/{multipart,simple_request}.cp`、`Installer.cp`、`hoisted_install.cp` 等 `--strict` 补丁方案，待 Batch 3a 完成后立即执行纯化。
+
+## [2026-11-23] Wave #76：Batch 3a（`shell` + `spawn`）测试验证与全仓 `--strict`/占位盘点
+- 完成 Batch 3a（`test/js/bun/shell` + `test/js/bun/spawn`）测试验证：
+  - Wave #75 对 `src/shell/Builtin.cp` 的修复彻底消除 `bunshell-default.test.ts`（1/1）、`yes.test.ts`（全绿）及 `EventLoopTask.fromEventLoop` 共 3 处 ASan SEGV；
+  - `test/js/bun/spawn` 39 文件全量跑完（**262 pass / 23 fail / 4 skip / 2 todo / 0 主进程崩溃**）；
+  - `test/js/bun/shell` 分批合计 **479 pass / 28 fail / 30 skip / 6 todo**，定位剩余 2 处崩溃：`bunshell.test.ts` `Allocation scope leaked 30 bytes`（`Cmd.cp:487-489`）与 `commands/ls.test.ts` `BufferedIoClosed.close` ASan SEGV（`Cmd.zig:257`）；
+- 完成全仓 1,295 个 `.cp` 文件的 `--strict` 资产盘点与全仓 `throwTODO`/`@panic("todo"` 复核（确认除 `Blob.cp:doImage` 外 0 处遗漏实现）。
+
+## [2026-11-23] Wave #77：修复 `Cmd.cp` 两处崩溃、恢复 `Blob.cp:doImage` 并完成 70 文件 `--strict` 批量纯化
+- 修复 2 个核心模块：
+  - `src/shell/states/Cmd.cp`：L482-492 `Expansion` 分支改用 `bun.default_allocator` 格式化并先 `e.deinit(_.base.allocator())` 再调用 `writeFailingError`，消除 `Allocation scope leaked 30 bytes` panic；L613-614 `initSubproc` 改为直传 `&_.exec.subproc.child` 给 `Subprocess.spawnAsync`，消除 `BufferedIoClosed.close` ASan SEGV；
+  - `src/runtime/webcore/Blob.cp`：补回 `import Image from "../image/Image.zig";` 恢复 `doImage`（`Image.fromBlobJS`），并清零全部 9 处 `E0307`；
+- 5 路并进完成 **70 个非 `return struct` 文件 `--strict` 批量纯化**（均 0 报错）：
+  - `s3/{multipart,simple_request,credentials_jsc}.cp`、`S3File.cp`、`PasswordObject.cp`（含 `AlgorithmDef_.get` `static fn`）、`PBKDF2.cp`、`hoisted_install.cp`、`Installer.cp`（8 文件）；
+  - `src/jsc/{JSValue,VirtualMachine,Task,event_loop,CppTask}.cp`、`install/{ExternalSlice,versioned_url,PackageManager/ProgressStrings}.cp`（`pub static struct`）、`shell/{EnvMap,subproc}.cp`（10 文件，含 `JSValue.cp` 67 个 `static fn` 补全）；
+  - `src/sql/postgres/protocol/`（21 文件）+ `src/sql/shared/`（2 文件）；
+  - `src/sql/mysql/`（5 文件）+ `src/sql/mysql/protocol/`（13 文件）；
+  - `valkey_protocol.cp`、`zstd.cp`、`zlib.cp`、`watcher/{INotify,KEvent,Windows}Watcher.cp`、`threading/{ThreadPool,WaitGroup}.cp`、`safety/{CriticalSection,ThreadLock,alloc}.cp`（11 文件）；
+- 全量 72 个修改文件通过 `cpc_brief.py` 4 项门禁、`cpc check --strict`（0 报错）与 `bun run zig:check`（**5/5，30s**）。
+- 推导下一阶段 Wave #78：Subagent 1 运行 `bun bd test test/js/bun/shell/bunshell.test.ts test/js/bun/shell/commands/ls.test.ts` 验证 `Cmd.cp` 修复后推进 Batch 3b（`test/js/bun/resolve` 等）；Subagent 2 先行只读分析 `spawn` 23 fail / `util` 48 fail 归因或准备下一批 `--strict` 文件清单（零 `src/` 写冲突）。
+
+### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
+- `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。
+- **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（将 `E0311` 收窄至真实函数返回 `: void` 签名，不再误报 `union`/`struct` 零大小字段）及 `cpc/src/parser/container.rs`（允许 `union` 字段省略 `: void` 默认为 `Type::Void`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0311_union_void.cp` 返回 `Check successful`，已执行 `ack`。
+25. **用户**：`还剩多少 工作待完成?`
+    - **主智能体回应**：汇报全仓实盘剩余工作：（1）代码迁移与基础编译 100% 达成（1,295 个 `.cp` 全过 `cpc check --brief` 与 `zig:check` 5/5）；（2）`--strict` 深度纯化已完成 ~968 个文件 `E0305`/`E0306` 清零，剩余 327 个文件（含 83 个 `return struct` 与 244 个普通结构体文件，已出首批纯化清单）及 `E0307` `catch |e|` 待分批清理；（3）`bun bd test` 已完成 `bun/http`、`bun/util`、`bun/test` 与 `test/js/web/` 全量，Batch 3a（`shell` + `spawn`）运行中，尚余 Batch 3 其余 `test/js/bun/*`、Batch 4 `test/js/node/*`、Batch 5 `test/{cli,bundler,integration,napi,v8}` 及已跑批次零星真实失败点收口与 Release 构建验收。

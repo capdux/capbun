@@ -6,15 +6,14 @@ import { WriteWrap } from "./WriteWrap.zig";
     p: PortalOrPreparedStatement,
 
     pub fn writeInternal(
-        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const message = this.p.slice();
+        const message = _.p.slice();
         const d_hdr: [1]u8 = ['D'];
         writer.write(&d_hdr)?;
         const length = writer.length()?;
-        const tag_hdr: [1]u8 = [this.p.tag()];
+        const tag_hdr: [1]u8 = [_.p.tag()];
         writer.write(&tag_hdr)?;
         writer.@"string"(message)?;
         length.write()?;

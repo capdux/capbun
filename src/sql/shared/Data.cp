@@ -27,20 +27,20 @@ pub enum Data {
     }
 
     pub fn toOwned(): bun.ByteList! {
-        return switch (this) {
-            .owned => this.owned,
+        return switch (_) {
+            .owned => _.owned,
             .temporary => bun.ByteList.fromOwnedSlice(
-                bun.default_allocator.dupe(u8, this.temporary)?,
+                bun.default_allocator.dupe(u8, _.temporary)?,
             ),
             .empty => bun.ByteList.empty,
             .inline_storage => bun.ByteList.fromOwnedSlice(
-                bun.default_allocator.dupe(u8, this.inline_storage.slice())?,
+                bun.default_allocator.dupe(u8, _.inline_storage.slice())?,
             ),
         };
     }
 
     pub fn deinit(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .owned => |*owned| owned.clearAndFree(bun.default_allocator),
             .temporary => {},
             .empty => {},
@@ -49,7 +49,7 @@ pub enum Data {
     }
 
     pub fn zdeinit(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .owned => |*owned| {
                 bun.freeSensitive(bun.default_allocator, owned.slice());
                 owned.deinit(bun.default_allocator);
@@ -60,30 +60,30 @@ pub enum Data {
         }
     }
 
-    pub fn slice(_: *const Data): []const u8 {
-        return switch (unsafe { this.* }) {
-            .owned => this.owned.slice(),
-            .temporary => this.temporary,
+    pub fn slice(): []const u8 {
+        return switch (_) {
+            .owned => _.owned.slice(),
+            .temporary => _.temporary,
             .empty => "",
-            .inline_storage => this.inline_storage.slice(),
+            .inline_storage => _.inline_storage.slice(),
         };
     }
 
-    pub fn substring(_: *const Data, start_index: usize, end_index: usize): Data {
-        return switch (unsafe { this.* }) {
-            .owned => .temporary(this.owned.slice()[start_index..end_index]),
-            .temporary => .temporary(this.temporary[start_index..end_index]),
+    pub fn substring(start_index: usize, end_index: usize): Data {
+        return switch (_) {
+            .owned => .temporary(_.owned.slice()[start_index..end_index]),
+            .temporary => .temporary(_.temporary[start_index..end_index]),
             .empty => .empty,
-            .inline_storage => .temporary(this.inline_storage.slice()[start_index..end_index]),
+            .inline_storage => .temporary(_.inline_storage.slice()[start_index..end_index]),
         };
     }
 
-    pub fn sliceZ(_: *const Data): [:0]const u8 {
-        return switch (unsafe { this.* }) {
-            .owned => this.owned.slice()[0..this.owned.len :0],
-            .temporary => this.temporary[0..this.temporary.len :0],
+    pub fn sliceZ(): [:0]const u8 {
+        return switch (_) {
+            .owned => _.owned.slice()[0.._.owned.len :0],
+            .temporary => _.temporary[0.._.temporary.len :0],
             .empty => "",
-            .inline_storage => this.inline_storage.slice()[0..this.inline_storage.len :0],
+            .inline_storage => _.inline_storage.slice()[0.._.inline_storage.len :0],
         };
     }
 }

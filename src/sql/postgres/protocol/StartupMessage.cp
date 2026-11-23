@@ -15,13 +15,12 @@ const int4 = int_types.int4;
     options: Data = .empty,
 
     pub fn writeInternal(
-        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const user = this.user.slice();
-        const database = this.database.slice();
-        const options = this.options.slice();
+        const user = _.user.slice();
+        const database = _.database.slice();
+        const options = _.options.slice();
         const count: usize = @sizeOf(int4) + @sizeOf(int4) + zFieldCount("user", user) + zFieldCount("database", database) + zFieldCount("client_encoding", "UTF8") + options.len + 1;
 
         const header = toBytes(Int32(@as(u32, @truncate(count))));

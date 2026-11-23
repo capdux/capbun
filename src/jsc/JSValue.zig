@@ -177,7 +177,7 @@ pub const JSValue = enum(i64) {
     pub fn fromName(__cp_s: []const u8) ?@This() { return std.meta.stringToEnum(@This(), __cp_s); }
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
-pub fn format(self: JSValue, _: *std.Io.Writer) !void {
+pub fn format(self: *JSValue, _: *std.Io.Writer) !void {
         _ = self;
             _ = @compileError("Formatting a JSValue directly is not allowed. Use jsc.ConsoleObject.Formatter");
     }
@@ -797,7 +797,7 @@ pub fn coerceJSValueDoubleTruncatingTT(comptime T: type, comptime Out: type, num
             if (((num <= std.math.minInt(T)) or std.math.isNegativeInf(num))) {
                 return std.math.minInt(T);
             }
-            if (((num >= @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum") @as(comptime_float, @enumFromInt(std.math.maxInt(T))) else @as(comptime_float, std.math.maxInt(T)))))) or std.math.isPositiveInf(num))) {
+            if (((num >= @as(f64, @floatCast((if (comptime @typeInfo(comptime_float) == .@"enum" and (@typeInfo(@TypeOf(std.math.maxInt(T))) == .int or @typeInfo(@TypeOf(std.math.maxInt(T))) == .comptime_int)) @as(comptime_float, @enumFromInt(std.math.maxInt(T))) else @as(comptime_float, std.math.maxInt(T)))))) or std.math.isPositiveInf(num))) {
                 return std.math.maxInt(T);
             }
             return @intFromFloat(num);
@@ -1874,12 +1874,14 @@ var array = try jsc.JSValue.createEmptyArray(globalObject, value.len);
 } else {
 if (bun.trait.isSlice(Type)) {
                 const Child = (comptime std.meta.Child(Type));
+                _ = &Child;
                 var array = try jsc.JSValue.createEmptyArray(globalObject, value.len);
                 _ = &array;
                 var i: usize = 0;
                 _ = &i;
                 while ((i < value.len)) : (i = (i + 1)) {
-                    const res = try JSValue.fromAny(globalObject, *Child, (&value[@as(usize, @intCast(i))]));
+                    const ChildPtr = @TypeOf((&value[@as(usize, @intCast(i))]));
+                    const res = try JSValue.fromAny(globalObject, ChildPtr, (&value[@as(usize, @intCast(i))]));
                     if ((res == .zero)) {
                         return .zero;
                     }

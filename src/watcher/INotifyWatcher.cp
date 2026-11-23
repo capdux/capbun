@@ -84,73 +84,73 @@ pub struct MutexUnlockGuard<T> {
     coalesce_interval: isize = 100_000,
 
     pub fn watchPath(*_, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
-        bun.assert(this.loaded);
-        const old_count = this.watch_count.fetchAdd(1, .release);
-        const _wake_guard = FutexWakeGuard{ ptr: if (old_count == 0) unsafe { &this.watch_count } else null };
+        bun.assert(_.loaded);
+        const old_count = _.watch_count.fetchAdd(1, .release);
+        const _wake_guard = FutexWakeGuard{ ptr: if (old_count == 0) unsafe { &_.watch_count } else null };
         const watch_file_mask = IN.EXCL_UNLINK | IN.MOVE_SELF | IN.DELETE_SELF | IN.MOVED_TO | IN.MODIFY;
-        const rc = system.inotify_add_watch(this.fd.cast(), pathname, watch_file_mask);
-        log("inotify_add_watch({f}) = {}", [this.fd, rc]);
+        const rc = system.inotify_add_watch(_.fd.cast(), pathname, watch_file_mask);
+        log("inotify_add_watch({f}) = {}", [_.fd, rc]);
         return bun.sys.Maybe(EventListIndex).errnoSysP(rc, .watch, pathname) ?? { result: rc };
     }
 
     pub fn watchDir(*_, pathname: [:0]const u8): bun.sys.Maybe(EventListIndex) {
-        bun.assert(this.loaded);
-        const old_count = this.watch_count.fetchAdd(1, .release);
-        const _wake_guard = FutexWakeGuard{ ptr: if (old_count == 0) unsafe { &this.watch_count } else null };
+        bun.assert(_.loaded);
+        const old_count = _.watch_count.fetchAdd(1, .release);
+        const _wake_guard = FutexWakeGuard{ ptr: if (old_count == 0) unsafe { &_.watch_count } else null };
         const watch_dir_mask = IN.EXCL_UNLINK | IN.DELETE | IN.DELETE_SELF | IN.CREATE | IN.MOVE_SELF | IN.ONLYDIR | IN.MOVED_TO | IN.MODIFY;
-        const rc = system.inotify_add_watch(this.fd.cast(), pathname, watch_dir_mask);
-        log("inotify_add_watch({f}) = {}", [this.fd, rc]);
+        const rc = system.inotify_add_watch(_.fd.cast(), pathname, watch_dir_mask);
+        log("inotify_add_watch({f}) = {}", [_.fd, rc]);
         return bun.sys.Maybe(EventListIndex).errnoSysP(rc, .watch, pathname) ?? { result: rc };
     }
 
     pub fn unwatch(*_, wd: EventListIndex) {
-        bun.assert(this.loaded);
-        * = this.watch_count.fetchSub(1, .release);
-        * = system.inotify_rm_watch(this.fd, wd);
+        bun.assert(_.loaded);
+        * = _.watch_count.fetchSub(1, .release);
+        * = system.inotify_rm_watch(_.fd, wd);
     }
 
     pub fn init(*_, _root: []const u8): ! {
         * = _root;
-        bun.assert(!this.loaded);
-        this.loaded = true;
+        bun.assert(!_.loaded);
+        _.loaded = true;
 
         if (v := std.math.cast(isize, bun.env_var.BUN_INOTIFY_COALESCE_INTERVAL.get())) {
-            this.coalesce_interval = v;
+            _.coalesce_interval = v;
         } else {
-            this.coalesce_interval = 100_000;
+            _.coalesce_interval = 100_000;
         }
 
-        this.fd = .fromNative(std.posix.inotify_init1(IN.CLOEXEC)?);
+        _.fd = .fromNative(std.posix.inotify_init1(IN.CLOEXEC)?);
         const allocated = bun.default_allocator.alignedAlloc(EventListBytes, std.mem.Alignment.fromByteUnits(@alignOf(Event)), 1)?;
-        this.eventlist_bytes = &allocated[0];
-        log("{f} init", [this.fd]);
+        _.eventlist_bytes = &allocated[0];
+        log("{f} init", [_.fd]);
     }
 
     pub fn read(*_): bun.sys.Maybe(ConstUnalignedEventSlice) {
-        bun.assert(this.loaded);
+        bun.assert(_.loaded);
         let i: u32 = 0;
         let empty_u8: [0]u8 = undefined;
         let read_eventlist_bytes: []u8 = empty_u8[0..0];
-        if (this.read_ptr != null) {
-            const ptr = this.read_ptr.?;
-            Futex.waitForever(&this.watch_count, 0);
+        if (_.read_ptr != null) {
+            const ptr = _.read_ptr.?;
+            Futex.waitForever(&_.watch_count, 0);
             i = ptr.i;
-            read_eventlist_bytes = this.eventlist_bytes[0..ptr.len];
+            read_eventlist_bytes = _.eventlist_bytes[0..ptr.len];
         } else {
             while (true) {
-                Futex.waitForever(&this.watch_count, 0);
+                Futex.waitForever(&_.watch_count, 0);
 
                 const rc = std.posix.system.read(
-                    this.fd.cast(),
-                    this.eventlist_bytes,
-                    this.eventlist_bytes.len,
+                    _.fd.cast(),
+                    _.eventlist_bytes,
+                    _.eventlist_bytes.len,
                 );
                 const errno = std.posix.errno(rc);
                 switch (errno) {
                     .SUCCESS => {
                         const rc_len: usize = @intCast(rc);
-                        read_eventlist_bytes = this.eventlist_bytes[0..rc_len];
-                        log("{f} read {} bytes", [this.fd, read_eventlist_bytes.len]);
+                        read_eventlist_bytes = _.eventlist_bytes[0..rc_len];
+                        log("{f} read {} bytes", [_.fd, read_eventlist_bytes.len]);
                         if (read_eventlist_bytes.len == 0) {
                             let empty_ptrs: [0]UnalignedEventPtr = undefined;
                             return { result: empty_ptrs[0..0] };
@@ -159,16 +159,16 @@ pub struct MutexUnlockGuard<T> {
                         const double_read_threshold = Event.largest_size * (max_count / 2);
                         if (read_eventlist_bytes.len < double_read_threshold) {
                             let fds: [1]std.posix.pollfd = [{
-                                fd: this.fd.cast(),
+                                fd: _.fd.cast(),
                                 events: std.posix.POLL.IN | std.posix.POLL.ERR,
                                 revents: 0,
                             }];
-                            let timespec: std.posix.timespec = { sec: 0, nsec: this.coalesce_interval };
+                            let timespec: std.posix.timespec = { sec: 0, nsec: _.coalesce_interval };
                             if ((std.posix.ppoll(&fds, &timespec, null) catch 0) > 0) {
                                 while (true) {
-                                    const rest = this.eventlist_bytes[read_eventlist_bytes.len..];
+                                    const rest = _.eventlist_bytes[read_eventlist_bytes.len..];
                                     bun.assert(rest.len > 0);
-                                    const new_rc = std.posix.system.read(this.fd.cast(), rest.ptr, rest.len);
+                                    const new_rc = std.posix.system.read(_.fd.cast(), rest.ptr, rest.len);
                                     const e = std.posix.errno(new_rc);
                                     switch (e) {
                                         .SUCCESS => {
@@ -191,7 +191,7 @@ pub struct MutexUnlockGuard<T> {
                     .AGAIN, .INTR => continue,
                     .INVAL => {
                         if (Environment.isDebug) {
-                            bun.Output.err("EINVAL", "inotify read({f}, {d})", [this.fd, this.eventlist_bytes.len]);
+                            bun.Output.err("EINVAL", "inotify read({f}, {d})", [_.fd, _.eventlist_bytes.len]);
                         }
                         return { err: {
                             errno: @truncate(@intFromEnum(errno)),
@@ -209,12 +209,12 @@ pub struct MutexUnlockGuard<T> {
         let count: u32 = 0;
         while (i < read_eventlist_bytes.len) {
             const event: UnalignedEventPtr = unsafe { @ptrCast(read_eventlist_bytes[i..][0..@sizeOf(Event)].ptr) };
-            this.eventlist_ptrs[count] = event;
+            _.eventlist_ptrs[count] = event;
             i += Event.size(event);
             count += 1;
             if (Environment.enable_logs) {
                 log("{f} read event {} {} {} {f}", [
-                    this.fd,
+                    _.fd,
                     event.watch_descriptor,
                     event.cookie,
                     event.mask,
@@ -223,24 +223,24 @@ pub struct MutexUnlockGuard<T> {
             }
 
             if (count == max_count) {
-                this.read_ptr = {
+                _.read_ptr = {
                     i: i,
                     len: @intCast(read_eventlist_bytes.len),
                 };
-                log("{f} read buffer filled up", [this.fd]);
-                return { result: &this.eventlist_ptrs };
+                log("{f} read buffer filled up", [_.fd]);
+                return { result: &_.eventlist_ptrs };
             }
         }
 
-        this.read_ptr = null;
-        return { result: this.eventlist_ptrs[0..count] };
+        _.read_ptr = null;
+        return { result: _.eventlist_ptrs[0..count] };
     }
 
     pub fn stop(*_) {
-        log("{f} stop", [this.fd]);
-        if (this.fd != bun.invalid_fd) {
-            this.fd.close();
-            this.fd = bun.invalid_fd;
+        log("{f} stop", [_.fd]);
+        if (_.fd != bun.invalid_fd) {
+            _.fd.close();
+            _.fd = bun.invalid_fd;
         }
     }
 

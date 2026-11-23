@@ -23,11 +23,11 @@ struct UnlockGuard<T> {
         * = _root;
         const fd = std.posix.kqueue()?;
         if (fd == 0) return err.KQueueError;
-        this.fd = .init(.fromNative(fd));
+        _.fd = .init(.fromNative(fd));
     }
 
     pub fn stop(*_) {
-        if (fd := this.fd.take()) {
+        if (fd := _.fd.take()) {
             fd.close();
         }
     }

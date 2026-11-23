@@ -33,16 +33,16 @@ export struct PrepareOK {
     warning_count: u16,
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        this.status = reader.int(u8)?;
-        if (this.status != 0) {
+        _.status = reader.int(u8)?;
+        if (_.status != 0) {
             return error.InvalidPrepareOKPacket;
         }
 
-        this.statement_id = reader.int(u32)?;
-        this.num_columns = reader.int(u16)?;
-        this.num_params = reader.int(u16)?;
+        _.statement_id = reader.int(u32)?;
+        _.num_columns = reader.int(u16)?;
+        _.num_params = reader.int(u16)?;
         * = reader.int(u8)?;
-        this.warning_count = reader.int(u16)?;
+        _.warning_count = reader.int(u16)?;
     }
 
     pub const decode = decoderWrap(PrepareOK, decodeInternal).decode;
@@ -58,26 +58,26 @@ export struct Execute {
 
     pub fn deinit(*_)  {
         let i: usize = 0;
-        while (i < this.params.len) {
-            this.params[i].deinit(bun.default_allocator);
+        while (i < _.params.len) {
+            _.params[i].deinit(bun.default_allocator);
             i += 1;
         }
-        if (this.params.len > 0) {
-            bun.default_allocator.free(this.params);
+        if (_.params.len > 0) {
+            bun.default_allocator.free(_.params);
         }
     }
 
-    fn writeNullBitmap(_: *const Execute, comptime Context: type, writer: NewWriter(Context)): AnyMySQLError.Error!void {
+    fn writeNullBitmap(comptime Context: type, writer: NewWriter(Context)): AnyMySQLError.Error!void {
         const MYSQL_MAX_PARAMS = (std.math.maxInt(u16) / 8) + 1;
 
         let null_bitmap_buf: [MYSQL_MAX_PARAMS]u8 = undefined;
-        const bitmap_bytes = (this.params.len + 7) / 8;
+        const bitmap_bytes = (_.params.len + 7) / 8;
         let null_bitmap = null_bitmap_buf[0..bitmap_bytes];
         @memset(null_bitmap, 0);
 
         let i: usize = 0;
-        while (i < this.params.len) {
-            if (this.params[i] == .@"null") {
+        while (i < _.params.len) {
+            if (_.params[i] == .@"null") {
                 null_bitmap[i >> 3] |= @as(u8, 1) << @as(u3, @truncate(i & 7));
             }
             i += 1;
@@ -86,19 +86,19 @@ export struct Execute {
         writer.write(null_bitmap)?;
     }
 
-    pub fn writeInternal(_: *const Execute, comptime Context: type, writer: NewWriter(Context)): AnyMySQLError.Error!void {
+    pub fn writeInternal(comptime Context: type, writer: NewWriter(Context)): AnyMySQLError.Error!void {
         writer.int1(@intFromEnum(CommandType.COM_STMT_EXECUTE))?;
-        writer.int4(this.statement_id)?;
-        writer.int1(this.flags)?;
-        writer.int4(this.iteration_count)?;
+        writer.int4(_.statement_id)?;
+        writer.int1(_.flags)?;
+        writer.int4(_.iteration_count)?;
 
-        if (this.params.len > 0) {
-            this.writeNullBitmap(Context, writer)?;
+        if (_.params.len > 0) {
+            _.writeNullBitmap(Context, writer)?;
 
-            writer.int1(@intFromBool(this.new_params_bind_flag))?;
+            writer.int1(@intFromBool(_.new_params_bind_flag))?;
 
-            if (this.new_params_bind_flag) {
-                const param_types = this.param_types;
+            if (_.new_params_bind_flag) {
+                const param_types = _.param_types;
                 for (param_type of param_types) {
                     debug("New params bind flag {s} unsigned? {}", .{ @tagName(param_type.type), param_type.flags.UNSIGNED });
                     writer.int1(@intFromEnum(param_type.type))?;
@@ -107,9 +107,9 @@ export struct Execute {
             }
 
             let idx: usize = 0;
-            while (idx < this.params.len) {
-                const param = &this.params[idx];
-                const param_type = this.param_types[idx];
+            while (idx < _.params.len) {
+                const param = &_.params[idx];
+                const param_type = _.param_types[idx];
                 idx += 1;
                 if (unsafe { param.* } == .@"null" || param_type.type == .MYSQL_TYPE_NULL) continue;
 

@@ -99,7 +99,7 @@ pub const HoistedClosure = struct {
 
 pub fn isDone(self: *HoistedClosure) bool {
             const pm = self.manager;
-            _ = (blk_catch_0: { break :blk_catch_0 ((self.manager.runTasks(*PackageInstaller, self.installer, .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, pm.options.log_level)) catch |e| { _ = &e; self.err_val = e;
+            _ = (blk_catch_0: { break :blk_catch_0 ((self.manager.runTasks(@TypeOf(self.installer), self.installer, .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, pm.options.log_level)) catch |e| { _ = &e; self.err_val = e;
             break :blk_catch_0 {}; }); });
             if ((self.err_val != null)) {
                 return true;
@@ -290,7 +290,7 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
                     }
                     remaining = remaining[unroll_count..];
                     if ((self.pendingTaskCount() > 0)) {
-                        _ = try self.runTasks(*PackageInstaller, (&installer_guard.val), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
+                        _ = try self.runTasks(@TypeOf((&installer_guard.val)), (&installer_guard.val), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
                         if ((!installer_guard.val.options.do.install_packages)) {
                             return error.InstallFailed;
                         }
@@ -302,7 +302,7 @@ break :brk std.fs.Dir{ .fd = fd.cast() };
                     _ = &dependency_id;
                     _ = installer_guard.val.installPackage(dependency_id, log_level);
                 }
-                _ = try self.runTasks(*PackageInstaller, (&installer_guard.val), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
+                _ = try self.runTasks(@TypeOf((&installer_guard.val)), (&installer_guard.val), .{ .onExtract = PackageInstaller.installEnqueuedPackagesAfterExtraction, .onResolve = .{}, .onPackageManifestError = .{}, .onPackageDownloadError = .{} }, true, log_level);
                 if ((!installer_guard.val.options.do.install_packages)) {
                     return error.InstallFailed;
                 }

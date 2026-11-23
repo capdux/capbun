@@ -879,7 +879,7 @@ pub fn unhandledRejection(client: *jsc.VirtualMachine, globalObject: *JSGlobalOb
         .warn => {
             const _drain_guard = DrainMicrotasksGuard{ client: client };
             * = Bun__handleUnhandledRejection(globalObject, reason, promise);
-            jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch |e| {
+            jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch e => {
                 * = globalObject.reportUncaughtException(globalObject.takeException(e).asException(globalObject.vm()).?);
             };
             return;
@@ -887,7 +887,7 @@ pub fn unhandledRejection(client: *jsc.VirtualMachine, globalObject: *JSGlobalOb
         .warn_with_error_code => {
             const _drain_guard = DrainMicrotasksGuard{ client: client };
             if (Bun__handleUnhandledRejection(globalObject, reason, promise) > 0) return;
-            jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch |e| {
+            jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch e => {
                 * = globalObject.reportUncaughtException(globalObject.takeException(e).asException(globalObject.vm()).?);
             };
             client.exit_handler.exit_code = 1;
@@ -898,7 +898,7 @@ pub fn unhandledRejection(client: *jsc.VirtualMachine, globalObject: *JSGlobalOb
             const wrapped_reason = wrapUnhandledRejectionErrorForUncaughtException(globalObject, reason);
             * = client.uncaughtException(globalObject, wrapped_reason, true);
             if (Bun__handleUnhandledRejection(globalObject, reason, promise) > 0) return;
-            jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch |e| {
+            jsc.fromJSHostCallGeneric(globalObject, @src(), Bun__promises__emitUnhandledRejectionWarning, .{ globalObject, reason, promise }) catch e => {
                 * = globalObject.reportUncaughtException(globalObject.takeException(e).asException(globalObject.vm()).?);
             };
             return;
@@ -1182,7 +1182,7 @@ pub fn onExit(client: *VirtualMachine) {
     // Grab the config and null it out to make this idempotent
     if (config := client.cpu_profiler_config) {
         client.cpu_profiler_config = null;
-        CPUProfiler.stopAndWriteProfile(client.jsc_vm, config) catch |e| {
+        CPUProfiler.stopAndWriteProfile(client.jsc_vm, config) catch e => {
             Output.err(e, "Failed to write CPU profile", {});
         };
     }
@@ -1191,7 +1191,7 @@ pub fn onExit(client: *VirtualMachine) {
     // Grab the config and null it out to make this idempotent
     if (config := client.heap_profiler_config) {
         client.heap_profiler_config = null;
-        HeapProfiler.generateAndWriteProfile(client.jsc_vm, config) catch |e| {
+        HeapProfiler.generateAndWriteProfile(client.jsc_vm, config) catch e => {
             Output.err(e, "Failed to write heap profile", {});
         };
     }
@@ -2158,7 +2158,7 @@ pub fn resolveMaybeNeedsTrailingSlash(
             source_utf8.slice(),
             error.NameTooLong,
             if (is_esm) .stmt else if (is_user_require_resolve) .require_resolve else .require,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         const msg = logger.Msg{
             data: logger.rangeData(
                 null,
@@ -2213,7 +2213,7 @@ pub fn resolveMaybeNeedsTrailingSlash(
         pm.log = &log;
     }
     const _restore_log_guard = RestoreLogGuard{ vm: jsc_vm, old_log: old_log };
-    jsc_vm._resolve(&result, specifier_utf8.slice(), normalizeSource(source_utf8.slice()), is_esm, is_a_file_path) catch |err_| {
+    jsc_vm._resolve(&result, specifier_utf8.slice(), normalizeSource(source_utf8.slice()), is_esm, is_a_file_path) catch err_ => {
         let e = err_;
         const msg: logger.Msg = brk: {
             const msgs: []logger.Msg = log.msgs.items;
@@ -2309,7 +2309,7 @@ pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, refer
                 };
             };
             {
-                ret.* = ErrorableResolvedSource.err(e, (bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch |ex| globalThis.takeException(ex)));
+                ret.* = ErrorableResolvedSource.err(e, (bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch ex => globalThis.takeException(ex)));
             }
             return;
         },
@@ -2319,13 +2319,13 @@ pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, refer
             const referrer_utf8 = referrer.toUTF8(bun.default_allocator);
             const _ref_utf8_guard = DeinitGuard<@TypeOf(referrer_utf8)>{ val: referrer_utf8 };
             ret.* = ErrorableResolvedSource.err(e, switch (msg.metadata) {
-                .build => (bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch |ex| globalThis.takeException(ex)),
+                .build => (bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch ex => globalThis.takeException(ex)),
                 .resolve => (bun.api.ResolveMessage.create(
                     globalThis,
                     globalThis.allocator(),
                     msg,
                     referrer_utf8.slice(),
-                ) catch |ex| globalThis.takeException(ex)),
+                ) catch ex => globalThis.takeException(ex)),
             });
             return;
         },
@@ -2344,13 +2344,13 @@ pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, refer
                 const msg = logs[idx];
                 const current = &errors[idx];
                 current.* = switch (msg.metadata) {
-                    .build => bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch |ex| globalThis.takeException(ex),
+                    .build => bun.api.BuildMessage.create(globalThis, globalThis.allocator(), msg) catch ex => globalThis.takeException(ex),
                     .resolve => bun.api.ResolveMessage.create(
                         globalThis,
                         globalThis.allocator(),
                         msg,
                         referrer_utf8.slice(),
-                    ) catch |ex| globalThis.takeException(ex),
+                    ) catch ex => globalThis.takeException(ex),
                 };
             }
 
@@ -2364,7 +2364,7 @@ pub fn processFetchLog(globalThis: *JSGlobalObject, specifier: bun.String, refer
                             specifier,
                         }) catch unreachable,
                     ),
-                ) catch |ex| globalThis.takeException(ex),
+                ) catch ex => globalThis.takeException(ex),
             );
         },
     }
@@ -2990,30 +2990,30 @@ pub fn printErrorlikeObject(
         was_internal: unsafe { &was_internal },
         exception: exception,
         exception_list: exception_list,
-        vm: this,
+        vm: _,
         writer: writer,
         allow_ansi_color: allow_ansi_color,
     };
 
-    if (value.isAggregateError(this.global)) {
+    if (value.isAggregateError(_.global)) {
         let iter = AggregateErrorIterator<Writer>{ writer: writer, current_exception_list: exception_list, formatter: formatter };
         if (comptime allow_ansi_color) {
             if (comptime allow_side_effects) {
-                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
+                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
             } else {
-                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
+                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
             }
         } else {
             if (comptime allow_side_effects) {
-                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
+                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorAndSideEffects) catch return; // TODO: properly propagate exception upwards
             } else {
-                value.getErrorsProperty(this.global).forEach(this.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
+                value.getErrorsProperty(_.global).forEach(_.global, &iter, AggregateErrorIterator<Writer>.iteratorWithoutColorNoSideEffects) catch return; // TODO: properly propagate exception upwards
             }
         }
         return;
     }
 
-    was_internal = this.printErrorFromMaybePrivateData(
+    was_internal = _.printErrorFromMaybePrivateData(
         value,
         exception_list,
         formatter,
@@ -3038,16 +3038,16 @@ fn printErrorFromMaybePrivateData(
         if (build_error := value.@"as"(bun.api.BuildMessage)) {
             const _out_guard = OutputFlushGuard{};
             if (!build_error.logged) {
-                if (this.had_errors) {
+                if (_.had_errors) {
                     writer.writeAll("\n") catch {};
                 }
                 build_error.msg.writeFormat(writer, allow_ansi_color) catch {};
                 build_error.logged = true;
                 writer.writeAll("\n") catch {};
             }
-            this.had_errors = this.had_errors || build_error.msg.kind == .err;
+            _.had_errors = _.had_errors || build_error.msg.kind == .err;
             if (exception_list != null) {
-                this.log.addMsg(
+                _.log.addMsg(
                     build_error.msg,
                 ) catch {};
             }
@@ -3055,7 +3055,7 @@ fn printErrorFromMaybePrivateData(
         } else if (resolve_error := value.@"as"(bun.api.ResolveMessage)) {
             const _out_guard = OutputFlushGuard{};
             if (!resolve_error.logged) {
-                if (this.had_errors) {
+                if (_.had_errors) {
                     writer.writeAll("\n") catch {};
                 }
                 resolve_error.msg.writeFormat(writer, allow_ansi_color) catch {};
@@ -3063,10 +3063,10 @@ fn printErrorFromMaybePrivateData(
                 writer.writeAll("\n") catch {};
             }
 
-            this.had_errors = this.had_errors || resolve_error.msg.kind == .err;
+            _.had_errors = _.had_errors || resolve_error.msg.kind == .err;
 
             if (exception_list != null) {
-                this.log.addMsg(
+                _.log.addMsg(
                     resolve_error.msg,
                 ) catch {};
             }
@@ -3074,7 +3074,7 @@ fn printErrorFromMaybePrivateData(
         }
     }
 
-    this.printErrorInstance(
+    _.printErrorInstance(
         .js,
         value,
         exception_list,
@@ -3083,9 +3083,9 @@ fn printErrorFromMaybePrivateData(
         writer,
         allow_ansi_color,
         allow_side_effects,
-    ) catch |e| {
+    ) catch e => {
         if (e == error.JSError) {
-            this.global.clearException();
+            _.global.clearException();
         } else if (comptime Environment.isDebug) {
             // yo dawg
             Output.printErrorln("Error while printing Error-like object: {s}", .{@errorName(e)});

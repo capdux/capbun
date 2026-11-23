@@ -68,26 +68,26 @@ import std from "std";
     const _CLIENT_REMEMBER_OPTIONS = 2147483648;
 
     pub fn reject(*_) {
-        this.CLIENT_ZSTD_COMPRESSION_ALGORITHM = false;
-        this.MULTI_FACTOR_AUTHENTICATION = false;
-        this.CLIENT_CAPABILITY_EXTENSION = false;
-        this.CLIENT_SSL_VERIFY_SERVER_CERT = false;
-        this.CLIENT_REMEMBER_OPTIONS = false;
-        this.CLIENT_COMPRESS = false;
-        this.CLIENT_INTERACTIVE = false;
-        this.CLIENT_IGNORE_SIGPIPE = false;
-        this.CLIENT_NO_SCHEMA = false;
-        this.CLIENT_ODBC = false;
-        this.CLIENT_LOCAL_FILES = false;
-        this.CLIENT_OPTIONAL_RESULTSET_METADATA = false;
-        this.CLIENT_QUERY_ATTRIBUTES = false;
+        _.CLIENT_ZSTD_COMPRESSION_ALGORITHM = false;
+        _.MULTI_FACTOR_AUTHENTICATION = false;
+        _.CLIENT_CAPABILITY_EXTENSION = false;
+        _.CLIENT_SSL_VERIFY_SERVER_CERT = false;
+        _.CLIENT_REMEMBER_OPTIONS = false;
+        _.CLIENT_COMPRESS = false;
+        _.CLIENT_INTERACTIVE = false;
+        _.CLIENT_IGNORE_SIGPIPE = false;
+        _.CLIENT_NO_SCHEMA = false;
+        _.CLIENT_ODBC = false;
+        _.CLIENT_LOCAL_FILES = false;
+        _.CLIENT_OPTIONAL_RESULTSET_METADATA = false;
+        _.CLIENT_QUERY_ATTRIBUTES = false;
     }
 
-    pub fn format(_: Capabilities, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let first = true;
         @for (field of comptime std.meta.fieldNames(Capabilities)) {
-            if (@TypeOf(@field(this, field)) == bool) {
-                if (@field(this, field)) {
+            if (@TypeOf(@field(_, field)) == bool) {
+                if (@field(_, field)) {
                     if (!first) {
                         writer.writeAll(", ")?;
                     }
@@ -98,7 +98,7 @@ import std from "std";
         }
     }
 
-    pub fn toInt(_: Capabilities): u32 {
+    pub fn toInt(): u32 {
         let value: u32 = 0;
 
         const fields: [32][]const u8 = [
@@ -152,8 +152,8 @@ import std from "std";
         return res;
     }
 
-    pub fn intersect(_: Capabilities, other: Capabilities): Capabilities {
-        return fromInt(this.toInt() & other.toInt());
+    pub fn intersect(other: Capabilities): Capabilities {
+        return fromInt(_.toInt() & other.toInt());
     }
 
     pub static fn getDefaultCapabilities(ssl: bool, has_db_name: bool): Capabilities {

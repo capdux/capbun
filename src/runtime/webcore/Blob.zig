@@ -102,6 +102,7 @@ pub const read_file_mod = @import("./blob/read_file.zig");
 pub const write_file_mod = @import("./blob/write_file.zig");
 pub const copy_file_mod = @import("./blob/copy_file.zig");
 pub const Archive = @import("../api/Archive.zig");
+pub const Image = @import("../image/Image.zig");
 pub const Retry = enum {
     @"continue",
     fail,
@@ -1886,9 +1887,9 @@ pub fn toFormData(blob: *Blob, global: *JSGlobalObject, comptime lifetime: webco
 }), lifetime);
 }
 
-pub fn doImage(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self.size;
-        return globalThis.throwTODO("Blob.image is not yet implemented");
+pub fn doImage(self: *Blob, global: *JSGlobalObject, cf: *CallFrame) JSError!JSValue {
+    _ = self;
+        return Image.fromBlobJS(global, cf.this(), cf.argument(0));
 }
 
 pub fn isDetached(self: Blob) bool {

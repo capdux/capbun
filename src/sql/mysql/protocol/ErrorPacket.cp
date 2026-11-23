@@ -31,28 +31,28 @@ export struct MySQLErrorOptions {
     pub const toJS = ErrorPacketJsc.toJS;
 
     pub fn deinit(*_)  {
-        this.error_message.deinit();
+        _.error_message.deinit();
     }
 
     pub fn decodeInternal(*_, comptime Context: type, reader: NewReader(Context)): anyerror!void {
-        this.header = reader.int(u8)?;
-        if (this.header != 0xff) {
+        _.header = reader.int(u8)?;
+        if (_.header != 0xff) {
             return error.InvalidErrorPacket;
         }
 
-        this.error_code = reader.int(u16)?;
+        _.error_code = reader.int(u16)?;
 
         const next_byte = reader.int(u8)?;
         if (next_byte == '#') {
-            this.sql_state_marker = '#';
+            _.sql_state_marker = '#';
             let sql_state_guard = DataGuard{ val: reader.read(5)? };
-            this.sql_state = unsafe { sql_state_guard.val.slice()[0..5].* };
+            _.sql_state = unsafe { sql_state_guard.val.slice()[0..5].* };
         } else {
             reader.skip(-1);
         }
 
         const peeked: []const u8 = reader.peek();
-        this.error_message = reader.read(peeked.len)?;
+        _.error_message = reader.read(peeked.len)?;
     }
 
     pub const decode = decoderWrap(ErrorPacket, decodeInternal).decode;

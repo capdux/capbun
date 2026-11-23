@@ -463,20 +463,20 @@ pub fn run(thread_pool: *ThreadPool) void {
                 const named = (blk_catch_2: { break :blk_catch_2 ((std.fmt.bufPrintZ((&counter_buf), "Bun Pool {d}", .{ int })) catch |__ce_2| { _ = &__ce_2; break :blk_catch_2 "Bun Pool"; }); });
                 _ = Output.Source.configureNamedThread(named);
             }
-            var self = TopThread{ .thread_pool = thread_pool };
-            _ = &self;
+            var thread = TopThread{ .thread_pool = thread_pool };
+            _ = &thread;
             current = (blk: {
-            break :blk (&self);
+            break :blk (&thread);
 
 });
             defer {
             current = null;
             }
             {
-                _ = thread_pool.register((&self));
+                _ = thread_pool.register((&thread));
             }
             var unregister_guard = UnregisterThreadGuard{ .thread_pool = thread_pool, .thread = (blk: {
-            break :blk (&self);
+            break :blk (&thread);
 
 }) };
             _ = &unregister_guard;
@@ -490,7 +490,7 @@ pub fn run(thread_pool: *ThreadPool) void {
                 break :blk thread_pool.wait(is_waking);
 
 })) catch |__ce_3| { _ = &__ce_3; return; }); });
-                while (self.pop(thread_pool)) |result| {
+                while (thread.pop(thread_pool)) |result| {
                     if ((result.pushed or is_waking)) {
                         {
                             _ = thread_pool.notify(is_waking);
@@ -509,7 +509,7 @@ pub fn run(thread_pool: *ThreadPool) void {
                     }
                 }
                 _ = Output.flush();
-                _ = self.drainIdleEvents();
+                _ = thread.drainIdleEvents();
             }
     }
 

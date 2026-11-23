@@ -291,7 +291,7 @@ pub fn updateCounts(self: *EventLoop) void {
             if ((delta > 0)) {
                 _ = loop.addActive(@intCast(delta));
             } else {
-                _ = loop.subActive(@intCast((0 - delta)));
+                _ = loop.subActive(@intCast((-delta)));
             }
         } else {
             if ((delta > 0)) {
@@ -299,8 +299,8 @@ pub fn updateCounts(self: *EventLoop) void {
                 loop.num_polls = (loop.num_polls + @as(i32, @intCast(delta)));
                 loop.active = (blk_catch_5: { break :blk_catch_5 ((std.math.add(u32, loop.active, d)) catch |__ce_5| { _ = &__ce_5; break :blk_catch_5 std.math.maxInt(u32); }); });
             } else {
-                const d: u32 = @intCast((0 - delta));
-                loop.num_polls = (loop.num_polls - @as(i32, @intCast((0 - delta))));
+                const d: u32 = @intCast((-delta));
+                loop.num_polls = (loop.num_polls - @as(i32, @intCast((-delta))));
                 loop.active = (blk_catch_6: { break :blk_catch_6 ((std.math.sub(u32, loop.active, d)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 0; }); });
             }
         }
@@ -699,10 +699,12 @@ pub fn exit(self: *@This()) void {
     }
 } else struct {
 
-pub inline fn enter(_: Debug) void {
+pub inline fn enter(self: *@This()) void {
+        _ = self;
     }
 
-pub inline fn exit(_: Debug) void {
+pub inline fn exit(self: *@This()) void {
+        _ = self;
     }
 });
 pub const AnyEventLoop = _AnyEventLoopMod.AnyEventLoop;

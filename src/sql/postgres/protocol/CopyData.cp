@@ -15,18 +15,17 @@ const toBytes = std.mem.toBytes;
         const length = reader.length()?;
         const data = reader.read(@intCast(length -| 5))?;
         unsafe {
-            this.* = { data: data };
+            _.* = { data: data };
         }
     }
 
     pub const decode = DecoderWrap(@This(), decodeInternal).decode;
 
     pub fn writeInternal(
-        _: *const @This(),
         comptime Context: type,
         writer: NewWriter(Context),
     ): void! {
-        const data = this.data.slice();
+        const data = _.data.slice();
         const count: u32 = @intCast(@sizeOf(u32) + data.len + 1);
         const b = toBytes(Int32(count));
         const header: [5]u8 = ['d', b[0], b[1], b[2], b[3]];

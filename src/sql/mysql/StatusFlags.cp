@@ -20,11 +20,11 @@ pub enum StatusFlag: u16 {
 pub struct StatusFlags {
     _value: u16 = 0,
 
-    pub fn format(_: StatusFlags, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+    pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         let first = true;
         @for (field of comptime std.meta.fieldNames(StatusFlags)) {
-            if (@TypeOf(@field(this, field)) == bool) {
-                if (@field(this, field)) {
+            if (@TypeOf(@field(_, field)) == bool) {
+                if (@field(_, field)) {
                     if (!first) {
                         writer.writeAll(", ")?;
                     }
@@ -35,12 +35,12 @@ pub struct StatusFlags {
         }
     }
 
-    pub fn has(_: StatusFlags, flag: StatusFlag): bool {
-        return (this._value & @as(u16, @intFromEnum(flag))) != 0;
+    pub fn has(flag: StatusFlag): bool {
+        return (_._value & @as(u16, @intFromEnum(flag))) != 0;
     }
 
-    pub fn toInt(_: StatusFlags): u16 {
-        return this._value;
+    pub fn toInt(): u16 {
+        return _._value;
     }
 
     pub static fn fromInt(flags: u16): StatusFlags {

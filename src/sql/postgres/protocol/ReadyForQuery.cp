@@ -12,7 +12,7 @@ import { TransactionStatusIndicator } from "./TransactionStatusIndicator.zig";
 
         const status = reader.int(u8)?;
         unsafe {
-            this.* = {
+            _.* = {
                 status: @enumFromInt(status),
             };
         }

@@ -23,42 +23,42 @@ export @root struct WaitGroup {
     }
 
     pub fn addUnsynchronized(*_, n: usize) {
-        this.raw_count.raw += n;
+        _.raw_count.raw += n;
     }
 
     pub fn add(*_, n: usize) {
-        * = this.raw_count.fetchAdd(n, .monotonic);
+        * = _.raw_count.fetchAdd(n, .monotonic);
     }
 
     pub fn addOne(*_) {
-        this.add(1);
+        _.add(1);
     }
 
     pub fn finish(*_) {
-        if (this.raw_count.fetchSub(1, .acq_rel) > 1) {
+        if (_.raw_count.fetchSub(1, .acq_rel) > 1) {
             return;
         }
 
-        this.mutex.lock();
-        this.mutex.unlock();
-        this.cond.signal();
+        _.mutex.lock();
+        _.mutex.unlock();
+        _.cond.signal();
     }
 
     pub fn wait(*_) {
-        this.mutex.lock();
-        let unlock_guard = MutexUnlockGuard{ mutex: unsafe { &this.mutex } };
+        _.mutex.lock();
+        let unlock_guard = MutexUnlockGuard{ mutex: unsafe { &_.mutex } };
 
-        while (this.raw_count.load(.acquire) > 0) {
-            this.cond.wait(&this.mutex);
+        while (_.raw_count.load(.acquire) > 0) {
+            _.cond.wait(&_.mutex);
         }
     }
 
     pub fn release(*_) {
-        this.cond.release();
-        this.mutex.release();
+        _.cond.release();
+        _.mutex.release();
     }
 
     pub fn deinit(*_) {
-        this.release();
+        _.release();
     }
 }

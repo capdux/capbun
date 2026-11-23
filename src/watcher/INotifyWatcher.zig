@@ -75,7 +75,7 @@ pub fn name(event: *align(1) Event) [:0]u8 {
             }
             return (blk: {
             const name_first_char_ptr = (std.mem.asBytes((&event.name_len)).ptr + @sizeOf(u32));
-            break :blk bun.sliceTo(@as([*:0]u8, @ptrCast(name_first_char_ptr)), 0);
+            break :blk bun.sliceTo(@as([*:0]u8, @alignCast(@ptrCast(name_first_char_ptr))), 0);
 
 });
     }
