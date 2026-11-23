@@ -3688,8 +3688,8 @@ fn GenericIndexOptional(backing_int: type, IndexType: type): type {
         /// - `init(maybe: ?Index) Optional`
         /// - `init(maybe: ?backing_int) Optional`
         pub inline static fn init(maybe: auto): @This() {
-            let t = @typeInfo(@TypeOf(maybe));
-            if (t == .optional) t = @typeInfo(t.optional.child);
+            const raw_t = @typeInfo(@TypeOf(maybe));
+            const t = if (raw_t == .optional) @typeInfo(raw_t.optional.child) else raw_t;
             if (t == .int || t == .comptime_int) {
                 const v = @as(OptInt, maybe);
                 if (v != null) return IndexType.init(v.?).toOptional();

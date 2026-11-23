@@ -982,7 +982,7 @@ fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility): 
 
         static let lock: bun.Mutex = bun.Mutex{};
 
-        static let is_visible_once: std.Once(evaluateIsVisible) = std.once(evaluateIsVisible);
+        static let is_visible_once: @TypeOf(std.once(evaluateIsVisible)) = std.once(evaluateIsVisible);
 
         static fn evaluateIsVisible() {
             scopedEvaluateIsVisible(tagname, &really_disable);

@@ -287,7 +287,7 @@ pub struct JSBundleCompletionTask {
         }
         _.config.deinit(bun.default_allocator);
         _.promise.deinit();
-        bun.destroy();
+        bun.destroy(_);
     }
 
     fn doCompilation(*_, output_files: *std.array_list.Managed(options.OutputFile)): bun.StandaloneModuleGraph.CompileResult {
@@ -517,7 +517,7 @@ pub struct JSBundleCompletionTask {
 
         if (html_build_task := _.html_build_task) {
             _.plugins = null;
-            html_build_task.onComplete();
+            html_build_task.onComplete(_);
             return;
         }
 

@@ -1010,7 +1010,7 @@ pub inline fn log(comptime _: []const u8, _: anytype) void {
     pub var out_set: bool = false;
     pub var really_disable: std.atomic.Value(bool) = std.atomic.Value(bool).init((visibility == .hidden));
     pub var lock: bun.Mutex = bun.Mutex{  };
-    pub var is_visible_once: std.Once(evaluateIsVisible) = std.once(evaluateIsVisible);
+    pub var is_visible_once: @TypeOf(std.once(evaluateIsVisible)) = std.once(evaluateIsVisible);
 
 pub fn evaluateIsVisible() void {
             _ = scopedEvaluateIsVisible(tagname, (&really_disable));
