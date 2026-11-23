@@ -985,7 +985,7 @@ pub fn runWithSourceCode(task: *ParseTask, worker: *ThreadPool.Worker, step: *Re
         const resolver: *Resolver = (&transpiler.resolver);
         const file_path = (&task.path);
         const loader = ((task.loader) orelse (((file_path.loader((&transpiler.options.loaders))) orelse (options.Loader.file))));
-        const debug_original_variant_check: if (bun.Environment.isDebug) ContentsOrFd.Tag else void = (if (bun.Environment.isDebug) std.meta.activeTag(task.contents_or_fd) else null);
+        const debug_original_variant_check: if (bun.Environment.isDebug) ContentsOrFd.Tag else void = (if (bun.Environment.isDebug) std.meta.activeTag(task.contents_or_fd) else @as(void, undefined));
         var _run_err_guard = RunWithSourceCodeErrGuard{ .task = task, .entry = entry, .allocator = allocator, .expected_tag = debug_original_variant_check };
         _ = &_run_err_guard;
         var ___run_err_guard_moved = false; _ = &___run_err_guard_moved;

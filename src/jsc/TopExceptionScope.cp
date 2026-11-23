@@ -65,7 +65,7 @@ pub struct TopExceptionScope {
 
         _.* = {
             bytes: _.bytes,
-            location: if (Environment.ci_assert) &_.bytes[0],
+            location: if (Environment.ci_assert) &_.bytes[0] else @as(void, undefined),
         };
     }
 

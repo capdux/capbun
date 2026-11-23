@@ -690,7 +690,7 @@ let did_register_sigaltstack: bool = false;
 let sigaltstack: [524288]u8 = undefined;
 
 fn updatePosixSegfaultHandler(act: *bun.sys.Sigaction?): ! {
-    if (act_ := act) {
+    if (*act_ := act) {
         if (!did_register_sigaltstack) {
             let stack: std.c.stack_t = {
                 flags: 0,
@@ -1588,7 +1588,7 @@ pub const js_bindings = crash_handler_jsc.js_bindings;
 
 pub fn PreCrashWrapper(comptime T: type, comptime handler: fn (*T) anyerror!void): type {
     return struct {
-        pub fn onCrash(opaque_ptr: *!) {
+        pub static fn onCrash(opaque_ptr: *!) {
             unsafe {
                 handler(opaque_ptr as *T!) catch err => {
                     bun.handleErrorReturnTrace(err, @errorReturnTrace());

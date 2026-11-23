@@ -2207,3 +2207,5 @@
 ### [2026-11-23] Wave #90–91（Batch 5a `bundler/` 完成、修复 `Chunk`/`convertStmtsForChunk`/`SQLDataCell` 与 `bundler/` 49/49 `--strict` 清零）
 - 复测 `AsyncLocalStorage.test.ts` + `fs.watchFile.test.ts` **0 崩溃**；完成 Batch 5a `test/bundler/` 90 文件（88 文件 **381 pass**）；
 - 修复 `src/bundler/Chunk.cp`（`dst += 2;` 消除 `standalone.test.ts` 崩溃）、`src/bundler/linker_context/convertStmtsForChunk.cp`（`metafile.test.ts` 崩溃）与 `src/sql_jsc/shared/SQLDataCell.cp`（`ExceptionScopeGuard` 指针化），并完成 `src/bundler/` 全目录 49/49 `--strict` 清零。
+
+- [release-fix] 修改 .cp/.zig：bundler/ParseTask, cli/Arguments, crash_handler/crash_handler, install/PackageInstall, jsc/{TopExceptionScope,VirtualMachine,event_loop}, paths/resolve_path, runtime/socket/Handlers, shell/AllocScope, shell/states/Base, string/immutable。`bun run build:release` 通过，`bun run zig:check` 5/5。

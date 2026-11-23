@@ -1368,7 +1368,7 @@ pub fn eqlComptimeCheckLenU8Impl(a: []const u8, comptime b: []const u8, comptime
             if ((@as(usize, @bitCast((a[b_ptr..][0..@sizeOf(usize)]).*)) != (comptime @as(usize, @bitCast((b[b_ptr..][0..@sizeOf(usize)]).*))))) {
                 return false;
             }
-            (comptime b_ptr) = ((comptime b_ptr) + @sizeOf(usize));
+            b_ptr = (b_ptr + @sizeOf(usize));
             if (comptime (b_ptr == b.len)) {
                 return true;
             }
@@ -1378,7 +1378,7 @@ pub fn eqlComptimeCheckLenU8Impl(a: []const u8, comptime b: []const u8, comptime
                 if ((@as(u32, @bitCast((a[b_ptr..][0..@sizeOf(u32)]).*)) != (comptime @as(u32, @bitCast((b[b_ptr..][0..@sizeOf(u32)]).*))))) {
                     return false;
                 }
-                (comptime b_ptr) = ((comptime b_ptr) + @sizeOf(u32));
+                b_ptr = (b_ptr + @sizeOf(u32));
                 if (comptime (b_ptr == b.len)) {
                     return true;
                 }
@@ -1388,7 +1388,7 @@ pub fn eqlComptimeCheckLenU8Impl(a: []const u8, comptime b: []const u8, comptime
             if ((@as(u16, @bitCast((a[b_ptr..][0..@sizeOf(u16)]).*)) != (comptime @as(u16, @bitCast((b[b_ptr..][0..@sizeOf(u16)]).*))))) {
                 return false;
             }
-            (comptime b_ptr) = ((comptime b_ptr) + @sizeOf(u16));
+            b_ptr = (b_ptr + @sizeOf(u16));
             if (comptime (b_ptr == b.len)) {
                 return true;
             }
@@ -1446,12 +1446,12 @@ pub fn eqlCaseInsensitiveT(comptime T: type, a: []const T, b: []const u8) bool {
             const d = b[@as(usize, @intCast(i))];
             switch (c) {
 97...122 => {
-if (((c != d) and ((c & (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(223)) else @as(T, 223))) != d))) {
+if (((c != d) and ((c & (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(223)) == .int or @typeInfo(@TypeOf(223)) == .comptime_int)) @as(T, @enumFromInt(223)) else @as(T, 223))) != d))) {
                 return false;
             }
 },
 65...90 => {
-if (((c != d) and ((c | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(32)) else @as(T, 32))) != d))) {
+if (((c != d) and ((c | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(32)) == .int or @typeInfo(@TypeOf(32)) == .comptime_int)) @as(T, @enumFromInt(32)) else @as(T, 32))) != d))) {
                 return false;
             }
 },
@@ -2150,6 +2150,10 @@ pub fn lengthOfLeadingWhitespaceASCII(slice: []const u8) usize {
         while (((begin < slice.len) and (std.mem.indexOfScalar(u8, whitespace_chars, slice[@as(usize, @intCast(begin))]) != null))) : (begin = (begin + 1)) {
         }
         return begin;
+}
+
+pub fn join(slices: []const []const u8, delimiter: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+        return try std.mem.join(allocator, delimiter, slices);
 }
 
 pub fn order(a: []const u8, b: []const u8) std.math.Order {

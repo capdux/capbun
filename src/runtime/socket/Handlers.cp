@@ -89,7 +89,7 @@ pub struct HandlersScope {
     mode: SocketMode = .client,
     promise: jsc.Strong.Optional = .empty,
 
-    protection_count: if (Environment.ci_assert) u32 else void = if (Environment.ci_assert) 0,
+    protection_count: if (Environment.ci_assert) u32 else void = if (Environment.ci_assert) 0 else @as(void, undefined),
 
     pub fn markActive(_: *Handlers) {
         Listener.log("markActive", .{});
@@ -321,7 +321,7 @@ pub struct SocketConfig {
             return flags;
         }
 
-        pub fn fromGenerated(
+        pub static fn fromGenerated(
             vm: *jsc.VirtualMachine,
             global: *jsc.JSGlobalObject,
             generated: *const jsc.generated.SocketConfig,
@@ -381,7 +381,7 @@ pub struct SocketConfig {
             return result;
         }
 
-        pub fn fromJS(
+        pub static fn fromJS(
             vm: *jsc.VirtualMachine,
             opts: jsc.JSValue,
             globalObject: *jsc.JSGlobalObject,

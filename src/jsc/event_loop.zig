@@ -391,7 +391,7 @@ pub fn autoTick(self: *EventLoop) void {
         _ = self.runImminentGCTimer();
         if (loop.isActive()) {
             _ = self.processGCTimer();
-            var event_loop_sleep_timer = (if (comptime Environment.isDebug) ((std.time.Timer.start()) catch unreachable) else null);
+            var event_loop_sleep_timer = (if (comptime Environment.isDebug) ((std.time.Timer.start()) catch unreachable) else @as(void, undefined));
             _ = &event_loop_sleep_timer;
             const zero_timespec: bun.timespec = .{ .sec = 0, .nsec = 0 };
             var timespec: bun.timespec = (if (Environment.isDebug) zero_timespec else undefined);

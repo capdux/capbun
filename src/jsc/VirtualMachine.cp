@@ -1394,7 +1394,7 @@ pub fn initWithModuleGraph(
         ref_strings: jsc.RefString.Map.init(allocator),
         ref_strings_mutex: {},
         standalone_module_graph: opts.graph.?,
-        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId(),
+        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined),
 
         initial_script_execution_context_identifier: if (opts.is_main_thread) 1 else std.math.maxInt(i32),
     };
@@ -1523,7 +1523,7 @@ pub fn init(opts: Options): !*VirtualMachine {
         origin_timestamp: getOriginTimestamp(),
         ref_strings: jsc.RefString.Map.init(allocator),
         ref_strings_mutex: {},
-        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId(),
+        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined),
 
         initial_script_execution_context_identifier: if (opts.is_main_thread) 1 else std.math.maxInt(i32),
     };
@@ -1693,7 +1693,7 @@ pub fn initWorker(
         ref_strings_mutex: {},
         standalone_module_graph: worker.parent.standalone_module_graph,
         worker: worker,
-        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId(),
+        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined),
         initial_script_execution_context_identifier: @as(i32, @intCast(worker.execution_context_id)),
     };
     vm.source_mappings.init(&vm.saved_source_map_table);
@@ -1789,7 +1789,7 @@ pub fn initBake(opts: Options): anyerror!*VirtualMachine {
         origin_timestamp: getOriginTimestamp(),
         ref_strings: jsc.RefString.Map.init(allocator),
         ref_strings_mutex: {},
-        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId(),
+        debug_thread_id: if (Environment.allow_assert) std.Thread.getCurrentId() else @as(void, undefined),
 
         initial_script_execution_context_identifier: if (opts.is_main_thread) 1 else std.math.maxInt(i32),
     };

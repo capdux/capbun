@@ -1016,13 +1016,13 @@ pub fn handleSegfaultPosix(sig: i32, info: *const std.posix.siginfo_t, _ctx: ?*a
 }
 
 pub fn updatePosixSegfaultHandler(act: ?*bun.sys.Sigaction) !void {
-        if (act) |act_| {
+        if (act) |*act_| {
             _ = &act_;
             if ((!did_register_sigaltstack)) {
                 var stack: std.c.stack_t = .{ .flags = 0, .size = sigaltstack.len, .sp = (&sigaltstack) };
                 _ = &stack;
                 if ((std.c.sigaltstack((&stack), null) == 0)) {
-                    (act_).?.flags = ((act_).?.flags | std.posix.SA.ONSTACK);
+                    (act_.*).flags = ((act_.*).flags | std.posix.SA.ONSTACK);
                     did_register_sigaltstack = true;
                 }
             }

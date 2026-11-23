@@ -475,7 +475,7 @@ pub fn isParentOrEqual(parent_: []const u8, child: []const u8) ParentEqual {
 
 pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime platform: Platform) ?[]const u8 {
         const separator = platform.separator();
-        const isPathSeparator = platform.getSeparatorFunc();
+        const isPathSeparator = (comptime platform.getSeparatorFunc());
         const nqlAtIndexFn = (switch (platform) {
 else => nqlAtIndex,
 .windows => nqlAtIndexCaseInsensitive,
@@ -559,7 +559,7 @@ var string_index: usize = 1;
 
 pub fn longestCommonPathGeneric(input: []const []const u8, comptime platform: Platform) []const u8 {
         const separator = platform.separator();
-        const isPathSeparator = platform.getSeparatorFunc();
+        const isPathSeparator = (comptime platform.getSeparatorFunc());
         const nqlAtIndexFn = (switch (platform) {
 else => nqlAtIndex,
 .windows => nqlAtIndexCaseInsensitive,
@@ -1054,11 +1054,10 @@ pub fn normalizeStringGeneric(path_: []const u8, buf: []u8, comptime allow_above
 
 pub fn separatorAdapter(comptime T: type, comptime func: anytype) *const fn (T) bool {
         return (struct {
-
-pub fn call(char: T) bool {
+        fn call(char: T) bool {
             return func(T, char);
-    }
-}).call;
+        }
+    }).call;
 }
 
 pub fn normalizeStringGenericT(comptime T: type, path_: []const T, buf: []T, comptime allow_above_root: bool, comptime separator: T, comptime isSeparatorT: anytype, comptime preserve_trailing_slash: bool) []T {
@@ -1067,18 +1066,20 @@ pub fn normalizeStringGenericT(comptime T: type, path_: []const T, buf: []T, com
 
 pub fn NormalizeOptions(comptime T: type) type {
         return struct {
-    allow_above_root: bool = false,
-    separator: T = std.fs.path.sep,
-    isSeparator: *const fn (T) bool = (struct {
-
-pub fn call(char: T) bool {
-            return (if (comptime (std.fs.path.sep == std.fs.path.sep_windows)) ((char == 92) or (char == 47)) else (char == 47));
-    }
-}).call,
-    preserve_trailing_slash: bool = false,
-    zero_terminate: bool = false,
-    add_nt_prefix: bool = false,
-};
+        allow_above_root: bool = false,
+        separator: T = std.fs.path.sep,
+        isSeparator: *const fn(T) bool = struct {
+            fn call(char: T) bool {
+                return if (comptime std.fs.path.sep == std.fs.path.sep_windows)
+                    char == '\\' or char == '/'
+                else
+                    char == '/';
+            }
+        }.call,
+        preserve_trailing_slash: bool = false,
+        zero_terminate: bool = false,
+        add_nt_prefix: bool = false,
+    };
 }
 
 pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, comptime options: NormalizeOptions(T)) if (options.zero_terminate) [:0]T else []T {
@@ -1124,15 +1125,15 @@ pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, co
                     path_begin = (volLen + 1);
                     if ((path_begin >= path_.len)) {
                         if (options.zero_terminate) {
-                            buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(0)) else @as(T, 0));
+                            buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(T, @enumFromInt(0)) else @as(T, 0));
                             return buf[0..buf_i :0];
                         } else {
                             return buf[0..buf_i];
                         }
                     }
                 } else {
-                    buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(std.ascii.toUpper(@truncate(path_[0])))) else @as(T, std.ascii.toUpper(@truncate(path_[0]))));
-                    buf[cp_cast_int(usize, (buf_i + 1))] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(58)) else @as(T, 58));
+                    buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(std.ascii.toUpper(@truncate(path_[0])))) == .int or @typeInfo(@TypeOf(std.ascii.toUpper(@truncate(path_[0])))) == .comptime_int)) @as(T, @enumFromInt(std.ascii.toUpper(@truncate(path_[0])))) else @as(T, std.ascii.toUpper(@truncate(path_[0]))));
+                    buf[cp_cast_int(usize, (buf_i + 1))] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(58)) == .int or @typeInfo(@TypeOf(58)) == .comptime_int)) @as(T, @enumFromInt(58)) else @as(T, 58));
                     buf_i = (buf_i + 2);
                     dotdot = buf_i;
                     path_begin = 2;
@@ -1181,12 +1182,12 @@ pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, co
                     if (options.allow_above_root) {
                         if ((buf_i > buf_start)) {
                             buf[cp_cast_int(usize, buf_i)] = options.separator;
-                            buf[cp_cast_int(usize, (buf_i + 1))] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
-                            buf[cp_cast_int(usize, (buf_i + 2))] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
+                            buf[cp_cast_int(usize, (buf_i + 1))] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
+                            buf[cp_cast_int(usize, (buf_i + 2))] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
                             buf_i = (buf_i + 3);
                         } else {
-                            buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
-                            buf[cp_cast_int(usize, (buf_i + 1))] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
+                            buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
+                            buf[cp_cast_int(usize, (buf_i + 1))] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
                             buf_i = (buf_i + 2);
                         }
                         dotdot = buf_i;
@@ -1212,11 +1213,11 @@ pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, co
             }
         }
         if (((isWindows and (buf_i == 2)) and (buf[1] == 58))) {
-            buf[cp_cast_int(usize, buf_i)] = (if (((path.len > 0) and (path[0] == 92))) (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(92)) else @as(T, 92)) else (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46)));
+            buf[cp_cast_int(usize, buf_i)] = (if (((path.len > 0) and (path[0] == 92))) (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(92)) == .int or @typeInfo(@TypeOf(92)) == .comptime_int)) @as(T, @enumFromInt(92)) else @as(T, 92)) else (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46)));
             buf_i = (buf_i + 1);
         }
         if (options.zero_terminate) {
-            buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(0)) else @as(T, 0));
+            buf[cp_cast_int(usize, buf_i)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(T, @enumFromInt(0)) else @as(T, 0));
         }
         const result = (if (options.zero_terminate) buf[0..buf_i :0] else buf[0..buf_i]);
         if ((bun.Environment.allow_assert and isWindows)) {
@@ -1250,7 +1251,7 @@ pub fn normalizeBufZ(str: []const u8, buf: []u8, comptime platform: Platform) [:
 
 pub fn normalizeBufT(comptime T: type, str: []const T, buf: []T, comptime platform: Platform) []T {
         if ((str.len == 0)) {
-            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
+            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
             return buf[0..1];
         }
         const is_absolute = platform.isAbsoluteT(T, str);
@@ -1415,12 +1416,12 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
             temp_buf = bun.handleOom(bun.default_allocator.alloc(T, (count * 2)));
             _temp_guard.slice = temp_buf;
         }
-        temp_buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(0)) else @as(T, 0));
+        temp_buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(T, @enumFromInt(0)) else @as(T, 0));
         if (comptime parts_is_tuple) {
             inline for (parts) |part| {
                 if ((part.len != 0)) {
                     if ((written > 0)) {
-                        temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+                        temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(platform.separator())) == .int or @typeInfo(@TypeOf(platform.separator())) == .comptime_int)) @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
                         written = (written + 1);
                     }
                     const Element = std.meta.Elem(@TypeOf(part));
@@ -1438,7 +1439,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
                 _ = &part;
                 if ((part.len != 0)) {
                     if ((written > 0)) {
-                        temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+                        temp_buf[cp_cast_int(usize, written)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(platform.separator())) == .int or @typeInfo(@TypeOf(platform.separator())) == .comptime_int)) @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
                         written = (written + 1);
                     }
                     const Element = std.meta.Elem(@TypeOf(part));
@@ -1453,7 +1454,7 @@ pub fn joinStringBufT(comptime T: type, buf: []T, parts: anytype, comptime platf
             }
         }
         if ((written == 0)) {
-            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
+            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
             return buf[0..1];
         }
         return (blk: {
@@ -1818,7 +1819,7 @@ pub fn normalizeStringNode(str: []const u8, buf: []u8, comptime platform: Platfo
 
 pub fn normalizeStringNodeT(comptime T: type, str: []const T, buf: []T, comptime platform: Platform) []const T {
         if ((str.len == 0)) {
-            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
+            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
             return buf[0..1];
         }
         const is_absolute = platform.isAbsoluteT(T, str);
@@ -1829,21 +1830,21 @@ pub fn normalizeStringNodeT(comptime T: type, str: []const T, buf: []T, comptime
         _ = &out;
         if ((out.len == 0)) {
             if (is_absolute) {
-                buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+                buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(platform.separator())) == .int or @typeInfo(@TypeOf(platform.separator())) == .comptime_int)) @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
                 return buf[0..1];
             }
             if (trailing_separator) {
                 const sep = platform.trailingSeparator();
-                buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(sep[0])) else @as(T, sep[0]));
-                buf[cp_cast_int(usize, 1)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(sep[1])) else @as(T, sep[1]));
+                buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(sep[0])) == .int or @typeInfo(@TypeOf(sep[0])) == .comptime_int)) @as(T, @enumFromInt(sep[0])) else @as(T, sep[0]));
+                buf[cp_cast_int(usize, 1)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(sep[1])) == .int or @typeInfo(@TypeOf(sep[1])) == .comptime_int)) @as(T, @enumFromInt(sep[1])) else @as(T, sep[1]));
                 return buf[0..2];
             }
-            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(46)) else @as(T, 46));
+            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(46)) == .int or @typeInfo(@TypeOf(46)) == .comptime_int)) @as(T, @enumFromInt(46)) else @as(T, 46));
             return buf[0..1];
         }
         if (trailing_separator) {
             if ((!platform.isSeparatorT(T, out[@as(usize, @intCast((out.len - 1)))]))) {
-                buf_[cp_cast_int(usize, out.len)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+                buf_[cp_cast_int(usize, out.len)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(platform.separator())) == .int or @typeInfo(@TypeOf(platform.separator())) == .comptime_int)) @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
                 out = buf_[0..(out.len + 1)];
             }
         }
@@ -1851,7 +1852,7 @@ pub fn normalizeStringNodeT(comptime T: type, str: []const T, buf: []T, comptime
             if ((platform == .windows)) {
                 return out;
             }
-            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
+            buf[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(platform.separator())) == .int or @typeInfo(@TypeOf(platform.separator())) == .comptime_int)) @as(T, @enumFromInt(platform.separator())) else @as(T, platform.separator()));
             out = buf[0..(out.len + 1)];
         }
         return out;
@@ -1935,7 +1936,7 @@ pub fn platformToPosixInPlace(comptime T: type, path_buffer: []T) void {
         var idx: usize = 0;
         _ = &idx;
         while (std.mem.indexOfScalarPos(T, path_buffer, idx, std.fs.path.sep)) |index| : (idx = (index + 1)) {
-            path_buffer[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(47)) else @as(T, 47));
+            path_buffer[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(47)) == .int or @typeInfo(@TypeOf(47)) == .comptime_int)) @as(T, @enumFromInt(47)) else @as(T, 47));
         }
 }
 
@@ -1946,7 +1947,7 @@ pub fn dangerouslyConvertPathToPosixInPlace(comptime T: type, path: []T) void {
             if (((((path.len > "C:".len) and isDriveLetter(path[0])) and (path[1] == 58)) and isSepAny(path[2]))) {
                 switch (path[0]) {
 97...122 => {
-path[cp_cast_int(usize, 0)] = ((path[0] - (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(97)) else @as(T, 97))) + (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(65)) else @as(T, 65)));
+path[cp_cast_int(usize, 0)] = ((path[0] - (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(97)) == .int or @typeInfo(@TypeOf(97)) == .comptime_int)) @as(T, @enumFromInt(97)) else @as(T, 97))) + (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(65)) == .int or @typeInfo(@TypeOf(65)) == .comptime_int)) @as(T, @enumFromInt(65)) else @as(T, 65)));
 },
 65...90 => {
 
@@ -1958,7 +1959,7 @@ _ = unreachable;
             }
         }
         while (std.mem.indexOfScalarPos(T, path, idx, std.fs.path.sep_windows)) |index| : (idx = (index + 1)) {
-            path[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(47)) else @as(T, 47));
+            path[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(47)) == .int or @typeInfo(@TypeOf(47)) == .comptime_int)) @as(T, @enumFromInt(47)) else @as(T, 47));
         }
 }
 
@@ -1966,7 +1967,7 @@ pub fn dangerouslyConvertPathToWindowsInPlace(comptime T: type, path: []T) void 
         var idx: usize = 0;
         _ = &idx;
         while (std.mem.indexOfScalarPos(T, path, idx, std.fs.path.sep_posix)) |index| : (idx = (index + 1)) {
-            path[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(92)) else @as(T, 92));
+            path[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(92)) == .int or @typeInfo(@TypeOf(92)) == .comptime_int)) @as(T, @enumFromInt(92)) else @as(T, 92));
         }
 }
 
@@ -1975,7 +1976,7 @@ pub fn pathToPosixBuf(comptime T: type, path: []const T, buf: []T) []T {
         _ = &idx;
         while (std.mem.indexOfScalarPos(T, path, idx, std.fs.path.sep_windows)) |index| : (idx = (index + 1)) {
             _ = @memcpy(buf[idx..index], path[idx..index]);
-            buf[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(std.fs.path.sep_posix)) else @as(T, std.fs.path.sep_posix));
+            buf[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(std.fs.path.sep_posix)) == .int or @typeInfo(@TypeOf(std.fs.path.sep_posix)) == .comptime_int)) @as(T, @enumFromInt(std.fs.path.sep_posix)) else @as(T, std.fs.path.sep_posix));
         }
         _ = @memcpy(buf[idx..path.len], path[idx..path.len]);
         return buf[0..path.len];
@@ -1989,7 +1990,7 @@ pub fn platformToPosixBuf(comptime T: type, path: []const T, buf: []T) []const T
         _ = &idx;
         while (std.mem.indexOfScalarPos(T, path, idx, std.fs.path.sep)) |index| : (idx = (index + 1)) {
             _ = @memcpy(buf[idx..index], path[idx..index]);
-            buf[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(47)) else @as(T, 47));
+            buf[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(47)) == .int or @typeInfo(@TypeOf(47)) == .comptime_int)) @as(T, @enumFromInt(47)) else @as(T, 47));
         }
         _ = @memcpy(buf[idx..path.len], path[idx..path.len]);
         return buf[0..path.len];
@@ -2002,6 +2003,6 @@ pub fn posixToPlatformInPlace(comptime T: type, path_buffer: []T) void {
         var idx: usize = 0;
         _ = &idx;
         while (std.mem.indexOfScalarPos(T, path_buffer, idx, 47)) |index| : (idx = (index + 1)) {
-            path_buffer[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(std.fs.path.sep)) else @as(T, std.fs.path.sep));
+            path_buffer[cp_cast_int(usize, index)] = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(std.fs.path.sep)) == .int or @typeInfo(@TypeOf(std.fs.path.sep)) == .comptime_int)) @as(T, @enumFromInt(std.fs.path.sep)) else @as(T, std.fs.path.sep));
         }
 }

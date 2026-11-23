@@ -1761,3 +1761,5 @@
 ### [2026-11-23] Wave #91 技术要点（`Chunk.memcpyEscapingClosingTags` 与 `static noinline fn`）
 - `Chunk.cp` `memcpyEscapingClosingTags` 在未匹配关闭标签时误写为 `dest[dst + 2] = 2;` 而未推进 `dst += 2;`，导致 `remain.len != 0` 断言失败；`convertStmtsForChunk` 对 `.s_local` `decls` 须兼容多/零声明分支。
 - `transpiler.dumpEnvironmentVariables` 首句含 `@branchHint(.cold)`，若未标 `static fn` 会被 `cpc` 在函数体首行注入 `_ = self;`，导致 Zig 报 `@branchHint` 非首句；标注 `pub static noinline fn` 即可。
+
+- [release-fix] release 编译 15 处错误根因：(1) `if(cond) T else void` 的 else 被生成 `null` → 显式 `else @as(void, undefined)`（ParseTask/PackageInstall/TopExceptionScope/VirtualMachine/Handlers/event_loop/AllocScope/Base）；(2) `comptime b_ptr += ..` 生成非法赋值 → 去 comptime 前缀（immutable）；(3) `isPathSeparator` 补 `comptime`（resolve_path）；(4) 零长数组 `[]` 生成指针 → `@as([0]T, undefined)`（Arguments）；(5) crash_handler `if (*act_ := act)`；(6) 新 cpc 重编注入多余 `self:` → 补 `static fn`/`*_`（AllocScope/Platform/PackageInstall/Handlers/crash_handler/immutable）。`static struct` 可整体声明静态成员。

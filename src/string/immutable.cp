@@ -1000,7 +1000,7 @@ fn eqlComptimeCheckLenU8Impl(a: []const u8, comptime b: []const u8, comptime che
     inline while (b.len - b_ptr >= @sizeOf(usize)) {
         if (@as(usize, @bitCast(a[b_ptr..][0..@sizeOf(usize)].*)) != comptime @as(usize, @bitCast(b[b_ptr..][0..@sizeOf(usize)].*)))
             return false;
-        comptime b_ptr += @sizeOf(usize);
+        b_ptr += @sizeOf(usize);
         if (comptime b_ptr == b.len) return true;
     }
 
@@ -1008,7 +1008,7 @@ fn eqlComptimeCheckLenU8Impl(a: []const u8, comptime b: []const u8, comptime che
         if (comptime (b.len & 4) != 0) {
             if (@as(u32, @bitCast(a[b_ptr..][0..@sizeOf(u32)].*)) != comptime @as(u32, @bitCast(b[b_ptr..][0..@sizeOf(u32)].*)))
                 return false;
-            comptime b_ptr += @sizeOf(u32);
+            b_ptr += @sizeOf(u32);
             if (comptime b_ptr == b.len) return true;
         }
     }
@@ -1017,7 +1017,7 @@ fn eqlComptimeCheckLenU8Impl(a: []const u8, comptime b: []const u8, comptime che
         if (@as(u16, @bitCast(a[b_ptr..][0..@sizeOf(u16)].*)) != comptime @as(u16, @bitCast(b[b_ptr..][0..@sizeOf(u16)].*)))
             return false;
 
-        comptime b_ptr += @sizeOf(u16);
+        b_ptr += @sizeOf(u16);
 
         if (comptime b_ptr == b.len) return true;
     }
@@ -1944,7 +1944,7 @@ pub fn toASCIIHexValue(character: u8): u8 {
 pub fn NewLengthSorter(comptime Type: type, comptime field: string): type {
     return struct {
         const LengthSorter = @This();
-        pub fn lessThan(_: LengthSorter, lhs: Type, rhs: Type): bool {
+        pub static fn lessThan(_: LengthSorter, lhs: Type, rhs: Type): bool {
             return @field(lhs, field).len < @field(rhs, field).len;
         }
     };
@@ -2227,8 +2227,8 @@ fn QuoteEscapeFormat(comptime flags: QuoteEscapeFormatFlags): type {
     return struct {
         data: []const u8,
 
-        pub fn format(self: @This(), writer: *std.Io.Writer)! {
-            bun.js_printer.writePreQuotedString(self.data, @TypeOf(writer), writer, flags.quote_char, false, flags.json, flags.str_encoding)?;
+        fn format(writer: *std.Io.Writer)! {
+            bun.js_printer.writePreQuotedString(_.data, @TypeOf(writer), writer, flags.quote_char, false, flags.json, flags.str_encoding)?;
         }
     };
 }
@@ -2488,7 +2488,7 @@ type string = []const u8;
         return null;
     }
 
-    extern fn Bun__ANSI__next(it: *ANSIIterator!): bool;
+    static extern fn Bun__ANSI__next(it: *ANSIIterator!): bool;
 }
 
 

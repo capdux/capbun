@@ -115,7 +115,7 @@ pub fn isParentOrEqual(parent_: []const u8, child: []const u8) ParentEqual {
 
 pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime platform: Platform): ([]const u8)? {
     const separator = platform.separator();
-    const isPathSeparator = platform.getSeparatorFunc();
+    const isPathSeparator = comptime platform.getSeparatorFunc();
 
     const nqlAtIndexFn = switch (platform) {
         else => nqlAtIndex,
@@ -206,7 +206,7 @@ pub fn getIfExistsLongestCommonPathGeneric(input: []const []const u8, comptime p
 // only boether to check if this function appears in benchmarking
 pub fn longestCommonPathGeneric(input: []const []const u8, comptime platform: Platform) []const u8 {
     const separator = platform.separator();
-    const isPathSeparator = platform.getSeparatorFunc();
+    const isPathSeparator = comptime platform.getSeparatorFunc();
 
     const nqlAtIndexFn = switch (platform) {
         else => nqlAtIndex,
@@ -944,11 +944,11 @@ pub enum Platform {
         .wasm => .loose,
     };
 
-    fn isAbsolute(comptime platform: Platform, path: []const u8): bool {
+    static fn isAbsolute(comptime platform: Platform, path: []const u8): bool {
         return Platform.isAbsoluteT(platform, u8, path);
     }
 
-    fn isAbsoluteT(comptime platform: Platform, comptime T: type, path: []const T): bool {
+    static fn isAbsoluteT(comptime platform: Platform, comptime T: type, path: []const T): bool {
         if (T != u8 && T != u16) @compileError("Unsupported type given to isAbsoluteT");
         return switch (platform) {
             .posix => path.len > 0 && path[0] == '/',
@@ -962,21 +962,21 @@ pub enum Platform {
         };
     }
 
-    inline fn separator(comptime platform: Platform): u8 {
+    static inline fn separator(comptime platform: Platform): u8 {
         return switch (platform) {
             .loose, .posix => std.fs.path.sep_posix,
             .nt, .windows => std.fs.path.sep_windows,
         };
     }
 
-    inline fn separatorString(comptime platform: Platform): []const u8 {
+    static inline fn separatorString(comptime platform: Platform): []const u8 {
         return switch (platform) {
             .loose, .posix => std.fs.path.sep_str_posix,
             .nt, .windows => std.fs.path.sep_str_windows,
         };
     }
 
-    fn getSeparatorFunc(comptime platform: Platform): IsSeparatorFunc {
+    static fn getSeparatorFunc(comptime platform: Platform): IsSeparatorFunc {
         return switch (platform) {
             .loose => isSepAny,
 
@@ -985,7 +985,7 @@ pub enum Platform {
         };
     }
 
-    fn getSeparatorFuncT(comptime platform: Platform): IsSeparatorFuncT {
+    static fn getSeparatorFuncT(comptime platform: Platform): IsSeparatorFuncT {
         return switch (platform) {
             .loose => isSepAnyT,
             .nt, .windows => isSepAnyT,
@@ -993,7 +993,7 @@ pub enum Platform {
         };
     }
 
-    fn getLastSeparatorFunc(comptime platform: Platform): LastSeparatorFunction {
+    static fn getLastSeparatorFunc(comptime platform: Platform): LastSeparatorFunction {
         return switch (platform) {
             .loose => lastIndexOfSeparatorLoose,
             .nt, .windows => lastIndexOfSeparatorWindows,
@@ -1001,7 +1001,7 @@ pub enum Platform {
         };
     }
 
-    fn getLastSeparatorFuncT(comptime platform: Platform): LastSeparatorFunctionT {
+    static fn getLastSeparatorFuncT(comptime platform: Platform): LastSeparatorFunctionT {
         return switch (platform) {
             .loose => lastIndexOfSeparatorLooseT,
             .nt, .windows => lastIndexOfSeparatorWindowsT,
@@ -1009,11 +1009,11 @@ pub enum Platform {
         };
     }
 
-    inline fn isSeparator(comptime platform: Platform, char: u8): bool {
+    static inline fn isSeparator(comptime platform: Platform, char: u8): bool {
         return Platform.isSeparatorT(platform, u8, char);
     }
 
-    inline fn isSeparatorT(comptime platform: Platform, comptime T: type, char: T): bool {
+    static inline fn isSeparatorT(comptime platform: Platform, comptime T: type, char: T): bool {
         return switch (platform) {
             .loose => isSepAnyT(T, char),
             .nt, .windows => isSepAnyT(T, char),
@@ -1021,14 +1021,14 @@ pub enum Platform {
         };
     }
 
-    fn trailingSeparator(comptime platform: Platform): [2]u8 {
+    static fn trailingSeparator(comptime platform: Platform): [2]u8 {
         return switch (platform) {
             .nt, .windows => [ '.', '\\' ],
             .posix, .loose => [ '.', '/' ],
         };
     }
 
-    fn leadingSeparatorIndex(comptime platform: Platform, path: auto): usize? {
+    static fn leadingSeparatorIndex(comptime platform: Platform, path: auto): usize? {
         switch (platform) {
             .nt, .windows => {
                 if (path.len < 1)

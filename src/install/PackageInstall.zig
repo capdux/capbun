@@ -272,7 +272,7 @@ pub const PackageInstallResult = union(PackageInstallResultTag) {
     failure: PackageInstallResultFailure,
 
 pub inline fn fail(e: anyerror, step: PackageInstallStep, trace: ?*std.builtin.StackTrace) PackageInstallResult {
-            return .{ .failure = .{ .@"err" = e, .step = step, .debug_trace = (if (Environment.isDebug) (if (trace) |t| bun.crash_handler.StoredTrace.from(t) else bun.crash_handler.StoredTrace.capture(@returnAddress())) else null) } };
+            return .{ .failure = .{ .@"err" = e, .step = step, .debug_trace = (if (Environment.isDebug) (if (trace) |t| bun.crash_handler.StoredTrace.from(t) else bun.crash_handler.StoredTrace.capture(@returnAddress())) else @as(void, undefined)) } };
     }
 
 pub fn isFail(self: PackageInstallResult) bool {

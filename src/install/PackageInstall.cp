@@ -491,7 +491,9 @@ pub union(PackageInstallResultTag) PackageInstallResult {
                     if (t := trace)
                         bun.crash_handler.StoredTrace.from(t)
                     else
-                        bun.crash_handler.StoredTrace.capture(@returnAddress()),
+                        bun.crash_handler.StoredTrace.capture(@returnAddress())
+                else
+                    @as(void, undefined),
             },
         };
     }
@@ -987,7 +989,7 @@ pub struct PackageInstall {
     }
 
     const node_fs_bufs = bun.ThreadlocalBuffers(struct { fs: bun.jsc.Node.fs.NodeFS = .{} });
-    inline fn node_fs_for_package_installer(): *bun.jsc.Node.fs.NodeFS {
+    static inline fn node_fs_for_package_installer(): *bun.jsc.Node.fs.NodeFS {
         return &node_fs_bufs.get().fs;
     }
 
@@ -1105,17 +1107,17 @@ pub struct PackageInstall {
             errored_task: std.atomic.Value(?*TaskType) = .init(null),
             wait_group: bun.threading.WaitGroup = .init(),
 
-            pub fn completeOne(this: *@This()) void {
-                this.wait_group.finish();
+            fn completeOne(*_) {
+                _.wait_group.finish();
             }
 
-            pub fn push(this: *@This(), task: *TaskType) void {
-                this.wait_group.addOne();
-                this.thread_pool.schedule(bun.ThreadPool.Batch.from(&task.task));
+            fn push(*_, task: *TaskType) {
+                _.wait_group.addOne();
+                _.thread_pool.schedule(bun.ThreadPool.Batch.from(&task.task));
             }
 
-            pub fn wait(this: *@This()) void {
-                this.wait_group.wait();
+            fn wait(*_) {
+                _.wait_group.wait();
             }
         };
     }

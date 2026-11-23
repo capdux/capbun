@@ -346,7 +346,7 @@ pub struct DeinitGuard<T> {
 
         if (loop.isActive()) {
             _.processGCTimer();
-            let event_loop_sleep_timer = if (comptime Environment.isDebug) std.time.Timer.start() catch unreachable;
+            let event_loop_sleep_timer = if (comptime Environment.isDebug) std.time.Timer.start() catch unreachable else @as(void, undefined);
             const zero_timespec: bun.timespec = { sec: 0, nsec: 0 };
             let timespec: bun.timespec = if (Environment.isDebug) zero_timespec else undefined;
             loop.tickWithTimeout(if (ctx.timer.getTimeout(&timespec, ctx)) &timespec else null);

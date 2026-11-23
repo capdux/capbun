@@ -72,7 +72,7 @@ pub fn resolve_jsx_runtime(str: string): !Api.JsxRuntime {
 
 pub const ParamType = clap.Param(clap.Help);
 
-const empty_params: [0]ParamType = [];
+const empty_params: [0]ParamType = @as([0]ParamType, undefined);
 
 pub const base_params_ = (if (Environment.show_crash_trace) debug_params else empty_params) ++ [
     clap.parseParam("--env-file <STR>...               Load environment variables from the specified file(s)") catch unreachable,

@@ -857,3 +857,5 @@
 - **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（将 `E0311` 收窄至真实函数返回 `: void` 签名，不再误报 `union`/`struct` 零大小字段）及 `cpc/src/parser/container.rs`（允许 `union` 字段省略 `: void` 默认为 `Type::Void`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0311_union_void.cp` 返回 `Check successful`，已执行 `ack`。
 25. **用户**：`还剩多少 工作待完成?`
     - **主智能体回应**：汇报全仓实盘剩余工作：（1）代码迁移与基础编译 100% 达成（1,295 个 `.cp` 全过 `cpc check --brief` 与 `zig:check` 5/5）；（2）`--strict` 深度纯化已完成 ~968 个文件 `E0305`/`E0306` 清零，剩余 327 个文件（含 83 个 `return struct` 与 244 个普通结构体文件，已出首批纯化清单）及 `E0307` `catch |e|` 待分批清理；（3）`bun bd test` 已完成 `bun/http`、`bun/util`、`bun/test` 与 `test/js/web/` 全量，Batch 3a（`shell` + `spawn`）运行中，尚余 Batch 3 其余 `test/js/bun/*`、Batch 4 `test/js/node/*`、Batch 5 `test/{cli,bundler,integration,napi,v8}` 及已跑批次零星真实失败点收口与 Release 构建验收。
+
+- [用户] debug 无问题、release 编译报错，分析并解决。[回应] 定位 15 处去重错误（12 文件），修复 .cp 后 release 构建成功（build/release/bun，Bun.version 1.3.14），debug zig:check 5/5。[用户] 提示可用 `static struct`。[回应] 已验证 cpc 支持，纯工具类新模块可用。

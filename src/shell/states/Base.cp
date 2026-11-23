@@ -140,7 +140,7 @@ union(enum) AllocScope {
                 .owned => |*scope| scope,
             };
         }
-        return {};
+        return @as(void, undefined);
     }
 
     /// Stop tracking `memory`
