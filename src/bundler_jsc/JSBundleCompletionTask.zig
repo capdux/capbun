@@ -247,7 +247,7 @@ pub fn deinit(self: *JSBundleCompletionTask) void {
             }
             _ = self.config.deinit(bun.default_allocator);
             _ = self.promise.deinit();
-            _ = bun.destroy(self);
+            _ = bun.destroy();
     }
 
 pub fn doCompilation(self: *JSBundleCompletionTask, output_files: *std.array_list.Managed(options.OutputFile)) bun.StandaloneModuleGraph.CompileResult {
@@ -408,7 +408,7 @@ pub fn onComplete(self: *JSBundleCompletionTask) bun.JSTerminated!void {
             if (self.html_build_task) |html_build_task| {
                 _ = &html_build_task;
                 self.plugins = null;
-                _ = html_build_task.onComplete(self);
+                _ = html_build_task.onComplete();
                 return;
             }
             const promise = self.promise.swap();

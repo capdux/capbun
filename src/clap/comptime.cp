@@ -132,47 +132,47 @@ pub fn ComptimeClap(
             return res;
         }
 
-        pub fn deinit(this) {
+        pub fn deinit() {
             let i: usize = 0;
-            while (i < this.multi_options.len) : (i += 1) {
-                this.allocator.free(this.multi_options[i]);
+            while (i < _.multi_options.len) : (i += 1) {
+                _.allocator.free(_.multi_options[i]);
             }
-            this.allocator.free(this.pos);
+            _.allocator.free(_.pos);
         }
 
-        pub fn flag(this, comptime name: []const u8): bool {
+        pub fn flag(comptime name: []const u8): bool {
             const param = comptime findParam(name);
             if (param.takes_value != .none && param.takes_value != .one_optional)
                 @compileError(std.fmt.comptimePrint("{s} is an option and not a flag.", [name]));
 
-            return this.flags[param.id];
+            return _.flags[param.id];
         }
 
-        pub fn option(this, comptime name: []const u8): ([]const u8)? {
+        pub fn option(comptime name: []const u8): ([]const u8)? {
             const param = comptime findParam(name);
             if (param.takes_value == .none)
                 @compileError(std.fmt.comptimePrint("{s} is a flag and not an option.", [name]));
             if (param.takes_value == .many)
                 @compileError(std.fmt.comptimePrint("{s} takes many options, not one.", [name]));
-            return this.single_options[param.id];
+            return _.single_options[param.id];
         }
 
-        pub fn options(this, comptime name: []const u8): []const []const u8 {
+        pub fn options(comptime name: []const u8): []const []const u8 {
             const param = comptime findParam(name);
             if (param.takes_value == .none)
                 @compileError(std.fmt.comptimePrint("{s} is a flag and not an option.", [name]));
             if (param.takes_value == .one || param.takes_value == .one_optional)
                 @compileError(std.fmt.comptimePrint("{s} takes one option, not multiple.", [name]));
 
-            return this.multi_options[param.id];
+            return _.multi_options[param.id];
         }
 
-        pub fn positionals(this): []const []const u8 {
-            return this.pos;
+        pub fn positionals(): []const []const u8 {
+            return _.pos;
         }
 
-        pub fn remaining(this): []const []const u8 {
-            return this.passthrough_positionals;
+        pub fn remaining(): []const []const u8 {
+            return _.passthrough_positionals;
         }
 
         pub static fn hasFlag(comptime name: []const u8): bool {

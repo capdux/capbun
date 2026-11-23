@@ -1954,7 +1954,7 @@ pub fn IncrementalGraph(comptime side: bake.Side): type {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
                     Output.warn("Could not dump bundle: {}", .{e});
                 };
-            };
+            }
         }
 
         pub const SourceMapGeneration = IncrementalGraphSourceMapGeneration;

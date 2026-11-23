@@ -1009,7 +1009,7 @@ pub struct JSFrameworkRouter {
         let _guard_style = DeinitGuard<Style>{ ptr: &style };
 
         let log = TinyLog.empty;
-        const parsed_opt = style.parse(filepath.slice(), std.fs.path.extension(filepath.slice()), &log, true, alloc) catch |e| {
+        const parsed_opt = style.parse(filepath.slice(), std.fs.path.extension(filepath.slice()), &log, true, alloc) catch e => {
             if (e == error.InvalidRoutePattern) {
                 return global.throw("{s} ({d}:{d})", .{ log.msg.slice(), log.cursor_at, log.cursor_len });
             }
@@ -1503,7 +1503,7 @@ fn scanInner(
                         },
                     };
 
-                    result catch |e| {
+                    result catch e => {
                         if (e == error.OutOfMemory) return error.OutOfMemory;
                         if (e == error.RouteCollision) {
                             ctx.vtable.onRouterCollisionError(

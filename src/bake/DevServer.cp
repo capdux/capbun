@@ -644,7 +644,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     let dump_dir: std.fs.Dir? = null;
     if (comptime bun.FeatureFlags.bake_debugging_features) {
         if (dir := options.dump_sources) {
-            dump_dir = std.fs.cwd().makeOpenPath(dir, {}) catch |e| dir: {
+            dump_dir = std.fs.cwd().makeOpenPath(dir, {}) catch e => dir: {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 Output.warn("Could not open directory for dumping sources: {}", .{e});
                 break :dir null;
@@ -729,14 +729,14 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     const lock_guard = GraphSafetyLockGuard{ lock: unsafe { &dev.graph_safety_lock } };
 
     const generic_action: [:0]const u8 = "while initializing development server";
-    const fs = bun.fs.FileSystem.init(options.root) catch |e|
+    const fs = bun.fs.FileSystem.init(options.root) catch e =>
         return global.throwError(e, generic_action);
 
-    dev.bun_watcher = Watcher.init(DevServer, dev, fs, bun.default_allocator) catch |e|
+    dev.bun_watcher = Watcher.init(DevServer, dev, fs, bun.default_allocator) catch e =>
         return global.throwError(e, "while initializing file watcher for development server");
 
     init_guard.deinit_watcher = true;
-    dev.bun_watcher.start() catch |e|
+    dev.bun_watcher.start() catch e =>
         return global.throwError(e, "while initializing file watcher thread for development server");
 
     dev.watcher_atomics = WatcherAtomics.init(dev);
@@ -744,7 +744,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     // This causes a memory leak, but the allocator is otherwise used on multiple threads.
     const transpiler_allocator = bun.default_allocator;
 
-    dev.framework.initTranspiler(transpiler_allocator, &dev.log, .development, .server, &dev.server_transpiler, &dev.bundler_options.server) catch |e|
+    dev.framework.initTranspiler(transpiler_allocator, &dev.log, .development, .server, &dev.server_transpiler, &dev.bundler_options.server) catch e =>
         return global.throwError(e, generic_action);
     dev.server_transpiler.options.dev_server = dev;
     dev.framework.initTranspiler(
@@ -754,7 +754,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
         .client,
         &dev.client_transpiler,
         &dev.bundler_options.client,
-    ) catch |e|
+    ) catch e =>
         return global.throwError(e, generic_action);
     dev.client_transpiler.options.dev_server = dev;
 
@@ -762,7 +762,7 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
     dev.client_transpiler.resolver.watcher = dev.bun_watcher.getResolveWatcher();
 
     if (separate_ssr_graph) {
-        dev.framework.initTranspiler(transpiler_allocator, &dev.log, .development, .ssr, &dev.ssr_transpiler, &dev.bundler_options.ssr) catch |e|
+        dev.framework.initTranspiler(transpiler_allocator, &dev.log, .development, .ssr, &dev.ssr_transpiler, &dev.bundler_options.ssr) catch e =>
             return global.throwError(e, generic_action);
         dev.ssr_transpiler.options.dev_server = dev;
         dev.ssr_transpiler.resolver.watcher = dev.bun_watcher.getResolveWatcher();
@@ -783,8 +783,8 @@ pub fn init(options: Options): bun.JSOOM!*DevServer {
         let hash = std.hash.Wyhash.init(128);
 
         if (bun.Environment.isDebug) {
-            const stat = bun.sys.stat(bun.selfExePath() catch |e|
-                Output.panic("unhandled {}", .{e})).unwrap() catch |e|
+            const stat = bun.sys.stat(bun.selfExePath() catch e =>
+                Output.panic("unhandled {}", .{e})).unwrap() catch e =>
                 Output.panic("unhandled {}", .{e});
             bun.writeAnyToHasher(&hash, stat.mtime());
             hash.update(bake.getHmrRuntime(.client).code);
@@ -1172,7 +1172,7 @@ fn initServerRuntime(dev: *DevServer) {
         unsafe { @ptrCast(dev.vm.global) },
         runtime,
         separate_ssr_graph,
-    ) catch |e| {
+    ) catch e => {
         dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
         @panic("Server runtime failed to start. The above error is always a bug in Bun");
     };
@@ -1309,7 +1309,7 @@ fn onJsRequest(dev: *DevServer, req: *Request, resp: AnyResponse) {
             source_id.kind,
             dev.allocator(),
             .client,
-        ) catch |e| if (e == error.OutOfMemory) bun.outOfMemory() else unreachable;
+        ) catch e => if (e == error.OutOfMemory) bun.outOfMemory() else unreachable;
         const response_guard = StaticRouteDerefGuard{
             route: StaticRoute.initFromAnyBlob(&.fromOwnedSlice(dev.allocator(), json_bytes), {
                 server: dev.server,
@@ -1367,7 +1367,7 @@ inline fn wrapGenericRequestHandler(
     dev: *DevServer,
     req: *Request,
     resp: *uws.NewApp(is_ssl).Response,
-): void {
+) void {
     const fn_info = @typeInfo(@TypeOf(handler)).@"fn";
     assert(fn_info.params.len == 3);
     const uses_any_response = (fn_info.params[2].@"type" ?? void) == AnyResponse;
@@ -1383,7 +1383,7 @@ inline fn redirectHandler(comptime path: []const u8, comptime is_ssl: bool): fn 
     dev: *DevServer,
     req: *Request,
     resp: *uws.NewApp(is_ssl).Response,
-): void {
+) void {
     return struct {
         static fn handle(_: *DevServer, _: *Request, resp: *uws.NewApp(is_ssl).Response) {
             resp.writeStatus("302 Found");
@@ -1572,7 +1572,7 @@ fn ensureRouteIsBundled(
                 entry_points.*,
                 false,
                 std.time.Timer.start() catch @panic("timers unsupported"),
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
             return;
         },
         .deferred_to_next_bundle => {
@@ -1848,7 +1848,7 @@ fn computeArgumentsForFrameworkRequest(
                 str: bun.String.createFormat(client_prefix ++ "/route-{x}{x}.js", .{
                     std.mem.asBytes(&bundle_index),
                     std.mem.asBytes(&generation),
-                }) catch |e| bun.handleOom(e),
+                }) catch e => bun.handleOom(e),
             };
             const js = str_guard.str.toJS(dev.vm.global)?;
             framework_bundle.cached_client_bundle_url = .create(js, dev.vm.global);
@@ -2243,9 +2243,9 @@ pub struct DeferredRequest {
     const Handler = DeferredRequestHandler;
 
     static fn onAbortWrapper(opaque_ptr: *!) {
-        const self: *DeferredRequest = unsafe { @ptrCast(@alignCast(opaque_ptr)) };
-        if (!self.isAlive()) return;
-        self.onAbortImpl();
+        const req_self: *DeferredRequest = unsafe { @ptrCast(@alignCast(opaque_ptr)) };
+        if (!req_self.isAlive()) return;
+        req_self.onAbortImpl();
     }
 
     fn onAbort(*_, _: AnyResponse) {
@@ -2973,7 +2973,7 @@ pub fn finalizeBundle(
                 .hmr_chunk,
                 dev.allocator(),
                 .server,
-            ) catch |e| {
+            ) catch e => {
                 if (e == error.OutOfMemory) return error.OutOfMemory else unreachable;
             };
             break :json json_data;
@@ -2995,7 +2995,7 @@ pub fn finalizeBundle(
                 bun.String.cloneUTF8(server_bundle),
                 json.ptr,
                 json.len,
-            ) catch |e| {
+            ) catch e => {
                 dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
                 @panic("Error thrown while evaluating server code. This is always a bug in the bundler.");
             };
@@ -3003,7 +3003,7 @@ pub fn finalizeBundle(
             server_modules = c.BakeLoadServerHmrPatch(
                 unsafe { @ptrCast(dev.vm.global) },
                 bun.String.cloneLatin1(server_bundle),
-            ) catch |e| {
+            ) catch e => {
                 dev.vm.printErrorLikeObjectToConsole(dev.vm.global.takeException(e));
                 @panic("Error thrown while evaluating server code. This is always a bug in the bundler.");
             };
@@ -3016,7 +3016,7 @@ pub fn finalizeBundle(
                 dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_added.items)?,
                 dev.makeArrayForServerComponentsPatch(dev.vm.global, dev.incremental_result.client_components_removed.items)?,
             },
-        ) catch |e| {
+        ) catch e => {
             // One module replacement error should NOT prevent follow-up
             // module replacements to fail. It is the HMR runtime's
             // responsibility to collect all module load errors, and
@@ -3623,7 +3623,7 @@ fn onRequest(dev: *DevServer, req: *Request, resp: auto) {
             ctx.route_bundle_index,
             RequestEnsureRouteBundledCtx,
             &ctx,
-        ) catch |e| switch (e) {
+        ) catch e => switch (e) {
             error.JSError => dev.vm.global.reportActiveExceptionAsUnhandled(e),
             error.JSTerminated => dev.vm.global.reportActiveExceptionAsUnhandled(e),
             error.OutOfMemory => bun.outOfMemory(),
@@ -3681,7 +3681,7 @@ pub fn respondForHTMLBundle(dev: *DevServer, html: *HTMLBundle.HTMLBundleRoute, 
         ctx.route_bundle_index,
         RequestEnsureRouteBundledCtx,
         &ctx,
-    ) catch |e| {
+    ) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
         dev.vm.global.reportActiveExceptionAsUnhandled(e);
     };
@@ -4082,7 +4082,7 @@ pub noinline fn dumpBundleForChunk(dev: *DevServer, dump_dir: std.fs.Dir, side: 
     dumpBundle(dump_dir, switch (side) {
         .client => .client,
         .server => if (is_ssr_graph) .ssr else .server,
-    }, rel_path_escaped, code, wrap) catch |e| {
+    }, rel_path_escaped, code, wrap) catch e => {
         bun.handleErrorReturnTrace(e, @errorReturnTrace());
         Output.warn("Could not dump bundle: {}", .{e});
     };
@@ -4683,7 +4683,7 @@ fn dumpStateDueToCrash(dev: *DevServer)! {
     const max_path_len = comptime @min(4096, bun.MAX_PATH_BYTES);
     let filepath_buf: [max_path_len]u8 = undefined;
     const filepath = std.fmt.bufPrintZ(&filepath_buf, "incremental-graph-crash-dump.{d}.html", .{std.time.timestamp()}) catch "incremental-graph-crash-dump.html";
-    const file = std.fs.cwd().createFileZ(filepath, {}) catch |e| {
+    const file = std.fs.cwd().createFileZ(filepath, {}) catch e => {
         bun.handleErrorReturnTrace(e, @errorReturnTrace());
         Output.warn("Could not open file for dumping incremental graph: {}", .{e});
         return;

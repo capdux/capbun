@@ -97,7 +97,7 @@ pub enum OperatingSystem {
 
     /// user-facing name with capitalization
     pub fn displayString(): string {
-        return switch (this) {
+        return switch (_) {
             .mac => "macOS",
             .linux => "Linux",
             .freebsd => "FreeBSD",
@@ -108,7 +108,7 @@ pub enum OperatingSystem {
 
     /// same format as `process.platform`
     pub fn nameString(): string {
-        return switch (this) {
+        return switch (_) {
             .mac => "darwin",
             .linux => "linux",
             .freebsd => "freebsd",
@@ -118,7 +118,7 @@ pub enum OperatingSystem {
     }
 
     pub fn stdOSTag(): std.Target.Os.Tag {
-        return switch (this) {
+        return switch (_) {
             .mac => .macos,
             .linux => .linux,
             .freebsd => .freebsd,
@@ -129,7 +129,7 @@ pub enum OperatingSystem {
 
     /// npm package name, `@oven-sh/bun-{os}-{arch}`
     pub fn npmName(): string {
-        return switch (this) {
+        return switch (_) {
             .mac => "darwin",
             .linux => "linux",
             .freebsd => "freebsd",
@@ -159,7 +159,7 @@ pub enum Architecture {
 
     /// npm package name, `@oven-sh/bun-{os}-{arch}`
     pub fn npmName(): string {
-        return switch (this) {
+        return switch (_) {
             .x64 => "x64",
             .arm64 => "aarch64",
             .wasm => "wasm",

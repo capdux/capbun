@@ -1015,14 +1015,14 @@ pub fn weakDeref(self: *DeferredRequest) void {
     }
 
 pub fn onAbortWrapper(opaque_ptr: *anyopaque) void {
-            const self: *DeferredRequest = (blk: {
+            const req_self: *DeferredRequest = (blk: {
             break :blk @ptrCast(@alignCast(opaque_ptr));
 
 });
-            if ((!self.isAlive())) {
+            if ((!req_self.isAlive())) {
                 return;
             }
-            _ = self.onAbortImpl();
+            _ = req_self.onAbortImpl();
     }
 
 pub fn onAbort(self: *DeferredRequest, _: AnyResponse) void {

@@ -266,7 +266,7 @@ pub fn write(self: @This(), to_compress: []const u8) WriteError!usize {
             return to_compress.len;
     }
 
-pub fn end(self: @This()) !usize {
+pub fn end(self: *@This()) !usize {
             const decompressed = try self.compressor.end();
             _ = try self.input_writer.writeAll(decompressed);
     }

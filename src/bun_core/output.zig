@@ -40,7 +40,7 @@ comptime {
 }
 comptime {
     if (Environment.isWindows) {
-        _ = @export(*const Bun__restoreWindowsStdio, .{ .name = "Bun__restoreWindowsStdio" });
+        _ = @export((&Bun__restoreWindowsStdio), .{ .name = "Bun__restoreWindowsStdio" });
     }
 
 }
@@ -994,36 +994,37 @@ pub fn scopedLogImpl(comptime tagname: []const u8, really_disable: *std.atomic.V
 pub fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility) type {
         if (comptime (!Environment.enable_logs)) {
             return struct {
-            pub fn isVisible() bool {
-                return false;
-            }
-            pub fn log(comptime _: string, _: anytype) callconv(bun.callconv_inline) void {}
-        };
+
+pub fn isVisible() bool {
+            return false;
+    }
+
+pub inline fn log(comptime _: []const u8, _: anytype) void {
+    }
+};
         }
         return struct {
-        var buffer: [4096]u8 = undefined;
-        var buffered_writer: File.QuietWriter.Adapter = undefined;
-        var out: *std.Io.Writer = undefined;
-        var out_set = false;
-        var really_disable = std.atomic.Value(bool).init(visibility == .hidden);
+    pub var buffer: [4096]u8 = undefined;
+    pub var buffered_writer: File.QuietWriter.Adapter = undefined;
+    pub var out: *std.Io.Writer = undefined;
+    pub var out_set: bool = false;
+    pub var really_disable: std.atomic.Value(bool) = std.atomic.Value(bool).init((visibility == .hidden));
+    pub var lock: bun.Mutex = bun.Mutex{  };
+    pub var is_visible_once: std.Once(evaluateIsVisible) = std.once(evaluateIsVisible);
 
-        var lock = bun.Mutex{};
+pub fn evaluateIsVisible() void {
+            _ = scopedEvaluateIsVisible(tagname, (&really_disable));
+    }
 
-        var is_visible_once = std.once(evaluateIsVisible);
+pub fn isVisible() bool {
+            _ = is_visible_once.call();
+            return (!really_disable.load(.monotonic));
+    }
 
-        fn evaluateIsVisible() void {
-            scopedEvaluateIsVisible(tagname, &really_disable);
-        }
-
-        pub fn isVisible() bool {
-            is_visible_once.call();
-            return !really_disable.load(.monotonic);
-        }
-
-        pub fn log(comptime fmt: string, args: anytype) void {
-            scopedLogImpl(tagname, &really_disable, &out_set, &out, &buffered_writer, &buffer, &lock, isVisible, fmt, args);
-        }
-    };
+pub fn log(comptime fmt: []const u8, args: anytype) void {
+            _ = scopedLogImpl(tagname, (&really_disable), (&out_set), (&out), (&buffered_writer), (&buffer), (&lock), isVisible, fmt, args);
+    }
+};
 }
 
 pub fn scoped(comptime tag: anytype, comptime visibility: Visibility) LogFunction {

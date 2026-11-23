@@ -394,7 +394,7 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
     }
 
     let cwd_buf: bun.PathBuffer = undefined;
-    const cwd = bun.getcwd(&cwd_buf) catch |e| {
+    const cwd = bun.getcwd(&cwd_buf) catch e => {
         Output.err(e, "Could not query current working directory", .{});
         bun.Global.crash();
     };
@@ -473,7 +473,7 @@ pub fn buildCommand(ctx: bun.cli.Command.Context): !void {
         all_server_files: JSValue.null,
     };
 
-    buildWithVm(ctx, cwd, vm, &pt) catch |e| switch (e) {
+    buildWithVm(ctx, cwd, vm, &pt) catch e => switch (e) {
         error.JSError => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
             const err_value = vm.global.takeException(error.JSError);
@@ -501,7 +501,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         unresolved_config_entry_point = (std.fmt.allocPrint(ctx.allocator, "./{s}", .{unresolved_config_entry_point}))?;
     }
 
-    const config_entry_point = b.resolver.resolve(cwd, unresolved_config_entry_point, .entry_point_build) catch |e| {
+    const config_entry_point = b.resolver.resolve(cwd, unresolved_config_entry_point, .entry_point_build) catch e => {
         if (e == error.ModuleNotFound) {
             if (ctx.args.entry_points.len == 0) {
                 // Onboarding message
@@ -741,14 +741,14 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         switch (file_side) {
             .client => {
                 // Client-side resources will be written to disk for usage in on the client side
-                * = file.writeToDisk(root_dir, ".") catch |e| {
+                * = file.writeToDisk(root_dir, ".") catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
                     Output.err(e, "Failed to write {f} to output directory", .{bun.fmt.quote(file.dest_path)});
                 };
             },
             .server => {
                 if (ctx.bundler_options.bake_debug_dump_server) {
-                    * = file.writeToDisk(root_dir, ".") catch |e| {
+                    * = file.writeToDisk(root_dir, ".") catch e => {
                         bun.handleErrorReturnTrace(e, @errorReturnTrace());
                         Output.err(e, "Failed to write {f} to output directory", .{bun.fmt.quote(file.dest_path)});
                     };
@@ -819,7 +819,7 @@ pub fn buildWithVm(ctx: bun.cli.Command.Context, cwd: []const u8, vm: *VirtualMa
         }
         if (any_client_chunks) {
             const runtime_file: *OutputFile = &bundled_outputs[runtime_file_index];
-            * = runtime_file.writeToDisk(root_dir, ".") catch |e| {
+            * = runtime_file.writeToDisk(root_dir, ".") catch e => {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 Output.err(e, "Failed to write {f} to output directory", .{bun.fmt.quote(runtime_file.dest_path)});
             };

@@ -179,7 +179,7 @@ struct DerefGuard<T> {
                         event.entry_points,
                         true,
                         std.time.Timer.start() catch @panic("timers unsupported"),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
 
                     event.entry_points.deinit(s.dev.allocator());
                 },

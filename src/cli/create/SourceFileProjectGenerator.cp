@@ -195,7 +195,7 @@ fn runInstall(argv: [][]const u8) !void {
         windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
         } else @as(void, undefined),
-    }) catch |e| {
+    }) catch e => {
         Output.err(e, "failed to install dependencies", {});
         Global.crash();
     };
@@ -346,7 +346,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
                     stderr: .inherit,
                     stdout: .inherit,
                     stdin: .inherit,
-                }) catch |e| {
+                }) catch e => {
                     Output.err(e, "failed to add shadcn components", {});
                     Global.crash();
                 };
@@ -400,7 +400,7 @@ pub fn generateFiles(allocator: std.mem.Allocator, entry_point: string, dependen
         windows: if (Environment.isWindows) .{
             loop: bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
         } else @as(void, undefined),
-    }) catch |e| {
+    }) catch e => {
         Output.err(e, "failed to start app", {});
         Global.crash();
     };

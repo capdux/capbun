@@ -232,25 +232,25 @@ fn StringCache(comptime ip: StringInput): type {
         ptr_value: std.atomic.Value(StringPointerType) = std.atomic.Value(StringPointerType).init(null);
         len_value: std.atomic.Value(LenType) = std.atomic.Value(LenType).init(std.math.maxInt(LenType));
 
-        fn getCached(*this): StringOutput {
-            const len = this.len_value.load(.acquire);
+        fn getCached(*_): StringOutput {
+            const len = _.len_value.load(.acquire);
             if (len == Self.not_loaded_len) {
                 return .unknown;
             }
             if (len == Self.not_set_len) {
                 return .not_set;
             }
-            const ptr = this.ptr_value.load(.monotonic);
+            const ptr = _.ptr_value.load(.monotonic);
             return StringOutput{ value: unsafe { ptr.?[0..len] } };
         }
 
-        inline fn deserAndInvalidate(*this, raw_env: string?): string? {
+        inline fn deserAndInvalidate(*_, raw_env: string?): string? {
             if (ev := raw_env) {
-                this.ptr_value.store(ev.ptr, .monotonic);
-                this.len_value.store(ev.len, .release);
+                _.ptr_value.store(ev.ptr, .monotonic);
+                _.len_value.store(ev.len, .release);
             } else {
-                this.ptr_value.store(null, .monotonic);
-                this.len_value.store(Self.not_set_len, .release);
+                _.ptr_value.store(null, .monotonic);
+                _.len_value.store(Self.not_set_len, .release);
             }
             return raw_env;
         }
@@ -282,9 +282,9 @@ fn BoolCache(comptime ip: BoolInput): type {
 
         value: std.atomic.Value(BoolStoredType) = std.atomic.Value(BoolStoredType).init(.unknown);
 
-        inline fn getCached(*this): BoolOutput {
+        inline fn getCached(*_): BoolOutput {
             * = ip;
-            const cached = this.value.load(.monotonic);
+            const cached = _.value.load(.monotonic);
             switch (cached) {
                 .unknown => {
                     @branchHint(.unlikely);
@@ -302,13 +302,13 @@ fn BoolCache(comptime ip: BoolInput): type {
             }
         }
 
-        inline fn deserAndInvalidate(*this, raw_env: string?): bool? {
+        inline fn deserAndInvalidate(*_, raw_env: string?): bool? {
             if (raw_env == null) {
-                this.value.store(.not_set, .monotonic);
+                _.value.store(.not_set, .monotonic);
                 return null;
             }
             const string_is_truthy = stringIsTruthyImpl(raw_env.?);
-            this.value.store(if (string_is_truthy) .yes else .no, .monotonic);
+            _.value.store(if (string_is_truthy) .yes else .no, .monotonic);
             return string_is_truthy;
         }
     };
@@ -348,8 +348,8 @@ fn UnsignedCache(comptime ip: UnsignedInput): type {
 
         value: std.atomic.Value(StoredType) = std.atomic.Value(StoredType).init(Self.unknown_sentinel);
 
-        inline fn getCached(*this): UnsignedOutput {
-            switch (this.value.load(.monotonic)) {
+        inline fn getCached(*_): UnsignedOutput {
+            switch (_.value.load(.monotonic)) {
                 Self.unknown_sentinel => {
                     @branchHint(.unlikely);
                     return .unknown;
@@ -363,41 +363,41 @@ fn UnsignedCache(comptime ip: UnsignedInput): type {
             }
         }
 
-        inline fn deserAndInvalidate(*this, raw_env: string?): u64? {
+        inline fn deserAndInvalidate(*_, raw_env: string?): u64? {
             if (raw_env == null) {
-                this.value.store(Self.not_set_sentinel, .monotonic);
+                _.value.store(Self.not_set_sentinel, .monotonic);
                 return null;
             }
 
             if (std.mem.eql(u8, raw_env.?, "")) {
                 switch (ip.opts.deser.empty_string_as) {
                     .value => |v| {
-                        this.value.store(v, .monotonic);
+                        _.value.store(v, .monotonic);
                         return v;
                     },
                     .erroneous => {
-                        return this.handleError(raw_env.?, "is an empty string");
+                        return _.handleError(raw_env.?, "is an empty string");
                     },
                 }
             }
 
-            const formatted = std.fmt.parseInt(StoredType, raw_env.?, 10) catch |e| {
+            const formatted = std.fmt.parseInt(StoredType, raw_env.?, 10) catch e => {
                 if (e == error.Overflow) {
-                    return this.handleError(raw_env.?, "overflows u64");
+                    return _.handleError(raw_env.?, "overflows u64");
                 } else {
-                    return this.handleError(raw_env.?, "is not a valid integer");
+                    return _.handleError(raw_env.?, "is not a valid integer");
                 }
             };
 
             if (formatted == Self.not_set_sentinel || formatted == Self.unknown_sentinel) {
-                return this.handleError(raw_env.?, "is a reserved value");
+                return _.handleError(raw_env.?, "is a reserved value");
             }
 
-            this.value.store(formatted, .monotonic);
+            _.value.store(formatted, .monotonic);
             return formatted;
         }
 
-        fn handleError(*this, raw_env: string, comptime reason: string): u64? {
+        fn handleError(*_, raw_env: string, comptime reason: string): u64? {
             const base_fmt = "Environment variable '{s}' has value '{s}' which ";
             const fmt = std.fmt.comptimePrint("{s}{s}.", [base_fmt, reason]);
             const missing_default_fmt = "Environment variable '{s}' is configured to fallback to default on {s}, but no default is set.";
@@ -405,26 +405,26 @@ fn UnsignedCache(comptime ip: UnsignedInput): type {
             switch (ip.opts.deser.error_handling) {
                 .debug_warn => {
                     bun.Output.debugWarn(fmt, [ip.var_name, raw_env]);
-                    this.value.store(Self.not_set_sentinel, .monotonic);
+                    _.value.store(Self.not_set_sentinel, .monotonic);
                     return null;
                 },
                 .not_set => {
-                    this.value.store(Self.not_set_sentinel, .monotonic);
+                    _.value.store(Self.not_set_sentinel, .monotonic);
                     return null;
                 },
                 .truthy_cast => {
                     if (stringIsTruthyImpl(raw_env)) {
-                        this.value.store(1, .monotonic);
+                        _.value.store(1, .monotonic);
                         return 1;
                     } else {
-                        this.value.store(0, .monotonic);
+                        _.value.store(0, .monotonic);
                         return 0;
                     }
                 },
                 .default_fallback => {
                     if (comptime ip.opts.default != null) {
                         const d = ip.opts.default.?;
-                        this.value.store(d, .monotonic);
+                        _.value.store(d, .monotonic);
                         return d;
                     }
                     @compileError(std.fmt.comptimePrint(missing_default_fmt, [

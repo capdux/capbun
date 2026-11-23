@@ -16,32 +16,32 @@ pub fn BufferedReader(comptime buffer_size: usize, comptime ReaderType: type): t
 
         const Self = @This();
 
-        pub fn read(*this, dest: []u8): usize ! ReaderType.Error {
+        pub fn read(*_, dest: []u8): usize ! ReaderType.Error {
             // First try reading from the already buffered data onto the destination.
-            const current = this.buf[this.start..this.end];
+            const current = _.buf[_.start.._.end];
             if (current.len != 0) {
                 const to_transfer = @min(current.len, dest.len);
                 @memcpy(dest[0..to_transfer], current[0..to_transfer]);
-                this.start += to_transfer;
+                _.start += to_transfer;
                 return to_transfer;
             }
 
             // If dest is large, read from the unbuffered reader directly into the destination.
             if (dest.len >= buffer_size) {
-                return this.unbuffered_reader.read(dest);
+                return _.unbuffered_reader.read(dest);
             }
 
             // If dest is small, read from the unbuffered reader into our own internal buffer,
             // and then transfer to destination.
-            this.end = this.unbuffered_reader.read(&this.buf)?;
-            const to_transfer = @min(this.end, dest.len);
-            @memcpy(dest[0..to_transfer], this.buf[0..to_transfer]);
-            this.start = to_transfer;
+            _.end = _.unbuffered_reader.read(&_.buf)?;
+            const to_transfer = @min(_.end, dest.len);
+            @memcpy(dest[0..to_transfer], _.buf[0..to_transfer]);
+            _.start = to_transfer;
             return to_transfer;
         }
 
-        pub fn reader(*this): Reader {
-            return Reader{ context: this };
+        pub fn reader(*_): Reader {
+            return Reader{ context: _ };
         }
     };
 }
@@ -68,30 +68,30 @@ fn SinglyLinkedListNode(comptime T: type): type {
         pub const Data = T;
 
         /// Insert a new node after the current one.
-        pub fn insertAfter(*this, new_node: *Node!) {
-            new_node.next = this.next;
-            this.next = new_node;
+        pub fn insertAfter(*_, new_node: *Node!) {
+            new_node.next = _.next;
+            _.next = new_node;
         }
 
         /// Remove a node from the list.
-        pub fn removeNext(*this): (*Node!)? {
-            const next_node = this.next ?? return null;
-            this.next = next_node.next;
+        pub fn removeNext(*_): (*Node!)? {
+            const next_node = _.next ?? return null;
+            _.next = next_node.next;
             return next_node;
         }
 
         /// Iterate over the singly-linked list from this node, until the final node is found.
-        pub fn findLast(*this): *Node! {
-            let it: *Node! = this;
+        pub fn findLast(*_): *Node! {
+            let it: *Node! = _;
             while (true) {
                 it = it.next ?? return it;
             }
         }
 
         /// Iterate over each next node, returning the count of all nodes except the starting one.
-        pub fn countChildren(this): usize {
+        pub fn countChildren(): usize {
             let count: usize = 0;
-            let it: (*const Node!)? = this.next;
+            let it: (*const Node!)? = _.next;
             while (n := it) : (it = n.next) {
                 count += 1;
             }
@@ -125,17 +125,17 @@ pub fn SinglyLinkedList(comptime T: type): type {
         first: (*Node!)? = null;
 
         /// Insert a new node at the head.
-        pub fn prepend(*this, new_node: *Node!) {
-            new_node.next = this.first;
-            this.first = new_node;
+        pub fn prepend(*_, new_node: *Node!) {
+            new_node.next = _.first;
+            _.first = new_node;
         }
 
         /// Remove a node from the list.
-        pub fn remove(*this, node: *Node!) {
-            if (this.first == node) {
-                this.first = node.next;
+        pub fn remove(*_, node: *Node!) {
+            if (_.first == node) {
+                _.first = node.next;
             } else {
-                let current_elm = this.first.?;
+                let current_elm = _.first.?;
                 while (current_elm.next != node) {
                     current_elm = current_elm.next.?;
                 }
@@ -144,15 +144,15 @@ pub fn SinglyLinkedList(comptime T: type): type {
         }
 
         /// Remove and return the first node in the list.
-        pub fn popFirst(*this): (*Node!)? {
-            const first = this.first ?? return null;
-            this.first = first.next;
+        pub fn popFirst(*_): (*Node!)? {
+            const first = _.first ?? return null;
+            _.first = first.next;
             return first;
         }
 
         /// Iterate over all nodes, returning the count.
-        pub fn len(this): usize {
-            if (n := this.first) {
+        pub fn len(): usize {
+            if (n := _.first) {
                 return 1 + n.countChildren();
             } else {
                 return 0;
@@ -183,7 +183,7 @@ pub fn DoublyLinkedList(comptime T: type): type {
         len: usize = 0;
 
         /// Insert a new node after an existing one.
-        pub fn insertAfter(*this, node: *Node!, new_node: *Node!) {
+        pub fn insertAfter(*_, node: *Node!, new_node: *Node!) {
             new_node.prev = node;
             if (node.next != null) {
                 let next_node = node.next.?;
@@ -193,15 +193,15 @@ pub fn DoublyLinkedList(comptime T: type): type {
             } else {
                 // Last element of the list.
                 new_node.next = null;
-                this.last = new_node;
+                _.last = new_node;
             }
             node.next = new_node;
 
-            this.len += 1;
+            _.len += 1;
         }
 
         /// Insert a new node before an existing one.
-        pub fn insertBefore(*this, node: *Node!, new_node: *Node!) {
+        pub fn insertBefore(*_, node: *Node!, new_node: *Node!) {
             new_node.next = node;
             if (node.prev != null) {
                 let prev_node = node.prev.?;
@@ -211,68 +211,68 @@ pub fn DoublyLinkedList(comptime T: type): type {
             } else {
                 // First element of the list.
                 new_node.prev = null;
-                this.first = new_node;
+                _.first = new_node;
             }
             node.prev = new_node;
 
-            this.len += 1;
+            _.len += 1;
         }
 
         /// Concatenate list2 onto the end of list1, removing all entries from the former.
-        pub fn concatByMoving(*this, list2: *Self!) {
+        pub fn concatByMoving(*_, list2: *Self!) {
             let l2_first = list2.first ?? return;
-            if (this.last != null) {
-                let l1_last = this.last.?;
+            if (_.last != null) {
+                let l1_last = _.last.?;
                 l1_last.next = list2.first;
-                l2_first.prev = this.last;
-                this.len += list2.len;
+                l2_first.prev = _.last;
+                _.len += list2.len;
             } else {
                 // list1 was empty
-                this.first = list2.first;
-                this.len = list2.len;
+                _.first = list2.first;
+                _.len = list2.len;
             }
-            this.last = list2.last;
+            _.last = list2.last;
             list2.first = null;
             list2.last = null;
             list2.len = 0;
         }
 
         /// Insert a new node at the end of the list.
-        pub fn append(*this, new_node: *Node!) {
-            if (last := this.last) {
+        pub fn append(*_, new_node: *Node!) {
+            if (last := _.last) {
                 // Insert after last.
-                this.insertAfter(last, new_node);
+                _.insertAfter(last, new_node);
             } else {
                 // Empty list.
-                this.prepend(new_node);
+                _.prepend(new_node);
             }
         }
 
         /// Insert a new node at the beginning of the list.
-        pub fn prepend(*this, new_node: *Node!) {
-            if (first := this.first) {
+        pub fn prepend(*_, new_node: *Node!) {
+            if (first := _.first) {
                 // Insert before first.
-                this.insertBefore(first, new_node);
+                _.insertBefore(first, new_node);
             } else {
                 // Empty list.
-                this.first = new_node;
-                this.last = new_node;
+                _.first = new_node;
+                _.last = new_node;
                 new_node.prev = null;
                 new_node.next = null;
 
-                this.len = 1;
+                _.len = 1;
             }
         }
 
         /// Remove a node from the list.
-        pub fn remove(*this, node: *Node!) {
+        pub fn remove(*_, node: *Node!) {
             if (node.prev != null) {
                 let prev_node = node.prev.?;
                 // Intermediate node.
                 prev_node.next = node.next;
             } else {
                 // First element of the list.
-                this.first = node.next;
+                _.first = node.next;
             }
 
             if (node.next != null) {
@@ -281,24 +281,24 @@ pub fn DoublyLinkedList(comptime T: type): type {
                 next_node.prev = node.prev;
             } else {
                 // Last element of the list.
-                this.last = node.prev;
+                _.last = node.prev;
             }
 
-            this.len -= 1;
-            assert(this.len == 0 || (this.first != null && this.last != null));
+            _.len -= 1;
+            assert(_.len == 0 || (_.first != null && _.last != null));
         }
 
         /// Remove and return the last node in the list.
-        pub fn pop(*this): (*Node!)? {
-            const last = this.last ?? return null;
-            this.remove(last);
+        pub fn pop(*_): (*Node!)? {
+            const last = _.last ?? return null;
+            _.remove(last);
             return last;
         }
 
         /// Remove and return the first node in the list.
-        pub fn popFirst(*this): (*Node!)? {
-            const first = this.first ?? return null;
-            this.remove(first);
+        pub fn popFirst(*_): (*Node!)? {
+            const first = _.first ?? return null;
+            _.remove(first);
             return first;
         }
     };

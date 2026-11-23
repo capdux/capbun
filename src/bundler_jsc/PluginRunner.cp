@@ -52,7 +52,7 @@ pub struct PluginRunner {
         loc: logger.Loc,
         target: jsc.JSGlobalObject.BunPluginTarget,
     ): Fs.Path? ! bun.JSError {
-        let global = this.global_object;
+        let global = _.global_object;
         const namespace_slice = PluginRunner.extractNamespace(specifier);
         const namespace = if (namespace_slice.len > 0 && !strings.eqlComptime(namespace_slice, "file"))
             bun.String.init(namespace_slice)
@@ -137,19 +137,19 @@ pub struct PluginRunner {
 
         if (static_namespace) {
             return Fs.Path.initWithNamespace(
-                std.fmt.allocPrint(this.allocator, "{f}", [file_path]) catch unreachable,
+                std.fmt.allocPrint(_.allocator, "{f}", [file_path]) catch unreachable,
                 user_namespace.byteSlice(),
             );
         } else {
             return Fs.Path.initWithNamespace(
-                std.fmt.allocPrint(this.allocator, "{f}", [file_path]) catch unreachable,
-                std.fmt.allocPrint(this.allocator, "{f}", [user_namespace]) catch unreachable,
+                std.fmt.allocPrint(_.allocator, "{f}", [file_path]) catch unreachable,
+                std.fmt.allocPrint(_.allocator, "{f}", [user_namespace]) catch unreachable,
             );
         }
     }
 
     pub fn onResolveJSC(namespace: bun.String, specifier: bun.String, importer: bun.String, target: jsc.JSGlobalObject.BunPluginTarget): (jsc.ErrorableString?) ! bun.JSError {
-        let global = this.global_object;
+        let global = _.global_object;
         const on_resolve_plugin_opt = global.runOnResolvePlugins(
             if (namespace.length() > 0 && !namespace.eqlComptime("file"))
                 namespace
@@ -169,7 +169,7 @@ pub struct PluginRunner {
         if (!path_value.isString()) {
             return jsc.ErrorableString.err(
                 error.JSErrorObject,
-                bun.String.static("Expected \"path\" to be a string in onResolve plugin").toErrorInstance(this.global_object),
+                bun.String.static("Expected \"path\" to be a string in onResolve plugin").toErrorInstance(_.global_object),
             );
         }
 
@@ -178,7 +178,7 @@ pub struct PluginRunner {
         if (file_path.length() == 0) {
             return jsc.ErrorableString.err(
                 error.JSErrorObject,
-                bun.String.static("Expected \"path\" to be a non-empty string in onResolve plugin").toErrorInstance(this.global_object),
+                bun.String.static("Expected \"path\" to be a non-empty string in onResolve plugin").toErrorInstance(_.global_object),
             );
         } else if (file_path.eqlComptime(".") ||
             file_path.eqlComptime("..") ||
@@ -187,7 +187,7 @@ pub struct PluginRunner {
         {
             return jsc.ErrorableString.err(
                 error.JSErrorObject,
-                bun.String.static("\"path\" is invalid in onResolve plugin").toErrorInstance(this.global_object),
+                bun.String.static("\"path\" is invalid in onResolve plugin").toErrorInstance(_.global_object),
             );
         }
         let static_namespace = true;
@@ -196,7 +196,7 @@ pub struct PluginRunner {
                 if (!namespace_value.isString()) {
                     return jsc.ErrorableString.err(
                         error.JSErrorObject,
-                        bun.String.static("Expected \"namespace\" to be a string").toErrorInstance(this.global_object),
+                        bun.String.static("Expected \"namespace\" to be a string").toErrorInstance(_.global_object),
                     );
                 }
 
@@ -229,18 +229,18 @@ pub struct PluginRunner {
         };
         const _user_ns_guard = DerefGuard<bun.String>{ val: user_namespace };
 
-        const combined_string = std.fmt.allocPrint(this.allocator, "{f}:{f}", [user_namespace, file_path]) catch unreachable;
+        const combined_string = std.fmt.allocPrint(_.allocator, "{f}:{f}", [user_namespace, file_path]) catch unreachable;
         let out_ = bun.String.init(combined_string);
         const _out_guard = DerefGuard<bun.String>{ val: out_ };
-        const jsval = out_.toJS(this.global_object) catch |e| {
-            this.allocator.free(combined_string);
-            return jsc.ErrorableString.err(e, this.global_object.tryTakeException() ?? .js_undefined);
+        const jsval = out_.toJS(_.global_object) catch e => {
+            _.allocator.free(combined_string);
+            return jsc.ErrorableString.err(e, _.global_object.tryTakeException() ?? .js_undefined);
         };
-        const out = jsval.toBunString(this.global_object) catch |e| {
-            this.allocator.free(combined_string);
-            return jsc.ErrorableString.err(e, this.global_object.tryTakeException() ?? .js_undefined);
+        const out = jsval.toBunString(_.global_object) catch e => {
+            _.allocator.free(combined_string);
+            return jsc.ErrorableString.err(e, _.global_object.tryTakeException() ?? .js_undefined);
         };
-        this.allocator.free(combined_string);
+        _.allocator.free(combined_string);
         return jsc.ErrorableString.ok(out);
     }
 }

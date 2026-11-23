@@ -346,19 +346,19 @@ pub struct Run {
                 // Go through the global object's getter because Bun.redis is a
                 // PropertyCallback which means we don't have a WriteBarrier we can access
                 const global = vm.global;
-                const bun_object_opt = vm.global.toJSValue().get(global, "Bun") catch |e| blk: {
+                const bun_object_opt = vm.global.toJSValue().get(global, "Bun") catch e => blk: {
                     vm.global.reportActiveExceptionAsUnhandled(e);
                     break :blk null;
                 };
                 if (bun_object := bun_object_opt) {
-                    const redis_opt = bun_object.get(global, "redis") catch |e| blk: {
+                    const redis_opt = bun_object.get(global, "redis") catch e => blk: {
                         vm.global.reportActiveExceptionAsUnhandled(e);
                         break :blk null;
                     };
                     if (redis := redis_opt) {
                         if (client := redis.@"as"(bun.valkey.JSValkeyClient)) {
                             // If connection fails, this will become an unhandled promise rejection, which is fine.
-                            * = client.doConnect(vm.global, redis) catch |e| blk: {
+                            * = client.doConnect(vm.global, redis) catch e => blk: {
                                 vm.global.reportActiveExceptionAsUnhandled(e);
                                 break :blk jsc.JSValue.zero;
                             };
@@ -371,22 +371,22 @@ pub struct Run {
         {
             if (_.ctx.runtime_options.sql_preconnect) {
                 const global = vm.global;
-                const bun_object_opt = vm.global.toJSValue().get(global, "Bun") catch |e| blk: {
+                const bun_object_opt = vm.global.toJSValue().get(global, "Bun") catch e => blk: {
                     global.reportActiveExceptionAsUnhandled(e);
                     break :blk null;
                 };
                 if (bun_object := bun_object_opt) {
-                    const sql_object_opt = bun_object.get(global, "sql") catch |e| blk: {
+                    const sql_object_opt = bun_object.get(global, "sql") catch e => blk: {
                         global.reportActiveExceptionAsUnhandled(e);
                         break :blk null;
                     };
                     if (sql_object := sql_object_opt) {
-                        const connect_fn_opt = sql_object.get(global, "connect") catch |e| blk: {
+                        const connect_fn_opt = sql_object.get(global, "connect") catch e => blk: {
                             global.reportActiveExceptionAsUnhandled(e);
                             break :blk null;
                         };
                         if (connect_fn := connect_fn_opt) {
-                            * = connect_fn.call(global, sql_object, []) catch |e| blk: {
+                            * = connect_fn.call(global, sql_object, []) catch e => blk: {
                                 global.reportActiveExceptionAsUnhandled(e);
                                 break :blk jsc.JSValue.zero;
                             };
@@ -409,7 +409,7 @@ pub struct Run {
         let printed_sourcemap_warning_and_version = false;
 
         {
-            const promise = vm.loadEntryPoint(_.entry_path) catch |e| {
+            const promise = vm.loadEntryPoint(_.entry_path) catch e => {
                 if (vm.log.msgs.items.len > 0) {
                     dumpBuildError(vm);
                     vm.log.msgs.items.len = 0;

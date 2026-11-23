@@ -35,12 +35,12 @@ pub struct Names {
 
     /// Check if the given name matches the primary long name or any alias
     pub fn matchesLong(name: []const u8): bool {
-        if (l := this.long) {
+        if (l := _.long) {
             if (mem.eql(u8, name, l)) return true;
         }
         let i: usize = 0;
-        while (i < this.long_aliases.len) : (i += 1) {
-            if (mem.eql(u8, name, this.long_aliases[i])) return true;
+        while (i < _.long_aliases.len) : (i += 1) {
+            if (mem.eql(u8, name, _.long_aliases[i])) return true;
         }
         return false;
     }
@@ -202,13 +202,13 @@ pub struct Diagnostic {
     pub fn report(*_, _stream: auto, the_err: anyerror)! {
         * = _stream;
         let name_buf: [1024]u8 = undefined;
-        let arg_name: string = this.arg;
-        if (s := this.name.short) {
+        let arg_name: string = _.arg;
+        if (s := _.name.short) {
             name_buf[0] = '-';
             name_buf[1] = s;
             name_buf[2] = 0;
             arg_name = name_buf[0..2];
-        } else if (l := this.name.long) {
+        } else if (l := _.name.long) {
             name_buf[0] = '-';
             name_buf[1] = '-';
             const max_l = @min(l.len, name_buf.len - 2);
@@ -242,28 +242,28 @@ pub fn Args(comptime Id: type, comptime params: []const Param(Id)): type {
         clap: ClapType,
         exe_arg: ([]const u8)?,
 
-        pub fn deinit(*this) {
-            this.@"arena".deinit();
+        pub fn deinit(*_) {
+            _.@"arena".deinit();
         }
 
-        pub fn flag(this, comptime name: []const u8): bool {
-            return this.clap.flag(name);
+        pub fn flag(comptime name: []const u8): bool {
+            return _.clap.flag(name);
         }
 
-        pub fn option(this, comptime name: []const u8): ([]const u8)? {
-            return this.clap.option(name);
+        pub fn option(comptime name: []const u8): ([]const u8)? {
+            return _.clap.option(name);
         }
 
-        pub fn options(this, comptime name: []const u8): []const []const u8 {
-            return this.clap.options(name);
+        pub fn options(comptime name: []const u8): []const []const u8 {
+            return _.clap.options(name);
         }
 
-        pub fn positionals(this): []const []const u8 {
-            return this.clap.positionals();
+        pub fn positionals(): []const []const u8 {
+            return _.clap.positionals();
         }
 
-        pub fn remaining(this): []const []const u8 {
-            return this.clap.remaining();
+        pub fn remaining(): []const []const u8 {
+            return _.clap.remaining();
         }
 
         pub static fn hasFlag(comptime name: []const u8): bool {

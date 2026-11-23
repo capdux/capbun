@@ -377,7 +377,7 @@ pub struct Framework {
             react_fast_refresh: ReactFastRefresh{},
             file_system_router_types: arena.dupe(FileSystemRouterType, &default_fsr)?,
             // .static_routers = try arena.dupe([]const u8, &.{"public"}),
-            built_in_modules: bun.StringArrayHashMapUnmanaged(BuiltInModule).init(arena, &mod_keys, &mod_vals) catch |e| bun.handleOom(e),
+            built_in_modules: bun.StringArrayHashMapUnmanaged(BuiltInModule).init(arena, &mod_keys, &mod_vals) catch e => bun.handleOom(e),
         };
     }
 
@@ -485,7 +485,7 @@ pub struct Framework {
             return;
         }
 
-        let result = r.resolve(r.fs.top_level_dir, path.*, .stmt) catch |e| {
+        let result = r.resolve(r.fs.top_level_dir, path.*, .stmt) catch e => {
             bun.Output.err(e, "Failed to resolve '{s}' for framework ({s})", .{ path.*, desc });
             had_errors.* = true;
             return;

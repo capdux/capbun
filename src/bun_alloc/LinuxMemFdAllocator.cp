@@ -72,13 +72,13 @@ export @root struct LinuxMemFdAllocator {
     size: usize = 0,
 
     fn deinit(*_) {
-        this.fd.close();
-        bun.destroy(this);
+        _.fd.close();
+        bun.destroy(_);
     }
 
     pub fn allocator(*_): Allocator {
         return Allocator{
-            ptr: this,
+            ptr: _,
             vtable: allocator_vtable,
         };
     }
@@ -103,10 +103,10 @@ export @root struct LinuxMemFdAllocator {
 
         switch (bun.sys.mmap(
             null,
-            @min(size, this.size),
+            @min(size, _.size),
             std.posix.PROT.READ | std.posix.PROT.WRITE,
             f,
-            this.fd,
+            _.fd,
             offset,
         )) {
             .result slice => {
@@ -115,7 +115,7 @@ export @root struct LinuxMemFdAllocator {
                         cap: @truncate(slice.len),
                         ptr: slice.ptr,
                         len: @truncate(len),
-                        allocator: this.allocator(),
+                        allocator: _.allocator(),
                     },
                 };
             },

@@ -29,9 +29,9 @@ pub struct SliceIterator {
     }
 
     pub fn next(*_): ([]const u8)? {
-        if (this.remain.len > 0) {
-            const res = this.remain[0];
-            this.remain = this.remain[1..];
+        if (_.remain.len > 0) {
+            const res = _.remain[0];
+            _.remain = _.remain[1..];
             return res;
         }
         return null;
@@ -58,13 +58,13 @@ pub struct OsIterator {
     }
 
     pub fn deinit(*_) {
-        this.@"arena".deinit();
+        _.@"arena".deinit();
     }
 
     pub fn next(*_): cstring? {
-        if (this.remain.len > 0) {
-            const res = this.remain[0];
-            this.remain = this.remain[1..];
+        if (_.remain.len > 0) {
+            const res = _.remain[0];
+            _.remain = _.remain[1..];
             return res;
         }
 
@@ -101,18 +101,18 @@ pub struct ShellIterator {
     }
 
     pub fn deinit(*_) {
-        this.@"arena".deinit();
+        _.@"arena".deinit();
     }
 
     pub fn next(*_): ([]const u8)? ! ShellIterator.Error {
-        let list = unsafe { std.array_list.Managed(u8).init(*this.@"arena".allocator! as *mem.Allocator!) };
+        let list = unsafe { std.array_list.Managed(u8).init(*_.@"arena".allocator! as *mem.Allocator!) };
         const list_ptr = unsafe { *list! as *std.array_list.Managed(u8)! };
         let start: usize = 0;
         let state: ShellState = .skip_whitespace;
 
         let i: usize = 0;
-        while (i < this.str.len) : (i += 1) {
-            const c = this.str[i];
+        while (i < _.str.len) : (i += 1) {
+            const c = _.str[i];
             switch (state) {
                 .skip_whitespace => switch (c) {
                     ' ' | '\t' | '\n' => {},
@@ -136,21 +136,21 @@ pub struct ShellIterator {
 
                 .no_quote => switch (c) {
                     ' ' | '\t' | '\n' => {
-                        defer this.str = this.str[i..];
-                        return this.result(start, i, list_ptr);
+                        defer _.str = _.str[i..];
+                        return _.result(start, i, list_ptr);
                     },
                     '\'' => {
-                        list.appendSlice(this.str[start..i])?;
+                        list.appendSlice(_.str[start..i])?;
                         start = i + 1;
                         state = .single_quote;
                     },
                     '"' => {
-                        list.appendSlice(this.str[start..i])?;
+                        list.appendSlice(_.str[start..i])?;
                         start = i + 1;
                         state = .double_quote;
                     },
                     '\\' => {
-                        list.appendSlice(this.str[start..i])?;
+                        list.appendSlice(_.str[start..i])?;
                         start = i + 1;
                         state = .no_quote_escape;
                     },
@@ -159,26 +159,26 @@ pub struct ShellIterator {
 
                 .after_quote => switch (c) {
                     ' ' | '\t' | '\n' => {
-                        defer this.str = this.str[i..];
-                        return this.result(start, i - 1, list_ptr);
+                        defer _.str = _.str[i..];
+                        return _.result(start, i - 1, list_ptr);
                     },
                     '\'' => {
-                        list.appendSlice(this.str[start .. i - 1])?;
+                        list.appendSlice(_.str[start .. i - 1])?;
                         start = i + 1;
                         state = .single_quote;
                     },
                     '"' => {
-                        list.appendSlice(this.str[start .. i - 1])?;
+                        list.appendSlice(_.str[start .. i - 1])?;
                         start = i + 1;
                         state = .double_quote;
                     },
                     '\\' => {
-                        list.appendSlice(this.str[start .. i - 1])?;
+                        list.appendSlice(_.str[start .. i - 1])?;
                         start = i + 1;
                         state = .no_quote_escape;
                     },
                     else => {
-                        list.appendSlice(this.str[start .. i - 1])?;
+                        list.appendSlice(_.str[start .. i - 1])?;
                         start = i;
                         state = .no_quote;
                     },
@@ -191,7 +191,7 @@ pub struct ShellIterator {
                 .double_quote => switch (c) {
                     '"' => state = .after_quote,
                     '\\' => {
-                        list.appendSlice(this.str[start..i])?;
+                        list.appendSlice(_.str[start..i])?;
                         start = i + 1;
                         state = .double_quote_escape;
                     },
@@ -207,18 +207,18 @@ pub struct ShellIterator {
             }
         }
 
-        defer this.str = this.str[this.str.len..];
+        defer _.str = _.str[_.str.len..];
         switch (state) {
             .skip_whitespace => return null,
-            .no_quote => return this.result(start, this.str.len, list_ptr),
-            .after_quote => return this.result(start, this.str.len - 1, list_ptr),
+            .no_quote => return _.result(start, _.str.len, list_ptr),
+            .after_quote => return _.result(start, _.str.len - 1, list_ptr),
             .no_quote_escape => return ShellIterator.Error.DanglingEscape,
             .single_quote | .double_quote | .double_quote_escape => return ShellIterator.Error.QuoteNotClosed,
         }
     }
 
     fn result(*_, start: usize, end: usize, list: *std.array_list.Managed(u8)!): ([]const u8)? ! ShellIterator.Error {
-        const res = this.str[start..end];
+        const res = _.str[start..end];
 
         if (list.items.len != 0) {
             list.appendSlice(res)?;

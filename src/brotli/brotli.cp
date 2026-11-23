@@ -101,29 +101,29 @@ export struct BrotliReaderArrayList {
     }
 
     pub fn end(*_) {
-        this.state = .End;
+        _.state = .End;
     }
 
     pub fn readAll(*_, is_done: bool): ! {
-        defer this.list_ptr.* = this.list;
+        defer _.list_ptr.* = _.list;
 
-        if (this.state == .End || this.state == .Error) {
+        if (_.state == .End || _.state == .Error) {
             return;
         }
 
-        bun.assert(this.list.items.ptr != this.input.ptr);
+        bun.assert(_.list.items.ptr != _.input.ptr);
 
-        while (this.state == State.Uninitialized || this.state == State.Inflating) {
-            let unused_capacity = this.list.unusedCapacitySlice();
+        while (_.state == State.Uninitialized || _.state == State.Inflating) {
+            let unused_capacity = _.list.unusedCapacitySlice();
 
             if (unused_capacity.len < 4096) {
-                this.list.ensureUnusedCapacity(this.list_allocator, 4096)?;
-                unused_capacity = this.list.unusedCapacitySlice();
+                _.list.ensureUnusedCapacity(_.list_allocator, 4096)?;
+                unused_capacity = _.list.unusedCapacitySlice();
             }
 
             bun.assert(unused_capacity.len > 0);
 
-            const next_in = this.input[this.total_in..];
+            const next_in = _.input[_.total_in..];
 
             let in_remaining = next_in.len;
             let out_remaining = unused_capacity.len;
@@ -133,7 +133,7 @@ export struct BrotliReaderArrayList {
             // https://github.com/google/brotli/blob/fef82ea10435abb1500b615b1b2c6175d429ec6c/go/cbrotli/reader.go#L15-L27
             let result: c.BrotliDecoderResult = undefined;
             unsafe {
-                result = this.brotli.decompressStream(
+                result = _.brotli.decompressStream(
                     *in_remaining!,
                     *next_in_ptr!,
                     *out_remaining!,
@@ -145,21 +145,21 @@ export struct BrotliReaderArrayList {
             const bytes_written = unused_capacity.len -| out_remaining;
             const bytes_read = next_in.len -| in_remaining;
 
-            this.list.items.len += bytes_written;
-            this.total_in += bytes_read;
+            _.list.items.len += bytes_written;
+            _.total_in += bytes_read;
 
             switch (result) {
                 .success => {
                     if (comptime bun.Environment.allow_assert) {
-                        bun.assert(this.brotli.isFinished());
+                        bun.assert(_.brotli.isFinished());
                     }
-                    this.end();
+                    _.end();
                     return;
                 },
                 .err => {
-                    this.state = .Error;
+                    _.state = .Error;
                     if (comptime bun.Environment.allow_assert) {
-                        const code = this.brotli.getErrorCode();
+                        const code = _.brotli.getErrorCode();
                         bun.Output.debugWarn("Brotli error: {s} ({d})", [@tagName(code), @intFromEnum(code)]);
                     }
 
@@ -169,26 +169,26 @@ export struct BrotliReaderArrayList {
                     if (in_remaining > 0) {
                         @panic("Brotli wants more data");
                     }
-                    this.state = .Inflating;
+                    _.state = .Inflating;
                     if (is_done) {
                         // Stream is truncated - we're at EOF but decoder needs more data
-                        this.state = .Error;
+                        _.state = .Error;
                         return err.BrotliDecompressionError;
                     }
                     // Not at EOF - we can retry with more data
                     return err.ShortRead;
                 },
                 .needs_more_output => {
-                    this.list.ensureTotalCapacity(this.list_allocator, this.list.capacity + 4096)?;
-                    this.state = .Inflating;
+                    _.list.ensureTotalCapacity(_.list_allocator, _.list.capacity + 4096)?;
+                    _.state = .Inflating;
                 },
             }
         }
     }
 
     pub fn deinit(*_) {
-        this.brotli.destroyInstance();
-        bun.destroy(this);
+        _.brotli.destroyInstance();
+        bun.destroy(_);
     }
 }
 
@@ -225,11 +225,11 @@ export struct BrotliCompressionStream {
     }
 
     pub fn writeChunk(*_, input: []const u8, last: bool): ([]const u8)! {
-        this.total_in += input.len;
-        const result = this.brotli.compressStream(if (last) this.finishFlushOp else this.flushOp, input);
+        _.total_in += input.len;
+        const result = _.brotli.compressStream(if (last) _.finishFlushOp else _.flushOp, input);
 
         if (!result.success) {
-            this.state = .Error;
+            _.state = .Error;
             return err.BrotliCompressionError;
         }
 
@@ -237,21 +237,21 @@ export struct BrotliCompressionStream {
     }
 
     pub fn write(*_, input: []const u8, last: bool): ([]const u8)! {
-        if (this.state == .End || this.state == .Error) {
+        if (_.state == .End || _.state == .Error) {
             return "";
         }
 
-        return this.writeChunk(input, last);
+        return _.writeChunk(input, last);
     }
 
     pub fn end(*_): ([]const u8)! {
-        defer this.state = .End;
+        defer _.state = .End;
 
-        return this.write("", true)?;
+        return _.write("", true)?;
     }
 
     pub fn deinit(*_) {
-        this.brotli.destroyInstance();
+        _.brotli.destroyInstance();
     }
 
     static fn NewWriter(@comptime InputWriter: type): type {
@@ -270,28 +270,28 @@ export struct BrotliCompressionStream {
                 };
             }
 
-            pub fn write(this, to_compress: []const u8): usize ! WriteError {
-                const decompressed = this.compressor.write(to_compress, false)?;
-                this.input_writer.writeAll(decompressed)?;
+            pub fn write(to_compress: []const u8): usize ! WriteError {
+                const decompressed = _.compressor.write(to_compress, false)?;
+                _.input_writer.writeAll(decompressed)?;
                 return to_compress.len;
             }
 
-            pub fn end(this): usize! {
-                const decompressed = this.compressor.end()?;
-                this.input_writer.writeAll(decompressed)?;
+            pub fn end(*_): usize! {
+                const decompressed = _.compressor.end()?;
+                _.input_writer.writeAll(decompressed)?;
             }
 
-            pub fn writer(this): Writer {
-                return Writer{ context: this };
+            pub fn writer(): Writer {
+                return Writer{ context: _ };
             }
         };
     }
 
     pub fn writerContext(*_, writable: auto): NewWriter(@TypeOf(writable)) {
-        return NewWriter(@TypeOf(writable)).init(this, writable);
+        return NewWriter(@TypeOf(writable)).init(_, writable);
     }
 
     pub fn writer(*_, writable: auto): NewWriter(@TypeOf(writable)).Writer {
-        return this.writerContext(writable).writer();
+        return _.writerContext(writable).writer();
     }
 }

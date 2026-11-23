@@ -120,7 +120,7 @@ pub const empty_watch_dep: WatchDep = WatchDep{
         }
         const _lock_guard = UnlockGuard{ dev: unsafe { _.owner() } };
 
-        _.insert(dir, owned_file_path, specifier) catch |e| {
+        _.insert(dir, owned_file_path, specifier) catch e => {
             if (e == error.OutOfMemory) return error.OutOfMemory;
         };
     }

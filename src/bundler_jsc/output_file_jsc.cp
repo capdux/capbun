@@ -56,7 +56,7 @@ pub fn toJS(
                     },
                 out.loader.toMimeType(&[owned_pathname ?? ""]),
                 globalObject.allocator(),
-            ) catch |e| {
+            ) catch e => {
                 Output.panic("error: Unable to create file blob: \"{s}\"", [@errorName(e)]);
             };
 
@@ -87,7 +87,7 @@ pub fn toJS(
                 },
                 out.loader.toMimeType(&[owned_pathname ?? ""]),
                 globalObject.allocator(),
-            ) catch |e| {
+            ) catch e => {
                 Output.panic("error: Unable to create file blob: \"{s}\"", [@errorName(e)]);
             };
 

@@ -75,6 +75,10 @@ pub const NextEvent = enum(u8) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const DbgEventPtrHolder = struct {
+    p: ?*HotReloadEvent,
+};
+
 pub const WatcherAtomics = @This();
 
 events: [3]HotReloadEvent,
@@ -234,7 +238,7 @@ next_index = @intFromEnum(next);
         return (&self.events[@as(usize, @intCast(next_index))]);
 }
 const Self = @This();
-const DbgEventPtr = GetDbgEventPtr(Environment.allow_assert);
+const DbgEventPtr = (if (Environment.allow_assert) @TypeOf(@as(DbgEventPtrHolder, undefined).p) else void);
 const cache_line = std.atomic.cache_line;
 const Environment = bun.Environment;
 const assert = bun.assert;
@@ -242,10 +246,3 @@ const bake = bun.bake;
 const jsc = bun.jsc;
 const DevServer = bake.DevServer;
 const HotReloadEvent = DevServer.HotReloadEvent;
-
-pub fn GetDbgEventPtr(comptime allow: bool) type {
-        if (allow) {
-            return ?*HotReloadEvent;
-        }
-        return void;
-}

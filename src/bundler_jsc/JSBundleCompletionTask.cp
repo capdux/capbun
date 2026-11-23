@@ -144,13 +144,13 @@ pub struct JSBundleCompletionTask {
         transpiler: *Transpiler,
         alloc: std.mem.Allocator,
     ): void! {
-        const config = &this.config;
+        const config = &_.config;
         const jsx_api = config.jsx;
 
         unsafe {
             transpiler.* = bun.Transpiler.init(
                 alloc,
-                &this.log,
+                &_.log,
                 api.TransformOptions{
                     define: if (config.define.count() > 0) config.define.toAPI() else null,
                     entry_points: config.entry_points.keys(),
@@ -170,7 +170,7 @@ pub struct JSBundleCompletionTask {
                     bunfig_path: transpiler.options.bunfig_path,
                     jsx: jsx_api,
                 },
-                this.env,
+                _.env,
             )?;
         }
         transpiler.options.env.behavior = config.env_behavior;
@@ -257,7 +257,7 @@ pub struct JSBundleCompletionTask {
         }
         if (transpiler.options.compile_to_standalone_html) {
             transpiler.options.compile = false;
-            this.config.compile = null;
+            _.config.compile = null;
         }
 
         if (transpiler.options.compile) {
@@ -275,23 +275,23 @@ pub struct JSBundleCompletionTask {
     }
 
     pub fn completeOnBundleThread(*_) {
-        this.jsc_event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.create(this.task.task()));
+        _.jsc_event_loop.enqueueTaskConcurrent(jsc.ConcurrentTask.create(_.task.task()));
     }
 
     fn deinit(*_) {
-        this.result.deinit();
-        this.log.deinit();
-        this.poll_ref.disable();
-        if (plugin := this.plugins) {
+        _.result.deinit();
+        _.log.deinit();
+        _.poll_ref.disable();
+        if (plugin := _.plugins) {
             plugin.deinit();
         }
-        this.config.deinit(bun.default_allocator);
-        this.promise.deinit();
-        bun.destroy(this);
+        _.config.deinit(bun.default_allocator);
+        _.promise.deinit();
+        bun.destroy();
     }
 
     fn doCompilation(*_, output_files: *std.array_list.Managed(options.OutputFile)): bun.StandaloneModuleGraph.CompileResult {
-        const compile_options = &(this.config.compile ?? @panic("Unexpected: No compile options provided"));
+        const compile_options = &(_.config.compile ?? @panic("Unexpected: No compile options provided"));
 
         const entry_point_index = brk: {
             for (i of 0..output_files.items.len) {
@@ -306,8 +306,8 @@ pub struct JSBundleCompletionTask {
         const outbuf = bun.path_buffer_pool.get();
         const _outbuf_guard = PathBufferPoolGuard<@TypeOf(outbuf)>{ buf: outbuf };
 
-        let full_outfile_path = if (this.config.outdir.slice().len > 0) brk: {
-            const outdir_slice = this.config.outdir.slice();
+        let full_outfile_path = if (_.config.outdir.slice().len > 0) brk: {
+            const outdir_slice = _.config.outdir.slice();
             const top_level_dir = bun.fs.FileSystem.instance.top_level_dir;
             break :brk bun.path.joinAbsStringBuf(top_level_dir, outbuf, &[outdir_slice, compile_options.outfile.slice()], .auto);
         } else if (std.fs.path.isAbsolute(compile_options.outfile.slice()))
@@ -318,7 +318,7 @@ pub struct JSBundleCompletionTask {
         };
 
         if (compile_options.compile_target.os == .windows && !strings.hasSuffixComptime(full_outfile_path, ".exe")) {
-            full_outfile_path = std.fmt.allocPrint(bun.default_allocator, "{s}.exe", [full_outfile_path]) catch |e| bun.handleOom(e);
+            full_outfile_path = std.fmt.allocPrint(bun.default_allocator, "{s}.exe", [full_outfile_path]) catch e => bun.handleOom(e);
         } else {
             full_outfile_path = bun.handleOom(bun.default_allocator.dupe(u8, full_outfile_path));
         }
@@ -332,11 +332,11 @@ pub struct JSBundleCompletionTask {
         const outfile_for_executable = if (Environment.isWindows) full_outfile_path else basename;
 
         if (Environment.isPosix && !(dirname.len == 0 || strings.eqlComptime(dirname, "."))) {
-            root_dir = root_dir.makeOpenPath(dirname, {}) catch |e| {
+            root_dir = root_dir.makeOpenPath(dirname, {}) catch e => {
                 return bun.StandaloneModuleGraph.CompileResult.failFmt("Failed to open output directory {s}: {s}", [dirname, @errorName(e)]);
             };
         } else if (Environment.isWindows && !(dirname.len == 0 || strings.eqlComptime(dirname, "."))) {
-            * = bun.makePath(root_dir, dirname) catch |e| {
+            * = bun.makePath(root_dir, dirname) catch e => {
                 return bun.StandaloneModuleGraph.CompileResult.failFmt("Failed to create output directory {s}: {s}", [dirname, @errorName(e)]);
             };
         }
@@ -350,8 +350,8 @@ pub struct JSBundleCompletionTask {
             root_dir,
             module_prefix,
             outfile_for_executable,
-            this.env,
-            this.config.format,
+            _.env,
+            _.config.format,
             {
                 hide_console: compile_options.windows_hide_console,
                 icon: if (compile_options.windows_icon_path.slice().len > 0)
@@ -390,7 +390,7 @@ pub struct JSBundleCompletionTask {
                 disable_autoload_tsconfig: !compile_options.autoload_tsconfig,
                 disable_autoload_package_json: !compile_options.autoload_package_json,
             },
-        ) catch |e| {
+        ) catch e => {
             return bun.StandaloneModuleGraph.CompileResult.failFmt("{s}", [@errorName(e)]);
         };
 
@@ -465,7 +465,7 @@ pub struct JSBundleCompletionTask {
     }
 
     fn toJSError(*_, promise: *jsc.JSPromise, globalThis: *jsc.JSGlobalObject): void ! bun.JSTerminated {
-        const throw_on_error = this.config.throw_on_error;
+        const throw_on_error = _.config.throw_on_error;
 
         const build_result = jsc.JSValue.createEmptyObject(globalThis, 3);
         build_result.put(globalThis, jsc.ZigString.static("outputs"), jsc.JSValue.createEmptyArray(globalThis, 0) catch return promise.reject(globalThis, error.JSError));
@@ -477,20 +477,20 @@ pub struct JSBundleCompletionTask {
         build_result.put(
             globalThis,
             jsc.ZigString.static("logs"),
-            this.log.toJSArray(globalThis, bun.default_allocator) catch |e| {
+            _.log.toJSArray(globalThis, bun.default_allocator) catch e => {
                 return promise.reject(globalThis, e);
             },
         );
 
         let didHandleCallbacks = false;
-        if (plugin := this.plugins) {
+        if (plugin := _.plugins) {
             if (throw_on_error) {
-                const aggregate_error = this.log.toJSAggregateError(globalThis, bun.String.static("Bundle failed"));
-                didHandleCallbacks = JSBundleCompletionTask.runOnEndCallbacks(globalThis, plugin, promise, build_result, aggregate_error) catch |e| {
+                const aggregate_error = _.log.toJSAggregateError(globalThis, bun.String.static("Bundle failed"));
+                didHandleCallbacks = JSBundleCompletionTask.runOnEndCallbacks(globalThis, plugin, promise, build_result, aggregate_error) catch e => {
                     return promise.reject(globalThis, e);
                 };
             } else {
-                didHandleCallbacks = JSBundleCompletionTask.runOnEndCallbacks(globalThis, plugin, promise, build_result, .js_undefined) catch |e| {
+                didHandleCallbacks = JSBundleCompletionTask.runOnEndCallbacks(globalThis, plugin, promise, build_result, .js_undefined) catch e => {
                     return promise.reject(globalThis, e);
                 };
             }
@@ -498,7 +498,7 @@ pub struct JSBundleCompletionTask {
 
         if (!didHandleCallbacks) {
             if (throw_on_error) {
-                const aggregate_error = this.log.toJSAggregateError(globalThis, bun.String.static("Bundle failed"));
+                const aggregate_error = _.log.toJSAggregateError(globalThis, bun.String.static("Bundle failed"));
                 return promise.reject(globalThis, aggregate_error);
             } else {
                 return promise.resolve(globalThis, build_result);
@@ -507,38 +507,38 @@ pub struct JSBundleCompletionTask {
     }
 
     pub fn onComplete(*_): void ! bun.JSTerminated {
-        let globalThis = this.globalThis;
-        const _deref_guard = DerefGuard<JSBundleCompletionTask>{ ptr: unsafe { this } };
+        let globalThis = _.globalThis;
+        const _deref_guard = DerefGuard<JSBundleCompletionTask>{ ptr: unsafe { _ } };
 
-        this.poll_ref.unref(globalThis.bunVM());
-        if (this.cancelled) {
+        _.poll_ref.unref(globalThis.bunVM());
+        if (_.cancelled) {
             return;
         }
 
-        if (html_build_task := this.html_build_task) {
-            this.plugins = null;
-            html_build_task.onComplete(this);
+        if (html_build_task := _.html_build_task) {
+            _.plugins = null;
+            html_build_task.onComplete();
             return;
         }
 
-        const promise = this.promise.swap();
+        const promise = _.promise.swap();
 
-        if (this.result == .value) {
-            if (this.config.compile != null) {
-                let compile_result = this.doCompilation(&this.result.value.output_files);
+        if (_.result == .value) {
+            if (_.config.compile != null) {
+                let compile_result = _.doCompilation(&_.result.value.output_files);
                 const _compile_result_guard = DeinitGuard<@TypeOf(compile_result)>{ ptr: unsafe { &compile_result } };
 
                 if (compile_result != .success) {
-                    bun.handleOom(this.log.addError(null, Logger.Loc.Empty, bun.handleOom(this.log.msgs.allocator.dupe(u8, compile_result.err.slice()))));
-                    this.result.value.deinit();
-                    this.result = .{ .@"err" = error.CompilationFailed };
+                    bun.handleOom(_.log.addError(null, Logger.Loc.Empty, bun.handleOom(_.log.msgs.allocator.dupe(u8, compile_result.err.slice()))));
+                    _.result.value.deinit();
+                    _.result = .{ .@"err" = error.CompilationFailed };
                 }
             }
         }
 
-        switch (this.result) {
+        switch (_.result) {
             .pending => unreachable,
-            .err => this.toJSError(promise, globalThis)?,
+            .err => _.toJSError(promise, globalThis)?,
             .value => |*build| {
                 const output_files = build.output_files.items;
                 const output_files_js = jsc.JSValue.createEmptyArray(globalThis, output_files.len) catch return promise.reject(globalThis, error.JSError);
@@ -550,12 +550,12 @@ pub struct JSBundleCompletionTask {
                 for (i of 0..output_files.len) {
                     const output_file = &output_files[i];
                     const result = output_file.toJS(
-                        if (!this.config.outdir.isEmpty())
-                            if (std.fs.path.isAbsolute(this.config.outdir.list.items))
+                        if (!_.config.outdir.isEmpty())
+                            if (std.fs.path.isAbsolute(_.config.outdir.list.items))
                                 bun.default_allocator.dupe(
                                     u8,
                                     bun.path.joinAbsString(
-                                        this.config.outdir.slice(),
+                                        _.config.outdir.slice(),
                                         &[output_file.dest_path],
                                         .auto,
                                     ),
@@ -565,7 +565,7 @@ pub struct JSBundleCompletionTask {
                                     u8,
                                     bun.path.joinAbsString(
                                         bun.fs.FileSystem.instance.top_level_dir,
-                                        &[this.config.dir.slice(), this.config.outdir.slice(), output_file.dest_path],
+                                        &[_.config.dir.slice(), _.config.outdir.slice(), output_file.dest_path],
                                         .auto,
                                     ),
                                 ) catch unreachable
@@ -588,7 +588,7 @@ pub struct JSBundleCompletionTask {
                         to_assign_on_sourcemap = result;
                     }
 
-                    output_files_js.putIndex(globalThis, u32(i), result) catch |e| {
+                    output_files_js.putIndex(globalThis, u32(i), result) catch e => {
                         return promise.reject(globalThis, e);
                     };
                 }
@@ -598,18 +598,18 @@ pub struct JSBundleCompletionTask {
                 build_output.put(
                     globalThis,
                     jsc.ZigString.static("logs"),
-                    this.log.toJSArray(globalThis, bun.default_allocator) catch |e| {
+                    _.log.toJSArray(globalThis, bun.default_allocator) catch e => {
                         return promise.reject(globalThis, e);
                     },
                 );
 
                 if (metafile := build.metafile) {
-                    const metafile_js_str = bun.String.createUTF8ForJS(globalThis, metafile) catch |e| {
+                    const metafile_js_str = bun.String.createUTF8ForJS(globalThis, metafile) catch e => {
                         return promise.reject(globalThis, e);
                     };
                     let metafile_md_str: jsc.JSValue = .js_undefined;
                     if (md := build.metafile_markdown) {
-                        metafile_md_str = bun.String.createUTF8ForJS(globalThis, md) catch |e| {
+                        metafile_md_str = bun.String.createUTF8ForJS(globalThis, md) catch e => {
                             return promise.reject(globalThis, e);
                         };
                     }
@@ -619,8 +619,8 @@ pub struct JSBundleCompletionTask {
                 }
 
                 let didHandleCallbacks = false;
-                if (plugin := this.plugins) {
-                    didHandleCallbacks = JSBundleCompletionTask.runOnEndCallbacks(globalThis, plugin, promise, build_output, .js_undefined) catch |e| {
+                if (plugin := _.plugins) {
+                    didHandleCallbacks = JSBundleCompletionTask.runOnEndCallbacks(globalThis, plugin, promise, build_output, .js_undefined) catch e => {
                         return promise.reject(globalThis, e);
                     };
                 }

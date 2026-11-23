@@ -1440,20 +1440,20 @@ pub fn fmtIdentifier(name: []const u8) FormatValidIdentifier {
         return FormatValidIdentifier{ .name = name };
 }
 
-pub fn githubActionWriter(writer: *std.Io.Writer, self: []const u8) !void {
+pub fn githubActionWriter(writer: *std.Io.Writer, text: []const u8) !void {
         var offset: usize = 0;
         _ = &offset;
-        const end = (if (comptime @typeInfo(@TypeOf(self.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(self.len)) else cp_cast_int(u32, self.len));
+        const end = (if (comptime @typeInfo(@TypeOf(text.len)) == .@"enum") cp_cast_int(u32, @intFromEnum(text.len)) else cp_cast_int(u32, text.len));
         while ((offset < end)) {
-            if (strings.indexOfNewlineOrNonASCIIOrANSI(self, (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(u32, @intFromEnum(offset)) else cp_cast_int(u32, offset)))) |i| {
+            if (strings.indexOfNewlineOrNonASCIIOrANSI(text, (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(u32, @intFromEnum(offset)) else cp_cast_int(u32, offset)))) |i| {
                 _ = &i;
-                const byte = self[@as(usize, @intCast(i))];
+                const byte = text[@as(usize, @intCast(i))];
                 if ((byte > 127)) {
                     offset = (offset + @max(strings.wtf8ByteSequenceLength(byte), 1));
                     continue;
                 }
                 if ((i > 0)) {
-                    _ = try writer.writeAll(self[offset..i]);
+                    _ = try writer.writeAll(text[offset..i]);
                 }
                 var n: usize = 1;
                 _ = &n;
@@ -1461,7 +1461,7 @@ pub fn githubActionWriter(writer: *std.Io.Writer, self: []const u8) !void {
                     _ = try writer.writeAll("%0A");
                 } else {
                     if (((i + 1) < end)) {
-                        const next = self[@as(usize, @intCast((i + 1)))];
+                        const next = text[@as(usize, @intCast((i + 1)))];
                         if (((byte == 13) and (next == 10))) {
                             n = (n + 1);
                             _ = try writer.writeAll("%0A");
@@ -1469,7 +1469,7 @@ pub fn githubActionWriter(writer: *std.Io.Writer, self: []const u8) !void {
                             if (((byte == 27) and (next == 91))) {
                                 n = (n + 1);
                                 if (((i + 2) < end)) {
-                                    const rem_ = self[(i + 2)..@min((i + 5), end)];
+                                    const rem_ = text[(i + 2)..@min((i + 5), end)];
                                     if (strings.indexOfChar(rem_, 109)) |j| {
                                         _ = &j;
                                         n = (n + (j + 1));
@@ -1481,7 +1481,7 @@ pub fn githubActionWriter(writer: *std.Io.Writer, self: []const u8) !void {
                 }
                 offset = (i + n);
             } else {
-                _ = try writer.writeAll(self[offset..end]);
+                _ = try writer.writeAll(text[offset..end]);
                 break;
             }
         }
@@ -1491,13 +1491,13 @@ pub fn githubAction(text: []const u8) strings.GithubActionFormatter {
         return GithubActionFormatter{ .text = text };
 }
 
-pub fn quotedWriter(writer: *std.Io.Writer, self: []const u8) !void {
-        const rest_ = self;
+pub fn quotedWriter(writer: *std.Io.Writer, text: []const u8) !void {
+        const rest_ = text;
         if (strings.containsNewlineOrNonASCIIOrQuote(rest_)) {
-            _ = try bun.js_printer.writeJSONString(self, @TypeOf(writer), writer, strings.Encoding.utf8);
+            _ = try bun.js_printer.writeJSONString(text, @TypeOf(writer), writer, strings.Encoding.utf8);
         } else {
             _ = try writer.writeAll("\"");
-            _ = try writer.writeAll(self);
+            _ = try writer.writeAll(text);
             _ = try writer.writeAll("\"");
         }
 }
@@ -1506,8 +1506,8 @@ pub fn fmtJavaScript(text: []const u8, opts: HighlighterOptions) QuickAndDirtyJa
         return QuickAndDirtyJavaScriptSyntaxHighlighter{ .text = text, .opts = opts };
 }
 
-pub fn quote(self: []const u8) bun.fmt.QuotedFormatter {
-        return bun.fmt.QuotedFormatter{ .text = self };
+pub fn quote(text: []const u8) bun.fmt.QuotedFormatter {
+        return bun.fmt.QuotedFormatter{ .text = text };
 }
 
 pub fn enumTagListText(comptime Enum: type, comptime Separator: @Type(.enum_literal)) []const u8 {

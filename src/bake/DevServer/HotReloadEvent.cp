@@ -47,7 +47,7 @@ fn GetDebugMutex(comptime is_debug: bool): type {
 
     debug_mutex: GetDebugMutex(Environment.isDebug),
 
-    pub fn initEmpty(owner: *DevServer): HotReloadEvent {
+    pub static fn initEmpty(owner: *DevServer): HotReloadEvent {
         return HotReloadEvent{
             owner: owner,
             concurrent_task: undefined,
@@ -60,7 +60,7 @@ fn GetDebugMutex(comptime is_debug: bool): type {
         };
     }
 
-    pub fn reset(ev: *HotReloadEvent) {
+    pub static fn reset(ev: *HotReloadEvent) {
         if (Environment.isDebug) {
             ev.debug_mutex.unlock();
         }
@@ -71,15 +71,15 @@ fn GetDebugMutex(comptime is_debug: bool): type {
         ev.timer = undefined;
     }
 
-    pub fn isEmpty(ev: *const HotReloadEvent): bool {
+    pub static fn isEmpty(ev: *const HotReloadEvent): bool {
         return (ev.files.count() + ev.dirs.count()) == 0;
     }
 
-    pub fn appendFile(event: *HotReloadEvent, allocator: Allocator, file_path: []const u8) {
+    pub static fn appendFile(event: *HotReloadEvent, allocator: Allocator, file_path: []const u8) {
         * = bun.handleOom(event.files.getOrPut(allocator, file_path));
     }
 
-    pub fn appendDir(event: *HotReloadEvent, allocator: Allocator, dir_path: []const u8, maybe_sub_path: ([]const u8)?) {
+    pub static fn appendDir(event: *HotReloadEvent, allocator: Allocator, dir_path: []const u8, maybe_sub_path: ([]const u8)?) {
         if (dir_path.len == 0) return;
         * = bun.handleOom(event.dirs.getOrPut(allocator, dir_path));
 
@@ -194,7 +194,7 @@ fn GetDebugMutex(comptime is_debug: bool): type {
         }
     }
 
-    pub fn run(first: *HotReloadEvent) {
+    pub static fn run(first: *HotReloadEvent) {
         assert(first.owner.magic == .valid);
         debug.log("HMR Task start", []);
         defer debug.log("HMR Task end", []);
@@ -258,7 +258,7 @@ fn GetDebugMutex(comptime is_debug: bool): type {
             entry_points,
             true,
             timer,
-        ) catch |e| {
+        ) catch e => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
             return;
         };

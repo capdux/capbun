@@ -11,11 +11,8 @@ pub enum NextEvent: u8 {
     _,
 }
 
-fn GetDbgEventPtr(comptime allow: bool): type {
-    if (allow) return ?*HotReloadEvent;
-    return void;
-}
-const DbgEventPtr = GetDbgEventPtr(Environment.allow_assert);
+struct DbgEventPtrHolder { p: (*HotReloadEvent)? }
+const DbgEventPtr = if (Environment.allow_assert) @TypeOf(@as(DbgEventPtrHolder, undefined).p) else void;
 
 const cache_line = std.atomic.cache_line;
 

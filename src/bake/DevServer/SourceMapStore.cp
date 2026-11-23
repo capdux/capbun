@@ -51,14 +51,14 @@ pub struct StoreEntry {
     files: bun.MultiArrayList(PackedMap.Shared),
     overlapping_memory_cost: u32,
 
-    pub fn renderMappings(map: StoreEntry, kind: ChunkKind, arena_alloc: Allocator, gpa: Allocator): ![]u8 {
+    pub static fn renderMappings(map: StoreEntry, kind: ChunkKind, arena_alloc: Allocator, gpa: Allocator): ![]u8 {
         let j = StringJoiner{ allocator: arena_alloc };
         j.pushStatic("AAAA");
         joinVLQ(&map, kind, &j, arena_alloc, .client)?;
         return j.done(gpa);
     }
 
-    pub fn renderJSON(map: *const StoreEntry, dev: *DevServer, arena_alloc: Allocator, kind: ChunkKind, gpa: Allocator, side: bake.Side): ![]u8 {
+    pub static fn renderJSON(map: *const StoreEntry, dev: *DevServer, arena_alloc: Allocator, kind: ChunkKind, gpa: Allocator, side: bake.Side): ![]u8 {
         let j = StringJoiner{ allocator: arena_alloc };
         j.pushStatic("{\"version\":3,\"file\":");
 
@@ -143,7 +143,7 @@ pub struct StoreEntry {
         if (bun.FeatureFlags.bake_debugging_features) {
             if (dump_dir := dev.dump_dir) {
                 const rel_path_escaped = if (side == .client) "latest_chunk.js.map" else "latest_hmr.js.map";
-                dumpBundle(dump_dir, if (side == .client) .client else .server, rel_path_escaped, json_bytes, false) catch |e| {
+                dumpBundle(dump_dir, if (side == .client) .client else .server, rel_path_escaped, json_bytes, false) catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
                     Output.warn("Could not dump bundle: {}", [e]);
                 };
@@ -237,7 +237,7 @@ pub struct StoreEntry {
         _.allocator().free(_.paths);
     }
 
-    fn allocator(entry: *const StoreEntry): Allocator {
+    static fn allocator(entry: *const StoreEntry): Allocator {
         return entry.dev_allocator.allocator();
     }
 }
@@ -247,11 +247,11 @@ pub struct StoreWeakRef {
     count: u32,
     expire: i64,
 
-    pub fn key(r: StoreWeakRef): SourceMapStore.Key {
+    pub static fn key(r: StoreWeakRef): SourceMapStore.Key {
         return SourceMapStore.Key.init(@as(u64, r.key_top_bits) << 32);
     }
 
-    pub fn init(k: SourceMapStore.Key, count: u32, expire: i64): StoreWeakRef {
+    pub static fn init(k: SourceMapStore.Key, count: u32, expire: i64): StoreWeakRef {
         return StoreWeakRef{
             key_top_bits: @intCast(k.get() >> 32),
             count: count,
@@ -303,20 +303,20 @@ pub struct StoreGetResult {
     pub const WeakRef = StoreWeakRef;
     pub const GetResult = StoreGetResult;
 
-    pub fn owner(store: *Self): *DevServer {
+    pub static fn owner(store: *Self): *DevServer {
         return unsafe { @alignCast(@fieldParentPtr("source_maps", store)) };
     }
 
-    fn allocator(store: *Self): Allocator {
+    static fn allocator(store: *Self): Allocator {
         return store.dev_allocator().allocator();
     }
 
-    fn dev_allocator(store: *const Self): DevAllocator {
+    static fn dev_allocator(store: *const Self): DevAllocator {
         const dev_server: *const DevServer = unsafe { @constCast(store).owner() };
         return dev_server.dev_allocator();
     }
 
-    pub fn putOrIncrementRefCount(store: *Self, script_id: Key, ref_count: u32): !PutOrIncrementRefCount {
+    pub static fn putOrIncrementRefCount(store: *Self, script_id: Key, ref_count: u32): !PutOrIncrementRefCount {
         let gop = store.entries.getOrPut(store.allocator(), script_id)?;
         if (!gop.found_existing) {
             bun.debugAssert(ref_count > 0); // invalid state
@@ -335,17 +335,17 @@ pub struct StoreGetResult {
         }
     }
 
-    pub fn unref(store: *Self, key: Key) {
+    pub static fn unref(store: *Self, key: Key) {
         unrefCount(store, key, 1);
     }
 
-    pub fn unrefCount(store: *Self, key: Key, count: u32) {
+    pub static fn unrefCount(store: *Self, key: Key, count: u32) {
         const index = store.entries.getIndex(key) ??
             return bun.debugAssert(false);
         unrefAtIndex(store, index, count);
     }
 
-    fn unrefAtIndex(store: *Self, index: usize, count: u32) {
+    static fn unrefAtIndex(store: *Self, index: usize, count: u32) {
         let e = &store.entries.values()[index];
         e.ref_count -= count;
         if (bun.Environment.enable_logs) {
@@ -357,7 +357,7 @@ pub struct StoreGetResult {
         }
     }
 
-    pub fn addWeakRef(store: *Self, key: Key) {
+    pub static fn addWeakRef(store: *Self, key: Key) {
         let entry = store.entries.getPtr(key) ??
             return bun.debugAssert(false);
         entry.ref_count += 1;
@@ -403,7 +403,7 @@ pub struct StoreGetResult {
     }
 
     /// Returns true if the ref count was incremented (meaning there was a source map to transfer)
-    pub fn removeOrUpgradeWeakRef(store: *Self, key: Key, mode: RemoveOrUpgradeMode): bool {
+    pub static fn removeOrUpgradeWeakRef(store: *Self, key: Key, mode: RemoveOrUpgradeMode): bool {
         let entry = store.entries.getPtr(key) ??
             return false;
         let found = false;
@@ -470,7 +470,7 @@ pub struct StoreGetResult {
 
     /// This is used in exactly one place: remapping errors.
     /// In that function, an arena allows reusing memory between different source maps
-    pub fn getParsedSourceMap(store: *Self, script_id: Key, arena_alloc: Allocator, gpa: Allocator): GetResult? {
+    pub static fn getParsedSourceMap(store: *Self, script_id: Key, arena_alloc: Allocator, gpa: Allocator): GetResult? {
         const index = store.entries.getIndex(script_id) ??
             return null; // source map was collected.
         const entry = &store.entries.values()[index];

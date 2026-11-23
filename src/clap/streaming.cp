@@ -61,13 +61,13 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
         diagnostic: (*clap.Diagnostic)? = null,
 
         /// Get the next Arg that matches a Param.
-        pub fn next(*this): Arg(Id)? ! ArgError {
-            switch (this.state) {
-                .normal => return this.normal()?,
-                .chaining state => return this.chainging(state)?,
+        pub fn next(*_): Arg(Id)? ! ArgError {
+            switch (_.state) {
+                .normal => return _.normal()?,
+                .chaining state => return _.chainging(state)?,
                 .rest_are_positional => {
-                    const param = this.positionalParam() ?? unreachable;
-                    if (value := this.iter.next()) {
+                    const param = _.positionalParam() ?? unreachable;
+                    if (value := _.iter.next()) {
                         return ArgType{ param: param, value: value };
                     }
                     return null;
@@ -75,8 +75,8 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
             }
         }
 
-        fn normal(*this): Arg(Id)? ! ArgError {
-            const arg_info_opt = this.parseNextArg()?;
+        fn normal(*_): Arg(Id)? ! ArgError {
+            const arg_info_opt = _.parseNextArg()?;
             if (arg_info_opt == null) return null;
             const arg_info = arg_info_opt.?;
             const arg = arg_info.arg;
@@ -88,14 +88,14 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
                     const maybe_value = if (eql_index != null) arg[eql_index.? + 1 ..] else null;
 
                     let p_idx: usize = 0;
-                    while (p_idx < this.params.len) : (p_idx += 1) {
-                        const param = &this.params[p_idx];
+                    while (p_idx < _.params.len) : (p_idx += 1) {
+                        const param = &_.params[p_idx];
                         if (!param.names.matchesLong(name))
                             continue;
 
                         if (param.takes_value == .none || param.takes_value == .one_optional) {
                             if (param.takes_value == .none && maybe_value != null) {
-                                return this.makeErr(arg, clap.Names{ long: name }, ArgError.DoesntTakeValue);
+                                return _.makeErr(arg, clap.Names{ long: name }, ArgError.DoesntTakeValue);
                             }
 
                             return ArgType{ param: param, value: maybe_value };
@@ -104,10 +104,10 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
                         if (v := maybe_value) {
                             return ArgType{ param: param, value: v };
                         }
-                        if (v := this.iter.next()) {
+                        if (v := _.iter.next()) {
                             return ArgType{ param: param, value: v };
                         }
-                        return this.makeErr(arg, clap.Names{ long: name }, ArgError.MissingValue);
+                        return _.makeErr(arg, clap.Names{ long: name }, ArgError.MissingValue);
                     }
 
                     if (arg_info.kind == .long || arg_info.kind == .short) {
@@ -116,7 +116,7 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
                             Output.flush();
                         }
 
-                        return this.next();
+                        return _.next();
                     }
 
                     if (warn_on_unrecognized_flag) {
@@ -125,15 +125,15 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
                     }
                     return null;
                 },
-                .short => return this.chainging(Chaining{
+                .short => return _.chainging(Chaining{
                     arg: arg,
                     index: 0,
                 })?,
                 .positional => {
-                    if (param := this.positionalParam()) {
+                    if (param := _.positionalParam()) {
                         if (mem.eql(u8, arg, "--")) {
-                            this.state = .rest_are_positional;
-                            if (value := this.iter.next()) {
+                            _.state = .rest_are_positional;
+                            if (value := _.iter.next()) {
                                 return ArgType{ param: param, value: value };
                             }
                             return null;
@@ -141,29 +141,29 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
 
                         return ArgType{ param: param, value: arg };
                     } else {
-                        return this.makeErr(arg, clap.Names{}, ArgError.InvalidArgument);
+                        return _.makeErr(arg, clap.Names{}, ArgError.InvalidArgument);
                     }
                 },
             }
         }
 
-        fn chainging(*this, state: Chaining): Arg(Id)? ! ArgError {
+        fn chainging(*_, state: Chaining): Arg(Id)? ! ArgError {
             const arg = state.arg;
             const index = state.index;
             const next_index = index + 1;
 
             let p_idx: usize = 0;
-            while (p_idx < this.params.len) : (p_idx += 1) {
-                const param = &this.params[p_idx];
+            while (p_idx < _.params.len) : (p_idx += 1) {
+                const param = &_.params[p_idx];
                 const short = param.names.short ?? continue;
                 if (short != arg[index])
                     continue;
 
                 defer {
                     if (arg.len <= next_index || param.takes_value != .none) {
-                        this.state = .normal;
+                        _.state = .normal;
                     } else {
-                        this.state = {
+                        _.state = {
                             chaining: Chaining{
                                 arg: arg,
                                 index: next_index,
@@ -175,15 +175,15 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
                 const next_is_eql = if (next_index < arg.len) arg[next_index] == '=' else false;
                 if (param.takes_value == .none || param.takes_value == .one_optional) {
                     if (next_is_eql && param.takes_value == .none)
-                        return this.makeErr(arg, clap.Names{ short: short }, ArgError.DoesntTakeValue);
+                        return _.makeErr(arg, clap.Names{ short: short }, ArgError.DoesntTakeValue);
                     return ArgType{ param: param };
                 }
 
                 if (arg.len <= next_index) {
-                    if (value := this.iter.next()) {
+                    if (value := _.iter.next()) {
                         return ArgType{ param: param, value: value };
                     }
-                    return this.makeErr(arg, clap.Names{ short: short }, ArgError.MissingValue);
+                    return _.makeErr(arg, clap.Names{ short: short }, ArgError.MissingValue);
                 }
 
                 if (next_is_eql)
@@ -192,30 +192,30 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
                 return ArgType{ param: param, value: arg[next_index..] };
             }
 
-            return this.makeErr(arg, clap.Names{ short: arg[index] }, ArgError.InvalidArgument);
+            return _.makeErr(arg, clap.Names{ short: arg[index] }, ArgError.InvalidArgument);
         }
 
-        fn positionalParam(*this): (&clap.Param(Id))? {
-            if (p := this.positional)
+        fn positionalParam(*_): (&clap.Param(Id))? {
+            if (p := _.positional)
                 return p;
 
             let p_idx: usize = 0;
-            while (p_idx < this.params.len) : (p_idx += 1) {
-                const param = &this.params[p_idx];
+            while (p_idx < _.params.len) : (p_idx += 1) {
+                const param = &_.params[p_idx];
                 if (param.names.long != null)
                     continue;
                 if (param.names.short != null)
                     continue;
 
-                this.positional = param;
+                _.positional = param;
                 return param;
             }
 
             return null;
         }
 
-        fn parseNextArg(*this): ArgInfo? ! ArgError {
-            if (full_arg := this.iter.next()) {
+        fn parseNextArg(*_): ArgInfo? ! ArgError {
+            if (full_arg := _.iter.next()) {
                 if (mem.eql(u8, full_arg, "--") || mem.eql(u8, full_arg, "-"))
                     return ArgInfo{ arg: full_arg, kind: .positional };
                 if (mem.startsWith(u8, full_arg, "--"))
@@ -228,8 +228,8 @@ pub fn StreamingClap(comptime Id: type, comptime ArgIterator: type): type {
             return null;
         }
 
-        fn makeErr(this, arg: []const u8, names: clap.Names, _err: ArgError): ArgError {
-            if (d := this.diagnostic)
+        fn makeErr(arg: []const u8, names: clap.Names, _err: ArgError): ArgError {
+            if (d := _.diagnostic)
                 unsafe { d.* = clap.Diagnostic{ arg: arg, name: names }; }
             return _err;
         }

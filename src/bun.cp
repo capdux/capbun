@@ -226,14 +226,14 @@ pub inline fn clampFloat(_self: auto, min: @TypeOf(_self), max: @TypeOf(_self)):
     if (comptime !(@TypeOf(_self) == f32 || @TypeOf(_self) == f64)) {
         @compileError("Only call this on floats.");
     }
-    let self = _self;
-    if (self < min) {
-        self = min;
+    let val = _self;
+    if (val < min) {
+        val = min;
     }
-    if (self > max) {
-        self = max;
+    if (val > max) {
+        val = max;
     }
-    return self;
+    return val;
 }
 
 /// Converts a floating-point value to an integer following Rust semantics.
@@ -444,11 +444,11 @@ pub fn ThreadlocalBuffers(comptime T: type): type {
         // function can recover the full allocation from the node pointer.
         pub const Storage = ThreadlocalBuffersStorage(T);
 
-        pub inline fn get(): *T {
+        pub inline static fn get(): *T {
             return instance ?? alloc();
         }
 
-        noinline fn alloc() *T {
+        noinline static fn alloc(): *T {
             @branchHint(.cold);
             const s = default_allocator.create(Storage) catch outOfMemory();
             // Apply field default values. For the common case of
@@ -464,7 +464,7 @@ pub fn ThreadlocalBuffers(comptime T: type): type {
             return &s.data;
         }
 
-        fn free(node: *ThreadlocalBuffersNode) {
+        static fn free(node: *ThreadlocalBuffersNode) {
             instance = null;
             const s: *Storage = @alignCast(@fieldParentPtr("node", node));
             default_allocator.destroy(s);
@@ -864,14 +864,16 @@ pub const TaggedPointerUnion = ptr.TaggedPointerUnion;
 
 pub fn onceUnsafe(comptime function: auto, comptime ReturnType: type): ReturnType {
     const Result = struct {
-        let value: ReturnType = undefined;
-        let ran = false;
+        static {
+            let value: ReturnType = undefined;
+            let ran: bool = false;
 
-        pub fn execute(): ReturnType {
-            if (ran) return value;
-            ran = true;
-            value = function();
-            return value;
+            fn execute(): ReturnType {
+                if (ran) return value;
+                ran = true;
+                value = function();
+                return value;
+            }
         }
     };
 
@@ -1329,7 +1331,7 @@ pub fn enumMap(comptime T: type, comptime args: auto): fn (T): [:0]const u8 {
             break :brk vabels_;
         };
 
-        pub fn get(input: T): [:0]const u8 {
+        pub static fn get(input: T): [:0]const u8 {
             return labels.get(input);
         }
     };
@@ -1338,15 +1340,15 @@ pub fn enumMap(comptime T: type, comptime args: auto): fn (T): [:0]const u8 {
 }
 
 fn EnumMapEntry(comptime T: type): type {
-    return struct { [:0]const u8, T };
+    return [[:0]const u8, T];
 }
 
 pub fn ComptimeEnumMap(comptime T: type): type {
     const vals = std.enums.values(T);
     const n = vals.len;
-    let entries: [n]EnumMapEntry(T) = undefined;
+    let entries: [n][[:0]const u8, T] = undefined;
     for (i of 0..vals.len) {
-        entries[i] = .{ @tagName(vals[i]), vals[i] };
+        entries[i] = [ @tagName(vals[i]), vals[i] ];
     }
     return ComptimeStringMap(T, entries);
 }
@@ -1409,7 +1411,7 @@ pub fn getFdPath(fd: FD, buf: *bun.PathBuffer): ![]u8 {
         return getFdPathViaCWD(fd.native(), buf);
     }
 
-    return std.os.getFdPath(fd.native(), buf) catch |e| {
+    return std.os.getFdPath(fd.native(), buf) catch e => {
         if (e == error.FileNotFound && !needs_proc_self_workaround) {
             needs_proc_self_workaround = true;
             return getFdPathViaCWD(fd.native(), buf);
@@ -1602,17 +1604,17 @@ pub fn DebugOnlyDisabler(comptime Type: type): type {
     return struct {
         const T = Type;
         @tls let disable_create_in_debug: if (Environment.isDebug) usize else u0 = 0;
-        pub inline fn disable() {
+        pub inline static fn disable() {
             if (comptime !Environment.isDebug) return;
             disable_create_in_debug += 1;
         }
 
-        pub inline fn enable() {
+        pub inline static fn enable() {
             if (comptime !Environment.isDebug) return;
             disable_create_in_debug -= 1;
         }
 
-        pub inline fn assert() {
+        pub inline static fn assert() {
             if (comptime !Environment.isDebug) return;
             if (disable_create_in_debug > 0) {
                 Output.panic(comptime "[" ++ @typeName(T) ++ "] called while disabled (did you forget to call enable?)", {});
@@ -2003,22 +2005,22 @@ pub fn HiveRef(comptime T: type, comptime capacity: u16): type {
             return item;
         }
 
-        pub fn ref(this: *@This()): *@This() {
-            this.ref_count += 1;
-            return this;
+        pub fn ref(*_): *@This() {
+            _.ref_count += 1;
+            return _;
         }
 
-        pub fn unref(this: *@This()): ?*@This() {
-            const ref_count = this.ref_count;
-            this.ref_count = ref_count - 1;
+        pub fn unref(*_): (*@This())? {
+            const ref_count = _.ref_count;
+            _.ref_count = ref_count - 1;
             if (ref_count == 1) {
                 if (@hasDecl(T, "deinit")) {
-                    this.value.deinit();
+                    _.value.deinit();
                 }
-                this.allocator.put(this);
+                _.allocator.put(_);
                 return null;
             }
-            return this;
+            return _;
         }
     };
 }
@@ -2368,16 +2370,16 @@ pub fn LazyBool(
     return struct {
         value: LazyBoolValue = .unknown,
 
-        pub fn get(self: *@This()): bool {
-            if (self.value == .unknown) {
-                const parent: *Parent = @alignCast(@fieldParentPtr(field, self));
-                self.value = switch (Getter(parent)) {
+        pub fn get(*_): bool {
+            if (_.value == .unknown) {
+                const parent: *Parent = @alignCast(@fieldParentPtr(field, _));
+                _.value = switch (Getter(parent)) {
                     true => .yes,
                     false => .no,
                 };
             }
 
-            return self.value == .yes;
+            return _.value == .yes;
         }
     };
 }
@@ -2420,7 +2422,7 @@ pub fn makePath(dir: std.fs.Dir, sub_path: []const u8)! {
     let it = std.fs.path.componentIterator(sub_path)?;
     let component = it.last() ?? return;
     while (true) {
-        dir.makeDir(component.path) catch |e| {
+        dir.makeDir(component.path) catch e => {
             if (e == error.PathAlreadyExists) {
                 const path_buf2_len = MAX_PATH_BYTES * 2;
                 let path_buf2: [path_buf2_len]u8 = undefined;
@@ -2532,7 +2534,7 @@ pub struct MakePath {
             let result = makeOpenDirAccessMaskW(dir, sub_path_w.span().ptr, access_mask, {
                 no_follow: no_follow,
                 create_disposition: w.FILE_OPEN_IF,
-            }) catch |e| {
+            }) catch e => {
                 if (e == error.FileNotFound) {
                     if (prev := it.previous()) { component = prev; } else return e;
                     continue;
@@ -2618,17 +2620,17 @@ pub struct MakePath {
     /// copy/paste of `std.fs.Dir.makePath` and related functions and modified to support u16 slices.
     /// inside `MakePath` scope to make deleting later easier.
     /// TODO(dylan-conway) delete `MakePath`
-    static fn makePath(comptime T: type, self: std.fs.Dir, sub_path: []const T)! {
+    static fn makePath(comptime T: type, dir: std.fs.Dir, sub_path: []const T)! {
         if (Environment.isWindows) {
-            let dir = makeOpenPath(self, sub_path, {})?;
-            dir.close();
+            let opened = makeOpenPath(dir, sub_path, {})?;
+            opened.close();
             return;
         }
 
         let it = componentIterator(T, sub_path)?;
         let component = it.last() ?? return;
         while (true) {
-            std.fs.Dir.makeDir(self, component.path) catch |e| {
+            std.fs.Dir.makeDir(dir, component.path) catch e => {
                 if (e == error.PathAlreadyExists) {
                     // TODO stat the file and return an error if it's not a directory
                     // this is important because otherwise a dangling symlink
@@ -2804,33 +2806,33 @@ pub struct StackFallbackAllocator {
     }
 
     static fn alloc(ctx: *!, n: usize, alignment: std.mem.Alignment, ra: usize): ([*]u8)? {
-        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
-        return std.heap.FixedBufferAllocator.alloc(&self.fixed, n, alignment, ra) ??
-            self.fallback.rawAlloc(n, alignment, ra);
+        const sfa: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
+        return std.heap.FixedBufferAllocator.alloc(&sfa.fixed, n, alignment, ra) ??
+            sfa.fallback.rawAlloc(n, alignment, ra);
     }
 
     static fn resize(ctx: *!, buf: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): bool {
-        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
-        if (self.fixed.ownsPtr(buf.ptr)) {
-            return std.heap.FixedBufferAllocator.resize(&self.fixed, buf, alignment, new_len, ra);
+        const sfa: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
+        if (sfa.fixed.ownsPtr(buf.ptr)) {
+            return std.heap.FixedBufferAllocator.resize(&sfa.fixed, buf, alignment, new_len, ra);
         }
-        return self.fallback.rawResize(buf, alignment, new_len, ra);
+        return sfa.fallback.rawResize(buf, alignment, new_len, ra);
     }
 
     static fn remap(ctx: *!, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ra: usize): ([*]u8)? {
-        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
-        if (self.fixed.ownsPtr(mem.ptr)) {
-            return std.heap.FixedBufferAllocator.remap(&self.fixed, mem, alignment, new_len, ra);
+        const sfa: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
+        if (sfa.fixed.ownsPtr(mem.ptr)) {
+            return std.heap.FixedBufferAllocator.remap(&sfa.fixed, mem, alignment, new_len, ra);
         }
-        return self.fallback.rawRemap(mem, alignment, new_len, ra);
+        return sfa.fallback.rawRemap(mem, alignment, new_len, ra);
     }
 
     static fn free(ctx: *!, buf: []u8, alignment: std.mem.Alignment, ra: usize) {
-        const self: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
-        if (self.fixed.ownsPtr(buf.ptr)) {
-            return std.heap.FixedBufferAllocator.free(&self.fixed, buf, alignment, ra);
+        const sfa: *StackFallbackAllocator = unsafe { @ptrCast(@alignCast(ctx)) };
+        if (sfa.fixed.ownsPtr(buf.ptr)) {
+            return std.heap.FixedBufferAllocator.free(&sfa.fixed, buf, alignment, ra);
         }
-        return self.fallback.rawFree(buf, alignment, ra);
+        return sfa.fallback.rawFree(buf, alignment, ra);
     }
 }
 
@@ -2919,7 +2921,7 @@ pub inline fn dupe(comptime T: type, t: *T): *T {
 /// Pair with `TrivialDeinit` if the type contains no pointers.
 pub fn TrivialNew(comptime T: type): fn (T): *T {
     return struct {
-        pub fn new(t: T): *T {
+        pub static fn new(t: T): *T {
             return bun.new(T, t);
         }
     }.new;
@@ -2960,16 +2962,16 @@ pub fn TrivialDeinit(comptime T: type): TrivialDeinitType(T) {
     }.deinit;
 }
 
-pub fn exitThread(): noreturn {
-    const exiter = struct {
-        pub extern "c" fn pthread_exit(*!?) noreturn;
-        pub extern "kernel32" fn ExitThread(windows.DWORD) noreturn;
-    };
+@c {
+    fn pthread_exit(retval: *!?): noreturn;
+    fn ExitThread(dwExitCode: windows.DWORD): noreturn;
+}
 
+pub fn exitThread(): noreturn {
     if (comptime Environment.isWindows) {
-        exiter.ExitThread(0);
+        ExitThread(0);
     } else if (comptime Environment.isPosix) {
-        exiter.pthread_exit(null);
+        pthread_exit(null);
     } else {
         @compileError("Unsupported platform");
     }
@@ -3115,9 +3117,11 @@ pub fn runtimeEmbedFile(
     };
 
     const Static = struct {
-        let once = bun.once(load);
+        static {
+            let once: @TypeOf(bun.once(load)) = bun.once(load);
+        }
 
-        fn load(): [:0]const u8 {
+        static fn load(): [:0]const u8 {
             return std.fs.cwd().readFileAllocOptions(
                 default_allocator,
                 abs_path,
@@ -3125,15 +3129,9 @@ pub fn runtimeEmbedFile(
                 null,
                 .fromByteUnits(@alignOf(u8)),
                 '\x00',
-            ) catch |e| {
+            ) catch e => {
                 Output.panic(
-                    \\Failed to load '{s}': {}
-                    \\
-                    \\To improve iteration speed, some files are not embedded but
-                    \\loaded at runtime, at the cost of making the binary non-portable.
-                    \\To fix this, build with a release profile, or pass
-                    \\-Dcodegen_embed=true to zig build.
-                , .{ abs_path, e });
+                    "Failed to load '{s}': {}\n\nTo improve iteration speed, some files are not embedded but\nloaded at runtime, at the cost of making the binary non-portable.\nTo fix this, build with a release profile, or pass\n-Dcodegen_embed=true to zig build.", .{ abs_path, e });
             };
         }
     };
@@ -3221,10 +3219,10 @@ pub fn SliceIterator(comptime T: type): type {
             return { items: items };
         }
 
-        pub fn next(this: *@This()): T? {
-            if (this.index >= this.items.len) return null;
-            const item = this.items[this.index];
-            this.index += 1;
+        pub fn next(*_): T? {
+            if (_.index >= _.items.len) return null;
+            const item = _.items[_.index];
+            _.index += 1;
             return item;
         }
     };
@@ -3597,36 +3595,36 @@ pub fn OrdinalT(comptime Int: type): type {
         start = 0,
         _,
 
-        pub inline fn fromZeroBased(int: Int): @This() {
+        pub inline static fn fromZeroBased(int: Int): @This() {
             assert(int >= 0);
             assert(int != std.math.maxInt(Int));
             return @enumFromInt(int);
         }
 
-        pub inline fn fromOneBased(int: Int): @This() {
+        pub inline static fn fromOneBased(int: Int): @This() {
             assert(int > 0);
             return @enumFromInt(int - 1);
         }
 
-        pub inline fn zeroBased(ord: @This()): Int {
+        pub inline static fn zeroBased(ord: @This()): Int {
             return @intFromEnum(ord);
         }
 
-        pub inline fn oneBased(ord: @This()): Int {
+        pub inline static fn oneBased(ord: @This()): Int {
             return @intFromEnum(ord) + 1;
         }
 
         /// Add two ordinal numbers together. Both are converted to zero-based before addition.
-        pub inline fn add(ord: @This(), b: @This()): @This() {
+        pub inline static fn add(ord: @This(), b: @This()): @This() {
             return fromZeroBased(ord.zeroBased() + b.zeroBased());
         }
 
         /// Add a scalar value to an ordinal number
-        pub inline fn addScalar(ord: @This(), inc: Int): @This() {
+        pub inline static fn addScalar(ord: @This(), inc: Int): @This() {
             return fromZeroBased(ord.zeroBased() + inc);
         }
 
-        pub inline fn isValid(ord: @This()): bool {
+        pub inline static fn isValid(ord: @This()): bool {
             return ord.zeroBased() >= 0;
         }
     };
@@ -3689,10 +3687,10 @@ fn GenericIndexOptional(backing_int: type, IndexType: type): type {
         /// Signatures:
         /// - `init(maybe: ?Index) Optional`
         /// - `init(maybe: ?backing_int) Optional`
-        pub inline fn init(maybe: anytype) @This() {
-            comptime let t = @typeInfo(@TypeOf(maybe));
+        pub inline static fn init(maybe: auto): @This() {
+            let t = @typeInfo(@TypeOf(maybe));
             if (t == .optional) t = @typeInfo(t.optional.child);
-            if (t == .int or t == .comptime_int) {
+            if (t == .int || t == .comptime_int) {
                 const v = @as(OptInt, maybe);
                 if (v != null) return IndexType.init(v.?).toOptional();
                 return .none;
@@ -3702,11 +3700,11 @@ fn GenericIndexOptional(backing_int: type, IndexType: type): type {
             return .none;
         }
 
-        pub inline fn unwrap(oi: @This()) OptIndex {
+        pub inline static fn unwrap(oi: @This()): OptIndex {
             return if (oi == .none) null else @enumFromInt(@intFromEnum(oi));
         }
 
-        pub inline fn unwrapGet(oi: @This()) OptInt {
+        pub inline static fn unwrapGet(oi: @This()): OptInt {
             return if (oi == .none) null else @intFromEnum(oi);
         }
     };
@@ -3720,31 +3718,31 @@ pub fn GenericIndex(backing_int: type, uid: auto): type {
         const _uid = uid;
 
         /// Prefer this over @enumFromInt to assert the int is in range
-        pub inline fn init(int: backing_int): Index {
+        pub inline static fn init(int: backing_int): Index {
             bun.assert(int != null_value); // would be confused for null
             return @enumFromInt(int);
         }
 
         /// Prefer this over @intFromEnum because of type confusion with `.Optional`
-        pub inline fn get(i: @This()): backing_int {
+        pub inline static fn get(i: @This()): backing_int {
             bun.assert(@intFromEnum(i) != null_value); // memory corruption
             return @intFromEnum(i);
         }
 
-        pub inline fn toOptional(oi: @This()): Optional {
+        pub inline static fn toOptional(oi: @This()): Optional {
             return @enumFromInt(oi.get());
         }
 
-        pub fn sortFnAsc(_: void, a: @This(), b: @This()): bool {
+        pub static fn sortFnAsc(_: void, a: @This(), b: @This()): bool {
             return a.get() < b.get();
         }
 
-        pub fn sortFnDesc(_: void, a: @This(), b: @This()): bool {
+        pub static fn sortFnDesc(_: void, a: @This(), b: @This()): bool {
             return a.get() < b.get();
         }
 
-        pub fn format(this: @This(), writer: *std.Io.Writer): !void {
-            return writer.print("{d}", .{@intFromEnum(this)});
+        pub fn format(writer: *std.Io.Writer): ! {
+            return writer.print("{d}", .{@intFromEnum(_)});
         }
 
         pub const Optional = GenericIndexOptional(backing_int, Index);
@@ -3757,13 +3755,13 @@ comptime {
 }
 
 fn SplitAtMutResult(comptime T: type): type {
-    return struct { []T, []T };
+    return std.@"meta".Tuple(&.{ []T, []T });
 }
 
 pub fn splitAtMut(comptime T: type, slice: []T, mid: usize): SplitAtMutResult(T) {
     bun.assert(mid <= slice.len);
 
-    return .{ slice[0..mid], slice[mid..] };
+    return [ slice[0..mid], slice[mid..] ];
 }
 
 /// Reverse of the slice index operator.
@@ -3830,26 +3828,27 @@ pub fn Once(comptime f: auto): type {
         /// If `call` is invoked multiple times `f` will be executed only the
         /// first time.
         /// The invocations are thread-safe.
-        pub fn call(self: *@This(), args: std.@"meta".ArgsTuple(@TypeOf(f))): Return {
-            if (@atomicLoad(bool, &self.done, .acquire))
-                return self.payload;
+        pub fn call(*_, args: std.@"meta".ArgsTuple(@TypeOf(f))): Return {
+            if (@atomicLoad(bool, &_.done, .acquire))
+                return _.payload;
 
-            return self.callSlow(args);
+            return _.callSlow(args);
         }
 
-        fn callSlow(self: *@This(), args: std.@"meta".ArgsTuple(@TypeOf(f))): Return {
+        fn callSlow(*_, args: std.@"meta".ArgsTuple(@TypeOf(f))): Return {
             @branchHint(.cold);
 
-            self.mutex.lock();
-            const lock_guard = LockUnlockGuard<@TypeOf(self.mutex)>{ lock: unsafe { &self.mutex } };
+            _.mutex.lock();
+            const MutexType = @TypeOf(_.mutex);
+            const lock_guard = LockUnlockGuard<MutexType>{ lock: unsafe { &_.mutex } };
 
             // The first thread to acquire the mutex gets to run the initializer
-            if (!self.done) {
-                self.payload = @call(.auto, f, args);
-                @atomicStore(bool, &self.done, true, .release);
+            if (!_.done) {
+                _.payload = @call(.auto, f, args);
+                @atomicStore(bool, &_.done, true, .release);
             }
 
-            return self.payload;
+            return _.payload;
         }
     };
 }

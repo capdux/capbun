@@ -131,7 +131,7 @@ extern fn JSC_JSModuleRecord__addImportEntryNamespace(module_record: *JSModuleRe
     pub const destroy = JSC__IdentifierArray__destroy;
 
     pub fn setFromUtf8(*_, n: usize, vm: *bun.jsc.VM, str: []const u8) {
-        unsafe { JSC__IdentifierArray__setFromUtf8(this, n, vm, str.ptr, str.len); }
+        unsafe { JSC__IdentifierArray__setFromUtf8(_, n, vm, str.ptr, str.len); }
     }
 }
 

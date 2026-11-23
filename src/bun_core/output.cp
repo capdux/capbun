@@ -966,34 +966,34 @@ fn scopedLogImpl(
 fn ScopedLogger(comptime tagname: []const u8, comptime visibility: Visibility): type {
     if (comptime !Environment.enable_logs) {
         return struct {
-            pub fn isVisible(): bool {
+            static fn isVisible(): bool {
                 return false;
             }
-            pub fn log(comptime _: string, _: anytype): callconv(bun.callconv_inline) void {}
+            static inline fn log(comptime _: string, _: anytype) {}
         };
     }
 
     return struct {
-        let buffer: [4096]u8 = undefined;
-        let buffered_writer: File.QuietWriter.Adapter = undefined;
-        let out: *std.Io.Writer = undefined;
-        let out_set = false;
-        let really_disable = std.atomic.Value(bool).init(visibility == .hidden);
+        static let buffer: [4096]u8 = undefined;
+        static let buffered_writer: File.QuietWriter.Adapter = undefined;
+        static let out: *std.Io.Writer = undefined;
+        static let out_set: bool = false;
+        static let really_disable: std.atomic.Value(bool) = std.atomic.Value(bool).init(visibility == .hidden);
 
-        let lock = bun.Mutex{};
+        static let lock: bun.Mutex = bun.Mutex{};
 
-        let is_visible_once = std.once(evaluateIsVisible);
+        static let is_visible_once: std.Once(evaluateIsVisible) = std.once(evaluateIsVisible);
 
-        fn evaluateIsVisible() void {
+        static fn evaluateIsVisible() {
             scopedEvaluateIsVisible(tagname, &really_disable);
         }
 
-        pub fn isVisible(): bool {
+        static fn isVisible(): bool {
             is_visible_once.call();
             return !really_disable.load(.monotonic);
         }
 
-        pub fn log(comptime fmt: string, args: anytype) void {
+        static fn log(comptime fmt: string, args: anytype) {
             scopedLogImpl(tagname, &really_disable, &out_set, &out, &buffered_writer, &buffer, &lock, isVisible, fmt, args);
         }
     };

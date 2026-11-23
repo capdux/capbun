@@ -77,21 +77,21 @@ pub fn Table(
             };
         }
 
-        pub fn printTopLineSeparator(this) {
-            this.printLine(table_symbols.topLeftSep(), table_symbols.topRightSep(), table_symbols.topColumnSep());
+        pub fn printTopLineSeparator() {
+            _.printLine(table_symbols.topLeftSep(), table_symbols.topRightSep(), table_symbols.topColumnSep());
         }
 
-        pub fn printBottomLineSeparator(this) {
-            this.printLine(table_symbols.bottomLeftSep(), table_symbols.bottomRightSep(), table_symbols.bottomColumnSep());
+        pub fn printBottomLineSeparator() {
+            _.printLine(table_symbols.bottomLeftSep(), table_symbols.bottomRightSep(), table_symbols.bottomColumnSep());
         }
 
-        pub fn printLineSeparator(this) {
-            this.printLine(symbols.middleLeftSep(), symbols.middleRightSep(), symbols.middleColumnSep());
+        pub fn printLineSeparator() {
+            _.printLine(symbols.middleLeftSep(), symbols.middleRightSep(), symbols.middleColumnSep());
         }
 
-        pub fn printLine(this, left_edge_separator: string, right_edge_separator: string, column_separator: string) {
-            for (i of 0..this.column_inside_lengths.len) {
-                const column_inside_length = this.column_inside_lengths[i];
+        pub fn printLine(left_edge_separator: string, right_edge_separator: string, column_separator: string) {
+            for (i of 0.._.column_inside_lengths.len) {
+                const column_inside_length = _.column_inside_lengths[i];
                 if (i == 0) {
                     Output.pretty("{s}", [left_edge_separator]);
                 } else {
@@ -102,26 +102,26 @@ pub fn Table(
                     Output.pretty("{s}", [symbols.horizontalEdge()]);
                 }
 
-                if (i == this.column_inside_lengths.len - 1) {
+                if (i == _.column_inside_lengths.len - 1) {
                     Output.pretty("{s}\n", [right_edge_separator]);
                 }
             }
         }
 
-        pub fn printColumnNames(this) {
+        pub fn printColumnNames() {
             const col_fmt = comptime std.fmt.comptimePrint("<b><{s}>{{s}}<r>", [column_color]);
-            for (i of 0..this.column_inside_lengths.len) {
-                const column_inside_length = this.column_inside_lengths[i];
+            for (i of 0.._.column_inside_lengths.len) {
+                const column_inside_length = _.column_inside_lengths[i];
                 Output.pretty("{s}", [symbols.verticalEdge()]);
                 for (j of 0..column_left_pad) {
                     Output.pretty(" ", .{});
                 }
-                Output.pretty(col_fmt, [this.column_names[i]]);
-                let j: usize = this.column_names[i].len;
+                Output.pretty(col_fmt, [_.column_names[i]]);
+                let j: usize = _.column_names[i].len;
                 while (j < (column_inside_length + column_right_pad)) : (j += 1) {
                     Output.pretty(" ", .{});
                 }
-                if (i == this.column_inside_lengths.len - 1) {
+                if (i == _.column_inside_lengths.len - 1) {
                     Output.pretty("{s}\n", [symbols.verticalEdge()]);
                 }
             }
@@ -220,9 +220,9 @@ pub fn IntegrityFormatter(comptime style: IntegrityFormatStyle): type {
     return struct {
         bytes: [SHA512_DIGEST_LEN]u8;
 
-        pub fn format(this, writer: *std.Io.Writer): void ! std.Io.Writer.Error {
+        pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
             let buf: [SHA512_B64_LEN]u8 = undefined;
-            const count = bun.simdutf.base64.encode(this.bytes[0..sha.SHA512.digest], &buf, false);
+            const count = bun.simdutf.base64.encode(_.bytes[0..sha.SHA512.digest], &buf, false);
 
             const encoded = buf[0..count];
 
@@ -650,31 +650,31 @@ pub struct FormatValidIdentifier {
     }
 }
 
-pub fn githubActionWriter(writer: *std.Io.Writer, self: string): ! {
+pub fn githubActionWriter(writer: *std.Io.Writer, text: string): ! {
     let offset: usize = 0;
-    const end = self.len as u32;
+    const end = text.len as u32;
     while (offset < end) {
-        if (i := strings.indexOfNewlineOrNonASCIIOrANSI(self, offset as u32)) {
-            const byte = self[i];
+        if (i := strings.indexOfNewlineOrNonASCIIOrANSI(text, offset as u32)) {
+            const byte = text[i];
             if (byte > 0x7F) {
                 offset += @max(strings.wtf8ByteSequenceLength(byte), 1);
                 continue;
             }
             if (i > 0) {
-                writer.writeAll(self[offset..i])?;
+                writer.writeAll(text[offset..i])?;
             }
             let n: usize = 1;
             if (byte == '\n') {
                 writer.writeAll("%0A")?;
             } else if (i + 1 < end) {
-                const next = self[i + 1];
+                const next = text[i + 1];
                 if (byte == '\r' && next == '\n') {
                     n += 1;
                     writer.writeAll("%0A")?;
                 } else if (byte == 0x1b && next == '[') {
                     n += 1;
                     if (i + 2 < end) {
-                        const rem_ = self[(i + 2)..@min(i + 5, end)];
+                        const rem_ = text[(i + 2)..@min(i + 5, end)];
                         if (j := strings.indexOfChar(rem_, 'm')) {
                             n += j + 1;
                         }
@@ -683,7 +683,7 @@ pub fn githubActionWriter(writer: *std.Io.Writer, self: string): ! {
             }
             offset = i + n;
         } else {
-            writer.writeAll(self[offset..end])?;
+            writer.writeAll(text[offset..end])?;
             break;
         }
     }
@@ -703,13 +703,13 @@ pub fn githubAction(text: string): strings.GithubActionFormatter {
     };
 }
 
-pub fn quotedWriter(writer: *std.Io.Writer, self: string): ! {
-    const rest_ = self;
+pub fn quotedWriter(writer: *std.Io.Writer, text: string): ! {
+    const rest_ = text;
     if (strings.containsNewlineOrNonASCIIOrQuote(rest_)) {
-        bun.js_printer.writeJSONString(self, @TypeOf(writer), writer, strings.Encoding.utf8)?;
+        bun.js_printer.writeJSONString(text, @TypeOf(writer), writer, strings.Encoding.utf8)?;
     } else {
         writer.writeAll("\"")?;
-        writer.writeAll(self)?;
+        writer.writeAll(text)?;
         writer.writeAll("\"")?;
     }
 }
@@ -1038,10 +1038,10 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
     }
 
     pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
-        let txt = this.text[0..];
-        if (this.opts.check_for_unhighlighted_write) {
-            if (!this.opts.enable_colors || txt.len > 2048 || txt.len == 0 || !strings.isAllASCII(txt)) {
-                if (this.opts.redact_sensitive_information) {
+        let txt = _.text[0..];
+        if (_.opts.check_for_unhighlighted_write) {
+            if (!_.opts.enable_colors || txt.len > 2048 || txt.len == 0 || !strings.isAllASCII(txt)) {
+                if (_.opts.redact_sensitive_information) {
                     writer.print("{f}", [redactedSource(txt)])?;
                 } else {
                     writer.writeAll(txt)?;
@@ -1069,7 +1069,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                     const code = keyword.colorCode();
                     writer.print(Output.prettyFmt("<r>{s}{s}<r>", true), [code.color(), txt[0..i]])?;
                 } else {
-                    should_redact_value = this.opts.redact_sensitive_information && QuickAndDirtyJavaScriptSyntaxHighlighter.RedactedKeywords.has(txt[0..i]);
+                    should_redact_value = _.opts.redact_sensitive_information && QuickAndDirtyJavaScriptSyntaxHighlighter.RedactedKeywords.has(txt[0..i]);
                     write: {
                         if (prev := prev_keyword) {
                             switch (prev) {
@@ -1104,7 +1104,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                 }
                 txt = txt[i..];
             } else {
-                if (this.opts.redact_sensitive_information && should_redact_value) {
+                if (_.opts.redact_sensitive_information && should_redact_value) {
                     while (txt.len > 0 && std.ascii.isWhitespace(txt[0])) {
                         writer.writeByte(txt[0])?;
                         txt = txt[1..];
@@ -1124,7 +1124,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
 
                 switch (txt[0]) {
                     '0'...'9' => |num| {
-                        if (this.opts.redact_sensitive_information) {
+                        if (_.opts.redact_sensitive_information) {
                             if (should_redact_value) {
                                 should_redact_value = false;
                                 const end = strings.indexOfChar(txt, '\n') ?? txt.len;
@@ -1164,19 +1164,19 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                     },
                     '`' => {
                         prev_keyword = null;
-                        if (QuickAndDirtyJavaScriptSyntaxHighlighter.highlightStringLit('`', writer, *txt, *should_redact_value, this.opts)?) {
+                        if (QuickAndDirtyJavaScriptSyntaxHighlighter.highlightStringLit('`', writer, *txt, *should_redact_value, _.opts)?) {
                             continue :outer;
                         }
                     },
                     '"' => {
                         prev_keyword = null;
-                        if (QuickAndDirtyJavaScriptSyntaxHighlighter.highlightStringLit('"', writer, *txt, *should_redact_value, this.opts)?) {
+                        if (QuickAndDirtyJavaScriptSyntaxHighlighter.highlightStringLit('"', writer, *txt, *should_redact_value, _.opts)?) {
                             continue :outer;
                         }
                     },
                     0x27 => {
                         prev_keyword = null;
-                        if (QuickAndDirtyJavaScriptSyntaxHighlighter.highlightStringLit(0x27, writer, *txt, *should_redact_value, this.opts)?) {
+                        if (QuickAndDirtyJavaScriptSyntaxHighlighter.highlightStringLit(0x27, writer, *txt, *should_redact_value, _.opts)?) {
                             continue :outer;
                         }
                     },
@@ -1208,7 +1208,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                                 i += 1;
                             }
 
-                            if (this.opts.redact_sensitive_information) {
+                            if (_.opts.redact_sensitive_information) {
                                 writer.print(Output.prettyFmt("<r><d>{f}<r>", true), [redactedSource(remain_to_print)])?;
                             } else {
                                 writer.print(Output.prettyFmt("<r><d>{s}<r>", true), [remain_to_print])?;
@@ -1232,7 +1232,7 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
                                     break :as_multiline_comment;
                                 }
 
-                                if (this.opts.redact_sensitive_information) {
+                                if (_.opts.redact_sensitive_information) {
                                     writer.print(Output.prettyFmt("<r><d>{f}<r>", true), [redactedSource(txt[0..i])])?;
                                 } else {
                                     writer.print(Output.prettyFmt("<r><d>{s}<r>", true), [txt[0..i]])?;
@@ -1360,9 +1360,9 @@ pub struct QuickAndDirtyJavaScriptSyntaxHighlighter {
     }
 }
 
-pub fn quote(_: string): bun.fmt.QuotedFormatter {
+pub fn quote(text: string): bun.fmt.QuotedFormatter {
     return bun.fmt.QuotedFormatter{
-        text: self,
+        text: text,
     };
 }
 
@@ -1475,9 +1475,9 @@ pub struct SizeFormatter {
 
     pub fn format(writer: *std.Io.Writer): void ! std.Io.Writer.Error {
         const math = std.math;
-        const value = this.value;
+        const value = _.value;
         if (value == 0) {
-            if (this.opts.space_between_number_and_unit) {
+            if (_.opts.space_between_number_and_unit) {
                 return writer.writeAll("0 KB");
             } else {
                 return writer.writeAll("0KB");
@@ -1485,8 +1485,8 @@ pub struct SizeFormatter {
         }
 
         if (value < 512) {
-            writer.print("{d}", [this.value])?;
-            if (this.opts.space_between_number_and_unit) {
+            writer.print("{d}", [_.value])?;
+            if (_.opts.space_between_number_and_unit) {
                 return writer.writeAll(" bytes");
             } else {
                 return writer.writeByte('B');
@@ -1501,7 +1501,7 @@ pub struct SizeFormatter {
         const suffix = mags_si[magnitude];
 
         if (suffix == ' ') {
-            if (this.opts.space_between_number_and_unit) {
+            if (_.opts.space_between_number_and_unit) {
                 writer.print("{d:.2} KB", [new_value / 1000.0])?;
             } else {
                 writer.print("{d:.2}KB", [new_value / 1000.0])?;
@@ -1510,7 +1510,7 @@ pub struct SizeFormatter {
         }
         const precision: usize = if (std.math.approxEqAbs(f64, new_value, @trunc(new_value), 0.100)) (1 as usize) else (2 as usize);
         writer.print("{d:.[1]}", [new_value, precision])?;
-        if (this.opts.space_between_number_and_unit) {
+        if (_.opts.space_between_number_and_unit) {
             writer.print(" {c}B", [suffix])?;
         } else {
             writer.print("{c}B", [suffix])?;
@@ -1553,8 +1553,8 @@ pub fn HexIntFormatter(comptime Int: type, comptime lower: bool): type {
             return buf;
         }
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            const value = this.value;
+        pub fn format(writer: *std.Io.Writer): ! {
+            const value = _.value;
             const out_buf = getOutBuf(value);
             writer.writeAll(&out_buf)?;
         }
@@ -1582,10 +1582,10 @@ fn TrimmedPrecisionFormatter(comptime precision: usize): type {
         num: f64;
         precision: usize;
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            const whole = @trunc(this.num);
+        pub fn format(writer: *std.Io.Writer): ! {
+            const whole = @trunc(_.num);
             writer.print("{d}", [whole])?;
-            const rem = this.num - whole;
+            const rem = _.num - whole;
             if (rem != 0) {
                 const buf_len = 2 + precision;
                 let buf: [buf_len]u8 = undefined;
@@ -1688,11 +1688,11 @@ fn FormatSlice(comptime T: type, comptime delim: string): type {
     return struct {
         slice: T;
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            if (this.slice.len == 0) return;
+        pub fn format(writer: *std.Io.Writer): ! {
+            if (_.slice.len == 0) return;
             const f = "{s}";
-            writer.print(f, [this.slice[0]])?;
-            for (item of this.slice[1..]) {
+            writer.print(f, [_.slice[0]])?;
+            for (item of _.slice[1..]) {
                 if (delim.len > 0) writer.writeAll(delim)?;
                 writer.print(f, [item])?;
             }
@@ -1728,7 +1728,7 @@ pub struct FormatDouble {
 
     pub fn format(writer: *std.Io.Writer): ! {
         let buf: [124]u8 = undefined;
-        const slice = unsafe { FormatDouble.dtoa(*buf!, this.number) };
+        const slice = unsafe { FormatDouble.dtoa(*buf!, _.number) };
         writer.writeAll(slice)?;
     }
 }
@@ -1742,11 +1742,11 @@ pub fn NullableFallback(comptime T: type): type {
         value: T;
         null_fallback: string;
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            if (value := this.value) {
+        pub fn format(writer: *std.Io.Writer): ! {
+            if (value := _.value) {
                 writer.print("{}", [value])?;
             } else {
-                writer.writeAll(this.null_fallback)?;
+                writer.writeAll(_.null_fallback)?;
             }
         }
     };
@@ -1775,10 +1775,10 @@ fn NewOutOfRangeFormatter(comptime T: type): type {
         field_name: string;
         msg: string = "";
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            if (this.field_name.len > 0) {
+        pub fn format(writer: *std.Io.Writer): ! {
+            if (_.field_name.len > 0) {
                 writer.writeAll("The value of \"")?;
-                writer.writeAll(this.field_name)?;
+                writer.writeAll(_.field_name)?;
                 writer.writeAll("\" is out of range. It must be ")?;
             } else {
                 if (comptime Environment.isDebug) {
@@ -1787,9 +1787,9 @@ fn NewOutOfRangeFormatter(comptime T: type): type {
                 writer.writeAll("The value is out of range. It must be ")?;
             }
 
-            const min = this.min;
-            const max = this.max;
-            const msg = this.msg;
+            const min = _.min;
+            const max = _.max;
+            const msg = _.msg;
 
             if (min != std.math.maxInt(i64) && max != std.math.maxInt(i64)) {
                 writer.print(">= {d} and <= {d}.", [min, max])?;
@@ -1807,13 +1807,13 @@ fn NewOutOfRangeFormatter(comptime T: type): type {
             }
 
             if (comptime T == f64 || T == f32) {
-                writer.print(" Received {f}", [double(this.value)])?;
+                writer.print(" Received {f}", [double(_.value)])?;
             } else if (comptime T == string) {
-                writer.print(" Received {s}", [this.value])?;
-            } else if (comptime std.meta.hasFn(@TypeOf(this.value), "format")) {
-                writer.print(" Received {f}", [this.value])?;
+                writer.print(" Received {s}", [_.value])?;
+            } else if (comptime std.meta.hasFn(@TypeOf(_.value), "format")) {
+                writer.print(" Received {f}", [_.value])?;
             } else {
-                writer.print(" Received {}", [this.value])?;
+                writer.print(" Received {}", [_.value])?;
             }
         }
     };
