@@ -120,7 +120,6 @@ pub struct StatWatcherScheduler {
     }
 
     fn setIntervalOnMainThread(*_) {
-        const _guard = DerefGuard<StatWatcherScheduler>{ ptr: _ };
         bun.assert(_.main_thread == std.Thread.getCurrentId());
 
         const interval = _.getInterval();

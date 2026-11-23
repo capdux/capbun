@@ -85,7 +85,7 @@ struct LoaderValuesGuard {
 }
 
 struct TopExceptionScopeGuard {
-    scope: jsc.TopExceptionScope,
+    scope: *jsc.TopExceptionScope,
     ~init() { _.scope.deinit(); }
 }
 
@@ -319,7 +319,7 @@ struct IndentGuard {
             autoload_tsconfig: bool = false,
             autoload_package_json: bool = false,
 
-            pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, allocator: std.mem.Allocator, compile_target: CompileTarget?): JSError!BundlerCompileOptions? {
+            static fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, allocator: std.mem.Allocator, compile_target: CompileTarget?): JSError!BundlerCompileOptions? {
                 let opts_guard = CompileOptionsGuard{
                     opts: BundlerCompileOptions{
                         .exec_argv = OwnedString.initEmpty(allocator),
@@ -565,7 +565,7 @@ struct IndentGuard {
 
         pub const List = bun.StringArrayHashMapUnmanaged(Config);
 
-        pub fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, plugins: *(*BundlerPlugin)?, allocator: std.mem.Allocator): JSError!Config {
+        static fn fromJS(globalThis: *jsc.JSGlobalObject, config: jsc.JSValue, plugins: *(*BundlerPlugin)?, allocator: std.mem.Allocator): JSError!Config {
             let cfg_guard = BundlerConfigGuard{
                 cfg: BundlerConfig{
                     .entry_points = bun.StringSet.init(allocator),
@@ -1657,8 +1657,9 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 error.JSTerminated => return error.JSTerminated,
             };
 
-            let scope_guard = TopExceptionScopeGuard{ scope: undefined };
-            scope_guard.scope.init(globalThis, @src());
+            let scope: jsc.TopExceptionScope = undefined;
+            scope.init(globalThis, @src());
+            const scope_guard = TopExceptionScopeGuard{ scope: &scope };
 
             const value = JSBundlerPlugin__runOnEndCallbacks(
                 _,
@@ -1667,7 +1668,7 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 rejection_value,
             );
 
-            scope_guard.scope.returnIfException()?;
+            scope.returnIfException()?;
 
             return value;
         }

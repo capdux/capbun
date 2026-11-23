@@ -2199,3 +2199,7 @@
 ### [2026-11-23] Wave #86–87（Wave #85 复测全绿、Batch 4b 116 文件完成与修复 `sys.cp` 2038 溢出）
 - 复测 `direct-readable-stream.test.tsx` + `udp_socket.test.ts` **447 pass / 0 fail**；完成 Batch 4b `test/js/node/` 10 核心目录（116 文件 **2,102 pass / 54 fail / 0 crash**）；
 - 修复 `src/sys/sys.cp` `futimens`/`utimensWithFlags` 64 位时间戳截断（`i32(...)` -> `@intCast(...)`），消除 `utimesSync > works after 2038` 溢出。
+
+### [2026-11-23] Wave #88–89（Batch 4c `node/` 72 文件收官与修复 `JSBundler`/`node_fs_stat_watcher` 崩溃）
+- 复测 `utimesSync` 4 pass / 0 fail；完成 Batch 4c `test/js/node/` 其余 72 文件（**2,058 pass / 35 fail / 2 crash**，至此 `test/js/node/` 全量 259 文件完成）；
+- 修复 `src/runtime/api/JSBundler.cp`（`TopExceptionScopeGuard` 改持有 `*jsc.TopExceptionScope` + `fromJS` `static fn`）与 `src/runtime/node/node_fs_stat_watcher.cp`（移除 `setIntervalOnMainThread` 误加 `DerefGuard`），消除两处 `SIGILL` panic。

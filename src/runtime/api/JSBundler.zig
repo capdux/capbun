@@ -248,7 +248,7 @@ pub fn __cp_deinit(self: *LoaderValuesGuard) void {
 };
 
 pub const TopExceptionScopeGuard = struct {
-    scope: jsc.TopExceptionScope,
+    scope: *jsc.TopExceptionScope,
     __cp_dropped: bool = false,
 
 pub fn __cp_deinit(self: *TopExceptionScopeGuard) void {
@@ -1719,13 +1719,15 @@ pub fn hasOnBeforeParsePlugins(self: *BundlerPlugin) bool {
 pub fn runOnEndCallbacks(self: *BundlerPlugin, globalThis: *jsc.JSGlobalObject, build_promise: *jsc.JSPromise, build_result: jsc.JSValue, rejection: bun.JSError!jsc.JSValue) bun.JSError!jsc.JSValue {
             _ = jsc.markBinding(@src());
             const rejection_value = (blk_catch_5: { break :blk_catch_5 ((rejection) catch |e| { _ = &e; break :blk_catch_5 @as(jsc.JSValue, (__sw_blk_6: { const __disc_6 = e; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(globalThis.createOutOfMemoryError()); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .JSError)) {  break :__sw_blk_6 cp_val(globalThis.takeError(e)); } } if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .JSTerminated)) {  return error.JSTerminated; } }  unreachable; })); }); });
-            var scope_guard = TopExceptionScopeGuard{ .scope = undefined };
+            var scope: jsc.TopExceptionScope = undefined;
+            _ = &scope;
+            _ = scope.init(globalThis, @src());
+            var scope_guard = TopExceptionScopeGuard{ .scope = (&scope) };
             _ = &scope_guard;
             var __scope_guard_moved = false; _ = &__scope_guard_moved;
             defer if (!__scope_guard_moved) { __scope_guard_moved = true; const __T = @TypeOf(scope_guard); if (@typeInfo(__T) == .optional) { if (scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = scope_guard; _drop_val.__cp_deinit(); } };
-            _ = scope_guard.scope.init(globalThis, @src());
             const value = JSBundlerPlugin__runOnEndCallbacks(self, build_promise.asValue(globalThis), build_result, rejection_value);
-            _ = try scope_guard.scope.returnIfException();
+            _ = try scope.returnIfException();
             return value;
     }
 

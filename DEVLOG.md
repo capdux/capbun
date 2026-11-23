@@ -1753,3 +1753,7 @@
 
 ### [2026-11-23] Wave #87 技术要点（`timespec.sec` 64 位 `@intCast`）
 - `sys.cp` 中 `futimens` 与 `utimensWithFlags` 构造 `syscall.timespec` 时，CP 简写 `i32(atime.sec)` 会将 64 位时间戳截断为 32 位导致 2038 年后回绕；须使用 `@intCast(atime.sec)` 由目标 `timespec.sec`（Linux x86_64 为 `i64`/`isize`）推断宽度。
+
+### [2026-11-23] Wave #89 技术要点（自指结构体的指针 Guard 与引用计数对称性）
+- 含自指成员（如 `jsc.TopExceptionScope` 的 `location == &bytes[0]`）不可按值放入 CP RAII Guard（`~init()` 会将值拷贝到 `_drop_val` 导致地址失效）；必须栈上固定 `let scope: T = undefined;` 并让 Guard 持有 `*T` 指针。
+- `StatWatcherScheduler.setInterval()` `ref()` 后的引用在定时器回调 `workPoolCallback` 中释放，`setIntervalOnMainThread` 不得额外构造 `DerefGuard` 提前 `deref`。
