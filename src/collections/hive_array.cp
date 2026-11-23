@@ -53,10 +53,10 @@ pub fn HiveArray(comptime T: type, comptime capacity: u16): type {
             return ret;
         }
 
-        pub fn indexOf(value: *const T): u32? {
+        pub static fn indexOf(hive: *const Self, value: *const T): u32? {
             unsafe {
                 bun.asan.assertUnpoisoned(value as *const !);
-                const start = &_.buffer;
+                const start = &hive.buffer;
                 const end = (start as [*]const T!) + capacity;
                 if (!(@intFromPtr(value) >= @intFromPtr(start) && @intFromPtr(value) < @intFromPtr(end))) {
                     return null;
@@ -65,22 +65,22 @@ pub fn HiveArray(comptime T: type, comptime capacity: u16): type {
                 // aligned to the size of T
                 const index = (@intFromPtr(value) - @intFromPtr(start)) / @sizeOf(T);
                 assert(index < capacity);
-                assert(&_.buffer[index] == value);
+                assert(&hive.buffer[index] == value);
                 return u32(index);
             }
         }
 
-        pub fn in(value: *const T): bool {
+        pub static fn in(hive: *const Self, value: *const T): bool {
             unsafe {
                 bun.asan.assertUnpoisoned(value as *const !);
-                const start = &_.buffer;
+                const start = &hive.buffer;
                 const end = (start as [*]const T!) + capacity;
                 return (@intFromPtr(value) >= @intFromPtr(start) && @intFromPtr(value) < @intFromPtr(end));
             }
         }
 
         pub fn put(*_, value: *T): bool {
-            const index = Self.indexOf(value) ?? return false;
+            const index = Self.indexOf(_, value) ?? return false;
 
             assert(_.used.isSet(index));
             assert(&_.buffer[index] == value);
