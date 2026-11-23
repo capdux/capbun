@@ -13,7 +13,7 @@ type string = []const u8;
 
 pub struct InstallCommand {
     static fn exec(ctx: Command.Context)! {
-        install(ctx) catch |e| {
+        install(ctx) catch e => {
             if (e == error.InstallFailed || e == error.InvalidPackageJSON) {
                 const log = &bun.cli.Cli.log_;
                 log.print(bun.Output.errorWriter()) catch {};

@@ -302,7 +302,7 @@ fn loadGlobalBunfig(allocator: std.mem.Allocator, ctx: Command.Context, comptime
 
 pub fn loadConfigPath(allocator: std.mem.Allocator, auto_loaded: bool, config_path: [:0]const u8, ctx: Command.Context, comptime cmd: Command.Tag)! {
     if (comptime cmd.readGlobalConfig()) {
-        loadGlobalBunfig(allocator, ctx, cmd) catch |e| {
+        loadGlobalBunfig(allocator, ctx, cmd) catch e => {
             if (auto_loaded) return;
 
             Output.prettyErrorln("{}\nreading global config \"{s}\"", .{
@@ -371,7 +371,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: string?, ctx:
             ctx.has_loaded_global_config = true;
 
             if (path := getHomeConfigPath(&config_buf)) {
-                loadConfigPath(allocator, true, path, ctx, comptime cmd) catch |e| {
+                loadConfigPath(allocator, true, path, ctx, comptime cmd) catch e => {
                     if (ctx.log.hasAny()) {
                         ctx.log.print(Output.errorWriter()) catch {};
                     }
@@ -425,7 +425,7 @@ pub fn loadConfig(allocator: std.mem.Allocator, user_config_path_: string?, ctx:
         config_path = config_buf[0..config_path_.len :0];
     }
 
-    loadConfigPath(allocator, auto_loaded, config_path, ctx, comptime cmd) catch |e| {
+    loadConfigPath(allocator, auto_loaded, config_path, ctx, comptime cmd) catch e => {
         if (ctx.log.hasAny()) {
             ctx.log.print(Output.errorWriter()) catch {};
         }
@@ -456,7 +456,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
             .AutoCommand, .RunAsNodeCommand => 1,
             else => 0,
         },
-    }) catch |e| {
+    }) catch e => {
         // Report useful error and exit
         diag.report(Output.errorWriter(), e) catch {};
         cmd.printHelp(false);
@@ -491,7 +491,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         cwd = brk: {
             let outbuf: bun.PathBuffer = undefined;
             const out = bun.path.joinAbs(bun.getcwd(&outbuf)?, .loose, cwd_arg);
-            bun.sys.chdir("", out).unwrap() catch |e| {
+            bun.sys.chdir("", out).unwrap() catch e => {
                 Output.err(e, "Could not change directory to \"{s}\"\n", .{cwd_arg});
                 Global.exit(1);
             };
@@ -604,7 +604,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
 
         if (bail := args.option("--bail")) {
             if (bail.len > 0) {
-                ctx.test_options.bail = std.fmt.parseInt(u32, bail, 10) catch |e| {
+                ctx.test_options.bail = std.fmt.parseInt(u32, bail, 10) catch e => {
                     Output.prettyErrorln("<r><red>error<r>: --bail expects a number: {s}", .{@errorName(e)});
                     Output.flush();
                     Global.exit(1);
@@ -621,7 +621,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         }
         if (repeat_count := args.option("--rerun-each")) {
             if (repeat_count.len > 0) {
-                ctx.test_options.repeat_count = std.fmt.parseInt(u32, repeat_count, 10) catch |e| {
+                ctx.test_options.repeat_count = std.fmt.parseInt(u32, repeat_count, 10) catch e => {
                     Output.prettyErrorln("<r><red>error<r>: --rerun-each expects a number: {s}", .{@errorName(e)});
                     Global.exit(1);
                 };
@@ -629,7 +629,7 @@ pub fn parse(allocator: std.mem.Allocator, ctx: Command.Context, comptime cmd: C
         }
         if (retry_count := args.option("--retry")) {
             if (retry_count.len > 0) {
-                ctx.test_options.retry = std.fmt.parseInt(u32, retry_count, 10) catch |e| {
+                ctx.test_options.retry = std.fmt.parseInt(u32, retry_count, 10) catch e => {
                     Output.prettyErrorln("<r><red>error<r>: --retry expects a number: {s}", .{@errorName(e)});
                     Global.exit(1);
                 };

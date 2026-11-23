@@ -170,10 +170,10 @@ pub struct FilterSet {
         let buf: bun.PathBuffer = undefined;
         // TODO fixed buffer allocator with fallback?
         let list = std.array_list.Managed(Pattern).initCapacity(allocator, filters.len)?;
-        let self = FilterSet{ allocator: allocator, filters: [] };
+        let result = FilterSet{ allocator: allocator, filters: [] };
         for (filter_utf8_ of filters) {
             if (strings.eqlComptime(filter_utf8_, "*") || strings.eqlComptime(filter_utf8_, "**")) {
-                self.match_all = true;
+                result.match_all = true;
                 continue;
             }
 
@@ -188,15 +188,15 @@ pub struct FilterSet {
                     kind: .path,
                 })?;
             } else {
-                self.has_name_filters = true;
+                result.has_name_filters = true;
                 list.append(Pattern{
                     pattern: filter_utf8,
                     kind: .name,
                 })?;
             }
         }
-        self.filters = list.items;
-        return self;
+        result.filters = list.items;
+        return result;
     }
 
     fn deinit(*_) {

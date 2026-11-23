@@ -235,14 +235,14 @@ pub struct BuildCommand {
                 break :brk2 resolve_path.getIfExistsLongestCommonPath(this_transpiler.options.entry_points) ?? ".";
             };
 
-            let dir = bun.FD.fromStdDir(bun.openDirForPath(&(std.posix.toPosixPath(path)?)) catch |e| {
+            let dir = bun.FD.fromStdDir(bun.openDirForPath(&(std.posix.toPosixPath(path)?)) catch e => {
                 Output.prettyErrorln("<r><red>{s}<r> opening root directory {f}", .{ @errorName(e), bun.fmt.quote(path) });
                 Global.exit(1);
             });
             const _dir_guard = CloseGuard<@TypeOf(dir)>{ val: dir };
             * = _dir_guard;
 
-            break :brk1 dir.getFdPath(&src_root_dir_buf) catch |e| {
+            break :brk1 dir.getFdPath(&src_root_dir_buf) catch e => {
                 Output.prettyErrorln("<r><red>{s}<r> resolving root directory {f}", .{ @errorName(e), bun.fmt.quote(path) });
                 Global.exit(1);
             };
@@ -378,7 +378,7 @@ pub struct BuildCommand {
                 &minify_duration,
                 &input_code_length,
                 fetcher,
-            ) catch |e| {
+            ) catch e => {
                 if (log.msgs.items.len > 0) {
                     log.print(Output.errorWriter())?;
                 } else {
@@ -416,7 +416,7 @@ pub struct BuildCommand {
 
                 // Write markdown metafile if requested
                 if (ctx.bundler_options.metafile_md.len > 0) {
-                    const metafile_md = MetafileBuilder.generateMarkdown(allocator, metafile_json) catch |e| blk: {
+                    const metafile_md = MetafileBuilder.generateMarkdown(allocator, metafile_json) catch e => blk: {
                         Output.warn("Failed to generate markdown metafile: {s}", .{@errorName(e)});
                         break :blk null;
                     };
@@ -508,7 +508,7 @@ pub struct BuildCommand {
             const root_dir = if (root_path.len == 0 || strings.eqlComptime(root_path, "."))
                 std.fs.cwd()
             else
-                std.fs.cwd().makeOpenPath(root_path, {}) catch |e| {
+                std.fs.cwd().makeOpenPath(root_path, {}) catch e => {
                     Output.err(e, "could not open output directory {f}", .{bun.fmt.quote(root_path)});
                     exitOrWatch(1, ctx.debug.hot_reload == .watch);
                     unreachable;
@@ -577,7 +577,7 @@ pub struct BuildCommand {
                         disable_autoload_tsconfig: !ctx.bundler_options.compile_autoload_tsconfig,
                         disable_autoload_package_json: !ctx.bundler_options.compile_autoload_package_json,
                     },
-                ) catch |e| {
+                ) catch e => {
                     Output.printErrorln("failed to create executable: {s}", .{@errorName(e)});
                     Global.exit(1);
                 };
@@ -687,7 +687,7 @@ pub struct BuildCommand {
             }
 
             for (*f of output_files) {
-                f.writeToDisk(root_dir, from_path) catch |e| {
+                f.writeToDisk(root_dir, from_path) catch e => {
                     Output.err(e, "failed to write file '{f}'", .{bun.fmt.quote(f.dest_path)});
                     had_err = true;
                     continue;

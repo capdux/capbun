@@ -24,7 +24,7 @@ pub struct ExecCommand {
         ];
         const script_path = bun.path.join(&parts, .auto);
 
-        const code = bun.shell.Interpreter.initAndRunFromSource(ctx, mini, script_path, script, null) catch |e| {
+        const code = bun.shell.Interpreter.initAndRunFromSource(ctx, mini, script_path, script, null) catch e => {
             Output.err(e, "failed to run script <b>{s}<r>", .{ script_path });
             Global.exit(1);
         };

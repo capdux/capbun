@@ -856,7 +856,7 @@ pub struct BunfigParser {
                             public_hoist_pattern_expr,
                             _.log,
                             _.source,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.OutOfMemory) return error.OutOfMemory;
                             return error.@"Invalid Bunfig";
                         };
@@ -868,7 +868,7 @@ pub struct BunfigParser {
                             hoist_pattern_expr,
                             _.log,
                             _.source,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.OutOfMemory) return error.OutOfMemory;
                             return error.@"Invalid Bunfig";
                         };
@@ -1301,7 +1301,7 @@ pub struct Bunfig {
     static fn parse(allocator: std.mem.Allocator, source: *const logger.Source, ctx: Command.Context, comptime cmd: Command.Tag)! {
         const log_count = ctx.log.errors + ctx.log.warnings;
 
-        const expr = if (strings.eqlComptime(source.path.name.ext[1..], "toml")) TOML.parse(source, ctx.log, allocator, true) catch |e| {
+        const expr = if (strings.eqlComptime(source.path.name.ext[1..], "toml")) TOML.parse(source, ctx.log, allocator, true) catch e => {
             if (ctx.log.errors + ctx.log.warnings == log_count) {
                 ctx.log.addErrorOpts("Failed to parse", {
                     source: source,
@@ -1309,7 +1309,7 @@ pub struct Bunfig {
                 })?;
             }
             return e;
-        } else JSONParser.parseTSConfig(source, ctx.log, allocator, true) catch |e| {
+        } else JSONParser.parseTSConfig(source, ctx.log, allocator, true) catch e => {
             if (ctx.log.errors + ctx.log.warnings == log_count) {
                 ctx.log.addErrorOpts("Failed to parse", {
                     source: source,

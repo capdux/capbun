@@ -2217,3 +2217,5 @@
 - [Wave #95] 修改 .cp/.zig：`src/runtime/valkey_jsc/{ValkeyCommand,js_valkey_functions,js_valkey}.{cp,zig}`、`src/collections/bit_set.{cp,zig}`（全部通过 `cpc_brief.py` 4 门禁与 `--strict` 零错误，`zig:check` 5/5）。
 
 - [Wave #96] 修改 .cp/.zig：`src/options_types/schema.{cp,zig}`、`src/semver/{SemverRange,Version}.{cp,zig}`（全部通过 `cpc_brief.py` 4 门禁与 `--strict` 零错误，`zig:check` 5/5）。
+
+- [Wave #97] 修改 .cp/.zig：`src/cli/{Arguments,audit_command,build_command,bunfig,bunx_command,cli,colon_list_type,create_command,exec_command,filter_arg,filter_run,init_command,install_command,install_completions_command,link_command}.{cp,zig}`（全部通过 `cpc_brief.py` 4 门禁与 `--strict` 零错误，`zig:check` 5/5）。

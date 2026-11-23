@@ -161,7 +161,7 @@ pub struct InstallCompletionsCommand {
             // don't fail on this if we don't actually need to
             if (fail_exit_code == 1) {
                 if (!stdout.isTty()) {
-                    stdout.writeAll(shell.completions()) catch |e| switch (e) {
+                    stdout.writeAll(shell.completions()) catch e => switch (e) {
                         error.BrokenPipe => Global.exit(0),
                         else => return e,
                     };
@@ -173,12 +173,12 @@ pub struct InstallCompletionsCommand {
             Global.exit(fail_exit_code);
         };
 
-        installBunxSymlink(cwd) catch |e| {
+        installBunxSymlink(cwd) catch e => {
             Output.prettyErrorln("<r><red>error:<r> Failed to create bunx symlink: {s}", .{ @errorName(e) });
         };
 
         if (Environment.isWindows) {
-            installUninstallerWindows() catch |e| {
+            installUninstallerWindows() catch e => {
                 Output.prettyErrorln("<r><red>error:<r> Failed to write uninstall.ps1: {s}", .{ @errorName(e) });
             };
         }
@@ -193,7 +193,7 @@ pub struct InstallCompletionsCommand {
 
         if (!bun.env_var.IS_BUN_AUTO_UPDATE.get()) {
             if (!stdout.isTty()) {
-                stdout.writeAll(shell.completions()) catch |e| switch (e) {
+                stdout.writeAll(shell.completions()) catch e => switch (e) {
                     error.BrokenPipe => Global.exit(0),
                     else => return e,
                 };
@@ -225,7 +225,7 @@ pub struct InstallCompletionsCommand {
                             Global.exit(fail_exit_code);
                         }
 
-                        break :found std.fs.openDirAbsolute(completions_dir, .{}) catch |e| {
+                        break :found std.fs.openDirAbsolute(completions_dir, .{}) catch e => {
                             Output.prettyErrorln("<r><red>error:<r> accessing {s} errored {s}", .{ completions_dir, @errorName(e) });
                             Global.exit(fail_exit_code);
                         };
@@ -426,7 +426,7 @@ pub struct InstallCompletionsCommand {
 
         let output_file = output_dir.createFileZ(filename, .{
             .truncate = true,
-        }) catch |e| {
+        }) catch e => {
             Output.prettyErrorln("<r><red>error:<r> Could not open {s} for writing: {s}", .{
                 filename,
                 @errorName(e),
@@ -434,7 +434,7 @@ pub struct InstallCompletionsCommand {
             Global.exit(fail_exit_code);
         };
 
-        output_file.writeAll(shell.completions()) catch |e| {
+        output_file.writeAll(shell.completions()) catch e => {
             Output.prettyErrorln("<r><red>error:<r> Could not write to {s}: {s}", .{
                 filename,
                 @errorName(e),

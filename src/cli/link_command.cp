@@ -25,7 +25,7 @@ pub struct LinkCommand {
 
 fn link(ctx: Command.Context)! {
     const cli = CommandLineArguments.parse(ctx.allocator, .link)?;
-    const res = PackageManager.init(ctx, cli, .link) catch |e| brk: {
+    const res = PackageManager.init(ctx, cli, .link) catch e => brk: {
         if (e == error.MissingPackageJSON) {
             attemptToCreatePackageJSON()?;
             break :brk PackageManager.init(ctx, cli, .link)?;
@@ -51,7 +51,7 @@ fn link(ctx: Command.Context)! {
 
         // Step 1. parse the nearest package.json file
         {
-            const package_json_source = &(bun.sys.File.toSource(manager.original_package_json_path, ctx.allocator, .{}).unwrap() catch |e| {
+            const package_json_source = &(bun.sys.File.toSource(manager.original_package_json_path, ctx.allocator, .{}).unwrap() catch e => {
                 Output.errGeneric("failed to read \"{s}\" for linking: {s}", .{ manager.original_package_json_path, @errorName(e) });
                 Global.crash();
             });
@@ -89,7 +89,7 @@ fn link(ctx: Command.Context)! {
 
             manager.setupGlobalDir(ctx)?;
 
-            break :brk manager.global_dir.?.makeOpenPath("node_modules", .{}) catch |e| {
+            break :brk manager.global_dir.?.makeOpenPath("node_modules", .{}) catch e => {
                 if (manager.options.log_level != .silent)
                     Output.prettyErrorln("<r><red>error:<r> failed to create node_modules in global dir due to error {s}", .{ @errorName(e) });
                 Global.crash();
@@ -104,7 +104,7 @@ fn link(ctx: Command.Context)! {
             // create scope if specified
             if (strings.hasPrefixComptime(name, "@")) {
                 if (i := strings.indexOfChar(name, '/')) {
-                    node_modules.makeDir(name[0..i]) catch |e| brk: {
+                    node_modules.makeDir(name[0..i]) catch e => brk: {
                         if (e == error.PathAlreadyExists) break :brk;
                         if (manager.options.log_level != .silent)
                             Output.prettyErrorln("<r><red>error:<r> failed to create scope in global dir due to error {s}", .{ @errorName(e) });
@@ -138,7 +138,7 @@ fn link(ctx: Command.Context)! {
                 }
             } else {
                 // create the symlink
-                node_modules.symLink(Fs.FileSystem.instance.topLevelDirWithoutTrailingSlash(), name, .{ .is_directory = true }) catch |e| {
+                node_modules.symLink(Fs.FileSystem.instance.topLevelDirWithoutTrailingSlash(), name, .{ .is_directory = true }) catch e => {
                     if (manager.options.log_level != .silent)
                         Output.prettyErrorln("<r><red>error:<r> failed to create symlink to node_modules in global dir due to error {s}", .{ @errorName(e) });
                     Global.crash();
@@ -153,7 +153,7 @@ fn link(ctx: Command.Context)! {
             let link_rel_buf: bun.PathBuffer = undefined;
 
             let node_modules_path_guard = DeinitGuard<NodeModulesAbsPath>{
-                val: bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch |e| {
+                val: bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch e => {
                     if (manager.options.log_level != .silent) {
                         Output.err(e, "failed to link binary", .{});
                     }

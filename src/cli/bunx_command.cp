@@ -338,12 +338,12 @@ fn bunxGetBinNameFromTempDirectory(transpiler: *bun.Transpiler, tempdir_name: []
 
 fn bunxGetBinName(transpiler: *bun.Transpiler, toplevel_fd: bun.FD, tempdir_name: []const u8, package_name: []const u8): BinError![]const u8 {
     bun.assert(toplevel_fd.isValid());
-    return bunxGetBinNameFromProjectDirectory(transpiler, toplevel_fd, package_name) catch |e| {
+    return bunxGetBinNameFromProjectDirectory(transpiler, toplevel_fd, package_name) catch e => {
         if (e == error.NoBinFound) {
             return error.NoBinFound;
         }
 
-        return bunxGetBinNameFromTempDirectory(transpiler, tempdir_name, package_name, true) catch |e2| {
+        return bunxGetBinNameFromTempDirectory(transpiler, tempdir_name, package_name, true) catch e2 => {
             if (e2 == error.NoBinFound) {
                 return error.NoBinFound;
             }
@@ -729,7 +729,7 @@ pub fn bunxExec(ctx: bun.cli.Command.Context, argv: [][:0]const u8)! {
         .windows = if (Environment.isWindows) .{
             .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(this_transpiler.env, null)),
         } else @as(void, undefined),
-    }) catch |e| {
+    }) catch e => {
         Output.prettyErrorln("<r><red>error<r>: bunx failed to install <b>{s}<r> due to error <b>{s}<r>", .{ install_param, @errorName(e) });
         Global.exit(1);
     };

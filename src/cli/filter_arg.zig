@@ -141,12 +141,12 @@ pub fn init(allocator: std.mem.Allocator, filters: []const []const u8, cwd_: []c
             _ = &buf;
             var list = try std.array_list.Managed(Pattern).initCapacity(allocator, filters.len);
             _ = &list;
-            var self = FilterSet{ .allocator = allocator, .filters = &.{} };
-            _ = &self;
+            var result = FilterSet{ .allocator = allocator, .filters = &.{} };
+            _ = &result;
             for (cp_iter_slice(filters)) |filter_utf8_| {
                 _ = &filter_utf8_;
                 if ((strings.eqlComptime(filter_utf8_, "*") or strings.eqlComptime(filter_utf8_, "**"))) {
-                    self.match_all = true;
+                    result.match_all = true;
                     continue;
                 }
                 var filter_utf8 = filter_utf8_;
@@ -158,12 +158,12 @@ pub fn init(allocator: std.mem.Allocator, filters: []const []const u8, cwd_: []c
                     filter_utf8 = filter_utf8_temp;
                     _ = try list.append(Pattern{ .pattern = filter_utf8, .kind = .path });
                 } else {
-                    self.has_name_filters = true;
+                    result.has_name_filters = true;
                     _ = try list.append(Pattern{ .pattern = filter_utf8, .kind = .name });
                 }
             }
-            self.filters = list.items;
-            return self;
+            result.filters = list.items;
+            return result;
     }
 
 pub fn deinit(self: *FilterSet) void {

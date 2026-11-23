@@ -345,7 +345,7 @@ pub struct InitCommand {
             }
         }
 
-        const selection = processRadioButton(label, Choices) catch |e| {
+        const selection = processRadioButton(label, Choices) catch e => {
             if (e == error.EndOfStream) {
                 Output.flush();
                 // Add an "x" cancelled
@@ -444,11 +444,11 @@ pub struct InitCommand {
         }
 
         if (ifdir := initialize_in_folder) {
-            std.fs.cwd().makePath(ifdir) catch |e| {
+            std.fs.cwd().makePath(ifdir) catch e => {
                 Output.prettyErrorln("Failed to create directory {s}: {s}", .{ ifdir, @errorName(e) });
                 Global.exit(1);
             };
-            bun.sys.chdir("", ifdir).unwrap() catch |e| {
+            bun.sys.chdir("", ifdir).unwrap() catch e => {
                 Output.prettyErrorln("Failed to change directory to {s}: {s}", .{ ifdir, @errorName(e) });
                 Global.exit(1);
             };
@@ -603,7 +603,7 @@ pub struct InitCommand {
                             alloc,
                             "<r><cyan>package name<r> ",
                             fields.name,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.EndOfStream) return;
                             return e;
                         };
@@ -612,7 +612,7 @@ pub struct InitCommand {
                             alloc,
                             "<r><cyan>entry point<r> ",
                             fields.entry_point,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.EndOfStream) return;
                             return e;
                         };
@@ -792,7 +792,7 @@ pub struct InitCommand {
                 js_ast.Expr{ data: .{ e_object: fields.object }, loc: logger.Loc.Empty },
                 &logger.Source.initEmptyFile("package.json"),
                 .{ mangled_props: null },
-            ) catch |e| {
+            ) catch e => {
                 Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
                 package_json_file = null;
                 print_ok = false;
@@ -801,7 +801,7 @@ pub struct InitCommand {
 
             const written = package_json_writer.ctx.getWritten();
             let write_ok = true;
-            bun.sys.File.writeAll(.{ handle: fd }, written).unwrap() catch |e| {
+            bun.sys.File.writeAll(.{ handle: fd }, written).unwrap() catch e => {
                 Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
                 package_json_file = null;
                 write_ok = false;
@@ -809,7 +809,7 @@ pub struct InitCommand {
             if (!write_ok) break :write_package_json;
 
             let trunc_ok = true;
-            bun.sys.ftruncate(fd, i32(written.len)).unwrap() catch |e| {
+            bun.sys.ftruncate(fd, i32(written.len)).unwrap() catch e => {
                 Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e) });
                 package_json_file = null;
                 trunc_ok = false;
@@ -1223,7 +1223,7 @@ enum Template {
                         })
                     else
                         InitCommand.Assets.createNew(path, contents);
-                    result catch |e| {
+                    result catch e => {
                         if (e == error.EEXIST) {
                             Output.prettyln(" ○ <r><yellow>{s}<r> (already exists, skipping)", .{ path });
                             Output.flush();

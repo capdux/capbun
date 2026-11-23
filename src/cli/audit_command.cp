@@ -149,7 +149,7 @@ pub struct VulnCounts {
 pub struct AuditCommand {
     static fn exec(ctx: Command.Context): !noreturn {
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .audit)?;
-        const init_res = PackageManager.init(ctx, cli, .audit) catch |e| {
+        const init_res = PackageManager.init(ctx, cli, .audit) catch e => {
             if (e == error.MissingPackageJSON) {
                 let cwd_buf: bun.PathBuffer = undefined;
                 if (cwd := bun.getcwd(&cwd_buf) catch null) {
@@ -498,7 +498,7 @@ fn sendAuditRequest(allocator: std.mem.Allocator, pm: *PackageManager, body: []c
         null,
         .follow,
     );
-    const res = req.sendSync() catch |e| {
+    const res = req.sendSync() catch e => {
         Output.err(e, "audit request failed", .{});
         Global.crash();
     };

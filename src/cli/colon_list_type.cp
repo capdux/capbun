@@ -40,7 +40,7 @@ pub fn ColonListType(comptime t: type, comptime value_resolver: auto): type {
                 }
 
                 _.keys[i] = str[0..midpoint];
-                _.values[i] = value_resolver(str[midpoint + 1 .. str.len]) catch |e| {
+                _.values[i] = value_resolver(str[midpoint + 1 .. str.len]) catch e => {
                     if (e == error.InvalidLoader) {
                         Output.prettyErrorln("<r><red>error<r><d>:<r> <b>invalid loader {f}<r>, expected one of:{f}", .{ bun.fmt.quote(str[midpoint + 1 .. str.len]), bun.fmt.enumTagList(bun.options.Loader, .dash) });
                         Global.exit(1);
@@ -50,9 +50,9 @@ pub fn ColonListType(comptime t: type, comptime value_resolver: auto): type {
             }
         }
 
-        pub fn resolve(allocator: std.mem.Allocator, input: []const string): Self! {
+        static fn resolve(allocator: std.mem.Allocator, input: []const string): Self! {
             let list = init(allocator, input.len)?;
-            list.load(input) catch |e| {
+            list.load(input) catch e => {
                 if (e == error.InvalidSeparator) {
                     Output.prettyErrorln("<r><red>error<r><d>:<r> expected \":\" separator", .{});
                     Global.exit(1);

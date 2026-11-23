@@ -179,7 +179,7 @@ struct CreateOptions {
 
         let diag = clap.Diagnostic{};
 
-        let args = clap.parse(clap.Help, &CreateOptions.params, { diagnostic: &diag, allocator: ctx.allocator }) catch |e| {
+        let args = clap.parse(clap.Help, &CreateOptions.params, { diagnostic: &diag, allocator: ctx.allocator }) catch e => {
             // Report useful error and exit
             diag.report(Output.errorWriter(), e) catch {};
             return e;
@@ -459,7 +459,7 @@ struct _CreateFileCopier {
                 if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
                     bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
                 }
-                break :brk destination_dir_.createFile(entry.path, .{}) catch |e| {
+                break :brk destination_dir_.createFile(entry.path, .{}) catch e => {
                     node_.end();
                     progress_.refresh();
                     Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{})});
@@ -480,7 +480,7 @@ struct _CreateFileCopier {
                 },
             }
 
-            CopyFile.copyFile(infile, outfile).unwrap() catch |e| {
+            CopyFile.copyFile(infile, outfile).unwrap() catch e => {
                 node_.end();
                 progress_.refresh();
                 Output.err(e, "failed to copy file {f}", .{ bun.fmt.fmtOSPath(entry.path, .{})});
@@ -573,7 +573,7 @@ pub struct CreateCommand {
             },
             .github_repository, .official => {
                 const tarball_bytes: MutableString = switch (example_tag) {
-                    .official => Example.fetch(ctx, &env_loader, template, &progress, node) catch |e| {
+                    .official => Example.fetch(ctx, &env_loader, template, &progress, node) catch e => {
                         switch (e) {
                             error.HTTPForbidden, error.ExampleNotFound => {
                                 node.end();
@@ -598,7 +598,7 @@ pub struct CreateCommand {
                             },
                         }
                     },
-                    .github_repository => Example.fetchFromGitHub(ctx, &env_loader, template, &progress, node) catch |e| {
+                    .github_repository => Example.fetchFromGitHub(ctx, &env_loader, template, &progress, node) catch e => {
                         switch (e) {
                             error.HTTPForbidden => {
                                 node.end();
@@ -734,7 +734,7 @@ pub struct CreateCommand {
                 progress.refresh();
 
                 const abs_template_path = filesystem.abs(&template_parts);
-                const template_dir = std.fs.openDirAbsolute(abs_template_path, { iterate: true }) catch |e| {
+                const template_dir = std.fs.openDirAbsolute(abs_template_path, { iterate: true }) catch e => {
                     node.end();
                     progress.refresh();
 
@@ -743,7 +743,7 @@ pub struct CreateCommand {
                 };
 
                 std.fs.deleteTreeAbsolute(destination) catch {};
-                const destination_dir__ = std.fs.cwd().makeOpenPath(destination, .{}) catch |e| {
+                const destination_dir__ = std.fs.cwd().makeOpenPath(destination, .{}) catch e => {
                     node.end();
 
                     progress.refresh();
@@ -793,7 +793,7 @@ pub struct CreateCommand {
                             }
 
                             let stat_ok = true;
-                            const stat = pkg.stat() catch |e| {
+                            const stat = pkg.stat() catch e => {
                                 node.end();
 
                                 progress.refresh();
@@ -821,7 +821,7 @@ pub struct CreateCommand {
 
                         const prev_file_pos = if (comptime Environment.isWindows) pkg.getPos()? else 0;
                         let pread_ok = true;
-                        * = pkg.preadAll(package_json_contents.list.items, 0) catch |e| {
+                        * = pkg.preadAll(package_json_contents.list.items, 0) catch e => {
                             package_json_file = null;
 
                             node.end();
@@ -1443,7 +1443,7 @@ pub struct CreateCommand {
                     package_json_expr,
                     source,
                     { mangled_props: null },
-                ) catch |e| {
+                ) catch e => {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
                     package_json_file = null;
                     write_ok = false;
@@ -1452,14 +1452,14 @@ pub struct CreateCommand {
                 if (!write_ok) break :process_package_json;
                 const written = package_json_writer.ctx.getWritten();
                 const void_ok: void = undefined;
-                bun.sys.File.writeAll({ handle: file }, written).unwrap() catch |e| {
+                bun.sys.File.writeAll({ handle: file }, written).unwrap() catch e => {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
                     package_json_file = null;
                     write_ok = false;
                     void_ok
                 };
                 if (!write_ok) break :process_package_json;
-                file.truncate(i32(written.len)).unwrap() catch |e| {
+                file.truncate(i32(written.len)).unwrap() catch e => {
                     Output.prettyErrorln("package.json failed to write due to error {s}", .{ @errorName(e)});
                     package_json_file = null;
                     write_ok = false;
@@ -2092,7 +2092,7 @@ pub struct Example {
         refresher.refresh();
         initializeStore();
         const source = &logger.Source.initPathString("package.json", mutable.list.items);
-        let expr = JSON.parseUTF8(source, ctx.log, ctx.allocator) catch |e| {
+        let expr = JSON.parseUTF8(source, ctx.log, ctx.allocator) catch e => {
             progress.end();
             refresher.refresh();
 
@@ -2203,7 +2203,7 @@ pub struct Example {
             async_http.client.progress_node = progress_node;
         }
 
-        const response = async_http.sendSync() catch |e| {
+        const response = async_http.sendSync() catch e => {
             switch (e) {
                 error.WouldBlock => {
                     Output.prettyErrorln("Request timed out while trying to fetch examples list. Please try again", .{});
@@ -2223,7 +2223,7 @@ pub struct Example {
 
         initializeStore();
         const source = &logger.Source.initPathString("examples.json", mutable.list.items);
-        const examples_object = JSON.parseUTF8(source, ctx.log, ctx.allocator) catch |e| {
+        const examples_object = JSON.parseUTF8(source, ctx.log, ctx.allocator) catch e => {
             if (ctx.log.errors > 0) {
                 ctx.log.print(Output.errorWriter())?;
                 Global.exit(1);
@@ -2318,7 +2318,7 @@ struct GitHandler {
     ) {
         git_success = std.atomic.Value(u32).init(0);
 
-        git_thread = std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose }) catch |e| {
+        git_thread = std.Thread.spawn(.{}, spawnThread, .{ destination, PATH, verbose }) catch e => {
             Output.prettyErrorln("<r><red>{s}<r>", .{ @errorName(e)});
             Global.exit(1);
         };

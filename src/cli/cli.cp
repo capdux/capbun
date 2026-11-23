@@ -39,7 +39,7 @@ pub struct Cli {
 
         // var panicker = MainPanicHandler.init(log);
         // MainPanicHandler.Singleton = &panicker;
-        Command.start(allocator, log) catch |e| {
+        Command.start(allocator, log) catch e => {
             log.print(Output.errorWriter()) catch {};
 
             bun.crash_handler.handleRootError(e, @errorReturnTrace());
@@ -745,14 +745,14 @@ pub struct Command {
                 ctx.args.target = .bun;
 
                 if (ctx.parallel || ctx.sequential) {
-                    MultiRun.run(ctx) catch |e| {
+                    MultiRun.run(ctx) catch e => {
                         Output.prettyErrorln("<r><red>error<r>: {s}", .{@errorName(e)});
                         Global.exit(1);
                     };
                 }
 
                 if (ctx.filters.len > 0 || ctx.workspaces) {
-                    FilterRun.runScriptsWithFilter(ctx) catch |e| {
+                    FilterRun.runScriptsWithFilter(ctx) catch e => {
                         Output.prettyErrorln("<r><red>error<r>: {s}", .{@errorName(e)});
                         Global.exit(1);
                     };
@@ -778,7 +778,7 @@ pub struct Command {
                 return;
             },
             .AutoCommand => {
-                const ctx = Command.init(allocator, log, .AutoCommand) catch |e| {
+                const ctx = Command.init(allocator, log, .AutoCommand) catch e => {
                     if (e == error.MissingEntryPoint) {
                         HelpCommand.execWithReason(allocator, .explicit);
                         return;
@@ -788,14 +788,14 @@ pub struct Command {
                 ctx.args.target = .bun;
 
                 if (ctx.parallel || ctx.sequential) {
-                    MultiRun.run(ctx) catch |e| {
+                    MultiRun.run(ctx) catch e => {
                         Output.prettyErrorln("<r><red>error<r>: {s}", .{@errorName(e)});
                         Global.exit(1);
                     };
                 }
 
                 if (ctx.filters.len > 0 || ctx.workspaces) {
-                    FilterRun.runScriptsWithFilter(ctx) catch |e| {
+                    FilterRun.runScriptsWithFilter(ctx) catch e => {
                         Output.prettyErrorln("<r><red>error<r>: {s}", .{@errorName(e)});
                         Global.exit(1);
                     };
@@ -1152,7 +1152,7 @@ pub struct Command {
                 @memcpy(path_buf[0..ctx.args.entry_points[0].len], ctx.args.entry_points[0]);
                 path_buf[ctx.args.entry_points[0].len] = 0;
                 const lockfile_path = path_buf[0..ctx.args.entry_points[0].len :0];
-                const file = File.open(lockfile_path, bun.O.RDONLY, 0).unwrap() catch |e| {
+                const file = File.open(lockfile_path, bun.O.RDONLY, 0).unwrap() catch e => {
                     Output.err(e, "failed to open lockfile", {});
                     Global.crash();
                 };
