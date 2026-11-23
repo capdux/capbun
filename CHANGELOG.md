@@ -2172,3 +2172,6 @@
 
 ### [2026-11-23] Wave #74（补全 `Blob.cp` `FormData`/`transfer`/`CloneTransfer` 与 `ParentDeathWatchdog.cp`）
 - 补全 `Blob.cp`（`getFormData`/`toFormData`/`toFormDataWithBytes`、`onStructuredCloneTransfer`、`toStreamWithOffset` 与 `Any.to*Transfer`）与修复 `ParentDeathWatchdog.cp`（`32768` 缓冲区与 `tokenizeAny " \n"`），通过 `bun run zig:check`（5/5）；完成 Batch 2c 后半段（889 pass / 0 崩溃）与全仓 110 目录完整性覆检。
+
+### [2026-11-23] Wave #75（修复 `shell.Builtin` SEGV 与纯化 `MarkdownObject`/`copy_file`）
+- 修复 `src/shell/Builtin.cp`（`allocator(*_)`/`eventLoop(*_)` 与 `static fn onForceSyncOrIsaTTY`），纯化 `src/runtime/api/MarkdownObject.cp`（`E0305`x95/`E0307`x3）与 `src/runtime/webcore/blob/copy_file.cp`（`E0306`x214 与 `fcntl` `@as(usize, 0)`），同步 `scripts/cpc_brief.py` `zig{}` 正则，通过 `bun run zig:check`（5/5）。

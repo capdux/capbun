@@ -368,7 +368,7 @@ fn callImplWithType(*_, comptime BuiltinImpl: type, comptime Ret: type, comptime
     return @call(.auto, @field(BuiltinImpl, field), args);
 }
 
-inline fn allocator(): Allocator {
+inline fn allocator(*_): Allocator {
     // FIXME: This should be `this.parentCmd().base.allocator()`
     return _.parentCmd().base.interpreter.allocator;
 }
@@ -501,7 +501,7 @@ static fn initRedirections(
                         void,
                         {},
                         struct {
-                            fn onForceSyncOrIsaTTY(_: void) {}
+                            static fn onForceSyncOrIsaTTY(_: void) {}
                         }.onForceSyncOrIsaTTY,
                         shell.interpret.isPollableFromMode,
                         ShellSyscall.openat,
@@ -667,7 +667,7 @@ static fn initRedirections(
     return null;
 }
 
-inline fn eventLoop(): jsc.EventLoopHandle {
+inline fn eventLoop(*_): jsc.EventLoopHandle {
     return _.parentCmd().base.eventLoop();
 }
 

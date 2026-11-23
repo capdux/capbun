@@ -1726,3 +1726,7 @@
 ### [2026-11-23] Wave #74 技术要点（`Blob` `.transfer` 路径与 Linux `/proc` PID 分隔符）
 - `Any.toArrayBufferTransfer`/`toUint8ArrayTransfer`/`toStringTransfer` 必须转发至 `_.to*(globalObject, .transfer)` 以确保 `.Blob` 文件/S3 异步路径与 `.InternalBlob`/`.WTFStringImpl` 所有权转移完整生效。
 - `ParentDeathWatchdog` 读取 `/proc/<pid>/task/<tid>/children` 时末尾可能包含 `\n`，必须使用 `std.mem.tokenizeAny(u8, contents, " \n")` 而非 `tokenizeScalar(..., ' ')`。
+
+### [2026-11-23] Wave #75 技术要点（`@fieldParentPtr` 接收者指针与 `cpc` 泛型移位发现）
+- `Builtin.allocator`/`eventLoop` 内部调用 `_.parentCmd()`（`@fieldParentPtr("bltn", self)`），若省略 `*_` 会被降级为按值传参，导致对栈副本取址算出错误 `Cmd` 指针并在 `yes`/`ls` 触发 `EventLoopTask.fromEventLoop` ASan SEGV；内联匿名 `struct { static fn ... }` 回调也须标注 `static fn`。
+- 排查 `src/collections/bit_set.cp` 确认 `cpc` 对 `comptime T: type` 泛型整数移位误报 `E0207`，已提炼最小复现上报 `cp_agy`（`task-bun-20261123-generic-shift-e0207`）。

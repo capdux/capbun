@@ -441,7 +441,7 @@ pub fn callImplWithType(self: *Builtin, comptime BuiltinImpl: type, comptime Ret
         return @call(.auto, @field(BuiltinImpl, field), args);
 }
 
-pub inline fn allocator(self: Builtin) Allocator {
+pub inline fn allocator(self: *Builtin) Allocator {
         return self.parentCmd().base.interpreter.allocator;
 }
 
@@ -689,7 +689,7 @@ const globalObject = interpreter.event_loop.js.global;
         return null;
 }
 
-pub inline fn eventLoop(self: Builtin) jsc.EventLoopHandle {
+pub inline fn eventLoop(self: *Builtin) jsc.EventLoopHandle {
         return self.parentCmd().base.eventLoop();
 }
 

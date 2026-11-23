@@ -739,3 +739,19 @@
   - `src/runtime/webcore/Blob.cp`（恢复 `Any.toArrayBufferTransfer`/`toUint8ArrayTransfer`/`toStringTransfer` 走 `.transfer` 路径，将 `getFormData` 桩替换为 `toFormData`/`toFormDataWithBytes`，补全 `onStructuredCloneTransfer` 与 `toStreamWithOffset`）；
   - `src/aio/ParentDeathWatchdog.cp`（恢复 `[u8; 32768]` 缓冲区与 `tokenizeAny(u8, contents, " \n")`）。
 - 推导下一阶段 Wave #75：Subagent 1 启动 **Batch 3a**（`bun bd test test/js/bun/spawn test/js/bun/shell`，77 个测试文件）；待 `worker.test.ts` 只读排查返回后继续推进 `Batch 3` 与针对性修复。
+
+### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0308` 误报 `std.zig` 工单
+- `task-bun-20261123-strict-e0308-std-zig` (`repro_strict_e0308_std_zig.cp`)：`cpc check --strict` 误将 `std.zig.fmtString(s)` 中的 `.zig` 成员名识别为 `zig { ... }` 逃逸块并报 `E0308`（全仓核查确认真实 `zig {}` 为 0，全部 8 处 `E0308` 均为 `std.zig.fmtString` 误报）。
+- **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（`!is_member_access && matches!(next, Some(Token::LBrace))`）、`cpc/src/brief.rs`（词法 token 统计）及 `scripts/cpc_brief.py`（`(?<!\.)\bzig\s*\{`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0308_std_zig.cp` 返回 `Check successful`，已同步更新 `scripts/cpc_brief.py` 并执行 `ack`。
+
+### [2026-11-23] 向 `cp_agy` 提交泛型移位 `E0207` 工单
+- `task-bun-20261123-generic-shift-e0207` (`repro_generic_shift_e0207.cp`)：`comptime T: type` 泛型整数参数执行移位运算 `>>` / `<<` 时，`cpc` 误要求右操作数与左操作数类型完全一致，报 `E0207: expected 'MaskInt', found 'ShiftInt'`（影响 `src/collections/bit_set.cp` 7 处）。
+
+## [2026-11-23] Wave #75：修复 `shell.Builtin` SEGV 根因、纯化 `MarkdownObject`/`copy_file` 与 `zig:check` 5/5 通过
+- 修复 `test/js/bun/shell` 3 处 ASan SEGV 共同根因：
+  - `src/shell/Builtin.cp`：`inline fn allocator(*_)` 与 `inline fn eventLoop(*_)` 补充 `*_` 指针接收者（原按值传参导致 `_.parentCmd()` 的 `@fieldParentPtr("bltn", self)` 取栈副本地址读取野指针），并补 `static fn onForceSyncOrIsaTTY(_: void)`；
+- 完成 2 个大模块 `--strict` 接收者纯化与编译适配：
+  - `src/runtime/api/MarkdownObject.cp`（消除 95 处 `E0305` 与 3 处 `E0307`，`--strict` 0 报错）；
+  - `src/runtime/webcore/blob/copy_file.cp`（消除 214 处 `E0306`，`std.os.linux.fcntl` 第三参数改 `@as(usize, 0)`，`--strict` 0 报错）；
+- `scripts/cpc_brief.py` 同步 `(?<!\.)\bzig\s*\{` 正则；以上改动均通过 `cpc_brief.py` 4 项门禁与 `bun run zig:check`（5/5，30s）。
+- 推导下一阶段 Wave #76：Subagent 1 运行 `bun bd test test/js/bun/shell` 验证 SEGV 消除并继续完成 Batch 3a（`test/js/bun/spawn`）；Subagent 2（不改 `src/` 以防竞态，先做只读排查/准备）核查 `s3/{multipart,simple_request}.cp`、`Installer.cp`、`hoisted_install.cp` 等 `--strict` 补丁方案，待 Batch 3a 完成后立即执行纯化。

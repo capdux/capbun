@@ -114,11 +114,11 @@ export class CopyFile {
     }
 
     pub fn deinit(*_) {
-        if (this.source_file_store.pathlike == .path) {
-            switch (this.source_file_store.pathlike.path) {
+        if (_.source_file_store.pathlike == .path) {
+            switch (_.source_file_store.pathlike.path) {
                 .string => {
-                    if (this.system_error == null) {
-                        default_allocator.free(unsafe { @constCast(this.source_file_store.pathlike.path.slice()) });
+                    if (_.system_error == null) {
+                        default_allocator.free(unsafe { @constCast(_.source_file_store.pathlike.path.slice()) });
                     }
                 },
                 else => {},
@@ -127,25 +127,25 @@ export class CopyFile {
         if (s := _.store) {
             s.deref();
         }
-        destroy(this);
+        destroy(_);
     }
 
     pub fn reject(*_, promise: *JSPromise): !void {
-        let globalThis = this.globalThis;
-        let system_error = this.system_error ?? SystemError {
+        let globalThis = _.globalThis;
+        let system_error = _.system_error ?? SystemError {
             errno = 0,
             message = BunString.empty,
             path = BunString.empty,
             syscall = BunString.empty,
         };
-        if (this.source_file_store.pathlike == .path && system_error.path.isEmpty()) {
-            system_error.path = BunString.cloneUTF8(this.source_file_store.pathlike.path.slice());
+        if (_.source_file_store.pathlike == .path && system_error.path.isEmpty()) {
+            system_error.path = BunString.cloneUTF8(_.source_file_store.pathlike.path.slice());
         }
         if (system_error.message.isEmpty()) {
             system_error.message = BunString.static("Failed to copy file");
         }
-        let instance = system_error.toErrorInstanceWithAsyncStack(this.globalThis, promise);
-        if (this.store != null) {
+        let instance = system_error.toErrorInstanceWithAsyncStack(_.globalThis, promise);
+        if (_.store != null) {
             const st: *Store = _.store.?;
             st.deref();
         }
@@ -153,28 +153,28 @@ export class CopyFile {
     }
 
     pub fn then(*_, promise: *JSPromise): !void {
-        this.source_store.?.deref();
-        if (this.system_error != null) {
-            this.reject(promise)?;
+        _.source_store.?.deref();
+        if (_.system_error != null) {
+            _.reject(promise)?;
             return;
         }
-        promise.resolve(this.globalThis, .jsNumberFromUint64(this.read_len))?;
+        promise.resolve(_.globalThis, .jsNumberFromUint64(_.read_len))?;
     }
 
     pub fn run(*_) {
-        this.runAsync();
+        _.runAsync();
     }
 
     pub fn doClose(*_) {
-        let close_input = this.destination_file_store.pathlike != .fd && this.destination_fd != invalid_fd;
-        let close_output = this.source_file_store.pathlike != .fd && this.source_fd != invalid_fd;
+        let close_input = _.destination_file_store.pathlike != .fd && _.destination_fd != invalid_fd;
+        let close_output = _.source_file_store.pathlike != .fd && _.source_fd != invalid_fd;
 
         if (!Environment.isWindows) {
-            if (mode := this.destination_mode) {
-                if (this.destination_fd != invalid_fd && this.system_error == null) {
-                    switch (sys.fchmod(this.destination_fd, mode)) {
+            if (mode := _.destination_mode) {
+                if (_.destination_fd != invalid_fd && _.system_error == null) {
+                    switch (sys.fchmod(_.destination_fd, mode)) {
                         .err => |err| {
-                            this.system_error = err.toSystemError();
+                            _.system_error = err.toSystemError();
                         },
                         .result => {},
                     }
@@ -183,25 +183,25 @@ export class CopyFile {
         }
 
         if (close_input && close_output) {
-            this.doCloseFile(.both);
+            _.doCloseFile(.both);
         } else if (close_input) {
-            this.doCloseFile(.destination);
+            _.doCloseFile(.destination);
         } else if (close_output) {
-            this.doCloseFile(.source);
+            _.doCloseFile(.source);
         }
     }
 
     pub fn doCloseFile(*_, which: IOWhich) {
         switch (which) {
             .both => {
-                this.destination_fd.close();
-                this.source_fd.close();
+                _.destination_fd.close();
+                _.source_fd.close();
             },
             .destination => {
-                this.destination_fd.close();
+                _.destination_fd.close();
             },
             .source => {
-                this.source_fd.close();
+                _.source_fd.close();
             },
         }
     }
@@ -212,20 +212,20 @@ export class CopyFile {
         const open_destination_flags = O.CLOEXEC | O.CREAT | O.WRONLY | O.TRUNC;
 
         if (which == .both || which == .source) {
-            this.source_fd = switch (sys.open(
-                this.source_file_store.pathlike.path.sliceZ(&path_buf1),
+            _.source_fd = switch (sys.open(
+                _.source_file_store.pathlike.path.sliceZ(&path_buf1),
                 open_source_flags,
                 0,
             )) {
                 .result => |result| switch (result.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {
                     .result => |result_fd| result_fd,
                     .err => |errno| {
-                        this.system_error = errno.toSystemError();
+                        _.system_error = errno.toSystemError();
                         return errnoToZigErr(errno.errno);
                     },
                 },
                 .err => |errno| {
-                    this.system_error = errno.toSystemError();
+                    _.system_error = errno.toSystemError();
                     return errnoToZigErr(errno.errno);
                 },
             };
@@ -233,9 +233,9 @@ export class CopyFile {
 
         if (which == .both || which == .destination) {
             while (true) {
-                let dest = this.destination_file_store.pathlike.path.sliceZ(&path_buf1);
-                let mode = this.destination_mode ?? jsc.Node.fs.default_permission;
-                this.destination_fd = switch (sys.open(
+                let dest = _.destination_file_store.pathlike.path.sliceZ(&path_buf1);
+                let mode = _.destination_mode ?? jsc.Node.fs.default_permission;
+                _.destination_fd = switch (sys.open(
                     dest,
                     open_destination_flags,
                     mode,
@@ -243,29 +243,29 @@ export class CopyFile {
                     .result => |result| switch (result.makeLibUVOwnedForSyscall(.open, .close_on_fail)) {
                         .result => |result_fd| result_fd,
                         .err => |errno| {
-                            this.system_error = errno.toSystemError();
+                            _.system_error = errno.toSystemError();
                             return errnoToZigErr(errno.errno);
                         },
                     },
                     .err => |errno| {
-                        switch (Blob.mkdirIfNotExists(this, errno, dest, dest)) {
+                        switch (Blob.mkdirIfNotExists(_, errno, dest, dest)) {
                             .@"continue" => {
                                 continue;
                             },
                             .fail => {
                                 if (which == .both) {
-                                    this.source_fd.close();
-                                    this.source_fd = .invalid;
+                                    _.source_fd.close();
+                                    _.source_fd = .invalid;
                                 }
                                 return errnoToZigErr(errno.errno);
                             },
                             .no => {},
                         }
                         if (which == .both) {
-                            this.source_fd.close();
-                            this.source_fd = .invalid;
+                            _.source_fd.close();
+                            _.source_fd = .invalid;
                         }
-                        this.system_error = errno.withPath(this.destination_file_store.pathlike.path.slice()).toSystemError();
+                        _.system_error = errno.withPath(_.destination_file_store.pathlike.path.slice()).toSystemError();
                         return errnoToZigErr(errno.errno);
                     },
                 };
@@ -277,22 +277,22 @@ export class CopyFile {
     pub const TryWith = CopyFileTryWith;
 
     pub fn doCopyFileRange(*_, use: TryWith, clear_append_if_invalid: bool): anyerror!void {
-        this.read_off += this.offset;
-        let remain = @as(usize, this.max_length);
+        _.read_off += _.offset;
+        let remain = @as(usize, _.max_length);
         let unknown_size = remain == Blob.max_size || remain == 0;
         if (unknown_size) {
             remain = 4096;
         }
 
-        let len_guard = CopyFileReadLenGuard{ copy_file: this };
-        let src_fd = this.source_fd;
-        let dest_fd = this.destination_fd;
+        let len_guard = CopyFileReadLenGuard{ copy_file: _ };
+        let src_fd = _.source_fd;
+        let dest_fd = _.destination_fd;
 
         let has_unset_append = false;
         if (!canUseCopyFileRangeSyscall()) {
             switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
                 .err => |err| {
-                    this.system_error = err.toSystemError();
+                    _.system_error = err.toSystemError();
                     return errnoToZigErr(err.errno);
                 },
                 .result => {
@@ -314,7 +314,7 @@ export class CopyFile {
                 .NOSYS, .XDEV, .OPNOTSUPP => {
                     switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
                         .err => |err| {
-                            this.system_error = err.toSystemError();
+                            _.system_error = err.toSystemError();
                             return errnoToZigErr(err.errno);
                         },
                         .result => {
@@ -327,7 +327,7 @@ export class CopyFile {
                     if (clear_append_if_invalid) {
                         if (!has_unset_append) {
                             has_unset_append = true;
-                            let flags = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.GETFL, @as(c_int, 0));
+                            let flags = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.GETFL, @as(usize, 0));
                             if ((flags & O.APPEND) != 0) {
                                 * = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.SETFL, flags ^ O.APPEND);
                                 continue;
@@ -337,7 +337,7 @@ export class CopyFile {
                     if (len_guard.total_written == 0) {
                         switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", src_fd, dest_fd, if (unknown_size) 0 else remain, &len_guard.total_written)) {
                             .err => |err| {
-                                this.system_error = err.toSystemError();
+                                _.system_error = err.toSystemError();
                                 return errnoToZigErr(err.errno);
                             },
                             .result => {
@@ -361,21 +361,21 @@ export class CopyFile {
     }
 
     pub fn doFCopyFileWithReadWriteLoopFallback(*_): anyerror!void {
-        switch (sys.fcopyfile(this.source_fd, this.destination_fd, posix.system.COPYFILE { DATA = true })) {
+        switch (sys.fcopyfile(_.source_fd, _.destination_fd, posix.system.COPYFILE { DATA = true })) {
             .err => |errno| {
                 switch (errno.getErrno()) {
                     .BADF => {
                         let total_written: u64 = 0;
-                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", this.source_fd, this.destination_fd, 0, &total_written)) {
+                        switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", _.source_fd, _.destination_fd, 0, &total_written)) {
                             .err => |err| {
-                                this.system_error = err.toSystemError();
+                                _.system_error = err.toSystemError();
                                 return errnoToZigErr(err.errno);
                             },
                             .result => {},
                         }
                     },
                     else => {
-                        this.system_error = errno.toSystemError();
+                        _.system_error = errno.toSystemError();
                         return errnoToZigErr(errno.errno);
                     },
                 }
@@ -389,17 +389,17 @@ export class CopyFile {
         let dest_buf: bun.PathBuffer = undefined;
 
         while (true) {
-            let dest = this.destination_file_store.pathlike.path.sliceZ(&dest_buf);
-            switch (sys.clonefile(this.source_file_store.pathlike.path.sliceZ(&source_buf), dest)) {
+            let dest = _.destination_file_store.pathlike.path.sliceZ(&dest_buf);
+            switch (sys.clonefile(_.source_file_store.pathlike.path.sliceZ(&source_buf), dest)) {
                 .err => |errno| {
-                    switch (Blob.mkdirIfNotExists(this, errno, dest, this.destination_file_store.pathlike.path.slice())) {
+                    switch (Blob.mkdirIfNotExists(_, errno, dest, _.destination_file_store.pathlike.path.slice())) {
                         .@"continue" => {
                             continue;
                         },
                         .fail => {},
                         .no => {},
                     }
-                    this.system_error = errno.toSystemError();
+                    _.system_error = errno.toSystemError();
                     return errnoToZigErr(errno.errno);
                 },
                 .result => {},
@@ -412,48 +412,48 @@ export class CopyFile {
         if (Environment.isWindows) return;
 
         let stat_: bun.Stat? = null;
-        if (this.destination_file_store.pathlike == .fd) {
-            this.destination_fd = this.destination_file_store.pathlike.fd;
+        if (_.destination_file_store.pathlike == .fd) {
+            _.destination_fd = _.destination_file_store.pathlike.fd;
         }
-        if (this.source_file_store.pathlike == .fd) {
-            this.source_fd = this.source_file_store.pathlike.fd;
+        if (_.source_file_store.pathlike == .fd) {
+            _.source_fd = _.source_file_store.pathlike.fd;
         }
 
-        if (this.destination_fd == invalid_fd && this.source_fd == invalid_fd) {
+        if (_.destination_fd == invalid_fd && _.source_fd == invalid_fd) {
             if (Environment.isMac) {
-                if (this.offset == 0 && this.source_file_store.pathlike == .path && this.destination_file_store.pathlike == .path) {
+                if (_.offset == 0 && _.source_file_store.pathlike == .path && _.destination_file_store.pathlike == .path) {
                     do_clonefile: {
                         let path_buf: bun.PathBuffer = undefined;
-                        switch (sys.stat(this.source_file_store.pathlike.path.sliceZ(&path_buf))) {
+                        switch (sys.stat(_.source_file_store.pathlike.path.sliceZ(&path_buf))) {
                             .result => |result| {
                                 stat_ = result;
                                 if (posix.S.ISDIR(result.mode)) {
-                                    this.system_error = unsupported_directory_error;
+                                    _.system_error = unsupported_directory_error;
                                     return;
                                 }
                                 if (!posix.S.ISREG(result.mode))
                                     break :do_clonefile;
                             },
                             .err => |err| {
-                                this.system_error = err.toSystemError();
+                                _.system_error = err.toSystemError();
                                 return;
                             },
                         }
 
-                        let did_clone = (this.doClonefile() catch null) != null;
+                        let did_clone = (_.doClonefile() catch null) != null;
                         if (!did_clone) {
-                            this.system_error = null;
+                            _.system_error = null;
                         } else {
-                            if (this.max_length != Blob.max_size && this.max_length < @as(SizeType, @intCast(stat_.?.size))) {
-                                * = bun.c.truncate(this.destination_file_store.pathlike.path.sliceZ(&path_buf), @as(posix.off_t, @intCast(this.max_length)));
-                                this.read_len = @as(SizeType, @intCast(this.max_length));
+                            if (_.max_length != Blob.max_size && _.max_length < @as(SizeType, @intCast(stat_.?.size))) {
+                                * = bun.c.truncate(_.destination_file_store.pathlike.path.sliceZ(&path_buf), @as(posix.off_t, @intCast(_.max_length)));
+                                _.read_len = @as(SizeType, @intCast(_.max_length));
                             } else {
-                                this.read_len = @as(SizeType, @intCast(stat_.?.size));
+                                _.read_len = @as(SizeType, @intCast(stat_.?.size));
                             }
-                            if (mode := this.destination_mode) {
-                                switch (sys.chmod(this.destination_file_store.pathlike.path.sliceZ(&path_buf), mode)) {
+                            if (mode := _.destination_mode) {
+                                switch (sys.chmod(_.destination_file_store.pathlike.path.sliceZ(&path_buf), mode)) {
                                     .err => |err| {
-                                        this.system_error = err.toSystemError();
+                                        _.system_error = err.toSystemError();
                                         return;
                                     },
                                     .result => {},
@@ -464,110 +464,110 @@ export class CopyFile {
                     }
                 }
             }
-            this.doOpenFile(.both) catch return;
-        } else if (this.destination_fd == invalid_fd) {
-            this.source_fd = this.source_file_store.pathlike.fd;
-            this.doOpenFile(.destination) catch return;
-        } else if (this.source_fd == invalid_fd) {
-            this.destination_fd = this.destination_file_store.pathlike.fd;
-            this.doOpenFile(.source) catch return;
+            _.doOpenFile(.both) catch return;
+        } else if (_.destination_fd == invalid_fd) {
+            _.source_fd = _.source_file_store.pathlike.fd;
+            _.doOpenFile(.destination) catch return;
+        } else if (_.source_fd == invalid_fd) {
+            _.destination_fd = _.destination_file_store.pathlike.fd;
+            _.doOpenFile(.source) catch return;
         }
 
-        if (this.system_error != null) {
+        if (_.system_error != null) {
             return;
         }
 
-        assert(this.destination_fd.isValid());
-        assert(this.source_fd.isValid());
+        assert(_.destination_fd.isValid());
+        assert(_.source_fd.isValid());
 
-        let stat: bun.Stat = stat_ ?? switch (sys.fstat(this.source_fd)) {
+        let stat: bun.Stat = stat_ ?? switch (sys.fstat(_.source_fd)) {
             .result => |result| result,
             .err => |err| {
-                this.doClose();
-                this.system_error = err.toSystemError();
+                _.doClose();
+                _.system_error = err.toSystemError();
                 return;
             },
         };
 
         if (posix.S.ISDIR(stat.mode)) {
-            this.system_error = unsupported_directory_error;
-            this.doClose();
+            _.system_error = unsupported_directory_error;
+            _.doClose();
             return;
         }
 
         if (stat.size != 0) {
-            this.max_length = @max(@min(@as(SizeType, @intCast(stat.size)), this.max_length), this.offset) - this.offset;
-            if (this.max_length == 0) {
-                this.doClose();
+            _.max_length = @max(@min(@as(SizeType, @intCast(stat.size)), _.max_length), _.offset) - _.offset;
+            if (_.max_length == 0) {
+                _.doClose();
                 return;
             }
-            if (sys.preallocate_supported && posix.S.ISREG(stat.mode) && this.max_length > sys.preallocate_length && this.max_length != Blob.max_size) {
-                sys.preallocate_file(this.destination_fd.cast(), 0, this.max_length) catch {};
+            if (sys.preallocate_supported && posix.S.ISREG(stat.mode) && _.max_length > sys.preallocate_length && _.max_length != Blob.max_size) {
+                sys.preallocate_file(_.destination_fd.cast(), 0, _.max_length) catch {};
             }
         }
 
         if (Environment.isLinux) {
-            if (posix.S.ISREG(stat.mode) && (posix.S.ISREG(this.destination_file_store.mode) || this.destination_file_store.mode == 0)) {
-                if (this.destination_file_store.is_atty ?? false) {
-                    this.doCopyFileRange(.copy_file_range, true) catch {};
+            if (posix.S.ISREG(stat.mode) && (posix.S.ISREG(_.destination_file_store.mode) || _.destination_file_store.mode == 0)) {
+                if (_.destination_file_store.is_atty ?? false) {
+                    _.doCopyFileRange(.copy_file_range, true) catch {};
                 } else {
-                    this.doCopyFileRange(.copy_file_range, false) catch {};
+                    _.doCopyFileRange(.copy_file_range, false) catch {};
                 }
-                this.doClose();
+                _.doClose();
                 return;
             }
 
-            if (posix.S.ISFIFO(stat.mode) && posix.S.ISFIFO(this.destination_file_store.mode)) {
-                if (this.destination_file_store.is_atty ?? false) {
-                    this.doCopyFileRange(.splice, true) catch {};
+            if (posix.S.ISFIFO(stat.mode) && posix.S.ISFIFO(_.destination_file_store.mode)) {
+                if (_.destination_file_store.is_atty ?? false) {
+                    _.doCopyFileRange(.splice, true) catch {};
                 } else {
-                    this.doCopyFileRange(.splice, false) catch {};
+                    _.doCopyFileRange(.splice, false) catch {};
                 }
-                this.doClose();
+                _.doClose();
                 return;
             }
 
             if (posix.S.ISREG(stat.mode) || posix.S.ISCHR(stat.mode) || posix.S.ISSOCK(stat.mode)) {
-                if (this.destination_file_store.is_atty ?? false) {
-                    this.doCopyFileRange(.sendfile, true) catch {};
+                if (_.destination_file_store.is_atty ?? false) {
+                    _.doCopyFileRange(.sendfile, true) catch {};
                 } else {
-                    this.doCopyFileRange(.sendfile, false) catch {};
+                    _.doCopyFileRange(.sendfile, false) catch {};
                 }
-                this.doClose();
+                _.doClose();
                 return;
             }
 
-            this.system_error = unsupported_non_regular_file_error;
-            this.doClose();
+            _.system_error = unsupported_non_regular_file_error;
+            _.doClose();
             return;
         }
 
         if (Environment.isMac) {
-            this.doFCopyFileWithReadWriteLoopFallback() catch {
-                this.doClose();
+            _.doFCopyFileWithReadWriteLoopFallback() catch {
+                _.doClose();
                 return;
             };
-            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > this.max_length) {
-                * = posix.system.ftruncate(this.destination_fd.cast(), @as(posix.off_t, @intCast(this.max_length)));
+            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > _.max_length) {
+                * = posix.system.ftruncate(_.destination_fd.cast(), @as(posix.off_t, @intCast(_.max_length)));
             }
-            this.doClose();
+            _.doClose();
         } else if (Environment.isFreeBSD) {
             let total_written: u64 = 0;
-            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", this.source_fd, this.destination_fd, 0, &total_written)) {
+            switch (jsc.Node.fs.NodeFS.copyFileUsingReadWriteLoop("", "", _.source_fd, _.destination_fd, 0, &total_written)) {
                 .err => |err| {
-                    this.system_error = err.toSystemError();
-                    this.doClose();
+                    _.system_error = err.toSystemError();
+                    _.doClose();
                     return;
                 },
                 .result => {},
             }
-            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > this.max_length) {
-                * = sys.ftruncate(this.destination_fd, @intCast(this.max_length));
-                this.read_len = @truncate(@min(total_written, @as(u64, this.max_length)));
+            if (stat.size != 0 && @as(SizeType, @intCast(stat.size)) > _.max_length) {
+                * = sys.ftruncate(_.destination_fd, @intCast(_.max_length));
+                _.read_len = @truncate(@min(total_written, @as(u64, _.max_length)));
             } else {
-                this.read_len = @truncate(total_written);
+                _.read_len = @truncate(total_written);
             }
-            this.doClose();
+            _.doClose();
         }
     }
 }
@@ -582,21 +582,21 @@ export class CopyFileWindowsReadWriteLoop {
     uv_buf: libuv.uv_buf_t;
 
     pub fn start(*_, parent: **CopyFileWindows): sys.Maybe(void) {
-        handleOom(this.read_buf.ensureTotalCapacityPrecise(64 * 1024));
-        return this.read(parent);
+        handleOom(_.read_buf.ensureTotalCapacityPrecise(64 * 1024));
+        return _.read(parent);
     }
 
     pub fn read(*_, parent: **CopyFileWindows): sys.Maybe(void) {
-        this.read_buf.items.len = 0;
-        this.uv_buf = libuv.uv_buf_t.init(this.read_buf.allocatedSlice());
+        _.read_buf.items.len = 0;
+        _.uv_buf = libuv.uv_buf_t.init(_.read_buf.allocatedSlice());
         let loop = parent.event_loop.virtual_machine.event_loop_handle.?;
         parent.io_request.data = unsafe { @ptrCast(parent) };
 
         let rc = libuv.uv_fs_read(
             loop,
             &parent.io_request,
-            this.source_fd.uv(),
-            unsafe { @ptrCast(&this.uv_buf) },
+            _.source_fd.uv(),
+            unsafe { @ptrCast(&_.uv_buf) },
             1,
             -1,
             &onRead,
@@ -696,25 +696,25 @@ export class CopyFileWindowsReadWriteLoop {
     }
 
     pub fn close(*_) {
-        if (this.must_close_source_fd) {
-            if (fd := this.source_fd.makeLibUVOwned() catch null) {
+        if (_.must_close_source_fd) {
+            if (fd := _.source_fd.makeLibUVOwned() catch null) {
                 bun.Async.Closer.close(fd, bun.Async.Loop.get());
             } else {
-                this.source_fd.close();
+                _.source_fd.close();
             }
-            this.must_close_source_fd = false;
-            this.source_fd = invalid_fd;
+            _.must_close_source_fd = false;
+            _.source_fd = invalid_fd;
         }
-        if (this.must_close_destination_fd) {
-            if (fd := this.destination_fd.makeLibUVOwned() catch null) {
+        if (_.must_close_destination_fd) {
+            if (fd := _.destination_fd.makeLibUVOwned() catch null) {
                 bun.Async.Closer.close(fd, bun.Async.Loop.get());
             } else {
-                this.destination_fd.close();
+                _.destination_fd.close();
             }
-            this.must_close_destination_fd = false;
-            this.destination_fd = invalid_fd;
+            _.must_close_destination_fd = false;
+            _.destination_fd = invalid_fd;
         }
-        this.read_buf.clearAndFree();
+        _.read_buf.clearAndFree();
     }
 }
 
@@ -972,45 +972,45 @@ export class CopyFileWindows {
     }
 
     pub fn onReadWriteLoopComplete(*_) {
-        this.event_loop.unrefConcurrently();
-        if (err := this.err) {
-            this.err = null;
-            this.throw(err);
+        _.event_loop.unrefConcurrently();
+        if (err := _.err) {
+            _.err = null;
+            _.throw(err);
             return;
         }
-        this.onComplete(this.read_write_loop.written);
+        _.onComplete(_.read_write_loop.written);
     }
 
     pub fn throw(*_, err: sys.Error) {
-        let globalThis = this.event_loop.global;
-        let promise = this.promise.swap();
+        let globalThis = _.event_loop.global;
+        let promise = _.promise.swap();
         let err_instance = err.toJSWithAsyncStack(globalThis, promise);
 
-        let _el_guard = EventLoopEnterGuard.enter(this.event_loop);
-        this.deinit();
+        let _el_guard = EventLoopEnterGuard.enter(_.event_loop);
+        _.deinit();
         promise.reject(globalThis, err_instance) catch {};
     }
 
     pub fn onComplete(*_, written_actual: usize) {
         let written = written_actual;
-        if (written != @as(@TypeOf(written), @intCast(this.size)) && this.size != Blob.max_size) {
-            this.truncate();
-            written = @intCast(this.size);
+        if (written != @as(@TypeOf(written), @intCast(_.size)) && _.size != Blob.max_size) {
+            _.truncate();
+            written = @intCast(_.size);
         }
 
-        if (mode := this.destination_mode) {
-            if (this.destination_file_store.data.file.pathlike == .path) {
-                this.written_bytes = written;
+        if (mode := _.destination_mode) {
+            if (_.destination_file_store.data.file.pathlike == .path) {
+                _.written_bytes = written;
                 let pathbuf: bun.PathBuffer = undefined;
-                let path = this.destination_file_store.data.file.pathlike.path.sliceZ(&pathbuf);
-                let loop = this.event_loop.virtual_machine.event_loop_handle.?;
-                this.io_request.deinit();
-                this.io_request = std.mem.zeroes(libuv.fs_t);
-                this.io_request.data = unsafe { @ptrCast(this) };
+                let path = _.destination_file_store.data.file.pathlike.path.sliceZ(&pathbuf);
+                let loop = _.event_loop.virtual_machine.event_loop_handle.?;
+                _.io_request.deinit();
+                _.io_request = std.mem.zeroes(libuv.fs_t);
+                _.io_request.data = unsafe { @ptrCast(_) };
 
                 let rc = libuv.uv_fs_chmod(
                     loop,
-                    &this.io_request,
+                    &_.io_request,
                     path,
                     @intCast(mode),
                     &onChmod,
@@ -1018,17 +1018,17 @@ export class CopyFileWindows {
 
                 if (errno := rc.errno()) {
                     let err = sys.Error.fromCode(@enumFromInt(errno), .chmod);
-                    if (this.destination_file_store.data.file.pathlike == .path) {
-                        err = err.withPath(this.destination_file_store.data.file.pathlike.path.slice());
+                    if (_.destination_file_store.data.file.pathlike == .path) {
+                        err = err.withPath(_.destination_file_store.data.file.pathlike.path.slice());
                     }
-                    this.throw(err);
+                    _.throw(err);
                     return;
                 }
-                this.event_loop.refConcurrently();
+                _.event_loop.refConcurrently();
                 return;
             }
         }
-        this.resolvePromise(written);
+        _.resolvePromise(written);
     }
 
     @c static fn onChmod(req: *libuv.fs_t) {
@@ -1048,28 +1048,28 @@ export class CopyFileWindows {
     }
 
     fn resolvePromise(*_, written: usize) {
-        let globalThis = this.event_loop.global;
-        let promise = this.promise.swap();
-        let _el_guard = EventLoopEnterGuard.enter(this.event_loop);
-        this.deinit();
+        let globalThis = _.event_loop.global;
+        let promise = _.promise.swap();
+        let _el_guard = EventLoopEnterGuard.enter(_.event_loop);
+        _.deinit();
         promise.resolve(globalThis, jsc.JSValue.jsNumberFromUint64(written)) catch {};
     }
 
     fn truncate(*_) {
         let node_fs: jsc.Node.fs.NodeFS = .{};
         * = node_fs.truncate(.{
-            .path = this.destination_file_store.data.file.pathlike,
-            .len = @intCast(this.size),
+            .path = _.destination_file_store.data.file.pathlike,
+            .len = @intCast(_.size),
         }, .sync);
     }
 
     pub fn deinit(*_) {
-        this.read_write_loop.close();
-        this.destination_file_store.deref();
-        this.source_file_store.deref();
-        this.promise.deinit();
-        this.io_request.deinit();
-        destroy(this);
+        _.read_write_loop.close();
+        _.destination_file_store.deref();
+        _.source_file_store.deref();
+        _.promise.deinit();
+        _.io_request.deinit();
+        destroy(_);
     }
 
     fn mkdirp(*_) {

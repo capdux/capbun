@@ -112,7 +112,7 @@ pub fn renderToAnsi(
         }
     }
 
-    const result_opt = md.renderToAnsi(input, arena_.allocator(), .terminal, theme) catch |e| {
+    const result_opt = md.renderToAnsi(input, arena_.allocator(), .terminal, theme) catch e => {
         if (e == error.OutOfMemory) return globalThis.throwOutOfMemory();
         return globalThis.throwStackOverflow();
     };
@@ -274,7 +274,7 @@ pub fn render(
     js_renderer.extractCallbacks(if (callbacks_value.isObject()) callbacks_value else .js_undefined)?;
 
     // Run parser with the JS callback renderer
-    md.renderWithRenderer(input, arena_.allocator(), options, js_renderer.renderer()) catch |e| {
+    md.renderWithRenderer(input, arena_.allocator(), options, js_renderer.renderer()) catch e => {
         if (e == error.StackOverflow) return globalThis.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.JSTerminated) return error.JSTerminated;
@@ -351,7 +351,7 @@ fn renderAST(
     // Extract component overrides from 2nd argument
     renderer.extractComponents(if (components_value.isObject()) components_value else .js_undefined)?;
 
-    md.renderWithRenderer(input, arena_.allocator(), options, renderer.renderer()) catch |e| {
+    md.renderWithRenderer(input, arena_.allocator(), options, renderer.renderer()) catch e => {
         if (e == error.StackOverflow) return globalThis.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.JSTerminated) return error.JSTerminated;
@@ -435,7 +435,7 @@ struct ParseRenderer {
         heading_ids: bool,
         react_version: u8?,
     ): ParseRenderer! {
-        let self = ParseRenderer{
+        let r = ParseRenderer{
             #globalObject: globalObject,
             #marked_args: marked_args,
             #src_text: src_text,
@@ -446,8 +446,8 @@ struct ParseRenderer {
         // Root entry — its children array becomes the return value
         const root_array = JSValue.createEmptyArray(globalObject, 0) catch return error.OutOfMemory;
         marked_args.append(root_array);
-        (self.#stack.append(bun.default_allocator, { children: root_array, block_type: .doc }))?;
-        return self;
+        (r.#stack.append(bun.default_allocator, { children: root_array, block_type: .doc }))?;
+        return r;
     }
 
     fn deinit(*_) {
@@ -552,17 +552,17 @@ struct ParseRenderer {
     // ========================================
 
     static fn enterBlockImpl(ptr: *!, block_type: md.BlockType, data: u32, flags: u32): bun.JSError!void {
-        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
 
         if (block_type == .h) {
-            self.#heading_tracker.enterHeading();
+            r.#heading_tracker.enterHeading();
         }
 
-        const array = JSValue.createEmptyArray(self.#globalObject, 0)?;
-        self.#marked_args.append(array);
-        (self.#stack.append(bun.default_allocator, {
+        const array = JSValue.createEmptyArray(r.#globalObject, 0)?;
+        r.#marked_args.append(array);
+        (r.#stack.append(bun.default_allocator, {
             children: array,
             block_type: block_type,
             data: data,
@@ -571,19 +571,19 @@ struct ParseRenderer {
     }
 
     static fn leaveBlockImpl(ptr: *!, block_type: md.BlockType, unused_data: u32): bun.JSError!void {
-        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
 
-        if (self.#stack.items.len <= 1) return;
-        const entry = self.#stack.pop().?;
-        const g = self.#globalObject;
+        if (r.#stack.items.len <= 1) return;
+        const entry = r.#stack.pop().?;
+        const g = r.#globalObject;
 
         // Determine HTML tag index for cached string
         const tag_index = getBlockTypeTag(block_type, entry.data);
 
         // For headings, compute slug before counting props
-        const slug: ([]const u8)? = if (block_type == .h) self.#heading_tracker.leaveHeading(bun.default_allocator) else null;
+        const slug: ([]const u8)? = if (block_type == .h) r.#heading_tracker.leaveHeading(bun.default_allocator) else null;
 
         // Count props fields
         let props_count: usize = if (block_type == .hr) 0 else 1; // children
@@ -602,7 +602,7 @@ struct ParseRenderer {
             },
             .code => {
                 if ((entry.flags & md.BLOCK_FENCED_CODE) != 0) {
-                    const lang = extractLanguage(self.#src_text, entry.data);
+                    const lang = extractLanguage(r.#src_text, entry.data);
                     if (lang.len > 0) props_count += 1;
                 }
             },
@@ -614,11 +614,11 @@ struct ParseRenderer {
         }
 
         // Build React element — use component override as type if set
-        const component = self.getBlockComponent(block_type, entry.data);
+        const component = r.getBlockComponent(block_type, entry.data);
         const type_val: JSValue = if (component != .zero) component else getCachedTagString(g, tag_index);
 
         const props = JSValue.createEmptyObject(g, props_count);
-        self.#marked_args.append(props);
+        r.#marked_args.append(props);
 
         // Set metadata props
         switch (block_type) {
@@ -638,7 +638,7 @@ struct ParseRenderer {
             },
             .code => {
                 if ((entry.flags & md.BLOCK_FENCED_CODE) != 0) {
-                    const lang = extractLanguage(self.#src_text, entry.data);
+                    const lang = extractLanguage(r.#src_text, entry.data);
                     if (lang.len > 0) {
                         props.put(g, ZigString.static("language"), (bun.String.createUTF8ForJS(g, lang))?);
                     }
@@ -658,15 +658,15 @@ struct ParseRenderer {
             props.put(g, ZigString.static("children"), entry.children);
         }
 
-        const obj = self.createElement(type_val, props);
+        const obj = r.createElement(type_val, props);
 
         // Push to parent's children array
-        if (self.#stack.items.len > 0) {
-            self.#stack.items[self.#stack.items.len - 1].children.push(g, obj)?;
+        if (r.#stack.items.len > 0) {
+            r.#stack.items[r.#stack.items.len - 1].children.push(g, obj)?;
         }
 
         if (block_type == .h) {
-            self.#heading_tracker.clearAfterHeading();
+            r.#heading_tracker.clearAfterHeading();
         }
     }
 
@@ -675,21 +675,21 @@ struct ParseRenderer {
     // ========================================
 
     static fn enterSpanImpl(ptr: *!, unused_span: md.SpanType, detail: md.SpanDetail): bun.JSError!void {
-        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
 
-        const array = JSValue.createEmptyArray(self.#globalObject, 0)?;
-        self.#marked_args.append(array);
-        self.#stack.append(bun.default_allocator, { children: array, detail: detail })?;
+        const array = JSValue.createEmptyArray(r.#globalObject, 0)?;
+        r.#marked_args.append(array);
+        r.#stack.append(bun.default_allocator, { children: array, detail: detail })?;
     }
 
     static fn leaveSpanImpl(ptr: *!, span_type: md.SpanType): bun.JSError!void {
-        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
 
-        if (self.#stack.items.len <= 1) return;
-        const entry = self.#stack.pop().?;
-        const g = self.#globalObject;
+        if (r.#stack.items.len <= 1) return;
+        const entry = r.#stack.pop().?;
+        const g = r.#globalObject;
 
         const tag_index = getSpanTypeTag(span_type);
 
@@ -710,11 +710,11 @@ struct ParseRenderer {
         }
 
         // Build React element: { $$typeof, type, key, ref, props }
-        const component = self.getSpanComponent(span_type);
+        const component = r.getSpanComponent(span_type);
         const type_val: JSValue = if (component != .zero) component else getCachedTagString(g, tag_index);
 
         const props = JSValue.createEmptyObject(g, props_count);
-        self.#marked_args.append(props);
+        r.#marked_args.append(props);
 
         // Set metadata props
         switch (span_type) {
@@ -767,11 +767,11 @@ struct ParseRenderer {
             props.put(g, ZigString.static("children"), entry.children);
         }
 
-        const obj = self.createElement(type_val, props);
+        const obj = r.createElement(type_val, props);
 
         // Push to parent's children array
-        if (self.#stack.items.len > 0) {
-            self.#stack.items[self.#stack.items.len - 1].children.push(g, obj)?;
+        if (r.#stack.items.len > 0) {
+            r.#stack.items[r.#stack.items.len - 1].children.push(g, obj)?;
         }
     }
 
@@ -780,46 +780,46 @@ struct ParseRenderer {
     // ========================================
 
     static fn textImpl(ptr: *!, text_type: md.TextType, content: []const u8): bun.JSError!void {
-        const self: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *ParseRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
 
-        const g = self.#globalObject;
+        const g = r.#globalObject;
 
         // Track plain text for slug generation when inside a heading
-        self.#heading_tracker.trackText(text_type, content, bun.default_allocator);
+        r.#heading_tracker.trackText(text_type, content, bun.default_allocator);
 
-        if (self.#stack.items.len == 0) return;
-        const parent = &self.#stack.items[self.#stack.items.len - 1];
+        if (r.#stack.items.len == 0) return;
+        const parent = &r.#stack.items[r.#stack.items.len - 1];
 
         switch (text_type) {
             .br => {
-                const br_component = self.#components.br;
+                const br_component = r.#components.br;
                 const br_type: JSValue = if (br_component != .zero) br_component else getCachedTagString(g, .br);
                 const empty_props = JSValue.createEmptyObject(g, 0);
-                self.#marked_args.append(empty_props);
-                const obj = self.createElement(br_type, empty_props);
+                r.#marked_args.append(empty_props);
+                const obj = r.createElement(br_type, empty_props);
                 parent.children.push(g, obj)?;
             },
             .softbr => {
                 const str = bun.String.createUTF8ForJS(g, "\n")?;
-                self.#marked_args.append(str);
+                r.#marked_args.append(str);
                 parent.children.push(g, str)?;
             },
             .null_char => {
                 const str = bun.String.createUTF8ForJS(g, "\xEF\xBF\xBD")?;
-                self.#marked_args.append(str);
+                r.#marked_args.append(str);
                 parent.children.push(g, str)?;
             },
             .entity => {
                 let buf: [8]u8 = undefined;
                 const decoded = md.helpers.decodeEntityToUtf8(content, &buf) ?? content;
                 const str = bun.String.createUTF8ForJS(g, decoded)?;
-                self.#marked_args.append(str);
+                r.#marked_args.append(str);
                 parent.children.push(g, str)?;
             },
             else => {
                 const str = bun.String.createUTF8ForJS(g, content)?;
-                self.#marked_args.append(str);
+                r.#marked_args.append(str);
                 parent.children.push(g, str)?;
             },
         }
@@ -879,15 +879,15 @@ struct JsCallbackRenderer {
     #stack_check: bun.StackCheck,
 
     static fn init(globalObject: *jsc.JSGlobalObject, src_text: []const u8, heading_ids: bool): JsCallbackRenderer! {
-        let self = JsCallbackRenderer{
+        let r = JsCallbackRenderer{
             #globalObject: globalObject,
             #allocator: bun.default_allocator,
             #src_text: src_text,
             #heading_tracker: md.helpers.HeadingIdTracker.init(heading_ids),
             #stack_check: bun.StackCheck.init(),
         };
-        (self.#stack.append(bun.default_allocator, {}))?;
-        return self;
+        (r.#stack.append(bun.default_allocator, {}))?;
+        return r;
     }
 
     fn extractCallbacks(*_, opts: JSValue): bun.JSError!void {
@@ -978,23 +978,23 @@ struct JsCallbackRenderer {
     // ========================================
 
     static fn enterBlockImpl(ptr: *!, block_type: md.BlockType, data: u32, flags: u32): bun.JSError!void {
-        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
         if (block_type == .h) {
-            self.#heading_tracker.enterHeading();
+            r.#heading_tracker.enterHeading();
         }
 
         // For li: record its 0-based index within the parent list, then
         // increment the parent's counter so the next sibling gets index+1.
         let child_index: u32 = 0;
-        if (block_type == .li && self.#stack.items.len > 0) {
-            const parent = &self.#stack.items[self.#stack.items.len - 1];
+        if (block_type == .li && r.#stack.items.len > 0) {
+            const parent = &r.#stack.items[r.#stack.items.len - 1];
             child_index = parent.child_index;
             parent.child_index += 1;
         }
 
-        (self.#stack.append(self.#allocator, {
+        (r.#stack.append(r.#allocator, {
             block_type: block_type,
             data: data,
             flags: flags,
@@ -1003,59 +1003,59 @@ struct JsCallbackRenderer {
     }
 
     static fn leaveBlockImpl(ptr: *!, block_type: md.BlockType, unused_data: u32): bun.JSError!void {
-        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
         if (block_type == .doc) return;
 
-        const callback = self.getBlockCallback(block_type);
-        const saved = if (self.#stack.items.len > 1)
-            self.#stack.items[self.#stack.items.len - 1]
+        const callback = r.getBlockCallback(block_type);
+        const saved = if (r.#stack.items.len > 1)
+            r.#stack.items[r.#stack.items.len - 1]
         else
             StackEntry{};
-        const meta_val = self.createBlockMeta(block_type, saved.data, saved.flags)?;
-        self.popAndCallback(callback, meta_val)?;
+        const meta_val = r.createBlockMeta(block_type, saved.data, saved.flags)?;
+        r.popAndCallback(callback, meta_val)?;
 
         if (block_type == .h) {
-            self.#heading_tracker.clearAfterHeading();
+            r.#heading_tracker.clearAfterHeading();
         }
     }
 
     static fn enterSpanImpl(ptr: *!, unused_span: md.SpanType, detail: md.SpanDetail): bun.JSError!void {
-        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
-        self.#stack.append(self.#allocator, { detail: detail })?;
+        const r: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
+        r.#stack.append(r.#allocator, { detail: detail })?;
     }
 
     static fn leaveSpanImpl(ptr: *!, span_type: md.SpanType): bun.JSError!void {
-        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
 
-        const callback = self.getSpanCallback(span_type);
-        const detail = if (self.#stack.items.len > 1)
-            self.#stack.items[self.#stack.items.len - 1].detail
+        const callback = r.getSpanCallback(span_type);
+        const detail = if (r.#stack.items.len > 1)
+            r.#stack.items[r.#stack.items.len - 1].detail
         else
             md.SpanDetail{};
-        const meta_val = self.createSpanMeta(span_type, detail)?;
-        self.popAndCallback(callback, meta_val)?;
+        const meta_val = r.createSpanMeta(span_type, detail)?;
+        r.popAndCallback(callback, meta_val)?;
     }
 
     static fn textImpl(ptr: *!, text_type: md.TextType, content: []const u8): bun.JSError!void {
-        const self: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
-        if (!self.#stack_check.isSafeToRecurse()) return self.#globalObject.throwStackOverflow();
+        const r: *JsCallbackRenderer = unsafe { @ptrCast(@alignCast(ptr)) };
+        if (!r.#stack_check.isSafeToRecurse()) return r.#globalObject.throwStackOverflow();
 
         // Track plain text for slug generation when inside a heading
-        self.#heading_tracker.trackText(text_type, content, self.#allocator);
+        r.#heading_tracker.trackText(text_type, content, r.#allocator);
 
         switch (text_type) {
-            .null_char => self.appendToTop("\xEF\xBF\xBD")?,
-            .br => self.appendToTop("\n")?,
-            .softbr => self.appendToTop("\n")?,
-            .entity => self.decodeAndAppendEntity(content)?,
+            .null_char => r.appendToTop("\xEF\xBF\xBD")?,
+            .br => r.appendToTop("\n")?,
+            .softbr => r.appendToTop("\n")?,
+            .entity => r.decodeAndAppendEntity(content)?,
             else => {
-                if (self.#callbacks.text != .zero) {
-                    self.callTextCallback(content)?;
+                if (r.#callbacks.text != .zero) {
+                    r.callTextCallback(content)?;
                 } else {
-                    self.appendToTop(content)?;
+                    r.appendToTop(content)?;
                 }
             },
         }

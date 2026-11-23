@@ -220,7 +220,7 @@ else => {
             }
             if (self.store) |s| {
                 _ = &s;
-                _ = (s).?.deref();
+                _ = s.deref();
             }
             _ = destroy(self);
     }
@@ -435,7 +435,7 @@ _ = std.os.linux.ftruncate(dest_fd.cast(), @as(posix.off_t, @intCast(len_guard.t
 if (clear_append_if_invalid) {
                     if ((!has_unset_append)) {
                         has_unset_append = true;
-                        var flags = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.GETFL, (if (comptime @typeInfo(c_int) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c_int, @enumFromInt(0)) else @as(c_int, 0)));
+                        var flags = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.GETFL, (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(usize, @intFromEnum(0)) else cp_cast_int(usize, 0)));
                         _ = &flags;
                         if (((flags & O.APPEND) != 0)) {
                             _ = std.os.linux.fcntl(dest_fd.cast(), std.os.linux.F.SETFL, (flags ^ O.APPEND));
