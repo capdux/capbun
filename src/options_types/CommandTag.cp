@@ -47,7 +47,7 @@ export enum Tag {
     ///
     /// This must be kept in sync with https://github.com/oven-sh/bun.report/blob/62601d8aafb9c0d29554dfc3f8854044ec04d367/backend/remap.ts#L10
     pub fn char(): u8 {
-        return switch (this) {
+        return switch (_) {
             .AddCommand => 'I',
             .AutoCommand => 'a',
             .BuildCommand => 'b',
@@ -84,14 +84,14 @@ export enum Tag {
     }
 
     pub fn readGlobalConfig(): bool {
-        return switch (this) {
+        return switch (_) {
             .BunxCommand | .PackageManagerCommand | .InstallCommand | .AddCommand | .RemoveCommand | .UpdateCommand | .PatchCommand | .PatchCommitCommand | .OutdatedCommand | .PublishCommand | .AuditCommand => true,
             else => false,
         };
     }
 
     pub fn isNPMRelated(): bool {
-        return switch (this) {
+        return switch (_) {
             .BunxCommand | .LinkCommand | .UnlinkCommand | .PackageManagerCommand | .InstallCommand | .AddCommand | .RemoveCommand | .UpdateCommand | .PatchCommand | .PatchCommitCommand | .OutdatedCommand | .PublishCommand | .AuditCommand => true,
             else => false,
         };

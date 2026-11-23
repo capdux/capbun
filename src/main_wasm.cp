@@ -472,7 +472,7 @@ struct TestAnalyzer {
     let parser = JSParser.Parser.init({
         jsx: {},
         ts: true,
-    }, &log_, &code, define, allocator) catch |e| bun.handleOom(e);
+    }, &log_, &code, define, allocator) catch e => bun.handleOom(e);
 
     let anaylzer = TestAnalyzer{
         items: std.array_list.Managed(
@@ -486,7 +486,7 @@ struct TestAnalyzer {
     parser.options.features.commonjs_at_runtime = true;
     parser.options.features.top_level_await = true;
 
-    parser.analyze(&anaylzer, unsafe { @ptrCast(&TestAnalyzer.visitParts) }) catch |e| {
+    parser.analyze(&anaylzer, unsafe { @ptrCast(&TestAnalyzer.visitParts) }) catch e => {
         bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
         Output.print("Error: {s}\n", .{@errorName(e)});

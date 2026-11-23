@@ -1075,7 +1075,7 @@ pub fn _write(self: *SendQueue, data: []const u8, fd: ?bun.FD) void {
                 _ = pipe.ref();
                 if (self.windows.windows_write.?.write_req.write(pipe.asStream(), (&self.windows.windows_write.?.write_buffer), write_req, (&_windowsOnWriteComplete)).asErr()) |err| {
                     _ = &err;
-                    _ = SendQueue._windowsOnWriteComplete(write_req, @enumFromInt((0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(err.errno)) else @as(c_int, err.errno)))));
+                    _ = SendQueue._windowsOnWriteComplete(write_req, @enumFromInt((-(if (comptime @typeInfo(@TypeOf(err.errno)) == .@"enum") cp_cast_int(c_int, @intFromEnum(err.errno)) else cp_cast_int(c_int, err.errno)))));
                 }
             } else {
                 if (fd) |fd_unwrapped| {

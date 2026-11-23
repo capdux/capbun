@@ -1282,7 +1282,7 @@ if ((((parser.next() == 46) and (parser.peek(1) == 105)) or (parser.peek(1) == 7
 const i_start = parser.pos;
                     _ = parser.inc(1);
                     if (parser.remainStartsWith("nf")) {
-                        _ = try ctx.resolve(.{ .number = (if ((first_char == .negative)) (0 - inf) else inf) }, i_start, "inf");
+                        _ = try ctx.resolve(.{ .number = (if ((first_char == .negative)) (-inf) else inf) }, i_start, "inf");
                         _ = parser.inc(2);
                         return;
                     }
@@ -1293,12 +1293,12 @@ const i_start = parser.pos;
 const i_start = parser.pos;
                     _ = parser.inc(1);
                     if (parser.remainStartsWith("nf")) {
-                        _ = try ctx.resolve(.{ .number = (if ((first_char == .negative)) (0 - inf) else inf) }, i_start, "Inf");
+                        _ = try ctx.resolve(.{ .number = (if ((first_char == .negative)) (-inf) else inf) }, i_start, "Inf");
                         _ = parser.inc(2);
                         return;
                     }
                     if (parser.remainStartsWith("NF")) {
-                        _ = try ctx.resolve(.{ .number = (if ((first_char == .negative)) (0 - inf) else inf) }, i_start, "INF");
+                        _ = try ctx.resolve(.{ .number = (if ((first_char == .negative)) (-inf) else inf) }, i_start, "INF");
                         _ = parser.inc(2);
                         return;
                     }
@@ -1506,7 +1506,7 @@ first = false;
 ctx.resolved_scalar_len = ctx.str_builder.len();
                 if ((first_char == .negative)) {
                     const cur_number = scalar.number;
-                    scalar.number = (0 - cur_number);
+                    scalar.number = (-cur_number);
                 }
                 ctx.scalar = scalar;
 },

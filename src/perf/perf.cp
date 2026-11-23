@@ -69,7 +69,7 @@ export fn isEnabled(): bool {
 /// Tip: Make sure you write bun.perf.trace() with a string literal exactly instead of passing a variable.
 ///
 /// It has to be compile-time known this way because they need to become string literals in C.
-export fn trace(@comptime name: cstring): Ctx {
+pub inline fn trace(comptime name: cstring): Ctx {
     comptime {
         if (!@hasField(PerfEvent, name)) {
             @compileError(std.fmt.comptimePrint(
@@ -153,10 +153,10 @@ export struct Linux {
     pub fn end(*_) {
         if (!Linux.isSupported()) return;
 
-        const duration = bun.timespec.now(.force_real_time).ns() -| this.start_time;
+        const duration = bun.timespec.now(.force_real_time).ns() -| _.start_time;
 
         unsafe {
-            * = Bun__linux_trace_emit(@tagName(this.event).ptr, @intCast(duration));
+            * = Bun__linux_trace_emit(@tagName(_.event).ptr, @intCast(duration));
         }
     }
 }

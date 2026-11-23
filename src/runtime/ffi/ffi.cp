@@ -77,7 +77,7 @@ let offsets_once = std.once(Offsets.loadOnce);
     JSCell__offsetOfType: u32,
 
     const Bun__FFI__offsets = @extern(*Offsets, { name: "Bun__FFI__offsets" });
-    extern fn Bun__FFI__ensureOffsetsAreLoaded();
+    static extern fn Bun__FFI__ensureOffsetsAreLoaded();
     static fn loadOnce() {
         Bun__FFI__ensureOffsetsAreLoaded();
     }
@@ -149,27 +149,27 @@ pub struct CompileCStdargEmpty {
 }
 
 pub struct CompileCStdarg {
-    extern fn ffi_vfprintf(f: *!, fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_vprintf(fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_fprintf(f: *!, fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_printf(fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_fscanf(f: *!, fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_scanf(fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_sscanf(s: [*:0]const u8, fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_vsscanf(s: [*:0]const u8, fmt: [*:0]const u8, ...): c_int;
-    extern fn ffi_fopen(path: [*:0]const u8, mode: [*:0]const u8): *!;
-    extern fn ffi_fclose(f: *!): c_int;
-    extern fn ffi_fgetc(f: *!): c_int;
-    extern fn ffi_fputc(c: c_int, f: *!): c_int;
-    extern fn ffi_feof(f: *!): c_int;
-    extern fn ffi_fileno(f: *!): c_int;
-    extern fn ffi_ungetc(c: c_int, f: *!): c_int;
-    extern fn ffi_ftell(f: *!): c_long;
-    extern fn ffi_fseek(f: *!, off: c_long, whence: c_int): c_int;
-    extern fn ffi_fflush(f: *!): c_int;
+    static extern fn ffi_vfprintf(f: *!, fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_vprintf(fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_fprintf(f: *!, fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_printf(fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_fscanf(f: *!, fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_scanf(fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_sscanf(s: [*:0]const u8, fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_vsscanf(s: [*:0]const u8, fmt: [*:0]const u8, ...): c_int;
+    static extern fn ffi_fopen(path: [*:0]const u8, mode: [*:0]const u8): *!;
+    static extern fn ffi_fclose(f: *!): c_int;
+    static extern fn ffi_fgetc(f: *!): c_int;
+    static extern fn ffi_fputc(c: c_int, f: *!): c_int;
+    static extern fn ffi_feof(f: *!): c_int;
+    static extern fn ffi_fileno(f: *!): c_int;
+    static extern fn ffi_ungetc(c: c_int, f: *!): c_int;
+    static extern fn ffi_ftell(f: *!): c_long;
+    static extern fn ffi_fseek(f: *!, off: c_long, whence: c_int): c_int;
+    static extern fn ffi_fflush(f: *!): c_int;
 
-    extern fn calloc(nmemb: usize, size: usize): *!?;
-    extern fn perror(s: [*:0]const u8);
+    static extern fn calloc(nmemb: usize, size: usize): *!?;
+    static extern fn perror(s: [*:0]const u8);
 
     const mac = if (Environment.isMac) CompileCStdargMac else CompileCStdargEmpty;
 
@@ -404,17 +404,17 @@ pub struct FFI {
 
     pub fn finalize(_: *FFI) callconv(.c) {}
 
-    pub fn Bun__FFI__cc(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    pub static fn Bun__FFI__cc(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         return ffi_cc(globalThis, callframe);
     }
 
-    pub fn closeCallback(globalThis: *JSGlobalObject, ctx: JSValue): JSValue {
+    pub static fn closeCallback(globalThis: *JSGlobalObject, ctx: JSValue): JSValue {
         let function: *Function! = unsafe { @ptrFromInt(ctx.asPtrAddress()) };
         unsafe { function.deinit(globalThis); }
         return .js_undefined;
     }
 
-    pub fn callback(globalThis: *JSGlobalObject, iface: jsc.JSValue, js_callback: jsc.JSValue): bun.JSError!JSValue {
+    pub static fn callback(globalThis: *JSGlobalObject, iface: jsc.JSValue, js_callback: jsc.JSValue): bun.JSError!JSValue {
         if (comptime !Environment.enable_tinycc) {
             return globalThis.throw("bun:ffi callback() is not available in this build (TinyCC is disabled)", {});
         }
@@ -466,41 +466,41 @@ pub struct FFI {
     }
 
     pub fn close(
-        *_: *FFI,
+        *_,
         globalThis: *jsc.JSGlobalObject,
         _: *jsc.CallFrame,
     ): bun.JSError!JSValue {
         jsc.markBinding(@src());
-        if (this.closed) {
+        if (_.closed) {
             return .js_undefined;
         }
-        this.closed = true;
-        if (*dylib := this.dylib) {
+        _.closed = true;
+        if (*dylib := _.dylib) {
             dylib.close();
-            this.dylib = null;
+            _.dylib = null;
         }
 
-        if (state := this.shared_state) {
-            this.shared_state = null;
+        if (state := _.shared_state) {
+            _.shared_state = null;
             state.deinit();
         }
 
         const allocator = VirtualMachine.get().allocator;
 
-        const values = this.functions.values();
+        const values = _.functions.values();
         for (*val of values) {
             val.deinit(globalThis);
         }
-        this.functions.deinit(allocator);
+        _.functions.deinit(allocator);
 
         return .js_undefined;
     }
 
-    pub fn printCallback(global: *JSGlobalObject, object: jsc.JSValue): JSValue {
+    pub static fn printCallback(global: *JSGlobalObject, object: jsc.JSValue): JSValue {
         return ffi_printCallback(global, object);
     }
 
-    pub fn print(global: *JSGlobalObject, object: jsc.JSValue, is_callback_val: jsc.JSValue?): bun.JSError!JSValue {
+    pub static fn print(global: *JSGlobalObject, object: jsc.JSValue, is_callback_val: jsc.JSValue?): bun.JSError!JSValue {
         const allocator = bun.default_allocator;
         if (is_callback := is_callback_val) {
             if (is_callback.toBoolean()) {
@@ -570,11 +570,11 @@ pub struct FFI {
 
     /// Creates an Exception object indicating that options object is invalid.
     /// The exception is not thrown on the VM.
-    pub fn invalidOptionsArg(global: *JSGlobalObject): JSValue {
+    pub static fn invalidOptionsArg(global: *JSGlobalObject): JSValue {
         return global.toInvalidArguments("Expected an options object with symbol names", {});
     }
 
-    pub fn open(global: *JSGlobalObject, name_str: ZigString, object_value: jsc.JSValue): jsc.JSValue {
+    pub static fn open(global: *JSGlobalObject, name_str: ZigString, object_value: jsc.JSValue): jsc.JSValue {
         return ffi_open(global, name_str, object_value);
     }
 
@@ -583,7 +583,7 @@ pub struct FFI {
         return .js_undefined;
     }
 
-    pub fn linkSymbols(global: *JSGlobalObject, object_value: jsc.JSValue): jsc.JSValue {
+    pub static fn linkSymbols(global: *JSGlobalObject, object_value: jsc.JSValue): jsc.JSValue {
         if (comptime !Environment.enable_tinycc) {
             global.throw("bun:ffi linkSymbols() is not available in this build (TinyCC is disabled)", {}) catch {};
             return .zero;
@@ -634,7 +634,7 @@ pub struct FFI {
                 return ret;
             }
 
-            sym_vals[sym_i].compile(napi_env) catch |e| {
+            sym_vals[sym_i].compile(napi_env) catch e => {
                 const ret = global.toInvalidArguments("{s} when compiling symbol \"{s}\"", .{
                     bun.asByteSlice(@errorName(e)),
                     bun.asByteSlice(function_name),
@@ -693,11 +693,11 @@ pub struct FFI {
         jsc.Codegen.JSFFI.symbolsValueSetCached(js_object, global, obj);
         return js_object;
     }
-    pub fn generateSymbolForFunction(global: *JSGlobalObject, allocator: std.mem.Allocator, value: jsc.JSValue, function: *FFIFunction): bun.JSError!JSValue? {
+    pub static fn generateSymbolForFunction(global: *JSGlobalObject, allocator: std.mem.Allocator, value: jsc.JSValue, function: *FFIFunction): bun.JSError!JSValue? {
         return ffi_generateSymbolForFunction(global, allocator, value, function);
     }
 
-    pub fn generateSymbols(global: *JSGlobalObject, allocator: Allocator, symbols: *bun.StringArrayHashMapUnmanaged(Function), object: *jsc.JSObject): bun.JSError!JSValue? {
+    pub static fn generateSymbols(global: *JSGlobalObject, allocator: Allocator, symbols: *bun.StringArrayHashMapUnmanaged(Function), object: *jsc.JSObject): bun.JSError!JSValue? {
         return ffi_generateSymbols(global, allocator, symbols, object);
     }
 }
@@ -744,7 +744,7 @@ pub struct FFIFunction {
         return _.return_type == FFIABIType.napi_value;
     }
 
-    extern fn FFICallbackFunctionWrapper_destroy(ptr: *!);
+    static extern fn FFICallbackFunctionWrapper_destroy(ptr: *!);
 
     fn deinit(*_, globalThis: *jsc.JSGlobalObject) {
         jsc.markBinding(@src());
@@ -1086,17 +1086,17 @@ pub struct FFIFunction {
             writer.writeAll(";\n}\n\n")?;
         }
 
-        extern fn FFI_Callback_call(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_0(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_1(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_2(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_3(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_4(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_5(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_threadsafe_call(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_6(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn FFI_Callback_call_7(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
-        extern fn Bun__createFFICallbackFunction(global: *jsc.JSGlobalObject, val: JSValue): *!;
+        static extern fn FFI_Callback_call(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_0(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_1(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_2(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_3(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_4(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_5(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_threadsafe_call(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_6(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn FFI_Callback_call_7(ctx: *!, argc: usize, argv: [*]JSValue): JSValue;
+        static extern fn Bun__createFFICallbackFunction(global: *jsc.JSGlobalObject, val: JSValue): *!;
 
         pub fn printCallbackSourceCode(
             globalObject: (*jsc.JSGlobalObject)?,

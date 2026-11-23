@@ -77,7 +77,8 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
             let values: @This() = .{};
             while (true) {
                 input.skipWhitespace();
-                switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, {}, parseFn)) {
+                const empty_ctx: void = undefined;
+                switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, empty_ctx, parseFn)) {
                     .result => |v| {
                         values.append(input.allocator(), v);
                     },
@@ -299,7 +300,10 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
                     // Convert to lab if needed (e.g. if oklab is not supported but lab is).
                     if (fallbacks.lab) {
-                        for (*item of _.slice_mut()) {
+                        const sl = _.slice_mut();
+                        let idx: usize = 0;
+                        while (idx < sl.len) : (idx += 1) {
+                            const item = &sl[idx];
                             let old = item.*;
                             item.* = item.getFallback(allocator, ColorFallbackKind{ .lab = true });
                             old.deinit(allocator);
@@ -323,29 +327,29 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
                 let res: SmallList(SmallList(TextShadow, 1), 2) = .{};
                 if (fallbacks.rgb) {
-                    let rgb = SmallList(TextShadow, 1).initCapacity(allocator, _.len());
-                    for (*shadow of _.slice()) {
-                        let new_shadow = shadow.*;
+                    let rgb_shadows = SmallList(TextShadow, 1).initCapacity(allocator, _.len());
+                    for (shadow of _.slice()) {
+                        let new_shadow = shadow;
                         // dummy non-alloced color to avoid deep cloning the real one since we will replace it
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
                         new_shadow.color = shadow.color.toRGB(allocator).?;
-                        rgb.appendAssumeCapacity(new_shadow);
+                        rgb_shadows.appendAssumeCapacity(new_shadow);
                     }
-                    res.append(allocator, rgb);
+                    res.append(allocator, rgb_shadows);
                 }
 
                 if (fallbacks.p3) {
-                    let p3 = SmallList(TextShadow, 1).initCapacity(allocator, _.len());
-                    for (*shadow of _.slice()) {
-                        let new_shadow = shadow.*;
+                    let p3_shadows = SmallList(TextShadow, 1).initCapacity(allocator, _.len());
+                    for (shadow of _.slice()) {
+                        let new_shadow = shadow;
                         // dummy non-alloced color to avoid deep cloning the real one since we will replace it
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
                         new_shadow.color = shadow.color.toP3(allocator).?;
-                        p3.appendAssumeCapacity(new_shadow);
+                        p3_shadows.appendAssumeCapacity(new_shadow);
                     }
-                    res.append(allocator, p3);
+                    res.append(allocator, p3_shadows);
                 }
 
                 if (fallbacks.lab) {
@@ -361,7 +365,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
             @compileError("Dunno what to do here.");
         }
 
-        fn getFallbacksReturnType(comptime @"Type": type, comptime InlineSize: comptime_int): type {
+        static fn getFallbacksReturnType(comptime @"Type": type, comptime InlineSize: comptime_int): type {
             // Implements ImageFallback interface
             if (@hasDecl(@"Type", "getImage") && InlineSize == 1) {
                 return bun.BabyList(SmallList(@"Type", 1));
@@ -374,15 +378,17 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
         // TODO: remove this stupid function
         pub fn map(*_, comptime func: anytype) {
-            for (*item of _.slice_mut()) {
-                func(item);
+            const sl = _.slice_mut();
+            let idx: usize = 0;
+            while (idx < sl.len) : (idx += 1) {
+                func(&sl[idx]);
             }
         }
 
         /// `predicate` must be: `fn(*const T) bool`
         pub fn any(comptime predicate: anytype): bool {
-            for (*item of _.slice()) {
-                if (predicate(item)) return true;
+            for (item of _.slice()) {
+                if (predicate(&item)) return true;
             }
             return false;
         }
@@ -429,7 +435,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn shallowClone(allocator: Allocator): @This() {
-            if (!_.spilled()) return _.*;
+            if (!_.spilled()) return _;
             let h = HeapData.initCapacity(allocator, _.capacity);
             h.len = _.data.heap.len;
             @memcpy(h.ptr[0..h.len], _.data.heap.ptr[0..h.len]);
@@ -464,7 +470,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
 
         /// Shallow clone
         pub fn clone(allocator: Allocator): @This() {
-            let ret = _.*;
+            let ret = _;
             if (!_.spilled()) return ret;
             // Preserve the invariant that the heap allocation holds `capacity` elements,
             // otherwise a later append that trusts `capacity` would write out of bounds.
@@ -481,8 +487,8 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         }
 
         pub fn hash(hasher: anytype) {
-            for (*item of _.slice()) {
-                css.generic.hash(T, item, hasher);
+            for (item of _.slice()) {
+                css.generic.hash(T, &item, hasher);
             }
         }
 
@@ -689,7 +695,7 @@ pub fn SmallList(comptime T: type, comptime N: comptime_int): type {
         ///
         /// Called when memory growth is necessary. Returns a capacity larger than
         /// minimum that grows super-linearly.
-        fn growCapacity(current: u32, minimum: u32): u32 {
+        static fn growCapacity(current: u32, minimum: u32): u32 {
             let new = current;
             while (true) {
                 new = new +| (new / 2 + 8);

@@ -81,7 +81,7 @@ pub struct Parser {
             _.@"arena".deinit();
         }
 
-        inline fn shouldSkipLine(line: []const u8): bool {
+        static inline fn shouldSkipLine(line: []const u8): bool {
             if (line.len == 0 ||
                 // comments
                 line[0] == ';' ||
@@ -128,7 +128,7 @@ pub struct Parser {
                     }
                     const section: *Rope = _.prepareStr(arena_allocator, ropealloc, line[1..close_bracket_idx], @as(i32, @intCast(unsafe { @intFromPtr(line.ptr) - @intFromPtr(_.src.ptr) })) + 1, .section)?;
                     defer rope_stack.fixed_buffer_allocator.reset();
-                    const parent_object = _.out.data.e_object.getOrPutObject(section, arena_allocator) catch |e| {
+                    const parent_object = _.out.data.e_object.getOrPutObject(section, arena_allocator) catch e => {
                         if (e == error.OutOfMemory) return error.OutOfMemory;
                         if (e == error.Clobber) {
                             skip_until_next_section = true;
@@ -299,7 +299,8 @@ pub struct Parser {
                 let sfb = std.heap.stackFallback(STACK_BUF_SIZE, arena_allocator);
                 let unesc = std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE)?;
 
-                const RopeT = if (comptime usage == .section) *Rope else struct {};
+                const RopePtr = @FieldType(struct { p: *Rope }, "p");
+                const RopeT = if (comptime usage == .section) RopePtr else struct {};
                 let rope: RopeT? = if (comptime usage == .section) null else undefined;
 
                 let i: usize = 0;
@@ -560,7 +561,7 @@ pub struct Parser {
             return null;
         }
 
-        fn singleStrRope(ropealloc: Allocator, str: []const u8): OOM!*Rope {
+        static fn singleStrRope(ropealloc: Allocator, str: []const u8): OOM!*Rope {
             const rope = ropealloc.create(Rope)?;
             rope.* = .{
                 .head = Expr.init(E.String, E.String.init(str), Loc.Empty),
@@ -568,7 +569,7 @@ pub struct Parser {
             return rope;
         }
 
-        fn nextDot(key: []const u8): usize? {
+        static fn nextDot(key: []const u8): usize? {
             return std.mem.indexOfScalar(u8, key, '.');
         }
 
@@ -587,7 +588,7 @@ pub struct Parser {
             unesc.clearRetainingCapacity();
         }
 
-        fn strToRope(ropealloc: Allocator, key: []const u8): OOM!*Rope {
+        static fn strToRope(ropealloc: Allocator, key: []const u8): OOM!*Rope {
             const dot_idx_opt = nextDot(key);
             if (dot_idx_opt == null) {
                 const rope = ropealloc.create(Rope)?;
@@ -620,7 +621,7 @@ pub struct Parser {
             return head;
         }
 
-        fn isQuoted(val: []const u8): bool {
+        static fn isQuoted(val: []const u8): bool {
             return (bun.strings.startsWithChar(val, '"') && bun.strings.endsWithChar(val, '"')) ||
                 (bun.strings.startsWithChar(val, '\'') && bun.strings.endsWithChar(val, '\''));
         }
@@ -658,9 +659,9 @@ pub struct Parser {
             some: T,
             none,
 
-            pub fn get(self: @This()) ?T {
-                return switch (self) {
-                    .some => self.some,
+            pub fn get(): T? {
+                return switch (_) {
+                    .some => _.some,
                     .none => null,
                 };
             }

@@ -8,42 +8,42 @@ pub enum PollOrFd {
     closed,
 
     pub fn setOwner(*_, owner: anytype) {
-        if (this.* == .poll) {
-            this.poll.owner.set(owner);
+        if (_.* == .poll) {
+            _.poll.owner.set(owner);
         }
     }
 
     pub fn getFd(): bun.FD {
-        return match (this) {
+        return match (_) {
             .closed => bun.invalid_fd,
-            .fd => this.fd,
-            .poll => this.poll.fd,
+            .fd => _.fd,
+            .poll => _.poll.fd,
         };
     }
 
     pub fn getPoll(): *Async.FilePoll? {
-        return match (this) {
+        return match (_) {
             .closed => null,
             .fd => null,
-            .poll => this.poll,
+            .poll => _.poll,
         };
     }
 
     pub fn closeImpl(*_, ctx: *!?, comptime onCloseFn: anytype, close_fd: bool) {
-        const fd = this.getFd();
+        const fd = _.getFd();
         let close_async = true;
-        if (this.* == .poll) {
+        if (_.* == .poll) {
             if (comptime (Environment.isMac)) {
-                if (this.poll.flags.contains(.poll_writable) && this.poll.flags.contains(.nonblocking)) {
+                if (_.poll.flags.contains(.poll_writable) && _.poll.flags.contains(.nonblocking)) {
                     close_async = false;
                 }
             }
-            this.poll.deinitForceUnregister();
-            this.* = .closed;
+            _.poll.deinitForceUnregister();
+            _.* = .closed;
         }
 
         if (fd != bun.invalid_fd) {
-            this.* = .closed;
+            _.* = .closed;
 
             //TODO: We should make this call compatible using bun.FD
             if (Environment.isWindows) {
@@ -59,12 +59,12 @@ pub enum PollOrFd {
                 onCloseFn(unsafe { @ptrCast(@alignCast(ctx.?)) });
             }
         } else {
-            this.* = .closed;
+            _.* = .closed;
         }
     }
 
     pub fn close(*_, ctx: *!?, comptime onCloseFn: anytype) {
-        this.closeImpl(ctx, onCloseFn, true);
+        _.closeImpl(ctx, onCloseFn, true);
     }
 }
 
@@ -75,11 +75,11 @@ pub enum FileType {
     socket,
 
     pub fn isPollable(_: FileType): bool {
-        return this == .pipe || this == .nonblocking_pipe || this == .socket;
+        return _ == .pipe || _ == .nonblocking_pipe || _ == .socket;
     }
 
     pub fn isBlocking(_: FileType): bool {
-        return this == .pipe;
+        return _ == .pipe;
     }
 }
 

@@ -44,7 +44,7 @@ fn dumpBtjsTraceDebugImpl(): [*:0]const u8 {
     let _rw_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: unsafe { &result_writer } };
     const w = &result_writer.writer;
 
-    const debug_info = std.debug.getSelfDebugInfo() catch |e| {
+    const debug_info = std.debug.getSelfDebugInfo() catch e => {
         w.print("Unable to dump stack trace: Unable to open debug info: {s}\x00", .{ @errorName(e) }) catch {
             return "<oom>".ptr;
         };
@@ -94,7 +94,7 @@ fn dumpBtjsTraceDebugImpl(): [*:0]const u8 {
 
 fn printSourceAtAddress(debug_info: *std.debug.SelfInfo, out_stream: *std.Io.Writer, address: usize, tty_config: std.io.tty.Config, fp: usize): !void {
     if (!bun.Environment.isDebug) unreachable;
-    const module = debug_info.getModuleForAddress(address) catch |e| {
+    const module = debug_info.getModuleForAddress(address) catch e => {
         if (e == error.MissingDebugInfo || e == error.InvalidDebugInfo) {
             return printUnknownSource(debug_info, out_stream, address, tty_config);
         } else {
@@ -102,7 +102,7 @@ fn printSourceAtAddress(debug_info: *std.debug.SelfInfo, out_stream: *std.Io.Wri
         }
     };
 
-    const symbol_info = module.getSymbolAtAddress(debug_info.allocator, address) catch |e| {
+    const symbol_info = module.getSymbolAtAddress(debug_info.allocator, address) catch e => {
         if (e == error.MissingDebugInfo || e == error.InvalidDebugInfo) {
             return printUnknownSource(debug_info, out_stream, address, tty_config);
         } else {
@@ -194,7 +194,7 @@ fn printLineInfo(
     // Show the matching source code line if possible
     if (sl := source_location) {
         let succeeded = true;
-        printLineFromFile(out_stream, sl) catch |e| {
+        printLineFromFile(out_stream, sl) catch e => {
             succeeded = false;
             if (e == error.EndOfFile || e == error.FileNotFound || e == error.BadPathName || e == error.AccessDenied) {
                 // ignore

@@ -365,7 +365,7 @@ pub struct ImageSetOption {
                     dependencies.append(
                         dest.allocator,
                         { url: dep },
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
             } else {
                 css.serializer.serializeString(dest.getImportRecordUrl(_.image.url.import_record_idx)?, dest) catch return dest.addFmtError();

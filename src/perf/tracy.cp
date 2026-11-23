@@ -27,22 +27,22 @@ export @c struct Ctx {
 
     pub inline fn addText(text: string) {
         if (!enable) return;
-        ___tracy_emit_zone_text(this, text.ptr, text.len);
+        ___tracy_emit_zone_text(_, text.ptr, text.len);
     }
 
     pub inline fn setName(name: string) {
         if (!enable) return;
-        ___tracy_emit_zone_name(this, name.ptr, name.len);
+        ___tracy_emit_zone_name(_, name.ptr, name.len);
     }
 
     pub inline fn setColor(color: u32) {
         if (!enable) return;
-        ___tracy_emit_zone_color(this, color);
+        ___tracy_emit_zone_color(_, color);
     }
 
     pub inline fn setValue(value: u64) {
         if (!enable) return;
-        ___tracy_emit_zone_value(this, value);
+        ___tracy_emit_zone_value(_, value);
     }
 }
 
@@ -106,9 +106,9 @@ export fn TracyAllocator(@comptime name: cstring?): type {
             };
         }
 
-        pub fn allocator(*this): std.mem.Allocator {
+        pub fn allocator(*_): std.mem.Allocator {
             return std.mem.Allocator{
-                ptr: this,
+                ptr: _,
                 vtable: &std.mem.Allocator.VTable{
                     alloc: allocFn,
                     resize: resizeFn,
@@ -209,7 +209,7 @@ pub inline fn namedFrame(comptime name: cstring): Frame(name) {
 
 export fn Frame(@comptime name: cstring): type {
     return struct {
-        pub fn end(_: @This()) void {
+        pub fn end() {
             frameMarkEnd(name);
         }
     };
@@ -265,32 +265,32 @@ inline fn freeNamed(ptr: [*]u8, @comptime name: cstring) {
     }
 }
 
-type TracyEmitFrameMarkStart = @c (name: cstr): void;
-type TracyEmitFrameMarkEnd = @c (name: cstr): void;
+type TracyEmitFrameMarkStart = *const fn (name: cstr) callconv(.c);
+type TracyEmitFrameMarkEnd = *const fn (name: cstr) callconv(.c);
 type TracyEmitZoneBegin = @c (srcloc: *const SourceLocationData!, active: c_int): Ctx;
 type TracyEmitZoneBeginCallstack = @c (srcloc: *const SourceLocationData!, depth: c_int, active: c_int): Ctx;
-type TracyEmitZoneText = @c (ctx: Ctx, txt: [*]const u8, size: usize): void;
-type TracyEmitZoneName = @c (ctx: Ctx, txt: [*]const u8, size: usize): void;
-type TracyEmitZoneColor = @c (ctx: Ctx, color: u32): void;
-type TracyEmitZoneValue = @c (ctx: Ctx, value: u64): void;
-type TracyEmitZoneEnd = @c (ctx: Ctx): void;
-type TracyEmitMemoryAlloc = @c (ptr: *const !, size: usize, secure: c_int): void;
-type TracyEmitMemoryAllocCallstack = @c (ptr: *const !, size: usize, depth: c_int, secure: c_int): void;
-type TracyEmitMemoryFree = @c (ptr: *const !, secure: c_int): void;
-type TracyEmitMemoryFreeCallstack = @c (ptr: *const !, depth: c_int, secure: c_int): void;
-type TracyEmitMemoryAllocNamed = @c (ptr: *const !, size: usize, secure: c_int, name: cstr): void;
-type TracyEmitMemoryAllocCallstackNamed = @c (ptr: *const !, size: usize, depth: c_int, secure: c_int, name: cstr): void;
-type TracyEmitMemoryFreeNamed = @c (ptr: *const !, secure: c_int, name: cstr): void;
-type TracyEmitMemoryFreeCallstackNamed = @c (ptr: *const !, depth: c_int, secure: c_int, name: cstr): void;
-type TracyEmitMessage = @c (txt: [*]const u8, size: usize, callstack: c_int): void;
-type TracyEmitMessageL = @c (txt: cstr, callstack: c_int): void;
-type TracyEmitMessageC = @c (txt: [*]const u8, size: usize, color: u32, callstack: c_int): void;
-type TracyEmitMessageLC = @c (txt: cstr, color: u32, callstack: c_int): void;
-type TracyEmitFrameMark = @c (name: cstr?): void;
+type TracyEmitZoneText = *const fn (ctx: Ctx, txt: [*]const u8, size: usize) callconv(.c);
+type TracyEmitZoneName = *const fn (ctx: Ctx, txt: [*]const u8, size: usize) callconv(.c);
+type TracyEmitZoneColor = *const fn (ctx: Ctx, color: u32) callconv(.c);
+type TracyEmitZoneValue = *const fn (ctx: Ctx, value: u64) callconv(.c);
+type TracyEmitZoneEnd = *const fn (ctx: Ctx) callconv(.c);
+type TracyEmitMemoryAlloc = *const fn (ptr: *const !, size: usize, secure: c_int) callconv(.c);
+type TracyEmitMemoryAllocCallstack = *const fn (ptr: *const !, size: usize, depth: c_int, secure: c_int) callconv(.c);
+type TracyEmitMemoryFree = *const fn (ptr: *const !, secure: c_int) callconv(.c);
+type TracyEmitMemoryFreeCallstack = *const fn (ptr: *const !, depth: c_int, secure: c_int) callconv(.c);
+type TracyEmitMemoryAllocNamed = *const fn (ptr: *const !, size: usize, secure: c_int, name: cstr) callconv(.c);
+type TracyEmitMemoryAllocCallstackNamed = *const fn (ptr: *const !, size: usize, depth: c_int, secure: c_int, name: cstr) callconv(.c);
+type TracyEmitMemoryFreeNamed = *const fn (ptr: *const !, secure: c_int, name: cstr) callconv(.c);
+type TracyEmitMemoryFreeCallstackNamed = *const fn (ptr: *const !, depth: c_int, secure: c_int, name: cstr) callconv(.c);
+type TracyEmitMessage = *const fn (txt: [*]const u8, size: usize, callstack: c_int) callconv(.c);
+type TracyEmitMessageL = *const fn (txt: cstr, callstack: c_int) callconv(.c);
+type TracyEmitMessageC = *const fn (txt: [*]const u8, size: usize, color: u32, callstack: c_int) callconv(.c);
+type TracyEmitMessageLC = *const fn (txt: cstr, color: u32, callstack: c_int) callconv(.c);
+type TracyEmitFrameMark = *const fn (name: cstr?) callconv(.c);
 type TracyConnected = @c (): c_int;
-type TracySetThreadName = @c (name: cstr): void;
-type TracyStartupProfiler = @c (): void;
-type TracyShutdownProfiler = @c (): void;
+type TracySetThreadName = *const fn (name: cstr) callconv(.c);
+type TracyStartupProfiler = *const fn () callconv(.c);
+type TracyShutdownProfiler = *const fn () callconv(.c);
 
 fn ___tracy_startup_profiler() {
     const fn_ptr = (dlsym(TracyStartupProfiler, "___tracy_startup_profiler") ?? return) as TracyStartupProfiler;

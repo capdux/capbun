@@ -17,7 +17,7 @@ pub fn init(target_host: []const u8, target_is_https: bool, websocket_request_bu
         return WebSocketProxy{ .#target_host = target_host, .#target_is_https = target_is_https, .#websocket_request_buf = websocket_request_buf };
 }
 
-pub fn getTargetHost(self: WebSocketProxy) []const u8 {
+pub fn getTargetHost(self: *const WebSocketProxy) []const u8 {
         return self.#target_host;
 }
 
@@ -25,7 +25,7 @@ pub fn isTargetHttps(self: WebSocketProxy) bool {
         return self.#target_is_https;
 }
 
-pub fn getTunnel(self: WebSocketProxy) ?*WebSocketProxyTunnel {
+pub fn getTunnel(self: *const WebSocketProxy) ?*WebSocketProxyTunnel {
         return self.#tunnel;
 }
 

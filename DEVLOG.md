@@ -1799,3 +1799,5 @@
 - [Wave #111] 清零第 4 批 15 个 `src/css/` `--strict` 报错文件（`css_modules`, `css_parser`, `declaration`, `error`, `generics`, `media_query`, `printer`, `properties/{align,animation,background,border,border_radius,flex,font,margin_padding}`）；`zig:check` 5/5 通过。
 
 - [Wave #112] 清零第 5 批 15 个 `src/css/` `--strict` 报错文件（`properties/{prefix_handler,size,transform,transition,ui}`, `rules/{font_face,page,rules,style,supports}`, `selectors/parser`, `small_list`, `values/{calc,color,gradient}`）；`zig:check` 5/5 通过。
+
+- [Wave #113–#119] 清零 105 个 `--strict` 报错 `.cp` 文件（覆盖 `css/values` 至 `runtime/node` 连续 7 批）；修复 `css/rules`、`selectors/parser`、`small_list`、`calc`、`color`、`websocket_client`、`io/PipeWriter`、`ConsoleObject`、`JSObject`、`SavedSourceMap`、`host_fn`、`libdeflate`、`lol_html`、`rare_data`、`perf`、`CowSlice`、`ffi`（33 处 struct 内 `extern fn` 补 `static`）、`dns`（`LookupCacheHit` 补 `static`）及 `host_fn`/`CowSlice`/`rare_data` 表达式位指针类型别名（规避 `cpc` 将 `*T` 解析为 `&T`）；`bun run zig:check` 5/5 全绿通过。

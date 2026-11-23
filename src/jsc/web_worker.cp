@@ -444,7 +444,7 @@ pub struct LiveWorkers {
             // unreachable
         }
 
-        _.startVM() catch |e| {
+        _.startVM() catch e => {
             Output.panic("An unhandled error occurred while starting a worker: {s}\n", .{ @errorName(e) });
         };
 
@@ -824,11 +824,11 @@ pub struct LiveWorkers {
         jsc.markBinding(@src());
         if (vm.log.msgs.items.len == 0) return;
         const err_pair = blk: {
-            const err_obj = vm.log.toJS(vm.global, bun.default_allocator, "Error in worker") catch |e| {
+            const err_obj = vm.log.toJS(vm.global, bun.default_allocator, "Error in worker") catch e => {
                 if (e == error.OutOfMemory) bun.outOfMemory();
                 @panic("unhandled exception");
             };
-            const str_val = err_obj.toBunString(vm.global) catch |e| {
+            const str_val = err_obj.toBunString(vm.global) catch e => {
                 if (e == error.OutOfMemory) bun.outOfMemory();
                 @panic("unhandled exception");
             };
@@ -837,7 +837,7 @@ pub struct LiveWorkers {
         const err_val = @field(err_pair, "0");
         let str = @field(err_pair, "1");
         const _guard_str = DerefGuard<bun.String>{ ptr: &str };
-        bun.jsc.fromJSHostCallGeneric(vm.global, @src(), WebWorker__dispatchError, .{ vm.global, _.cpp_worker, str, err_val }) catch |e| {
+        bun.jsc.fromJSHostCallGeneric(vm.global, @src(), WebWorker__dispatchError, .{ vm.global, _.cpp_worker, str, err_val }) catch e => {
             * = vm.global.reportUncaughtException(vm.global.takeException(e).asException(vm.global.vm()).?);
         };
     }
@@ -866,7 +866,7 @@ pub struct LiveWorkers {
                 flush: false,
                 max_depth: 32,
             },
-        ) catch |e| {
+        ) catch e => {
             if (e == error.OutOfMemory) {
                 if (globalObject.throwOutOfMemory() == error.JSError) {}
             }
@@ -965,9 +965,9 @@ pub struct LiveWorkers {
                     parent.global,
                     bun.default_allocator,
                     "Error resolving Worker entry point",
-                ) catch |e| break :blk e;
+                ) catch e => break :blk e;
                 break :blk out.toBunString(parent.global);
-            } catch |e| {
+            } catch e => {
                 if (e == error.OutOfMemory) bun.outOfMemory();
                 error_message.* = bun.String.static("unexpected exception");
                 return null;

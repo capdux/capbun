@@ -664,7 +664,8 @@ pub fn fromFileWithCacheFilePath(cache_file_path: bun.PathString, input_hash: u6
             return entry;
     }
 
-pub fn isEligible(path: *const bun.fs.Path) bool {
+pub fn isEligible(self: RuntimeTranspilerCache, path: *const bun.fs.Path) bool {
+        _ = self;
             return path.isFile();
     }
 

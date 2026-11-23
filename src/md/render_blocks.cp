@@ -7,13 +7,13 @@ struct AllocDeinitPtrGuard<T> {
 }
 
 pub fn enterBlock(*_: *Parser, block_type: BlockType, data: u32, flags: u32): bun.JSError!void {
-    if (self.image_nesting_level > 0) return;
-    self.renderer.enterBlock(block_type, data, flags)?;
+    if (_.image_nesting_level > 0) return;
+    _.renderer.enterBlock(block_type, data, flags)?;
 }
 
 pub fn leaveBlock(*_: *Parser, block_type: BlockType, data: u32): bun.JSError!void {
-    if (self.image_nesting_level > 0) return;
-    self.renderer.leaveBlock(block_type, data)?;
+    if (_.image_nesting_level > 0) return;
+    _.renderer.leaveBlock(block_type, data)?;
 }
 
 pub fn processCodeBlock(*_: *Parser, block_lines: []const VerbatimLine, data: u32, flags: u32): bun.JSError!void {
@@ -32,51 +32,51 @@ pub fn processCodeBlock(*_: *Parser, block_lines: []const VerbatimLine, data: u3
         // Output indented content
         for (idx of 0..vline.indent) {
             * = idx;
-            self.emitText(.normal, " ")?;
+            _.emitText(.normal, " ")?;
         }
-        const content = self.text[vline.beg..vline.end];
-        self.emitText(.normal, content)?;
-        self.emitText(.normal, "\n")?;
+        const content = _.text[vline.beg..vline.end];
+        _.emitText(.normal, content)?;
+        _.emitText(.normal, "\n")?;
     }
 }
 
 pub fn processHtmlBlock(*_: *Parser, block_lines: []const VerbatimLine): bun.JSError!void {
     let i: usize = 0;
     for (vline of block_lines) {
-        if (i > 0) self.emitText(.html, "\n")?;
+        if (i > 0) _.emitText(.html, "\n")?;
         for (idx of 0..vline.indent) {
             * = idx;
-            self.emitText(.html, " ")?;
+            _.emitText(.html, " ")?;
         }
-        self.emitText(.html, self.text[vline.beg..vline.end])?;
+        _.emitText(.html, _.text[vline.beg..vline.end])?;
         i += 1;
     }
-    self.emitText(.html, "\n")?;
+    _.emitText(.html, "\n")?;
 }
 
 pub fn processTableBlock(*_: *Parser, block_lines: []const VerbatimLine, col_count: u32): Parser.Error!void {
     if (block_lines.len < 2) return;
 
     // First line is header, second is underline, rest are body
-    self.enterBlock(.thead, 0, 0)?;
-    self.enterBlock(.tr, 0, 0)?;
-    self.processTableRow(block_lines[0], true, col_count)?;
-    self.leaveBlock(.tr, 0)?;
-    self.leaveBlock(.thead, 0)?;
+    _.enterBlock(.thead, 0, 0)?;
+    _.enterBlock(.tr, 0, 0)?;
+    _.processTableRow(block_lines[0], true, col_count)?;
+    _.leaveBlock(.tr, 0)?;
+    _.leaveBlock(.thead, 0)?;
 
     if (block_lines.len > 2) {
-        self.enterBlock(.tbody, 0, 0)?;
+        _.enterBlock(.tbody, 0, 0)?;
         for (vline of block_lines[2..]) {
-            self.enterBlock(.tr, 0, 0)?;
-            self.processTableRow(vline, false, col_count)?;
-            self.leaveBlock(.tr, 0)?;
+            _.enterBlock(.tr, 0, 0)?;
+            _.processTableRow(vline, false, col_count)?;
+            _.leaveBlock(.tr, 0)?;
         }
-        self.leaveBlock(.tbody, 0)?;
+        _.leaveBlock(.tbody, 0)?;
     }
 }
 
 pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_count: u32): Parser.Error!void {
-    const row_text = self.text[vline.beg..vline.end];
+    const row_text = _.text[vline.beg..vline.end];
     let start: usize = 0;
     let cell_index: u32 = 0;
 
@@ -104,8 +104,8 @@ pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_co
         while (cell_end > cell_beg && helpers.isBlank(row_text[cell_end - 1])) cell_end -= 1;
 
         const cell_type: BlockType = if (is_header) .th else .td;
-        const align_data: u32 = if (cell_index < types.TABLE_MAXCOLCOUNT) @intFromEnum(self.table_alignments[cell_index]) else 0;
-        self.enterBlock(cell_type, align_data, 0)?;
+        const align_data: u32 = if (cell_index < types.TABLE_MAXCOLCOUNT) @intFromEnum(_.table_alignments[cell_index]) else 0;
+        _.enterBlock(cell_type, align_data, 0)?;
         if (cell_beg < cell_end) {
             const cell_content = row_text[cell_beg..cell_end];
             // GFM: \| in table cells should be consumed at the table level,
@@ -113,10 +113,10 @@ pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_co
             // code spans where backslash escapes don't apply.
             if (std.mem.indexOf(u8, cell_content, "\\|") != null) {
                 let buf: std.ArrayListUnmanaged(u8) = {};
-                const _buf_guard = AllocDeinitPtrGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &buf }, alloc: self.allocator };
+                const _buf_guard = AllocDeinitPtrGuard<std.ArrayListUnmanaged(u8)>{ ptr: unsafe { &buf }, alloc: _.allocator };
                 let unescaped = cell_content;
                 let cap_ok = true;
-                buf.ensureTotalCapacity(self.allocator, cell_content.len) catch {
+                buf.ensureTotalCapacity(_.allocator, cell_content.len) catch {
                     cap_ok = false;
                 };
                 if (cap_ok) {
@@ -132,12 +132,12 @@ pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_co
                     }
                     unescaped = buf.items;
                 }
-                self.processInlineContent(unescaped, vline.beg + @as(OFF, @intCast(cell_beg)))?;
+                _.processInlineContent(unescaped, vline.beg + @as(OFF, @intCast(cell_beg)))?;
             } else {
-                self.processInlineContent(cell_content, vline.beg + @as(OFF, @intCast(cell_beg)))?;
+                _.processInlineContent(cell_content, vline.beg + @as(OFF, @intCast(cell_beg)))?;
             }
         }
-        self.leaveBlock(cell_type, 0)?;
+        _.leaveBlock(cell_type, 0)?;
         cell_index += 1;
 
         if (end < row_text.len) {
@@ -150,9 +150,9 @@ pub fn processTableRow(*_: *Parser, vline: VerbatimLine, is_header: bool, col_co
     // Pad short rows with empty cells
     const cell_type: BlockType = if (is_header) .th else .td;
     while (cell_index < col_count) {
-        const align_data: u32 = if (cell_index < types.TABLE_MAXCOLCOUNT) @intFromEnum(self.table_alignments[cell_index]) else 0;
-        self.enterBlock(cell_type, align_data, 0)?;
-        self.leaveBlock(cell_type, 0)?;
+        const align_data: u32 = if (cell_index < types.TABLE_MAXCOLCOUNT) @intFromEnum(_.table_alignments[cell_index]) else 0;
+        _.enterBlock(cell_type, align_data, 0)?;
+        _.leaveBlock(cell_type, 0)?;
         cell_index += 1;
     }
 }

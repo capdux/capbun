@@ -24,18 +24,18 @@ pub struct js_bindings {
                     enable_colors: true,
                     check_for_unhighlighted_write: false,
                 });
-                writer.writer().print("{f}", .{ formatter }) catch |e| {
+                writer.writer().print("{f}", .{ formatter }) catch e => {
                     return global.throwError(e, "while formatting");
                 };
             },
             .escape_powershell => {
-                writer.writer().print("{f}", .{ bun.fmt.escapePowershell(code) }) catch |e| {
+                writer.writer().print("{f}", .{ bun.fmt.escapePowershell(code) }) catch e => {
                     return global.throwError(e, "while formatting");
                 };
             },
         }
 
-        writer.flush() catch |e| {
+        writer.flush() catch e => {
             return global.throwError(e, "while formatting");
         };
 

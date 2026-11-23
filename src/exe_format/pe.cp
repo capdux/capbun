@@ -354,12 +354,12 @@ pub struct PEFile {
     }
 
     pub fn deinit(*_) {
-        this.data.deinit();
-        this.allocator.destroy(this);
+        _.data.deinit();
+        _.allocator.destroy(_);
     }
 
     pub fn stripAuthenticode(*_, opts: StripOpts): void! {
-        const opt = this.getOptionalHeader()?;
+        const opt = _.getOptionalHeader()?;
 
         const dd = opt.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY];
         const sec_off_u32 = dd.virtual_address;
@@ -367,16 +367,16 @@ pub struct PEFile {
 
         if (sec_off_u32 == 0 || sec_size_u32 == 0) return;
 
-        this.checkSectionHeadersBounds()?;
+        _.checkSectionHeadersBounds()?;
         let last_raw_end: u32 = 0;
         let s_idx: usize = 0;
-        while (s_idx < this.num_sections) : (s_idx += 1) {
-            const s = this.readSectionHeader(s_idx);
+        while (s_idx < _.num_sections) : (s_idx += 1) {
+            const s = _.readSectionHeader(s_idx);
             const end = s.pointer_to_raw_data + s.size_of_raw_data;
             if (end > last_raw_end) last_raw_end = end;
         }
 
-        const file_len = this.data.items.len;
+        const file_len = _.data.items.len;
         const sec_off = sec_off_u32 as usize;
         const sec_size = sec_size_u32 as usize;
 
@@ -388,34 +388,34 @@ pub struct PEFile {
         if (end_raw > file_len) return err.InvalidSecurityDirectory;
 
         if (end_raw == file_len) {
-            this.data.resize(sec_off)?;
+            _.data.resize(sec_off)?;
         } else {
             const tail_len = file_len - end_raw;
-            std.mem.copyBackwards(u8, this.data.items[sec_off .. sec_off + tail_len], this.data.items[end_raw..file_len]);
-            this.data.resize(sec_off + tail_len)?;
+            std.mem.copyBackwards(u8, _.data.items[sec_off .. sec_off + tail_len], _.data.items[end_raw..file_len]);
+            _.data.resize(sec_off + tail_len)?;
         }
 
-        let opt_after = this.getOptionalHeader()?;
+        let opt_after = _.getOptionalHeader()?;
         opt_after.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY].virtual_address = 0;
         opt_after.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY].size = 0;
 
         if ((opt_after.dll_characteristics & IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY) != 0)
             opt_after.dll_characteristics &= ~IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY;
 
-        this.writeOptionalHeader(opt_after)?;
+        _.writeOptionalHeader(opt_after)?;
 
-        if (opts.recompute_checksum) this.recomputePEChecksum()?;
+        if (opts.recompute_checksum) _.recomputePEChecksum()?;
 
-        const after_strip_len = this.data.items.len;
+        const after_strip_len = _.data.items.len;
         if ((last_raw_end as usize) < after_strip_len)
             return err.UnexpectedOverlayPresent;
     }
 
     fn recomputePEChecksum(*_): void! {
-        const checksum_off = this.optional_header_offset + 64;
-        @memset(this.data.items[checksum_off .. checksum_off + 4], 0);
+        const checksum_off = _.optional_header_offset + 64;
+        @memset(_.data.items[checksum_off .. checksum_off + 4], 0);
 
-        const raw_bytes = this.data.items;
+        const raw_bytes = _.data.items;
         let sum: u64 = 0;
         let i: usize = 0;
 
@@ -434,44 +434,44 @@ pub struct PEFile {
         sum = (sum & 0xffff) + (sum >> 16);
         const final_sum = ((sum & 0xffff) + (sum >> 16)) as u32;
 
-        let opt = this.getOptionalHeader()?;
+        let opt = _.getOptionalHeader()?;
         opt.checksum = final_sum;
-        this.writeOptionalHeader(opt)?;
+        _.writeOptionalHeader(opt)?;
     }
 
     pub fn addBunSection(*_, data_to_embed: []const u8, strip: StripMode): void! {
         if (strip == .strip_always) {
-            this.stripAuthenticode(StripOpts{ require_overlay: true, recompute_checksum: true })?;
+            _.stripAuthenticode(StripOpts{ require_overlay: true, recompute_checksum: true })?;
         } else if (strip == .strip_if_signed) {
-            const opt_check = this.getOptionalHeader()?;
+            const opt_check = _.getOptionalHeader()?;
             const dd = opt_check.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY];
             if (dd.virtual_address != 0 || dd.size != 0) {
-                this.stripAuthenticode(StripOpts{ require_overlay: true, recompute_checksum: true })?;
+                _.stripAuthenticode(StripOpts{ require_overlay: true, recompute_checksum: true })?;
             }
         }
 
-        const opt = this.getOptionalHeader()?;
+        const opt = _.getOptionalHeader()?;
 
-        this.checkSectionHeadersBounds()?;
+        _.checkSectionHeadersBounds()?;
         let s_idx: usize = 0;
-        while (s_idx < this.num_sections) : (s_idx += 1) {
-            const section = this.readSectionHeader(s_idx);
+        while (s_idx < _.num_sections) : (s_idx += 1) {
+            const section = _.readSectionHeader(s_idx);
             if (std.mem.eql(u8, section.name[0..8], BUN_SECTION_NAME[0..8])) {
                 return err.SectionExists;
             }
         }
 
-        if (this.num_sections >= 96) {
+        if (_.num_sections >= 96) {
             return err.TooManySections;
         }
 
-        const new_headers_end = this.section_headers_offset + @sizeOf(SectionHeader) * ((this.num_sections as usize) + 1);
+        const new_headers_end = _.section_headers_offset + @sizeOf(SectionHeader) * ((_.num_sections as usize) + 1);
         const new_size_of_headers = alignUpU32(new_headers_end as u32, opt.file_alignment)?;
 
-        let first_raw = this.data.items.len as u32;
+        let first_raw = _.data.items.len as u32;
         s_idx = 0;
-        while (s_idx < this.num_sections) : (s_idx += 1) {
-            const section = this.readSectionHeader(s_idx);
+        while (s_idx < _.num_sections) : (s_idx += 1) {
+            const section = _.readSectionHeader(s_idx);
             if (section.size_of_raw_data > 0) {
                 if (section.pointer_to_raw_data < first_raw) {
                     first_raw = section.pointer_to_raw_data;
@@ -486,8 +486,8 @@ pub struct PEFile {
         let last_file_end: u32 = 0;
         let last_va_end: u32 = 0;
         s_idx = 0;
-        while (s_idx < this.num_sections) : (s_idx += 1) {
-            const section = this.readSectionHeader(s_idx);
+        while (s_idx < _.num_sections) : (s_idx += 1) {
+            const section = _.readSectionHeader(s_idx);
             const file_end = section.pointer_to_raw_data + section.size_of_raw_data;
             if (file_end > last_file_end) {
                 last_file_end = file_end;
@@ -509,8 +509,8 @@ pub struct PEFile {
         const new_raw = alignUpU32(last_file_end, opt.file_alignment)?;
 
         const new_file_size = (new_raw as usize) + (raw_size as usize);
-        this.data.resize(new_file_size)?;
-        @memset(this.data.items[(new_raw as usize)..new_file_size], 0);
+        _.data.resize(new_file_size)?;
+        @memset(_.data.items[(new_raw as usize)..new_file_size], 0);
 
         const sh = SectionHeader{
             name: BUN_SECTION_NAME,
@@ -525,21 +525,21 @@ pub struct PEFile {
             characteristics: IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ,
         };
 
-        const new_sh_off = this.section_headers_offset + @sizeOf(SectionHeader) * (this.num_sections as usize);
+        const new_sh_off = _.section_headers_offset + @sizeOf(SectionHeader) * (_.num_sections as usize);
         if (new_sh_off + @sizeOf(SectionHeader) > (first_raw as usize)) {
             return err.InsufficientHeaderSpace;
         }
-        std.mem.copyForwards(u8, this.data.items[new_sh_off .. new_sh_off + @sizeOf(SectionHeader)], std.mem.asBytes(&sh));
+        std.mem.copyForwards(u8, _.data.items[new_sh_off .. new_sh_off + @sizeOf(SectionHeader)], std.mem.asBytes(&sh));
 
-        std.mem.writeInt(u64, this.data.items[(new_raw as usize)..][0..8], data_to_embed.len as u64, .little);
-        @memcpy(this.data.items[(new_raw as usize) + 8 ..][0..data_to_embed.len], data_to_embed);
+        std.mem.writeInt(u64, _.data.items[(new_raw as usize)..][0..8], data_to_embed.len as u64, .little);
+        @memcpy(_.data.items[(new_raw as usize) + 8 ..][0..data_to_embed.len], data_to_embed);
 
-        let pe_after = this.getPEHeader()?;
+        let pe_after = _.getPEHeader()?;
         pe_after.number_of_sections += 1;
-        this.writePEHeader(pe_after)?;
-        this.num_sections += 1;
+        _.writePEHeader(pe_after)?;
+        _.num_sections += 1;
 
-        let opt_after = this.getOptionalHeader()?;
+        let opt_after = _.getOptionalHeader()?;
         if (opt_after.size_of_headers < new_size_of_headers) {
             opt_after.size_of_headers = new_size_of_headers;
         }
@@ -552,9 +552,9 @@ pub struct PEFile {
             opt_after.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY].virtual_address = 0;
             opt_after.data_directories[IMAGE_DIRECTORY_ENTRY_SECURITY].size = 0;
         }
-        this.writeOptionalHeader(opt_after)?;
+        _.writeOptionalHeader(opt_after)?;
 
-        this.recomputePEChecksum()?;
+        _.recomputePEChecksum()?;
     }
 
     pub fn getBunSectionData(): ([]const u8)! {

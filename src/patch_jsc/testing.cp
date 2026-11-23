@@ -34,11 +34,11 @@ struct ApplyArgs {
     dirfd: bun.FD,
 
     pub fn deinit(*_) {
-        this.patchfile_txt.deinit();
-        this.patchfile.deinit(bun.default_allocator);
+        _.patchfile_txt.deinit();
+        _.patchfile.deinit(bun.default_allocator);
         // TODO: HAVE @zackradisic REVIEW THIS DIFF
-        if (bun.FD.cwd() != this.dirfd) {
-            this.dirfd.close();
+        if (bun.FD.cwd() != _.dirfd) {
+            _.dirfd.close();
         }
     }
 }

@@ -1512,14 +1512,16 @@ pub fn dir() ?[:0]const u8 {
             return compiler_rt_dir;
     }
 
-pub noinline fn memset(dest: [*]u8, c: u8, byte_count: usize) callconv(.c) void {
+pub noinline fn memset(self: CompilerRT, dest: [*]u8, c: u8, byte_count: usize) callconv(.c) void {
+        _ = self;
             _ = @memset((blk: {
             break :blk dest[0..byte_count];
 
 }), c);
     }
 
-pub noinline fn memcpy(dest: [*]u8, source: [*]const u8, byte_count: usize) callconv(.c) void {
+pub noinline fn memcpy(self: CompilerRT, dest: [*]u8, source: [*]const u8, byte_count: usize) callconv(.c) void {
+        _ = self;
             _ = @memcpy((blk: {
             break :blk dest[0..byte_count];
 

@@ -118,7 +118,7 @@ pub fn Calc(comptime V: type): type {
         const This = @This();
 
         pub fn deepClone(allocator: Allocator): This {
-            return switch (_.*) {
+            return switch (_) {
                 .value => |v| .{
                     .value = bun.create(
                         allocator,
@@ -126,7 +126,7 @@ pub fn Calc(comptime V: type): type {
                         if (needs_deepclone) v.deepClone(allocator) else v.*,
                     ),
                 },
-                .number => _.*,
+                .number => _,
                 .sum => |sum| .{ .sum = .{
                     .left = bun.create(allocator, This, sum.left.deepClone(allocator)),
                     .right = bun.create(allocator, This, sum.right.deepClone(allocator)),
@@ -174,7 +174,7 @@ pub fn Calc(comptime V: type): type {
         }
 
         pub fn eql(other: *const @This()): bool {
-            return switch (_.*) {
+            return switch (_) {
                 .value => |a| return other.* == .value && css.generic.eql(V, a, other.value),
                 .number => |*a| return other.* == .number && css.generic.eql(f32, a, &other.number),
                 .sum => |s| return other.* == .sum && s.left.eql(other.sum.left) && s.right.eql(other.sum.right),
@@ -423,7 +423,7 @@ pub fn Calc(comptime V: type): type {
                     } };
                 },
                 .clamp => {
-                    const ClosureResult = [This?, This, This?];
+                    const ClosureResult = struct { min: This?, center: This, max: This? };
                     const Closure = struct {
                         ctx: @TypeOf(ctx),
 
@@ -442,7 +442,7 @@ pub fn Calc(comptime V: type): type {
                                 .result => |vv| vv,
                                 .err => |e| return .{ .err = e },
                             };
-                            return .{ .result = .{ min, center, max } };
+                            return .{ .result = .{ .min = min, .center = center, .max = max } };
                         }
 
                         pub fn parseIdentWrapper(*_, ident: []const u8): This? {
@@ -458,9 +458,9 @@ pub fn Calc(comptime V: type): type {
                         .result => |vv| vv,
                         .err => |e| return .{ .err = e },
                     };
-                    let min = clamp_res[0];
-                    let center = clamp_res[1];
-                    let max = clamp_res[2];
+                    let min = clamp_res.min;
+                    let center = clamp_res.center;
+                    let max = clamp_res.max;
 
                     // According to the spec, the minimum should "win" over the maximum if they are in the wrong order.
                     const cmp = if (max != null && max.? == .value && center == .value)
@@ -583,10 +583,10 @@ pub fn Calc(comptime V: type): type {
                             );
                         }
 
-                        pub fn rem(_: void, a: f32, b: f32): f32 {
+                        pub static fn rem(_: void, a: f32, b: f32): f32 {
                             return @mod(a, b);
                         }
-                        pub fn mathFunctionRem(_: void, a: This, b: This): MathFunction(V) {
+                        pub static fn mathFunctionRem(_: void, a: This, b: This): MathFunction(V) {
                             return MathFunction(V){
                                 .rem = .{
                                     .dividend = a,
@@ -613,11 +613,11 @@ pub fn Calc(comptime V: type): type {
                             );
                         }
 
-                        pub fn modulo(_: void, a: f32, b: f32): f32 {
+                        pub static fn modulo(_: void, a: f32, b: f32): f32 {
                             // return ((a % b) + b) % b;
                             return @mod((@mod(a, b) + b), b);
                         }
-                        pub fn mathFunctionMod(_: void, a: This, b: This): MathFunction(V) {
+                        pub static fn mathFunctionMod(_: void, a: This, b: This): MathFunction(V) {
                             return MathFunction(V){
                                 .mod_ = .{
                                     .dividend = a,
@@ -1052,7 +1052,7 @@ pub fn Calc(comptime V: type): type {
             comptime parse_ident: fn (@TypeOf(ctx), []const u8) This?,
         ): Result(This) {
             const trig_fn = struct {
-                pub fn run(x: f32): f32 {
+                pub static fn run(x: f32): f32 {
                     const mathfn = comptime switch (trig_fn_kind) {
                         .sin => std.math.sin,
                         .cos => std.math.cos,
@@ -1117,7 +1117,7 @@ pub fn Calc(comptime V: type): type {
 
         pub static fn ParseIdentNone(comptime Ctx: type, comptime Value: type): type {
             return struct {
-                pub fn func(_: Ctx, _: []const u8): Calc(Value)? {
+                pub static fn func(_: Ctx, _: []const u8): Calc(Value)? {
                     return null;
                 }
             };
@@ -1249,7 +1249,8 @@ pub fn Calc(comptime V: type): type {
             i += 1;
             let errored: bool = false;
             let sum: This = first;
-            for (*arg of args.items[i..]) {
+            while (i < args.items.len) : (i += 1) {
+                const arg = &args.items[i];
                 if (sum_val := This.applyOp(&sum, arg, allocator, @as(void, undefined), calcHypotApplyOpFn)) {
                     sum = sum_val;
                 } else {
@@ -1292,8 +1293,8 @@ pub fn Calc(comptime V: type): type {
             return null;
         }
 
-        pub fn applyMap(allocator: Allocator, comptime op: fn (f32) f32): This? {
-            switch (_.*) {
+        pub static fn applyMap(this_val: *const This, allocator: Allocator, comptime op: fn (f32) f32): This? {
+            switch (this_val.*) {
                 .number => |n| return This{ .number = op(n) },
                 .value => |v| {
                     if (new_v := css.generic.tryMap(V, v, op)) {
@@ -1323,7 +1324,7 @@ pub fn Calc(comptime V: type): type {
         }
 
         pub fn toCssImpl(dest: *css.Printer): css.PrintErr!void {
-            return switch (_.*) {
+            return switch (_) {
                 .value => |v| v.toCss(dest),
                 .number => |n| CSSNumberFns.toCss(&n, dest),
                 .sum => |sum| {
@@ -1350,11 +1351,11 @@ pub fn Calc(comptime V: type): type {
                     if (@abs(num) < 1.0) {
                         const div = 1.0 / num;
                         calc.toCss(dest)?;
-                        dest.delim('/'?, true);
-                        CSSNumberFns.toCss(&div?, dest);
+                        dest.delim('/', true)?;
+                        CSSNumberFns.toCss(&div, dest)?;
                     } else {
-                        CSSNumberFns.toCss(&num?, dest);
-                        dest.delim('*'?, true);
+                        CSSNumberFns.toCss(&num, dest)?;
+                        dest.delim('*', true)?;
                         calc.toCss(dest)?;
                     }
                 },
@@ -1363,7 +1364,7 @@ pub fn Calc(comptime V: type): type {
         }
 
         pub fn trySign(): f32? {
-            return switch (_.*) {
+            return switch (_) {
                 .value => |v| return switch (V) {
                     f32 => css.signfns.signF32(v),
                     else => v.trySign(),
@@ -1441,11 +1442,15 @@ pub fn Calc(comptime V: type): type {
             // e.g. min(1px, 1em, 2px, 3in) => min(1px, 1em)
             let reduced: ArrayList(This) = .{};
 
-            for (*arg of args.items) {
+            let arg_i: usize = 0;
+            while (arg_i < args.items.len) : (arg_i += 1) {
+                const arg = &args.items[arg_i];
                 let found: ((*This)?)? = null;
                 switch (arg.*) {
                     .value => |val| {
-                        for (*b of reduced.items) {
+                        let b_i: usize = 0;
+                        while (b_i < reduced.items.len) : (b_i += 1) {
+                            const b = &reduced.items[b_i];
                             switch (b.*) {
                                 .value => |v| {
                                     const result = css.generic.partialCmp(V, val, v);
@@ -1488,7 +1493,7 @@ pub fn Calc(comptime V: type): type {
         }
 
         pub fn isCompatible(browsers: css.targets.Browsers): bool {
-            return switch (_.*) {
+            return switch (_) {
                 .sum => |*args| return args.left.isCompatible(browsers) && args.right.isCompatible(browsers),
                 .product => |*args| return args.expression.isCompatible(browsers),
                 .function => |f| f.isCompatible(browsers),
@@ -1543,7 +1548,7 @@ pub fn MathFunction(comptime V: type): type {
         const ThisCalc = Calc(V);
 
         pub fn eql(other: *const @This()): bool {
-            return switch (_.*) {
+            return switch (_) {
                 .calc => |a| return other.* == .calc && a.eql(&other.calc),
                 .min => |*a| return other.* == .min && css.generic.eqlList(ThisCalc, a, &other.min),
                 .max => |*a| return other.* == .max && css.generic.eqlList(ThisCalc, a, &other.max),
@@ -1558,7 +1563,7 @@ pub fn MathFunction(comptime V: type): type {
         }
 
         pub fn deepClone(allocator: Allocator): @This() {
-            return switch (_.*) {
+            return switch (_) {
                 .calc => |*calc| .{ .calc = calc.deepClone(allocator) },
                 .min => |*min| .{ .min = css.deepClone(ThisCalc, allocator, min) },
                 .max => |*max| .{ .max = css.deepClone(ThisCalc, allocator, max) },
@@ -1623,7 +1628,7 @@ pub fn MathFunction(comptime V: type): type {
         }
 
         pub fn toCss(dest: *css.Printer): css.PrintErr!void {
-            return switch (_.*) {
+            return switch (_) {
                 .calc => |*calc| {
                     dest.writeStr("calc(")?;
                     calc.toCss(dest)?;
@@ -1717,7 +1722,7 @@ pub fn MathFunction(comptime V: type): type {
 
         pub fn isCompatible(browsers: css.targets.Browsers): bool {
             const F = css.compat.Feature;
-            return switch (_.*) {
+            return switch (_) {
                 .calc => |*c| F.isCompatible(F.calc_function, browsers) && c.isCompatible(browsers),
                 .min => |*m| F.isCompatible(F.min_function, browsers) && brk: {
                     for (*arg of m.items) {

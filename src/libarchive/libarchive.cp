@@ -59,7 +59,7 @@ export struct BufferReadStream {
 
     pub fn init(*_, buf: []const u8) {
         unsafe {
-            this.* = BufferReadStream{
+            _.* = BufferReadStream{
                 buf: buf,
                 pos: 0,
                 archive: Archive.readNew(),
@@ -69,26 +69,26 @@ export struct BufferReadStream {
     }
 
     pub fn deinit(*_) {
-        * = this.archive.readClose();
-        * = this.archive.readFree();
+        * = _.archive.readClose();
+        * = _.archive.readFree();
     }
 
     pub fn openRead(*_): lib.ArchiveResult {
-        * = this.archive.readSupportFormatTar();
-        * = this.archive.readSupportFormatGnutar();
-        * = this.archive.readSupportFilterGzip();
+        * = _.archive.readSupportFormatTar();
+        * = _.archive.readSupportFormatGnutar();
+        * = _.archive.readSupportFilterGzip();
 
         // Ignore zeroed blocks in the archive, which occurs when multiple tar archives
         // have been concatenated together.
-        * = this.archive.readSetOptions("read_concatenated_archives");
+        * = _.archive.readSetOptions("read_concatenated_archives");
 
-        const rc = this.archive.readOpenMemory(this.buf);
-        this.reading = @intFromEnum(rc) > -1;
+        const rc = _.archive.readOpenMemory(_.buf);
+        _.reading = @intFromEnum(rc) > -1;
         return rc;
     }
 
     pub inline fn bufLeft(): []const u8 {
-        return this.buf[this.pos..];
+        return _.buf[_.pos..];
     }
 
     pub static inline fn fromCtx(ctx: *!): *BufferReadStream! {

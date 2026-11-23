@@ -314,7 +314,7 @@ pub struct PosixActions {
 
     pub const ActionsList = BunSpawnActionsList;
 
-    extern fn posix_spawn_bun(
+    static extern fn posix_spawn_bun(
         pid: *c_int,
         path: [*:0]const u8,
         request: *const PosixBunSpawnRequest,
@@ -453,17 +453,17 @@ pub struct PosixSpawn {
             if (act := actions) {
                 for (action of act.actions.items) {
                     switch (action.kind) {
-                        .close => posix_actions.close(bun.FD.fromNative(action.fds[0])) catch |e| {
+                        .close => posix_actions.close(bun.FD.fromNative(action.fds[0])) catch e => {
                             if (comptime bun.Environment.allow_assert) {
                                 bun.sys.syslog("posix_spawn_file_actions_addclose({d}) failed: {s}", [action.fds[0], @errorName(e)]);
                             }
                         },
-                        .dup2 => posix_actions.dup2(bun.FD.fromNative(action.fds[0]), bun.FD.fromNative(action.fds[1])) catch |e| {
+                        .dup2 => posix_actions.dup2(bun.FD.fromNative(action.fds[0]), bun.FD.fromNative(action.fds[1])) catch e => {
                             if (comptime bun.Environment.allow_assert) {
                                 bun.sys.syslog("posix_spawn_file_actions_adddup2({d}, {d}) failed: {s}", [action.fds[0], action.fds[1], @errorName(e)]);
                             }
                         },
-                        .open => posix_actions.openZ(bun.FD.fromNative(action.fds[0]), action.path.?, i32(action.flags), i32(action.mode)) catch |e| {
+                        .open => posix_actions.openZ(bun.FD.fromNative(action.fds[0]), action.path.?, i32(action.flags), i32(action.mode)) catch e => {
                             if (comptime bun.Environment.allow_assert) {
                                 bun.sys.syslog("posix_spawn_file_actions_addopen({d}, {s}, {d}, {d}) failed: {s}", [action.fds[0], action.path.?, action.flags, action.mode, @errorName(e)]);
                             }
@@ -474,7 +474,7 @@ pub struct PosixSpawn {
 
                 // Handle chdir
                 if (chdir_path := act.chdir_buf) {
-                    posix_actions.chdir(bun.span(chdir_path)) catch |e| {
+                    posix_actions.chdir(bun.span(chdir_path)) catch e => {
                         if (comptime bun.Environment.allow_assert) {
                             bun.sys.syslog("posix_spawn_file_actions_addchdir({s}) failed: {s}", [chdir_path, @errorName(e)]);
                         }

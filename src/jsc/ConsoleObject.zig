@@ -1675,7 +1675,7 @@ const int = try value.coerce(i64, self.globalThis);
                 _ = &i;
                 const is_negative = (i < 0);
                 if (is_negative) {
-                    i = (0 - i);
+                    i = (-i);
                 }
                 const digits = (if ((i != 0)) (bun.fmt.fastDigitCount((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(is_negative))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(is_negative))) else cp_cast_int(usize, @intFromBool(is_negative)))) else 1);
                 _ = self.addForNewLine(digits);
@@ -2962,52 +2962,40 @@ pub const FormatterTag = enum {
     Set,
     BigInt,
     Symbol,
-
     CustomFormattedObject,
-
     GlobalObject,
     Private,
     Promise,
-
     JSON,
     toJSON,
     NativeCode,
-
     JSX,
     Event,
-
     GetterSetter,
     CustomGetterSetter,
-
     Proxy,
     RevokedProxy,
 
-    pub fn isPrimitive(this: FormatterTag) bool {
-        return switch (this) {
-            .String,
-            .StringPossiblyFormatted,
-            .Undefined,
-            .Double,
-            .Integer,
-            .Null,
-            .Boolean,
-            .Symbol,
-            .BigInt,
-            => true,
-            else => false,
-        };
+pub fn isPrimitive(self: @This()) bool {
+            return (switch (self) {
+.String, .StringPossiblyFormatted, .Undefined, .Double, .Integer, .Null, .Boolean, .Symbol, .BigInt => true,
+else => false,
+});
     }
 
-    pub fn canHaveCircularReferences(tag: FormatterTag) bool {
-        return switch (tag) {
-            .Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
-            else => false,
-        };
+pub fn canHaveCircularReferences(self: @This()) bool {
+            return (switch (self) {
+.Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
+else => false,
+});
     }
-
+    
     pub const Result = FormatterTagResult;
+    
     pub const Options = FormatterTagOptions;
+    
     pub const get = getFormatterTag;
+    
     pub const getAdvanced = getAdvancedFormatterTag;
 };
 const PendingTimers = std.AutoHashMap(u64, OptionalTimer);
@@ -3554,18 +3542,18 @@ else => .JSON,
 }), .cell = js_type };
 }
 
-pub fn count(self: *ConsoleObject, globalThis: *JSGlobalObject, ptr: [*]const u8, len: usize) callconv(jsc.conv) void {
-        var this = globalThis.bunVM().console;
-        _ = &this;
+pub fn count(_: *ConsoleObject, globalThis: *JSGlobalObject, ptr: [*]const u8, len: usize) callconv(jsc.conv) void {
+        var console_obj = globalThis.bunVM().console;
+        _ = &console_obj;
         const slice = (blk: {
         break :blk ptr[0..len];
 
 });
         const hash = bun.hash(slice);
-        const counter = ((self.counts.getOrPut(globalThis.allocator(), hash)) catch unreachable);
+        const counter = ((console_obj.counts.getOrPut(globalThis.allocator(), hash)) catch unreachable);
         const current = ((if (comptime @typeInfo(@TypeOf((if (counter.found_existing) counter.value_ptr.* else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u32, @intFromEnum(0)) else cp_cast_int(u32, 0))))) == .@"enum") cp_cast_int(u32, @intFromEnum((if (counter.found_existing) counter.value_ptr.* else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u32, @intFromEnum(0)) else cp_cast_int(u32, 0))))) else cp_cast_int(u32, (if (counter.found_existing) counter.value_ptr.* else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u32, @intFromEnum(0)) else cp_cast_int(u32, 0))))) + 1);
         counter.value_ptr.* = current;
-        const writer = self.writer;
+        const writer = console_obj.writer;
         if (Output.enable_ansi_colors_stdout) {
             _ = ((writer.print((comptime Output.prettyFmt("<r>{s}<d>: <r><yellow>{d}<r>\n", true)), .{ .slice = slice, .current = current })) catch unreachable);
         } else {
@@ -3574,15 +3562,15 @@ pub fn count(self: *ConsoleObject, globalThis: *JSGlobalObject, ptr: [*]const u8
         _ = ((writer.flush()) catch unreachable);
 }
 
-pub fn countReset(self: *ConsoleObject, globalThis: *JSGlobalObject, ptr: [*]const u8, len: usize) callconv(jsc.conv) void {
-        var this = globalThis.bunVM().console;
-        _ = &this;
+pub fn countReset(_: *ConsoleObject, globalThis: *JSGlobalObject, ptr: [*]const u8, len: usize) callconv(jsc.conv) void {
+        var console_obj = globalThis.bunVM().console;
+        _ = &console_obj;
         const slice = (blk: {
         break :blk ptr[0..len];
 
 });
         const hash = bun.hash(slice);
-        const entry_opt = self.counts.getEntry(hash);
+        const entry_opt = console_obj.counts.getEntry(hash);
         if ((entry_opt == null)) {
             return;
         }

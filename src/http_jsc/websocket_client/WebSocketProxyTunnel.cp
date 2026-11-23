@@ -27,7 +27,7 @@ export enum UpgradeClientUnion {
     none: void,
 
     pub fn handleDecryptedData(data: []const u8)  {
-        switch (this) {
+        switch (_) {
             .http => |client| client.handleDecryptedData(data),
             .https => |client| client.handleDecryptedData(data),
             .none => {},
@@ -35,7 +35,7 @@ export enum UpgradeClientUnion {
     }
 
     pub fn terminate(code: ErrorCode)  {
-        switch (this) {
+        switch (_) {
             .http => |client| client.terminate(code),
             .https => |client| client.terminate(code),
             .none => {},
@@ -43,7 +43,7 @@ export enum UpgradeClientUnion {
     }
 
     pub fn onProxyTLSHandshakeComplete()  {
-        switch (this) {
+        switch (_) {
             .http => |client| client.onProxyTLSHandshakeComplete(),
             .https => |client| client.onProxyTLSHandshakeComplete(),
             .none => {},
@@ -61,7 +61,7 @@ export enum SocketUnion {
     none: void,
 
     pub fn write(data: []const u8): c_int {
-        return switch (this) {
+        return switch (_) {
             .tcp => |s| s.write(data),
             .ssl => |s| s.write(data),
             .none => 0,
@@ -69,7 +69,7 @@ export enum SocketUnion {
     }
 
     pub fn isClosed(): bool {
-        return switch (this) {
+        return switch (_) {
             .tcp => |s| s.isClosed(),
             .ssl => |s| s.isClosed(),
             .none => true,
@@ -132,23 +132,23 @@ comptime {
     }
 
     pub fn deinit(*_)  {
-        if (*wrapper := this.#wrapper) {
+        if (*wrapper := _.#wrapper) {
             wrapper.deinit();
-            this.#wrapper = null;
+            _.#wrapper = null;
         }
-        this.#write_buffer.deinit();
-        if (hostname := this.#sni_hostname) {
+        _.#write_buffer.deinit();
+        if (hostname := _.#sni_hostname) {
             bun.default_allocator.free(hostname);
-            this.#sni_hostname = null;
+            _.#sni_hostname = null;
         }
-        bun.destroy(this);
+        bun.destroy(_);
     }
 
     pub fn start(*_, ssl_options: SSLConfig, initial_data: []const u8): anyerror!void {
         const options = ssl_options.forClientVerification();
 
-        this.#wrapper = SSLWrapperType.init(options, true, {
-            ctx: this,
+        _.#wrapper = SSLWrapperType.init(options, true, {
+            ctx: _,
             onOpen: onOpen,
             onData: onData,
             onHandshake: onHandshake,
@@ -157,20 +157,20 @@ comptime {
         })?;
 
         if (initial_data.len > 0) {
-            this.#wrapper.?.startWithPayload(initial_data);
+            _.#wrapper.?.startWithPayload(initial_data);
         } else {
-            this.#wrapper.?.start();
+            _.#wrapper.?.start();
         }
     }
 
     pub fn onOpen(*_)  {
-        this.ref();
-        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
+        _.ref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: _ };
 
         log("onOpen", .{});
-        if (*wrapper := this.#wrapper) {
+        if (*wrapper := _.#wrapper) {
             if (ssl_ptr := wrapper.ssl) {
-                if (hostname := this.#sni_hostname) {
+                if (hostname := _.#sni_hostname) {
                     if (!bun.strings.isIPAddress(hostname)) {
                         const hostname_z = bun.default_allocator.dupeZ(u8, hostname) catch return;
                         const _hostname_guard = FreeGuard<@TypeOf(hostname_z)>{ alloc: bun.default_allocator, slice: hostname_z };
@@ -182,44 +182,44 @@ comptime {
     }
 
     pub fn onData(*_, decrypted_data: []const u8)  {
-        this.ref();
-        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
+        _.ref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: _ };
 
         log("onData: {} bytes", .{decrypted_data.len});
         if (decrypted_data.len == 0) return;
 
-        if (ws := this.#connected_websocket) {
+        if (ws := _.#connected_websocket) {
             ws.handleTunnelData(decrypted_data);
             return;
         }
 
-        this.#upgrade_client.handleDecryptedData(decrypted_data);
+        _.#upgrade_client.handleDecryptedData(decrypted_data);
     }
 
     pub fn onHandshake(*_, success: bool, ssl_error: uws.us_bun_verify_error_t)  {
-        this.ref();
-        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
+        _.ref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: _ };
 
         log("onHandshake: success={}", .{success});
 
-        if (this.#upgrade_client.isNone()) return;
+        if (_.#upgrade_client.isNone()) return;
 
         if (!success) {
-            this.#upgrade_client.terminate(ErrorCode.tls_handshake_failed);
+            _.#upgrade_client.terminate(ErrorCode.tls_handshake_failed);
             return;
         }
 
-        if (this.#reject_unauthorized) {
+        if (_.#reject_unauthorized) {
             if (ssl_error.error_no != 0) {
-                this.#upgrade_client.terminate(ErrorCode.tls_handshake_failed);
+                _.#upgrade_client.terminate(ErrorCode.tls_handshake_failed);
                 return;
             }
 
-            if (*wrapper := this.#wrapper) {
+            if (*wrapper := _.#wrapper) {
                 if (ssl_ptr := wrapper.ssl) {
-                    if (hostname := this.#sni_hostname) {
+                    if (hostname := _.#sni_hostname) {
                         if (!BoringSSL.checkServerIdentity(ssl_ptr, hostname)) {
-                            this.#upgrade_client.terminate(ErrorCode.tls_handshake_failed);
+                            _.#upgrade_client.terminate(ErrorCode.tls_handshake_failed);
                             return;
                         }
                     }
@@ -227,104 +227,104 @@ comptime {
             }
         }
 
-        this.#upgrade_client.onProxyTLSHandshakeComplete();
+        _.#upgrade_client.onProxyTLSHandshakeComplete();
     }
 
     pub fn onClose(*_)  {
-        this.ref();
-        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
+        _.ref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: _ };
 
         log("onClose", .{});
 
-        if (ws := this.#connected_websocket) {
+        if (ws := _.#connected_websocket) {
             ws.fail(ErrorCode.ended);
             return;
         }
 
-        if (this.#upgrade_client.isNone()) return;
+        if (_.#upgrade_client.isNone()) return;
 
-        this.#upgrade_client.terminate(ErrorCode.ended);
+        _.#upgrade_client.terminate(ErrorCode.ended);
     }
 
     pub fn setConnectedWebSocket(*_, ws: *WebSocketClient)  {
         log("setConnectedWebSocket", .{});
-        this.#connected_websocket = ws;
-        this.#upgrade_client = .none;
+        _.#connected_websocket = ws;
+        _.#upgrade_client = .none;
     }
 
     pub fn clearConnectedWebSocket(*_)  {
-        this.#connected_websocket = null;
+        _.#connected_websocket = null;
     }
 
     pub fn detachUpgradeClient(*_)  {
-        this.#upgrade_client = .none;
+        _.#upgrade_client = .none;
     }
 
     pub fn writeEncrypted(*_, encrypted_data: []const u8)  {
         log("writeEncrypted: {} bytes", .{encrypted_data.len});
 
-        if (this.#write_buffer.isNotEmpty()) {
-            bun.handleOom(this.#write_buffer.write(encrypted_data));
+        if (_.#write_buffer.isNotEmpty()) {
+            bun.handleOom(_.#write_buffer.write(encrypted_data));
             return;
         }
 
-        const written = this.#socket.write(encrypted_data);
+        const written = _.#socket.write(encrypted_data);
         if (written < 0) {
-            bun.handleOom(this.#write_buffer.write(encrypted_data));
+            bun.handleOom(_.#write_buffer.write(encrypted_data));
             return;
         }
 
         const written_usize: usize = @intCast(written);
         if (written_usize < encrypted_data.len) {
-            bun.handleOom(this.#write_buffer.write(encrypted_data[written_usize..]));
+            bun.handleOom(_.#write_buffer.write(encrypted_data[written_usize..]));
         }
     }
 
     pub fn onWritable(*_)  {
-        this.ref();
-        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
+        _.ref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: _ };
 
-        if (*wrapper := this.#wrapper) {
+        if (*wrapper := _.#wrapper) {
             * = wrapper.flush();
         }
 
-        const to_send = this.#write_buffer.slice();
+        const to_send = _.#write_buffer.slice();
         if (to_send.len > 0) {
-            const written = this.#socket.write(to_send);
+            const written = _.#socket.write(to_send);
             if (written < 0) return;
 
             const written_usize: usize = @intCast(written);
             if (written_usize == to_send.len) {
-                this.#write_buffer.reset();
+                _.#write_buffer.reset();
             } else {
-                this.#write_buffer.cursor += written_usize;
+                _.#write_buffer.cursor += written_usize;
                 return;
             }
         }
 
-        if (ws := this.#connected_websocket) {
+        if (ws := _.#connected_websocket) {
             ws.handleTunnelWritable();
         }
     }
 
     pub fn receive(*_, data: []const u8)  {
-        this.ref();
-        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: this };
+        _.ref();
+        const _ref_guard = DerefGuard<*WebSocketProxyTunnel>{ ptr: _ };
 
-        if (*wrapper := this.#wrapper) {
+        if (*wrapper := _.#wrapper) {
             wrapper.receiveData(data);
         }
     }
 
     pub fn write(*_, data: []const u8): anyerror!usize {
-        if (*wrapper := this.#wrapper) {
+        if (*wrapper := _.#wrapper) {
             return wrapper.writeData(data)?;
         }
         return error.ConnectionClosed;
     }
 
     pub fn shutdown(*_)  {
-        if (*wrapper := this.#wrapper) {
+        if (*wrapper := _.#wrapper) {
             * = wrapper.shutdown(true);
         }
     }

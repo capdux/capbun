@@ -179,8 +179,7 @@ pub fn CssRule(comptime Rule: type) type {
     unknown: unknown.UnknownAtRule,
     custom: Rule,
 
-pub fn toCss(self: @This(), rule_self: *const @This(), dest: *Printer) PrintErr!void {
-        _ = self;
+pub fn toCss(rule_self: *const @This(), dest: *Printer) PrintErr!void {
             return (switch (rule_self.*) {
 .media => |x| {
 {
@@ -241,8 +240,7 @@ pub fn toCss(self: @This(), rule_self: *const @This(), dest: *Printer) PrintErr!
 });
     }
 
-pub fn deepClone(self: @This(), rule_self: *const @This(), allocator: std.mem.Allocator) This {
-        _ = self;
+pub fn deepClone(rule_self: *const @This(), allocator: std.mem.Allocator) This {
             return css.implementDeepClone(@This(), rule_self, allocator);
     }
     const This = @This();
@@ -562,13 +560,11 @@ pub fn HashMap(comptime V: type) type {
             _ = &V;
             return std.ArrayHashMapUnmanaged(StyleRuleKey(R), V, struct {
 
-pub fn hash(self: @This(), key: This) u32 {
-        _ = self;
+pub fn hash(_: @This(), key: This) u32 {
             return @truncate(key.hash);
     }
 
-pub fn eql(self: @This(), a: This, b: This, _: usize) bool {
-        _ = self;
+pub fn eql(_: @This(), a: This, b: This, _: usize) bool {
             return a.eql((&b));
     }
 }, false);
@@ -579,8 +575,7 @@ pub fn new(list: *const ArrayList(CssRule(R)), index: usize) This {
             return This{ .list = list, .index = index, .hash = rule.hashKey() };
     }
 
-pub fn eql(self: @This(), key_self: *const @This(), other: *const This) bool {
-        _ = self;
+pub fn eql(key_self: *const @This(), other: *const This) bool {
             if ((!((key_self.index < key_self.list.items.len) and (key_self.list.items[@as(usize, @intCast(key_self.index))] == .style)))) {
                 return false;
             }

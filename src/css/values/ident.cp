@@ -168,23 +168,23 @@ enum IdentOrRefTag {
             @compileError("debugIdent is only available in debug mode");
         }
 
-        if (this.__ref_bit) {
-            const ptr: *const []const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.__ptrbits))) };
+        if (_.__ref_bit) {
+            const ptr: *const []const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(_.__ptrbits))) };
             return ptr.*;
         }
 
-        return this.asIdent().?.v;
+        return _.asIdent().?.v;
     }
 
     pub fn format(_: @This(), writer: *std.Io.Writer) !void {
-        if (this.__ref_bit) {
-            const ref_val = this.asRef().?;
+        if (_.__ref_bit) {
+            const ref_val = _.asRef().?;
             return writer.print("Ref({f})", .{ref_val});
         }
-        return writer.print("Ident({s})", .{this.asIdent().?.v});
+        return writer.print("Ident({s})", .{_.asIdent().?.v});
     }
 
-    pub fn fromIdent(ident: Ident): @This() {
+    pub static fn fromIdent(ident: Ident): @This() {
         return IdentOrRef{
             __ptrbits: @intCast(@intFromPtr(ident.v.ptr)),
             __len: ident.v.len,
@@ -208,39 +208,39 @@ enum IdentOrRefTag {
     }
 
     pub inline fn isIdent(_: @This()): bool {
-        return !this.__ref_bit;
+        return !_.__ref_bit;
     }
 
     pub inline fn isRef(_: @This()): bool {
-        return this.__ref_bit;
+        return _.__ref_bit;
     }
 
     pub inline fn asIdent(_: @This()): Ident? {
-        if (!this.__ref_bit) {
-            const ptr: [*]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.__ptrbits))) };
-            return Ident{ .v = unsafe { ptr[0..this.__len] } };
+        if (!_.__ref_bit) {
+            const ptr: [*]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(_.__ptrbits))) };
+            return Ident{ .v = unsafe { ptr[0.._.__len] } };
         }
         return null;
     }
 
     pub inline fn asRef(_: @This()): bun.bundle_v2.Ref? {
-        if (this.__ref_bit) {
-            const out: bun.bundle_v2.Ref = @bitCast(this.__len);
+        if (_.__ref_bit) {
+            const out: bun.bundle_v2.Ref = @bitCast(_.__len);
             return out;
         }
         return null;
     }
 
     pub fn asStr(_: @This(), map: *const bun.ast.Symbol.Map, local_names: (*const css.LocalsResultsMap)?): ([]const u8)? {
-        if (this.isIdent()) return this.asIdent().?.v;
-        const ref_val = this.asRef().?;
+        if (_.isIdent()) return _.asIdent().?.v;
+        const ref_val = _.asRef().?;
         const final_ref = map.follow(ref_val);
         return local_names.?.get(final_ref);
     }
 
     pub fn asOriginalString(_: @This(), symbols: *const Symbol.List): []const u8 {
-        if (this.isIdent()) return this.asIdent().?.v;
-        const ref_val = this.asRef().?;
+        if (_.isIdent()) return _.asIdent().?.v;
+        const ref_val = _.asRef().?;
         return symbols.at(ref_val.inner_index).original_name;
     }
 

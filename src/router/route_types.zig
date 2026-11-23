@@ -106,7 +106,8 @@ pub inline fn toStringPointer(self: TinyPtr) api.StringPointer {
             return api.StringPointer{ .offset = self.offset, .length = self.len };
     }
 
-pub inline fn eql(a: TinyPtr, b: TinyPtr) bool {
+pub inline fn eql(self: TinyPtr, a: TinyPtr, b: TinyPtr) bool {
+        _ = self;
             return (@as(u32, @bitCast(a)) == @as(u32, @bitCast(b)));
     }
 
@@ -145,8 +146,9 @@ pub const _PatternValue = union(_PatternTag) {
     catch_all: TinyPtr,
     optional_catch_all: TinyPtr,
 
-pub fn eql(a: _PatternValue, b: _PatternValue) bool {
-            return ((@as(_PatternTag, @enumFromInt(a)) == @as(_PatternTag, @enumFromInt(b))) and (switch (a) {
+pub fn eql(self: _PatternValue, a: _PatternValue, b: _PatternValue) bool {
+        _ = self;
+            return ((@as(_PatternTag, a) == @as(_PatternTag, b)) and (switch (a) {
 .static => HashedString.eql(a.static, b.static),
 .dynamic => a.dynamic.eql(b.dynamic),
 .catch_all => a.catch_all.eql(b.catch_all),
@@ -280,15 +282,16 @@ pub fn validate(input: []const u8, allocator: std.mem.Allocator, log: *Logger.Lo
                 }
                 return null; }); });
                 offset = pattern.len;
-                kind = @max(@intFromEnum((if (comptime @typeInfo(Pattern.Tag) == .@"enum") @as(Pattern.Tag, @enumFromInt(pattern.value)) else @as(Pattern.Tag, pattern.value))), kind);
-                if ((@intFromEnum((if (comptime @typeInfo(Pattern.Tag) == .@"enum") @as(Pattern.Tag, @enumFromInt(pattern.value)) else @as(Pattern.Tag, pattern.value))) > @intFromEnum(Pattern.Tag.@"static"))) {
+                kind = @max(@intFromEnum((if (comptime @typeInfo(Pattern.Tag) == .@"enum" and (@typeInfo(@TypeOf(pattern.value)) == .int or @typeInfo(@TypeOf(pattern.value)) == .comptime_int)) @as(Pattern.Tag, @enumFromInt(pattern.value)) else @as(Pattern.Tag, pattern.value))), kind);
+                if ((@intFromEnum((if (comptime @typeInfo(Pattern.Tag) == .@"enum" and (@typeInfo(@TypeOf(pattern.value)) == .int or @typeInfo(@TypeOf(pattern.value)) == .comptime_int)) @as(Pattern.Tag, @enumFromInt(pattern.value)) else @as(Pattern.Tag, pattern.value))) > @intFromEnum(Pattern.Tag.@"static"))) {
                     count = (count + 1);
                 }
             }
             return ValidationResult{ .param_count = count, .kind = @as(Tag, @enumFromInt(kind)) };
     }
 
-pub fn eql(a: Pattern, b: Pattern) bool {
+pub fn eql(self: Pattern, a: Pattern, b: Pattern) bool {
+        _ = self;
             return ((a.len == b.len) and a.value.eql(b.value));
     }
 

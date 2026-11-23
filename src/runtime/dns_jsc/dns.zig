@@ -357,7 +357,8 @@ pub fn __cp_deinit(self: *@This()) void {
 
 pub const LibInfo = struct {
 
-pub fn getHandle() ?*anyopaque {
+pub fn getHandle(self: *const LibInfo) ?*anyopaque {
+        _ = self;
             if (libinfo_loaded) {
                 return libinfo_handle;
             }
@@ -430,7 +431,8 @@ pub fn lookup(dns_res: *Resolver, query: GetAddrInfo, globalThis: *jsc.JSGlobalO
 
 pub const LibInfo_getaddrinfo_async_start = struct {
 
-pub fn get() ?LibInfo.GetaddrinfoAsyncStart {
+pub fn get(self: LibInfo_getaddrinfo_async_start) ?LibInfo.GetaddrinfoAsyncStart {
+        _ = self;
             _ = bun.Environment.onlyMac();
             return bun.sys.dlsymWithHandle(LibInfo.GetaddrinfoAsyncStart, "getaddrinfo_async_start", LibInfo.getHandle);
     }
@@ -438,7 +440,8 @@ pub fn get() ?LibInfo.GetaddrinfoAsyncStart {
 
 pub const LibInfo_getaddrinfo_async_handle_reply = struct {
 
-pub fn get() ?LibInfo.GetaddrinfoAsyncHandleReply {
+pub fn get(self: LibInfo_getaddrinfo_async_handle_reply) ?LibInfo.GetaddrinfoAsyncHandleReply {
+        _ = self;
             _ = bun.Environment.onlyMac();
             return bun.sys.dlsymWithHandle(LibInfo.GetaddrinfoAsyncHandleReply, "getaddrinfo_async_handle_reply", LibInfo.getHandle);
     }
@@ -446,7 +449,8 @@ pub fn get() ?LibInfo.GetaddrinfoAsyncHandleReply {
 
 pub const LibInfo_getaddrinfo_async_cancel = struct {
 
-pub fn get() ?LibInfo.GetaddrinfoAsyncCancel {
+pub fn get(self: LibInfo_getaddrinfo_async_cancel) ?LibInfo.GetaddrinfoAsyncCancel {
+        _ = self;
             _ = bun.Environment.onlyMac();
             return bun.C.dlsymWithHandle(LibInfo.GetaddrinfoAsyncCancel, "getaddrinfo_async_cancel", LibInfo.getHandle);
     }
@@ -483,7 +487,8 @@ pub const LibUVBackendHolder = struct {
     uv_info: *libuv.uv_getaddrinfo_t,
     task: jsc.AnyTask,
 
-pub fn run(held: *LibUVBackendHolder) void {
+pub fn run(self: LibUVBackendHolder, held: *LibUVBackendHolder) void {
+        _ = self;
             var _held_guard = DestroyGuard(@TypeOf(held), @TypeOf(bun.default_allocator)){ .ptr = held, .alloc = bun.default_allocator };
             _ = &_held_guard;
             var ___held_guard_moved = false; _ = &___held_guard_moved;
@@ -494,7 +499,8 @@ pub fn run(held: *LibUVBackendHolder) void {
 
 pub const LibUVBackend = struct {
 
-pub fn onRawLibUVComplete(uv_info: *libuv.uv_getaddrinfo_t, _: c_int, _: ?*libuv.addrinfo) callconv(.c) void {
+pub fn onRawLibUVComplete(self: LibUVBackend, uv_info: *libuv.uv_getaddrinfo_t, _: c_int, _: ?*libuv.addrinfo) callconv(.c) void {
+        _ = self;
             var req: *GetAddrInfoRequest = (blk: {
             break :blk @ptrCast(@alignCast(uv_info.data));
 
@@ -825,7 +831,8 @@ pub const GetAddrInfoRequestBackendLibInfo = struct {
     file_poll: ?*bun.Async.FilePoll = null,
     machport: bun.mach_port = 0,
 
-pub fn onMachportChange(req: *GetAddrInfoRequest) void {
+pub fn onMachportChange(self: GetAddrInfoRequestBackendLibInfo, req: *GetAddrInfoRequest) void {
+        _ = self;
             if ((!Environment.isMac)) {
                 _ = unreachable;
             }
@@ -1620,7 +1627,7 @@ pub fn lookupLibinfo(req: *Request, loop: jsc.EventLoopHandle) bool {
                 return false;
             }
             const getaddrinfo_async_start_ = getaddrinfo_async_start_opt.?;
-            var machport: bun.mach_port = (if (comptime @typeInfo(bun.mach_port) == .@"enum") @as(bun.mach_port, @enumFromInt(0)) else @as(bun.mach_port, 0));
+            var machport: bun.mach_port = (if (comptime @typeInfo(bun.mach_port) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.mach_port, @enumFromInt(0)) else @as(bun.mach_port, 0));
             _ = &machport;
             var service_buf: [32]u8 = undefined;
             _ = &service_buf;
@@ -1653,7 +1660,7 @@ pub fn libinfoCallback(status: i32, addr_info: ?*std.c.addrinfo, arg: ?*anyopaqu
                 const service: ?[*:0]u8 = (if ((req.key.port > 0)) ((std.fmt.bufPrintZ((&service_buf), "{d}", .{ req.key.port })) catch unreachable).ptr else null);
                 if (LibInfo.getaddrinfo_async_start.get()) |getaddrinfo_async_start_| {
                     _ = &getaddrinfo_async_start_;
-                    var machport: bun.mach_port = (if (comptime @typeInfo(bun.mach_port) == .@"enum") @as(bun.mach_port, @enumFromInt(0)) else @as(bun.mach_port, 0));
+                    var machport: bun.mach_port = (if (comptime @typeInfo(bun.mach_port) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.mach_port, @enumFromInt(0)) else @as(bun.mach_port, 0));
                     _ = &machport;
                     var hints = getHints();
                     _ = &hints;
@@ -2329,7 +2336,8 @@ pub fn onDNSPollUv(watcher: [*c]bun.windows.libuv.uv_poll_t, status: c_int, even
             _ = (channel).?.process(poll.socket, (events & (bun.windows.libuv.UV_READABLE != 0)), (events & (bun.windows.libuv.UV_WRITABLE != 0)));
     }
 
-pub fn onCloseUv(watcher: *anyopaque) callconv(.c) void {
+pub fn onCloseUv(self: Resolver, watcher: *anyopaque) callconv(.c) void {
+        _ = self;
             const poll = UvDnsPoll.fromPoll((blk: {
             break :blk @ptrCast(@alignCast(watcher));
 
@@ -3412,9 +3420,9 @@ pub fn processResolve(self: *@This(), err_: ?c_ares.Error, _: i32, result: ?*car
             _ = &_result_guard;
             var ___result_guard_moved = false; _ = &___result_guard_moved;
             defer if (!___result_guard_moved) { ___result_guard_moved = true; const __T = @TypeOf(_result_guard); if (@typeInfo(__T) == .optional) { if (_result_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _result_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _result_guard; _drop_val.__cp_deinit(); } };
-            if (err_) |err| {
-                _ = &err;
-                _ = err.toDeferred(syscall, self.name, (&self.promise)).rejectLater(self.globalThis);
+            if (err_) |e| {
+                _ = &e;
+                _ = e.toDeferred(syscall, self.name, (&self.promise)).rejectLater(self.globalThis);
                 _ = self.releaseInternal();
                 return;
             }

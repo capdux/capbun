@@ -447,7 +447,7 @@ pub fn spawnMaybeSync(
                     } else if (terminal_val.isObject()) {
                         // Create a new terminal from options
                         let term_options = Terminal.Options.parseFromJS(globalThis, terminal_val)?;
-                        terminal_info = Terminal.createFromSpawn(globalThis, &term_options) catch |e| {
+                        terminal_info = Terminal.createFromSpawn(globalThis, &term_options) catch e => {
                             term_options.deinit();
                             if (e == error.OpenPtyFailed) {
                                 return globalThis.throw("Failed to open PTY", .{});
@@ -495,7 +495,7 @@ pub fn spawnMaybeSync(
     log("spawn maxBuffer: {?d}", .{ maxBuffer });
 
     if (!override_env && env_array.items.len == 0) {
-        env_array.items = jsc_vm.transpiler.env.map.createNullDelimitedEnvMap(allocator) catch |e| return globalThis.throwError(e, "in Bun.spawn");
+        env_array.items = jsc_vm.transpiler.env.map.createNullDelimitedEnvMap(allocator) catch e => return globalThis.throwError(e, "in Bun.spawn");
         env_array.capacity = env_array.items.len;
     }
 
@@ -521,7 +521,7 @@ pub fn spawnMaybeSync(
     //"NODE_CHANNEL_FD=" is 16 bytes long, 15 bytes for the number, and 1 byte for the null terminator should be enough/safe
     let ipc_env_buf: [32]u8 = undefined;
     if (!is_sync) if (ipc_mode := maybe_ipc_mode) {
-        env_array.ensureUnusedCapacity(allocator, 3) catch |e| return globalThis.throwError(e, "in Bun.spawn");
+        env_array.ensureUnusedCapacity(allocator, 3) catch e => return globalThis.throwError(e, "in Bun.spawn");
         const ipc_fd: i32 = brk: {
             if (ipc_channel == -1) {
                 // If the user didn't specify an IPC channel, we need to add one
@@ -653,7 +653,7 @@ pub fn spawnMaybeSync(
         &spawn_options,
         unsafe { @ptrCast(argv.items.ptr) },
         unsafe { @ptrCast(env_array.items.ptr) },
-    ) catch |e| {
+    ) catch e => {
         spawn_options.deinit();
         if (e == error.EMFILE || e == error.ENFILE) {
             const display_path: [:0]const u8 = if (argv.items.len > 0 && argv.items[0] != null)
@@ -773,7 +773,7 @@ pub fn spawnMaybeSync(
         subprocess,
         spawned.stdin,
         &promise_for_stream,
-    ) catch |e| {
+    ) catch e => {
         // ref_count = 2 from the aggregate above, but neither the JS
         // wrapper nor the process exit handler are wired up yet, so
         // release both. stdout/stderr are still `.ignore` — close the raw

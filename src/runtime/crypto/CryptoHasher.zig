@@ -229,7 +229,8 @@ pub fn clearSSLErr() void {
             _ = f();
     }
 
-pub fn throwHmacConsumed(globalThis: *jsc.JSGlobalObject) bun.JSError {
+pub fn throwHmacConsumed(self: CryptoHasher, globalThis: *jsc.JSGlobalObject) bun.JSError {
+        _ = self;
             return globalThis.throw("HMAC has been consumed and is no longer usable", .{});
     }
 
@@ -237,7 +238,7 @@ pub fn getByteLength(self: *CryptoHasher, globalThis: *jsc.JSGlobalObject) bun.J
             return jsc.JSValue.jsNumber((switch (self.*) {
 .evp => self.evp.size(),
 .hmac => (if (self.hmac) |h| h.size() else ({
-            return CryptoHasher.throwHmacConsumed(globalThis);
+            return self.throwHmacConsumed(globalThis);
 })),
 .@"zig" => self.@"zig".digest_length,
 }));
@@ -248,7 +249,7 @@ pub fn getAlgorithm(self: *CryptoHasher, globalObject: *jsc.JSGlobalObject) bun.
 .evp => ZigString.fromUTF8(bun.asByteSlice(@tagName(self.evp.algorithm))).toJS(globalObject),
 .@"zig" => ZigString.fromUTF8(bun.asByteSlice(@tagName(self.@"zig".algorithm))).toJS(globalObject),
 .hmac => (if (self.hmac) |h| ZigString.fromUTF8(bun.asByteSlice(@tagName(h.algorithm))).toJS(globalObject) else ({
-            return CryptoHasher.throwHmacConsumed(globalObject);
+            return self.throwHmacConsumed(globalObject);
 })),
 });
     }
@@ -505,7 +506,7 @@ if (self.hmac) |hmac| {
                     return globalThis.throwValue(instance);
                 }
             } else {
-                return CryptoHasher.throwHmacConsumed(globalThis);
+                return self.throwHmacConsumed(globalThis);
             }
 },
 .@"zig" => {
@@ -526,7 +527,7 @@ pub fn copy(self: *CryptoHasher, globalObject: *jsc.JSGlobalObject, _: *jsc.Call
                 _ = CryptoHasher.clearSSLErr();
                 return globalObject.throwValue(e_val); }); }) };
             } else {
-                return CryptoHasher.throwHmacConsumed(globalObject);
+                return self.throwHmacConsumed(globalObject);
             }
 },
 .@"zig" => .{ .@"zig" = self.@"zig".copy() },
@@ -615,7 +616,7 @@ pub fn final(self: *CryptoHasher, globalThis: *JSGlobalObject, output_digest_sli
                 defer if (!__hmac_guard_moved) { __hmac_guard_moved = true; const __T = @TypeOf(hmac_guard); if (@typeInfo(__T) == .optional) { if (hmac_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { hmac_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = hmac_guard; _drop_val.__cp_deinit(); } };
                 break :brk hmac.final(output_digest_slice);
             } else {
-                return CryptoHasher.throwHmacConsumed(globalThis);
+                return self.throwHmacConsumed(globalThis);
             }
 },
 .evp => self.evp.final(globalThis.bunVM().rareData().boringEngine(), output_digest_slice),

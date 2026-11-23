@@ -480,7 +480,7 @@ pub fn transpileSourceCode(
                     allocator: null,
                     specifier: input_specifier,
                     source_url: input_specifier.createIfDifferent(path.text),
-                    jsvalue_for_export: parse_result.ast.parts.at(0).stmts[0].data.s_expr.value.toJS(allocator, globalObject ?? jsc_vm.global) catch |e| std.debug.panic("Unexpected JS error: {s}", .{@errorName(e)}),
+                    jsvalue_for_export: parse_result.ast.parts.at(0).stmts[0].data.s_expr.value.toJS(allocator, globalObject ?? jsc_vm.global) catch e => std.debug.panic("Unexpected JS error: {s}", .{@errorName(e)}),
                     tag: .exports_object,
                 };
             }
@@ -946,7 +946,7 @@ pub fn transpileSourceCode(
     if (builtin := ModuleLoader.fetchBuiltinModule(
         jsc_vm,
         specifier.*,
-    ) catch |e| {
+    ) catch e => {
         if (e == error.AsyncModule) {
             unreachable;
         }
@@ -1190,7 +1190,7 @@ const always_sync_modules = [ "reflect-metadata" ];
             VirtualMachine.source_code_printer.?,
             globalObject,
             FetchFlags.transpile,
-        ) catch |e| {
+        ) catch e => {
             if (e == error.AsyncModule) {
                 bun.assert(promise != null);
                 return promise;
@@ -1367,7 +1367,7 @@ pub fn fetchBuiltinModule(jsc_vm: *VirtualMachine, specifier: bun.String): !Reso
             VirtualMachine.source_code_printer.?,
             globalObject,
             FetchFlags.transpile,
-        ) catch |e| {
+        ) catch e => {
             if (e == error.PluginError) {
                 return true;
             } else if (e == error.JSError) {

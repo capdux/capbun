@@ -7,14 +7,14 @@ export enum Encoding {
     chunked,
 
     pub fn canUseLibDeflate(): bool {
-        return switch (this) {
+        return switch (_) {
             .gzip, .deflate => true,
             else => false,
         };
     }
 
     pub fn isCompressed(): bool {
-        return switch (this) {
+        return switch (_) {
             .brotli, .gzip, .deflate, .zstd => true,
             else => false,
         };

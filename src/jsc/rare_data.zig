@@ -535,7 +535,10 @@ pub fn addFSWatcherForIsolation(self: *RareData, watcher: *FSWatcher) void {
 }
 
 pub fn removeFSWatcherForIsolation(self: *RareData, watcher: *FSWatcher) void {
-        if (std.mem.indexOfScalar(*FSWatcher, self.fs_watchers_for_isolation.items, watcher)) |i| {
+        const FSWatcherPtr = @FieldType(struct {
+    p: *FSWatcher,
+}, "p");
+        if (std.mem.indexOfScalar(FSWatcherPtr, self.fs_watchers_for_isolation.items, watcher)) |i| {
             _ = &i;
             _ = self.fs_watchers_for_isolation.swapRemove(i);
         }
@@ -546,7 +549,10 @@ pub fn addStatWatcherForIsolation(self: *RareData, watcher: *StatWatcher) void {
 }
 
 pub fn removeStatWatcherForIsolation(self: *RareData, watcher: *StatWatcher) void {
-        if (std.mem.indexOfScalar(*StatWatcher, self.stat_watchers_for_isolation.items, watcher)) |i| {
+        const StatWatcherPtr = @FieldType(struct {
+    p: *StatWatcher,
+}, "p");
+        if (std.mem.indexOfScalar(StatWatcherPtr, self.stat_watchers_for_isolation.items, watcher)) |i| {
             _ = &i;
             _ = self.stat_watchers_for_isolation.swapRemove(i);
         }
@@ -648,7 +654,7 @@ pub fn stderr(self: *RareData) *Blob.Store {
             _ = &s;
             return s;
         }
-        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
+        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
         _ = &mode;
         const fd = bun.FD.fromUV(2);
         switch (Syscall.fstat(fd)) {
@@ -670,7 +676,7 @@ pub fn stdout(self: *RareData) *Blob.Store {
             _ = &s;
             return s;
         }
-        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
+        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
         _ = &mode;
         const fd = bun.FD.fromUV(1);
         switch (Syscall.fstat(fd)) {
@@ -692,7 +698,7 @@ pub fn stdin(self: *RareData) *Blob.Store {
             _ = &s;
             return s;
         }
-        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
+        var mode: bun.Mode = (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
         _ = &mode;
         const fd = bun.FD.fromUV(0);
         switch (Syscall.fstat(fd)) {
@@ -722,7 +728,8 @@ pub fn setStdinFile(self: *RareData, store: *Blob.Store) void {
         self.stdin_store = store;
 }
 
-pub fn isInteractiveTerminal() bool {
+pub fn isInteractiveTerminal(self: RareData) bool {
+    _ = self;
         const is_stdin = Output.isTerminal(bun.FD.fromUV(0));
         const is_stdout = Output.isTerminal(bun.FD.fromUV(1));
         return (is_stdin and is_stdout);

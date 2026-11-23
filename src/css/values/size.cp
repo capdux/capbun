@@ -13,7 +13,7 @@ pub fn Size2D(comptime T: type): type {
         a: T,
         b: T,
 
-        fn parseVal(input: *css.Parser): Result(T) {
+        static fn parseVal(input: *css.Parser): Result(T) {
             return switch (T) {
                 f32 => return CSSNumberFns.parse(input),
                 LengthPercentage => return LengthPercentage.parse(input),
@@ -23,7 +23,7 @@ pub fn Size2D(comptime T: type): type {
 
         const This = @This();
 
-        pub fn parse(input: *css.Parser): Result(Size2D(T)) {
+        pub static fn parse(input: *css.Parser): Result(Size2D(T)) {
             const first = switch (parseVal(input)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
@@ -35,37 +35,37 @@ pub fn Size2D(comptime T: type): type {
             } };
         }
 
-        pub fn toCss(this: *const Size2D(T), dest: *css.Printer): css.PrintErr!void {
-            valToCss(&this.a, dest)?;
-            if (!valEql(&this.b, &this.a)) {
+        pub fn toCss(dest: *css.Printer): css.PrintErr!void {
+            valToCss(&_.a, dest)?;
+            if (!valEql(&_.b, &_.a)) {
                 dest.writeStr(" ")?;
-                valToCss(&this.b, dest)?;
+                valToCss(&_.b, dest)?;
             }
         }
 
-        pub fn valToCss(val: *const T, dest: *css.Printer): css.PrintErr!void {
+        pub static fn valToCss(val: *const T, dest: *css.Printer): css.PrintErr!void {
             return switch (T) {
                 f32 => CSSNumberFns.toCss(val, dest),
                 else => val.toCss(dest),
             };
         }
 
-        pub fn isCompatible(this: *const @This(), browsers: bun.css.targets.Browsers): bool {
-            return this.a.isCompatible(browsers) && this.b.isCompatible(browsers);
+        pub fn isCompatible(browsers: bun.css.targets.Browsers): bool {
+            return _.a.isCompatible(browsers) && _.b.isCompatible(browsers);
         }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): @This() {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
-        pub inline fn valEql(lhs: *const T, rhs: *const T): bool {
+        pub static inline fn valEql(lhs: *const T, rhs: *const T): bool {
             return switch (T) {
                 f32 => lhs.* == rhs.*,
                 else => lhs.eql(rhs),
             };
         }
 
-        pub inline fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+        pub static inline fn eql(lhs: *const @This(), rhs: *const @This()): bool {
             return switch (T) {
                 f32 => lhs.a == rhs.b,
                 else => lhs.a.eql(&rhs.b),

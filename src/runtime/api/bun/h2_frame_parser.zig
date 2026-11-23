@@ -1601,6 +1601,12 @@ return written;
     }
 
 pub fn flush(self: *H2FrameParser) usize {
+            const TLSSocketPtr = @FieldType(struct {
+    p: *TLSSocket,
+}, "p");
+            const TCPSocketPtr = @FieldType(struct {
+    p: *TCPSocket,
+}, "p");
             _ = log("flush", .{});
             _ = self.ref();
             var _deref_guard = DerefGuard(H2FrameParser){ .ptr = self };
@@ -1609,10 +1615,10 @@ pub fn flush(self: *H2FrameParser) usize {
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             _ = self.uncork();
             var written = (switch (self.native_socket) {
-.tls_writeonly => |socket| self._genericFlush(*TLSSocket, socket),
-.tls => |socket| self._genericFlush(*TLSSocket, socket),
-.tcp_writeonly => |socket| self._genericFlush(*TCPSocket, socket),
-.tcp => |socket| self._genericFlush(*TCPSocket, socket),
+.tls_writeonly => |socket| self._genericFlush(TLSSocketPtr, socket),
+.tls => |socket| self._genericFlush(TLSSocketPtr, socket),
+.tcp_writeonly => |socket| self._genericFlush(TCPSocketPtr, socket),
+.tcp => |socket| self._genericFlush(TCPSocketPtr, socket),
 else => {
 {
                 self.has_nonnative_backpressure = false;
@@ -1641,16 +1647,22 @@ else => {
     }
 
 pub fn _write(self: *H2FrameParser, bytes: []const u8) bool {
+            const TLSSocketPtr = @FieldType(struct {
+    p: *TLSSocket,
+}, "p");
+            const TCPSocketPtr = @FieldType(struct {
+    p: *TCPSocket,
+}, "p");
             _ = self.ref();
             var _deref_guard = DerefGuard(H2FrameParser){ .ptr = self };
             _ = &_deref_guard;
             var ___deref_guard_moved = false; _ = &___deref_guard_moved;
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             return (switch (self.native_socket) {
-.tls_writeonly => |socket| self._genericWrite(*TLSSocket, socket, bytes),
-.tls => |socket| self._genericWrite(*TLSSocket, socket, bytes),
-.tcp_writeonly => |socket| self._genericWrite(*TCPSocket, socket, bytes),
-.tcp => |socket| self._genericWrite(*TCPSocket, socket, bytes),
+.tls_writeonly => |socket| self._genericWrite(TLSSocketPtr, socket, bytes),
+.tls => |socket| self._genericWrite(TLSSocketPtr, socket, bytes),
+.tcp_writeonly => |socket| self._genericWrite(TCPSocketPtr, socket, bytes),
+.tcp => |socket| self._genericWrite(TCPSocketPtr, socket, bytes),
 else => {
 {
                 if (self.has_nonnative_backpressure) {
@@ -2345,7 +2357,7 @@ pub fn handleSettingsFrame(self: *H2FrameParser, frame: FrameHeader, data: []con
                                 if ((delta >= 0)) {
                                     stream.windowSize = (stream.windowSize +| @as(u64, @intCast(delta)));
                                 } else {
-                                    stream.windowSize = (stream.windowSize -| @as(u64, @intCast((0 - delta))));
+                                    stream.windowSize = (stream.windowSize -| @as(u64, @intCast((-delta))));
                                 }
                             }
                             _ = log("adjusted stream windows by delta {} (old: {}, new: {})", .{ delta, old_size, new_size });

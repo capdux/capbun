@@ -14,7 +14,7 @@ pub struct YAML {
 
         let parser: Parser(.utf8) = .init(allocator, source.contents);
 
-        const stream = parser.parse() catch |e| {
+        const stream = parser.parse() catch e => {
             const res: Parser(.utf8).ParseResult = .fail(e, &parser);
             res.err.addToLog(source, log)?;
             return error.SyntaxError;
@@ -42,7 +42,7 @@ pub struct YAML {
 pub fn parse(comptime encoding: Encoding, allocator: std.mem.Allocator, input: []const encoding.unit()): Parser(encoding).ParseResult {
     let parser: Parser(encoding) = .init(allocator, input);
 
-    const stream = parser.parse() catch |e| {
+    const stream = parser.parse() catch e => {
         return Parser(encoding).ParseResult.fail(e, &parser);
     };
 
@@ -2582,58 +2582,58 @@ pub struct Parser<const enc: Encoding> {
     const MappingProps = ParserMappingProps;
 
     fn parseBlockMapping(
-        self: *@This(),
+        *_,
         first_key: Expr,
         mapping_start: Pos,
         mapping_indent: Indent,
         mapping_line: Line,
     ): ParseError!Expr {
-        if (explicit_document_start_line := self.explicit_document_start_line) {
+        if (explicit_document_start_line := _.explicit_document_start_line) {
             if (mapping_line == explicit_document_start_line) {
                 // TODO: more specific error
                 return error.UnexpectedToken;
             }
         }
 
-        self.block_indents.push(mapping_indent)?;
-        defer self.block_indents.pop();
+        _.block_indents.push(mapping_indent)?;
+        defer _.block_indents.pop();
 
-        let props: MappingProps = .init(self.allocator);
+        let props: MappingProps = .init(_.allocator);
 
         {
-            // try self.context.set(.block_in);
-            // defer self.context.unset(.block_in);
+            // try _.context.set(.block_in);
+            // defer _.context.unset(.block_in);
 
             // get the first value
 
-            const mapping_value_start = self.token.start;
-            const mapping_value_line = self.token.line;
+            const mapping_value_start = _.token.start;
+            const mapping_value_line = _.token.line;
 
-            const value: Expr = switch (self.token.data) {
+            const value: Expr = switch (_.token.data) {
                 // it's a !!set entry
                 .mapping_key => value: {
-                    if (self.token.line == mapping_line) {
+                    if (_.token.line == mapping_line) {
                         return error.UnexpectedToken;
                     }
                     break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                 },
                 else => value: {
-                    self.scan({})?;
+                    _.scan({})?;
 
-                    switch (self.token.data) {
+                    switch (_.token.data) {
                         .sequence_entry => {
-                            if (self.token.line == mapping_value_line) {
+                            if (_.token.line == mapping_value_line) {
                                 return error.UnexpectedToken;
                             }
 
-                            if (self.token.indent.isLessThan(mapping_indent)) {
+                            if (_.token.indent.isLessThan(mapping_indent)) {
                                 break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                             }
 
                             break :value _.parseNode({ current_mapping_indent: mapping_indent })?;
                         },
                         else => {
-                            if (self.token.line != mapping_value_line && self.token.indent.isLessThanOrEqual(mapping_indent)) {
+                            if (_.token.line != mapping_value_line && _.token.indent.isLessThanOrEqual(mapping_indent)) {
                                 break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                             }
 
@@ -2646,33 +2646,33 @@ pub struct Parser<const enc: Encoding> {
             props.appendMaybeMerge(first_key, value)?;
         }
 
-        if (self.context.get() == .flow_in) {
+        if (_.context.get() == .flow_in) {
             return Expr.init(E.Object, { properties: props.moveList() }, mapping_start.loc());
         }
 
-        self.context.set(.block_in)?;
-        defer self.context.unset(.block_in);
+        _.context.set(.block_in)?;
+        defer _.context.unset(.block_in);
 
         let previous_line = mapping_line;
 
-        while (switch (self.token.data) {
+        while (switch (_.token.data) {
             .eof,
             .document_start,
             .document_end
             => false,
             else => true,
-        } && self.token.indent == mapping_indent && self.token.line != previous_line) {
-            const key_line = self.token.line;
+        } && _.token.indent == mapping_indent && _.token.line != previous_line) {
+            const key_line = _.token.line;
             previous_line = key_line;
-            const explicit_key = self.token.data == .mapping_key;
+            const explicit_key = _.token.data == .mapping_key;
 
             const key = _.parseNode({ current_mapping_indent: mapping_indent })?;
 
-            switch (self.token.data) {
+            switch (_.token.data) {
                 .eof
                 => {
                     if (explicit_key) {
-                        const value: Expr = .init(E.Null, {}, self.pos.loc());
+                        const value: Expr = .init(E.Null, {}, _.pos.loc());
                         props.append({
                             key: key,
                             value: value,
@@ -2682,7 +2682,7 @@ pub struct Parser<const enc: Encoding> {
                     return error.UnexpectedToken;
                 },
                 .mapping_value => {
-                    if (key_line != self.token.line) {
+                    if (key_line != _.token.line) {
                         return error.MultilineImplicitKey;
                     }
                 },
@@ -2692,34 +2692,34 @@ pub struct Parser<const enc: Encoding> {
                 },
             }
 
-            const mapping_value_line = self.token.line;
-            const mapping_value_start = self.token.start;
+            const mapping_value_line = _.token.line;
+            const mapping_value_start = _.token.start;
 
-            const value: Expr = switch (self.token.data) {
+            const value: Expr = switch (_.token.data) {
                 // it's a !!set entry
                 .mapping_key => value: {
-                    if (self.token.line == key_line) {
+                    if (_.token.line == key_line) {
                         return error.UnexpectedToken;
                     }
                     break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                 },
                 else => value: {
-                    self.scan({})?;
+                    _.scan({})?;
 
-                    switch (self.token.data) {
+                    switch (_.token.data) {
                         .sequence_entry => {
-                            if (self.token.line == key_line) {
+                            if (_.token.line == key_line) {
                                 return error.UnexpectedToken;
                             }
 
-                            if (self.token.indent.isLessThan(mapping_indent)) {
+                            if (_.token.indent.isLessThan(mapping_indent)) {
                                 break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                             }
 
                             break :value _.parseNode({ current_mapping_indent: mapping_indent })?;
                         },
                         else => {
-                            if (self.token.line != mapping_value_line && self.token.indent.isLessThanOrEqual(mapping_indent)) {
+                            if (_.token.line != mapping_value_line && _.token.indent.isLessThanOrEqual(mapping_indent)) {
                                 break :value Expr.init(E.Null, {}, mapping_value_start.loc());
                             }
 

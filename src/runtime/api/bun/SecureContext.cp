@@ -19,8 +19,10 @@ struct SSLConfigGuard {
 
 
 struct cpp {
-    pub extern fn Bun__SecureContextCache__get(global: *jsc.JSGlobalObject, key: u64): jsc.JSValue;
-    pub extern fn Bun__SecureContextCache__set(global: *jsc.JSGlobalObject, key: u64, value: jsc.JSValue);
+    static {
+        extern fn Bun__SecureContextCache__get(global: *jsc.JSGlobalObject, key: u64): jsc.JSValue;
+        extern fn Bun__SecureContextCache__set(global: *jsc.JSGlobalObject, key: u64, value: jsc.JSValue);
+    }
 }
 
 fn createWithDigest(global: *jsc.JSGlobalObject, ctx_opts: uws.SocketContext.BunSocketContextOptions, d: [32]u8): bun.JSError!*SecureContext {

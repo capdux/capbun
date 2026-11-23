@@ -396,70 +396,70 @@ pub @opaque struct ArchiveEntry {
         unsafe { return archive_entry_new2(archive); }
     }
     pub fn free(*_) {
-        unsafe { archive_entry_free(this); }
+        unsafe { archive_entry_free(_); }
     }
     pub fn setPathname(*_, name: [:0]const u8) {
-        unsafe { archive_entry_set_pathname(this, name.ptr); }
+        unsafe { archive_entry_set_pathname(_, name.ptr); }
     }
     pub fn setPathnameUtf8(*_, name: [:0]const u8) {
-        unsafe { archive_entry_set_pathname_utf8(this, name.ptr); }
+        unsafe { archive_entry_set_pathname_utf8(_, name.ptr); }
     }
     pub fn copyPathname(*_, name: [:0]const u8) {
-        unsafe { archive_entry_copy_pathname(this, name.ptr); }
+        unsafe { archive_entry_copy_pathname(_, name.ptr); }
     }
     pub fn copyPathnameW(*_, name: [:0]const u16) {
-        unsafe { archive_entry_copy_pathname_w(this, name.ptr); }
+        unsafe { archive_entry_copy_pathname_w(_, name.ptr); }
     }
     pub fn setSize(*_, s: i64) {
-        unsafe { archive_entry_set_size(this, s); }
+        unsafe { archive_entry_set_size(_, s); }
     }
     pub fn setFiletype(*_, file_type: u32) {
-        unsafe { archive_entry_set_filetype(this, file_type); }
+        unsafe { archive_entry_set_filetype(_, file_type); }
     }
     pub fn setPerm(*_, p: bun.Mode) {
-        unsafe { archive_entry_set_perm(this, p); }
+        unsafe { archive_entry_set_perm(_, p); }
     }
     pub fn setMode(*_, mode: bun.Mode) {
-        unsafe { archive_entry_set_mode(this, mode); }
+        unsafe { archive_entry_set_mode(_, mode); }
     }
     pub fn setMtime(*_, secs: isize, nsecs: c_long) {
-        unsafe { archive_entry_set_mtime(this, secs, nsecs); }
+        unsafe { archive_entry_set_mtime(_, secs, nsecs); }
     }
     pub fn clear(*_): *ArchiveEntry! {
-        unsafe { return archive_entry_clear(this); }
+        unsafe { return archive_entry_clear(_); }
     }
     pub fn pathname(*_): [:0]const u8 {
-        unsafe { return bun.sliceTo(archive_entry_pathname(this), 0); }
+        unsafe { return bun.sliceTo(archive_entry_pathname(_), 0); }
     }
     pub fn pathnameUtf8(*_): [:0]const u8 {
-        unsafe { return bun.sliceTo(archive_entry_pathname_utf8(this), 0); }
+        unsafe { return bun.sliceTo(archive_entry_pathname_utf8(_), 0); }
     }
     pub fn pathnameW(*_): [:0]const u16 {
-        unsafe { return bun.sliceTo(archive_entry_pathname_w(this), 0); }
+        unsafe { return bun.sliceTo(archive_entry_pathname_w(_), 0); }
     }
     pub fn filetype(*_): bun.Mode {
-        unsafe { return archive_entry_filetype(this); }
+        unsafe { return archive_entry_filetype(_); }
     }
     pub fn perm(*_): bun.Mode {
-        unsafe { return archive_entry_perm(this); }
+        unsafe { return archive_entry_perm(_); }
     }
     pub fn size(*_): i64 {
-        unsafe { return archive_entry_size(this); }
+        unsafe { return archive_entry_size(_); }
     }
     pub fn mtime(*_): i64 {
-        unsafe { return i64(archive_entry_mtime(this as *struct_archive_entry!)); }
+        unsafe { return i64(archive_entry_mtime(_ as *struct_archive_entry!)); }
     }
     pub fn symlink(*_): [:0]const u8 {
-        unsafe { return bun.sliceTo(archive_entry_symlink(this), 0); }
+        unsafe { return bun.sliceTo(archive_entry_symlink(_), 0); }
     }
     pub fn symlinkUtf8(*_): [:0]const u8 {
-        unsafe { return bun.sliceTo(archive_entry_symlink_utf8(this), 0); }
+        unsafe { return bun.sliceTo(archive_entry_symlink_utf8(_), 0); }
     }
     pub fn symlinkType(*_): SymlinkType {
-        unsafe { return archive_entry_symlink_type(this); }
+        unsafe { return archive_entry_symlink_type(_); }
     }
     pub fn symlinkW(*_): [:0]const u16 {
-        unsafe { return bun.sliceTo(archive_entry_symlink_w(this), 0); }
+        unsafe { return bun.sliceTo(archive_entry_symlink_w(_), 0); }
     }
 }
 
@@ -493,7 +493,7 @@ pub struct ArchiveIteratorNextEntry {
     kind: std.fs.File.Kind,
 
     pub fn readEntryData(allocator: std.mem.Allocator, archive: *Archive!): ArchiveIteratorBytesResult ! OOM {
-        const sz = this.entry.size();
+        const sz = _.entry.size();
         if (sz < 0) return { err: ArchiveIteratorErr{ message: "invalid archive entry size", archive: archive } };
         const buf = allocator.alloc(u8, usize(sz))?;
         let mut_archive = archive;
@@ -543,29 +543,29 @@ pub struct ArchiveIterator {
     pub fn next(*_): ArchiveIteratorNextResult {
         let entry: *ArchiveEntry! = undefined;
         while (true) {
-            const r = unsafe { archive_read_next_header(this.archive, (&entry) as [*c]*ArchiveEntry!) };
+            const r = unsafe { archive_read_next_header(_.archive, (&entry) as [*c]*ArchiveEntry!) };
             switch (r) {
                 .retry => continue,
                 .eof => return { result: null },
                 .ok => {
                     const kind = bun.sys.kindFromMode(entry.filetype());
-                    if (this.filter.contains(kind)) continue;
+                    if (_.filter.contains(kind)) continue;
                     return { result: ArchiveIteratorNextEntry{
                         entry: entry,
                         kind: kind,
                     } };
                 },
-                else => return { err: ArchiveIteratorErr{ message: "failed to read archive header", archive: this.archive } },
+                else => return { err: ArchiveIteratorErr{ message: "failed to read archive header", archive: _.archive } },
             }
         }
     }
 
     pub fn deinit(*_): ArchiveIteratorVoidResult {
-        if (ArchiveIterator.isErrResult(this.archive.readClose())) {
-            return { err: ArchiveIteratorErr{ message: "failed to close archive read", archive: this.archive } };
+        if (ArchiveIterator.isErrResult(_.archive.readClose())) {
+            return { err: ArchiveIteratorErr{ message: "failed to close archive read", archive: _.archive } };
         }
-        if (ArchiveIterator.isErrResult(this.archive.readFree())) {
-            return { err: ArchiveIteratorErr{ message: "failed to free archive read", archive: this.archive } };
+        if (ArchiveIterator.isErrResult(_.archive.readFree())) {
+            return { err: ArchiveIteratorErr{ message: "failed to free archive read", archive: _.archive } };
         }
         const void_val: void = undefined;
         return { result: void_val };
@@ -604,7 +604,7 @@ pub @opaque struct Archive {
     }
     pub fn errorString(*_): []const u8 {
         unsafe {
-            const err_str = archive_error_string(this);
+            const err_str = archive_error_string(_);
             if (err_str == null) return "";
             return bun.sliceTo(err_str, 0);
         }
@@ -613,204 +613,204 @@ pub @opaque struct Archive {
         unsafe { return archive_write_new(); }
     }
     pub fn writeClose(*_): ArchiveResult {
-        unsafe { return archive_write_close(this); }
+        unsafe { return archive_write_close(_); }
     }
     pub fn writeFinish(*_): ArchiveResult {
-        unsafe { return archive_write_finish(this); }
+        unsafe { return archive_write_finish(_); }
     }
     pub fn free(*_): ArchiveResult {
-        unsafe { return archive_free(this); }
+        unsafe { return archive_free(_); }
     }
     pub fn writeSetOptions(*_, opts: [:0]const u8): ArchiveResult {
-        unsafe { return archive_write_set_options(this, opts.ptr); }
+        unsafe { return archive_write_set_options(_, opts.ptr); }
     }
     pub fn writeSetFormatPaxRestricted(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_pax_restricted(this); }
+        unsafe { return archive_write_set_format_pax_restricted(_); }
     }
     pub fn writeSetFormatGnutar(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_gnutar(this); }
+        unsafe { return archive_write_set_format_gnutar(_); }
     }
     pub fn writeSetFormat7zip(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_7zip(this); }
+        unsafe { return archive_write_set_format_7zip(_); }
     }
     pub fn writeSetFormatPax(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_pax(this); }
+        unsafe { return archive_write_set_format_pax(_); }
     }
     pub fn writeSetFormatUstar(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_ustar(this); }
+        unsafe { return archive_write_set_format_ustar(_); }
     }
     pub fn writeSetFormatZip(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_zip(this); }
+        unsafe { return archive_write_set_format_zip(_); }
     }
     pub fn writeSetFormatShar(*_): ArchiveResult {
-        unsafe { return archive_write_set_format_shar(this); }
+        unsafe { return archive_write_set_format_shar(_); }
     }
     pub fn writeSetFormat(*_, format: FormatFlags): ArchiveResult {
-        unsafe { return archive_write_set_format(this as *struct_archive!, @intFromEnum(format)); }
+        unsafe { return archive_write_set_format(_ as *struct_archive!, @intFromEnum(format)); }
     }
     pub fn writeAddFilterGzip(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_gzip(this); }
+        unsafe { return archive_write_add_filter_gzip(_); }
     }
     pub fn writeAddFilter(*_, filter: FilterFlags): ArchiveResult {
-        unsafe { return archive_write_add_filter(this, @intFromEnum(filter)); }
+        unsafe { return archive_write_add_filter(_, @intFromEnum(filter)); }
     }
     pub fn writeAddFilterByName(*_, name: [:0]const u8): ArchiveResult {
-        unsafe { return archive_write_add_filter_by_name(this, name.ptr); }
+        unsafe { return archive_write_add_filter_by_name(_, name.ptr); }
     }
     pub fn writeAddFilterB64encode(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_b64encode(this); }
+        unsafe { return archive_write_add_filter_b64encode(_); }
     }
     pub fn writeAddFilterCompress(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_compress(this); }
+        unsafe { return archive_write_add_filter_compress(_); }
     }
     pub fn writeAddFilterGrzip(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_grzip(this); }
+        unsafe { return archive_write_add_filter_grzip(_); }
     }
     pub fn writeAddFilterLrzip(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_lrzip(this); }
+        unsafe { return archive_write_add_filter_lrzip(_); }
     }
     pub fn writeAddFilterLz4(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_lz4(this); }
+        unsafe { return archive_write_add_filter_lz4(_); }
     }
     pub fn writeAddFilterLzip(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_lzip(this); }
+        unsafe { return archive_write_add_filter_lzip(_); }
     }
     pub fn writeAddFilterLzma(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_lzma(this); }
+        unsafe { return archive_write_add_filter_lzma(_); }
     }
     pub fn writeAddFilterLzop(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_lzop(this); }
+        unsafe { return archive_write_add_filter_lzop(_); }
     }
     pub fn writeAddFilterNone(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_none(this); }
+        unsafe { return archive_write_add_filter_none(_); }
     }
     pub fn writeAddFilterUuencode(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_uuencode(this); }
+        unsafe { return archive_write_add_filter_uuencode(_); }
     }
     pub fn writeAddFilterXz(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_xz(this); }
+        unsafe { return archive_write_add_filter_xz(_); }
     }
     pub fn writeAddFilterZstd(*_): ArchiveResult {
-        unsafe { return archive_write_add_filter_zstd(this); }
+        unsafe { return archive_write_add_filter_zstd(_); }
     }
     pub fn writeSetFilterOption(*_, m: ([:0]const u8)?, o: [:0]const u8, v: [:0]const u8): ArchiveResult {
         unsafe {
             if (mv := m) {
-                return archive_write_set_filter_option(this, mv.ptr, o.ptr, v.ptr);
+                return archive_write_set_filter_option(_, mv.ptr, o.ptr, v.ptr);
             }
-            return archive_write_set_filter_option(this, null, o.ptr, v.ptr);
+            return archive_write_set_filter_option(_, null, o.ptr, v.ptr);
         }
     }
     pub fn writeOpenFilename(*_, filename: [:0]const u8): ArchiveResult {
-        unsafe { return archive_write_open_filename(this, filename.ptr); }
+        unsafe { return archive_write_open_filename(_, filename.ptr); }
     }
     pub fn writeOpenFd(*_, fd: bun.FD): ArchiveResult {
-        unsafe { return archive_write_open_fd(this, fd.cast()); }
+        unsafe { return archive_write_open_fd(_, fd.cast()); }
     }
     pub fn writeOpenMemory(*_, buf: *!?, buf_size: usize, used: *usize): ArchiveResult {
-        unsafe { return archive_write_open_memory(this, buf, buf_size, used as [*c]usize); }
+        unsafe { return archive_write_open_memory(_, buf, buf_size, used as [*c]usize); }
     }
     pub fn writeHeader(*_, entry: *ArchiveEntry!): ArchiveResult {
-        unsafe { return archive_write_header(this, entry); }
+        unsafe { return archive_write_header(_, entry); }
     }
     pub fn writeData(*_, data: []const u8): isize {
-        unsafe { return archive_write_data(this, data.ptr, data.len); }
+        unsafe { return archive_write_data(_, data.ptr, data.len); }
     }
     pub fn writeFinishEntry(*_): ArchiveResult {
-        unsafe { return archive_write_finish_entry(this); }
+        unsafe { return archive_write_finish_entry(_); }
     }
     pub fn writeFree(*_): ArchiveResult {
-        unsafe { return archive_write_free(this); }
+        unsafe { return archive_write_free(_); }
     }
     pub static fn readNew(): *Archive! {
         unsafe { return archive_read_new(); }
     }
     pub fn readClose(*_): ArchiveResult {
-        unsafe { return archive_read_close(this); }
+        unsafe { return archive_read_close(_); }
     }
     pub fn readFree(*_): ArchiveResult {
-        unsafe { return archive_read_free(this); }
+        unsafe { return archive_read_free(_); }
     }
     pub fn readFinish(*_): ArchiveResult {
-        unsafe { return archive_read_finish(this); }
+        unsafe { return archive_read_finish(_); }
     }
     pub fn readSupportFormat7zip(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_7zip(this); }
+        unsafe { return archive_read_support_format_7zip(_); }
     }
     pub fn readSupportFormatAll(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_all(this); }
+        unsafe { return archive_read_support_format_all(_); }
     }
     pub fn readSupportFormatAr(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_ar(this); }
+        unsafe { return archive_read_support_format_ar(_); }
     }
     pub fn readSupportFormatByCode(*_, code: i32): ArchiveResult {
-        unsafe { return archive_read_support_format_by_code(this, code); }
+        unsafe { return archive_read_support_format_by_code(_, code); }
     }
     pub fn readSupportFormatCab(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_cab(this); }
+        unsafe { return archive_read_support_format_cab(_); }
     }
     pub fn readSupportFormatCpio(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_cpio(this); }
+        unsafe { return archive_read_support_format_cpio(_); }
     }
     pub fn readSupportFormatEmpty(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_empty(this); }
+        unsafe { return archive_read_support_format_empty(_); }
     }
     pub fn readSupportFormatGnutar(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_gnutar(this); }
+        unsafe { return archive_read_support_format_gnutar(_); }
     }
     pub fn readSupportFormatIso9660(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_iso9660(this); }
+        unsafe { return archive_read_support_format_iso9660(_); }
     }
     pub fn readSupportFormatLha(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_lha(this); }
+        unsafe { return archive_read_support_format_lha(_); }
     }
     pub fn readSupportFormatMtree(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_mtree(this); }
+        unsafe { return archive_read_support_format_mtree(_); }
     }
     pub fn readSupportFormatRar(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_rar(this); }
+        unsafe { return archive_read_support_format_rar(_); }
     }
     pub fn readSupportFormatRar5(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_rar5(this); }
+        unsafe { return archive_read_support_format_rar5(_); }
     }
     pub fn readSupportFormatRaw(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_raw(this); }
+        unsafe { return archive_read_support_format_raw(_); }
     }
     pub fn readSupportFormatTar(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_tar(this); }
+        unsafe { return archive_read_support_format_tar(_); }
     }
     pub fn readSupportFormatWarc(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_warc(this); }
+        unsafe { return archive_read_support_format_warc(_); }
     }
     pub fn readSupportFormatXar(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_xar(this); }
+        unsafe { return archive_read_support_format_xar(_); }
     }
     pub fn readSupportFormatZip(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_zip(this); }
+        unsafe { return archive_read_support_format_zip(_); }
     }
     pub fn readSupportFormatZipStreamable(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_zip_streamable(this); }
+        unsafe { return archive_read_support_format_zip_streamable(_); }
     }
     pub fn readSupportFormatZipSeekable(*_): ArchiveResult {
-        unsafe { return archive_read_support_format_zip_seekable(this); }
+        unsafe { return archive_read_support_format_zip_seekable(_); }
     }
     pub fn readSetOptions(*_, opts: [:0]const u8): ArchiveResult {
-        unsafe { return archive_read_set_options(this, opts.ptr); }
+        unsafe { return archive_read_set_options(_, opts.ptr); }
     }
     pub fn readOpenMemory(*_, buf: []const u8): ArchiveResult {
-        unsafe { return archive_read_open_memory(this, buf.ptr, buf.len); }
+        unsafe { return archive_read_open_memory(_, buf.ptr, buf.len); }
     }
     pub fn readNextHeader(*_, entry: [*c]*ArchiveEntry!): ArchiveResult {
-        unsafe { return archive_read_next_header(this, entry); }
+        unsafe { return archive_read_next_header(_, entry); }
     }
     pub fn readNextHeader2(*_, entry: *ArchiveEntry!): ArchiveResult {
-        unsafe { return archive_read_next_header2(this, entry); }
+        unsafe { return archive_read_next_header2(_, entry); }
     }
     pub fn next(*_, offset: *i64): ArchiveBlock? {
         let buff: *const ! = undefined;
         let size: usize = 0;
         unsafe {
-            const r = archive_read_data_block(this as *struct_archive!, (&buff) as [*c]*const !, *size!, offset);
+            const r = archive_read_data_block(_ as *struct_archive!, (&buff) as [*c]*const !, *size!, offset);
             if (r == ArchiveResult.eof) return null;
             if (r != ArchiveResult.ok) return ArchiveBlock{ offset: offset.*, result: r };
             const ptr: [*]const u8 = buff as [*]const u8!;
@@ -818,7 +818,7 @@ pub @opaque struct Archive {
         }
     }
     pub fn readData(*_, buf: []u8): isize {
-        unsafe { return archive_read_data(this, buf.ptr, buf.len); }
+        unsafe { return archive_read_data(_, buf.ptr, buf.len); }
     }
     pub static fn writeZerosToFile(file: bun.sys.File, count: usize): ArchiveResult {
         let zero_buf: [16384]u8 = undefined;
@@ -840,7 +840,7 @@ pub @opaque struct Archive {
         let final_offset: i64 = 0;
         const file = bun.sys.File{ handle: fd };
 
-        while (block := this.next(*target_offset)) {
+        while (block := _.next(*target_offset)) {
             if (block.result != ArchiveResult.ok) {
                 return block.result;
             }
@@ -906,49 +906,49 @@ pub @opaque struct Archive {
         return ArchiveResult.ok;
     }
     pub fn readSupportFilterAll(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_all(this); }
+        unsafe { return archive_read_support_filter_all(_); }
     }
     pub fn readSupportFilterByCode(*_, code: i32): ArchiveResult {
-        unsafe { return archive_read_support_filter_by_code(this, code); }
+        unsafe { return archive_read_support_filter_by_code(_, code); }
     }
     pub fn readSupportFilterCompress(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_compress(this); }
+        unsafe { return archive_read_support_filter_compress(_); }
     }
     pub fn readSupportFilterGzip(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_gzip(this); }
+        unsafe { return archive_read_support_filter_gzip(_); }
     }
     pub fn readSupportFilterGrzip(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_grzip(this); }
+        unsafe { return archive_read_support_filter_grzip(_); }
     }
     pub fn readSupportFilterLrzip(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_lrzip(this); }
+        unsafe { return archive_read_support_filter_lrzip(_); }
     }
     pub fn readSupportFilterLz4(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_lz4(this); }
+        unsafe { return archive_read_support_filter_lz4(_); }
     }
     pub fn readSupportFilterLzip(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_lzip(this); }
+        unsafe { return archive_read_support_filter_lzip(_); }
     }
     pub fn readSupportFilterLzma(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_lzma(this); }
+        unsafe { return archive_read_support_filter_lzma(_); }
     }
     pub fn readSupportFilterLzop(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_lzop(this); }
+        unsafe { return archive_read_support_filter_lzop(_); }
     }
     pub fn readSupportFilterNone(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_none(this); }
+        unsafe { return archive_read_support_filter_none(_); }
     }
     pub fn readSupportFilterRpm(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_rpm(this); }
+        unsafe { return archive_read_support_filter_rpm(_); }
     }
     pub fn readSupportFilterUu(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_uu(this); }
+        unsafe { return archive_read_support_filter_uu(_); }
     }
     pub fn readSupportFilterXz(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_xz(this); }
+        unsafe { return archive_read_support_filter_xz(_); }
     }
     pub fn readSupportFilterZstd(*_): ArchiveResult {
-        unsafe { return archive_read_support_filter_zstd(this); }
+        unsafe { return archive_read_support_filter_zstd(_); }
     }
 }
 
@@ -1329,12 +1329,12 @@ pub struct GrowingBuffer {
     }
 
     pub fn deinit(*_) {
-        this.list.deinit(this.allocator);
+        _.list.deinit(_.allocator);
     }
 
     pub fn toOwnedSlice(*_): ([]u8) ! OOM {
-        if (this.had_error) return err.OutOfMemory;
-        return this.list.toOwnedSlice(this.allocator);
+        if (_.had_error) return err.OutOfMemory;
+        return _.list.toOwnedSlice(_.allocator);
     }
 
     @c pub static fn openCallback(_: *struct_archive!, client_data: *!): c_int {

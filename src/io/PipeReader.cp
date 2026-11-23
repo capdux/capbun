@@ -243,7 +243,7 @@ struct PosixBufferedReader {
     fn finalBuffer(*_): *std.array_list.Managed(u8) {
         if (_.flags.memfd && _.handle == .fd) {
             const _handle_guard = HandleCloseGuard{ handle: unsafe { &_.handle } };
-            * = bun.sys.File.readToEndWithArrayList(.{ handle: _.handle.fd }, _.buffer(), .unknown_size).unwrap() catch |e| {
+            * = bun.sys.File.readToEndWithArrayList(.{ handle: _.handle.fd }, _.buffer(), .unknown_size).unwrap() catch e => {
                 bun.Output.debugWarn("error reading from memfd\n{}", .{e});
                 return _.buffer();
             };
@@ -444,7 +444,7 @@ struct PosixBufferedReader {
 
     static fn wrapReadFn(comptime func: fn (bun.FD, []u8) bun.sys.Maybe(usize)): fn (bun.FD, []u8, usize) bun.sys.Maybe(usize) {
         return struct {
-            pub fn call(fd: bun.FD, buf: []u8, offset: usize) bun.sys.Maybe(usize) {
+            pub static fn call(fd: bun.FD, buf: []u8, offset: usize): bun.sys.Maybe(usize) {
                 * = offset;
                 return func(fd, buf);
             }

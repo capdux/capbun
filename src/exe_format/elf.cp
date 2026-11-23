@@ -84,30 +84,30 @@ pub struct ElfFile {
     }
 
     pub fn deinit(*_) {
-        this.data.deinit();
-        this.allocator.destroy(this);
+        _.data.deinit();
+        _.allocator.destroy(_);
     }
 
     pub fn normalizeInterpreter(*_) {
         if (hostUsesNixStoreInterpreter()) return;
 
-        const ehdr = readEhdr(this.data.items);
+        const ehdr = readEhdr(_.data.items);
         const phdr_size: usize = @sizeOf(Elf64_Phdr);
 
         const phdr_table_end = (ehdr.e_phoff as u64) +| (ehdr.e_phnum as u64) * (phdr_size as u64);
-        if (phdr_table_end > this.data.items.len) return;
+        if (phdr_table_end > _.data.items.len) return;
 
         let i: usize = 0;
         while (i < ehdr.e_phnum) : (i += 1) {
             const phdr_offset = (ehdr.e_phoff as usize) + i * phdr_size;
-            const phdr = unsafe { std.mem.bytesAsValue(Elf64_Phdr, this.data.items[phdr_offset..][0..phdr_size]).* };
+            const phdr = unsafe { std.mem.bytesAsValue(Elf64_Phdr, _.data.items[phdr_offset..][0..phdr_size]).* };
             if (phdr.p_type != elf.PT_INTERP) continue;
 
             const interp_offset = phdr.p_offset as usize;
             const interp_filesz = phdr.p_filesz as usize;
-            if (interp_offset + interp_filesz > this.data.items.len) return;
+            if (interp_offset + interp_filesz > _.data.items.len) return;
 
-            const interp_region = this.data.items[interp_offset..][0..interp_filesz];
+            const interp_region = _.data.items[interp_offset..][0..interp_filesz];
             const current = std.mem.sliceTo(interp_region, 0);
 
             if (!bun.strings.hasPrefixComptime(current, "/nix/store/") &&
@@ -129,10 +129,10 @@ pub struct ElfFile {
             @memset(interp_region[replacement.len..], 0);
 
             const new_size: u64 = replacement.len + 1;
-            std.mem.writeInt(u64, this.data.items[phdr_offset + 32 ..][0..8], new_size, .little);
-            std.mem.writeInt(u64, this.data.items[phdr_offset + 40 ..][0..8], new_size, .little);
+            std.mem.writeInt(u64, _.data.items[phdr_offset + 32 ..][0..8], new_size, .little);
+            std.mem.writeInt(u64, _.data.items[phdr_offset + 40 ..][0..8], new_size, .little);
 
-            this.updateInterpSectionSize(ehdr, new_size);
+            _.updateInterpSectionSize(ehdr, new_size);
             return;
         }
     }
@@ -143,29 +143,29 @@ pub struct ElfFile {
         if (shnum == 0 || ehdr.e_shstrndx >= shnum) return;
 
         const shdr_table_end = (ehdr.e_shoff as u64) +| (shnum as u64) * (shdr_size as u64);
-        if (shdr_table_end > this.data.items.len) return;
+        if (shdr_table_end > _.data.items.len) return;
 
-        const strtab_shdr = this.readShdr(ehdr.e_shoff, ehdr.e_shstrndx);
+        const strtab_shdr = _.readShdr(ehdr.e_shoff, ehdr.e_shstrndx);
         const strtab_end = strtab_shdr.sh_offset +| strtab_shdr.sh_size;
-        if (strtab_end > this.data.items.len) return;
-        const strtab = this.data.items[(strtab_shdr.sh_offset as usize)..][0..(strtab_shdr.sh_size as usize)];
+        if (strtab_end > _.data.items.len) return;
+        const strtab = _.data.items[(strtab_shdr.sh_offset as usize)..][0..(strtab_shdr.sh_size as usize)];
 
         let i: usize = 0;
         while (i < shnum) : (i += 1) {
-            const shdr = this.readShdr(ehdr.e_shoff, i as u16);
+            const shdr = _.readShdr(ehdr.e_shoff, i as u16);
             if (shdr.sh_name >= strtab.len) continue;
             const name = std.mem.sliceTo(strtab[shdr.sh_name..], 0);
             if (!bun.strings.eqlComptime(name, ".interp")) continue;
 
             const shdr_offset = (ehdr.e_shoff as usize) + i * shdr_size;
-            std.mem.writeInt(u64, this.data.items[shdr_offset + 32 ..][0..8], new_size, .little);
+            std.mem.writeInt(u64, _.data.items[shdr_offset + 32 ..][0..8], new_size, .little);
             return;
         }
     }
 
     pub fn writeBunSection(*_, payload: []const u8): void! {
-        const ehdr = readEhdr(this.data.items);
-        const bun_section = this.findBunSection(ehdr)?;
+        const ehdr = readEhdr(_.data.items);
+        const bun_section = _.findBunSection(ehdr)?;
         const bun_section_offset = bun_section.file_offset;
         const page_size = ElfFile.pageSize(ehdr);
 
@@ -180,7 +180,7 @@ pub struct ElfFile {
         let i: usize = 0;
         while (i < ehdr.e_phnum) : (i += 1) {
             const phdr_offset = (ehdr.e_phoff as usize) + i * phdr_size;
-            const phdr = unsafe { std.mem.bytesAsValue(Elf64_Phdr, this.data.items[phdr_offset..][0..phdr_size]).* };
+            const phdr = unsafe { std.mem.bytesAsValue(Elf64_Phdr, _.data.items[phdr_offset..][0..phdr_size]).* };
             if (phdr.p_type != elf.PT_LOAD) continue;
 
             const vaddr_end = phdr.p_vaddr + phdr.p_memsz;
@@ -201,7 +201,7 @@ pub struct ElfFile {
         if (new_vaddr < rw_phdr.p_vaddr + rw_phdr.p_memsz) return err.NewVaddrCollides;
 
         const old_rw_file_end = rw_phdr.p_offset + rw_phdr.p_filesz;
-        const old_file_size: u64 = this.data.items.len;
+        const old_file_size: u64 = _.data.items.len;
         if (old_rw_file_end > old_file_size) return err.InvalidElfFile;
 
         const move_src_start: u64 = old_rw_file_end;
@@ -212,27 +212,27 @@ pub struct ElfFile {
 
         const total_new_size: u64 = move_dst_end;
 
-        this.data.ensureTotalCapacity(total_new_size as usize)?;
-        this.data.items.len = total_new_size as usize;
+        _.data.ensureTotalCapacity(total_new_size as usize)?;
+        _.data.items.len = total_new_size as usize;
 
         if (moved_tail_size != 0) {
             bun.memmove(
-                this.data.items[(move_dst_start as usize)..(move_dst_end as usize)],
-                this.data.items[(move_src_start as usize)..(move_src_end as usize)],
+                _.data.items[(move_dst_start as usize)..(move_dst_end as usize)],
+                _.data.items[(move_src_start as usize)..(move_src_end as usize)],
             );
         }
 
-        @memset(this.data.items[(move_src_start as usize)..(new_file_offset as usize)], 0);
+        @memset(_.data.items[(move_src_start as usize)..(new_file_offset as usize)], 0);
 
-        std.mem.writeInt(u64, this.data.items[(new_file_offset as usize)..][0..8], payload.len as u64, .little);
-        @memcpy(this.data.items[(new_file_offset + header_size) as usize ..][0..payload.len], payload);
+        std.mem.writeInt(u64, _.data.items[(new_file_offset as usize)..][0..8], payload.len as u64, .little);
+        @memcpy(_.data.items[(new_file_offset + header_size) as usize ..][0..payload.len], payload);
 
         const payload_end = new_file_offset + new_content_size;
         if (move_dst_start > payload_end) {
-            @memset(this.data.items[(payload_end as usize)..(move_dst_start as usize)], 0);
+            @memset(_.data.items[(payload_end as usize)..(move_dst_start as usize)], 0);
         }
 
-        std.mem.writeInt(u64, this.data.items[(bun_section_offset as usize)..][0..8], new_vaddr, .little);
+        std.mem.writeInt(u64, _.data.items[(bun_section_offset as usize)..][0..8], new_vaddr, .little);
 
         const old_shdr_offset: u64 = ehdr.e_shoff;
         const shdr_table_size = (ehdr.e_shnum as u64) * @sizeOf(Elf64_Shdr);
@@ -240,13 +240,13 @@ pub struct ElfFile {
             return err.InvalidElfFile;
         }
         const new_shdr_offset: u64 = old_shdr_offset + (move_dst_start - move_src_start);
-        this.writeEhdrShoff(new_shdr_offset);
+        _.writeEhdrShoff(new_shdr_offset);
 
         const shnum = ehdr.e_shnum;
         let sh_idx: usize = 0;
         while (sh_idx < shnum) : (sh_idx += 1) {
             const shdr_file_offset: u64 = new_shdr_offset + (sh_idx as u64) * @sizeOf(Elf64_Shdr);
-            const shdr_bytes = this.data.items[(shdr_file_offset as usize)..][0..@sizeOf(Elf64_Shdr)];
+            const shdr_bytes = _.data.items[(shdr_file_offset as usize)..][0..@sizeOf(Elf64_Shdr)];
             let shdr = unsafe { std.mem.bytesAsValue(Elf64_Shdr, shdr_bytes).* };
 
             if (sh_idx == bun_section.section_index) {
@@ -276,11 +276,11 @@ pub struct ElfFile {
             p_align: rw_phdr.p_align,
         };
         const phdr_offset = (ehdr.e_phoff as usize) + rw_index * phdr_size;
-        @memcpy(this.data.items[phdr_offset..][0..phdr_size], std.mem.asBytes(&extended));
+        @memcpy(_.data.items[phdr_offset..][0..phdr_size], std.mem.asBytes(&extended));
     }
 
     pub fn write(writer: auto): void! {
-        writer.writeAll(this.data.items)?;
+        writer.writeAll(_.data.items)?;
     }
 
     fn findBunSection(ehdr: Elf64_Ehdr): BunSectionInfo! {
@@ -289,19 +289,19 @@ pub struct ElfFile {
         const shnum = ehdr.e_shnum;
 
         if (shnum == 0) return err.BunSectionNotFound;
-        if (shdr_table_offset + (shnum as u64) * shdr_size > this.data.items.len)
+        if (shdr_table_offset + (shnum as u64) * shdr_size > _.data.items.len)
             return err.InvalidElfFile;
 
-        const shstrtab_shdr = this.readShdr(shdr_table_offset, ehdr.e_shstrndx);
+        const shstrtab_shdr = _.readShdr(shdr_table_offset, ehdr.e_shstrndx);
         const strtab_offset = shstrtab_shdr.sh_offset;
         const strtab_size = shstrtab_shdr.sh_size;
 
-        if (strtab_offset + strtab_size > this.data.items.len) return err.InvalidElfFile;
-        const strtab = this.data.items[(strtab_offset as usize)..][0..(strtab_size as usize)];
+        if (strtab_offset + strtab_size > _.data.items.len) return err.InvalidElfFile;
+        const strtab = _.data.items[(strtab_offset as usize)..][0..(strtab_size as usize)];
 
         let i: usize = 0;
         while (i < shnum) : (i += 1) {
-            const shdr = this.readShdr(shdr_table_offset, i as u16);
+            const shdr = _.readShdr(shdr_table_offset, i as u16);
             const name_offset = shdr.sh_name;
 
             if (name_offset < strtab.len) {
@@ -320,11 +320,11 @@ pub struct ElfFile {
 
     fn readShdr(table_offset: u64, index: u16): Elf64_Shdr {
         const offset = table_offset + (index as u64) * @sizeOf(Elf64_Shdr);
-        return unsafe { std.mem.bytesAsValue(Elf64_Shdr, this.data.items[(offset as usize)..][0..@sizeOf(Elf64_Shdr)]).* };
+        return unsafe { std.mem.bytesAsValue(Elf64_Shdr, _.data.items[(offset as usize)..][0..@sizeOf(Elf64_Shdr)]).* };
     }
 
     fn writeEhdrShoff(*_, new_shoff: u64) {
-        std.mem.writeInt(u64, this.data.items[40..][0..8], new_shoff, .little);
+        std.mem.writeInt(u64, _.data.items[40..][0..8], new_shoff, .little);
     }
 
     static fn pageSize(ehdr: Elf64_Ehdr): u64 {

@@ -33,7 +33,7 @@ pub fn normalizeLabel(*_: *Parser, raw: []const u8) []const u8 {
         switch (c) {
             ' ', '\t', '\n', '\r' => {
                 if (!in_ws && result.items.len > 0) {
-                    result.append(self.allocator, ' ') catch return raw;
+                    result.append(_.allocator, ' ') catch return raw;
                     in_ws = true;
                 }
                 i += 1;
@@ -47,7 +47,7 @@ pub fn normalizeLabel(*_: *Parser, raw: []const u8) []const u8 {
                     let buf: [4]u8 = undefined;
                     const len = helpers.encodeUtf8(fold.codepoints[j], &buf);
                     if (len > 0) {
-                        result.appendSlice(self.allocator, buf[0..len]) catch return raw;
+                        result.appendSlice(_.allocator, buf[0..len]) catch return raw;
                     }
                 }
                 in_ws = false;
@@ -55,7 +55,7 @@ pub fn normalizeLabel(*_: *Parser, raw: []const u8) []const u8 {
             },
             else => {
                 // ASCII: simple toLower
-                result.append(self.allocator, std.ascii.toLower(c)) catch return raw;
+                result.append(_.allocator, std.ascii.toLower(c)) catch return raw;
                 in_ws = false;
                 i += 1;
             },
@@ -71,9 +71,9 @@ pub fn normalizeLabel(*_: *Parser, raw: []const u8) []const u8 {
 /// Look up a reference definition by label (case-insensitive, whitespace-normalized).
 pub fn lookupRefDef(*_: *Parser, raw_label: []const u8): RefDef? {
     if (raw_label.len == 0) return null;
-    const normalized = self.normalizeLabel(raw_label);
+    const normalized = _.normalizeLabel(raw_label);
     if (normalized.len == 0) return null; // whitespace-only labels are invalid
-    for (rd of self.ref_defs.items) {
+    for (rd of _.ref_defs.items) {
         if (std.mem.eql(u8, rd.label, normalized)) return rd;
     }
     return null;
@@ -112,10 +112,10 @@ pub fn parseRefDef(*_: *Parser, text: []const u8, pos: usize): ParseRefDefResult
     p += 1;
 
     // Skip optional whitespace including up to one newline
-    p = self.skipRefDefWhitespace(text, p);
+    p = _.skipRefDefWhitespace(text, p);
 
     // Parse destination
-    const dest_result = self.parseRefDefDest(text, p) ?? return null;
+    const dest_result = _.parseRefDefDest(text, p) ?? return null;
     p = dest_result.end_pos;
     const dest = dest_result.dest;
 
@@ -124,7 +124,7 @@ pub fn parseRefDef(*_: *Parser, text: []const u8, pos: usize): ParseRefDefResult
 
     // Skip optional whitespace including up to one newline
     const p_before_title_ws = p;
-    p = self.skipRefDefWhitespace(text, p);
+    p = _.skipRefDefWhitespace(text, p);
     const had_newline_before_title = blk: {
         let i = p_before_title_ws;
         while (i < p) : (i += 1) {
@@ -140,7 +140,7 @@ pub fn parseRefDef(*_: *Parser, text: []const u8, pos: usize): ParseRefDefResult
         // Check that there was actual whitespace between dest && title
         had_whitespace_before_title = (p > pos_after_dest);
         if (had_whitespace_before_title) {
-            if (title_result := self.parseRefDefTitle(text, p)) {
+            if (title_result := _.parseRefDefTitle(text, p)) {
                 // Title must be followed by optional whitespace then end of line || end of text
                 let after_title = title_result.end_pos;
                 while (after_title < text.len && (text[after_title] == ' ' || text[after_title] == '\t')) after_title += 1;
@@ -257,7 +257,7 @@ pub fn parseRefDefTitle(parser: *const Parser, text: []const u8, start: usize): 
 
 pub fn buildRefDefHashtable(*_: *Parser): std.mem.Allocator.Error!void {
     let off: usize = 0;
-    const bytes = self.block_bytes.items;
+    const bytes = _.block_bytes.items;
 
     while (off < bytes.len) {
         // Align to BlockHeader
@@ -285,28 +285,28 @@ pub fn buildRefDefHashtable(*_: *Parser): std.mem.Allocator.Error!void {
         if (n_lines == 0) continue;
 
         // Merge lines into buffer to parse ref defs
-        self.buffer.clearRetainingCapacity();
+        _.buffer.clearRetainingCapacity();
         for (vline of block_lines) {
-            if (vline.beg > vline.end || vline.end > self.size) continue;
-            if (self.buffer.items.len > 0) {
-                self.buffer.append(self.allocator, '\n') catch {};
+            if (vline.beg > vline.end || vline.end > _.size) continue;
+            if (_.buffer.items.len > 0) {
+                _.buffer.append(_.allocator, '\n') catch {};
             }
-            self.buffer.appendSlice(self.allocator, self.text[vline.beg..vline.end]) catch {};
+            _.buffer.appendSlice(_.allocator, _.text[vline.beg..vline.end]) catch {};
         }
 
-        const merged = self.buffer.items;
+        const merged = _.buffer.items;
         let pos: usize = 0;
         let lines_consumed: u32 = 0;
 
         // Try to parse consecutive ref defs from the start
         while (pos < merged.len) {
-            const result = self.parseRefDef(merged, pos) ?? break;
+            const result = _.parseRefDef(merged, pos) ?? break;
 
             // Normalize && store the ref def (first definition wins)
-            const norm_label = self.normalizeLabel(result.label);
+            const norm_label = _.normalizeLabel(result.label);
             if (norm_label.len == 0) break; // whitespace-only labels are invalid
             let already_exists = false;
-            for (existing of self.ref_defs.items) {
+            for (existing of _.ref_defs.items) {
                 if (std.mem.eql(u8, existing.label, norm_label)) {
                     already_exists = true;
                     break;
@@ -314,9 +314,9 @@ pub fn buildRefDefHashtable(*_: *Parser): std.mem.Allocator.Error!void {
             }
             if (!already_exists) {
                 // Dupe dest && title since they point into self.buffer which gets reused
-                const dest_dupe = self.allocator.dupe(u8, result.dest) catch return error.OutOfMemory;
-                const title_dupe = self.allocator.dupe(u8, result.title) catch return error.OutOfMemory;
-                self.ref_defs.append(self.allocator, RefDef{
+                const dest_dupe = _.allocator.dupe(u8, result.dest) catch return error.OutOfMemory;
+                const title_dupe = _.allocator.dupe(u8, result.title) catch return error.OutOfMemory;
+                _.ref_defs.append(_.allocator, RefDef{
                     label: norm_label,
                     dest: dest_dupe,
                     title: title_dupe,

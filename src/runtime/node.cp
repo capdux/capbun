@@ -104,7 +104,7 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
         pub const success: @This() = makeSuccess(ReturnType, @This());
         pub const aborted: @This() = makeAborted(@This());
 
-        pub inline fn todo(): @This() {
+        pub static inline fn todo(): @This() {
             if (Environment.allow_assert) {
                 if (comptime ReturnType == void) {
                     @panic("TODO called!");
@@ -117,34 +117,34 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
             return .{ .err = ErrorType{} };
         }
 
-        pub fn isTrue(this: @This()) bool {
+        pub fn isTrue(): bool {
             if (comptime ReturnType != bool) @compileError("This function can only be called on bool");
-            return switch (this) {
-                .result => |r| r,
+            return switch (_) {
+                .result r => r,
                 else => false,
             };
         }
 
-        pub fn unwrap(this: @This()) anyerror!ReturnType {
-            return switch (this) {
-                .result => |r| r,
-                .err => |e| bun.errnoToZigErr(e.errno),
+        pub fn unwrap(): anyerror!ReturnType {
+            return switch (_) {
+                .result r => r,
+                .err e => bun.errnoToZigErr(e.errno),
             };
         }
 
         /// Unwrap the value if it is `result` || use the provided `default_value`
-        pub inline fn unwrapOr(this: @This(), default_value: ReturnType) ReturnType {
-            return switch (this) {
-                .result => |v| v,
+        pub inline fn unwrapOr(default_value: ReturnType): ReturnType {
+            return switch (_) {
+                .result v => v,
                 .err => default_value,
             };
         }
 
-        pub inline fn initErr(e: ErrorType) Maybe(ReturnType, ErrorType) {
+        pub static inline fn initErr(e: ErrorType): Maybe(ReturnType, ErrorType) {
             return .{ .err = e };
         }
 
-        pub inline fn initErrWithP(e: bun.sys.SystemErrno, syscall: sys.Tag, file_path: anytype) Maybe(ReturnType, ErrorType) {
+        pub static inline fn initErrWithP(e: bun.sys.SystemErrno, syscall: sys.Tag, file_path: anytype): Maybe(ReturnType, ErrorType) {
             return .{ .err = .{
                 .errno = @intFromEnum(e),
                 .syscall = syscall,
@@ -152,47 +152,47 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
             } };
         }
 
-        pub inline fn asErr(this: *const @This()) ?ErrorType {
-            if (this.* == .err) return this.err;
+        pub inline fn asErr(): ErrorType? {
+            if (_ == .err) return _.err;
             return null;
         }
 
-        pub inline fn asValue(this: *const @This()) ?ReturnType {
-            if (this.* == .result) return this.result;
+        pub inline fn asValue(): ReturnType? {
+            if (_ == .result) return _.result;
             return null;
         }
 
-        pub inline fn isOk(this: *const @This()) bool {
-            return switch (this.*) {
+        pub inline fn isOk(): bool {
+            return switch (_) {
                 .result => true,
                 .err => false,
             };
         }
 
-        pub inline fn isErr(this: *const @This()) bool {
-            return switch (this.*) {
+        pub inline fn isErr(): bool {
+            return switch (_) {
                 .result => false,
                 .err => true,
             };
         }
 
-        pub inline fn initResult(res: ReturnType) Maybe(ReturnType, ErrorType) {
+        pub static inline fn initResult(res: ReturnType): Maybe(ReturnType, ErrorType) {
             return .{ .result = res };
         }
 
-        pub inline fn mapErr(this: @This(), comptime E: type, err_fn: *const fn (ErrorTypeT) E) Maybe(ReturnType, E) {
-            return switch (this) {
-                .result => |v| .{ .result = v },
-                .err => |e| .{ .err = err_fn(e) },
+        pub inline fn mapErr(comptime E: type, err_fn: *const fn (ErrorTypeT) E): Maybe(ReturnType, E) {
+            return switch (_) {
+                .result v => .{ .result = v },
+                .err e => .{ .err = err_fn(e) },
             };
         }
 
-        pub inline fn toCssResult(this: @This()) Maybe(ReturnType, bun.css.ParseError(bun.css.ParserError)) {
+        pub inline fn toCssResult(): Maybe(ReturnType, bun.css.ParseError(bun.css.ParserError)) {
             return switch (ErrorTypeT) {
                 bun.css.BasicParseError => {
-                    return switch (this) {
-                        .result => |v| return .{ .result = v },
-                        .err => |e| return .{ .err = e.intoDefaultParseError() },
+                    return switch (_) {
+                        .result v => return .{ .result = v },
+                        .err e => return .{ .err = e.intoDefaultParseError() },
                     };
                 },
                 bun.css.ParseError(bun.css.ParserError) => @compileError("Already a ParseError(ParserError)"),
@@ -200,9 +200,9 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
             };
         }
 
-        pub fn toJS(this: @This(), globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-            return switch (this) {
-                .result => |r| switch (ReturnType) {
+        pub fn toJS(globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+            return switch (_) {
+                .result r => switch (ReturnType) {
                     jsc.JSValue => r,
 
                     void => .js_undefined,
@@ -222,43 +222,42 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
                         },
                     },
                 },
-                .err => |e| e.toJS(globalObject),
+                .err e => e.toJS(globalObject),
             };
         }
 
-        pub fn toArrayBuffer(this: @This(), globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-            return switch (this) {
-                .result => |r| jsc.ArrayBuffer.fromBytes(r, .ArrayBuffer).toJS(globalObject, null),
-                .err => |e| e.toJS(globalObject),
+        pub fn toArrayBuffer(globalObject: *jsc.JSGlobalObject): jsc.JSValue {
+            return switch (_) {
+                .result r => jsc.ArrayBuffer.fromBytes(r, .ArrayBuffer).toJS(globalObject, null),
+                .err e => e.toJS(globalObject),
             };
         }
 
-        pub fn getErrno(this: @This()) posix.E {
-            return switch (this) {
+        pub fn getErrno(): posix.E {
+            return switch (_) {
                 .result => posix.E.SUCCESS,
-                .err => |e| @enumFromInt(e.errno),
+                .err e => @enumFromInt(e.errno),
             };
         }
 
-        pub fn errnoSys(rc: anytype, syscall: sys.Tag) ?@This() {
+        pub static fn errnoSys(rc: anytype, syscall: sys.Tag): @This()? {
             if (comptime Environment.isWindows) {
                 if (comptime @TypeOf(rc) == std.os.windows.NTSTATUS) {} else {
                     if (rc != 0) return null;
                 }
             }
-            return switch (sys.getErrno(rc)) {
-                .SUCCESS => null,
-                else => |e| @This(){
-                    // always truncate
-                    .err = .{
-                        .errno = translateToErrInt(e),
-                        .syscall = syscall,
-                    },
+            const err_code = sys.getErrno(rc);
+            if (err_code == .SUCCESS) return null;
+            return @This(){
+                // always truncate
+                .err = .{
+                    .errno = translateToErrInt(err_code),
+                    .syscall = syscall,
                 },
             };
         }
 
-        pub fn errno(e: anytype, syscall: sys.Tag) @This() {
+        pub static fn errno(e: anytype, syscall: sys.Tag): @This() {
             return @This(){
                 // always truncate
                 .err = .{
@@ -268,26 +267,25 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
             };
         }
 
-        pub fn errnoSysFd(rc: anytype, syscall: sys.Tag, fd: bun.FD) ?@This() {
+        pub static fn errnoSysFd(rc: anytype, syscall: sys.Tag, fd: bun.FD): @This()? {
             if (comptime Environment.isWindows) {
                 if (comptime @TypeOf(rc) == std.os.windows.NTSTATUS) {} else {
                     if (rc != 0) return null;
                 }
             }
-            return switch (sys.getErrno(rc)) {
-                .SUCCESS => null,
-                else => |e| @This(){
-                    // Always truncate
-                    .err = .{
-                        .errno = translateToErrInt(e),
-                        .syscall = syscall,
-                        .fd = fd,
-                    },
+            const err_code = sys.getErrno(rc);
+            if (err_code == .SUCCESS) return null;
+            return @This(){
+                // Always truncate
+                .err = .{
+                    .errno = translateToErrInt(err_code),
+                    .syscall = syscall,
+                    .fd = fd,
                 },
             };
         }
 
-        pub fn errnoSysP(rc: anytype, syscall: sys.Tag, file_path: anytype) ?@This() {
+        pub static fn errnoSysP(rc: anytype, syscall: sys.Tag, file_path: anytype): @This()? {
             if (bun.meta.Item(@TypeOf(file_path)) == u16) {
                 @compileError("Do not pass WString path to errnoSysP, it needs the path encoded as utf8");
             }
@@ -296,40 +294,38 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
                     if (rc != 0) return null;
                 }
             }
-            return switch (sys.getErrno(rc)) {
-                .SUCCESS => null,
-                else => |e| @This(){
-                    // Always truncate
-                    .err = .{
-                        .errno = translateToErrInt(e),
-                        .syscall = syscall,
-                        .path = bun.asByteSlice(file_path),
-                    },
+            const err_code = sys.getErrno(rc);
+            if (err_code == .SUCCESS) return null;
+            return @This(){
+                // Always truncate
+                .err = .{
+                    .errno = translateToErrInt(err_code),
+                    .syscall = syscall,
+                    .path = bun.asByteSlice(file_path),
                 },
             };
         }
 
-        pub fn errnoSysFP(rc: anytype, syscall: sys.Tag, fd: bun.FD, file_path: anytype) ?@This() {
+        pub static fn errnoSysFP(rc: anytype, syscall: sys.Tag, fd: bun.FD, file_path: anytype): @This()? {
             if (comptime Environment.isWindows) {
                 if (comptime @TypeOf(rc) == std.os.windows.NTSTATUS) {} else {
                     if (rc != 0) return null;
                 }
             }
-            return switch (sys.getErrno(rc)) {
-                .SUCCESS => null,
-                else => |e| @This(){
-                    // Always truncate
-                    .err = .{
-                        .errno = translateToErrInt(e),
-                        .syscall = syscall,
-                        .fd = fd,
-                        .path = bun.asByteSlice(file_path),
-                    },
+            const err_code = sys.getErrno(rc);
+            if (err_code == .SUCCESS) return null;
+            return @This(){
+                // Always truncate
+                .err = .{
+                    .errno = translateToErrInt(err_code),
+                    .syscall = syscall,
+                    .fd = fd,
+                    .path = bun.asByteSlice(file_path),
                 },
             };
         }
 
-        pub fn errnoSysPD(rc: anytype, syscall: sys.Tag, file_path: anytype, dest: anytype) ?@This() {
+        pub static fn errnoSysPD(rc: anytype, syscall: sys.Tag, file_path: anytype, dest: anytype): @This()? {
             if (bun.meta.Item(@TypeOf(file_path)) == u16) {
                 @compileError("Do not pass WString path to errnoSysPD, it needs the path encoded as utf8");
             }
@@ -338,24 +334,23 @@ pub fn Maybe(comptime ReturnTypeT: type, comptime ErrorTypeT: type): type {
                     if (rc != 0) return null;
                 }
             }
-            return switch (sys.getErrno(rc)) {
-                .SUCCESS => null,
-                else => |e| @This(){
-                    // Always truncate
-                    .err = .{
-                        .errno = translateToErrInt(e),
-                        .syscall = syscall,
-                        .path = bun.asByteSlice(file_path),
-                        .dest = bun.asByteSlice(dest),
-                    },
+            const err_code = sys.getErrno(rc);
+            if (err_code == .SUCCESS) return null;
+            return @This(){
+                // Always truncate
+                .err = .{
+                    .errno = translateToErrInt(err_code),
+                    .syscall = syscall,
+                    .path = bun.asByteSlice(file_path),
+                    .dest = bun.asByteSlice(dest),
                 },
             };
         }
 
-        pub fn format(this: @This(), writer: *std.Io.Writer) !void {
-            return switch (this) {
-                .result => try writer.print("Result(...)", .{}),
-                .err => |e| try writer.print("Error(" ++ bun.deprecated.autoFormatLabelFallback(ErrorType, "{any}") ++ ")", .{e}),
+        pub fn format(writer: *std.Io.Writer)! {
+            return switch (_) {
+                .result => writer.print("Result(...)", .{})?,
+                .err e => writer.print("Error(" ++ bun.deprecated.autoFormatLabelFallback(ErrorType, "{any}") ++ ")", .{e})?,
             };
         }
     };

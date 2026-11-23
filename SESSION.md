@@ -881,3 +881,6 @@
 - [Wave #110] 第 3 批 15 文件（`cli/test`/`collections`/`crash_handler`/`csrf`/`css/context`）`--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`6c9f180f` `css/` 第 4 批 15 文件）并行推进中。
 - [Wave #111] `src/css/` 第 4 批 15 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`8423f739` 第 5 批 15 文件）并行推进中。
 - [Wave #112] `src/css/` 第 5 批 15 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`ee82f53c` 第 6 批 15 文件）并行推进中。
+
+- [Wave #113–#119] 完成 105 个 `--strict` 报错 `.cp` 文件的清零与 4 项硬门禁验收（覆盖 `css/values/*`、`event_loop/*`、`exe_format/*`、`http_jsc/*`、`ini`、`interchange/yaml`、`io/*`、`js_parser/parser`、`jsc/*`、`libarchive*/`、`libdeflate_sys`、`logger`、`lolhtml_sys`、`main*`、`md/*`、`meta`、`mimalloc_sys`、`napi`、`options_types`、`patch*`、`paths`、`perf/*`、`picohttp`、`platform/darwin`、`ptr/*`、`router/*`、`runtime/api/bun/*`、`runtime/crypto/CryptoHasher`、`runtime/dns_jsc/*`、`runtime/ffi/ffi`、`runtime/node`），全仓 `bun run zig:check` 5/5 绿色通过，已原子提交。
+- [用户] 执行当前任务后，收回子智能体，暂停工作，要退出 agy 切换配额账号。[回应] 已完成 Wave #112–#119 全仓 `bun run zig:check` 5/5 校验与原子 Git 提交，已通过 `manage_subagents(Action='kill_all')` 收回并终止全部子智能体，当前工作树干净，已暂停后续派发。

@@ -741,7 +741,7 @@ return e.throwJS(globalThis);
             const display_path: [:0]const u8 = (if (((argv.items.len > 0) and (argv.items[0] != null))) std.mem.sliceTo((argv.items[0]).?, 0) else "");
             var systemerror = bun.sys.Error.fromCode((if ((e == error.EMFILE)) .MFILE else .NFILE), .posix_spawn).withPath(display_path).toSystemError();
             _ = &systemerror;
-            systemerror.errno = (if ((e == error.EMFILE)) (0 - bun.sys.UV_E.MFILE) else (0 - bun.sys.UV_E.NFILE));
+            systemerror.errno = (if ((e == error.EMFILE)) (-bun.sys.UV_E.MFILE) else (-bun.sys.UV_E.NFILE));
             return globalThis.throwValue(systemerror.toErrorInstance(globalThis));
         } else {
             return globalThis.throwError(e, ": failed to spawn process");
@@ -757,7 +757,7 @@ const display_path: [:0]const u8 = (if (((argv.items.len > 0) and (argv.items[0]
                 var systemerror = e.withPath(display_path).toSystemError();
                 _ = &systemerror;
                 if ((errno == .NOENT)) {
-                    systemerror.errno = (0 - bun.sys.UV_E.NOENT);
+                    systemerror.errno = (-bun.sys.UV_E.NOENT);
                 }
                 return globalThis.throwValue(systemerror.toErrorInstance(globalThis));
             }
@@ -1148,7 +1148,7 @@ now = bun.timespec.now(.allow_mocked_time);
 }
 
 pub fn throwCommandNotFound(globalThis: *jsc.JSGlobalObject, command: []const u8) bun.JSError {
-        const e = jsc.SystemError{ .message = bun.handleOom(bun.String.createFormat("Executable not found in $PATH: \"{s}\"", .{ command })), .code = bun.String.static("ENOENT"), .errno = (0 - bun.sys.UV_E.NOENT), .path = bun.String.cloneUTF8(command) };
+        const e = jsc.SystemError{ .message = bun.handleOom(bun.String.createFormat("Executable not found in $PATH: \"{s}\"", .{ command })), .code = bun.String.static("ENOENT"), .errno = (-bun.sys.UV_E.NOENT), .path = bun.String.cloneUTF8(command) };
         return globalThis.throwValue(e.toErrorInstance(globalThis));
 }
 

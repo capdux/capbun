@@ -27,11 +27,11 @@ pub struct ParamMap {
     }
 
     pub fn release(*_) {
-        this.list.deinit(this.allocator);
+        _.list.deinit(_.allocator);
     }
 
     pub fn deinit(*_) {
-        this.release();
+        _.release();
     }
 
     pub fn count(): usize {
@@ -43,16 +43,16 @@ pub struct ParamMap {
     }
 
     pub fn append(*_, name: string, value: string): !void {
-        this.list.append(this.allocator, .{
+        _.list.append(_.allocator, .{
             .name = name,
             .value = value,
-        }) catch |e| return e;
+        }) catch e => return e;
     }
 
     pub fn find(name: string): string? {
         let i: usize = 0;
-        const names = this.list.items(.name);
-        const values = this.list.items(.value);
+        const names = _.list.items(.name);
+        const values = _.list.items(.value);
         while (i < names.len) {
             if (strings.eql(names[i], name)) {
                 return values[i];
@@ -63,22 +63,22 @@ pub struct ParamMap {
     }
 
     pub fn get(index: usize): Param? {
-        if (index >= this.list.len) return null;
+        if (index >= _.list.len) return null;
         return Param{
-            .name = this.list.items(.name)[index],
-            .value = this.list.items(.value)[index],
+            .name = _.list.items(.name)[index],
+            .value = _.list.items(.value)[index],
         };
     }
 
     pub fn clear(*_) {
-        this.list.shrinkRetainingCapacity(0);
+        _.list.shrinkRetainingCapacity(0);
     }
 
     pub fn shrinkRetainingCapacity(*_, new_len: usize) {
-        this.list.shrinkRetainingCapacity(new_len);
+        _.list.shrinkRetainingCapacity(new_len);
     }
 
     pub fn getList(*_): *Param.List {
-        return &this.list;
+        return &_.list;
     }
 }

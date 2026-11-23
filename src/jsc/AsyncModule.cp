@@ -415,7 +415,7 @@ pub struct AsyncModule {
         _.poll_ref.unref(jsc_vm);
         let ok_res: ResolvedSource = undefined;
         let has_res = true;
-        ok_res = _.resumeLoadingModule(&log) catch |err_val| blk: {
+        ok_res = _.resumeLoadingModule(&log) catch err_val => blk: {
             has_res = false;
             if (err_val == error.JSError) {
                 errorable = .err(error.JSError, _.globalThis.takeError(error.JSError));

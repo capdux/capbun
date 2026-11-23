@@ -55,14 +55,14 @@ pub struct Shifter {
 
     pub fn do(value: u64): u32! {
         if (value == 0) return 0;
-        const range_min = this.start;
-        const range_max = this.linkedit_fileoff + this.linkedit_filesize;
+        const range_min = _.start;
+        const range_max = _.linkedit_fileoff + _.linkedit_filesize;
         if (value < range_min) return err.OffsetOutOfRange;
         if (value > range_max) return err.OffsetOutOfRange;
-        if (value > std.math.maxInt(u64) - this.amount) {
+        if (value > std.math.maxInt(u64) - _.amount) {
             return err.OffsetOverflow;
         }
-        return @as(u32, @intCast(value + this.amount));
+        return @as(u32, @intCast(value + _.amount));
     }
 }
 
@@ -156,8 +156,8 @@ pub struct MachoSigner {
     }
 
     pub fn deinit(*_) {
-        this.data.deinit();
-        this.allocator.destroy(this);
+        _.data.deinit();
+        _.allocator.destroy(_);
     }
 
     pub static fn computeSignatureSize(sig_off: u64): usize {
@@ -176,7 +176,7 @@ pub struct MachoSigner {
         const PAGE_SIZE: usize = SIGNATURE_PAGE_SIZE;
         const HASH_SIZE: usize = SIGNATURE_HASH_SIZE;
 
-        const total_pages = (this.sig_off + PAGE_SIZE - 1) / PAGE_SIZE;
+        const total_pages = (_.sig_off + PAGE_SIZE - 1) / PAGE_SIZE;
         const aligned_sig_off = total_pages * PAGE_SIZE;
 
         const id = IDENTIFIER;
@@ -190,7 +190,7 @@ pub struct MachoSigner {
         const code_dir_length = hash_offset + hashes_size;
 
         const sig_structure_size = super_blob_header_size + blob_index_size + code_dir_length;
-        bun.debugAssert(sig_structure_size == MachoSigner.computeSignatureSize(this.sig_off as u64));
+        bun.debugAssert(sig_structure_size == MachoSigner.computeSignatureSize(_.sig_off as u64));
         const total_sig_size = alignSize(sig_structure_size as u64, PAGE_SIZE as u64) as usize;
 
         const super_blob = SuperBlob{
@@ -213,30 +213,30 @@ pub struct MachoSigner {
         code_dir.identOffset = @byteSwap(id_offset as u32);
         code_dir.nSpecialSlots = 0;
         code_dir.nCodeSlots = @byteSwap(total_pages as u32);
-        code_dir.codeLimit = @byteSwap(this.sig_off as u32);
+        code_dir.codeLimit = @byteSwap(_.sig_off as u32);
         code_dir.hashSize = HASH_SIZE as u8;
         code_dir.hashType = SEC_CODE_SIGNATURE_HASH_SHA256;
         code_dir.pageSize = 12;
 
-        const text_base = alignSize(this.text_seg.fileoff, PAGE_SIZE as u64);
-        const text_limit = alignSize(this.text_seg.filesize, PAGE_SIZE as u64);
+        const text_base = alignSize(_.text_seg.fileoff, PAGE_SIZE as u64);
+        const text_limit = alignSize(_.text_seg.filesize, PAGE_SIZE as u64);
         code_dir.execSegBase = @byteSwap(text_base);
         code_dir.execSegLimit = @byteSwap(text_limit);
         code_dir.execSegFlags = @byteSwap(CS_EXECSEG_MAIN_BINARY);
         const code_dir_const: CodeDirectory = code_dir;
 
-        this.data.resize(aligned_sig_off + total_sig_size)?;
-        this.data.items.len = this.sig_off;
-        @memset(this.data.unusedCapacitySlice(), 0);
+        _.data.resize(aligned_sig_off + total_sig_size)?;
+        _.data.items.len = _.sig_off;
+        @memset(_.data.unusedCapacitySlice(), 0);
 
-        let sig_writer = this.data.writer();
+        let sig_writer = _.data.writer();
 
         sig_writer.writeAll(mem.asBytes(&super_blob))?;
         sig_writer.writeAll(mem.asBytes(&blob_index))?;
         sig_writer.writeAll(mem.asBytes(&code_dir_const))?;
         sig_writer.writeAll(id)?;
 
-        let remaining = this.data.items[0..this.sig_off];
+        let remaining = _.data.items[0.._.sig_off];
         while (remaining.len >= PAGE_SIZE) {
             const page = remaining[0..PAGE_SIZE];
             let digest: bun.sha.SHA256.Digest = undefined;
@@ -253,8 +253,8 @@ pub struct MachoSigner {
             sig_writer.writeAll(&digest)?;
         }
 
-        this.data.items.len = (this.linkedit_seg.fileoff + this.linkedit_seg.filesize) as usize;
-        writer.writeAll(this.data.items)?;
+        _.data.items.len = (_.linkedit_seg.fileoff + _.linkedit_seg.filesize) as usize;
+        writer.writeAll(_.data.items)?;
     }
 }
 
@@ -292,8 +292,8 @@ pub struct MachoFile {
     }
 
     pub fn deinit(*_) {
-        this.data.deinit();
-        this.allocator.destroy(this);
+        _.data.deinit();
+        _.allocator.destroy(_);
     }
 
     pub fn writeSection(*_, data: []const u8): void! {
@@ -314,7 +314,7 @@ pub struct MachoFile {
         let linkedit_seg_idx: usize? = null;
         let found_bun = false;
 
-        let iter = this.iterator();
+        let iter = _.iterator();
 
         while (entry := iter.next()) {
             const cmd = entry.hdr;
@@ -323,13 +323,13 @@ pub struct MachoFile {
                     const command = entry.cast(macho.segment_command_64).?;
                     if (strings.eqlComptime(command.segName(), "__BUN")) {
                         if (command.nsects > 0) {
-                            const section_offset = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
+                            const section_offset = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(_.data.items.ptr) };
                             const seg_hdr_sz: usize = @sizeOf(macho.segment_command_64);
                             const sect_sz: usize = @sizeOf(macho.section_64);
                             let s_idx: usize = 0;
                             while (s_idx < command.nsects) : (s_idx += 1) {
                                 const sect_off = section_offset + seg_hdr_sz + s_idx * sect_sz;
-                                const sect_bytes = this.data.items[sect_off..][0..sect_sz];
+                                const sect_bytes = _.data.items[sect_off..][0..sect_sz];
                                 const sect = unsafe { std.mem.bytesAsValue(macho.section_64, sect_bytes).* };
                                 if (strings.eqlComptime(sect.sectName(), "__bun")) {
                                     found_bun = true;
@@ -337,13 +337,13 @@ pub struct MachoFile {
                                     original_vmaddr = sect.addr;
                                     original_data_end = command.fileoff + command.filesize;
                                     original_segsize = command.filesize;
-                                    this.segment = command;
-                                    this.section = sect;
+                                    _.segment = command;
+                                    _.section = sect;
 
-                                    this.segment.vmsize = alignVmsize(aligned_size, blob_alignment);
-                                    this.segment.filesize = aligned_size;
-                                    this.segment.maxprot = macho.PROT.READ | macho.PROT.WRITE;
-                                    this.segment.initprot = macho.PROT.READ | macho.PROT.WRITE;
+                                    _.segment.vmsize = alignVmsize(aligned_size, blob_alignment);
+                                    _.segment.filesize = aligned_size;
+                                    _.segment.maxprot = macho.PROT.READ | macho.PROT.WRITE;
+                                    _.segment.initprot = macho.PROT.READ | macho.PROT.WRITE;
 
                                     let new_sect = std.mem.zeroes(macho.section_64);
                                     new_sect.sectname = SECTNAME;
@@ -353,21 +353,21 @@ pub struct MachoFile {
                                     new_sect.offset = original_fileoff as u32;
                                     new_sect.@"align" = 14;
                                     new_sect.flags = macho.S_REGULAR | macho.S_ATTR_NO_DEAD_STRIP;
-                                    this.section = new_sect;
+                                    _.section = new_sect;
 
-                                    const seg_const = this.segment;
-                                    const sect_const = this.section;
-                                    @memcpy(this.data.items[section_offset..][0..seg_hdr_sz], std.mem.asBytes(&seg_const));
+                                    const seg_const = _.segment;
+                                    const sect_const = _.section;
+                                    @memcpy(_.data.items[section_offset..][0..seg_hdr_sz], std.mem.asBytes(&seg_const));
                                     @memcpy(sect_bytes, std.mem.asBytes(&sect_const));
                                 }
                             }
                         }
                     } else if (strings.eqlComptime(command.segName(), SEG_LINKEDIT)) {
-                        linkedit_seg_idx = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
+                        linkedit_seg_idx = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(_.data.items.ptr) };
                     }
                 },
                 .CODE_SIGNATURE => {
-                    code_sign_cmd_idx = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
+                    code_sign_cmd_idx = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(_.data.items.ptr) };
                 },
                 else => {},
             }
@@ -380,33 +380,33 @@ pub struct MachoFile {
         const size_diff = (aligned_size as i64) - (original_segsize as i64);
         const num_of_new_pages = @divExact(size_diff, PAGE_SIZE as i64);
 
-        this.data.ensureUnusedCapacity((size_diff + num_of_new_pages * (HASH_SIZE as i64)) as usize)?;
+        _.data.ensureUnusedCapacity((size_diff + num_of_new_pages * (HASH_SIZE as i64)) as usize)?;
 
         const linkedit_idx = linkedit_seg_idx ?? return err.MissingLinkeditSegment;
 
         let sig_size: usize = 0;
 
-        const prev_data_slice = this.data.items[(original_fileoff as usize)..];
-        this.data.items.len += size_diff as usize;
+        const prev_data_slice = _.data.items[(original_fileoff as usize)..];
+        _.data.items.len += size_diff as usize;
 
-        const after_bun_slice = this.data.items[(original_data_end as usize) + (size_diff as usize) ..];
+        const after_bun_slice = _.data.items[(original_data_end as usize) + (size_diff as usize) ..];
         const prev_after_bun_slice = prev_data_slice[(original_segsize as usize)..];
         bun.memmove(after_bun_slice, prev_after_bun_slice);
 
-        std.mem.writeInt(u64, this.data.items[(original_fileoff as usize)..][0..8], data.len as u64, .little);
-        @memcpy(this.data.items[(original_fileoff as usize) + 8 ..][0..data.len], data);
+        std.mem.writeInt(u64, _.data.items[(original_fileoff as usize)..][0..8], data.len as u64, .little);
+        @memcpy(_.data.items[(original_fileoff as usize) + 8 ..][0..data.len], data);
 
-        const padding_bytes = this.data.items[(original_fileoff as usize)..][data.len + 8 .. (aligned_size as usize)];
+        const padding_bytes = _.data.items[(original_fileoff as usize)..][data.len + 8 .. (aligned_size as usize)];
         @memset(padding_bytes, 0);
 
         const cs_sz: usize = @sizeOf(macho.linkedit_data_command);
         if (cs_idx := code_sign_cmd_idx) {
-            const cs_val = unsafe { std.mem.bytesAsValue(macho.linkedit_data_command, this.data.items[cs_idx..][0..cs_sz]).* };
+            const cs_val = unsafe { std.mem.bytesAsValue(macho.linkedit_data_command, _.data.items[cs_idx..][0..cs_sz]).* };
             sig_size = cs_val.datasize;
         }
 
         const seg_sz: usize = @sizeOf(macho.segment_command_64);
-        let linkedit_seg = unsafe { std.mem.bytesAsValue(macho.segment_command_64, this.data.items[linkedit_idx..][0..seg_sz]).* };
+        let linkedit_seg = unsafe { std.mem.bytesAsValue(macho.segment_command_64, _.data.items[linkedit_idx..][0..seg_sz]).* };
 
         if (size_diff != 0) {
             linkedit_seg.fileoff += size_diff as u64;
@@ -414,8 +414,8 @@ pub struct MachoFile {
         }
 
         if (cs_idx := code_sign_cmd_idx) {
-            if (this.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
-                let cs_val = unsafe { std.mem.bytesAsValue(macho.linkedit_data_command, this.data.items[cs_idx..][0..cs_sz]).* };
+            if (_.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
+                let cs_val = unsafe { std.mem.bytesAsValue(macho.linkedit_data_command, _.data.items[cs_idx..][0..cs_sz]).* };
                 const new_sig_dataoff: u64 = (cs_val.dataoff as u64) + (size_diff as u64);
                 const new_sig_size = MachoSigner.computeSignatureSize(new_sig_dataoff);
 
@@ -424,19 +424,19 @@ pub struct MachoFile {
 
                 cs_val.datasize = new_sig_size as u32;
                 const cs_const = cs_val;
-                @memcpy(this.data.items[cs_idx..][0..cs_sz], std.mem.asBytes(&cs_const));
+                @memcpy(_.data.items[cs_idx..][0..cs_sz], std.mem.asBytes(&cs_const));
                 sig_size = new_sig_size;
             }
         }
 
             const linkedit_const: macho.segment_command_64 = linkedit_seg;
-        @memcpy(this.data.items[linkedit_idx..][0..seg_sz], std.mem.asBytes(&linkedit_const));
+        @memcpy(_.data.items[linkedit_idx..][0..seg_sz], std.mem.asBytes(&linkedit_const));
 
         if (size_diff != 0) {
-            this.updateLoadCommandOffsets(original_fileoff, size_diff as u64, linkedit_seg.fileoff, linkedit_seg.filesize, sig_size)?;
+            _.updateLoadCommandOffsets(original_fileoff, size_diff as u64, linkedit_seg.fileoff, linkedit_seg.filesize, sig_size)?;
         }
 
-        this.validateSegments()?;
+        _.validateSegments()?;
     }
 
     fn updateLoadCommandOffsets(*_, previous_fileoff: u64, size_diff: u64, new_linkedit_fileoff: u64, new_linkedit_filesize: u64, sig_size: usize): void! {
@@ -448,7 +448,7 @@ pub struct MachoFile {
         const aligned_previous = alignSize(previous_fileoff, PAGE_SIZE);
         const aligned_linkedit = alignSize(new_linkedit_fileoff, PAGE_SIZE);
 
-        let iter = this.iterator();
+        let iter = _.iterator();
 
         const shifter = Shifter{
             start: aligned_previous,
@@ -459,20 +459,20 @@ pub struct MachoFile {
 
         while (entry := iter.next()) {
             const cmd = entry.hdr;
-            const cmd_off = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(this.data.items.ptr) };
+            const cmd_off = unsafe { @intFromPtr(entry.data.ptr) - @intFromPtr(_.data.items.ptr) };
 
             switch (cmd.cmd) {
                 .SYMTAB => {
                     const sz: usize = @sizeOf(macho.symtab_command);
-                    let symtab = unsafe { std.mem.bytesAsValue(macho.symtab_command, this.data.items[cmd_off..][0..sz]).* };
+                    let symtab = unsafe { std.mem.bytesAsValue(macho.symtab_command, _.data.items[cmd_off..][0..sz]).* };
                     symtab.symoff = shifter.do(symtab.symoff)?;
                     symtab.stroff = shifter.do(symtab.stroff)?;
                     const symtab_const = symtab;
-                    @memcpy(this.data.items[cmd_off..][0..sz], std.mem.asBytes(&symtab_const));
+                    @memcpy(_.data.items[cmd_off..][0..sz], std.mem.asBytes(&symtab_const));
                 },
                 .DYSYMTAB => {
                     const sz: usize = @sizeOf(macho.dysymtab_command);
-                    let dysymtab = unsafe { std.mem.bytesAsValue(macho.dysymtab_command, this.data.items[cmd_off..][0..sz]).* };
+                    let dysymtab = unsafe { std.mem.bytesAsValue(macho.dysymtab_command, _.data.items[cmd_off..][0..sz]).* };
                     dysymtab.tocoff = shifter.do(dysymtab.tocoff)?;
                     dysymtab.modtaboff = shifter.do(dysymtab.modtaboff)?;
                     dysymtab.extrefsymoff = shifter.do(dysymtab.extrefsymoff)?;
@@ -480,7 +480,7 @@ pub struct MachoFile {
                     dysymtab.extreloff = shifter.do(dysymtab.extreloff)?;
                     dysymtab.locreloff = shifter.do(dysymtab.locreloff)?;
                     const dysymtab_const = dysymtab;
-                    @memcpy(this.data.items[cmd_off..][0..sz], std.mem.asBytes(&dysymtab_const));
+                    @memcpy(_.data.items[cmd_off..][0..sz], std.mem.asBytes(&dysymtab_const));
                 },
                 .DYLD_CHAINED_FIXUPS |
                 .CODE_SIGNATURE |
@@ -490,24 +490,24 @@ pub struct MachoFile {
                 .LINKER_OPTIMIZATION_HINT |
                 .DYLD_EXPORTS_TRIE => {
                     const sz: usize = @sizeOf(macho.linkedit_data_command);
-                    let linkedit_cmd = unsafe { std.mem.bytesAsValue(macho.linkedit_data_command, this.data.items[cmd_off..][0..sz]).* };
+                    let linkedit_cmd = unsafe { std.mem.bytesAsValue(macho.linkedit_data_command, _.data.items[cmd_off..][0..sz]).* };
                     linkedit_cmd.dataoff = shifter.do(linkedit_cmd.dataoff)?;
                     if (cmd.cmd == .CODE_SIGNATURE) {
                         linkedit_cmd.datasize = sig_size as u32;
                     }
                     const linkedit_const = linkedit_cmd;
-                    @memcpy(this.data.items[cmd_off..][0..sz], std.mem.asBytes(&linkedit_const));
+                    @memcpy(_.data.items[cmd_off..][0..sz], std.mem.asBytes(&linkedit_const));
                 },
                 .DYLD_INFO | .DYLD_INFO_ONLY => {
                     const sz: usize = @sizeOf(macho.dyld_info_command);
-                    let dyld_info = unsafe { std.mem.bytesAsValue(macho.dyld_info_command, this.data.items[cmd_off..][0..sz]).* };
+                    let dyld_info = unsafe { std.mem.bytesAsValue(macho.dyld_info_command, _.data.items[cmd_off..][0..sz]).* };
                     dyld_info.rebase_off = shifter.do(dyld_info.rebase_off)?;
                     dyld_info.bind_off = shifter.do(dyld_info.bind_off)?;
                     dyld_info.weak_bind_off = shifter.do(dyld_info.weak_bind_off)?;
                     dyld_info.lazy_bind_off = shifter.do(dyld_info.lazy_bind_off)?;
                     dyld_info.export_off = shifter.do(dyld_info.export_off)?;
                     const dyld_const = dyld_info;
-                    @memcpy(this.data.items[cmd_off..][0..sz], std.mem.asBytes(&dyld_const));
+                    @memcpy(_.data.items[cmd_off..][0..sz], std.mem.asBytes(&dyld_const));
                 },
                 else => {},
             }
@@ -516,17 +516,17 @@ pub struct MachoFile {
 
     pub fn iterator(): macho.LoadCommandIterator {
         return macho.LoadCommandIterator{
-            buffer: this.data.items[@sizeOf(macho.mach_header_64)..][0..this.header.sizeofcmds],
-            ncmds: this.header.ncmds,
+            buffer: _.data.items[@sizeOf(macho.mach_header_64)..][0.._.header.sizeofcmds],
+            ncmds: _.header.ncmds,
         };
     }
 
     pub fn build(*_, writer: auto): void! {
-        writer.writeAll(this.data.items)?;
+        writer.writeAll(_.data.items)?;
     }
 
     fn validateSegments(*_): void! {
-        let iter = this.iterator();
+        let iter = _.iterator();
         let prev_end: u64 = 0;
 
         while (entry := iter.next()) {
@@ -542,17 +542,17 @@ pub struct MachoFile {
     }
 
     pub fn buildAndSign(*_, writer: *std.Io.Writer): void! {
-        if (this.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
+        if (_.header.cputype == macho.CPU_TYPE_ARM64 && !bun.feature_flag.BUN_NO_CODESIGN_MACHO_BINARY.get()) {
             let out_data_guard = DeinitGuard<std.array_list.Managed(u8)>{
-                val: std.array_list.Managed(u8).init(this.allocator),
+                val: std.array_list.Managed(u8).init(_.allocator),
             };
-            this.build(out_data_guard.val.writer())?;
+            _.build(out_data_guard.val.writer())?;
             let signer_guard = DeinitGuard<*MachoSigner!>{
-                val: MachoSigner.init(this.allocator, out_data_guard.val.items)?,
+                val: MachoSigner.init(_.allocator, out_data_guard.val.items)?,
             };
             signer_guard.val.sign(writer)?;
         } else {
-            this.build(writer)?;
+            _.build(writer)?;
         }
     }
 }

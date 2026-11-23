@@ -62,16 +62,16 @@ export struct Routes {
     client_framework_enabled: bool = false,
 
     pub fn release(*_) {
-        this.static.deinit();
-        this.list.deinit(this.allocator);
+        _.static.deinit();
+        _.list.deinit(_.allocator);
     }
 
     pub fn deinit(*_) {
-        this.release();
+        _.release();
     }
 
     pub fn matchPageWithAllocator(
-        *_: *Routes,
+        *_,
         __: string,
         url_path: URLPath,
         params: *Param.List,
@@ -106,7 +106,7 @@ export struct Routes {
         }
 
         if (path.len == 0) {
-            if (index := this.index) {
+            if (index := _.index) {
                 return Match{
                     .params = params,
                     .name = index.name,
@@ -116,7 +116,7 @@ export struct Routes {
                     .hash = index_route_hash,
                     .file_path = index.abs_path.slice(),
                     .query_string = url_path.query_string,
-                    .client_framework_enabled = this.client_framework_enabled,
+                    .client_framework_enabled = _.client_framework_enabled,
                 };
             }
             return null;
@@ -125,7 +125,7 @@ export struct Routes {
         let matcher = MatchContextType{ .params = params.* };
         defer params.* = matcher.params;
 
-        if (route := this.match(allocator, path, MatchContextType, &matcher)) {
+        if (route := _.match(allocator, path, MatchContextType, &matcher)) {
             return Match{
                 .params = params,
                 .name = route.name,
@@ -135,29 +135,29 @@ export struct Routes {
                 .hash = route.full_hash,
                 .file_path = route.abs_path.slice(),
                 .query_string = url_path.query_string,
-                .client_framework_enabled = this.client_framework_enabled,
+                .client_framework_enabled = _.client_framework_enabled,
             };
         }
 
         return null;
     }
 
-    pub fn matchPage(*_: *Routes, __: string, url_path: URLPath, params: *Param.List): Match? {
-        return this.matchPageWithAllocator("", url_path, params, this.allocator);
+    pub fn matchPage(*_, __: string, url_path: URLPath, params: *Param.List): Match? {
+        return _.matchPageWithAllocator("", url_path, params, _.allocator);
     }
 
     fn matchDynamic(
-        *_: *Routes,
+        *_,
         allocator: std.mem.Allocator,
         path: string,
         comptime MatchContext: type,
         ctx: MatchContext,
     ): (*Route)? {
         let i: usize = 0;
-        while (i < this.dynamic.len) {
-            const case_sensitive_name = this.dynamic_names[i];
-            const name = this.dynamic_match_names[i];
-            const route = this.dynamic[i];
+        while (i < _.dynamic.len) {
+            const case_sensitive_name = _.dynamic_names[i];
+            const name = _.dynamic_match_names[i];
+            const route = _.dynamic[i];
             if (Pattern.match(path, case_sensitive_name[1..], name, allocator, ParamList, &ctx.params, true)) {
                 return route;
             }
@@ -167,7 +167,7 @@ export struct Routes {
     }
 
     fn match(
-        *_: *Routes,
+        *_,
         allocator: std.mem.Allocator,
         pathname_: string,
         comptime MatchContext: type,
@@ -175,10 +175,10 @@ export struct Routes {
     ): (*Route)? {
         const pathname = std.mem.trimLeft(u8, pathname_, "/");
         if (pathname.len == 0) {
-            return this.index;
+            return _.index;
         }
-        return this.static.get(pathname) ??
-            this.matchDynamic(allocator, pathname, MatchContext, ctx);
+        return _.static.get(pathname) ??
+            _.matchDynamic(allocator, pathname, MatchContext, ctx);
     }
 }
 
@@ -202,42 +202,42 @@ export struct RouteLoader {
     static_list: bun.StringHashMap(*Route),
     all_routes: std.ArrayListUnmanaged(*Route),
 
-    pub fn appendRoute(*_: *RouteLoader, route: Route) {
+    pub fn appendRoute(*_, route: Route) {
         if (route.full_hash == index_route_hash) {
-            let new_route = this.allocator.create(Route) catch unreachable;
-            this.index = new_route;
+            let new_route = _.allocator.create(Route) catch unreachable;
+            _.index = new_route;
             new_route.* = route;
-            this.all_routes.append(this.allocator, new_route) catch unreachable;
+            _.all_routes.append(_.allocator, new_route) catch unreachable;
             return;
         }
 
         if (route.param_count == 0) {
-            let entry = this.static_list.getOrPut(route.match_name.slice()) catch unreachable;
+            let entry = _.static_list.getOrPut(route.match_name.slice()) catch unreachable;
             if (entry.found_existing) {
                 const existing_route = entry.value_ptr.*;
                 const source: Logger.Source = Logger.Source.initEmptyFile(route.abs_path.slice());
-                this.log.addErrorFmt(
+                _.log.addErrorFmt(
                     &source,
                     Logger.Loc.Empty,
-                    this.allocator,
+                    _.allocator,
                     "Route \"{s}\" is already defined by {s}",
                     [route.name, existing_route.abs_path.slice()],
                 ) catch unreachable;
                 return;
             }
 
-            let new_route = this.allocator.create(Route) catch unreachable;
+            let new_route = _.allocator.create(Route) catch unreachable;
             new_route.* = route;
 
             if (route.has_uppercase) {
-                let static_entry = this.static_list.getOrPut(route.name[1..]) catch unreachable;
+                let static_entry = _.static_list.getOrPut(route.name[1..]) catch unreachable;
                 if (static_entry.found_existing) {
                     const existing_route = static_entry.value_ptr.*;
                     const source: Logger.Source = Logger.Source.initEmptyFile(route.abs_path.slice());
-                    this.log.addErrorFmt(
+                    _.log.addErrorFmt(
                         &source,
                         Logger.Loc.Empty,
-                        this.allocator,
+                        _.allocator,
                         "Route \"{s}\" is already defined by {s}",
                         [route.name, existing_route.abs_path.slice()],
                     ) catch unreachable;
@@ -247,18 +247,18 @@ export struct RouteLoader {
             }
 
             entry.value_ptr.* = new_route;
-            this.all_routes.append(this.allocator, new_route) catch unreachable;
+            _.all_routes.append(_.allocator, new_route) catch unreachable;
             return;
         }
 
         {
-            let entry = this.dedupe_dynamic.getOrPutValue(route.full_hash, route.abs_path.slice()) catch unreachable;
+            let entry = _.dedupe_dynamic.getOrPutValue(route.full_hash, route.abs_path.slice()) catch unreachable;
             if (entry.found_existing) {
                 const source: Logger.Source = Logger.Source.initEmptyFile(route.abs_path.slice());
-                this.log.addErrorFmt(
+                _.log.addErrorFmt(
                     &source,
                     Logger.Loc.Empty,
-                    this.allocator,
+                    _.allocator,
                     "Route \"{s}\" is already defined by {s}",
                     [route.name, entry.value_ptr.*],
                 ) catch unreachable;
@@ -267,9 +267,9 @@ export struct RouteLoader {
         }
 
         {
-            let new_route = this.allocator.create(Route) catch unreachable;
+            let new_route = _.allocator.create(Route) catch unreachable;
             new_route.* = route;
-            this.all_routes.append(this.allocator, new_route) catch unreachable;
+            _.all_routes.append(_.allocator, new_route) catch unreachable;
         }
     }
 
@@ -368,13 +368,13 @@ export struct RouteLoader {
     }
 
     pub fn load(
-        *_: *RouteLoader,
+        *_,
         comptime ResolverType: type,
         resolver: *ResolverType,
         root_dir_info: *const DirInfo,
         base_dir: []const u8,
     ) {
-        let fs = this.fs;
+        let fs = _.fs;
 
         if (entries := root_dir_info.getEntriesConst()) {
             let iter = entries.data.iterator();
@@ -398,7 +398,7 @@ export struct RouteLoader {
                     let abs_parts: [2]string = .{ entry.dir, entry.base() };
                     if (_dir_info := resolver.readDirInfoIgnoreError(fs.abs(&abs_parts))) {
                         const dir_info: *const DirInfo = _dir_info;
-                        this.load(
+                        _.load(
                             ResolverType,
                             resolver,
                             dir_info,
@@ -409,7 +409,7 @@ export struct RouteLoader {
                     const extname = std.fs.path.extension(entry.base());
                     if (extname.len < 2) continue;
 
-                    for (_extname of this.config.extensions) {
+                    for (_extname of _.config.extensions) {
                         if (strings.eql(extname[1..], _extname)) {
                             if (comptime Environment.isDebug) {
                                 bun.assert(bun.path.isSepAny(entry.dir[base_dir.len - 1]));
@@ -421,12 +421,12 @@ export struct RouteLoader {
                                 entry.base(),
                                 extname,
                                 entry,
-                                this.log,
-                                this.allocator,
+                                _.log,
+                                _.allocator,
                                 public_dir,
-                                this.route_dirname_len,
+                                _.route_dirname_len,
                             )) {
-                                this.appendRoute(route);
+                                _.appendRoute(route);
                             }
                             break;
                         }
@@ -465,51 +465,51 @@ export class Router {
 
     pub fn release(*_) {
         if (comptime Environment.isWindows) {
-            for (abs_path of this.routes.list.items(.filepath)) {
-                this.allocator.free(abs_path);
+            for (abs_path of _.routes.list.items(.filepath)) {
+                _.allocator.free(abs_path);
             }
         }
-        this.routes.release();
+        _.routes.release();
     }
 
     pub fn deinit(*_) {
-        this.release();
+        _.release();
     }
 
-    pub fn getEntryPoints(_: *const Router): []const string {
-        return this.routes.list.items(.filepath);
+    pub fn getEntryPoints(): []const string {
+        return _.routes.list.items(.filepath);
     }
 
-    pub fn getPublicPaths(_: *const Router): []const string {
-        return this.routes.list.items(.public_path);
+    pub fn getPublicPaths(): []const string {
+        return _.routes.list.items(.public_path);
     }
 
-    pub fn routeIndexByHash(_: *const Router, hash: u32): usize? {
+    pub fn routeIndexByHash(hash: u32): usize? {
         if (hash == index_route_hash) {
-            return this.routes.index_id;
+            return _.routes.index_id;
         }
-        return std.mem.indexOfScalar(u32, this.routes.list.items(.hash), hash);
+        return std.mem.indexOfScalar(u32, _.routes.list.items(.hash), hash);
     }
 
-    pub fn getNames(_: *const Router): []const string {
-        return this.routes.list.items(.name);
+    pub fn getNames(): []const string {
+        return _.routes.list.items(.name);
     }
 
     pub fn loadRoutes(
-        *_: *Router,
+        *_,
         log: *Logger.Log,
         root_dir_info: *const DirInfo,
         comptime ResolverType: type,
         resolver: *ResolverType,
         base_dir: []const u8,
     ): !void {
-        if (this.loaded_routes) return;
-        this.routes = RouteLoader.loadAll(this.allocator, this.config, log, ResolverType, resolver, root_dir_info, base_dir);
-        this.loaded_routes = true;
+        if (_.loaded_routes) return;
+        _.routes = RouteLoader.loadAll(_.allocator, _.config, log, ResolverType, resolver, root_dir_info, base_dir);
+        _.loaded_routes = true;
     }
 
     pub fn match(
-        *_: *Router,
+        *_,
         comptime Server: type,
         server: Server,
         comptime RequestContextType: type,
@@ -534,7 +534,7 @@ export class Router {
         }
 
         params_list.shrinkRetainingCapacity(0);
-        if (route := this.routes.matchPage(this.config.dir, ctx.url, &params_list)) {
+        if (route := _.routes.matchPage(_.config.dir, ctx.url, &params_list)) {
             if (redirect := route.redirect_path) {
                 ctx.handleRedirect(redirect)?;
                 return;

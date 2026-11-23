@@ -21,23 +21,23 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
         0 => @compileError("cannot create an empty tagged union"),
         1 => union(enum) {
             @"0": at(field_types, 0),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         2 => union(enum) {
             @"0": at(field_types, 0),
             @"1": at(field_types, 1),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         3 => union(enum) {
             @"0": at(field_types, 0),
             @"1": at(field_types, 1),
             @"2": at(field_types, 2),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         4 => union(enum) {
@@ -45,8 +45,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"1": at(field_types, 1),
             @"2": at(field_types, 2),
             @"3": at(field_types, 3),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         5 => union(enum) {
@@ -55,8 +55,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"2": at(field_types, 2),
             @"3": at(field_types, 3),
             @"4": at(field_types, 4),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         6 => union(enum) {
@@ -66,8 +66,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"3": at(field_types, 3),
             @"4": at(field_types, 4),
             @"5": at(field_types, 5),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         7 => union(enum) {
@@ -78,8 +78,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"4": at(field_types, 4),
             @"5": at(field_types, 5),
             @"6": at(field_types, 6),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         8 => union(enum) {
@@ -91,8 +91,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"5": at(field_types, 5),
             @"6": at(field_types, 6),
             @"7": at(field_types, 7),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         9 => union(enum) {
@@ -105,8 +105,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"6": at(field_types, 6),
             @"7": at(field_types, 7),
             @"8": at(field_types, 8),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         10 => union(enum) {
@@ -120,8 +120,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"7": at(field_types, 7),
             @"8": at(field_types, 8),
             @"9": at(field_types, 9),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         11 => union(enum) {
@@ -136,8 +136,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"8": at(field_types, 8),
             @"9": at(field_types, 9),
             @"10": at(field_types, 10),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         12 => union(enum) {
@@ -153,8 +153,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"9": at(field_types, 9),
             @"10": at(field_types, 10),
             @"11": at(field_types, 11),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         13 => union(enum) {
@@ -171,8 +171,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"10": at(field_types, 10),
             @"11": at(field_types, 11),
             @"12": at(field_types, 12),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         14 => union(enum) {
@@ -190,8 +190,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"11": at(field_types, 11),
             @"12": at(field_types, 12),
             @"13": at(field_types, 13),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         15 => union(enum) {
@@ -210,8 +210,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"12": at(field_types, 12),
             @"13": at(field_types, 13),
             @"14": at(field_types, 14),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         16 => union(enum) {
@@ -231,8 +231,8 @@ pub fn TaggedUnion(comptime field_types: []const type): type {
             @"13": at(field_types, 13),
             @"14": at(field_types, 14),
             @"15": at(field_types, 15),
-            pub fn deinit(*this) {
-                deinitImpl(@This(), this);
+            pub fn deinit(*_) {
+                deinitImpl(@This(), _);
             }
         },
         else => @compileError("too many union fields"),

@@ -231,7 +231,7 @@ fn WrapImplWrapper(comptime Args: type, comptime Fn: auto): type {
     return struct {
         args: Args,
 
-        pub fn call(*_, g: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+        pub fn call(*_, g: *jsc.JSGlobalObject) callconv(.c): jsc.JSValue {
             return jsc.toJSHostCall(g, @src(), Fn, _.args);
         }
     };

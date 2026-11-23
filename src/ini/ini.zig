@@ -173,7 +173,7 @@ pub const Parser = struct {
     env: *bun.DotEnv.Loader,
 
 pub fn init(allocator: Allocator, path: []const u8, src: []const u8, env: *bun.DotEnv.Loader) Parser {
-            return .{ .logger = bun.logger.Log.init(allocator), .src = src, .out = Expr.init(E.Object, (if (comptime @typeInfo(E.Object) == .@"enum") @as(E.Object, @enumFromInt(.{})) else @as(E.Object, .{})), Loc.Empty), .source = bun.logger.Source.initPathString(path, src), .@"arena" = std.heap.ArenaAllocator.init(allocator), .env = env };
+            return .{ .logger = bun.logger.Log.init(allocator), .src = src, .out = Expr.init(E.Object, (if (comptime @typeInfo(E.Object) == .@"enum" and (@typeInfo(@TypeOf(.{})) == .int or @typeInfo(@TypeOf(.{})) == .comptime_int)) @as(E.Object, @enumFromInt(.{})) else @as(E.Object, .{})), Loc.Empty), .source = bun.logger.Source.initPathString(path, src), .@"arena" = std.heap.ArenaAllocator.init(allocator), .env = env };
     }
 
 pub fn deinit(self: *Parser) void {
@@ -278,7 +278,7 @@ else => true,
                 break :brk Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty);
 };
                 const value: Expr = (switch (value_raw.data) {
-.e_string => |s| (if (bun.strings.eqlComptime(s.data, "true")) Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty) else (if (bun.strings.eqlComptime(s.data, "false")) Expr.init(E.Boolean, E.Boolean{ .value = false }, Loc.Empty) else (if (bun.strings.eqlComptime(s.data, "null")) Expr.init(E.Null, (if (comptime @typeInfo(E.Null) == .@"enum") @as(E.Null, @enumFromInt(.{})) else @as(E.Null, .{})), Loc.Empty) else value_raw))),
+.e_string => |s| (if (bun.strings.eqlComptime(s.data, "true")) Expr.init(E.Boolean, E.Boolean{ .value = true }, Loc.Empty) else (if (bun.strings.eqlComptime(s.data, "false")) Expr.init(E.Boolean, E.Boolean{ .value = false }, Loc.Empty) else (if (bun.strings.eqlComptime(s.data, "null")) Expr.init(E.Null, (if (comptime @typeInfo(E.Null) == .@"enum" and (@typeInfo(@TypeOf(.{})) == .int or @typeInfo(@TypeOf(.{})) == .comptime_int)) @as(E.Null, @enumFromInt(.{})) else @as(E.Null, .{})), Loc.Empty) else value_raw))),
 else => value_raw,
 });
                 if (is_array) {
@@ -291,7 +291,7 @@ else => value_raw,
                             _ = try head.put(arena_allocator, key, Expr.init(E.Array, arr, Loc.Empty));
                         }
                     } else {
-                        _ = try head.put(arena_allocator, key, Expr.init(E.Array, (if (comptime @typeInfo(E.Array) == .@"enum") @as(E.Array, @enumFromInt(.{})) else @as(E.Array, .{})), Loc.Empty));
+                        _ = try head.put(arena_allocator, key, Expr.init(E.Array, (if (comptime @typeInfo(E.Array) == .@"enum" and (@typeInfo(@TypeOf(.{})) == .int or @typeInfo(@TypeOf(.{})) == .comptime_int)) @as(E.Array, @enumFromInt(.{})) else @as(E.Array, .{})), Loc.Empty));
                     }
                 }
                 var was_already_array = false;
@@ -389,7 +389,10 @@ else => {
                 _ = &sfb;
                 var unesc = try std.array_list.Managed(u8).initCapacity(sfb.get(), STACK_BUF_SIZE);
                 _ = &unesc;
-                const RopeT = (if (comptime (usage == .section)) *Rope else struct {
+                const RopePtr = @FieldType(struct {
+    p: *Rope,
+}, "p");
+                const RopeT = (if (comptime (usage == .section)) RopePtr else struct {
 });
                 var rope: ?RopeT = (if (comptime (usage == .section)) null else undefined);
                 _ = &rope;
@@ -1470,14 +1473,14 @@ const @"handle _auth" = _Internal.@"handle _auth";
 
 pub fn Option(comptime T: type) type {
         return union(enum) {
-            some: T,
-            none,
+    some: T,
+    none: void,
 
-            pub fn get(self: @This()) ?T {
-                return switch (self) {
-                    .some => self.some,
-                    .none => null,
-                };
-            }
-        };
+pub fn get(self: @This()) ?T {
+            return (switch (self) {
+.some => self.some,
+.none => null,
+});
+    }
+};
 }

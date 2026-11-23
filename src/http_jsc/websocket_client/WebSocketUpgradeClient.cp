@@ -188,8 +188,8 @@ export struct Headers8Bit {
         };
         let _guard_headers = DeinitGuard<Headers>{ ptr: &headers };
 
-        const n_slices = this.name_slices;
-        const v_slices = this.value_slices;
+        const n_slices = _.name_slices;
+        const v_slices = _.value_slices;
         for (i of 0..n_slices.len) {
             headers.append(n_slices[i], v_slices[i])?;
         }
@@ -447,10 +447,10 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
         pub const onEnd = handleEnd;
         pub const onHandshake = handleHandshake;
 
-        pub fn deinit(*this) void {
-            this.clearData();
-            bun.debugAssert(this.tcp.isDetached());
-            bun.destroy(this);
+        pub fn deinit(*_) {
+            _.clearData();
+            bun.debugAssert(_.tcp.isDetached());
+            bun.destroy(_);
         }
 
         @c pub static fn connect(
@@ -484,7 +484,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             let pathname_slice = pathname.toUTF8(allocator);
             let client_protocol_slice = client_protocol.toUTF8(allocator);
 
-            let extra_headers = Headers8Bit.init(allocator, header_names, header_values, header_count) catch |e| bun.handleOom(e);
+            let extra_headers = Headers8Bit.init(allocator, header_names, header_values, header_count) catch e => bun.handleOom(e);
             const _guard_extra_headers = DeinitGuard<Headers8Bit>{ ptr: &extra_headers };
 
             const _guard_host_slice = DeinitGuard<ZigSlice>{ ptr: &host_slice };
@@ -546,11 +546,11 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 let proxy_hdrs: Headers? = null;
                 const _guard_proxy_hdrs = OptDeinitGuard<Headers?>{ ptr: &proxy_hdrs };
 
-                let proxy_extra_headers = Headers8Bit.init(allocator, proxy_header_names, proxy_header_values, proxy_header_count) catch |e| bun.handleOom(e);
+                let proxy_extra_headers = Headers8Bit.init(allocator, proxy_header_names, proxy_header_values, proxy_header_count) catch e => bun.handleOom(e);
                 const _guard_proxy_extra_headers = DeinitGuard<Headers8Bit>{ ptr: &proxy_extra_headers };
 
                 if (proxy_header_count > 0) {
-                    proxy_hdrs = proxy_extra_headers.toHeaders(allocator) catch |e| bun.handleOom(e);
+                    proxy_hdrs = proxy_extra_headers.toHeaders(allocator) catch e => bun.handleOom(e);
                 }
 
                 connect_request = buildConnectRequest(
@@ -558,9 +558,9 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                     port,
                     proxy_auth_slice,
                     proxy_hdrs,
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
 
-                const target_host_dup = allocator.dupe(u8, host_slice.slice()) catch |e| bun.handleOom(e);
+                const target_host_dup = allocator.dupe(u8, host_slice.slice()) catch e => bun.handleOom(e);
 
                 proxy_state = WebSocketProxy.init(
                     target_host_dup,
@@ -582,7 +582,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                     let subprotocols = bun.StringSet.init(bun.default_allocator);
                     let it = bun.http.HeaderValueIterator.init(protocol_for_subprotocols);
                     while (protocol := it.next()) {
-                        subprotocols.insert(protocol) catch |e| bun.handleOom(e);
+                        subprotocols.insert(protocol) catch e => bun.handleOom(e);
                     }
                     break :brk subprotocols;
                 },
@@ -687,163 +687,163 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             return null;
         }
 
-        pub fn clearInput(*this) void {
-            if (this.input_body_buf.len > 0) bun.default_allocator.free(this.input_body_buf);
-            this.input_body_buf.len = 0;
+        pub fn clearInput(*_) {
+            if (_.input_body_buf.len > 0) bun.default_allocator.free(_.input_body_buf);
+            _.input_body_buf.len = 0;
         }
 
-        pub fn clearData(*this) void {
+        pub fn clearData(*_) {
             const vm: *jsc.VirtualMachine = jsc.VirtualMachine.get();
-            this.poll_ref.unref(vm);
+            _.poll_ref.unref(vm);
 
-            this.subprotocols.clearAndFree();
-            this.clearInput();
-            this.body.clearAndFree(bun.default_allocator);
+            _.subprotocols.clearAndFree();
+            _.clearInput();
+            _.body.clearAndFree(bun.default_allocator);
 
-            if (this.hostname.len > 0) {
-                bun.default_allocator.free(this.hostname);
-                this.hostname = "";
+            if (_.hostname.len > 0) {
+                bun.default_allocator.free(_.hostname);
+                _.hostname = "";
             }
 
-            if (this.proxy != null) {
-                let proxy = this.proxy.?;
-                this.proxy = null;
+            if (_.proxy != null) {
+                let proxy = _.proxy.?;
+                _.proxy = null;
                 if (tunnel := proxy.getTunnel()) {
                     tunnel.detachUpgradeClient();
                 }
                 proxy.deinit();
             }
-            if (config := this.ssl_config) {
+            if (config := _.ssl_config) {
                 config.deinit();
                 bun.default_allocator.destroy(config);
-                this.ssl_config = null;
+                _.ssl_config = null;
             }
-            if (s := this.secure) {
+            if (s := _.secure) {
                 bun.BoringSSL.c.SSL_CTX_free(s);
-                this.secure = null;
+                _.secure = null;
             }
         }
 
-        @c pub fn cancel(*this) void {
-            this.clearData();
+        @c pub fn cancel(*_) {
+            _.clearData();
 
-            this.ref();
-            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
+            _.ref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
 
-            if (this.outgoing_websocket != null) {
-                this.outgoing_websocket = null;
-                this.deref();
+            if (_.outgoing_websocket != null) {
+                _.outgoing_websocket = null;
+                _.deref();
             }
 
             if (comptime ssl) {
-                this.tcp.close(.normal);
+                _.tcp.close(.normal);
             } else {
-                this.tcp.close(.failure);
+                _.tcp.close(.failure);
             }
         }
 
-        pub fn fail(*this, code: ErrorCode) void {
+        pub fn fail(*_, code: ErrorCode) {
             log("onFail: {s}", .{@tagName(code)});
             jsc.markBinding(@src());
-            this.dispatchAbruptClose(code);
+            _.dispatchAbruptClose(code);
 
             if (comptime ssl) {
-                this.tcp.close(.normal);
+                _.tcp.close(.normal);
             } else {
-                this.tcp.close(.failure);
+                _.tcp.close(.failure);
             }
         }
 
-        pub fn dispatchAbruptClose(*this, code: ErrorCode) void {
-            if (ws := this.outgoing_websocket) {
-                this.outgoing_websocket = null;
+        pub fn dispatchAbruptClose(*_, code: ErrorCode) {
+            if (ws := _.outgoing_websocket) {
+                _.outgoing_websocket = null;
                 ws.didAbruptClose(code);
-                this.deref();
+                _.deref();
             }
         }
 
-        pub fn handleClose(*this, _: Socket, _: c_int, _: *!?) void {
+        pub fn handleClose(*_, _: Socket, _: c_int, _: *!?) {
             log("onClose", .{});
             jsc.markBinding(@src());
-            this.clearData();
-            this.tcp.detach();
-            this.dispatchAbruptClose(ErrorCode.ended);
+            _.clearData();
+            _.tcp.detach();
+            _.dispatchAbruptClose(ErrorCode.ended);
 
-            this.deref();
+            _.deref();
         }
 
-        pub fn terminate(*this, code: ErrorCode) void {
-            this.fail(code);
+        pub fn terminate(*_, code: ErrorCode) {
+            _.fail(code);
         }
 
-        pub fn handleHandshake(*this, socket: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) void {
+        pub fn handleHandshake(*_, socket: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) {
             log("onHandshake({d}) ssl_error.error_no={d}", .{ success, ssl_error.error_no });
 
             const handshake_success = if (success == 1) true else false;
             let reject_unauthorized = false;
-            if (ws := this.outgoing_websocket) {
+            if (ws := _.outgoing_websocket) {
                 reject_unauthorized = ws.rejectUnauthorized();
             }
 
             if (handshake_success) {
                 if (reject_unauthorized) {
                     if (ssl_error.error_no != 0) {
-                        log("TLS handshake failed: ssl_error={d}, has_custom_ctx={}", .{ ssl_error.error_no, this.secure != null });
-                        this.fail(ErrorCode.tls_handshake_failed);
+                        log("TLS handshake failed: ssl_error={d}, has_custom_ctx={}", .{ ssl_error.error_no, _.secure != null });
+                        _.fail(ErrorCode.tls_handshake_failed);
                         return;
                     }
                     const ssl_ptr = unsafe { @as(*BoringSSL.c.SSL, socket.getNativeHandle()) };
                     if (servername := BoringSSL.c.SSL_get_servername(ssl_ptr, 0)) {
                         const hostname = unsafe { servername[0..bun.len(servername)] };
                         if (!BoringSSL.checkServerIdentity(ssl_ptr, hostname)) {
-                            this.fail(ErrorCode.tls_handshake_failed);
+                            _.fail(ErrorCode.tls_handshake_failed);
                         }
                     }
                 }
             } else {
-                this.fail(ErrorCode.tls_handshake_failed);
+                _.fail(ErrorCode.tls_handshake_failed);
             }
         }
 
-        pub fn handleOpen(*this, socket: Socket) void {
+        pub fn handleOpen(*_, socket: Socket) {
             log("onOpen", .{});
-            this.tcp = socket;
+            _.tcp = socket;
 
-            bun.assert(this.input_body_buf.len > 0);
-            bun.assert(this.to_send.len == 0);
+            bun.assert(_.input_body_buf.len > 0);
+            bun.assert(_.to_send.len == 0);
 
             if (comptime ssl) {
-                if (this.hostname.len > 0) {
+                if (_.hostname.len > 0) {
                     if (handle := socket.getNativeHandle()) {
-                        handle.configureHTTPClient(this.hostname);
+                        handle.configureHTTPClient(_.hostname);
                     }
-                    bun.default_allocator.free(this.hostname);
-                    this.hostname = "";
+                    bun.default_allocator.free(_.hostname);
+                    _.hostname = "";
                 }
             }
 
-            if (this.proxy != null) {
-                this.state = .proxy_handshake;
+            if (_.proxy != null) {
+                _.state = .proxy_handshake;
             }
 
-            const wrote = socket.write(this.input_body_buf);
+            const wrote = socket.write(_.input_body_buf);
             if (wrote < 0) {
-                this.terminate(ErrorCode.failed_to_write);
+                _.terminate(ErrorCode.failed_to_write);
                 return;
             }
 
-            this.to_send = this.input_body_buf[@as(usize, @intCast(wrote))..];
+            _.to_send = _.input_body_buf[@as(usize, @intCast(wrote))..];
         }
 
-        pub fn isSameSocket(*this, socket: Socket) bool {
-            return socket.socket.eq(this.tcp.socket);
+        pub fn isSameSocket(*_, socket: Socket): bool {
+            return socket.socket.eq(_.tcp.socket);
         }
 
-        pub fn handleData(*this, socket: Socket, data: []const u8) void {
+        pub fn handleData(*_, socket: Socket, data: []const u8) {
             log("onData", .{});
 
-            if (this.state == .done) {
-                if (*p := this.proxy) {
+            if (_.state == .done) {
+                if (*p := _.proxy) {
                     if (tunnel := p.getTunnel()) {
                         tunnel.ref();
                         const _guard_tunnel = DerefGuard<WebSocketProxyTunnel>{ ptr: tunnel };
@@ -853,26 +853,26 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 return;
             }
 
-            if (this.outgoing_websocket == null) {
-                this.state = .failed;
-                this.clearData();
+            if (_.outgoing_websocket == null) {
+                _.state = .failed;
+                _.clearData();
                 socket.close(.failure);
                 return;
             }
-            this.ref();
-            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
+            _.ref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
 
-            bun.assert(this.isSameSocket(socket));
+            bun.assert(_.isSameSocket(socket));
 
             if (comptime Environment.allow_assert)
                 bun.assert(!socket.isShutdown());
 
-            if (this.state == .proxy_handshake) {
-                this.handleProxyResponse(socket, data);
+            if (_.state == .proxy_handshake) {
+                _.handleProxyResponse(socket, data);
                 return;
             }
 
-            if (*p := this.proxy) {
+            if (*p := _.proxy) {
                 if (tunnel := p.getTunnel()) {
                     tunnel.receive(data);
                     return;
@@ -880,62 +880,62 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
 
             let body = data;
-            if (this.body.items.len > 0) {
-                bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
-                body = this.body.items;
+            if (_.body.items.len > 0) {
+                bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
+                body = _.body.items;
             }
 
-            const is_first = this.body.items.len == 0;
+            const is_first = _.body.items.len == 0;
             const http_101 = "HTTP/1.1 101 ";
             if (is_first && body.len > http_101.len) {
                 if (!strings.hasPrefixComptime(body, http_101)) {
-                    this.terminate(ErrorCode.expected_101_status_code);
+                    _.terminate(ErrorCode.expected_101_status_code);
                     return;
                 }
             }
 
-            const response = PicoHTTP.Response.parse(body, &this.headers_buf) catch |e| {
+            const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
                 if (e == error.Malformed_HTTP_Response) {
-                    this.terminate(ErrorCode.invalid_response);
+                    _.terminate(ErrorCode.invalid_response);
                     return;
                 } else if (e == error.ShortRead) {
-                    if (this.body.items.len == 0) {
-                        bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
+                    if (_.body.items.len == 0) {
+                        bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
                     }
                     return;
                 }
                 return;
             };
 
-            this.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
+            _.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
         }
 
-        pub fn handleProxyResponse(*this, socket: Socket, data: []const u8) void {
+        pub fn handleProxyResponse(*_, socket: Socket, data: []const u8) {
             log("handleProxyResponse", .{});
 
             let body = data;
-            if (this.body.items.len > 0) {
-                bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
-                body = this.body.items;
+            if (_.body.items.len > 0) {
+                bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
+                body = _.body.items;
             }
 
-            const is_first = this.body.items.len == 0;
+            const is_first = _.body.items.len == 0;
             const http_200 = "HTTP/1.1 200 ";
             const http_200_alt = "HTTP/1.0 200 ";
             if (is_first && body.len > http_200.len) {
                 if (!strings.hasPrefixComptime(body, http_200) && !strings.hasPrefixComptime(body, http_200_alt)) {
-                    this.terminate(ErrorCode.proxy_connect_failed);
+                    _.terminate(ErrorCode.proxy_connect_failed);
                     return;
                 }
             }
 
-            const response = PicoHTTP.Response.parse(body, &this.headers_buf) catch |e| {
+            const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
                 if (e == error.Malformed_HTTP_Response) {
-                    this.terminate(ErrorCode.invalid_response);
+                    _.terminate(ErrorCode.invalid_response);
                     return;
                 } else if (e == error.ShortRead) {
-                    if (this.body.items.len == 0) {
-                        bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
+                    if (_.body.items.len == 0) {
+                        bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
                     }
                     return;
                 }
@@ -944,149 +944,149 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
 
             if (response.status_code != 200) {
                 if (response.status_code == 407) {
-                    this.terminate(ErrorCode.proxy_authentication_required);
+                    _.terminate(ErrorCode.proxy_authentication_required);
                 } else {
-                    this.terminate(ErrorCode.proxy_connect_failed);
+                    _.terminate(ErrorCode.proxy_connect_failed);
                 }
                 return;
             }
 
             log("Proxy tunnel established", .{});
 
-            this.body.clearRetainingCapacity();
+            _.body.clearRetainingCapacity();
 
             const remain_buf = body[@as(usize, @intCast(response.bytes_read))..];
 
-            if (*p := this.proxy) {
+            if (*p := _.proxy) {
                 if (p.isTargetHttps()) {
-                    this.startProxyTLSHandshake(socket, remain_buf);
+                    _.startProxyTLSHandshake(socket, remain_buf);
                     return;
                 }
 
-                this.state = .reading;
+                _.state = .reading;
 
-                if (this.input_body_buf.len > 0) {
-                    bun.default_allocator.free(this.input_body_buf);
+                if (_.input_body_buf.len > 0) {
+                    bun.default_allocator.free(_.input_body_buf);
                 }
 
-                this.input_body_buf = p.takeWebsocketRequestBuf();
+                _.input_body_buf = p.takeWebsocketRequestBuf();
 
-                const wrote = socket.write(this.input_body_buf);
+                const wrote = socket.write(_.input_body_buf);
                 if (wrote < 0) {
-                    this.terminate(ErrorCode.failed_to_write);
+                    _.terminate(ErrorCode.failed_to_write);
                     return;
                 }
 
-                this.to_send = this.input_body_buf[@as(usize, @intCast(wrote))..];
+                _.to_send = _.input_body_buf[@as(usize, @intCast(wrote))..];
 
                 if (remain_buf.len > 0) {
-                    this.handleData(socket, remain_buf);
+                    _.handleData(socket, remain_buf);
                 }
             } else {
-                this.terminate(ErrorCode.proxy_tunnel_failed);
+                _.terminate(ErrorCode.proxy_tunnel_failed);
             }
         }
 
-        pub fn startProxyTLSHandshake(*this, socket: Socket, initial_data: []const u8) void {
+        pub fn startProxyTLSHandshake(*_, socket: Socket, initial_data: []const u8) {
             log("startProxyTLSHandshake", .{});
 
-            if (*p := this.proxy) {
-                const reject_unauthorized = if (this.outgoing_websocket != null) this.outgoing_websocket.?.rejectUnauthorized() else true;
+            if (*p := _.proxy) {
+                const reject_unauthorized = if (_.outgoing_websocket != null) _.outgoing_websocket.?.rejectUnauthorized() else true;
 
-                const tunnel = WebSocketProxyTunnel.init(ssl, this, socket, p.getTargetHost(), reject_unauthorized) catch {
-                    this.terminate(ErrorCode.proxy_tunnel_failed);
+                const tunnel = WebSocketProxyTunnel.init(ssl, _, socket, p.getTargetHost(), reject_unauthorized) catch {
+                    _.terminate(ErrorCode.proxy_tunnel_failed);
                     return;
                 };
 
-                const ssl_options: SSLConfig = if (this.ssl_config != null) unsafe { this.ssl_config.?.* } else SSLConfig{
+                const ssl_options: SSLConfig = if (_.ssl_config != null) unsafe { _.ssl_config.?.* } else SSLConfig{
                     reject_unauthorized: 0,
                     request_cert: 1,
                 };
 
                 tunnel.start(ssl_options, initial_data) catch {
                     tunnel.deref();
-                    this.terminate(ErrorCode.proxy_tunnel_failed);
+                    _.terminate(ErrorCode.proxy_tunnel_failed);
                     return;
                 };
 
                 p.setTunnel(tunnel);
-                this.state = .proxy_tls_handshake;
+                _.state = .proxy_tls_handshake;
             } else {
-                this.terminate(ErrorCode.proxy_tunnel_failed);
+                _.terminate(ErrorCode.proxy_tunnel_failed);
             }
         }
 
-        pub fn onProxyTLSHandshakeComplete(*this) void {
+        pub fn onProxyTLSHandshakeComplete(*_) {
             log("onProxyTLSHandshakeComplete", .{});
 
-            this.state = .reading;
+            _.state = .reading;
 
-            if (this.input_body_buf.len > 0) {
-                bun.default_allocator.free(this.input_body_buf);
-                this.input_body_buf = empty_u8[0..0];
+            if (_.input_body_buf.len > 0) {
+                bun.default_allocator.free(_.input_body_buf);
+                _.input_body_buf = empty_u8[0..0];
             }
 
-            if (*p := this.proxy) {
-                this.input_body_buf = p.takeWebsocketRequestBuf();
-                if (this.input_body_buf.len == 0) {
-                    this.terminate(ErrorCode.failed_to_write);
+            if (*p := _.proxy) {
+                _.input_body_buf = p.takeWebsocketRequestBuf();
+                if (_.input_body_buf.len == 0) {
+                    _.terminate(ErrorCode.failed_to_write);
                     return;
                 }
 
                 if (tunnel := p.getTunnel()) {
-                    const wrote = tunnel.write(this.input_body_buf) catch {
-                        this.terminate(ErrorCode.failed_to_write);
+                    const wrote = tunnel.write(_.input_body_buf) catch {
+                        _.terminate(ErrorCode.failed_to_write);
                         return;
                     };
-                    this.to_send = this.input_body_buf[wrote..];
+                    _.to_send = _.input_body_buf[wrote..];
                 } else {
-                    this.terminate(ErrorCode.proxy_tunnel_failed);
+                    _.terminate(ErrorCode.proxy_tunnel_failed);
                 }
             } else {
-                this.terminate(ErrorCode.proxy_tunnel_failed);
+                _.terminate(ErrorCode.proxy_tunnel_failed);
             }
         }
 
-        pub fn handleDecryptedData(*this, data: []const u8) void {
+        pub fn handleDecryptedData(*_, data: []const u8) {
             log("handleDecryptedData: {} bytes", .{data.len});
 
             let body = data;
-            if (this.body.items.len > 0) {
-                bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
-                body = this.body.items;
+            if (_.body.items.len > 0) {
+                bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
+                body = _.body.items;
             }
 
-            const is_first = this.body.items.len == 0;
+            const is_first = _.body.items.len == 0;
             const http_101 = "HTTP/1.1 101 ";
             if (is_first && body.len > http_101.len) {
                 if (!strings.hasPrefixComptime(body, http_101)) {
-                    this.terminate(ErrorCode.expected_101_status_code);
+                    _.terminate(ErrorCode.expected_101_status_code);
                     return;
                 }
             }
 
-            const response = PicoHTTP.Response.parse(body, &this.headers_buf) catch |e| {
+            const response = PicoHTTP.Response.parse(body, &_.headers_buf) catch e => {
                 if (e == error.Malformed_HTTP_Response) {
-                    this.terminate(ErrorCode.invalid_response);
+                    _.terminate(ErrorCode.invalid_response);
                     return;
                 } else if (e == error.ShortRead) {
-                    if (this.body.items.len == 0) {
-                        bun.handleOom(this.body.appendSlice(bun.default_allocator, data));
+                    if (_.body.items.len == 0) {
+                        bun.handleOom(_.body.appendSlice(bun.default_allocator, data));
                     }
                     return;
                 }
                 return;
             };
 
-            this.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
+            _.processResponse(response, body[@as(usize, @intCast(response.bytes_read))..]);
         }
 
-        pub fn handleEnd(*this, _: Socket) void {
+        pub fn handleEnd(*_, _: Socket) {
             log("onEnd", .{});
-            this.terminate(ErrorCode.ended);
+            _.terminate(ErrorCode.ended);
         }
 
-        pub fn processResponse(*this, response: PicoHTTP.Response, remain_buf: []const u8) void {
+        pub fn processResponse(*_, response: PicoHTTP.Response, remain_buf: []const u8) {
             let upgrade_header = PicoHTTP.Header{ name: "", value: "" };
             let connection_header = PicoHTTP.Header{ name: "", value: "" };
             let websocket_accept_header = PicoHTTP.Header{ name: "", value: "" };
@@ -1094,12 +1094,12 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             let deflate_result = DeflateNegotiationResult{};
 
             if (response.status_code != 101) {
-                this.terminate(ErrorCode.expected_101_status_code);
+                _.terminate(ErrorCode.expected_101_status_code);
                 return;
             }
 
             const hdr_list = response.headers.list;
-            for (hdr_list) |header| {
+            for (header of hdr_list) {
                 switch (header.name.len) {
                     10 => {
                         if (connection_header.name.len == 0 && strings.eqlCaseInsensitiveASCII(header.name, "Connection", false)) {
@@ -1114,7 +1114,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                     21 => {
                         if (strings.eqlCaseInsensitiveASCII(header.name, "Sec-WebSocket-Version", false)) {
                             if (!strings.eqlComptimeIgnoreLen(header.value, "13")) {
-                                this.terminate(ErrorCode.invalid_websocket_version);
+                                _.terminate(ErrorCode.invalid_websocket_version);
                                 return;
                             }
                         }
@@ -1133,9 +1133,9 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                                 let iterator = bun.http.HeaderValueIterator.init(header.value);
                                 if (protocol := iterator.next()) {
                                     if (iterator.next() != null) break :brk false;
-                                    if (!this.subprotocols.contains(protocol)) break :brk false;
+                                    if (!_.subprotocols.contains(protocol)) break :brk false;
 
-                                    if (ws := this.outgoing_websocket) {
+                                    if (ws := _.outgoing_websocket) {
                                         let protocol_str = bun.String.cloneLatin1(protocol);
                                         const _guard_proto = DerefGuard<bun.String>{ ptr: &protocol_str };
                                         ws.setProtocol(&protocol_str);
@@ -1146,15 +1146,15 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                             };
 
                             if (!valid) {
-                                this.terminate(ErrorCode.mismatch_client_protocol);
+                                _.terminate(ErrorCode.mismatch_client_protocol);
                                 return;
                             }
                         }
                     },
                     24 => {
                         if (strings.eqlCaseInsensitiveASCII(header.name, "Sec-WebSocket-Extensions", false)) {
-                            if (!this.offered_permessage_deflate) {
-                                this.terminate(ErrorCode.invalid_response);
+                            if (!_.offered_permessage_deflate) {
+                                _.terminate(ErrorCode.invalid_response);
                                 return;
                             }
                             let it = std.mem.splitScalar(u8, header.value, ',');
@@ -1212,32 +1212,32 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
 
             if (@min(upgrade_header.name.len, upgrade_header.value.len) == 0) {
-                this.terminate(ErrorCode.missing_upgrade_header);
+                _.terminate(ErrorCode.missing_upgrade_header);
                 return;
             }
 
             if (@min(connection_header.name.len, connection_header.value.len) == 0) {
-                this.terminate(ErrorCode.missing_connection_header);
+                _.terminate(ErrorCode.missing_connection_header);
                 return;
             }
 
             if (@min(websocket_accept_header.name.len, websocket_accept_header.value.len) == 0) {
-                this.terminate(ErrorCode.missing_websocket_accept_header);
+                _.terminate(ErrorCode.missing_websocket_accept_header);
                 return;
             }
 
             if (!strings.eqlCaseInsensitiveASCII(connection_header.value, "Upgrade", true)) {
-                this.terminate(ErrorCode.invalid_connection_header);
+                _.terminate(ErrorCode.invalid_connection_header);
                 return;
             }
 
             if (!strings.eqlCaseInsensitiveASCII(upgrade_header.value, "websocket", true)) {
-                this.terminate(ErrorCode.invalid_upgrade_header);
+                _.terminate(ErrorCode.invalid_upgrade_header);
                 return;
             }
 
-            if (!std.mem.eql(u8, websocket_accept_header.value, &this.expected_accept)) {
-                this.terminate(ErrorCode.mismatch_websocket_accept_header);
+            if (!std.mem.eql(u8, websocket_accept_header.value, &_.expected_accept)) {
+                _.terminate(ErrorCode.mismatch_websocket_accept_header);
                 return;
             }
 
@@ -1245,119 +1245,119 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             let overflow: []u8 = empty_u8[0..0];
             if (overflow_len > 0) {
                 overflow = bun.default_allocator.alloc(u8, overflow_len) catch {
-                    this.terminate(ErrorCode.invalid_response);
+                    _.terminate(ErrorCode.invalid_response);
                     return;
                 };
                 @memcpy(overflow, remain_buf);
             }
 
-            if (*p := this.proxy) {
+            if (*p := _.proxy) {
                 if (tunnel := p.getTunnel()) {
                     jsc.markBinding(@src());
-                    if (!this.tcp.isClosed() && this.outgoing_websocket != null) {
-                        this.tcp.timeout(0);
+                    if (!_.tcp.isClosed() && _.outgoing_websocket != null) {
+                        _.tcp.timeout(0);
                         log("onDidConnect (tunnel mode)", .{});
 
-                        const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
-                        const ws = bun.take(&this.outgoing_websocket).?;
+                        const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
+                        const ws = bun.take(&_.outgoing_websocket).?;
 
                         ws.didConnectWithTunnel(tunnel, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null);
 
-                        this.state = .done;
-                    } else if (this.tcp.isClosed()) {
-                        this.terminate(ErrorCode.cancel);
-                    } else if (this.outgoing_websocket == null) {
-                        this.tcp.close(.failure);
+                        _.state = .done;
+                    } else if (_.tcp.isClosed()) {
+                        _.terminate(ErrorCode.cancel);
+                    } else if (_.outgoing_websocket == null) {
+                        _.tcp.close(.failure);
                     }
                     return;
                 }
             }
 
-            let _guard_secure = SSLCtxGuard{ ctx: this.secure };
-            this.secure = null;
-            this.clearData();
+            let _guard_secure = SSLCtxGuard{ ctx: _.secure };
+            _.secure = null;
+            _.clearData();
             jsc.markBinding(@src());
-            if (!this.tcp.isClosed() && this.outgoing_websocket != null) {
-                this.tcp.timeout(0);
+            if (!_.tcp.isClosed() && _.outgoing_websocket != null) {
+                _.tcp.timeout(0);
                 log("onDidConnect", .{});
 
-                const _guard_deref1 = DerefGuard<HTTPClient>{ ptr: this };
-                const ws = bun.take(&this.outgoing_websocket).?;
-                const socket = this.tcp;
+                const _guard_deref1 = DerefGuard<HTTPClient>{ ptr: _ };
+                const ws = bun.take(&_.outgoing_websocket).?;
+                const socket = _.tcp;
 
-                this.tcp.detach();
-                const _guard_deref2 = DerefGuard<HTTPClient>{ ptr: this };
+                _.tcp.detach();
+                const _guard_deref2 = DerefGuard<HTTPClient>{ ptr: _ };
                 if (native_socket := socket.socket.get()) {
                     ws.didConnect(native_socket, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null, _guard_secure.ctx);
                     _guard_secure.disarm();
                 } else {
-                    this.terminate(ErrorCode.failed_to_connect);
+                    _.terminate(ErrorCode.failed_to_connect);
                 }
-            } else if (this.tcp.isClosed()) {
-                this.terminate(ErrorCode.cancel);
-            } else if (this.outgoing_websocket == null) {
-                this.tcp.close(.failure);
+            } else if (_.tcp.isClosed()) {
+                _.terminate(ErrorCode.cancel);
+            } else if (_.outgoing_websocket == null) {
+                _.tcp.close(.failure);
             }
         }
 
-        @c pub fn memoryCost(*this) usize {
+        @c pub fn memoryCost(*_): usize {
             let cost: usize = @sizeOf(HTTPClient);
-            cost += this.body.capacity;
-            cost += this.to_send.len;
+            cost += _.body.capacity;
+            cost += _.to_send.len;
             return cost;
         }
 
-        pub fn handleWritable(*this, socket: Socket) void {
-            bun.assert(this.isSameSocket(socket));
+        pub fn handleWritable(*_, socket: Socket) {
+            bun.assert(_.isSameSocket(socket));
 
-            if (*p := this.proxy) {
+            if (*p := _.proxy) {
                 if (tunnel := p.getTunnel()) {
                     tunnel.onWritable();
-                    if (this.state == .done) return;
+                    if (_.state == .done) return;
 
-                    if (this.to_send.len == 0) return;
-                    this.ref();
-                    const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
-                    const wrote = tunnel.write(this.to_send) catch {
-                        this.terminate(ErrorCode.failed_to_write);
+                    if (_.to_send.len == 0) return;
+                    _.ref();
+                    const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
+                    const wrote = tunnel.write(_.to_send) catch {
+                        _.terminate(ErrorCode.failed_to_write);
                         return;
                     };
-                    this.to_send = this.to_send[@min(wrote, this.to_send.len)..];
+                    _.to_send = _.to_send[@min(wrote, _.to_send.len)..];
                     return;
                 }
             }
 
-            if (this.to_send.len == 0)
+            if (_.to_send.len == 0)
                 return;
 
-            this.ref();
-            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
+            _.ref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
 
-            const wrote = socket.write(this.to_send);
+            const wrote = socket.write(_.to_send);
             if (wrote < 0) {
-                this.terminate(ErrorCode.failed_to_write);
+                _.terminate(ErrorCode.failed_to_write);
                 return;
             }
-            this.to_send = this.to_send[@min(@as(usize, @intCast(wrote)), this.to_send.len)..];
+            _.to_send = _.to_send[@min(@as(usize, @intCast(wrote)), _.to_send.len)..];
         }
 
-        pub fn handleTimeout(*this, _: Socket) void {
-            this.terminate(ErrorCode.timeout);
+        pub fn handleTimeout(*_, _: Socket) {
+            _.terminate(ErrorCode.timeout);
         }
 
-        pub fn handleConnectError(*this, _: Socket, _: c_int) void {
-            this.tcp.detach();
+        pub fn handleConnectError(*_, _: Socket, _: c_int) {
+            _.tcp.detach();
 
-            const _guard_deref = DerefGuard<HTTPClient>{ ptr: this };
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
 
-            if (this.state == .reading) {
-                this.terminate(ErrorCode.failed_to_connect);
+            if (_.state == .reading) {
+                _.terminate(ErrorCode.failed_to_connect);
             } else {
-                this.state = .failed;
+                _.state = .failed;
             }
         }
 
-        pub static fn exportAll() void {
+        pub static fn exportAll() {
             if (comptime ssl) {
                 @export(&connect, { name: "Bun__WebSocketHTTPSClient__connect" });
                 @export(&cancel, { name: "Bun__WebSocketHTTPSClient__cancel" });

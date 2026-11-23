@@ -709,7 +709,7 @@ struct PosixIoctl {
 
         let options = Options.parseFromJS(globalObject, js_options)?;
 
-        const result = initTerminal(globalObject, &options, this_value) catch |e| {
+        const result = initTerminal(globalObject, &options, this_value) catch e => {
             options.deinit();
             if (e == error.OpenPtyFailed) {
                 return globalObject.throw("Failed to open PTY", {});
@@ -1179,7 +1179,7 @@ struct PosixIoctl {
         const callback = callback_opt.?;
 
         const globalThis = client.globalThis;
-        const duped = bun.default_allocator.dupe(u8, chunk) catch |e| {
+        const duped = bun.default_allocator.dupe(u8, chunk) catch e => {
             log("Terminal data allocation OOM: chunk_size={d}, error={any}", .{ chunk.len, e });
             return true;
         };

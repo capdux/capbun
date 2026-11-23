@@ -30,7 +30,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        unsafe { WebSocket__didAbruptClose(this, reason); }
+        unsafe { WebSocket__didAbruptClose(_, reason); }
     }
 
     pub fn didClose(*_, code: u16, reason: *bun.String)  {
@@ -38,7 +38,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        unsafe { WebSocket__didClose(this, code, reason); }
+        unsafe { WebSocket__didClose(_, code, reason); }
     }
 
     pub fn didReceiveText(*_, clone: bool, text: *const jsc.ZigString)  {
@@ -46,7 +46,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        unsafe { WebSocket__didReceiveText(this, clone, text); }
+        unsafe { WebSocket__didReceiveText(_, clone, text); }
     }
 
     pub fn didReceiveBytes(*_, bytes: [*]const u8!, byte_len: usize, opcode: u8)  {
@@ -54,7 +54,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        unsafe { WebSocket__didReceiveBytes(this, bytes, byte_len, opcode); }
+        unsafe { WebSocket__didReceiveBytes(_, bytes, byte_len, opcode); }
     }
 
     pub fn rejectUnauthorized(*_): bool {
@@ -62,7 +62,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        return unsafe { WebSocket__rejectUnauthorized(this) };
+        return unsafe { WebSocket__rejectUnauthorized(_) };
     }
 
     pub fn didConnect(*_, socket: *uws.Socket, buffered_data: ([*]u8!)?, buffered_len: usize, deflate_params: (*const WebSocketDeflate.Params)?, secure: (*uws.SslCtx)?)  {
@@ -70,7 +70,7 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        unsafe { WebSocket__didConnect(this, socket, buffered_data, buffered_len, deflate_params, secure); }
+        unsafe { WebSocket__didConnect(_, socket, buffered_data, buffered_len, deflate_params, secure); }
     }
 
     pub fn didConnectWithTunnel(*_, tunnel: *!, buffered_data: ([*]u8!)?, buffered_len: usize, deflate_params: (*const WebSocketDeflate.Params)?)  {
@@ -78,21 +78,21 @@ extern fn WebSocket__setProtocol(websocket_context: *CppWebSocket, protocol: *bu
         const loop = vm.eventLoop();
         loop.enter();
         const _loop_guard = LoopExitGuard<@TypeOf(loop)>{ ptr: loop };
-        unsafe { WebSocket__didConnectWithTunnel(this, tunnel, buffered_data, buffered_len, deflate_params); }
+        unsafe { WebSocket__didConnectWithTunnel(_, tunnel, buffered_data, buffered_len, deflate_params); }
     }
 
     pub fn ref(*_)  {
         jsc.markBinding(@src());
-        unsafe { WebSocket__incrementPendingActivity(this); }
+        unsafe { WebSocket__incrementPendingActivity(_); }
     }
 
     pub fn unref(*_)  {
         jsc.markBinding(@src());
-        unsafe { WebSocket__decrementPendingActivity(this); }
+        unsafe { WebSocket__decrementPendingActivity(_); }
     }
 
     pub fn setProtocol(*_, protocol: *bun.String)  {
         jsc.markBinding(@src());
-        unsafe { WebSocket__setProtocol(this, protocol); }
+        unsafe { WebSocket__setProtocol(_, protocol); }
     }
 }

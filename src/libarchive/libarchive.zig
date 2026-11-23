@@ -190,7 +190,7 @@ pub fn archive_read_callback(_: *Archive, ctx_: *anyopaque, buffer: [*c]*const a
                 buffer.* = remaining[0..diff].ptr;
             }
             stream.pos = (stream.pos + diff);
-            return (if (comptime @typeInfo(lib.la_ssize_t) == .@"enum") @as(lib.la_ssize_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(diff)) == .@"enum") cp_cast_int(isize, @intFromEnum(diff)) else cp_cast_int(isize, diff)))) else @as(lib.la_ssize_t, (if (comptime @typeInfo(@TypeOf(diff)) == .@"enum") cp_cast_int(isize, @intFromEnum(diff)) else cp_cast_int(isize, diff))));
+            return (if (comptime @typeInfo(lib.la_ssize_t) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(diff)) == .@"enum") cp_cast_int(isize, @intFromEnum(diff)) else cp_cast_int(isize, diff)))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(diff)) == .@"enum") cp_cast_int(isize, @intFromEnum(diff)) else cp_cast_int(isize, diff)))) == .comptime_int)) @as(lib.la_ssize_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(diff)) == .@"enum") cp_cast_int(isize, @intFromEnum(diff)) else cp_cast_int(isize, diff)))) else @as(lib.la_ssize_t, (if (comptime @typeInfo(@TypeOf(diff)) == .@"enum") cp_cast_int(isize, @intFromEnum(diff)) else cp_cast_int(isize, diff))));
     }
 
 pub fn archive_skip_callback(_: *Archive, ctx_: *anyopaque, offset: lib.la_int64_t) callconv(.c) lib.la_int64_t {
@@ -201,7 +201,7 @@ pub fn archive_skip_callback(_: *Archive, ctx_: *anyopaque, offset: lib.la_int64
             const proposed = (pos + (if (comptime @typeInfo(@TypeOf(offset)) == .@"enum") cp_cast_int(isize, @intFromEnum(offset)) else cp_cast_int(isize, offset)));
             const new_pos = @min(@max(proposed, 0), (buflen - 1));
             stream.pos = (if (comptime @typeInfo(@TypeOf(new_pos)) == .@"enum") cp_cast_int(usize, @intFromEnum(new_pos)) else cp_cast_int(usize, new_pos));
-            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum") @as(lib.la_int64_t, @enumFromInt((new_pos - pos))) else @as(lib.la_int64_t, (new_pos - pos)));
+            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum" and (@typeInfo(@TypeOf((new_pos - pos))) == .int or @typeInfo(@TypeOf((new_pos - pos))) == .comptime_int)) @as(lib.la_int64_t, @enumFromInt((new_pos - pos))) else @as(lib.la_int64_t, (new_pos - pos)));
     }
 
 pub fn archive_seek_callback(_: *Archive, ctx_: *anyopaque, offset: lib.la_int64_t, whence: c_int) callconv(.c) lib.la_int64_t {
@@ -214,17 +214,17 @@ pub fn archive_seek_callback(_: *Archive, ctx_: *anyopaque, offset: lib.la_int64
 Seek.current => {
 const new_pos = @max(@min((pos + off), (buflen - 1)), 0);
             stream.pos = (if (comptime @typeInfo(@TypeOf(new_pos)) == .@"enum") cp_cast_int(usize, @intFromEnum(new_pos)) else cp_cast_int(usize, new_pos));
-            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum") @as(lib.la_int64_t, @enumFromInt(new_pos)) else @as(lib.la_int64_t, new_pos));
+            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum" and (@typeInfo(@TypeOf(new_pos)) == .int or @typeInfo(@TypeOf(new_pos)) == .comptime_int)) @as(lib.la_int64_t, @enumFromInt(new_pos)) else @as(lib.la_int64_t, new_pos));
 },
 Seek.end => {
 const new_pos = @max(@min((buflen - off), buflen), 0);
             stream.pos = (if (comptime @typeInfo(@TypeOf(new_pos)) == .@"enum") cp_cast_int(usize, @intFromEnum(new_pos)) else cp_cast_int(usize, new_pos));
-            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum") @as(lib.la_int64_t, @enumFromInt(new_pos)) else @as(lib.la_int64_t, new_pos));
+            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum" and (@typeInfo(@TypeOf(new_pos)) == .int or @typeInfo(@TypeOf(new_pos)) == .comptime_int)) @as(lib.la_int64_t, @enumFromInt(new_pos)) else @as(lib.la_int64_t, new_pos));
 },
 Seek.set => {
 const new_pos = @max(@min(off, (buflen - 1)), 0);
             stream.pos = (if (comptime @typeInfo(@TypeOf(new_pos)) == .@"enum") cp_cast_int(usize, @intFromEnum(new_pos)) else cp_cast_int(usize, new_pos));
-            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum") @as(lib.la_int64_t, @enumFromInt(new_pos)) else @as(lib.la_int64_t, new_pos));
+            return (if (comptime @typeInfo(lib.la_int64_t) == .@"enum" and (@typeInfo(@TypeOf(new_pos)) == .int or @typeInfo(@TypeOf(new_pos)) == .comptime_int)) @as(lib.la_int64_t, @enumFromInt(new_pos)) else @as(lib.la_int64_t, new_pos));
 },
 }
     }
@@ -473,7 +473,7 @@ var pathname: bun.OSPathSliceZ = (if (comptime Environment.isWindows) entry.path
                         {
                             switch ((char.*)) {
 '|', '<', '>', '?', ':' => {
-(char.*) = ((char.*) + (if (comptime @typeInfo(bun.OSPathChar) == .@"enum") @as(bun.OSPathChar, @enumFromInt(61440)) else @as(bun.OSPathChar, 61440)));
+(char.*) = ((char.*) + (if (comptime @typeInfo(bun.OSPathChar) == .@"enum" and (@typeInfo(@TypeOf(61440)) == .int or @typeInfo(@TypeOf(61440)) == .comptime_int)) @as(bun.OSPathChar, @enumFromInt(61440)) else @as(bun.OSPathChar, 61440)));
 },
 else => {
 

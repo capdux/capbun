@@ -65,12 +65,12 @@ pub enum PatchFilePart {
     file_mode_change: *FileModeChange,
 
     pub fn deinit(*_, allocator: Allocator) {
-        switch (this.*) {
-            .file_patch => this.file_patch.deinit(allocator),
-            .file_deletion => this.file_deletion.deinit(allocator),
-            .file_creation => this.file_creation.deinit(allocator),
-            .file_rename => this.file_rename.deinit(allocator),
-            .file_mode_change => this.file_mode_change.deinit(allocator),
+        switch (_.*) {
+            .file_patch => _.file_patch.deinit(allocator),
+            .file_deletion => _.file_deletion.deinit(allocator),
+            .file_creation => _.file_creation.deinit(allocator),
+            .file_rename => _.file_rename.deinit(allocator),
+            .file_mode_change => _.file_mode_change.deinit(allocator),
         }
     }
 }
@@ -80,11 +80,11 @@ struct ApplyState {
     patch_dir_abs_path: ([:0]const u8)? = null,
 
     fn patchDirAbsPath(*_, fd: bun.FD): bun.sys.Maybe(ZStr) {
-        if (p := this.patch_dir_abs_path) return { result: p };
-        switch (bun.sys.getFdPath(fd, &this.pathbuf)) {
+        if (p := _.patch_dir_abs_path) return { result: p };
+        switch (bun.sys.getFdPath(fd, &_.pathbuf)) {
             .result p => {
-                this.patch_dir_abs_path = this.pathbuf[0..p.len :0];
-                return { result: this.patch_dir_abs_path.? };
+                _.patch_dir_abs_path = _.pathbuf[0..p.len :0];
+                return { result: _.patch_dir_abs_path.? };
             },
             .err e => return { err: e.withFd(fd) },
         }
@@ -95,8 +95,8 @@ pub struct PatchFile {
     parts: List(PatchFilePart) = {},
 
     pub fn deinit(*_, allocator: Allocator) {
-        for (*part of this.parts.items) part.deinit(allocator);
-        this.parts.deinit(allocator);
+        for (*part of _.parts.items) part.deinit(allocator);
+        _.parts.deinit(allocator);
     }
 
     pub fn apply(allocator: Allocator, patch_dir: bun.FD): bun.sys.Error? {
@@ -105,7 +105,7 @@ pub struct PatchFile {
         let arena_alloc = bun.ArenaAllocator.init(sfb.get());
         const arena_guard = DeinitGuard<bun.ArenaAllocator>{ ptr: unsafe { &arena_alloc } };
 
-        for (part of this.parts.items) {
+        for (part of _.parts.items) {
             defer * = arena_alloc.reset(.retain_capacity);
             switch (part) {
                 .file_deletion => {
@@ -399,16 +399,16 @@ struct FileDeets {
     hunks: List(Hunk) = {},
 
     fn takeHunks(*_): List(Hunk) {
-        const hunks = this.hunks;
-        this.hunks = {};
+        const hunks = _.hunks;
+        _.hunks = {};
         return hunks;
     }
 
     fn deinit(*_, allocator: Allocator) {
-        for (*hunk of this.hunks.items) {
+        for (*hunk of _.hunks.items) {
             hunk.deinit(allocator);
         }
-        this.hunks.deinit(allocator);
+        _.hunks.deinit(allocator);
     }
 
     fn nullifyEmptyStrings(*_) {
@@ -416,9 +416,9 @@ struct FileDeets {
 
         inline for (field of fields) {
             if (field.type == OptStr) {
-                const value = @field(this, field.name);
+                const value = @field(_, field.name);
                 if (value != null && value.?.len == 0) {
-                    @field(this, field.name) = null;
+                    @field(_, field.name) = null;
                 }
             }
         }
@@ -437,7 +437,7 @@ pub struct PatchMutationPart {
     pub const PartType = PatchMutationPartType;
 
     pub fn deinit(*_, allocator: Allocator) {
-        this.lines.deinit(allocator);
+        _.lines.deinit(allocator);
     }
 }
 
@@ -465,10 +465,10 @@ pub struct Hunk {
     pub const Header = HunkHeader;
 
     pub fn deinit(*_, allocator: Allocator) {
-        for (*part of this.parts.items) {
+        for (*part of _.parts.items) {
             part.deinit(allocator);
         }
-        this.parts.deinit(allocator);
+        _.parts.deinit(allocator);
     }
 
     pub fn verifyIntegrity(): bool {
@@ -496,7 +496,7 @@ pub enum FileMode: u32 {
     executable = 0o755,
 
     pub fn toBunMode(): bun.Mode {
-        return @intFromEnum(this) as bun.Mode;
+        return @intFromEnum(_) as bun.Mode;
     }
 
     pub static fn fromU32(mode: u32): FileMode? {
@@ -540,9 +540,9 @@ pub struct FilePatch {
     after_hash: ([]const u8)?,
 
     pub fn deinit(*_, allocator: Allocator) {
-        for (*hunk of this.hunks.items) hunk.deinit(allocator);
-        this.hunks.deinit(allocator);
-        bun.destroy(this);
+        for (*hunk of _.hunks.items) hunk.deinit(allocator);
+        _.hunks.deinit(allocator);
+        bun.destroy(_);
     }
 }
 
@@ -553,8 +553,8 @@ pub struct FileDeletion {
     hash: ([]const u8)?,
 
     pub fn deinit(*_, allocator: Allocator) {
-        if (hunk := this.hunk) hunk.deinit(allocator);
-        bun.destroy(this);
+        if (hunk := _.hunk) hunk.deinit(allocator);
+        bun.destroy(_);
     }
 }
 
@@ -565,8 +565,8 @@ pub struct FileCreation {
     hash: ([]const u8)?,
 
     pub fn deinit(*_, allocator: Allocator) {
-        if (hunk := this.hunk) hunk.deinit(allocator);
-        bun.destroy(this);
+        if (hunk := _.hunk) hunk.deinit(allocator);
+        bun.destroy(_);
     }
 }
 
@@ -755,7 +755,7 @@ struct LookbackIterator {
     }
 
     pub fn back(*_) {
-        this.inner.index = this.prev_index;
+        _.inner.index = _.prev_index;
     }
 }
 
@@ -790,22 +790,22 @@ struct PatchLinesParser {
     const HunkLineType = PatchHunkLineType;
 
     fn deinit(*_, allocator: Allocator, comptime clear_result_retaining_capacity: bool) {
-        this.current_file_patch.deinit(allocator);
-        if (*hunk := this.current_hunk) hunk.deinit(allocator);
-        if (*part := this.current_hunk_mutation_part) part.deinit(allocator);
-        for (*file_deet of this.result.items) file_deet.deinit(allocator);
+        _.current_file_patch.deinit(allocator);
+        if (*hunk := _.current_hunk) hunk.deinit(allocator);
+        if (*part := _.current_hunk_mutation_part) part.deinit(allocator);
+        for (*file_deet of _.result.items) file_deet.deinit(allocator);
         if (comptime clear_result_retaining_capacity) {
-            this.result.clearRetainingCapacity();
+            _.result.clearRetainingCapacity();
         } else {
-            this.result.deinit(allocator);
+            _.result.deinit(allocator);
         }
     }
 
     fn reset(*_, allocator: Allocator) {
-        this.deinit(allocator, true);
-        this.result.clearRetainingCapacity();
-        this.* = {
-            result: this.result,
+        _.deinit(allocator, true);
+        _.result.clearRetainingCapacity();
+        _.* = {
+            result: _.result,
         };
     }
 
@@ -830,51 +830,51 @@ struct PatchLinesParser {
         let lines = LookbackIterator.fromInner(std.mem.splitScalar(u8, file, '\n'));
 
         while (line := lines.next()) {
-            switch (this.state) {
+            switch (_.state) {
                 .parsing_header => {
                     if (bun.strings.hasPrefix(line, "@@")) {
-                        this.state = .parsing_hunks;
-                        this.current_file_patch.hunks = {};
+                        _.state = .parsing_hunks;
+                        _.current_file_patch.hunks = {};
                         lines.back();
                     } else if (bun.strings.hasPrefix(line, "diff --git ")) {
-                        if (this.current_file_patch.diff_line_from_path != null) {
-                            this.commitFilePatch();
+                        if (_.current_file_patch.diff_line_from_path != null) {
+                            _.commitFilePatch();
                         }
                         const matched_opt = parseDiffLinePaths(line);
                         if (matched_opt == null) {
                             return ParseErr.bad_diff_line;
                         }
                         const matched = matched_opt.?;
-                        this.current_file_patch.diff_line_from_path = matched[0];
-                        this.current_file_patch.diff_line_to_path = matched[1];
+                        _.current_file_patch.diff_line_from_path = matched[0];
+                        _.current_file_patch.diff_line_to_path = matched[1];
                     } else if (bun.strings.hasPrefix(line, "old mode ")) {
-                        this.current_file_patch.old_mode = std.mem.trim(u8, line["old mode ".len..], WHITESPACE);
+                        _.current_file_patch.old_mode = std.mem.trim(u8, line["old mode ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "new mode ")) {
-                        this.current_file_patch.new_mode = std.mem.trim(u8, line["new mode ".len..], WHITESPACE);
+                        _.current_file_patch.new_mode = std.mem.trim(u8, line["new mode ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "deleted file mode ")) {
-                        this.current_file_patch.deleted_file_mode = std.mem.trim(u8, line["deleted file mode ".len..], WHITESPACE);
+                        _.current_file_patch.deleted_file_mode = std.mem.trim(u8, line["deleted file mode ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "new file mode ")) {
-                        this.current_file_patch.new_file_mode = std.mem.trim(u8, line["new file mode ".len..], WHITESPACE);
+                        _.current_file_patch.new_file_mode = std.mem.trim(u8, line["new file mode ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "rename from ")) {
-                        this.current_file_patch.rename_from = std.mem.trim(u8, line["rename from ".len..], WHITESPACE);
+                        _.current_file_patch.rename_from = std.mem.trim(u8, line["rename from ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "rename to ")) {
-                        this.current_file_patch.rename_to = std.mem.trim(u8, line["rename to ".len..], WHITESPACE);
+                        _.current_file_patch.rename_to = std.mem.trim(u8, line["rename to ".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "index ")) {
                         const hashes_opt = parseDiffHashes(line["index ".len..]);
                         if (hashes_opt == null) continue;
                         const hashes = hashes_opt.?;
-                        this.current_file_patch.before_hash = hashes[0];
-                        this.current_file_patch.after_hash = hashes[1];
+                        _.current_file_patch.before_hash = hashes[0];
+                        _.current_file_patch.after_hash = hashes[1];
                     } else if (bun.strings.hasPrefix(line, "--- ")) {
-                        this.current_file_patch.from_path = std.mem.trim(u8, line["--- a/".len..], WHITESPACE);
+                        _.current_file_patch.from_path = std.mem.trim(u8, line["--- a/".len..], WHITESPACE);
                     } else if (bun.strings.hasPrefix(line, "+++ ")) {
-                        this.current_file_patch.to_path = std.mem.trim(u8, line["+++ b/".len..], WHITESPACE);
+                        _.current_file_patch.to_path = std.mem.trim(u8, line["+++ b/".len..], WHITESPACE);
                     }
                 },
                 .parsing_hunks => {
                     if (opts.support_legacy_diffs && bun.strings.hasPrefix(line, "--- a/")) {
-                        this.state = .parsing_header;
-                        this.commitFilePatch();
+                        _.state = .parsing_header;
+                        _.commitFilePatch();
                         lines.back();
                         continue;
                     }
@@ -894,8 +894,8 @@ struct PatchLinesParser {
                         if (opt_type_val := opt_type) {
                             break :brk opt_type_val;
                         } else {
-                            this.state = .parsing_header;
-                            this.commitFilePatch();
+                            _.state = .parsing_header;
+                            _.commitFilePatch();
                             lines.back();
                             continue;
                         }
@@ -903,43 +903,43 @@ struct PatchLinesParser {
 
                     switch (hunk_line_type) {
                         .header => {
-                            this.commitHunk();
-                            this.current_hunk = parseHunkHeaderLine(line)?;
+                            _.commitHunk();
+                            _.current_hunk = parseHunkHeaderLine(line)?;
                         },
                         .pragma => {
                             if (!bun.strings.hasPrefix(line, "\\ No newline at end of file")) {
                                 return ParseErr.unrecognized_pragma;
                             }
-                            if (this.current_hunk_mutation_part == null) {
+                            if (_.current_hunk_mutation_part == null) {
                                 return ParseErr.no_newline_at_eof_pragma_encountered_without_context;
                             }
-                            this.current_hunk_mutation_part.?.no_newline_at_end_of_file = true;
+                            _.current_hunk_mutation_part.?.no_newline_at_end_of_file = true;
                         },
                         .insertion, .deletion, .context => {
-                            if (this.current_hunk == null) {
+                            if (_.current_hunk == null) {
                                 return ParseErr.hunk_lines_encountered_before_hunk_header;
                             }
-                            if (this.current_hunk_mutation_part != null && @intFromEnum(this.current_hunk_mutation_part.?.type) != @intFromEnum(hunk_line_type)) {
-                                this.current_hunk.?.parts.append(bun.default_allocator, this.current_hunk_mutation_part.?) catch unreachable;
-                                this.current_hunk_mutation_part = null;
+                            if (_.current_hunk_mutation_part != null && @intFromEnum(_.current_hunk_mutation_part.?.type) != @intFromEnum(hunk_line_type)) {
+                                _.current_hunk.?.parts.append(bun.default_allocator, _.current_hunk_mutation_part.?) catch unreachable;
+                                _.current_hunk_mutation_part = null;
                             }
 
-                            if (this.current_hunk_mutation_part == null) {
-                                this.current_hunk_mutation_part = {
+                            if (_.current_hunk_mutation_part == null) {
+                                _.current_hunk_mutation_part = {
                                     type: @enumFromInt(@intFromEnum(hunk_line_type)),
                                 };
                             }
 
-                            this.current_hunk_mutation_part.?.lines.append(bun.default_allocator, line[@min(1, line.len)..]) catch unreachable;
+                            _.current_hunk_mutation_part.?.lines.append(bun.default_allocator, line[@min(1, line.len)..]) catch unreachable;
                         },
                     }
                 },
             }
         }
 
-        this.commitFilePatch();
+        _.commitFilePatch();
 
-        for (file_deet of this.result.items) {
+        for (file_deet of _.result.items) {
             for (hunk of file_deet.hunks.items) {
                 if (!hunk.verifyIntegrity()) {
                     return ParseErr.hunk_header_integrity_check_failed;
@@ -949,21 +949,21 @@ struct PatchLinesParser {
     }
 
     fn commitHunk(*_) {
-        if (*hunk := this.current_hunk) {
-            if (mutation_part := this.current_hunk_mutation_part) {
+        if (*hunk := _.current_hunk) {
+            if (mutation_part := _.current_hunk_mutation_part) {
                 hunk.parts.append(bun.default_allocator, mutation_part) catch unreachable;
-                this.current_hunk_mutation_part = null;
+                _.current_hunk_mutation_part = null;
             }
-            this.current_file_patch.hunks.append(bun.default_allocator, hunk) catch unreachable;
-            this.current_hunk = null;
+            _.current_file_patch.hunks.append(bun.default_allocator, hunk) catch unreachable;
+            _.current_hunk = null;
         }
     }
 
     fn commitFilePatch(*_) {
-        this.commitHunk();
-        this.current_file_patch.nullifyEmptyStrings();
-        this.result.append(bun.default_allocator, this.current_file_patch) catch unreachable;
-        this.current_file_patch = {};
+        _.commitHunk();
+        _.current_file_patch.nullifyEmptyStrings();
+        _.result.append(bun.default_allocator, _.current_file_patch) catch unreachable;
+        _.current_file_patch = {};
     }
 
     static fn parseHunkHeaderLineImpl(text_: []const u8): HunkHeaderPart ! ParseErr {

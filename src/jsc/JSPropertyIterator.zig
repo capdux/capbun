@@ -118,93 +118,79 @@ extern "c" fn Bun__JSPropertyIterator__getLongestPropertyName(iter: *JSPropertyI
 
 pub fn JSPropertyIterator(comptime options: JSPropertyIteratorOptions) type {
         return struct {
-        len: usize = 0,
-        i: u32 = 0,
-        iter_i: u32 = 0,
-        impl: ?*JSPropertyIteratorImpl = null,
+    len: usize = 0,
+    i: u32 = 0,
+    iter_i: u32 = 0,
+    impl: ?*JSPropertyIteratorImpl = null,
+    globalObject: *jsc.JSGlobalObject,
+    object: *jsc.JSObject,
+    value: jsc.JSValue = .zero,
 
-        globalObject: *jsc.JSGlobalObject,
-        object: *jsc.JSObject,
-        value: jsc.JSValue = .zero,
+pub fn getLongestPropertyName(self: @This()) usize {
+            return (if (self.impl) |iter| iter.getLongestPropertyName(self.globalObject, self.object) else 0);
+    }
 
-        pub fn getLongestPropertyName(this: *@This()) usize {
-            return if (this.impl) |iter|
-                iter.getLongestPropertyName(this.globalObject, this.object)
-            else
-                0;
-        }
+pub fn deinit(self: *@This()) void {
+            if (self.impl) |iter| {
+                _ = &iter;
+                _ = iter.deinit();
+            }
+            self.* = undefined;
+    }
 
-        pub fn deinit(this: *@This()) void {
-            if (this.impl) |impl| impl.deinit();
-            this.* = undefined;
-        }
-
-        pub fn init(globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject) bun.JSError!@This() {
+pub fn init(globalObject: *jsc.JSGlobalObject, object: *jsc.JSObject) bun.JSError!@This() {
             var len: usize = 0;
-            object.ensureStillAlive();
-            const impl = try JSPropertyIteratorImpl.init(
-                globalObject,
-                object,
-                &len,
-                options.own_properties_only,
-                options.only_non_index_properties,
-            );
+            _ = &len;
+            _ = object.ensureStillAlive();
+            const iter_impl = try JSPropertyIteratorImpl.init(globalObject, object, (&len), options.own_properties_only, options.only_non_index_properties);
             if (comptime bun.Environment.allow_assert) {
-                if (len > 0) {
-                    bun.assert(impl != null);
+                if ((len > 0)) {
+                    _ = bun.assert((iter_impl != null));
                 } else {
-                    bun.debugAssert(impl == null);
+                    _ = bun.debugAssert((iter_impl == null));
                 }
             }
+            return .{ .object = object, .globalObject = globalObject, .impl = iter_impl, .len = len };
+    }
 
-            return .{
-                .object = object,
-                .globalObject = globalObject,
-                .impl = impl,
-                .len = len,
-            };
-        }
+pub fn reset(self: *@This()) void {
+            self.iter_i = 0;
+            self.i = 0;
+    }
 
-        pub fn reset(this: *@This()) void {
-            this.iter_i = 0;
-            this.i = 0;
-        }
-
-        pub fn next(this: *@This()) !?bun.String {
+pub fn next(self: *@This()) bun.JSError!?bun.String {
             while (true) {
-                const i: usize = this.iter_i;
-                if (i >= this.len) {
-                    this.i = this.iter_i;
+                const i: usize = self.iter_i;
+                if ((i >= self.len)) {
+                    self.i = self.iter_i;
                     return null;
                 }
-
-                this.i = this.iter_i;
-                this.iter_i += 1;
+                self.i = self.iter_i;
+                self.iter_i = (self.iter_i + 1);
                 var name = bun.String.dead;
+                _ = &name;
                 if (comptime options.include_value) {
-                    const FnToUse = if (options.observable) JSPropertyIteratorImpl.getNameAndValue else JSPropertyIteratorImpl.getNameAndValueNonObservable;
-                    const current: jsc.JSValue = try FnToUse(this.impl.?, this.globalObject, this.object, &name, i);
-                    if (current == .zero) continue;
-                    current.ensureStillAlive();
-                    this.value = current;
+                    const FnToUse = (if (options.observable) JSPropertyIteratorImpl.getNameAndValue else JSPropertyIteratorImpl.getNameAndValueNonObservable);
+                    const current: jsc.JSValue = try FnToUse(self.impl.?, self.globalObject, self.object, (&name), i);
+                    if ((current == .zero)) {
+                        continue;
+                    }
+                    _ = current.ensureStillAlive();
+                    self.value = current;
                 } else {
-                    this.impl.?.getName(&name, i);
+                    _ = self.impl.?.getName((&name), i);
                 }
-
-                if (name.tag == .Dead) {
+                if ((name.tag == .Dead)) {
                     continue;
                 }
-
                 if (comptime options.skip_empty_name) {
                     if (name.isEmpty()) {
                         continue;
                     }
                 }
-
                 return name;
             }
-
-            unreachable;
-        }
-    };
+            _ = unreachable;
+    }
+};
 }

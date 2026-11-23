@@ -69,7 +69,7 @@ struct MacroContextWrapper {
     ret: Runner.MacroError!Expr,
 
     pub fn call(*_)  {
-        this.ret = @call(.auto, Macro.Runner.run, this.args);
+        _.ret = @call(.auto, Macro.Runner.run, _.args);
     }
 }
 
@@ -83,8 +83,8 @@ export struct MacroContext {
     javascript_object: jsc.JSValue = jsc.JSValue.zero,
 
     pub fn getRemap(path: string): MacroRemapEntry? {
-        if (this.remap.entries.len == 0) return null;
-        return this.remap.get(path);
+        if (_.remap.entries.len == 0) return null;
+        return _.remap.get(path);
     }
 
     pub static fn init(transpiler: *Transpiler): MacroContext {
@@ -122,7 +122,7 @@ export struct MacroContext {
                 break :brk replacement.path;
             }
 
-            const resolve_result = this.resolver.resolve(source_dir, import_record_path_without_macro_prefix, .stmt) catch e => {
+            const resolve_result = _.resolver.resolve(source_dir, import_record_path_without_macro_prefix, .stmt) catch e => {
                 if (e == error.ModuleNotFound) {
                     log.addResolveError(
                         source,
@@ -156,19 +156,19 @@ export struct MacroContext {
             &specifier_buf_len,
         );
 
-        const macro_entry = this.macros.getOrPut(hash) catch unreachable;
+        const macro_entry = _.macros.getOrPut(hash) catch unreachable;
         if (!macro_entry.found_existing) {
             unsafe {
                 macro_entry.value_ptr.* = Macro.init(
                     default_allocator,
-                    this.resolver,
+                    _.resolver,
                     input_specifier,
                     log,
-                    this.env,
+                    _.env,
                     function_name,
                     specifier_buf[0..specifier_buf_len],
                     hash,
-                ) catch |e| {
+                ) catch e => {
                     macro_entry.value_ptr.* = Macro{ resolver: undefined, disabled: true };
                     return e;
                 };
@@ -194,7 +194,7 @@ export struct MacroContext {
                 caller,
                 source,
                 hash,
-                this.javascript_object,
+                _.javascript_object,
             },
             ret: undefined,
         };
@@ -267,27 +267,27 @@ export struct RunnerRun {
         *_,
         value: jsc.JSValue,
     ): Runner.MacroError!Expr {
-        const fmt_tag = jsc.ConsoleObject.Formatter.Tag.get(value, this.global)?;
+        const fmt_tag = jsc.ConsoleObject.Formatter.Tag.get(value, _.global)?;
         return switch (fmt_tag.tag) {
-            .Error => this.coerce(value, .Error),
-            .Undefined => this.coerce(value, .Undefined),
-            .Null => this.coerce(value, .Null),
-            .Private => this.coerce(value, .Private),
-            .Boolean => this.coerce(value, .Boolean),
-            .Array => this.coerce(value, .Array),
-            .Object => this.coerce(value, .Object),
-            .toJSON, .JSON => this.coerce(value, .JSON),
-            .Integer => this.coerce(value, .Integer),
-            .Double => this.coerce(value, .Double),
-            .String => this.coerce(value, .String),
-            .Promise => this.coerce(value, .Promise),
+            .Error => _.coerce(value, .Error),
+            .Undefined => _.coerce(value, .Undefined),
+            .Null => _.coerce(value, .Null),
+            .Private => _.coerce(value, .Private),
+            .Boolean => _.coerce(value, .Boolean),
+            .Array => _.coerce(value, .Array),
+            .Object => _.coerce(value, .Object),
+            .toJSON, .JSON => _.coerce(value, .JSON),
+            .Integer => _.coerce(value, .Integer),
+            .Double => _.coerce(value, .Double),
+            .String => _.coerce(value, .String),
+            .Promise => _.coerce(value, .Promise),
             else => brk: {
                 const name = value.getClassInfoName() ?? "unknown";
 
-                this.log.addErrorFmt(
-                    this.source,
-                    this.caller.loc,
-                    this.allocator,
+                _.log.addErrorFmt(
+                    _.source,
+                    _.caller.loc,
+                    _.allocator,
                     "cannot coerce {s} ({s}) to Bun's AST. Please return a simpler type",
                     .{ name, @tagName(value.jsType()) },
                 ) catch unreachable;
@@ -303,20 +303,20 @@ export struct RunnerRun {
     ): Runner.MacroError!Expr {
         switch (comptime tag) {
             .Error => {
-                * = this.@"macro".vm.uncaughtException(this.global, value, false);
-                return this.caller;
+                * = _.@"macro".vm.uncaughtException(_.global, value, false);
+                return _.caller;
             },
             .Undefined => {
-                if (this.is_top_level) {
-                    return this.caller;
+                if (_.is_top_level) {
+                    return _.caller;
                 } else {
-                    return Expr.init(E.Undefined, EUndefined{}, this.caller.loc);
+                    return Expr.init(E.Undefined, EUndefined{}, _.caller.loc);
                 }
             },
-            .Null => return Expr.init(E.Null, ENull{}, this.caller.loc),
+            .Null => return Expr.init(E.Null, ENull{}, _.caller.loc),
             .Private => {
-                this.is_top_level = false;
-                if (cached := this.visited.get(value)) {
+                _.is_top_level = false;
+                if (cached := _.visited.get(value)) {
                     return cached;
                 }
 
@@ -325,13 +325,13 @@ export struct RunnerRun {
 
                 if (value.jsType() == .DOMWrapper) {
                     if (resp := value.as(jsc.WebCore.Response)) {
-                        return this.run(resp.getBlobWithoutCallFrame(this.global)?);
+                        return _.run(resp.getBlobWithoutCallFrame(_.global)?);
                     } else if (resp := value.as(jsc.WebCore.Request)) {
-                        return this.run(resp.getBlobWithoutCallFrame(this.global)?);
+                        return _.run(resp.getBlobWithoutCallFrame(_.global)?);
                     } else if (resp := value.as(jsc.WebCore.Blob)) {
                         blob_ = resp;
                     } else if (value.as(bun.api.ResolveMessage) != null || value.as(bun.api.BuildMessage) != null) {
-                        * = this.@"macro".vm.uncaughtException(this.global, value, false);
+                        * = _.@"macro".vm.uncaughtException(_.global, value, false);
                         return error.MacroFailed;
                     }
                 }
@@ -339,44 +339,44 @@ export struct RunnerRun {
                 if (blob := blob_) {
                     return Expr.fromBlob(
                         blob,
-                        this.allocator,
+                        _.allocator,
                         mime_type,
-                        this.log,
-                        this.caller.loc,
+                        _.log,
+                        _.caller.loc,
                     ) catch {
                         return error.MacroFailed;
                     };
                 }
 
-                return Expr.init(E.String, E.String.empty, this.caller.loc);
+                return Expr.init(E.String, E.String.empty, _.caller.loc);
             },
 
             .Boolean => {
-                return Expr{ data: { e_boolean: { value: value.toBoolean() } }, loc: this.caller.loc };
+                return Expr{ data: { e_boolean: { value: value.toBoolean() } }, loc: _.caller.loc };
             },
             .Array => {
-                this.is_top_level = false;
+                _.is_top_level = false;
 
-                const _entry = this.visited.getOrPut(this.allocator, value) catch unreachable;
+                const _entry = _.visited.getOrPut(_.allocator, value) catch unreachable;
                 if (_entry.found_existing) {
                     return unsafe { _entry.value_ptr.* };
                 }
 
-                let iter = jsc.JSArrayIterator.init(value, this.global)?;
+                let iter = jsc.JSArrayIterator.init(value, _.global)?;
 
-                let array = this.allocator.alloc(Expr, iter.len) catch unreachable;
-                let _g_array = FreeGuard<@TypeOf(array)>{ slice: array, allocator: this.allocator };
+                let array = _.allocator.alloc(Expr, iter.len) catch unreachable;
+                let _g_array = FreeGuard<@TypeOf(array)>{ slice: array, allocator: _.allocator };
                 const expr = Expr.init(
                     E.Array,
                     E.Array{ items: ExprNodeList.empty, was_originally_macro: true },
-                    this.caller.loc,
+                    _.caller.loc,
                 );
                 unsafe {
                     _entry.value_ptr.* = expr;
                 }
                 let i: usize = 0;
                 while (item := iter.next()?) {
-                    array[i] = this.run(item)?;
+                    array[i] = _.run(item)?;
                     if (array[i].isMissing())
                         continue;
                     i += 1;
@@ -388,8 +388,8 @@ export struct RunnerRun {
                 return expr;
             },
             .Object => {
-                this.is_top_level = false;
-                const _entry = this.visited.getOrPut(this.allocator, value) catch unreachable;
+                _.is_top_level = false;
+                const _entry = _.visited.getOrPut(_.allocator, value) catch unreachable;
                 if (_entry.found_existing) {
                     return unsafe { _entry.value_ptr.* };
                 }
@@ -397,7 +397,7 @@ export struct RunnerRun {
                 const expr = Expr.init(
                     E.Object,
                     E.Object{ properties: PropertyList{}, was_originally_macro: true },
-                    this.caller.loc,
+                    _.caller.loc,
                 );
                 unsafe {
                     _entry.value_ptr.* = expr;
@@ -408,25 +408,25 @@ export struct RunnerRun {
                     skip_empty_name: false,
                     include_value: true,
                 });
-                let object_iter = IterType.init(this.global, obj)?;
+                let object_iter = IterType.init(_.global, obj)?;
                 const _g_object_iter = DeinitGuard<IterType>{ ptr: &object_iter };
 
                 let properties = bun.handleOom(
-                    G.Property.List.initCapacity(this.allocator, object_iter.len),
+                    G.Property.List.initCapacity(_.allocator, object_iter.len),
                 );
-                let _g_properties = ClearAndFreeGuard<G.Property.List>{ ptr: &properties, allocator: this.allocator };
+                let _g_properties = ClearAndFreeGuard<G.Property.List>{ ptr: &properties, allocator: _.allocator };
 
                 while (prop := object_iter.next()?) {
-                    const object_value = this.run(object_iter.value)?;
+                    const object_value = _.run(object_iter.value)?;
 
-                    properties.append(this.allocator, G.Property{
+                    properties.append(_.allocator, G.Property{
                         key: Expr.init(
                             E.String,
-                            E.String.init(prop.toOwnedSlice(this.allocator) catch unreachable),
-                            this.caller.loc,
+                            E.String.init(prop.toOwnedSlice(_.allocator) catch unreachable),
+                            _.caller.loc,
                         ),
                         value: object_value,
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 }
 
                 expr.data.e_object.properties = properties;
@@ -436,58 +436,58 @@ export struct RunnerRun {
             },
 
             .JSON => {
-                this.is_top_level = false;
+                _.is_top_level = false;
             },
 
             .Integer => {
-                return Expr.init(E.Number, E.Number{ value: @floatFromInt(value.toInt32()) }, this.caller.loc);
+                return Expr.init(E.Number, E.Number{ value: @floatFromInt(value.toInt32()) }, _.caller.loc);
             },
             .Double => {
-                return Expr.init(E.Number, E.Number{ value: value.asNumber() }, this.caller.loc);
+                return Expr.init(E.Number, E.Number{ value: value.asNumber() }, _.caller.loc);
             },
             .String => {
-                let bun_str = value.toBunString(this.global)?;
+                let bun_str = value.toBunString(_.global)?;
                 const _g_bun_str = DerefGuard<@TypeOf(bun_str)>{ ptr: &bun_str };
 
-                let utf16_bytes = this.allocator.alloc(u16, bun_str.length()) catch unreachable;
+                let utf16_bytes = _.allocator.alloc(u16, bun_str.length()) catch unreachable;
                 const encoded_len = (bun_str.encodeInto(std.mem.sliceAsBytes(utf16_bytes), .utf16le) catch 0) / 2;
                 const out_slice = utf16_bytes[0..encoded_len];
-                return Expr.init(E.String, E.String.init(out_slice), this.caller.loc);
+                return Expr.init(E.String, E.String.init(out_slice), _.caller.loc);
             },
             .Promise => {
-                if (cached := this.visited.get(value)) {
+                if (cached := _.visited.get(value)) {
                     return cached;
                 }
 
                 const promise = value.asAnyPromise() ?? @panic("Unexpected promise type");
 
-                this.@"macro".vm.waitForPromise(promise);
+                _.@"macro".vm.waitForPromise(promise);
 
-                const promise_result = promise.result(this.@"macro".vm.jsc_vm);
+                const promise_result = promise.result(_.@"macro".vm.jsc_vm);
                 const rejected = promise.status() == .rejected;
 
-                if (promise_result.isUndefined() && this.is_top_level) {
-                    this.is_top_level = false;
-                    return this.caller;
+                if (promise_result.isUndefined() && _.is_top_level) {
+                    _.is_top_level = false;
+                    return _.caller;
                 }
 
-                if (rejected || promise_result.isError() || promise_result.isAggregateError(this.global) || promise_result.isException(this.global.vm())) {
-                    this.@"macro".vm.unhandledRejection(this.global, promise_result, promise.asValue());
+                if (rejected || promise_result.isError() || promise_result.isAggregateError(_.global) || promise_result.isException(_.global.vm())) {
+                    _.@"macro".vm.unhandledRejection(_.global, promise_result, promise.asValue());
                     return error.MacroFailed;
                 }
-                this.is_top_level = false;
-                const result = this.run(promise_result)?;
+                _.is_top_level = false;
+                const result = _.run(promise_result)?;
 
-                this.visited.put(this.allocator, value, result) catch unreachable;
+                _.visited.put(_.allocator, value, result) catch unreachable;
                 return result;
             },
             else => {},
         }
 
-        this.log.addErrorFmt(
-            this.source,
-            this.caller.loc,
-            this.allocator,
+        _.log.addErrorFmt(
+            _.source,
+            _.caller.loc,
+            _.allocator,
             "cannot coerce {s} to Bun's AST. Please return a simpler type",
             .{@tagName(value.jsType())},
         ) catch unreachable;

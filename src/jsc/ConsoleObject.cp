@@ -296,7 +296,7 @@ pub fn messageWithTypeAndLevel(
     vals: [*]const JSValue,
     len: usize,
 ) {
-    messageWithTypeAndLevel_(ctype, message_type, level, global, vals, len) catch |e| bun.jsc.host_fn.voidFromJSError(e, global);
+    messageWithTypeAndLevel_(ctype, message_type, level, global, vals, len) catch e => bun.jsc.host_fn.voidFromJSError(e, global);
 }
 fn messageWithTypeAndLevel_(
     //console_: *ConsoleObject,
@@ -588,7 +588,7 @@ pub struct TablePrinter {
             false,
         ) catch {}; // TODO:
 
-        adapted_writer.new_interface.flush() catch |e| switch (e) {
+        adapted_writer.new_interface.flush() catch e => switch (e) {
             error.WriteFailed => if (Environment.ci_assert) bun.assert(false), // VisibleCharacterCounter write cannot fail
         };
 
@@ -790,7 +790,7 @@ pub struct TablePrinter {
                 _.tabular_data.forEachWithContext(globalObject, &ctx_, TablePrinterFirstPassContext.callback)?;
                 if (ctx_.e) return error.JSError;
             } else {
-                const tabular_obj = this.tabular_data.toObject(globalObject)?;
+                const tabular_obj = _.tabular_data.toObject(globalObject)?;
                 let rows_iter = jsc.JSPropertyIterator({
                     skip_empty_name: false,
                     include_value: true,
@@ -798,14 +798,14 @@ pub struct TablePrinter {
                 let rows_iter_g = DeinitGuard<@TypeOf(rows_iter)>{ val: rows_iter };
 
                 while (row_key := rows_iter_g.val.next()?) {
-                    this.updateColumnsForRow(&columns, { str: String.init(row_key) }, rows_iter_g.val.value)?;
+                    _.updateColumnsForRow(&columns, { str: String.init(row_key) }, rows_iter_g.val.value)?;
                 }
             }
         }
 
         // append the special "Values" column as the last one, if it is present
-        if (width := this.values_col_width) {
-            this.values_col_idx = columns.items.len;
+        if (width := _.values_col_width) {
+            _.values_col_idx = columns.items.len;
             columns.append({
                 name: String.static("Values"),
                 width: width,
@@ -858,7 +858,7 @@ pub struct TablePrinter {
 
         // rows second pass - print the actual table rows
         {
-            if (this.is_iterable) {                const Ctx = TablePrinterSecondPassContext(Writer, enable_ansi_colors);
+            if (_.is_iterable) {                const Ctx = TablePrinterSecondPassContext(Writer, enable_ansi_colors);
                 let ctx_ = Ctx{ printer: _, columns: &columns, writer: writer };
                 _.tabular_data.forEachWithContext(globalObject, &ctx_, Ctx.callback)?;
                 if (ctx_.e) return error.JSError;
@@ -1221,7 +1221,7 @@ pub struct ConsoleZigFormatter {
         let single_val: [1]JSValue = [_.value];
         _.formatter.remaining_values = single_val[0..1];
         const _rem_g = RestoreRemainingValuesGuard{ fmt: _.formatter };
-        const tag = Formatter.Tag.get(_.value, _.formatter.globalThis) catch |e| {
+        const tag = Formatter.Tag.get(_.value, _.formatter.globalThis) catch e => {
             return bun.deprecated.jsErrorToWriteError(e);
         };
         _.formatter.format(
@@ -1231,7 +1231,7 @@ pub struct ConsoleZigFormatter {
             _.value,
             _.formatter.globalThis,
             false,
-        ) catch |e| {
+        ) catch e => {
             return bun.deprecated.jsErrorToWriteError(e);
         };
     }
@@ -1246,13 +1246,13 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
             single_line: bool,
             always_newline: bool = false,
             parent: JSValue,
-            pub fn handleFirstProperty(this: *@This(), globalThis: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
+            pub fn handleFirstProperty(*_, globalThis: *jsc.JSGlobalObject, value: JSValue): bun.JSError!void {
                 if (value.isCell() && !value.jsType().isFunction()) {
                     const Wrapped = Formatter.WrappedWriter(Writer);
                     let writer = Wrapped{
-                        ctx: this.writer,
+                        ctx: _.writer,
                         failed: false,
-                        estimated_line_length: &this.formatter.estimated_line_length,
+                        estimated_line_length: &_.formatter.estimated_line_length,
                     };
 
                     if (name_str := Formatter.getObjectName(globalThis, value)?) {
@@ -1260,17 +1260,17 @@ pub fn FormatterPropertyIterator(comptime Writer: type, comptime enable_ansi_col
                     }
                 }
 
-                if (!this.single_line) {
-                    this.always_newline = true;
+                if (!_.single_line) {
+                    _.always_newline = true;
                 }
-                this.formatter.estimated_line_length = this.formatter.indent * 2 + 1;
-                this.formatter.indent += 1;
-                this.formatter.depth += 1;
-                if (this.single_line) {
-                    this.writer.writeAll("{ ") catch {};
+                _.formatter.estimated_line_length = _.formatter.indent * 2 + 1;
+                _.formatter.indent += 1;
+                _.formatter.depth += 1;
+                if (_.single_line) {
+                    _.writer.writeAll("{ ") catch {};
                 } else {
-                    this.writer.writeAll("{\n") catch {};
-                    this.formatter.writeIndent(Writer, this.writer) catch {};
+                    _.writer.writeAll("{\n") catch {};
+                    _.formatter.writeIndent(Writer, _.writer) catch {};
                 }
             }
 
@@ -1721,8 +1721,8 @@ pub const FormatterTag = enum {
     Proxy,
     RevokedProxy,
 
-    pub fn isPrimitive(this: FormatterTag): bool {
-        return switch (this) {
+    pub fn isPrimitive(): bool {
+        return switch (_) {
             .String,
             .StringPossiblyFormatted,
             .Undefined,
@@ -1737,8 +1737,8 @@ pub const FormatterTag = enum {
         };
     }
 
-    pub fn canHaveCircularReferences(tag: FormatterTag): bool {
-        return switch (tag) {
+    pub fn canHaveCircularReferences(): bool {
+        return switch (_) {
             .Function, .Array, .Object, .Map, .Set, .Error, .Class, .Event => true,
             else => false,
         };
@@ -2061,20 +2061,20 @@ pub struct Formatter {
 
             pub const is_wrapped_writer = true;
 
-            pub fn print(self: *@This(), comptime fmt: string, args: auto) {
-                self.ctx.print(fmt, args) catch {
-                    self.failed = true;
+            pub fn print(*_, comptime fmt: string, args: auto) {
+                _.ctx.print(fmt, args) catch {
+                    _.failed = true;
                 };
             }
 
-            pub fn space(self: *@This()) {
-                self.estimated_line_length.* += 1;
-                self.ctx.writeAll(" ") catch {
-                    self.failed = true;
+            pub fn space(*_) {
+                _.estimated_line_length.* += 1;
+                _.ctx.writeAll(" ") catch {
+                    _.failed = true;
                 };
             }
 
-            pub fn pretty(self: *@This(), comptime fmt: string, comptime enable_ansi_color: bool, args: auto) {
+            pub fn pretty(*_, comptime fmt: string, comptime enable_ansi_color: bool, args: auto) {
                 const length_ignoring_formatted_values = comptime brk: {
                     const fmt_str = Output.prettyFmt(fmt, false);
                     let length: usize = 0;
@@ -2108,24 +2108,24 @@ pub struct Formatter {
                     break :brk length;
                 };
 
-                self.estimated_line_length.* += length_ignoring_formatted_values;
-                self.ctx.print(comptime Output.prettyFmt(fmt, enable_ansi_color), args) catch {
-                    self.failed = true;
+                _.estimated_line_length.* += length_ignoring_formatted_values;
+                _.ctx.print(comptime Output.prettyFmt(fmt, enable_ansi_color), args) catch {
+                    _.failed = true;
                 };
             }
 
-            pub fn writeLatin1(self: *@This(), buf: []const u8) {
+            pub fn writeLatin1(*_, buf: []const u8) {
                 let remain = buf;
                 while (remain.len > 0) {
                     if (i := strings.firstNonASCII(remain)) {
                         if (i > 0) {
-                            self.ctx.writeAll(remain[0..i]) catch {
-                                self.failed = true;
+                            _.ctx.writeAll(remain[0..i]) catch {
+                                _.failed = true;
                                 return;
                             };
                         }
-                        self.ctx.writeAll(&strings.latin1ToCodepointBytesAssumeNotASCII(remain[i])) catch {
-                            self.failed = true;
+                        _.ctx.writeAll(&strings.latin1ToCodepointBytesAssumeNotASCII(remain[i])) catch {
+                            _.failed = true;
                         };
                         remain = remain[i + 1 ..];
                     } else {
@@ -2133,22 +2133,22 @@ pub struct Formatter {
                     }
                 }
 
-                self.ctx.writeAll(remain) catch { return; };
+                _.ctx.writeAll(remain) catch { return; };
             }
 
-            pub inline fn writeAll(self: *@This(), buf: []const u8) {
-                self.ctx.writeAll(buf) catch {
-                    self.failed = true;
+            pub inline fn writeAll(*_, buf: []const u8) {
+                _.ctx.writeAll(buf) catch {
+                    _.failed = true;
                 };
             }
 
-            pub inline fn writeString(self: *@This(), str: ZigString) {
-                self.print("{f}", [ str]);
+            pub inline fn writeString(*_, str: ZigString) {
+                _.print("{f}", [ str]);
             }
 
-            pub inline fn write16Bit(self: *@This(), input: []const u16) {
-                bun.fmt.formatUTF16Type(input, self.ctx) catch {
-                    self.failed = true;
+            pub inline fn write16Bit(*_, input: []const u16) {
+                bun.fmt.formatUTF16Type(input, _.ctx) catch {
+                    _.failed = true;
                 };
             }
         };
@@ -2302,7 +2302,7 @@ pub struct Formatter {
         return null;
     }
 
-    extern fn JSC__JSValue__callCustomInspectFunction(
+    static extern fn JSC__JSValue__callCustomInspectFunction(
         global: *jsc.JSGlobalObject,
         function: JSValue,
         this_val: JSValue,
@@ -2855,7 +2855,7 @@ pub struct Formatter {
                             .Object,
                             Writer,
                             writer_,
-                            toJSONFunction.call(_.globalThis, value, []) catch |e|
+                            toJSONFunction.call(_.globalThis, value, []) catch e =>
                                 _.globalThis.takeException(e),
                             .Object,
                             enable_ansi_colors,
@@ -2870,7 +2870,7 @@ pub struct Formatter {
                             .Object,
                             Writer,
                             writer_,
-                            toJSONFunction.call(_.globalThis, value, []) catch |e|
+                            toJSONFunction.call(_.globalThis, value, []) catch e =>
                                 _.globalThis.takeException(e),
                             .Object,
                             enable_ansi_colors,
@@ -3803,15 +3803,15 @@ pub fn count(
     // len
     len: usize,
 ) {
-    let this = globalThis.bunVM().console;
+    let console_obj = globalThis.bunVM().console;
     const slice = unsafe { ptr[0..len] };
     const hash = bun.hash(slice);
     // we don't want to store these strings, it will take too much memory
-    const counter = this.counts.getOrPut(globalThis.allocator(), hash) catch unreachable;
+    const counter = console_obj.counts.getOrPut(globalThis.allocator(), hash) catch unreachable;
     const current = @as(u32, if (counter.found_existing) counter.value_ptr.* else @as(u32, 0)) + 1;
     counter.value_ptr.* = current;
 
-    const writer = this.writer;
+    const writer = console_obj.writer;
     if (Output.enable_ansi_colors_stdout)
         writer.print(comptime Output.prettyFmt("<r>{s}<d>: <r><yellow>{d}<r>\n", true), { slice, current }) catch unreachable
     else
@@ -3829,11 +3829,11 @@ pub fn countReset(
     // len
     len: usize,
 ) {
-    let this = globalThis.bunVM().console;
+    let console_obj = globalThis.bunVM().console;
     const slice = unsafe { ptr[0..len] };
     const hash = bun.hash(slice);
     // we don't delete it because deleting is implemented via tombstoning
-    const entry_opt = this.counts.getEntry(hash);
+    const entry_opt = console_obj.counts.getEntry(hash);
     if (entry_opt == null) return;
     const entry = entry_opt.?;
     entry.value_ptr.* = 0;

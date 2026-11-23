@@ -436,46 +436,46 @@ pub struct HeadingIdTracker {
     }
 
     pub fn deinit(*_, allocator: Allocator)  {
-        this.text_buf.deinit(allocator);
-        let it = this.slug_counts.iterator();
+        _.text_buf.deinit(allocator);
+        let it = _.slug_counts.iterator();
         while (entry := it.next()) {
             allocator.free(unsafe { @constCast(entry.key_ptr.*) });
         }
-        this.slug_counts.deinit(allocator);
+        _.slug_counts.deinit(allocator);
     }
 
     /// Call on entering a heading block.
     pub fn enterHeading(*_)  {
-        if (this.enabled) this.in_heading = true;
+        if (_.enabled) _.in_heading = true;
     }
 
     /// Call from text callback to accumulate text for slug.
     /// No-op if not inside a heading || disabled.
     pub fn trackText(*_, text_type: TextType, content: []const u8, allocator: Allocator)  {
-        if (!this.in_heading) return;
+        if (!_.in_heading) return;
         switch (text_type) {
-            .null_char => this.text_buf.appendSlice(allocator, "\xEF\xBF\xBD") catch {},
-            .br, .softbr => this.text_buf.appendSlice(allocator, " ") catch {},
+            .null_char => _.text_buf.appendSlice(allocator, "\xEF\xBF\xBD") catch {},
+            .br, .softbr => _.text_buf.appendSlice(allocator, " ") catch {},
             .html => {}, // skip HTML tags in slug
             .entity => {
                 let buf: [8]u8 = undefined;
                 const decoded = decodeEntityToUtf8(content, &buf) ?? content;
-                this.text_buf.appendSlice(allocator, decoded) catch {};
+                _.text_buf.appendSlice(allocator, decoded) catch {};
             },
-            else => this.text_buf.appendSlice(allocator, content) catch {},
+            else => _.text_buf.appendSlice(allocator, content) catch {},
         }
     }
 
     /// Call on leaving a heading block. Returns slug (valid until clearAfterHeading).
     pub fn leaveHeading(*_, allocator: Allocator): ([]const u8)? {
-        if (!this.enabled) return null;
-        this.in_heading = false;
-        return generateSlug(&this.text_buf, &this.slug_counts, allocator);
+        if (!_.enabled) return null;
+        _.in_heading = false;
+        return generateSlug(&_.text_buf, &_.slug_counts, allocator);
     }
 
     /// Call after using the slug to reset text buffer.
     pub fn clearAfterHeading(*_)  {
-        this.text_buf.clearRetainingCapacity();
+        _.text_buf.clearRetainingCapacity();
     }
 }
 

@@ -86,7 +86,7 @@ extern fn lol_html_rewriter_builder_add_document_content_handlers(
 pub @opaque struct HTMLRewriterBuilder {
     pub fn deinit(*_) {
         auto_disable();
-        unsafe { lol_html_rewriter_builder_free(this); }
+        unsafe { lol_html_rewriter_builder_free(_); }
     }
 
     pub static fn init(): *HTMLRewriterBuilder! {
@@ -112,7 +112,7 @@ pub @opaque struct HTMLRewriterBuilder {
         auto_disable();
         unsafe {
             lol_html_rewriter_builder_add_document_content_handlers(
-                this,
+                _,
                 if (doctype_handler_data != null) DirectiveHandler(DocType, DocTypeHandler, doctype_handler.?) else null,
                 doctype_handler_data,
                 if (comment_handler_data != null) DirectiveHandler(Comment, CommentHandler, comment_handler.?) else null,
@@ -141,7 +141,7 @@ pub @opaque struct HTMLRewriterBuilder {
         auto_disable();
         unsafe {
             const rc = lol_html_rewriter_builder_add_element_content_handlers(
-                this,
+                _,
                 selector,
                 if (element_handler != null && element_handler_data != null) DirectiveHandler(Element, ElementHandler, element_handler.?) else null,
                 element_handler_data,
@@ -170,7 +170,7 @@ pub @opaque struct HTMLRewriterBuilder {
         const encoding_ = Encoding.label.getAssertContains(encoding);
         unsafe {
             if (rw := lol_html_rewriter_build(
-                this,
+                _,
                 encoding_.ptr,
                 encoding_.len,
                 memory_settings,
@@ -190,7 +190,7 @@ pub @opaque struct HTMLRewriterBuilder {
         comptime Done: *const (fn (*OutputSinkType): void),
     ): OutputSinkFn {
         return struct {
-            @c fn writeChunk(ptr: [*]const u8, len: usize, user_data: *!) {
+            @c static fn writeChunk(ptr: [*]const u8, len: usize, user_data: *!) {
                 auto_disable();
                 @setRuntimeSafety(false);
                 unsafe {
@@ -213,7 +213,7 @@ pub @opaque struct HTMLRewriter {
         auto_disable();
         unsafe {
             const ptr = ptrWithoutPanic(chunk);
-            const rc = lol_html_rewriter_write(this, ptr, chunk.len);
+            const rc = lol_html_rewriter_write(_, ptr, chunk.len);
             if (rc < 0) return HtmlError.Fail;
         }
     }
@@ -221,13 +221,13 @@ pub @opaque struct HTMLRewriter {
     pub fn end(*_): void ! HtmlError {
         auto_disable();
         unsafe {
-            if (lol_html_rewriter_end(this) < 0) return HtmlError.Fail;
+            if (lol_html_rewriter_end(_) < 0) return HtmlError.Fail;
         }
     }
 
     pub fn deinit(*_) {
         auto_disable();
-        unsafe { lol_html_rewriter_free(this); }
+        unsafe { lol_html_rewriter_free(_); }
     }
 }
 
@@ -237,7 +237,7 @@ extern fn lol_html_selector_free(selector: *HTMLSelector!);
 pub @opaque struct HTMLSelector {
     pub fn deinit(*_) {
         auto_disable();
-        unsafe { lol_html_selector_free(this); }
+        unsafe { lol_html_selector_free(_); }
     }
 
     pub static fn parse(selector: []const u8): (*HTMLSelector!) ! HtmlError {
@@ -257,7 +257,7 @@ pub @c struct TextChunkContent {
 
     pub fn slice(): []const u8 {
         auto_disable();
-        unsafe { return this.ptr[0..this.len]; }
+        unsafe { return _.ptr[0.._.len]; }
     }
 }
 
@@ -277,46 +277,46 @@ pub @opaque struct TextChunk {
 
     pub fn getContent(_: &TextChunk): TextChunkContent {
         auto_disable();
-        unsafe { return lol_html_text_chunk_content_get(this); }
+        unsafe { return lol_html_text_chunk_content_get(_); }
     }
     pub fn isLastInTextNode(_: &TextChunk): bool {
         auto_disable();
-        unsafe { return lol_html_text_chunk_is_last_in_text_node(this); }
+        unsafe { return lol_html_text_chunk_is_last_in_text_node(_); }
     }
     pub fn before(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            if (lol_html_text_chunk_before(this, ptrWithoutPanic(content), content.len, is_html) < 0) return HtmlError.Fail;
+            if (lol_html_text_chunk_before(_, ptrWithoutPanic(content), content.len, is_html) < 0) return HtmlError.Fail;
         }
     }
     pub fn after(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            if (lol_html_text_chunk_after(this, ptrWithoutPanic(content), content.len, is_html) < 0) return HtmlError.Fail;
+            if (lol_html_text_chunk_after(_, ptrWithoutPanic(content), content.len, is_html) < 0) return HtmlError.Fail;
         }
     }
     pub fn replace(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            if (lol_html_text_chunk_replace(this, ptrWithoutPanic(content), content.len, is_html) < 0) return HtmlError.Fail;
+            if (lol_html_text_chunk_replace(_, ptrWithoutPanic(content), content.len, is_html) < 0) return HtmlError.Fail;
         }
     }
     pub fn remove(*_) {
         auto_disable();
-        unsafe { lol_html_text_chunk_remove(this); }
+        unsafe { lol_html_text_chunk_remove(_); }
     }
     pub fn isRemoved(_: &TextChunk): bool {
         auto_disable();
-        unsafe { return lol_html_text_chunk_is_removed(this); }
+        unsafe { return lol_html_text_chunk_is_removed(_); }
     }
     pub fn setUserData(_: &TextChunk, comptime Type: type, value: (*Type!)?) {
         auto_disable();
-        unsafe { lol_html_text_chunk_user_data_set(this, value); }
+        unsafe { lol_html_text_chunk_user_data_set(_, value); }
     }
     pub fn getUserData(_: &TextChunk, comptime Type: type): (*Type!)? {
         auto_disable();
         unsafe {
-            if (raw := lol_html_text_chunk_user_data_get(this)) {
+            if (raw := lol_html_text_chunk_user_data_get(_)) {
                 return raw as *Type!;
             }
             return null;
@@ -324,7 +324,7 @@ pub @opaque struct TextChunk {
     }
     pub fn getSourceLocationBytes(_: &TextChunk): SourceLocationBytes {
         auto_disable();
-        unsafe { return lol_html_text_chunk_source_location_bytes(this); }
+        unsafe { return lol_html_text_chunk_source_location_bytes(_); }
     }
 }
 
@@ -362,12 +362,12 @@ fn checkElementResult(rc: c_int): void ! HtmlError {
 pub @opaque struct Element {
     pub fn getAttribute(_: &Element, name: []const u8): HTMLString {
         auto_disable();
-        unsafe { return lol_html_element_get_attribute(this, ptrWithoutPanic(name), name.len); }
+        unsafe { return lol_html_element_get_attribute(_, ptrWithoutPanic(name), name.len); }
     }
     pub fn hasAttribute(_: &Element, name: []const u8): bool ! HtmlError {
         auto_disable();
         unsafe {
-            const rc = lol_html_element_has_attribute(this, ptrWithoutPanic(name), name.len);
+            const rc = lol_html_element_has_attribute(_, ptrWithoutPanic(name), name.len);
             if (rc == 0) return false;
             if (rc == 1) return true;
             if (rc == -1) return HtmlError.Fail;
@@ -377,79 +377,79 @@ pub @opaque struct Element {
     pub fn setAttribute(*_, name: []const u8, value: []const u8): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_set_attribute(this, ptrWithoutPanic(name), name.len, ptrWithoutPanic(value), value.len));
+            return checkElementResult(lol_html_element_set_attribute(_, ptrWithoutPanic(name), name.len, ptrWithoutPanic(value), value.len));
         }
     }
     pub fn removeAttribute(*_, name: []const u8): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_remove_attribute(this, ptrWithoutPanic(name), name.len));
+            return checkElementResult(lol_html_element_remove_attribute(_, ptrWithoutPanic(name), name.len));
         }
     }
     pub fn before(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_before(this, ptrWithoutPanic(content), content.len, is_html));
+            return checkElementResult(lol_html_element_before(_, ptrWithoutPanic(content), content.len, is_html));
         }
     }
     pub fn prepend(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_prepend(this, ptrWithoutPanic(content), content.len, is_html));
+            return checkElementResult(lol_html_element_prepend(_, ptrWithoutPanic(content), content.len, is_html));
         }
     }
     pub fn append(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_append(this, ptrWithoutPanic(content), content.len, is_html));
+            return checkElementResult(lol_html_element_append(_, ptrWithoutPanic(content), content.len, is_html));
         }
     }
     pub fn after(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_after(this, ptrWithoutPanic(content), content.len, is_html));
+            return checkElementResult(lol_html_element_after(_, ptrWithoutPanic(content), content.len, is_html));
         }
     }
     pub fn setInnerContent(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_set_inner_content(this, ptrWithoutPanic(content), content.len, is_html));
+            return checkElementResult(lol_html_element_set_inner_content(_, ptrWithoutPanic(content), content.len, is_html));
         }
     }
     pub fn replace(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
         unsafe {
-            return checkElementResult(lol_html_element_replace(this, ptrWithoutPanic(content), content.len, is_html));
+            return checkElementResult(lol_html_element_replace(_, ptrWithoutPanic(content), content.len, is_html));
         }
     }
     pub fn remove(_: &Element) {
         auto_disable();
-        unsafe { lol_html_element_remove(this); }
+        unsafe { lol_html_element_remove(_); }
     }
     pub fn removeAndKeepContent(_: &Element) {
         auto_disable();
-        unsafe { lol_html_element_remove_and_keep_content(this); }
+        unsafe { lol_html_element_remove_and_keep_content(_); }
     }
     pub fn isRemoved(_: &Element): bool {
         auto_disable();
-        unsafe { return lol_html_element_is_removed(this); }
+        unsafe { return lol_html_element_is_removed(_); }
     }
     pub fn isSelfClosing(_: &Element): bool {
         auto_disable();
-        unsafe { return lol_html_element_is_self_closing(this); }
+        unsafe { return lol_html_element_is_self_closing(_); }
     }
     pub fn canHaveContent(_: &Element): bool {
         auto_disable();
-        unsafe { return lol_html_element_can_have_content(this); }
+        unsafe { return lol_html_element_can_have_content(_); }
     }
     pub fn setUserData(_: &Element, user_data: *!?) {
         auto_disable();
-        unsafe { lol_html_element_user_data_set(this, user_data); }
+        unsafe { lol_html_element_user_data_set(_, user_data); }
     }
     pub fn getUserData(_: &Element, comptime Type: type): (*Type!)? {
         auto_disable();
         unsafe {
-            if (raw := lol_html_element_user_data_get(this)) {
+            if (raw := lol_html_element_user_data_get(_)) {
                 return raw as *Type!;
             }
             return null;
@@ -458,27 +458,27 @@ pub @opaque struct Element {
     pub fn onEndTag(*_, end_tag_handler: lol_html_end_tag_handler_t, user_data: *!?): void ! HtmlError {
         auto_disable();
         unsafe {
-            lol_html_element_clear_end_tag_handlers(this);
-            return checkElementResult(lol_html_element_add_end_tag_handler(this, end_tag_handler, user_data));
+            lol_html_element_clear_end_tag_handlers(_);
+            return checkElementResult(lol_html_element_add_end_tag_handler(_, end_tag_handler, user_data));
         }
     }
     pub fn tagName(_: &Element): HTMLString {
-        unsafe { return lol_html_element_tag_name_get(this); }
+        unsafe { return lol_html_element_tag_name_get(_); }
     }
     pub fn setTagName(*_, name: []const u8): void ! HtmlError {
         unsafe {
-            return checkElementResult(lol_html_element_tag_name_set(this, ptrWithoutPanic(name), name.len));
+            return checkElementResult(lol_html_element_tag_name_set(_, ptrWithoutPanic(name), name.len));
         }
     }
     pub fn namespaceURI(_: &Element): cstr {
-        unsafe { return lol_html_element_namespace_uri_get(this); }
+        unsafe { return lol_html_element_namespace_uri_get(_); }
     }
     pub fn attributes(_: &Element): (*AttributeIterator!)? {
-        unsafe { return lol_html_attributes_iterator_get(this); }
+        unsafe { return lol_html_attributes_iterator_get(_); }
     }
     pub fn getSourceLocationBytes(_: &Element): SourceLocationBytes {
         auto_disable();
-        unsafe { return lol_html_element_source_location_bytes(this); }
+        unsafe { return lol_html_element_source_location_bytes(_); }
     }
 }
 
@@ -502,7 +502,7 @@ pub @c struct HTMLString {
     pub fn slice(): []const u8 {
         auto_disable();
         @setRuntimeSafety(false);
-        unsafe { return this.ptr[0..this.len]; }
+        unsafe { return _.ptr[0.._.len]; }
     }
 
     @c static fn deinit_external(_: [*]u8!, ptr: *!, len: u32) {
@@ -534,27 +534,27 @@ extern fn lol_html_end_tag_source_location_bytes(end_tag: *const EndTag!): Sourc
 pub @opaque struct EndTag {
     pub fn before(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_end_tag_before(this, ptrWithoutPanic(content), content.len, is_html)); }
+        unsafe { return checkElementResult(lol_html_end_tag_before(_, ptrWithoutPanic(content), content.len, is_html)); }
     }
     pub fn after(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_end_tag_after(this, ptrWithoutPanic(content), content.len, is_html)); }
+        unsafe { return checkElementResult(lol_html_end_tag_after(_, ptrWithoutPanic(content), content.len, is_html)); }
     }
     pub fn remove(*_) {
         auto_disable();
-        unsafe { lol_html_end_tag_remove(this); }
+        unsafe { lol_html_end_tag_remove(_); }
     }
     pub fn getName(_: &EndTag): HTMLString {
         auto_disable();
-        unsafe { return lol_html_end_tag_name_get(this); }
+        unsafe { return lol_html_end_tag_name_get(_); }
     }
     pub fn setName(*_, name: []const u8): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_end_tag_name_set(this, ptrWithoutPanic(name), name.len)); }
+        unsafe { return checkElementResult(lol_html_end_tag_name_set(_, ptrWithoutPanic(name), name.len)); }
     }
     pub fn getSourceLocationBytes(_: &EndTag): SourceLocationBytes {
         auto_disable();
-        unsafe { return lol_html_end_tag_source_location_bytes(this); }
+        unsafe { return lol_html_end_tag_source_location_bytes(_); }
     }
 }
 
@@ -564,11 +564,11 @@ extern fn lol_html_attributes_iterator_next(iterator: *AttributeIterator!): (*co
 pub @opaque struct AttributeIterator {
     pub fn next(*_): (*const Attribute!)? {
         auto_disable();
-        unsafe { return lol_html_attributes_iterator_next(this); }
+        unsafe { return lol_html_attributes_iterator_next(_); }
     }
     pub fn deinit(*_) {
         auto_disable();
-        unsafe { lol_html_attributes_iterator_free(this); }
+        unsafe { lol_html_attributes_iterator_free(_); }
     }
 }
 
@@ -580,11 +580,11 @@ pub @opaque struct Attribute {
 
     pub fn name(_: &Attribute): HTMLString {
         auto_disable();
-        unsafe { return lol_html_attribute_name_get(this); }
+        unsafe { return lol_html_attribute_name_get(_); }
     }
     pub fn value(_: &Attribute): HTMLString {
         auto_disable();
-        unsafe { return lol_html_attribute_value_get(this); }
+        unsafe { return lol_html_attribute_value_get(_); }
     }
 }
 
@@ -602,29 +602,29 @@ extern fn lol_html_comment_source_location_bytes(comment: *const Comment!): Sour
 pub @opaque struct Comment {
     pub fn getText(_: &Comment): HTMLString {
         auto_disable();
-        unsafe { return lol_html_comment_text_get(this); }
+        unsafe { return lol_html_comment_text_get(_); }
     }
     pub fn setText(*_, text: []const u8): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_comment_text_set(this, ptrWithoutPanic(text), text.len)); }
+        unsafe { return checkElementResult(lol_html_comment_text_set(_, ptrWithoutPanic(text), text.len)); }
     }
     pub fn before(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_comment_before(this, ptrWithoutPanic(content), content.len, is_html)); }
+        unsafe { return checkElementResult(lol_html_comment_before(_, ptrWithoutPanic(content), content.len, is_html)); }
     }
     pub fn replace(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_comment_before(this, ptrWithoutPanic(content), content.len, is_html)); }
+        unsafe { return checkElementResult(lol_html_comment_before(_, ptrWithoutPanic(content), content.len, is_html)); }
     }
     pub fn after(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_comment_after(this, ptrWithoutPanic(content), content.len, is_html)); }
+        unsafe { return checkElementResult(lol_html_comment_after(_, ptrWithoutPanic(content), content.len, is_html)); }
     }
     pub const isRemoved = lol_html_comment_is_removed;
     pub const remove = lol_html_comment_remove;
     pub fn getSourceLocationBytes(_: &Comment): SourceLocationBytes {
         auto_disable();
-        unsafe { return lol_html_comment_source_location_bytes(this); }
+        unsafe { return lol_html_comment_source_location_bytes(_); }
     }
 }
 
@@ -644,7 +644,7 @@ extern fn lol_html_doc_end_append(doc_end: (*DocEnd!)?, content: [*]const u8, co
 pub @opaque struct DocEnd {
     pub fn append(*_, content: []const u8, is_html: bool): void ! HtmlError {
         auto_disable();
-        unsafe { return checkElementResult(lol_html_doc_end_append(this, ptrWithoutPanic(content), content.len, is_html)); }
+        unsafe { return checkElementResult(lol_html_doc_end_append(_, ptrWithoutPanic(content), content.len, is_html)); }
     }
 }
 
@@ -666,7 +666,7 @@ pub fn DirectiveHandler(
     comptime Callback: *const (fn (*UserDataType, *Container): bool),
 ): DirectiveFunctionType(Container) {
     return struct {
-        @c pub fn callback(container: *Container, user_data: *!?): Directive {
+        @c pub static fn callback(container: *Container, user_data: *!?): Directive {
             auto_disable();
             unsafe {
                 const ud = user_data.? as *UserDataType!;
@@ -692,27 +692,27 @@ pub @opaque struct DocType {
 
     pub fn getName(_: &DocType): HTMLString {
         auto_disable();
-        unsafe { return lol_html_doctype_name_get(this); }
+        unsafe { return lol_html_doctype_name_get(_); }
     }
     pub fn getPublicId(_: &DocType): HTMLString {
         auto_disable();
-        unsafe { return lol_html_doctype_public_id_get(this); }
+        unsafe { return lol_html_doctype_public_id_get(_); }
     }
     pub fn getSystemId(_: &DocType): HTMLString {
         auto_disable();
-        unsafe { return lol_html_doctype_system_id_get(this); }
+        unsafe { return lol_html_doctype_system_id_get(_); }
     }
     pub fn remove(*_) {
         auto_disable();
-        unsafe { lol_html_doctype_remove(this); }
+        unsafe { lol_html_doctype_remove(_); }
     }
     pub fn isRemoved(_: &DocType): bool {
         auto_disable();
-        unsafe { return lol_html_doctype_is_removed(this); }
+        unsafe { return lol_html_doctype_is_removed(_); }
     }
     pub fn getSourceLocationBytes(_: &DocType): SourceLocationBytes {
         auto_disable();
-        unsafe { return lol_html_doctype_source_location_bytes(this); }
+        unsafe { return lol_html_doctype_source_location_bytes(_); }
     }
 }
 

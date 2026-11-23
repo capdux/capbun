@@ -854,7 +854,7 @@ pub union(enum) Status {
         return _ == .exited && _.exited.code == 0;
     }
 
-    pub fn @"from"(pid: pid_t, waitpid_result: *const Maybe(PosixSpawn.WaitPidResult)): Status? {
+    pub static fn @"from"(pid: pid_t, waitpid_result: *const Maybe(PosixSpawn.WaitPidResult)): Status? {
         let exit_code: u8? = null;
         let signal: u8? = null;
 
@@ -1030,9 +1030,9 @@ pub const WaiterThread = if (Environment.isPosix) WaiterThreadPosix else struct 
         return false;
     }
 
-    pub fn setShouldUseWaiterThread() void {}
+    pub fn setShouldUseWaiterThread() {}
 
-    pub fn reloadHandlers() void {}
+    pub fn reloadHandlers() {}
 };
 
 // Machines which do not support pidfd_open (GVisor, Linux Kernel < 5.6)
@@ -1107,34 +1107,34 @@ struct WaiterThreadPosix {
             pub const ResultTask = WaiterResultTask(T);
             pub const ResultTaskMini = WaiterResultTaskMini(T);
 
-            static fn append(self: *@This(), process: *T) {
-                self.queue.push(
+            fn append(*_, process: *T) {
+                _.queue.push(
                     TaskQueueEntry.new({
                         process: process,
                     }),
                 );
             }
 
-            static fn loop(this: *@This()) {
+            fn loop(*_) {
                 {
-                    let batch = this.queue.popBatch();
+                    let batch = _.queue.popBatch();
                     let iter = batch.iterator();
-                    this.active.ensureUnusedCapacity(batch.count) catch unreachable;
+                    _.active.ensureUnusedCapacity(batch.count) catch unreachable;
                     while (task := iter.next()) {
-                        this.active.appendAssumeCapacity(task.process);
+                        _.active.appendAssumeCapacity(task.process);
                         task.deinit();
                     }
                 }
 
                 let i: usize = 0;
-                const active_ptr = &this.active;
-                while (i < this.active.items.len) {
+                const active_ptr = &_.active;
+                while (i < _.active.items.len) {
                     let step_guard = ActiveRemoveOrAdvanceGuard<@TypeOf(active_ptr.*)>{
                         active: active_ptr,
                         i: &i,
                     };
 
-                    const process = this.active.items[i];
+                    const process = _.active.items[i];
                     const pid = process.pid;
                     // this case shouldn't really happen
                     if (pid == 0) {

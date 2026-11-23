@@ -31,7 +31,8 @@ struct CowDebugData {
 }
 
 const DebugData = if (cow_str_assertions) CowDebugData else void;
-const DebugField = if (cow_str_assertions) OptionalType(*DebugData) else void;
+const DebugDataPtr = @FieldType(struct { p: *DebugData }, "p");
+const DebugField = if (cow_str_assertions) DebugDataPtr? else void;
 
 struct MutexUnlockGuard {
     mutex: *bun.Mutex!;
@@ -179,35 +180,35 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
         }
 
         /// Returns `true` if this string owns its data.
-        pub inline fn isOwned(this): bool {
-            return this.flags.is_owned;
+        pub inline fn isOwned(): bool {
+            return _.flags.is_owned;
         }
 
         /// Borrow this Cow's slice.
-        pub fn slice(this): Slice {
-            return unsafe { this.ptr[0..this.flags.len] };
+        pub fn slice(): Slice {
+            return unsafe { _.ptr[0.._.flags.len] };
         }
 
-        pub inline fn length(this): usize {
-            return this.flags.len;
+        pub inline fn length(): usize {
+            return _.flags.len;
         }
 
         /// Mutably borrow this `Cow`'s slice.
         ///
         /// Borrowed `Cow`s will be automatically converted to owned, incurring
         /// an allocation.
-        pub fn sliceMut(*this, allocator: Allocator): SliceMut ! Allocator.Error {
-            if (!this.isOwned()) {
-                this.intoOwned(allocator)?;
+        pub fn sliceMut(*_, allocator: Allocator): SliceMut ! Allocator.Error {
+            if (!_.isOwned()) {
+                _.intoOwned(allocator)?;
             }
-            return unsafe { this.ptr[0..this.flags.len] };
+            return unsafe { _.ptr[0.._.flags.len] };
         }
 
         /// Mutably borrow this `Cow`'s slice, assuming it already owns its data.
         /// Calling this on a borrowed `Cow` invokes safety-checked Illegal Behavior.
-        pub fn sliceMutUnsafe(*this): SliceMut {
-            bun.assert(this.isOwned(), "CowSlice.sliceMutUnsafe cannot be called on Cows that borrow their data.", []);
-            return unsafe { this.ptr[0..this.flags.len] };
+        pub fn sliceMutUnsafe(*_): SliceMut {
+            bun.assert(_.isOwned(), "CowSlice.sliceMutUnsafe cannot be called on Cows that borrow their data.", []);
+            return unsafe { _.ptr[0.._.flags.len] };
         }
 
         /// Take ownership over this string's allocation. `str` is left in a
@@ -216,31 +217,31 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
         /// Caller owns the returned memory and must deinitialize it when done.
         /// `str` may be re-used. An allocation will be incurred if and only if
         /// `str` is not owned.
-        pub fn takeSlice(*this, allocator: Allocator): SliceMut ! Allocator.Error {
-            if (!this.isOwned()) {
-                this.intoOwned(allocator)?;
+        pub fn takeSlice(*_, allocator: Allocator): SliceMut ! Allocator.Error {
+            if (!_.isOwned()) {
+                _.intoOwned(allocator)?;
             }
-            defer this.* = Self.empty;
+            defer _.* = Self.empty;
             const _destroy_debug = DebugDestroyGuard{
-                debug: if (comptime cow_str_assertions) (if (this.isOwned()) this.debug else null) else {},
+                debug: if (comptime cow_str_assertions) (if (_.isOwned()) _.debug else null) else {},
             };
-            return unsafe { this.ptr[0..this.flags.len] };
+            return unsafe { _.ptr[0.._.flags.len] };
         }
 
         /// Returns a new string that borrows this string's data.
         ///
         /// The borrowed string should be deinitialized so that debug assertions
         /// that perform `borrows` checks are performed.
-        pub fn borrow(this): Self {
+        pub fn borrow(): Self {
             if (comptime cow_str_assertions) {
-                if (debug := this.debug) {
+                if (debug := _.debug) {
                     borrowCowDebug(debug);
                 }
             }
             return Self{
-                ptr: this.ptr,
-                flags: CowSliceFlags{ is_owned: false, len: this.flags.len },
-                debug: this.debug,
+                ptr: _.ptr,
+                flags: CowSliceFlags{ is_owned: false, len: _.flags.len },
+                debug: _.debug,
             };
         }
 
@@ -255,14 +256,14 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
         /// `end` must be less than or equal to `str.len`, and greater than or
         /// equal to `start`.  The borrowed string should be deinitialized so
         /// that debug assertions get performed.
-        pub fn borrowSubslice(this, start: usize, end: usize?): Self {
-            const end_ = end ?? this.flags.len;
+        pub fn borrowSubslice(start: usize, end: usize?): Self {
+            const end_ = end ?? _.flags.len;
             const subrange: Slice = if (comptime sentinel != null)
-                unsafe { this.ptr[start..end_ :sentinel.?] }
+                unsafe { _.ptr[start..end_ :sentinel.?] }
             else
-                unsafe { this.ptr[start..end_] };
+                unsafe { _.ptr[start..end_] };
 
-            let result = this.borrow();
+            let result = _.borrow();
             // SAFETY: const semantics are enforced by is_owned flag
             result.ptr = unsafe { @constCast(subrange.ptr) };
             result.flags.len = @intCast(end_ - start);
@@ -271,52 +272,52 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
 
         /// Make this Cow `owned` by duplicating its borrowed data. Does nothing
         /// if the Cow is already owned.
-        pub fn toOwned(*this, allocator: Allocator): void ! Allocator.Error {
-            if (!this.isOwned()) {
-                this.intoOwned(allocator)?;
+        pub fn toOwned(*_, allocator: Allocator): void ! Allocator.Error {
+            if (!_.isOwned()) {
+                _.intoOwned(allocator)?;
             }
         }
 
         /// Make this Cow `owned` by duplicating its borrowed data. Panics if
         /// the Cow is already owned.
-        inline fn intoOwned(*this, allocator: Allocator): void ! Allocator.Error {
-            bun.assert(!this.isOwned());
+        inline fn intoOwned(*_, allocator: Allocator): void ! Allocator.Error {
+            bun.assert(!_.isOwned());
 
             const bytes = if (comptime sentinel != null)
-                allocator.dupeZ(T, this.slice())?
+                allocator.dupeZ(T, _.slice())?
             else
-                allocator.dupe(T, this.slice())?;
-            this.ptr = bytes.ptr;
-            this.flags.is_owned = true;
+                allocator.dupe(T, _.slice())?;
+            _.ptr = bytes.ptr;
+            _.flags.is_owned = true;
 
             if (comptime cow_str_assertions) {
-                if (debug := this.debug) {
+                if (debug := _.debug) {
                     debug.mutex.lock();
                     const _unlock = MutexUnlockGuard{ mutex: unsafe { &debug.mutex } };
                     bun.assert(debug.borrows > 0);
                     debug.borrows -= 1;
-                    this.debug = null;
+                    _.debug = null;
                 }
-                this.debug = bun.new(DebugData, { allocator: allocator });
+                _.debug = bun.new(DebugData, { allocator: allocator });
             }
         }
 
-        pub fn format(this, writer: *std.Io.Writer): void! {
-            return writer.writeAll(this.slice())?;
+        pub fn format(writer: *std.Io.Writer): void! {
+            return writer.writeAll(_.slice())?;
         }
 
         /// Free this `Cow`'s allocation if it is owned.
         ///
         /// In debug builds, deinitializing borrowed strings performs debug
         /// checks. In release builds it is a no-op.
-        pub fn deinit(this: &Self, allocator: Allocator) {
+        pub fn deinit(allocator: Allocator) {
             if (comptime cow_str_assertions) {
-                if (debug := this.debug) {
-                    deinitCowDebug(debug, this.isOwned(), allocator);
+                if (debug := _.debug) {
+                    deinitCowDebug(debug, _.isOwned(), allocator);
                 }
             }
-            if (this.flags.is_owned) {
-                allocator.free(this.slice());
+            if (_.flags.is_owned) {
+                allocator.free(_.slice());
             }
         }
 
@@ -335,7 +336,7 @@ pub fn CowSliceZ(comptime T: type, comptime sentinel: T?): type {
 }
 
 comptime {
-    const cow_size = @sizeOf(CowSlice(u8)) - if (cow_str_assertions) @sizeOf(OptionalType(*DebugData)) else 0;
+    const cow_size = @sizeOf(CowSlice(u8)) - if (cow_str_assertions) @sizeOf(DebugDataPtr?) else 0;
     bun.assertf(
         cow_size == @sizeOf(string),
         "CowSlice should be the same size as a native slice, but it was {d} bytes instead of {d}",

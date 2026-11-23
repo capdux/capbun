@@ -95,7 +95,7 @@ pub union(enum) AnyPromise {
         const Wrapper = struct {
             args: Args,
 
-            static fn call(wrap_: *@This(), global: *jsc.JSGlobalObject) callconv(.c) jsc.JSValue {
+            static fn call(wrap_: *@This(), global: *jsc.JSGlobalObject) callconv(.c): jsc.JSValue {
                 return jsc.toJSHostCall(global, @src(), Fn, wrap_.args);
             }
         };

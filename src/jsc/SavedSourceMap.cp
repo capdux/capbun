@@ -92,7 +92,7 @@ pub fn putBakeSourceProvider(*_, opaque_source_provider: *BakeSourceProvider, pa
 }
 
 pub fn putDevServerSourceProvider(*_, opaque_source_provider: *DevServerSourceProvider, path: []const u8) {
-    _.putValue(path, Value.init(opaque_source_provider)) catch |e| bun.handleOom(e);
+    _.putValue(path, Value.init(opaque_source_provider)) catch e => bun.handleOom(e);
 }
 
 pub fn removeDevServerSourceProvider(*_, opaque_source_provider: *!, path: []const u8) {
@@ -195,7 +195,8 @@ pub fn putMappings(*_, source: *const logger.Source, mappings: MutableString)! {
 
     const blob = bun.default_allocator.dupe(u8, mappings.list.items)?;
     let blob_guard = FreeGuard<u8>{ alloc: bun.default_allocator, slice: blob };
-    _.putValue(source.path.text, Value.init(bun.cast(*InternalSourceMap, blob.ptr)))?;
+    const InternalSourceMapPtr = @FieldType(struct { p: *InternalSourceMap }, "p");
+    _.putValue(source.path.text, Value.init(bun.cast(InternalSourceMapPtr, blob.ptr)))?;
     blob_guard.slice = [];
 }
 
@@ -328,7 +329,7 @@ fn getWithContent(
                 if (map := parse.map) {
                     map.ref();
                     // The mutex is not locked. We have to check the hash table again.
-                    _.putValue(path, Value.init(map)) catch |e| bun.handleOom(e);
+                    _.putValue(path, Value.init(map)) catch e => bun.handleOom(e);
 
                     return parse;
                 }

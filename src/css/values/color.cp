@@ -13,12 +13,12 @@ const PrintErr = css.PrintErr;
 
 pub fn UnboundedColorGamut(comptime T: type): type {
     return struct {
-        pub fn inGamut(unused_color: *const T): bool {
+        pub static fn inGamut(unused_color: *const T): bool {
             * = unused_color;
             return true;
         }
 
-        pub fn clip(color_val: *const T): T {
+        pub static fn clip(color_val: *const T): T {
             return color_val.*;
         }
     };
@@ -26,14 +26,14 @@ pub fn UnboundedColorGamut(comptime T: type): type {
 
 pub fn HslHwbColorGamut(comptime T: type, comptime a: []const u8, comptime b: []const u8): type {
     return struct {
-        pub fn inGamut(color_val: *const T): bool {
+        pub static fn inGamut(color_val: *const T): bool {
             return @field(color_val, a) >= 0.0 &&
                 @field(color_val, a) <= 1.0 &&
                 @field(color_val, b) >= 0.0 &&
                 @field(color_val, b) <= 1.0;
         }
 
-        pub fn clip(color_val: *const T): T {
+        pub static fn clip(color_val: *const T): T {
             let result: T = color_val.*;
             // result.h = this.h % 360.0;
             result.h = @mod(color_val.h, 360.0);
@@ -861,7 +861,7 @@ pub fn parseLab(
             return _.parser.parseRelative(i, T, CssColor, @This().innerfn, {});
         }
 
-        pub fn innerfn(i: *css.Parser, p: *ComponentParser): Result(CssColor) {
+        pub static fn innerfn(i: *css.Parser, p: *ComponentParser): Result(CssColor) {
             // f32::max() does not propagate NaN, so use clamp for now until f32::maximum() is stable.
             const l = bun.clamp(
                 switch (p.parsePercentage(i)) {
@@ -1669,7 +1669,7 @@ pub struct SRGB {
     fn adjustPowerlessComponents(_: *@This())  {}
     fn adjustHue(_: *@This(), _: *@This(), _: HueInterpolationMethod)  {}
 
-    fn intoRGBA(_rgb: *const SRGB): RGBA {
+    static fn intoRGBA(_rgb: *const SRGB): RGBA {
         const rgb = _rgb.resolve();
         return RGBA.fromFloats(
             rgb.r,
@@ -3192,19 +3192,19 @@ pub fn ColorspaceConversions(comptime T: type): type {
     return struct {
         const convert_type: ConvertTo = .fromType(T);
 
-        pub fn fromLABColor(color: *const LABColor): T {
+        pub static fn fromLABColor(color: *const LABColor): T {
             return switch (color.*) {
                 inline else => |*v| v.into(convert_type),
             };
         }
 
-        pub fn fromPredefinedColor(color: *const PredefinedColor): T {
+        pub static fn fromPredefinedColor(color: *const PredefinedColor): T {
             return switch (color.*) {
                 inline else => |*v| v.into(convert_type),
             };
         }
 
-        pub fn fromFloatColor(color: *const FloatColor): T {
+        pub static fn fromFloatColor(color: *const FloatColor): T {
             return switch (color.*) {
                 inline else => |*v| v.into(convert_type),
             };
@@ -3222,7 +3222,7 @@ pub fn ColorspaceConversions(comptime T: type): type {
             };
         }
 
-        pub fn hash(color_val: *const T, hasher: *std.hash.Wyhash) {
+        pub static fn hash(color_val: *const T, hasher: *std.hash.Wyhash) {
             return css.implementHash(T, color_val, hasher);
         }
     };
@@ -3249,7 +3249,7 @@ pub fn DefineColorspace(comptime T: type, comptime ChannelTypeMap: auto): type {
     }
 
     return struct {
-        pub fn components(color_val: *const T): struct { f32, f32, f32, f32 } {
+        pub static fn components(color_val: *const T): struct { f32, f32, f32, f32 } {
             return .{
                 @field(color_val, a),
                 @field(color_val, b),
@@ -3258,11 +3258,11 @@ pub fn DefineColorspace(comptime T: type, comptime ChannelTypeMap: auto): type {
             };
         }
 
-        pub fn channels(_: *const T): struct { []const u8, []const u8, []const u8 } {
+        pub static fn channels(_: *const T): struct { []const u8, []const u8, []const u8 } {
             return .{ a, b, c };
         }
 
-        pub fn types(_: *const T): struct { ChannelType, ChannelType, ChannelType } {
+        pub static fn types(_: *const T): struct { ChannelType, ChannelType, ChannelType } {
             return .{
                 @field(ChannelTypeMap, a),
                 @field(ChannelTypeMap, b),
@@ -3270,7 +3270,7 @@ pub fn DefineColorspace(comptime T: type, comptime ChannelTypeMap: auto): type {
             };
         }
 
-        pub fn resolveMissing(color_val: *const T): T {
+        pub static fn resolveMissing(color_val: *const T): T {
             let result: T = color_val.*;
             @field(result, a) = if (std.math.isNan(@field(color_val, a))) 0.0 else @field(color_val, a);
             @field(result, b) = if (std.math.isNan(@field(color_val, b))) 0.0 else @field(color_val, b);
@@ -3295,7 +3295,7 @@ pub fn BoundedColorGamut(comptime T: type): type {
     const b = fields[1].name;
     const c = fields[2].name;
     return struct {
-        pub fn inGamut(color_val: *const T): bool {
+        pub static fn inGamut(color_val: *const T): bool {
             return @field(color_val, a) >= 0.0 &&
                 @field(color_val, a) <= 1.0 &&
                 @field(color_val, b) >= 0.0 &&
@@ -3304,7 +3304,7 @@ pub fn BoundedColorGamut(comptime T: type): type {
                 @field(color_val, c) <= 1.0;
         }
 
-        pub fn clip(color_val: *const T): T {
+        pub static fn clip(color_val: *const T): T {
             let result: T = color_val.*;
             @field(result, a) = bun.clamp(@field(color_val, a), 0.0, 1.0);
             @field(result, b) = bun.clamp(@field(color_val, b), 0.0, 1.0);
@@ -3326,7 +3326,7 @@ pub fn DeriveInterpolate(
     if (!@hasField(T, c)) @compileError("Missing field: " ++ c);
 
     return struct {
-        pub fn fillMissingComponents(color_val: *T, other: *T) {
+        pub static fn fillMissingComponents(color_val: *T, other: *T) {
             if (std.math.isNan(@field(color_val, a))) {
                 @field(color_val, a) = @field(other, a);
             }
@@ -3344,7 +3344,7 @@ pub fn DeriveInterpolate(
             }
         }
 
-        pub fn interpolate(color_val: *const T, p1: f32, other: *const T, p2: f32): T {
+        pub static fn interpolate(color_val: *const T, p1: f32, other: *const T, p2: f32): T {
             let result: T = undefined;
             @field(result, a) = @field(color_val, a) * p1 + @field(other, a) * p2;
             @field(result, b) = @field(color_val, b) * p1 + @field(other, b) * p2;
@@ -3733,7 +3733,7 @@ struct _convert_LAB {
         ) };
     }
 
-    fn intoLCH(_lab: *const LAB): LCH {
+    static fn intoLCH(_lab: *const LAB): LCH {
         const lab = _lab.resolveMissing();
         const _t5 = rectangularToPolar(lab.l, lab.a, lab.b); const l = _t5[0]; const c = _t5[1]; const h = _t5[2];
         return LCH{
@@ -3744,7 +3744,7 @@ struct _convert_LAB {
         };
     }
 
-    fn intoXYZd50(_lab: *const LAB): XYZd50 {
+    static fn intoXYZd50(_lab: *const LAB): XYZd50 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L352
         const K: f32 = @floatCast(@as(f64, 24389.0) / @as(f64, 27.0)); // 29^3/3^3
         const E: f32 = @floatCast(@as(f64, 216.0) / @as(f64, 24389.0)); // 6^3/29^3
@@ -3804,7 +3804,7 @@ struct _convert_SRGB {
         };
     }
 
-    fn intoHSL(_rgb: *const SRGB): HSL {
+    static fn intoHSL(_rgb: *const SRGB): HSL {
         // https://drafts.csswg.org/css-color/#rgb-to-hsl
         const rgb = _rgb.resolve();
         const r = rgb.r;
@@ -3845,7 +3845,7 @@ struct _convert_SRGB {
         };
     }
 
-    fn intoHWB(_rgb: *const SRGB): HWB {
+    static fn intoHWB(_rgb: *const SRGB): HWB {
         const rgb = _rgb.resolve();
         const hsl = rgb.into(.HSL);
         const r = rgb.r;
@@ -3890,7 +3890,7 @@ struct _convert_HWB {
         return CssColor{ .rgba = c.into(.RGBA) };
     }
 
-    fn intoSRGB(_hwb: *const HWB): SRGB {
+    static fn intoSRGB(_hwb: *const HWB): SRGB {
         // https://drafts.csswg.org/css-color/#hwb-to-rgb
         const hwb = _hwb.resolveMissing();
         const h = hwb.h;
@@ -3937,7 +3937,7 @@ struct _convert_SRGBLinear {
         };
     }
 
-    fn intoSRGB(_rgb: *const SRGBLinear): SRGB {
+    static fn intoSRGB(_rgb: *const SRGBLinear): SRGB {
         const rgb = _rgb.resolveMissing();
         const _t8 = gamSrgb(rgb.r, rgb.g, rgb.b); const r = _t8[0]; const g = _t8[1]; const b = _t8[2];
         return SRGB{
@@ -3948,7 +3948,7 @@ struct _convert_SRGBLinear {
         };
     }
 
-    fn intoXYZd65(_rgb: *const SRGBLinear): XYZd65 {
+    static fn intoXYZd65(_rgb: *const SRGBLinear): XYZd65 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L50
         // convert an array of linear-light sRGB values to CIE XYZ
         // using sRGB's own white, D65 (no chromatic adaptation)
@@ -3990,7 +3990,7 @@ struct _convert_P3 {
         };
     }
 
-    fn intoXYZd65(_p3: *const P3): XYZd65 {
+    static fn intoXYZd65(_p3: *const P3): XYZd65 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L91
         // convert linear-light display-p3 values to CIE XYZ
         // using D65 (no chromatic adaptation)
@@ -4034,7 +4034,7 @@ struct _convert_A98 {
         };
     }
 
-    fn intoXYZd65(_a98: *const A98): XYZd65 {
+    static fn intoXYZd65(_a98: *const A98): XYZd65 {
         // convert an array of a98-rgb values in the range 0.0 - 1.0
         // to linear light (un-companded) form.
         // negative values are also now accepted
@@ -4087,7 +4087,7 @@ struct _convert_ProPhoto {
         };
     }
 
-    fn intoXYZd50(_prophoto: *const ProPhoto): XYZd50 {
+    static fn intoXYZd50(_prophoto: *const ProPhoto): XYZd50 {
         const prophoto = _prophoto.resolveMissing();
         const r = linProPhotoComponent(prophoto.r);
         const g = linProPhotoComponent(prophoto.g);
@@ -4134,7 +4134,7 @@ struct _convert_Rec2020 {
         };
     }
 
-    fn intoXYZd65(_rec2020: *const Rec2020): XYZd65 {
+    static fn intoXYZd65(_rec2020: *const Rec2020): XYZd65 {
         const rec2020 = _rec2020.resolveMissing();
         const r = linRec2020Component(rec2020.r);
         const g = linRec2020Component(rec2020.g);
@@ -4182,7 +4182,7 @@ struct _convert_XYZd50 {
         };
     }
 
-    fn intoLAB(_xyz: *const XYZd50): LAB {
+    static fn intoLAB(_xyz: *const XYZd50): LAB {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L332
         // Assuming XYZ is relative to D50, convert to CIE LAB
         // from CIE standard, which now defines these as a rational fraction
@@ -4215,7 +4215,7 @@ struct _convert_XYZd50 {
         };
     }
 
-    fn intoXYZd65(_xyz: *const XYZd50): XYZd65 {
+    static fn intoXYZd65(_xyz: *const XYZd50): XYZd65 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L105
         const MATRIX: [9]f32 = .{
             0.9554734527042182,
@@ -4239,7 +4239,7 @@ struct _convert_XYZd50 {
         };
     }
 
-    fn intoProPhoto(_xyz: *const XYZd50): ProPhoto {
+    static fn intoProPhoto(_xyz: *const XYZd50): ProPhoto {
         // convert XYZ to linear-light prophoto-rgb
         const MATRIX: [9]f32 = .{
             1.3457989731028281,
@@ -4281,7 +4281,7 @@ struct _convert_XYZd65 {
         };
     }
 
-    fn intoXYZd50(_xyz: *const XYZd65): XYZd50 {
+    static fn intoXYZd50(_xyz: *const XYZd65): XYZd50 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L319
 
         const MATRIX: [9]f32 = .{
@@ -4306,7 +4306,7 @@ struct _convert_XYZd65 {
         };
     }
 
-    fn intoSRGBLinear(_xyz: *const XYZd65): SRGBLinear {
+    static fn intoSRGBLinear(_xyz: *const XYZd65): SRGBLinear {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L62
         const MATRIX: [9]f32 = .{
             3.2409699419045226,
@@ -4330,7 +4330,7 @@ struct _convert_XYZd65 {
         };
     }
 
-    fn intoA98(_xyz: *const XYZd65): A98 {
+    static fn intoA98(_xyz: *const XYZd65): A98 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L222
         // convert XYZ to linear-light a98-rgb
 
@@ -4359,7 +4359,7 @@ struct _convert_XYZd65 {
         };
     }
 
-    fn intoRec2020(_xyz: *const XYZd65): Rec2020 {
+    static fn intoRec2020(_xyz: *const XYZd65): Rec2020 {
         // convert XYZ to linear-light rec2020
         const MATRIX: [9]f32 = .{
             1.7166511879712674,
@@ -4386,7 +4386,7 @@ struct _convert_XYZd65 {
         };
     }
 
-    fn intoOKLAB(_xyz: *const XYZd65): OKLAB {
+    static fn intoOKLAB(_xyz: *const XYZd65): OKLAB {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L400
         const XYZ_TO_LMS: [9]f32 = .{
             0.8190224432164319,
@@ -4426,7 +4426,7 @@ struct _convert_XYZd65 {
         };
     }
 
-    fn intoP3(_xyz: *const XYZd65): P3 {
+    static fn intoP3(_xyz: *const XYZd65): P3 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L105
         const MATRIX: [9]f32 = .{
             2.493496911941425,
@@ -4461,7 +4461,7 @@ struct _convert_LCH {
         ) };
     }
 
-    fn intoLAB(_lch: *const LCH): LAB {
+    static fn intoLAB(_lch: *const LCH): LAB {
         const lch = _lch.resolveMissing();
         const _t25 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t25[0]; const a = _t25[1]; const b = _t25[2];
         return LAB{
@@ -4497,7 +4497,7 @@ struct _convert_OKLAB {
         };
     }
 
-    fn intoXYZd65(_lab: *const OKLAB): XYZd65 {
+    static fn intoXYZd65(_lab: *const OKLAB): XYZd65 {
         // https://github.com/w3c/csswg-drafts/blob/fba005e2ce9bcac55b49e4aa19b87208b3a0631e/css-color-4/conversions.js#L418
         const LMS_TO_XYZ: [9]f32 = .{
             1.2268798733741557,
@@ -4550,7 +4550,7 @@ struct _convert_OKLCH {
         ) };
     }
 
-    fn intoOKLAB(_lch: *const OKLCH): OKLAB {
+    static fn intoOKLAB(_lch: *const OKLCH): OKLAB {
         const lch = _lch.resolveMissing();
         const _t29 = polarToRectangular(lch.l, lch.c, lch.h); const l = _t29[0]; const a = _t29[1]; const b = _t29[2];
         return OKLAB{
@@ -4652,7 +4652,7 @@ pub fn ColorIntoMixin(T: type, space: ConvertTo): type {
         const handwritten_conversions = @field(color_conversions, ns);
         const generated_conversions = @field(generated_color_conversions, ns);
 
-        pub fn into(color: *const T, comptime target_space: ConvertTo): target_space.Type() {
+        pub static fn into(color: *const T, comptime target_space: ConvertTo): target_space.Type() {
             if (target_space == space) return color.*;
 
             const name = @field(into_names, @tagName(target_space));

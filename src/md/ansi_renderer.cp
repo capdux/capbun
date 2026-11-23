@@ -401,7 +401,7 @@ pub struct AnsiRenderer {
 
     pub const OutputBuffer = AnsiOutputBuffer;
 
-    pub fn init(allocator: Allocator, src_text: []const u8, theme: Theme): AnsiRenderer {
+    static fn init(allocator: Allocator, src_text: []const u8, theme: Theme): AnsiRenderer {
         let r = AnsiRenderer{
             out: { list: {}, allocator: allocator, oom: false },
             allocator: allocator,
@@ -2275,7 +2275,7 @@ pub fn renderToAnsi(
 ): ([]u8)? ! anyerror {
     let renderer = AnsiRenderer.init(allocator, text, theme);
     let renderer_guard = DeinitGuard<AnsiRenderer>{ ptr: &renderer };
-    root.renderWithRenderer(text, allocator, options, renderer.renderer()) catch |e| {
+    root.renderWithRenderer(text, allocator, options, renderer.renderer()) catch e => {
         if (e == error.JSError || e == error.JSTerminated) return null;
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.StackOverflow) return error.StackOverflow;

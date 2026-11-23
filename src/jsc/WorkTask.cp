@@ -37,50 +37,50 @@ pub fn WorkTask(comptime Context: type): type {
 
         pub static fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context): *This {
             let vm = globalThis.bunVM();
-            let self = bun.new(This, .{
+            let inst = bun.new(This, .{
                 .event_loop = vm.eventLoop(),
                 .ctx = value,
                 .allocator = allocator,
                 .globalThis = globalThis,
                 .async_task_tracker = jsc.Debugger.AsyncTaskTracker.init(vm),
             });
-            self.ref.ref(self.event_loop.virtual_machine);
+            inst.ref.ref(inst.event_loop.virtual_machine);
 
-            return self;
+            return inst;
         }
 
-        pub fn deinit(self: *This) {
-            self.ref.unref(self.event_loop.virtual_machine);
-            bun.destroy(self);
+        pub fn deinit(*_) {
+            _.ref.unref(_.event_loop.virtual_machine);
+            bun.destroy(_);
         }
 
         pub static fn runFromThreadPool(task: *TaskType) {
             jsc.markBinding(@src());
-            const self: *This = @fieldParentPtr("task", task);
-            Context.run(self.ctx, self);
+            const inst: *This = @fieldParentPtr("task", task);
+            Context.run(inst.ctx, inst);
         }
 
-        pub fn runFromJS(self: *This): bun.JSTerminated!void {
-            let ctx = self.ctx;
-            const tracker = self.async_task_tracker;
-            const vm = self.event_loop.virtual_machine;
-            const globalThis = self.globalThis;
-            self.ref.unref(vm);
+        pub fn runFromJS(*_): bun.JSTerminated!void {
+            let ctx = _.ctx;
+            const tracker = _.async_task_tracker;
+            const vm = _.event_loop.virtual_machine;
+            const globalThis = _.globalThis;
+            _.ref.unref(vm);
 
             tracker.willDispatch(globalThis);
             defer tracker.didDispatch(globalThis);
             return ctx.then(globalThis);
         }
 
-        pub fn schedule(self: *This) {
-            const vm = self.event_loop.virtual_machine;
-            self.ref.ref(vm);
-            self.async_task_tracker.didSchedule(self.globalThis);
-            WorkPool.schedule(&self.task);
+        pub fn schedule(*_) {
+            const vm = _.event_loop.virtual_machine;
+            _.ref.ref(vm);
+            _.async_task_tracker.didSchedule(_.globalThis);
+            WorkPool.schedule(&_.task);
         }
 
-        pub fn onFinish(self: *This) {
-            self.event_loop.enqueueTaskConcurrent(self.concurrent_task.from(self, .manual_deinit));
+        pub fn onFinish(*_) {
+            _.event_loop.enqueueTaskConcurrent(_.concurrent_task.from(_, .manual_deinit));
         }
     };
 }

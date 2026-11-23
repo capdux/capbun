@@ -145,7 +145,8 @@ pub fn parse(input: *Parser) Result(@This()) {
             _ = &values;
             while (true) {
                 _ = input.skipWhitespace();
-                switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, .{}, parseFn)) {
+                const empty_ctx: void = undefined;
+                switch (input.parseUntilBefore(Delimiters{ .comma = true }, T, empty_ctx, parseFn)) {
 .result => |v| {
 _ = values.append(input.allocator(), v);
 },
@@ -369,11 +370,14 @@ pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.T
                         _ = bun.handleOom(res.append(allocator, p3_images));
                     }
                     if (fallbacks.lab) {
-                        for (cp_mut_slice(&self.slice_mut())) |*item| {
-                            _ = &item;
-                            var old = (item.*).*;
+                        const sl = self.slice_mut();
+                        var idx: usize = 0;
+                        _ = &idx;
+                        while ((idx < sl.len)) : (idx = (idx + 1)) {
+                            const item = (&sl[@as(usize, @intCast(idx))]);
+                            var old = item.*;
                             _ = &old;
-                            (item.*).* = (item.*).getFallback(allocator, ColorFallbackKind{ .lab = true });
+                            item.* = item.getFallback(allocator, ColorFallbackKind{ .lab = true });
                             _ = old.deinit(allocator);
                         }
                     }
@@ -398,32 +402,32 @@ pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.T
                 var res: SmallList(SmallList(TextShadow, 1), 2) = .{};
                 _ = &res;
                 if (fallbacks.rgb) {
-                    var rgb = SmallList(TextShadow, 1).initCapacity(allocator, self.len());
-                    _ = &rgb;
-                    for (cp_mut_slice(&self.slice())) |*shadow| {
+                    var rgb_shadows = SmallList(TextShadow, 1).initCapacity(allocator, self.len());
+                    _ = &rgb_shadows;
+                    for (cp_iter_slice(self.slice())) |shadow| {
                         _ = &shadow;
-                        var new_shadow = (shadow.*).*;
+                        var new_shadow = shadow;
                         _ = &new_shadow;
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
-                        new_shadow.color = ((shadow.*).color.toRGB(allocator)).?;
-                        _ = (rgb).?.appendAssumeCapacity(new_shadow);
+                        new_shadow.color = (shadow.color.toRGB(allocator)).?;
+                        _ = rgb_shadows.appendAssumeCapacity(new_shadow);
                     }
-                    _ = res.append(allocator, rgb);
+                    _ = res.append(allocator, rgb_shadows);
                 }
                 if (fallbacks.p3) {
-                    var p3 = SmallList(TextShadow, 1).initCapacity(allocator, self.len());
-                    _ = &p3;
-                    for (cp_mut_slice(&self.slice())) |*shadow| {
+                    var p3_shadows = SmallList(TextShadow, 1).initCapacity(allocator, self.len());
+                    _ = &p3_shadows;
+                    for (cp_iter_slice(self.slice())) |shadow| {
                         _ = &shadow;
-                        var new_shadow = (shadow.*).*;
+                        var new_shadow = shadow;
                         _ = &new_shadow;
                         new_shadow.color = .current_color;
                         new_shadow = new_shadow.deepClone(allocator);
-                        new_shadow.color = ((shadow.*).color.toP3(allocator)).?;
-                        _ = p3.appendAssumeCapacity(new_shadow);
+                        new_shadow.color = (shadow.color.toP3(allocator)).?;
+                        _ = p3_shadows.appendAssumeCapacity(new_shadow);
                     }
-                    _ = res.append(allocator, p3);
+                    _ = res.append(allocator, p3_shadows);
                 }
                 if (fallbacks.lab) {
                     for (cp_mut_slice(&self.slice_mut())) |*shadow| {
@@ -438,8 +442,7 @@ pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.T
             _ = @compileError("Dunno what to do here.");
     }
 
-pub fn getFallbacksReturnType(self: @This(), comptime @"Type": type, comptime InlineSize: comptime_int) type {
-        _ = self;
+pub fn getFallbacksReturnType(comptime @"Type": type, comptime InlineSize: comptime_int) type {
             if ((@hasDecl(@"Type", "getImage") and (InlineSize == 1))) {
                 return bun.BabyList(SmallList(@"Type", 1));
             }
@@ -450,16 +453,18 @@ pub fn getFallbacksReturnType(self: @This(), comptime @"Type": type, comptime In
     }
 
 pub fn map(self: *@This(), comptime func: anytype) void {
-            for (cp_mut_slice(&self.slice_mut())) |*item| {
-                _ = &item;
-                _ = func((item.*));
+            const sl = self.slice_mut();
+            var idx: usize = 0;
+            _ = &idx;
+            while ((idx < sl.len)) : (idx = (idx + 1)) {
+                _ = func((&sl[@as(usize, @intCast(idx))]));
             }
     }
 
 pub fn any(self: @This(), comptime predicate: anytype) bool {
-            for (cp_mut_slice(&self.slice())) |*item| {
+            for (cp_iter_slice(self.slice())) |item| {
                 _ = &item;
-                if (predicate((item.*))) {
+                if (predicate((&item))) {
                     return true;
                 }
             }
@@ -506,7 +511,7 @@ pub fn clearRetainingCapacity(self: *@This()) void {
 
 pub fn shallowClone(self: @This(), allocator: Allocator) @This() {
             if ((!self.spilled())) {
-                return self.*;
+                return self;
             }
             var h = HeapData.initCapacity(allocator, self.capacity);
             _ = &h;
@@ -546,7 +551,7 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn clone(self: @This(), allocator: Allocator) @This() {
-            var ret = self.*;
+            var ret = self;
             _ = &ret;
             if ((!self.spilled())) {
                 return ret;
@@ -564,9 +569,9 @@ pub fn deinit(self: *@This(), allocator: Allocator) void {
     }
 
 pub fn hash(self: @This(), hasher: anytype) void {
-            for (cp_mut_slice(&self.slice())) |*item| {
+            for (cp_iter_slice(self.slice())) |item| {
                 _ = &item;
-                _ = css.generic.hash(T, (item.*), hasher);
+                _ = css.generic.hash(T, (&item), hasher);
             }
     }
 
@@ -608,10 +613,10 @@ pub fn insert(self: *@This(), allocator: Allocator, index: u32, item: T) void {
             const capp = triple[2];
             if ((len_ptr.* == capp)) {
                 _ = self.reserveOneUnchecked(allocator);
-                const _tmp_v12 = self.heap();
-                const heap_ptr = cp_unpack_elem(_tmp_v12, 0);
+                const _tmp_v10 = self.heap();
+                const heap_ptr = cp_unpack_elem(_tmp_v10, 0);
                 _ = &heap_ptr;
-                const heap_len_ptr = cp_unpack_elem(_tmp_v12, 1);
+                const heap_len_ptr = cp_unpack_elem(_tmp_v10, 1);
                 _ = &heap_len_ptr;
                 ptr = heap_ptr;
                 len_ptr = heap_len_ptr;
@@ -643,10 +648,10 @@ pub fn appendAssumeCapacity(self: *@This(), item: T) void {
     }
 
 pub fn pop(self: *@This()) ?T {
-            const _tmp_v13 = self.tripleMut();
-            const ptr = cp_unpack_elem(_tmp_v13, 0);
+            const _tmp_v11 = self.tripleMut();
+            const ptr = cp_unpack_elem(_tmp_v11, 0);
             _ = &ptr;
-            const len_ptr = cp_unpack_elem(_tmp_v13, 1);
+            const len_ptr = cp_unpack_elem(_tmp_v11, 1);
             _ = &len_ptr;
             if ((len_ptr.* == 0)) {
                 return null;
@@ -665,10 +670,10 @@ pub fn append(self: *@This(), allocator: Allocator, item: T) void {
             const capp = triple[2];
             if ((len_ptr.* == capp)) {
                 _ = self.reserveOneUnchecked(allocator);
-                const _tmp_v14 = self.heap();
-                const heap_ptr = cp_unpack_elem(_tmp_v14, 0);
+                const _tmp_v12 = self.heap();
+                const heap_ptr = cp_unpack_elem(_tmp_v12, 0);
                 _ = &heap_ptr;
-                const heap_len = cp_unpack_elem(_tmp_v14, 1);
+                const heap_len = cp_unpack_elem(_tmp_v12, 1);
                 _ = &heap_len;
                 ptr = heap_ptr;
                 len_ptr = heap_len;
@@ -725,12 +730,12 @@ pub fn as_ptr(self: *@This()) [*]T {
     }
 
 pub fn reserve(self: *@This(), allocator: Allocator, additional: u32) void {
-            const _tmp_v15 = self.tripleMut();
-            const ptr = cp_unpack_elem(_tmp_v15, 0);
+            const _tmp_v13 = self.tripleMut();
+            const ptr = cp_unpack_elem(_tmp_v13, 0);
             _ = &ptr;
-            const __len = cp_unpack_elem(_tmp_v15, 1);
+            const __len = cp_unpack_elem(_tmp_v13, 1);
             _ = &__len;
-            const capp = cp_unpack_elem(_tmp_v15, 2);
+            const capp = cp_unpack_elem(_tmp_v13, 2);
             _ = &capp;
             _ = &ptr;
             const len_ = __len.*;
@@ -750,12 +755,12 @@ pub fn reserveOneUnchecked(self: *@This(), allocator: Allocator) void {
 
 pub fn tryGrow(self: *@This(), allocator: Allocator, new_cap: u32) void {
             const unspilled = (!self.spilled());
-            const _tmp_v16 = self.tripleMut();
-            const ptr = cp_unpack_elem(_tmp_v16, 0);
+            const _tmp_v14 = self.tripleMut();
+            const ptr = cp_unpack_elem(_tmp_v14, 0);
             _ = &ptr;
-            const __len = cp_unpack_elem(_tmp_v16, 1);
+            const __len = cp_unpack_elem(_tmp_v14, 1);
             _ = &__len;
-            const cap = cp_unpack_elem(_tmp_v16, 2);
+            const cap = cp_unpack_elem(_tmp_v14, 2);
             _ = &cap;
             const length = __len.*;
             _ = bun.assert((new_cap >= length));
@@ -810,8 +815,7 @@ pub inline fn spilled(self: @This()) bool {
             return (self.capacity > N);
     }
 
-pub fn growCapacity(self: @This(), current: u32, minimum: u32) u32 {
-        _ = self;
+pub fn growCapacity(current: u32, minimum: u32) u32 {
             var new = current;
             _ = &new;
             while (true) {

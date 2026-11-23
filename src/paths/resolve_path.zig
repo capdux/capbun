@@ -1064,22 +1064,28 @@ pub fn normalizeStringGenericT(comptime T: type, path_: []const T, buf: []T, com
         return normalizeStringGenericTZ(T, path_, buf, .{ .allow_above_root = allow_above_root, .separator = separator, .isSeparator = separatorAdapter(T, isSeparatorT), .preserve_trailing_slash = preserve_trailing_slash, .zero_terminate = false, .add_nt_prefix = false });
 }
 
+pub fn DefaultIsSeparator(comptime T: type) type {
+        return struct {
+
+pub fn call(char: T) bool {
+            if (comptime (std.fs.path.sep == std.fs.path.sep_windows)) {
+                return ((char == 92) or (char == 47));
+            } else {
+                return (char == 47);
+            }
+    }
+};
+}
+
 pub fn NormalizeOptions(comptime T: type) type {
         return struct {
-        allow_above_root: bool = false,
-        separator: T = std.fs.path.sep,
-        isSeparator: *const fn(T) bool = struct {
-            fn call(char: T) bool {
-                return if (comptime std.fs.path.sep == std.fs.path.sep_windows)
-                    char == '\\' or char == '/'
-                else
-                    char == '/';
-            }
-        }.call,
-        preserve_trailing_slash: bool = false,
-        zero_terminate: bool = false,
-        add_nt_prefix: bool = false,
-    };
+    allow_above_root: bool = false,
+    separator: T = std.fs.path.sep,
+    isSeparator: *const fn (T) bool = DefaultIsSeparator(T).call,
+    preserve_trailing_slash: bool = false,
+    zero_terminate: bool = false,
+    add_nt_prefix: bool = false,
+};
 }
 
 pub fn normalizeStringGenericTZ(comptime T: type, path_: []const T, buf: []T, comptime options: NormalizeOptions(T)) if (options.zero_terminate) [:0]T else []T {

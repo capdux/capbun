@@ -428,17 +428,16 @@ pub fn NamespaceUrl(comptime Impl: type) type {
     prefix: Impl.SelectorImpl.NamespacePrefix,
     url: Impl.SelectorImpl.NamespaceUrl,
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 };
     }
@@ -453,36 +452,36 @@ pub fn AttrSelectorWithOptionalNamespace(comptime Impl: type) type {
     never_matches: bool,
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
-            _ = dest.writeChar(try 91);
+            _ = try dest.writeChar(91);
             if (self.namespace) |nsp| {
                 _ = &nsp;
                 switch (nsp) {
 .specific => |v| {
-_ = css.IdentFns.toCss(try v.prefix, dest);
-                _ = dest.writeChar(try 124);
+_ = try css.IdentFns.toCss(v.prefix, dest);
+                _ = try dest.writeChar(124);
 },
 .any => {
-_ = dest.writeStr(try "*|");
+_ = try dest.writeStr("*|");
 },
 }
             }
-            _ = css.IdentFns.toCss(try self.local_name, dest);
+            _ = try css.IdentFns.toCss(self.local_name, dest);
             switch (self.operation) {
 .exists => {
 
 },
 .with_value => |v| {
-_ = v.operator.toCss(try dest);
-            _ = CSSStringFns.toCss(try (&v.expected_value), dest);
+_ = try v.operator.toCss(dest);
+            _ = try CSSStringFns.toCss((&v.expected_value), dest);
             switch (v.case_sensitivity) {
 .case_sensitive, .ascii_case_insensitive_if_in_html_element_in_html_document => {
 
 },
 .ascii_case_insensitive => {
-_ = dest.writeStr(try " i");
+_ = try dest.writeStr(" i");
 },
 .explicit_case_sensitive => {
-_ = dest.writeStr(try " s");
+_ = try dest.writeStr(" s");
 },
 }
 },
@@ -490,17 +489,16 @@ _ = dest.writeStr(try " s");
             return dest.writeChar(93);
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 };
     }
@@ -511,17 +509,16 @@ pub fn NamespaceConstraint(comptime NamespaceUrl_: type) type {
     any: void,
     specific: NamespaceUrl_,
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 };
     }
@@ -553,16 +550,15 @@ pub fn ParsedAttrSelectorOperation(comptime AttrValue: type) type {
     with_value: ParsedAttrSelectorWithValue(AttrValue),
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
-pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 };
     }
@@ -1769,8 +1765,7 @@ switch (d) {
 '>' => {
 if ((parser.deepCombinatorEnabled() and input.tryParse((struct {
 
-pub fn parseFn(self: @This(), i: *css.Parser) Result(void) {
-        _ = self;
+pub fn parseFn(i: *css.Parser) Result(void) {
             if (i.expectDelim(62).asErr()) |e| {
                 _ = &e;
                 return .{ .err = e };
@@ -1796,8 +1791,7 @@ combinator = .later_sibling;
 if (parser.deepCombinatorEnabled()) {
                     if (input.tryParse((struct {
 
-pub fn parseFn(self: @This(), i: *css.Parser) Result(void) {
-        _ = self;
+pub fn parseFn(i: *css.Parser) Result(void) {
             if (i.expectIdentMatching("deep").asErr()) |e| {
                 _ = &e;
                 return .{ .err = e };
@@ -2186,8 +2180,7 @@ return .{ .err = e };
             }
     }
 
-pub fn fromSelector(self: @This(), allocator: Allocator, selector: GenericSelector(Impl)) This {
-        _ = self;
+pub fn fromSelector(allocator: Allocator, selector: GenericSelector(Impl)) This {
             var result = This{  };
             _ = &result;
             _ = result.v.append(allocator, selector);
@@ -2198,13 +2191,12 @@ pub fn deepClone(self: @This(), allocator: Allocator) This {
             return .{ .v = self.v.deepClone(allocator) };
     }
 
-pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
-        _ = self;
+pub fn eql(lhs: *const This, rhs: *const This) bool {
             return lhs.v.eql((&rhs.v));
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
     const This = @This();
 };
@@ -2246,8 +2238,7 @@ pub fn debug(self: @This()) SelectorDebugFmt(This) {
             return SelectorDebugFmt(This){ .this = (&self) };
     }
 
-pub fn parse(self: @This(), parser: *SelectorParser, input: *css.Parser) Result(This) {
-        _ = self;
+pub fn parse(parser: *SelectorParser, input: *css.Parser) Result(This) {
             var state = SelectorParsingState{  };
             _ = &state;
             return parse_selector(Impl, parser, input, (&state), .none);
@@ -2280,11 +2271,11 @@ else => {
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) This {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(self: @This(), other: *const This) bool {
-            return css.implementEql(This, self, other);
+            return css.implementEql(This, (&self), other);
     }
 
 pub fn hasCombinator(self: @This()) bool {
@@ -2308,8 +2299,7 @@ pub fn len(self: @This()) usize {
             return self.components.items.len;
     }
 
-pub fn fromComponent(self: @This(), allocator: Allocator, component: GenericComponent(Impl)) This {
-        _ = self;
+pub fn fromComponent(allocator: Allocator, component: GenericComponent(Impl)) This {
             var builder = SelectorBuilder(Impl).init(allocator);
             _ = &builder;
             if (component.asCombinator()) |combinator| {
@@ -2341,7 +2331,7 @@ pub fn iterRawParseOrderFrom(self: @This(), offset: usize) RawParseOrderFromIter
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
     const This = @This();
 };
@@ -2447,30 +2437,29 @@ pub fn GenericComponent(comptime Impl: type) type {
     nesting: void,
 
 pub fn isLocallyScoped(self: @This()) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .id, .class => true,
 else => false,
 });
     }
 
 pub fn asClass(self: @This()) ?Impl.SelectorImpl.LocalIdentifier {
-            return (switch (self.*) {
+            return (switch (self) {
 inline .class => |v| v,
 else => null,
 });
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
-pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
-        _ = self;
+pub fn eql(lhs: *const This, rhs: *const This) bool {
             return css.implementEql(This, lhs, rhs);
     }
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {
-            switch (self.*) {
+            switch (self) {
 .local_name => {
 return try writer.print("local_name={s}", .{ (if (@typeInfo(@TypeOf(self.local_name)) == .@"enum" or @typeInfo(@TypeOf(self.local_name)) == .@"union") @tagName(self.local_name) else self.local_name.name).v });
 },
@@ -2487,33 +2476,30 @@ else => {
 
 },
 }
-            return writer.print("{s}", .{ @tagName(self.*) });
+            return writer.print("{s}", .{ @tagName(self) });
     }
 
 pub fn asCombinator(self: @This()) ?Combinator {
-            if ((self.* == .combinator)) {
+            if ((self == .combinator)) {
                 return self.combinator;
             }
             return null;
     }
 
-pub fn convertHelper_is(self: @This(), s: []GenericSelector(Impl)) This {
-        _ = self;
+pub fn convertHelper_is(s: []GenericSelector(Impl)) This {
             return .{ .is = s };
     }
 
-pub fn convertHelper_where(self: @This(), s: []GenericSelector(Impl)) This {
-        _ = self;
+pub fn convertHelper_where(s: []GenericSelector(Impl)) This {
             return .{ .where = s };
     }
 
-pub fn convertHelper_any(self: @This(), s: []GenericSelector(Impl), prefix: Impl.SelectorImpl.VendorPrefix) This {
-        _ = self;
+pub fn convertHelper_any(s: []GenericSelector(Impl), prefix: Impl.SelectorImpl.VendorPrefix) This {
             return .{ .any = .{ .vendor_prefix = prefix, .selectors = s } };
     }
 
 pub fn isCombinator(self: @This()) bool {
-            return (self.* == .combinator);
+            return (self == .combinator);
     }
 
 pub fn toCss(self: *const @This(), _: *Printer) PrintErr!void {
@@ -2522,7 +2508,7 @@ pub fn toCss(self: *const @This(), _: *Printer) PrintErr!void {
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
     const This = @This();
 };
@@ -2540,11 +2526,11 @@ pub fn eql(self: @This(), lhs: *const @This(), rhs: *const @This()) bool {
     }
 
 pub fn hash(self: @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (&self), hasher);
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn nthData(self: @This()) NthSelectorData {
@@ -2813,8 +2799,7 @@ return .{ .err = e };
             }
             break :pseudo_element (switch (input.parseNestedBlock(Impl.SelectorImpl.PseudoElement, (&ParseFunctionalPseudoElementClosure{ .parser = parser, .state = state, .name = name }), (struct {
 
-pub fn parseFn(self: @This(), closure: *const ParseFunctionalPseudoElementClosure, i: *css.Parser) Result(Impl.SelectorImpl.PseudoElement) {
-        _ = self;
+pub fn parseFn(closure: *const ParseFunctionalPseudoElementClosure, i: *css.Parser) Result(Impl.SelectorImpl.PseudoElement) {
             return closure.parser.parseFunctionalPseudoElement(closure.name, i);
     }
 }).parseFn)) {
@@ -3318,7 +3303,7 @@ return .{ .err = e };
 }
 
 pub fn OptionalQNameSome(comptime Impl: type) type {
-        return .{ QNamePrefix(Impl), ?[]const u8 };
+        return std.@"meta".Tuple((&.{ QNamePrefix(Impl), ?[]const u8 }));
 }
 
 pub fn OptionalQName(comptime Impl: type) type {

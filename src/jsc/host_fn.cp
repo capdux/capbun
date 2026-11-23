@@ -19,7 +19,7 @@ pub const JSHostFnZig = @TypeOf(_JSHostFnZig);
 
 fn _ZigWithContext(comptime ContextType: type): type {
     return struct {
-        pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) bun.JSError!JSValue {
+        pub static fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame): bun.JSError!JSValue {
             * = ctx;
             * = globalThis;
             * = callframe;
@@ -30,7 +30,7 @@ fn _ZigWithContext(comptime ContextType: type): type {
 
 fn _FnTypeWithContext(comptime ContextType: type): type {
     return struct {
-        pub fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) JSValue {
+        pub static fn f(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): JSValue {
             * = ctx;
             * = globalThis;
             * = callframe;
@@ -49,7 +49,7 @@ pub fn JSHostFunctionTypeWithContext(comptime ContextType: type): type {
 
 pub fn toJSHostFn(comptime functionToWrap: JSHostFnZig): JSHostFn {
     return struct {
-        pub fn function(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): JSValue {
+        pub static fn function(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): JSValue {
             return toJSHostFnResult(globalThis, functionToWrap(globalThis, callframe));
         }
     }.function;
@@ -57,7 +57,7 @@ pub fn toJSHostFn(comptime functionToWrap: JSHostFnZig): JSHostFn {
 
 pub fn toJSHostFnWithContext(comptime ContextType: type, comptime Function: JSHostFnZigWithContext(ContextType)): JSHostFunctionTypeWithContext(ContextType) {
     return struct {
-        pub fn function(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): JSValue {
+        pub static fn function(ctx: *ContextType, globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv): JSValue {
             return toJSHostFnResult(globalThis, Function(ctx, globalThis, callframe));
         }
     }.function;
@@ -65,7 +65,7 @@ pub fn toJSHostFnWithContext(comptime ContextType: type, comptime Function: JSHo
 
 pub fn toJSHostFnResult(globalThis: *JSGlobalObject, result: JSValue ! bun.JSError): JSValue {
     if (Environment.allow_assert && Environment.is_canary) {
-        const value = result catch |e| {
+        const value = result catch e => {
             if (e == error.OutOfMemory) {
                 return globalThis.throwOutOfMemoryValue();
             }
@@ -74,7 +74,7 @@ pub fn toJSHostFnResult(globalThis: *JSGlobalObject, result: JSValue ! bun.JSErr
         debugExceptionAssertion(globalThis, value, "_unknown_".*);
         return value;
     }
-    return result catch |e| {
+    return result catch e => {
         if (e == error.OutOfMemory) {
             return globalThis.throwOutOfMemoryValue();
         }
@@ -114,7 +114,7 @@ pub err JSErrorSet {
 }
 
 pub fn toJSHostSetterValue(globalThis: *JSGlobalObject, value: void ! HostFnError): bool {
-    value catch |e| {
+    value catch e => {
         if (e == error.OutOfMemory) {
             * = globalThis.throwOutOfMemoryValue();
         }
@@ -135,7 +135,7 @@ pub fn toJSHostCall(
     const _scope_guard = DeinitGuard<jsc.ExceptionValidationScope>{ ptr: unsafe { &scope } };
 
     const returned = @as(JSValue ! HostFnError, @call(.auto, function, args));
-    const normal = returned catch |e| {
+    const normal = returned catch e => {
         if (e == error.OutOfMemory) {
             return globalThis.throwOutOfMemoryValue();
         }
@@ -208,9 +208,9 @@ pub fn voidFromJSError(e: bun.JSError, globalThis: *jsc.JSGlobalObject) {
 }
 
 fn Wrap1Struct(comptime func: auto): type {
-    const p = checkWrapParams(func, 1);
+    * = checkWrapParams(func, 1);
     return struct {
-        pub fn wrapped(arg0: p[0].@"type".?) callconv(.c): JSValue {
+        pub static fn wrapped(arg0: *JSGlobalObject) callconv(.c): JSValue {
             return toJSHostCall(arg0, @src(), func, .{arg0});
         }
     };
@@ -222,8 +222,9 @@ pub fn wrap1(comptime func: auto): @TypeOf(Wrap1Struct(func).wrapped) {
 
 fn Wrap2Struct(comptime func: auto): type {
     const p = checkWrapParams(func, 2);
+    const A1 = p[1].@"type".?;
     return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?) callconv(.c): JSValue {
+        pub static fn wrapped(arg0: *JSGlobalObject, arg1: A1) callconv(.c): JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1 });
         }
     };
@@ -235,8 +236,10 @@ pub fn wrap2(comptime func: auto): @TypeOf(Wrap2Struct(func).wrapped) {
 
 fn Wrap3Struct(comptime func: auto): type {
     const p = checkWrapParams(func, 3);
+    const A1 = p[1].@"type".?;
+    const A2 = p[2].@"type".?;
     return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?) callconv(.c): JSValue {
+        pub static fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2) callconv(.c): JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2 });
         }
     };
@@ -248,8 +251,11 @@ pub fn wrap3(comptime func: auto): @TypeOf(Wrap3Struct(func).wrapped) {
 
 fn Wrap4Struct(comptime func: auto): type {
     const p = checkWrapParams(func, 4);
+    const A1 = p[1].@"type".?;
+    const A2 = p[2].@"type".?;
+    const A3 = p[3].@"type".?;
     return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?, arg3: p[3].@"type".?) callconv(.c): JSValue {
+        pub static fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2, arg3: A3) callconv(.c): JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2, arg3 });
         }
     };
@@ -261,8 +267,12 @@ pub fn wrap4(comptime func: auto): @TypeOf(Wrap4Struct(func).wrapped) {
 
 fn Wrap5Struct(comptime func: auto): type {
     const p = checkWrapParams(func, 5);
+    const A1 = p[1].@"type".?;
+    const A2 = p[2].@"type".?;
+    const A3 = p[3].@"type".?;
+    const A4 = p[4].@"type".?;
     return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?, arg3: p[3].@"type".?, arg4: p[4].@"type".?) callconv(.c): JSValue {
+        pub static fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2, arg3: A3, arg4: A4) callconv(.c): JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2, arg3, arg4 });
         }
     };
@@ -273,10 +283,11 @@ pub fn wrap5(comptime func: auto): @TypeOf(Wrap5Struct(func).wrapped) {
 }
 
 fn checkWrapParams(comptime func: auto, comptime N: u8): []const std.builtin.Type.Fn.Param {
+    const JSGlobalObjectPtr = @FieldType(struct { p: *JSGlobalObject }, "p");
     const params = @typeInfo(@TypeOf(func)).@"fn".params;
     if (params.len != N) {
         @compileError(std.fmt.comptimePrint("arg length mismatch: {d} != {d}", [ N, params.len ]));
-    } else if (params[0].@"type".? != *JSGlobalObject) {
+    } else if (params[0].@"type".? != JSGlobalObjectPtr) {
         @compileError("first arg must be *JSGlobalObject");
     }
     return params;
@@ -284,8 +295,11 @@ fn checkWrapParams(comptime func: auto, comptime N: u8): []const std.builtin.Typ
 
 fn Wrap4vStruct(comptime func: auto): type {
     const p = checkWrapParams(func, 4);
+    const A1 = p[1].@"type".?;
+    const A2 = p[2].@"type".?;
+    const A3 = p[3].@"type".?;
     return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?, arg3: p[3].@"type".?) callconv(jsc.conv): JSValue {
+        pub static fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2, arg3: A3) callconv(jsc.conv): JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2, arg3 });
         }
     };
@@ -503,7 +517,7 @@ pub fn DOMCall(
         const PutFnType = fn (globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) callconv(.c) void;
         const put_fn = @extern(PutFnType, .{ .name = className ++ "__" ++ functionName ++ "__put" });
 
-        pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
+        pub static fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
             put_fn(globalObject, value);
         }
 
@@ -544,7 +558,7 @@ pub fn wrapInstanceMethod(
         const Args = std.@"meta".ArgsTuple(FunctionType);
         const eater = if (auto_protect) jsc.CallFrame.ArgumentsSlice.protectEatNext else jsc.CallFrame.ArgumentsSlice.nextEat;
 
-        pub fn method(
+        pub static fn method(
             instance: *Container,
             globalThis: *jsc.JSGlobalObject,
             callframe: *jsc.CallFrame,
@@ -567,23 +581,26 @@ pub fn wrapInstanceMethod(
                 } else if (ArgType == *jsc.CallFrame) {
                     @field(args, std.fmt.comptimePrint("{d}", .{ i })) = callframe;
                 } else if (ArgType == jsc.Node.StringOrBuffer) {
-                    const arg = iter.nextEat() orelse {
+                    const opt_arg = iter.nextEat();
+                    if (opt_arg == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected string or buffer", {});
-                    };
-                    const __arg_val = (jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?) orelse {
+                    }
+                    const opt_val = jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), opt_arg.?)?;
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected string or buffer", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == Optional(jsc.Node.StringOrBuffer)) {
                     if (arg := iter.nextEat()) {
                         if (!arg.isEmptyOrUndefinedOrNull()) {
-                            const __arg_val = (jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?) orelse {
+                            const opt_val = jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?;
+                            if (opt_val == null) {
                                 iter.deinit();
                                 return globalThis.throwInvalidArguments("expected string or buffer", {});
-                            };
-                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                            }
+                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                         } else {
                             @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                         }
@@ -592,30 +609,34 @@ pub fn wrapInstanceMethod(
                     }
                 } else if (ArgType == jsc.ArrayBuffer) {
                     if (arg := iter.nextEat()) {
-                        const __arg_val = arg.asArrayBuffer(globalThis) orelse {
+                        const opt_val = arg.asArrayBuffer(globalThis);
+                        if (opt_val == null) {
                             iter.deinit();
                             return globalThis.throwInvalidArguments("expected TypedArray", {});
-                        };
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        }
+                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                     } else {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected TypedArray", {});
                     }
                 } else if (ArgType == Optional(jsc.ArrayBuffer)) {
                     if (arg := iter.nextEat()) {
-                        const __arg_val = arg.asArrayBuffer(globalThis) orelse {
+                        const opt_val = arg.asArrayBuffer(globalThis);
+                        if (opt_val == null) {
                             iter.deinit();
                             return globalThis.throwInvalidArguments("expected TypedArray", {});
-                        };
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        }
+                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                     } else {
                         @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                     }
                 } else if (ArgType == jsc.ZigString) {
-                    let string_value = eater(&iter) orelse {
+                    const opt_str = eater(&iter);
+                    if (opt_str == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing argument", {});
-                    };
+                    }
+                    let string_value = opt_str.?;
 
                     if (string_value.isUndefinedOrNull()) {
                         iter.deinit();
@@ -632,29 +653,36 @@ pub fn wrapInstanceMethod(
                         @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                     }
                 } else if (ArgType == *jsc.WebCore.Response) {
-                    const __arg_val = (eater(&iter) orelse {
+                    const opt_eaten = eater(&iter);
+                    if (opt_eaten == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing Response object", {});
-                    }).@"as"(jsc.WebCore.Response) orelse {
+                    }
+                    const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Response);
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Expected Response object", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == *jsc.WebCore.Request) {
-                    const __arg_val = (eater(&iter) orelse {
+                    const opt_eaten = eater(&iter);
+                    if (opt_eaten == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing Request object", {});
-                    }).@"as"(jsc.WebCore.Request) orelse {
+                    }
+                    const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Request);
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Expected Request object", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == jsc.JSValue) {
-                    const val = eater(&iter) orelse {
+                    const opt_val = eater(&iter);
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing argument", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == Optional(jsc.JSValue)) {
                     @field(args, std.fmt.comptimePrint("{d}", .{ i })) = eater(&iter);
                 } else if (ArgType == jsc.C.ExceptionRef) {
@@ -683,7 +711,7 @@ pub fn wrapStaticMethod(
         const Args = std.@"meta".ArgsTuple(FunctionType);
         const eater = if (auto_protect) jsc.CallFrame.ArgumentsSlice.protectEatNext else jsc.CallFrame.ArgumentsSlice.nextEat;
 
-        pub fn method(
+        pub static fn method(
             globalThis: *jsc.JSGlobalObject,
             callframe: *jsc.CallFrame,
         ): jsc.JSValue ! bun.JSError {
@@ -697,66 +725,72 @@ pub fn wrapStaticMethod(
                 if (ArgType == *jsc.JSGlobalObject) {
                     @field(args, std.fmt.comptimePrint("{d}", .{ i })) = globalThis;
                 } else if (ArgType == jsc.Node.StringOrBuffer) {
-                    const arg = iter.nextEat() orelse {
+                    const opt_arg = iter.nextEat();
+                    if (opt_arg == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected string or buffer", {});
-                    };
-                    const __arg_val = (jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?) orelse {
+                    }
+                    const opt_val = jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), opt_arg.?)?;
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected string or buffer", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == Optional(jsc.Node.StringOrBuffer)) {
                     if (arg := iter.nextEat()) {
-                        const __arg_val = (jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?) orelse brk: {
-                            if (arg.isUndefined()) {
-                                break :brk null;
-                            }
-
+                        if (val := jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?) {
+                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = val;
+                        } else if (arg.isUndefined()) {
+                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
+                        } else {
                             iter.deinit();
                             return globalThis.throwInvalidArguments("expected string or buffer", {});
-                        };
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        }
                     } else {
                         @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                     }
                 } else if (ArgType == jsc.Node.BlobOrStringOrBuffer) {
                     if (arg := iter.nextEat()) {
-                        const __arg_val = (jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?) orelse {
+                        const opt_val = jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)?;
+                        if (opt_val == null) {
                             iter.deinit();
                             return globalThis.throwInvalidArguments("expected blob, string or buffer", {});
-                        };
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        }
+                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                     } else {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected blob, string or buffer", {});
                     }
                 } else if (ArgType == jsc.ArrayBuffer) {
                     if (arg := iter.nextEat()) {
-                        const __arg_val = arg.asArrayBuffer(globalThis) orelse {
+                        const opt_val = arg.asArrayBuffer(globalThis);
+                        if (opt_val == null) {
                             iter.deinit();
                             return globalThis.throwInvalidArguments("expected TypedArray", {});
-                        };
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        }
+                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                     } else {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("expected TypedArray", {});
                     }
                 } else if (ArgType == Optional(jsc.ArrayBuffer)) {
                     if (arg := iter.nextEat()) {
-                        const __arg_val = arg.asArrayBuffer(globalThis) orelse {
+                        const opt_val = arg.asArrayBuffer(globalThis);
+                        if (opt_val == null) {
                             iter.deinit();
                             return globalThis.throwInvalidArguments("expected TypedArray", {});
-                        };
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        }
+                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                     } else {
                         @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                     }
                 } else if (ArgType == jsc.ZigString) {
-                    let string_value = eater(&iter) orelse {
+                    const opt_str = eater(&iter);
+                    if (opt_str == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing argument", {});
-                    };
+                    }
+                    let string_value = opt_str.?;
 
                     if (string_value.isUndefinedOrNull()) {
                         iter.deinit();
@@ -773,29 +807,36 @@ pub fn wrapStaticMethod(
                         @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                     }
                 } else if (ArgType == *jsc.WebCore.Response) {
-                    const __arg_val = (eater(&iter) orelse {
+                    const opt_eaten = eater(&iter);
+                    if (opt_eaten == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing Response object", {});
-                    }).@"as"(jsc.WebCore.Response) orelse {
+                    }
+                    const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Response);
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Expected Response object", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == *jsc.WebCore.Request) {
-                    const __arg_val = (eater(&iter) orelse {
+                    const opt_eaten = eater(&iter);
+                    if (opt_eaten == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing Request object", {});
-                    }).@"as"(jsc.WebCore.Request) orelse {
+                    }
+                    const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Request);
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Expected Request object", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == jsc.JSValue) {
-                    const val = eater(&iter) orelse {
+                    const opt_val = eater(&iter);
+                    if (opt_val == null) {
                         iter.deinit();
                         return globalThis.throwInvalidArguments("Missing argument", {});
-                    };
-                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = val;
+                    }
+                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                 } else if (ArgType == Optional(jsc.JSValue)) {
                     @field(args, std.fmt.comptimePrint("{d}", .{ i })) = eater(&iter);
                 } else {

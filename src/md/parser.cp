@@ -97,46 +97,46 @@ pub struct Parser {
     }
 
     fn deinit(*_: *Parser)  {
-        self.marks.deinit(self.allocator);
-        self.containers.deinit(self.allocator);
-        self.block_bytes.deinit(self.allocator);
-        self.buffer.deinit(self.allocator);
-        self.current_block_lines.deinit(self.allocator);
-        self.ref_defs.deinit(self.allocator);
-        self.emph_delims.deinit(self.allocator);
+        _.marks.deinit(_.allocator);
+        _.containers.deinit(_.allocator);
+        _.block_bytes.deinit(_.allocator);
+        _.buffer.deinit(_.allocator);
+        _.current_block_lines.deinit(_.allocator);
+        _.ref_defs.deinit(_.allocator);
+        _.emph_delims.deinit(_.allocator);
     }
 
     pub inline fn ch(_: *const Parser, off: OFF): u8 {
-        if (off >= self.size) return 0;
-        return self.text[off];
+        if (off >= _.size) return 0;
+        return _.text[off];
     }
 
     fn buildMarkCharMap(*_: *Parser)  {
-        self.mark_char_map.set('\\');
-        self.mark_char_map.set('*');
-        self.mark_char_map.set('_');
-        self.mark_char_map.set('`');
-        self.mark_char_map.set('&');
-        self.mark_char_map.set(';');
-        self.mark_char_map.set('[');
-        self.mark_char_map.set('!');
-        self.mark_char_map.set(']');
-        self.mark_char_map.set(0);
-        self.mark_char_map.set('\n'); // newlines always need handling (hard/soft breaks)
-        if (!self.flags.no_html_spans) {
-            self.mark_char_map.set('<');
-            self.mark_char_map.set('>');
+        _.mark_char_map.set('\\');
+        _.mark_char_map.set('*');
+        _.mark_char_map.set('_');
+        _.mark_char_map.set('`');
+        _.mark_char_map.set('&');
+        _.mark_char_map.set(';');
+        _.mark_char_map.set('[');
+        _.mark_char_map.set('!');
+        _.mark_char_map.set(']');
+        _.mark_char_map.set(0);
+        _.mark_char_map.set('\n'); // newlines always need handling (hard/soft breaks)
+        if (!_.flags.no_html_spans) {
+            _.mark_char_map.set('<');
+            _.mark_char_map.set('>');
         }
-        if (self.flags.strikethrough) self.mark_char_map.set('~');
-        if (self.flags.latex_math) self.mark_char_map.set('$');
-        if (self.flags.permissive_email_autolinks || self.flags.permissive_url_autolinks)
-            self.mark_char_map.set(':');
-        if (self.flags.permissive_email_autolinks) self.mark_char_map.set('@');
-        if (self.flags.permissive_www_autolinks) self.mark_char_map.set('.');
-        if (self.flags.collapse_whitespace) {
-            self.mark_char_map.set(' ');
-            self.mark_char_map.set('\t');
-            self.mark_char_map.set('\r');
+        if (_.flags.strikethrough) _.mark_char_map.set('~');
+        if (_.flags.latex_math) _.mark_char_map.set('$');
+        if (_.flags.permissive_email_autolinks || _.flags.permissive_url_autolinks)
+            _.mark_char_map.set(':');
+        if (_.flags.permissive_email_autolinks) _.mark_char_map.set('@');
+        if (_.flags.permissive_www_autolinks) _.mark_char_map.set('.');
+        if (_.flags.collapse_whitespace) {
+            _.mark_char_map.set(' ');
+            _.mark_char_map.set('\t');
+            _.mark_char_map.set('\r');
         }
     }
 
@@ -257,10 +257,10 @@ pub fn renderToHtml(text: []const u8, allocator: Allocator, flags: Flags, render
     };
 
     // HtmlRenderer never returns JSError/JSTerminated, so OutOfMemory is the only possible error.
-    parser_guard.val.processDoc() catch |e| switch (e) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.JSError, error.JSTerminated => unreachable,
-        error.StackOverflow => return error.StackOverflow,
+    parser_guard.val.processDoc() catch e => {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        if (e == error.StackOverflow) return error.StackOverflow;
+        unreachable;
     };
 
     const res = html_renderer_guard.val.?.toOwnedSlice()?;

@@ -60,6 +60,14 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
+const Message = struct { __cp_no_message_sentinel: void = {} };
+fn cp_msg_to_val(_: anytype) []const u8 { return ""; }
+pub fn CpUnpackElemType(comptime __cp_T: type, comptime __cp_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].type else __cp_s.field_types[__cp_idx]; } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{__cp_idx})); }
+pub fn cp_unpack_elem(__cp_v: anytype, comptime __cp_idx: usize) CpUnpackElemType(@TypeOf(__cp_v), __cp_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_idx < __cp_m.array.len) { return cp_msg_to_val(__cp_m.array[__cp_idx]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_idx < __cp_v.array.len) { return cp_msg_to_val(__cp_v.array[__cp_idx]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_idx]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_idx]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; return @field(__cp_v, if (@hasField(@TypeOf(__cp_s), "fields")) __cp_s.fields[__cp_idx].name else __cp_s.field_names[__cp_idx]); } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{__cp_idx})); } }
+pub fn CpUnpackTailType(comptime __cp_T: type, comptime __cp_offset_from_end: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const u8; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return __cp_s.fields[__cp_n - __cp_offset_from_end].type; } else { const __cp_n = __cp_s.field_names.len; return __cp_s.field_types[__cp_n - __cp_offset_from_end]; } } return @FieldType(__cp_T, std.fmt.comptimePrint("{d}", .{1})); }
+pub fn cp_unpack_tail(__cp_v: anytype, comptime __cp_offset_from_end: usize) CpUnpackTailType(@TypeOf(__cp_v), __cp_offset_from_end) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_m.array[__cp_m.array.len - __cp_offset_from_end]); } } return ""; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_offset_from_end) { return cp_msg_to_val(__cp_v.array[__cp_v.array.len - __cp_offset_from_end]); } return ""; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_v.*.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_v.len - __cp_offset_from_end]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_n = __cp_s.fields.len; return @field(__cp_v, __cp_s.fields[__cp_n - __cp_offset_from_end].name); } else { const __cp_n = __cp_s.field_names.len; return @field(__cp_v, __cp_s.field_names[__cp_n - __cp_offset_from_end]); } } return @field(__cp_v, std.fmt.comptimePrint("{d}", .{0})); } }
+pub fn CpUnpackSliceType(comptime __cp_T: type, comptime __cp_start_idx: usize) type { if (__cp_T == ?Message or __cp_T == Message) return []const Message; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice) return __cp_T; if (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice) return @typeInfo(__cp_T).pointer.child; if (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array) return []const @typeInfo(@typeInfo(__cp_T).pointer.child).array.child; if (@typeInfo(__cp_T) == .array) return []const @typeInfo(__cp_T).array.child; const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; if (__cp_fields.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) __cp_fields[__cp_start_idx].type else __cp_fields[0].type; return []const CpValType(__cp_Elem); } else { const __cp_types = __cp_s.field_types; if (__cp_types.len == 0) return []const i32; const __cp_Elem = if (__cp_start_idx < __cp_types.len) __cp_types[__cp_start_idx] else __cp_types[0]; return []const CpValType(__cp_Elem); } } return []const i32; }
+pub fn cp_unpack_slice(__cp_v: anytype, comptime __cp_start_idx: usize, comptime __cp_suffix_len: usize) CpUnpackSliceType(@TypeOf(__cp_v), __cp_start_idx) { const __cp_T = @TypeOf(__cp_v); if (comptime __cp_T == ?Message) { if (__cp_v) |__cp_m| { if (__cp_m == .array and __cp_m.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_m.array[__cp_start_idx .. __cp_m.array.len - __cp_suffix_len]; } } return &[_]Message{}; } else if (comptime __cp_T == Message) { if (__cp_v == .array and __cp_v.array.len >= __cp_start_idx + __cp_suffix_len) { return __cp_v.array[__cp_start_idx .. __cp_v.array.len - __cp_suffix_len]; } return &[_]Message{}; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child).pointer.size == .slice)) { return __cp_v.*[__cp_start_idx .. __cp_v.*.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else if (comptime (@typeInfo(__cp_T) == .array)) { return __cp_v[__cp_start_idx .. __cp_v.len - __cp_suffix_len]; } else { const __cp_ti = @typeInfo(__cp_T); if (__cp_ti == .@"struct") { const __cp_s = __cp_ti.@"struct"; if (@hasField(@TypeOf(__cp_s), "fields")) { const __cp_fields = __cp_s.fields; const __cp_end = __cp_fields.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_fields.len) CpValType(__cp_fields[__cp_start_idx].type) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_fields[__cp_f_idx].name)); } return __cp_buf; } else { const __cp_names = __cp_s.field_names; const __cp_types = __cp_s.field_types; const __cp_end = __cp_names.len - __cp_suffix_len; const __cp_count = if (__cp_end > __cp_start_idx) __cp_end - __cp_start_idx else 0; const __cp_Elem = if (__cp_start_idx < __cp_types.len) CpValType(__cp_types[__cp_start_idx]) else i32; const __cp_buf = std.heap.page_allocator.alloc(__cp_Elem, __cp_count) catch unreachable; inline for (__cp_start_idx..__cp_end, 0..) |__cp_f_idx, __cp_out_idx| { __cp_buf[__cp_out_idx] = cp_val(@field(__cp_v, __cp_names[__cp_f_idx])); } return __cp_buf; } } return &[_]i32{}; } }
 pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__cp_val); if (comptime __cp_T == []const u8) { return __cp_val; } else if (comptime (__cp_T == [*:0]const u8 or __cp_T == [*:0]u8)) { return std.mem.span(__cp_val); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .slice and @typeInfo(__cp_T).pointer.child == u8)) { return __cp_val; } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(__cp_T).pointer.size == .one and @typeInfo(@typeInfo(__cp_T).pointer.child) == .array and @typeInfo(@typeInfo(__cp_T).pointer.child).array.child == u8)) { return __cp_val[0..]; } else if (comptime (@typeInfo(__cp_T) == .@"enum")) { return @tagName(__cp_val); } else if (comptime __cp_T == bool) { return if (__cp_val) "true" else "false"; } else if (comptime (@typeInfo(__cp_T) == .int or __cp_T == comptime_int)) { return std.fmt.allocPrint(std.heap.page_allocator, "{}", .{__cp_val}) catch "0"; } else if (comptime (@typeInfo(__cp_T) == .float or __cp_T == comptime_float)) { return std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{__cp_val}) catch "0.0"; } else if (comptime (@typeInfo(__cp_T) == .@"struct" and @hasDecl(__cp_T, "toString"))) { return __cp_val.toString(); } else if (comptime (@typeInfo(__cp_T) == .pointer and @typeInfo(@typeInfo(__cp_T).pointer.child) == .@"struct" and @hasDecl(@typeInfo(__cp_T).pointer.child, "toString"))) { return __cp_val.toString(); } else { return @typeName(__cp_T); } }
 
 pub const bun = @import("bun");
@@ -380,7 +388,7 @@ pub fn PosixBufferedWriter(comptime Parent: type, comptime function_table: anyty
     closed_without_reporting: bool = false,
     close_fd: bool = true,
 
-pub fn memoryCost(self: *const @This()) usize {
+pub fn memoryCost(self: @This()) usize {
         _ = self;
             return @sizeOf(@This());
     }
@@ -393,12 +401,16 @@ pub fn getPoll(self: *const @This()) ?*Async.FilePoll {
             return self.handle.getPoll();
     }
 
-pub fn getFileType(self: *const @This()) FileType {
-            const poll = ((getPoll(self)) orelse { return FileType.file; });
+pub fn getFileType(self: *@This()) FileType {
+            const _poll_opt = getPoll(self);
+            if ((_poll_opt == null)) {
+                return FileType.file;
+            }
+            const poll = _poll_opt.?;
             return poll.fileType();
     }
 
-pub fn getFd(self: *const @This()) bun.FD {
+pub fn getFd(self: *@This()) bun.FD {
             return self.handle.getFd();
     }
 
@@ -408,7 +420,7 @@ pub fn _onError(self: *@This(), err: bun.sys.Error) void {
             _ = self.close();
     }
 
-pub fn getForceSync(self: *const @This()) bool {
+pub fn getForceSync(self: @This()) bool {
         _ = self;
             return false;
     }
@@ -436,7 +448,11 @@ pub fn _onWritable(self: *@This()) void {
     }
 
 pub fn registerPoll(self: *@This()) void {
-            var poll = ((self.getPoll()) orelse { return; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return;
+            }
+            var poll = _poll_opt.?;
             _ = &poll;
             const loop = self.parent.eventLoop().loop();
             switch (poll.registerWithFd(loop, .writable, .dispatch, poll.fd)) {
@@ -453,7 +469,11 @@ pub fn hasRef(self: *@This()) bool {
             if (self.is_done) {
                 return false;
             }
-            const poll = ((self.getPoll()) orelse { return false; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return false;
+            }
+            const poll = _poll_opt.?;
             return poll.canEnableKeepingProcessAlive();
     }
 
@@ -499,8 +519,12 @@ pub fn close(self: *@This()) void {
             }
     }
 
-pub fn updateRef(self: *const @This(), event_loop: anytype, value: bool) void {
-            const poll = ((self.getPoll()) orelse { return; });
+pub fn updateRef(self: @This(), event_loop: anytype, value: bool) void {
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return;
+            }
+            const poll = _poll_opt.?;
             _ = poll.setKeepingProcessAlive(event_loop, value);
     }
 
@@ -524,22 +548,26 @@ pub fn watch(self: *@This()) void {
 
 pub fn start(self: *@This(), rawfd: anytype, pollable: bool) bun.sys.Maybe(void) {
             const FDType = @TypeOf(rawfd);
-            const fd = (if (FDType == bun.FD) rawfd else if ((FDType == *bun.MovableIfWindowsFd) or (FDType == bun.MovableIfWindowsFd)) rawfd.getPosix() else @compileError(("Expected `bun.FD`, `*bun.MovableIfWindowsFd` or `bun.MovableIfWindowsFd` but got: " ++ @typeName(rawfd))));
+            const fd = (if (FDType == bun.FD) rawfd else if ((FDType == *bun.MovableIfWindowsFd) or (FDType == bun.MovableIfWindowsFd)) rawfd.getPosix() else @compileError(("Expected `bun.FD`, `*bun.MovableIfWindowsFd` || `bun.MovableIfWindowsFd` but got: " ++ @typeName(rawfd))));
             self.pollable = pollable;
             if ((!pollable)) {
                 _ = bun.assert((self.handle != .poll));
                 self.handle = .{ .fd = fd };
                 return .success;
             }
-            var poll = ((self.getPoll()) orelse (brk: {
-            self.handle = .{ .poll = self.createPoll(fd) };
-            break :brk self.handle.poll;
-}));
+            var poll: *Async.FilePoll = undefined;
             _ = &poll;
+            if (self.getPoll()) |p| {
+                _ = &p;
+                poll = p;
+            } else {
+                self.handle = .{ .poll = self.createPoll(fd) };
+                poll = self.handle.poll;
+            }
             const loop = @as(*Parent, @ptrCast(@alignCast(self.parent))).eventLoop().loop();
             switch (poll.registerWithFd(loop, .writable, .dispatch, fd)) {
-.err => |err| {
-return .initErr(err);
+.err => |e| {
+return .initErr(e);
 },
 .result => {
 _ = self.enableKeepingProcessAlive(@as(*Parent, @ptrCast(@alignCast(self.parent))).eventLoop());
@@ -569,11 +597,11 @@ pub fn PosixStreamingWriter(comptime Parent: type, comptime function_table: anyt
     closed_without_reporting: bool = false,
     force_sync: bool = false,
 
-pub fn getForceSync(self: *const @This()) bool {
+pub fn getForceSync(self: @This()) bool {
             return self.force_sync;
     }
 
-pub fn memoryCost(self: *const @This()) usize {
+pub fn memoryCost(self: @This()) usize {
             return (@sizeOf(@This()) + self.outgoing.memoryCost());
     }
 
@@ -586,15 +614,19 @@ pub fn getFd(self: *@This()) bun.FD {
     }
 
 pub fn getFileType(self: *@This()) FileType {
-            const poll = ((self.getPoll()) orelse { return FileType.file; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return FileType.file;
+            }
+            const poll = _poll_opt.?;
             return poll.fileType();
     }
 
-pub fn hasPendingData(self: *const @This()) bool {
+pub fn hasPendingData(self: @This()) bool {
             return self.outgoing.isNotEmpty();
     }
 
-pub fn shouldBuffer(self: *const @This(), addition: usize) bool {
+pub fn shouldBuffer(self: @This(), addition: usize) bool {
             return ((!self.force_sync) and ((self.outgoing.size() + addition) < chunk_size));
     }
 
@@ -655,7 +687,11 @@ pub fn closeWithoutReporting(self: *@This()) void {
     }
 
 pub fn registerPoll(self: *@This()) void {
-            const poll = ((self.getPoll()) orelse { return; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return;
+            }
+            const poll = _poll_opt.?;
             switch (poll.registerWithFd(self.parent.loop(), .writable, .dispatch, poll.fd)) {
 .err => |err| {
 _ = onError(self.parent, err);
@@ -819,7 +855,11 @@ pub fn deinit(self: *@This()) void {
     }
 
 pub fn hasRef(self: *@This()) bool {
-            const poll = ((self.getPoll()) orelse { return false; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return false;
+            }
+            const poll = _poll_opt.?;
             return ((!self.is_done) and poll.canEnableKeepingProcessAlive());
     }
 
@@ -827,12 +867,20 @@ pub fn enableKeepingProcessAlive(self: *@This(), event_loop: jsc.EventLoopHandle
             if (self.is_done) {
                 return;
             }
-            const poll = ((self.getPoll()) orelse { return; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return;
+            }
+            const poll = _poll_opt.?;
             _ = poll.enableKeepingProcessAlive(event_loop);
     }
 
 pub fn disableKeepingProcessAlive(self: *@This(), event_loop: jsc.EventLoopHandle) void {
-            const poll = ((self.getPoll()) orelse { return; });
+            const _poll_opt = self.getPoll();
+            if ((_poll_opt == null)) {
+                return;
+            }
+            const poll = _poll_opt.?;
             _ = poll.disableKeepingProcessAlive(event_loop);
     }
 
@@ -869,14 +917,18 @@ pub fn start(self: *@This(), fd: bun.FD, is_pollable: bool) bun.sys.Maybe(void) 
                 return .success;
             }
             const loop = self.parent.eventLoop();
-            var poll = ((self.getPoll()) orelse (brk: {
-            self.handle = .{ .poll = Async.FilePoll.init(loop, fd, .{}, PosixWriter, self) };
-            break :brk self.handle.poll;
-}));
+            var poll: *Async.FilePoll = undefined;
             _ = &poll;
+            if (self.getPoll()) |p| {
+                _ = &p;
+                poll = p;
+            } else {
+                self.handle = .{ .poll = Async.FilePoll.init(loop, fd, .{}, PosixWriter, self) };
+                poll = self.handle.poll;
+            }
             switch (poll.registerWithFd(loop.loop(), .writable, .dispatch, fd)) {
-.err => |err| {
-return .{ .err = err };
+.err => |e| {
+return .{ .err = e };
 },
 .result => {
 
@@ -899,12 +951,16 @@ return .{ .err = err };
 pub fn BaseWindowsPipeWriter(comptime WindowsPipeWriter: type, comptime Parent: type) type {
         return struct {
 
-pub fn getFd(self: *const @This()) bun.FD {
-            const pipe = ((self.source) orelse { return bun.invalid_fd; });
+pub fn getFd(self: *@This()) bun.FD {
+            const _pipe_opt = self.source;
+            if ((_pipe_opt == null)) {
+                return bun.invalid_fd;
+            }
+            const pipe = _pipe_opt.?;
             return pipe.getFd();
     }
 
-pub fn hasRef(self: *const @This()) bool {
+pub fn hasRef(self: @This()) bool {
             if (self.is_done) {
                 return false;
             }
@@ -936,7 +992,11 @@ pub fn onTTYClose(handle: *uv.uv_tty_t) callconv(.c) void {
 
 pub fn close(self: *@This()) void {
             self.is_done = true;
-            const source = ((self.source) orelse { return; });
+            const _source_opt = self.source;
+            if ((_source_opt == null)) {
+                return;
+            }
+            const source = _source_opt.?;
             const has_inflight_write = (if (@hasField(WindowsPipeWriter, "current_payload")) (switch (source) {
 .sync_file, .file => |file| ((file.state == .operating) or (file.state == .canceling)),
 else => false,
@@ -987,7 +1047,8 @@ pub fn setParent(self: *@This(), parent: *Parent) void {
             }
     }
 
-pub fn watch(_: *WindowsPipeWriter) void {
+pub fn watch(self: *@This()) void {
+        _ = self;
     }
 
 pub fn startWithPipe(self: *@This(), pipe: *uv.Pipe) bun.sys.Maybe(void) {
@@ -1017,7 +1078,7 @@ pub fn startWithFile(self: *@This(), fd: bun.FD) bun.sys.Maybe(void) {
 
 pub fn start(self: *@This(), rawfd: anytype, _: bool) bun.sys.Maybe(void) {
             const FDType = @TypeOf(rawfd);
-            const fd = (if (FDType == bun.FD) rawfd else if (FDType == *bun.MovableIfWindowsFd) (rawfd.get()).? else @compileError(("Expected `bun.FD` or `*bun.MovableIfWindowsFd` but got: " ++ @typeName(rawfd))));
+            const fd = (if (FDType == bun.FD) rawfd else if (FDType == *bun.MovableIfWindowsFd) (rawfd.get()).? else @compileError(("Expected `bun.FD` || `*bun.MovableIfWindowsFd` but got: " ++ @typeName(rawfd))));
             _ = bun.assert((self.source == null));
             const loop = self.parent.loop();
             const source = (switch (Source.open(loop, fd)) {
@@ -1044,7 +1105,11 @@ pub fn setPipe(self: *@This(), pipe: *uv.Pipe) void {
     }
 
 pub fn getStream(self: *const @This()) ?*uv.uv_stream_t {
-            const source = ((self.source) orelse { return null; });
+            const _source_opt = self.source;
+            if ((_source_opt == null)) {
+                return null;
+            }
+            const source = _source_opt.?;
             if ((source == .file)) {
                 return null;
             }
@@ -1070,7 +1135,7 @@ pub fn onCloseSource(self: *@This()) void {
             }
     }
 
-pub fn memoryCost(self: *const @This()) usize {
+pub fn memoryCost(self: @This()) usize {
             return (@sizeOf(@This()) + self.write_buffer.len);
     }
 
@@ -1084,10 +1149,10 @@ pub fn startWithCurrentPipe(self: *@This()) bun.sys.Maybe(void) {
 pub fn onWriteComplete(self: *@This(), status: uv.ReturnCode) void {
             const written = self.pending_payload_size;
             self.pending_payload_size = 0;
-            if (status.toError(.write)) |err| {
-                _ = &err;
+            if (status.toError(.write)) |e| {
+                _ = &e;
                 _ = self.close();
-                _ = onError(self.parent, err);
+                _ = onError(self.parent, e);
                 return;
             }
             const pending = self.getBufferInternal();
@@ -1112,15 +1177,15 @@ pub fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
             if ((parent_ptr == null)) {
                 return;
             }
-            const writer = bun.cast(*WindowsWriter, parent_ptr);
+            const writer = bun.cast((&WindowsWriter), parent_ptr);
             if (was_canceled) {
                 writer.pending_payload_size = 0;
                 return;
             }
-            if (result.toError(.write)) |err| {
-                _ = &err;
+            if (result.toError(.write)) |e| {
+                _ = &e;
                 _ = writer.close();
-                _ = onError(writer.parent, err);
+                _ = onError(writer.parent, e);
                 return;
             }
             _ = writer.onWriteComplete(.zero);
@@ -1131,7 +1196,11 @@ pub fn write(self: *@This()) void {
             if (((self.is_done or (self.pending_payload_size > 0)) or (buffer.len == 0))) {
                 return;
             }
-            const pipe = ((self.source) orelse { return; });
+            const _pipe_opt = self.source;
+            if ((_pipe_opt == null)) {
+                return;
+            }
+            const pipe = _pipe_opt.?;
             switch (pipe) {
 .sync_file => {
 _ = @panic("This code path shouldn't be reached - sync_file in PipeWriter.zig");
@@ -1145,11 +1214,11 @@ _ = bun.assert(file.canStart());
             if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, (blk: {
             break :blk @ptrCast((&self.write_buffer));
 
-}), 1, -1, onFsWriteComplete).toError(.write)) |err| {
-                _ = &err;
+}), 1, -1, onFsWriteComplete).toError(.write)) |e| {
+                _ = &e;
                 _ = file.complete(false);
                 _ = self.close();
-                _ = onError(self.parent, err);
+                _ = onError(self.parent, e);
             }
 },
 else => {
@@ -1215,7 +1284,7 @@ pub fn WindowsStreamingWriter(comptime Parent: type, comptime function_table: an
     last_write_result: WriteResult = .{ .wrote = 0 },
     closed_without_reporting: bool = false,
 
-pub fn memoryCost(self: *const @This()) usize {
+pub fn memoryCost(self: @This()) usize {
             return ((@sizeOf(@This()) + self.current_payload.memoryCost()) + self.outgoing.memoryCost());
     }
 
@@ -1234,7 +1303,7 @@ pub fn startWithCurrentPipe(self: *@This()) bun.sys.Maybe(void) {
             return .success;
     }
 
-pub fn hasPendingData(self: *const @This()) bool {
+pub fn hasPendingData(self: @This()) bool {
             return (self.outgoing.isNotEmpty() or self.current_payload.isNotEmpty());
     }
 
@@ -1247,11 +1316,11 @@ pub fn onWriteComplete(self: *@This(), status: uv.ReturnCode) void {
             _ = &_parent_guard;
             var ___parent_guard_moved = false; _ = &___parent_guard_moved;
             defer if (!___parent_guard_moved) { ___parent_guard_moved = true; const __T = @TypeOf(_parent_guard); if (@typeInfo(__T) == .optional) { if (_parent_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _parent_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _parent_guard; _drop_val.__cp_deinit(); } };
-            if (status.toError(.write)) |err| {
-                _ = &err;
-                self.last_write_result = .{ .err = err };
-                _ = log("onWrite() = {s}", .{ err.name() });
-                _ = onError(self.parent, err);
+            if (status.toError(.write)) |e| {
+                _ = &e;
+                self.last_write_result = .{ .e = e };
+                _ = log("onWrite() = {s}", .{ e.name() });
+                _ = onError(self.parent, e);
                 _ = self.closeWithoutReporting();
                 return;
             }
@@ -1283,20 +1352,20 @@ pub fn onFsWriteComplete(fs: *uv.fs_t) callconv(.c) void {
             if ((parent_ptr == null)) {
                 return;
             }
-            const writer = bun.cast(*WindowsWriter, parent_ptr);
+            const writer = bun.cast((&WindowsWriter), parent_ptr);
             if (was_canceled) {
                 _ = writer.current_payload.reset();
                 _ = writer.parent.deref();
                 return;
             }
-            if (result.toError(.write)) |err| {
-                _ = &err;
+            if (result.toError(.write)) |e| {
+                _ = &e;
                 var _parent_guard = DerefGuard(Parent){ .ptr = writer.parent };
                 _ = &_parent_guard;
                 var ___parent_guard_moved = false; _ = &___parent_guard_moved;
                 defer if (!___parent_guard_moved) { ___parent_guard_moved = true; const __T = @TypeOf(_parent_guard); if (@typeInfo(__T) == .optional) { if (_parent_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _parent_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _parent_guard; _drop_val.__cp_deinit(); } };
                 _ = writer.close();
-                _ = onError(writer.parent, err);
+                _ = onError(writer.parent, e);
                 return;
             }
             _ = writer.onWriteComplete(.zero);
@@ -1313,13 +1382,14 @@ pub fn processSend(self: *@This()) void {
                 self.last_write_result = .{ .wrote = 0 };
                 return;
             }
-            var pipe = ((self.source) orelse {
-            const err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .pipe);
-            self.last_write_result = .{ .err = err };
-            _ = onError(self.parent, err);
-            _ = self.closeWithoutReporting();
-            return;
-});
+            if ((self.source == null)) {
+                const err = bun.sys.Error.fromCode(bun.sys.E.PIPE, .pipe);
+                self.last_write_result = .{ .err = err };
+                _ = onError(self.parent, err);
+                _ = self.closeWithoutReporting();
+                return;
+            }
+            var pipe = self.source.?;
             _ = &pipe;
             const temp = self.current_payload;
             self.current_payload = self.outgoing;
@@ -1336,21 +1406,21 @@ _ = bun.assert(file.canStart());
             if (uv.uv_fs_write(self.parent.loop(), (&file.fs), file.file, (blk: {
             break :blk @ptrCast((&self.write_buffer));
 
-}), 1, -1, onFsWriteComplete).toError(.write)) |err| {
-                _ = &err;
+}), 1, -1, onFsWriteComplete).toError(.write)) |e| {
+                _ = &e;
                 _ = file.complete(false);
-                self.last_write_result = .{ .err = err };
-                _ = onError(self.parent, err);
+                self.last_write_result = .{ .e = e };
+                _ = onError(self.parent, e);
                 _ = self.closeWithoutReporting();
                 return;
             }
 },
 else => {
 self.write_buffer = uv.uv_buf_t.init(bytes);
-            if (self.write_req.write(pipe.toStream(), (&self.write_buffer), self, onWriteComplete).asErr()) |err| {
-                _ = &err;
-                self.last_write_result = .{ .err = err };
-                _ = onError(self.parent, err);
+            if (self.write_req.write(pipe.toStream(), (&self.write_buffer), self, onWriteComplete).asErr()) |e| {
+                _ = &e;
+                self.last_write_result = .{ .e = e };
+                _ = onError(self.parent, e);
                 _ = self.closeWithoutReporting();
                 return;
             }

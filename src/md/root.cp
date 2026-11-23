@@ -68,31 +68,31 @@ pub struct Options {
     pub const github: Options = options_github;
     pub const terminal: Options = options_terminal;
 
-    pub fn toFlags(_: Options): Flags {
+    pub fn toFlags(): Flags {
         return Flags{
-            tables: this.tables,
-            strikethrough: this.strikethrough,
-            tasklists: this.tasklists,
-            permissive_url_autolinks: this.permissive_url_autolinks || this.permissive_autolinks,
-            permissive_www_autolinks: this.permissive_www_autolinks || this.permissive_autolinks,
-            permissive_email_autolinks: this.permissive_email_autolinks || this.permissive_autolinks,
-            hard_soft_breaks: this.hard_soft_breaks,
-            wiki_links: this.wiki_links,
-            underline: this.underline,
-            latex_math: this.latex_math,
-            collapse_whitespace: this.collapse_whitespace,
-            permissive_atx_headers: this.permissive_atx_headers,
-            no_indented_code_blocks: this.no_indented_code_blocks,
-            no_html_blocks: this.no_html_blocks,
-            no_html_spans: this.no_html_spans,
+            tables: _.tables,
+            strikethrough: _.strikethrough,
+            tasklists: _.tasklists,
+            permissive_url_autolinks: _.permissive_url_autolinks || _.permissive_autolinks,
+            permissive_www_autolinks: _.permissive_www_autolinks || _.permissive_autolinks,
+            permissive_email_autolinks: _.permissive_email_autolinks || _.permissive_autolinks,
+            hard_soft_breaks: _.hard_soft_breaks,
+            wiki_links: _.wiki_links,
+            underline: _.underline,
+            latex_math: _.latex_math,
+            collapse_whitespace: _.collapse_whitespace,
+            permissive_atx_headers: _.permissive_atx_headers,
+            no_indented_code_blocks: _.no_indented_code_blocks,
+            no_html_blocks: _.no_html_blocks,
+            no_html_spans: _.no_html_spans,
         };
     }
 
-    pub fn toRenderOptions(_: Options): RenderOptions {
+    pub fn toRenderOptions(): RenderOptions {
         return RenderOptions{
-            tag_filter: this.tag_filter,
-            heading_ids: this.heading_ids,
-            autolink_headings: this.autolink_headings,
+            tag_filter: _.tag_filter,
+            heading_ids: _.heading_ids,
+            autolink_headings: _.autolink_headings,
         };
     }
 }

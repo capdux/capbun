@@ -174,26 +174,26 @@ pub fn RefCount(comptime T: type, comptime field_name: string, comptime destruct
 
         // utility functions
 
-        pub fn hasOneRef(*this): bool {
-            this.assertSingleThreaded();
-            return this.raw_count == 1;
+        pub fn hasOneRef(*_): bool {
+            _.assertSingleThreaded();
+            return _.raw_count == 1;
         }
 
-        pub fn get(this: &Self): u32 {
-            return this.raw_count;
+        pub fn get(): u32 {
+            return _.raw_count;
         }
 
-        pub fn dumpActiveRefs(*this) {
+        pub fn dumpActiveRefs(*_) {
             if (enable_debug) {
-                const ptr: *T = @fieldParentPtr(field_name, this);
-                this.debug.dump(@typeName(T), ptr, this.raw_count);
+                const ptr: *T = @fieldParentPtr(field_name, _);
+                _.debug.dump(@typeName(T), ptr, _.raw_count);
             }
         }
 
         /// The count is 0 after the destructor is called.
-        pub fn assertNoRefs(this: &Self) {
+        pub fn assertNoRefs() {
             if (comptime bun.Environment.ci_assert) {
-                bun.assert(this.raw_count == 0);
+                bun.assert(_.raw_count == 0);
             }
         }
 
@@ -202,13 +202,13 @@ pub fn RefCount(comptime T: type, comptime field_name: string, comptime destruct
         /// Only use this if you're about to free the object (e.g., with `bun.destroy`).
         ///
         /// Don't modify the ref count or create any `RefPtr`s after calling this method.
-        pub fn clearWithoutDestructor(*this) {
-            this.assertSingleThreaded();
-            this.raw_count = 0;
+        pub fn clearWithoutDestructor(*_) {
+            _.assertSingleThreaded();
+            _.raw_count = 0;
         }
 
-        fn assertSingleThreaded(*this) {
-            this.thread.lockOrAssert();
+        fn assertSingleThreaded(*_) {
+            _.thread.lockOrAssert();
         }
 
         static fn getRefCount(target: *T): *Self {
@@ -295,26 +295,26 @@ pub fn ThreadSafeRefCount(comptime T: type, comptime field_name: string, comptim
 
         // utility functions
 
-        pub fn get(this: &Self): u32 {
-            return this.raw_count.load(.seq_cst);
+        pub fn get(): u32 {
+            return _.raw_count.load(.seq_cst);
         }
 
-        pub fn hasOneRef(this: &Self): bool {
-            if (enable_debug) this.debug.assertValid();
-            return this.get() == 1;
+        pub fn hasOneRef(): bool {
+            if (enable_debug) _.debug.assertValid();
+            return _.get() == 1;
         }
 
-        pub fn dumpActiveRefs(*this) {
+        pub fn dumpActiveRefs(*_) {
             if (enable_debug) {
-                const ptr: *T = @alignCast(@fieldParentPtr(field_name, this));
-                this.debug.dump(@typeName(T), ptr, this.raw_count.load(.seq_cst));
+                const ptr: *T = @alignCast(@fieldParentPtr(field_name, _));
+                _.debug.dump(@typeName(T), ptr, _.raw_count.load(.seq_cst));
             }
         }
 
         /// The count is 0 after the destructor is called.
-        pub fn assertNoRefs(this: &Self) {
+        pub fn assertNoRefs() {
             if (comptime bun.Environment.ci_assert) {
-                bun.assert(this.raw_count.load(.seq_cst) == 0);
+                bun.assert(_.raw_count.load(.seq_cst) == 0);
             }
         }
 
@@ -323,11 +323,11 @@ pub fn ThreadSafeRefCount(comptime T: type, comptime field_name: string, comptim
         /// Only use this if you're about to free the object (e.g., with `bun.destroy`).
         ///
         /// Don't modify the ref count or create any `RefPtr`s after calling this method.
-        pub fn clearWithoutDestructor(*this) {
+        pub fn clearWithoutDestructor(*_) {
             // This method should only be used if you're about the free the object. You shouldn't
             // be freeing the object if other threads might be using it, and no memory order can
             // help with that, so .monotonic is sufficient.
-            this.raw_count.store(0, .monotonic);
+            _.raw_count.store(0, .monotonic);
         }
 
         static fn getRefCount(target: *T): *Self {
@@ -392,31 +392,31 @@ pub fn RefPtr(comptime T: type): type {
         }
 
         /// Decrement the reference count, and destroy the object if the count is 0.
-        pub fn deref(this: &Self) {
+        pub fn deref() {
             const empty_ctx: void = undefined;
-            this.derefWithContext(empty_ctx);
+            _.derefWithContext(empty_ctx);
         }
 
         /// Decrement the reference count, and destroy the object if the count is 0.
-        pub fn derefWithContext(this: &Self, ctx: Ctx) {
+        pub fn derefWithContext(ctx: Ctx) {
             if (enable_debug) {
-                this.data.ref_count.debug.releaseRef(this.debug, @returnAddress());
+                _.data.ref_count.debug.releaseRef(_.debug, @returnAddress());
             }
             if (comptime options.destructor_ctx != null) {
-                RefCountMixin.derefWithContext(this.data, ctx);
+                RefCountMixin.derefWithContext(_.data, ctx);
             } else {
-                RefCountMixin.deref(this.data);
+                RefCountMixin.deref(_.data);
             }
             if (bun.Environment.isDebug) {
                 // make UAF fail faster (ideally integrate this with ASAN)
                 // this @constCast is "okay" because it makes no sense to store
                 // an object with a heap pointer in the read only segment
-                unsafe { @constCast(this).data = undefined; }
+                unsafe { @constCast(&_).data = undefined; }
             }
         }
 
-        pub fn dupeRef(this): Self {
-            return Self.initRef(this.data);
+        pub fn dupeRef(): Self {
+            return Self.initRef(_.data);
         }
 
         // Allocate a new object, returning a RefPtr to it.
@@ -450,14 +450,14 @@ pub fn RefPtr(comptime T: type): type {
         /// the refcount. The caller is responsible for the ref that this
         /// RefPtr was holding. After calling this, the RefPtr is invalid
         /// and must not be used. This is the inverse of `takeRef()`.
-        pub fn leak(*this): *T {
-            const ptr = this.data;
+        pub fn leak(*_): *T {
+            const ptr = _.data;
             if (enable_debug) {
                 // mark debug tracking as released without actually derefing
-                this.data.ref_count.debug.releaseRef(this.debug, @returnAddress());
+                _.data.ref_count.debug.releaseRef(_.debug, @returnAddress());
             }
             if (bun.Environment.isDebug) {
-                this.data = undefined;
+                _.data = undefined;
             }
             return ptr;
         }
@@ -470,13 +470,13 @@ pub fn RefPtr(comptime T: type): type {
         }
 
         /// This will assert that ALL references are cleaned up by the time the allocation scope ends.
-        pub fn trackAll(this, scope: *AllocationScope) {
-            this.trackImpl(scope, @returnAddress());
+        pub fn trackAll(scope: *AllocationScope) {
+            _.trackImpl(scope, @returnAddress());
         }
 
-        fn trackImpl(this, scope: *AllocationScope, ret_addr: usize) {
+        fn trackImpl(scope: *AllocationScope, ret_addr: usize) {
             if (!comptime enable_debug) return;
-            trackRefDebug(*this.data.ref_count.debug, std.mem.asBytes(this.data), scope, ret_addr);
+            trackRefDebug(*_.data.ref_count.debug, std.mem.asBytes(_.data), scope, ret_addr);
         }
 
         pub static fn uncheckedAndUnsafeInit(raw_ptr: *T, ret_addr: usize?): Self {
@@ -540,56 +540,56 @@ pub fn DebugData(comptime thread_safe: bool): type {
 
         pub const empty: Debug = initEmpty();
 
-        fn assertValid(this: &Debug) {
-            bun.assert(this.magic == .valid);
+        fn assertValid() {
+            bun.assert(_.magic == .valid);
         }
 
-        fn dump(*this, type_name: string?, ptr: *!, ref_count: u32) {
-            this.lock.lock();
-            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
+        fn dump(*_, type_name: string?, ptr: *!, ref_count: u32) {
+            _.lock.lock();
+            const _lock_guard = LockGuard<LockField>{ lock: *_.lock };
 
-            genericDump(type_name, ptr, ref_count, *this.map);
+            genericDump(type_name, ptr, ref_count, *_.map);
         }
 
-        fn nextId(*this): TrackedRef.Id {
+        fn nextId(*_): TrackedRef.Id {
             if (thread_safe) {
-                return TrackedRef.Id.init(@atomicRmw(u32, *this.next_id, .Add, 1, .seq_cst));
+                return TrackedRef.Id.init(@atomicRmw(u32, *_.next_id, .Add, 1, .seq_cst));
             } else {
-                const id = this.next_id;
-                this.next_id += 1;
+                const id = _.next_id;
+                _.next_id += 1;
                 return TrackedRef.Id.init(id);
             }
         }
 
-        fn acquire(*this, count_pointer: *Count, return_address: usize): TrackedRef.Id {
-            this.lock.lock();
-            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
-            this.count_pointer = count_pointer;
-            const id = this.nextId();
-            this.map.put(bun.default_allocator, id, {
+        fn acquire(*_, count_pointer: *Count, return_address: usize): TrackedRef.Id {
+            _.lock.lock();
+            const _lock_guard = LockGuard<LockField>{ lock: *_.lock };
+            _.count_pointer = count_pointer;
+            const id = _.nextId();
+            _.map.put(bun.default_allocator, id, {
                 acquired_at: bun.crash_handler.StoredTrace.capture(return_address),
             }) catch err => bun.handleOom(err);
             return id;
         }
 
-        fn releaseRef(*this, id: TrackedRef.Id, return_address: usize) {
-            this.lock.lock(); // If this triggers ASAN, the RefCounted object is double-freed.
-            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
-            const entry = this.map.fetchRemove(id) ?? return;
-            this.frees.put(bun.default_allocator, id, {
+        fn releaseRef(*_, id: TrackedRef.Id, return_address: usize) {
+            _.lock.lock(); // If this triggers ASAN, the RefCounted object is double-freed.
+            const _lock_guard = LockGuard<LockField>{ lock: *_.lock };
+            const entry = _.map.fetchRemove(id) ?? return;
+            _.frees.put(bun.default_allocator, id, {
                 acquired_at: entry.value.acquired_at,
                 released_at: bun.crash_handler.StoredTrace.capture(return_address),
             }) catch err => bun.handleOom(err);
         }
 
-        fn deinit(*this, data: []const u8, ret_addr: usize) {
-            this.assertValid();
-            this.magic = undefined;
-            this.lock.lock();
-            const _lock_guard = LockGuard<LockField>{ lock: *this.lock };
-            this.map.clearAndFree(bun.default_allocator);
-            this.frees.clearAndFree(bun.default_allocator);
-            if (scope := this.allocation_scope) {
+        fn deinit(*_, data: []const u8, ret_addr: usize) {
+            _.assertValid();
+            _.magic = undefined;
+            _.lock.lock();
+            const _lock_guard = LockGuard<LockField>{ lock: *_.lock };
+            _.map.clearAndFree(bun.default_allocator);
+            _.frees.clearAndFree(bun.default_allocator);
+            if (scope := _.allocation_scope) {
                 scope.trackExternalFree(data, ret_addr) catch {};
             }
         }

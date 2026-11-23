@@ -34,22 +34,22 @@ const empty_u8: [0]u8 = std.mem.zeroes([0]u8);
     }
 
     pub fn setTunnel(*_, new_tunnel: (*WebSocketProxyTunnel)?)  {
-        this.#tunnel = new_tunnel;
+        _.#tunnel = new_tunnel;
     }
 
     pub fn takeWebsocketRequestBuf(*_): []u8 {
-        const buf = this.#websocket_request_buf;
-        this.#websocket_request_buf = empty_u8[0..0];
+        const buf = _.#websocket_request_buf;
+        _.#websocket_request_buf = empty_u8[0..0];
         return buf;
     }
 
     pub fn deinit(*_)  {
-        bun.default_allocator.free(this.#target_host);
-        if (this.#websocket_request_buf.len > 0) {
-            bun.default_allocator.free(this.#websocket_request_buf);
+        bun.default_allocator.free(_.#target_host);
+        if (_.#websocket_request_buf.len > 0) {
+            bun.default_allocator.free(_.#websocket_request_buf);
         }
-        if (tunnel := this.#tunnel) {
-            this.#tunnel = null;
+        if (tunnel := _.#tunnel) {
+            _.#tunnel = null;
             tunnel.shutdown();
             tunnel.deref();
         }

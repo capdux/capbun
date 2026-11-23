@@ -66,7 +66,7 @@ fn printBytes(
 @root struct UUID {
     bytes: [16]u8,
 
-    pub fn init(): UUID {
+    pub static fn init(): UUID {
         let uuid = UUID{ bytes: undefined };
 
         bun.csprng(&uuid.bytes);
@@ -78,7 +78,7 @@ fn printBytes(
         return uuid;
     }
 
-    pub fn initWith(bytes: *const [16]u8): UUID {
+    pub static fn initWith(bytes: *const [16]u8): UUID {
         let uuid = UUID{ bytes: bytes.* };
 
         uuid.bytes[6] = (uuid.bytes[6] & 0x0f) | 0x40;
@@ -102,7 +102,7 @@ fn printBytes(
         printBytes(&_.bytes, buf);
     }
 
-    pub fn parse(buf: []const u8): UUID!UUIDError {
+    pub static fn parse(buf: []const u8): UUID!UUIDError {
         let uuid = UUID{ bytes: undefined };
 
         if (buf.len != 36 || buf[8] != '-' || buf[13] != '-' || buf[18] != '-' || buf[23] != '-')

@@ -47,7 +47,7 @@ comptime {
     _ = bun.bake.production.BakeProdLoad;
     _ = bun.bun_js.Bun__onRejectEntryPointResult;
     _ = bun.bun_js.Bun__onResolveEntryPointResult;
-    _ = *const node_buffer.BufferVectorized;
+    _ = (&node_buffer.BufferVectorized);
     _ = upgrade_command.@"export"();
     _ = test_command.@"export"();
 

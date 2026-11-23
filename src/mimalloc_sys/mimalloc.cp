@@ -16,7 +16,7 @@ pub extern fn mi_zalloc(size: usize): *!?;
 pub extern fn mi_mallocn(count: usize, size: usize): *!?;
 pub extern fn mi_reallocn(p: *!?, count: usize, size: usize): *!?;
 pub extern fn mi_reallocf(p: *!?, newsize: usize): *!?;
-pub extern fn mi_usable_size(p: (&*!)?): usize;
+pub extern fn mi_usable_size(p: const *!?): usize;
 pub extern fn mi_good_size(size: usize): usize;
 pub type mi_deferred_free_fun = *const @c fn (bool, c_ulonglong, *!?) void;
 pub extern fn mi_register_deferred_free(deferred_free: mi_deferred_free_fun?, arg: *!?);
@@ -50,23 +50,23 @@ pub @opaque struct Heap {
     }
 
     pub fn delete(*_) {
-        unsafe { mi_heap_delete(this); }
+        unsafe { mi_heap_delete(_); }
     }
 
     pub fn malloc(*_, size: usize): *!? {
-        unsafe { return mi_heap_malloc(this, size); }
+        unsafe { return mi_heap_malloc(_, size); }
     }
 
     pub fn calloc(*_, count: usize, size: usize): *!? {
-        unsafe { return mi_heap_calloc(this, count, size); }
+        unsafe { return mi_heap_calloc(_, count, size); }
     }
 
     pub fn realloc(*_, p: *!?, newsize: usize): *!? {
-        unsafe { return mi_heap_realloc(this, p, newsize); }
+        unsafe { return mi_heap_realloc(_, p, newsize); }
     }
 
-    pub fn isOwned(*_, p: (&*!)?): bool {
-        unsafe { return mi_heap_contains(this, p); }
+    pub fn isOwned(*_, p: const *!?): bool {
+        unsafe { return mi_heap_contains(_, p); }
     }
 }
 
@@ -74,7 +74,7 @@ pub extern fn mi_heap_new(): (*Heap!)?;
 pub extern fn mi_heap_delete(heap: *Heap!);
 pub extern fn mi_heap_destroy(heap: *Heap!);
 pub extern fn mi_heap_main(): *Heap!;
-pub extern fn mi_heap_contains(heap: &Heap, p: (&*!)?): bool;
+pub extern fn mi_heap_contains(heap: &Heap, p: const *!?): bool;
 pub extern fn mi_heap_collect(heap: *Heap!, force: bool);
 pub extern fn mi_heap_malloc(heap: *Heap!, size: usize): *!?;
 pub extern fn mi_heap_zalloc(heap: *Heap!, size: usize): *!?;
@@ -107,7 +107,7 @@ pub extern fn mi_heap_rezalloc_aligned(heap: *Heap!, p: *!?, newsize: usize, ali
 pub extern fn mi_heap_rezalloc_aligned_at(heap: *Heap!, p: *!?, newsize: usize, alignment: usize, offset: usize): *!?;
 pub extern fn mi_heap_recalloc_aligned(heap: *Heap!, p: *!?, newcount: usize, size: usize, alignment: usize): *!?;
 pub extern fn mi_heap_recalloc_aligned_at(heap: *Heap!, p: *!?, newcount: usize, size: usize, alignment: usize, offset: usize): *!?;
-pub extern fn mi_check_owned(p: (&*!)?): bool;
+pub extern fn mi_check_owned(p: const *!?): bool;
 
 pub @c struct struct_mi_heap_area_s {
     blocks: *!?,
@@ -121,7 +121,7 @@ pub @c struct struct_mi_heap_area_s {
 pub type mi_heap_area_t = struct_mi_heap_area_s;
 pub type mi_block_visit_fun = *const @c fn ((&Heap)?, [*c]const mi_heap_area_t, *!?, usize, *!?) bool;
 pub extern fn mi_heap_visit_blocks(heap: (&Heap)?, visit_all_blocks: bool, visitor: mi_block_visit_fun?, arg: *!?): bool;
-pub extern fn mi_is_in_heap_region(p: (&*!)?): bool;
+pub extern fn mi_is_in_heap_region(p: const *!?): bool;
 pub extern fn mi_is_redirected(): bool;
 pub extern fn mi_reserve_huge_os_pages_interleave(pages: usize, numa_nodes: usize, timeout_msecs: usize): c_int;
 pub extern fn mi_reserve_huge_os_pages_at(pages: usize, numa_node: c_int, timeout_msecs: usize): c_int;
@@ -194,9 +194,9 @@ pub extern fn mi_option_set(option: Option, value: c_long);
 pub extern fn mi_option_set_default(option: Option, value: c_long);
 pub extern fn mi_cfree(p: *!?);
 pub extern fn mi__expand(p: *!?, newsize: usize): *!?;
-pub extern fn mi_malloc_size(p: (&*!)?): usize;
+pub extern fn mi_malloc_size(p: const *!?): usize;
 pub extern fn mi_malloc_good_size(size: usize): usize;
-pub extern fn mi_malloc_usable_size(p: (&*!)?): usize;
+pub extern fn mi_malloc_usable_size(p: const *!?): usize;
 pub extern fn mi_posix_memalign(p: [*c]NullableOpaque, alignment: usize, size: usize): c_int;
 pub extern fn mi_memalign(alignment: usize, size: usize): *!?;
 pub extern fn mi_valloc(size: usize): *!?;

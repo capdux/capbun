@@ -210,15 +210,15 @@ pub fn backendFromJS(value: jsc.JSValue, globalObject: *jsc.JSGlobalObject) !Bac
         return error.InvalidBackend;
 }
 
-pub fn resultAnyToJS(self: *const Result.Any, globalThis: *jsc.JSGlobalObject) !?jsc.JSValue {
-        if ((self.* == .addrinfo)) {
-            if ((self.addrinfo == null)) {
+pub fn resultAnyToJS(res: *const Result.Any, globalThis: *jsc.JSGlobalObject) !?jsc.JSValue {
+        if ((res.* == .addrinfo)) {
+            if ((res.addrinfo == null)) {
                 return null;
             }
-            const addrinfo = self.addrinfo.?;
+            const addrinfo = res.addrinfo.?;
             return (blk_catch_23: { break :blk_catch_23 ((addrInfoToJSArray(addrinfo, globalThis)) catch |e| { _ = &e; return e; }); });
         } else {
-            const list = self.list;
+            const list = res.list;
             const array = (blk_catch_24: { break :blk_catch_24 ((jsc.JSValue.createEmptyArray(globalThis, @as(u32, @truncate(list.items.len)))) catch |e| { _ = &e; return e; }); });
             var i: u32 = 0;
             _ = &i;
@@ -231,21 +231,21 @@ pub fn resultAnyToJS(self: *const Result.Any, globalThis: *jsc.JSGlobalObject) !
         }
 }
 
-pub fn resultToJS(self: *const Result, globalThis: *jsc.JSGlobalObject) !JSValue {
+pub fn resultToJS(res: *const Result, globalThis: *jsc.JSGlobalObject) !JSValue {
         const obj = jsc.JSValue.createEmptyObject(globalThis, 3);
-        const addr_js = (blk_catch_27: { break :blk_catch_27 ((addressToJS((&self.address), globalThis)) catch |e| { _ = &e; return e; }); });
+        const addr_js = (blk_catch_27: { break :blk_catch_27 ((addressToJS((&res.address), globalThis)) catch |e| { _ = &e; return e; }); });
         _ = obj.put(globalThis, jsc.ZigString.static("address"), addr_js);
         var family_num: i32 = 0;
         _ = &family_num;
-        if ((self.address.any.family == std.posix.AF.INET)) {
+        if ((res.address.any.family == std.posix.AF.INET)) {
             family_num = 4;
         } else {
-            if ((self.address.any.family == std.posix.AF.INET6)) {
+            if ((res.address.any.family == std.posix.AF.INET6)) {
                 family_num = 6;
             }
         }
         _ = obj.put(globalThis, jsc.ZigString.static("family"), JSValue.jsNumber(family_num));
-        _ = obj.put(globalThis, jsc.ZigString.static("ttl"), JSValue.jsNumber(self.ttl));
+        _ = obj.put(globalThis, jsc.ZigString.static("ttl"), JSValue.jsNumber(res.ttl));
         return obj;
 }
 

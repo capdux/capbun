@@ -102,7 +102,7 @@ pub fn CssRule(comptime Rule: type): type {
 
         const This = @This();
 
-        pub fn toCss(rule_self: *const @This(), dest: *Printer): PrintErr!void {
+        pub static fn toCss(rule_self: *const @This(), dest: *Printer): PrintErr!void {
             return switch (rule_self.*) {
                 .media => |x| {
                     let m = x;
@@ -145,7 +145,7 @@ pub fn CssRule(comptime Rule: type): type {
             };
         }
 
-        pub fn deepClone(rule_self: *const @This(), allocator: std.mem.Allocator): This {
+        pub static fn deepClone(rule_self: *const @This(), allocator: std.mem.Allocator): This {
             return css.implementDeepClone(@This(), rule_self, allocator);
         }
     };
@@ -573,11 +573,11 @@ pub fn StyleRuleKey(comptime R: type): type {
                 StyleRuleKey(R),
                 V,
                 struct {
-                    pub fn hash(_: @This(), key: This): u32 {
+                    pub static fn hash(_: @This(), key: This): u32 {
                         return @truncate(key.hash);
                     }
 
-                    pub fn eql(_: @This(), a: This, b: This, _: usize): bool {
+                    pub static fn eql(_: @This(), a: This, b: This, _: usize): bool {
                         return a.eql(&b);
                     }
                 },
@@ -595,7 +595,7 @@ pub fn StyleRuleKey(comptime R: type): type {
             };
         }
 
-        pub fn eql(key_self: *const @This(), other: *const This): bool {
+        pub static fn eql(key_self: *const @This(), other: *const This): bool {
             if (!(key_self.index < key_self.list.items.len && key_self.list.items[key_self.index] == .style)) return false;
             const rule = &key_self.list.items[key_self.index].style;
 

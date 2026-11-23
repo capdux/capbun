@@ -300,25 +300,25 @@ pub fn PositionComponent(comptime S: type): type {
 
         const This = @This();
 
-        pub fn isZero(this: *const This) bool {
-            if (this.* == .length and this.length.isZero()) return true;
+        pub fn isZero(): bool {
+            if (_ == .length && _.length.isZero()) return true;
             return false;
         }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): @This() {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
-        pub fn eql(this: *const This, other: *const This) bool {
-            return css.implementEql(@This(), this, other);
+        pub fn eql(other: *const This): bool {
+            return css.implementEql(@This(), &_, other);
         }
 
-        pub fn parse(input: *css.Parser) Result(This) {
+        pub static fn parse(input: *css.Parser): Result(This) {
             if (input.tryParse(parseCenterIdent, .{}).isOk()) {
                 return .{ .result = .center };
             }
 
-            if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |lp| {
+            if (lp := input.tryParse(LengthPercentage.parse, .{}).asValue()) {
                 return .{ .result = .{ .length = lp } };
             }
 
@@ -330,28 +330,28 @@ pub fn PositionComponent(comptime S: type): type {
             return .{ .result = .{ .side = .{ .side = side, .offset = offset } } };
         }
 
-        pub fn toCss(this: *const @This(), dest: *css.Printer) css.PrintErr!void {
-            switch (this.*) {
+        pub fn toCss(dest: *css.Printer): css.PrintErr!void {
+            switch (_) {
                 .center => {
                     if (dest.minify) {
-                        try dest.writeStr("50%");
+                        dest.writeStr("50%")?;
                     } else {
-                        try dest.writeStr("center");
+                        dest.writeStr("center")?;
                     }
                 },
-                .length => |*lp| try lp.toCss(dest),
+                .length => |*lp| lp.toCss(dest)?,
                 .side => |*s| {
-                    try s.side.toCss(dest);
-                    if (s.offset) |lp| {
-                        try dest.writeStr(" ");
-                        try lp.toCss(dest);
+                    s.side.toCss(dest)?;
+                    if (lp := s.offset) {
+                        dest.writeStr(" ")?;
+                        lp.toCss(dest)?;
                     }
                 },
             }
         }
 
-        pub fn isCenter(this: *const This) bool {
-            switch (this.*) {
+        pub fn isCenter(): bool {
+            switch (_) {
                 .center => return true,
                 .length => |*l| {
                     if (l.* == .percentage) return l.percentage.v == 0.5;

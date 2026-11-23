@@ -93,7 +93,7 @@ return .{ .err = e };
             return .{ .result = This{ .a = first, .b = second } };
     }
 
-pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
+pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
             _ = try valToCss((&self.a), dest);
             if ((!valEql((&self.b), (&self.a)))) {
                 _ = try dest.writeStr(" ");
@@ -105,12 +105,12 @@ pub fn valToCss(val: *const T, dest: *css.Printer) css.PrintErr!void {
             return (if (T == f32) CSSNumberFns.toCss(val, dest) else val.toCss(dest));
     }
 
-pub fn isCompatible(self: *const @This(), browsers: bun.css.targets.Browsers) bool {
+pub fn isCompatible(self: @This(), browsers: bun.css.targets.Browsers) bool {
             return (self.a.isCompatible(browsers) and self.b.isCompatible(browsers));
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub inline fn valEql(lhs: *const T, rhs: *const T) bool {

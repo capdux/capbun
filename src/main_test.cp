@@ -61,7 +61,7 @@ pub fn main() {
         }
     }
 
-    bun.initArgv() catch |e| {
+    bun.initArgv() catch e => {
         Output.panic("Failed to initialize argv: {s}\n", .{@errorName(e)});
     };
 
@@ -131,7 +131,7 @@ fn runTests(): u8 {
         const memory_check = std.testing.allocator_instance.deinit();
 
         let test_err: anyerror? = null;
-        result catch |e| {
+        result catch e => {
             test_err = e;
         };
         if (e := test_err) {

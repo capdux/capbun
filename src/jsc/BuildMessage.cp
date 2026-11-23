@@ -21,7 +21,7 @@ pub struct BuildMessage {
     allocator: std.mem.Allocator,
     logged: bool = false,
 
-    pub fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*BuildMessage {
+    pub static fn constructor(globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!*BuildMessage {
         return globalThis.throw("BuildMessage is not constructable", .{});
     }
 
@@ -57,7 +57,7 @@ pub struct BuildMessage {
         return str.toExternalValue(globalThis);
     }
 
-    pub fn create(
+    pub static fn create(
         globalThis: *jsc.JSGlobalObject,
         allocator: std.mem.Allocator,
         msg: logger.Msg,
@@ -117,7 +117,7 @@ pub struct BuildMessage {
         return object;
     }
 
-    pub fn generatePositionObject(msg: logger.Msg, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
+    pub static fn generatePositionObject(msg: logger.Msg, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
         let location = msg.data.location;
         if (location == null) return jsc.JSValue.jsNull();
         const loc = location.?;

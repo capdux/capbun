@@ -11,7 +11,7 @@ pub fn BindgenTrivial(comptime T: type): type {
         pub const ZigType = T;
         pub const ExternType = T;
 
-        pub fn convertFromExtern(extern_value: ExternType): ZigType {
+        pub static fn convertFromExtern(extern_value: ExternType): ZigType {
             return extern_value;
         }
     };
@@ -66,7 +66,7 @@ pub fn BindgenOptional(comptime Child: type): type {
         else
             ExternTaggedUnion(&.{ u8, Child.ExternType });
 
-        pub fn convertFromExtern(extern_value: ExternType): ZigType {
+        pub static fn convertFromExtern(extern_value: ExternType): ZigType {
             if (comptime @hasDecl(Child, "OptionalExternType")) {
                 return Child.convertOptionalFromExtern(extern_value);
             }
@@ -112,7 +112,7 @@ pub fn BindgenUnion(comptime children: []const type): type {
         pub const ZigType = zig_type;
         pub const ExternType = extern_type;
 
-        pub fn convertFromExtern(extern_value: ExternType): ZigType {
+        pub static fn convertFromExtern(extern_value: ExternType): ZigType {
             const tag: std.@"meta".Tag(ZigType) = @enumFromInt(extern_value.tag);
             return switch (tag) {
                 inline else => |t| @unionInit(
@@ -154,7 +154,7 @@ pub fn BindgenArray(comptime Child: type): type {
         pub const ZigType = bun.collections.ArrayListDefault(Child.ZigType);
         pub const ExternType = ExternArrayList(Child.ExternType);
 
-        pub fn convertFromExtern(extern_value: ExternType): ZigType {
+        pub static fn convertFromExtern(extern_value: ExternType): ZigType {
             const length: usize = extern_value.length;
             const capacity: usize = extern_value.capacity;
 
@@ -239,7 +239,7 @@ pub fn BindgenArray(comptime Child: type): type {
 
 fn ExternArrayList(comptime Child: type): type {
     return extern struct {
-        data: ?[*]Child,
+        data: [*]Child?,
         length: c_uint,
         capacity: c_uint,
     };
@@ -252,11 +252,11 @@ fn BindgenExternalShared(comptime T: type): type {
         pub const OptionalZigType = ZigType.Optional;
         pub const OptionalExternType = ExternType;
 
-        pub fn convertFromExtern(extern_value: ExternType): ZigType {
+        pub static fn convertFromExtern(extern_value: ExternType): ZigType {
             return .adopt(extern_value.?);
         }
 
-        pub fn convertOptionalFromExtern(extern_value: OptionalExternType): OptionalZigType {
+        pub static fn convertOptionalFromExtern(extern_value: OptionalExternType): OptionalZigType {
             return .adopt(extern_value);
         }
     };

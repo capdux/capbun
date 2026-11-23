@@ -26,25 +26,25 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
         });
         pub const Poll = IOWriter;
 
-        pub fn updateRef(this: *This, add: bool) void {
-            this.writer.updateRef(this.event_loop, add);
+        fn updateRef(*_, add: bool) {
+            _.writer.updateRef(_.event_loop, add);
         }
 
-        pub fn getBuffer(this: *This) []const u8 {
-            return this.buffer;
+        fn getBuffer(): []const u8 {
+            return _.buffer;
         }
 
-        pub fn close(this: *This) void {
-            log("StaticPipeWriter(0x{x}) close()", .{@intFromPtr(this)});
-            this.writer.close();
+        fn close(*_) {
+            log("StaticPipeWriter(0x{x}) close()", .{@intFromPtr(_)});
+            _.writer.close();
         }
 
-        pub fn flush(this: *This) void {
-            if (this.buffer.len > 0)
-                this.writer.write();
+        fn flush(*_) {
+            if (_.buffer.len > 0)
+                _.writer.write();
         }
 
-        pub static fn create(event_loop: anytype, subprocess: *ProcessType, result: StdioResult, source: Source): *This {
+        static fn create(event_loop: auto, subprocess: *ProcessType, result: StdioResult, source: Source): *This {
             let instance = bun.new(This, {
                 ref_count: .init(),
                 event_loop: jsc.EventLoopHandle.init(event_loop),
@@ -59,20 +59,20 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
             return instance;
         }
 
-        pub fn start(this: *This) bun.sys.Maybe(void) {
-            log("StaticPipeWriter(0x{x}) start()", .{@intFromPtr(this)});
-            this.ref();
-            this.buffer = this.source.slice();
+        fn start(*_): bun.sys.Maybe(void) {
+            log("StaticPipeWriter(0x{x}) start()", .{@intFromPtr(_)});
+            _.ref();
+            _.buffer = _.source.slice();
             if (Environment.isWindows) {
-                return this.writer.startWithCurrentPipe();
+                return _.writer.startWithCurrentPipe();
             }
-            switch (this.writer.start(this.stdio_result.?, true)) {
-                .err => |err| {
-                    return .{ .err = err };
+            switch (_.writer.start(_.stdio_result.?, true)) {
+                .err e => {
+                    return .{ .err = e };
                 },
                 .result => {
                     if (comptime Environment.isPosix) {
-                        const poll = this.writer.handle.poll;
+                        const poll = _.writer.handle.poll;
                         poll.flags.insert(.socket);
                     }
 
@@ -81,51 +81,51 @@ pub fn NewStaticPipeWriter(comptime ProcessType: type) : type {
             }
         }
 
-        pub fn onWrite(this: *This, amount: usize, status: bun.io.WriteStatus) void {
-            log("StaticPipeWriter(0x{x}) onWrite(amount={d} {})", .{ @intFromPtr(this), amount, status });
-            this.buffer = this.buffer[@min(amount, this.buffer.len)..];
-            if (status == .end_of_file || this.buffer.len == 0) {
-                this.writer.close();
+        fn onWrite(*_, amount: usize, status: bun.io.WriteStatus) {
+            log("StaticPipeWriter(0x{x}) onWrite(amount={d} {})", .{ @intFromPtr(_), amount, status });
+            _.buffer = _.buffer[@min(amount, _.buffer.len)..];
+            if (status == .end_of_file || _.buffer.len == 0) {
+                _.writer.close();
             }
         }
 
-        pub fn onError(this: *This, err: bun.sys.Error) void {
-            log("StaticPipeWriter(0x{x}) onError(err={f})", .{ @intFromPtr(this), err });
-            this.source.detach();
+        fn onError(*_, e: bun.sys.Error) {
+            log("StaticPipeWriter(0x{x}) onError(err={f})", .{ @intFromPtr(_), e });
+            _.source.detach();
         }
 
-        pub fn onClose(this: *This) void {
-            log("StaticPipeWriter(0x{x}) onClose()", .{@intFromPtr(this)});
-            this.source.detach();
-            this.process.onCloseIO(.stdin);
+        fn onClose(*_) {
+            log("StaticPipeWriter(0x{x}) onClose()", .{@intFromPtr(_)});
+            _.source.detach();
+            _.process.onCloseIO(.stdin);
         }
 
-        fn _deinit(this: *This) void {
-            this.writer.end();
-            this.source.detach();
-            bun.destroy(this);
+        fn _deinit(*_) {
+            _.writer.end();
+            _.source.detach();
+            bun.destroy(_);
         }
 
-        pub fn memoryCost(this: *const This) usize {
-            return @sizeOf(@This()) + this.source.memoryCost() + this.writer.memoryCost();
+        fn memoryCost(): usize {
+            return @sizeOf(@This()) + _.source.memoryCost() + _.writer.memoryCost();
         }
 
-        pub fn loop(this: *This) *bun.Async.Loop {
+        fn loop(): *bun.Async.Loop {
             if (comptime bun.Environment.isWindows) {
-                return this.event_loop.loop().uv_loop;
+                return _.event_loop.loop().uv_loop;
             } else {
-                return this.event_loop.loop();
+                return _.event_loop.loop();
             }
         }
 
-        pub fn watch(this: *This) void {
-            if (this.buffer.len > 0) {
-                this.writer.watch();
+        fn watch(*_) {
+            if (_.buffer.len > 0) {
+                _.writer.watch();
             }
         }
 
-        pub fn eventLoop(this: *This) jsc.EventLoopHandle {
-            return this.event_loop;
+        fn eventLoop(): jsc.EventLoopHandle {
+            return _.event_loop;
         }
     };
 }

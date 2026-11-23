@@ -1179,8 +1179,7 @@ pub fn adjustHue(self: *SRGB, _: *@This(), _: HueInterpolationMethod) void {
         _ = self;
     }
 
-pub fn intoRGBA(self: SRGB, _rgb: *const SRGB) RGBA {
-        _ = self;
+pub fn intoRGBA(_rgb: *const SRGB) RGBA {
             const rgb = _rgb.resolve();
             return RGBA.fromFloats(rgb.r, rgb.g, rgb.b, rgb.alpha);
     }
@@ -2181,8 +2180,7 @@ pub fn intoCssColor(c: *const LAB, allocator: Allocator) CssColor {
             return CssColor{ .lab = bun.create(allocator, LABColor, LABColor{ .lab = c.* }) };
     }
 
-pub fn intoLCH(self: _convert_LAB, _lab: *const LAB) LCH {
-        _ = self;
+pub fn intoLCH(_lab: *const LAB) LCH {
             const lab = _lab.resolveMissing();
             const _t5 = rectangularToPolar(lab.l, lab.a, lab.b);
             const l = _t5[0];
@@ -2191,8 +2189,7 @@ pub fn intoLCH(self: _convert_LAB, _lab: *const LAB) LCH {
             return LCH{ .l = l, .c = c, .h = h, .alpha = lab.alpha };
     }
 
-pub fn intoXYZd50(self: _convert_LAB, _lab: *const LAB) XYZd50 {
-        _ = self;
+pub fn intoXYZd50(_lab: *const LAB) XYZd50 {
             const K: f32 = @floatCast((@as(f64, @floatCast(24389.0)) / @as(f64, @floatCast(27.0))));
             const E: f32 = @floatCast((@as(f64, @floatCast(216.0)) / @as(f64, @floatCast(24389.0))));
             const lab = _lab.resolveMissing();
@@ -2227,8 +2224,7 @@ pub fn intoSRGBLinear(rgb: *const SRGB) SRGBLinear {
             return SRGBLinear{ .r = r, .g = g, .b = b, .alpha = srgb.alpha };
     }
 
-pub fn intoHSL(self: _convert_SRGB, _rgb: *const SRGB) HSL {
-        _ = self;
+pub fn intoHSL(_rgb: *const SRGB) HSL {
             const rgb = _rgb.resolve();
             const r = rgb.r;
             const g = rgb.g;
@@ -2259,8 +2255,7 @@ pub fn intoHSL(self: _convert_SRGB, _rgb: *const SRGB) HSL {
             return HSL{ .h = h, .s = s, .l = l, .alpha = rgb.alpha };
     }
 
-pub fn intoHWB(self: _convert_SRGB, _rgb: *const SRGB) HWB {
-        _ = self;
+pub fn intoHWB(_rgb: *const SRGB) HWB {
             const rgb = _rgb.resolve();
             const hsl = rgb.into(.HSL);
             const r = rgb.r;
@@ -2295,8 +2290,7 @@ pub fn intoCssColor(c: *const HWB, _: Allocator) CssColor {
             return CssColor{ .rgba = c.into(.RGBA) };
     }
 
-pub fn intoSRGB(self: _convert_HWB, _hwb: *const HWB) SRGB {
-        _ = self;
+pub fn intoSRGB(_hwb: *const HWB) SRGB {
             const hwb = _hwb.resolveMissing();
             const h = hwb.h;
             const w = hwb.w;
@@ -2326,8 +2320,7 @@ pub fn intoCssColor(rgb: *const SRGBLinear, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoSRGB(self: _convert_SRGBLinear, _rgb: *const SRGBLinear) SRGB {
-        _ = self;
+pub fn intoSRGB(_rgb: *const SRGBLinear) SRGB {
             const rgb = _rgb.resolveMissing();
             const _t8 = gamSrgb(rgb.r, rgb.g, rgb.b);
             const r = _t8[0];
@@ -2336,8 +2329,7 @@ pub fn intoSRGB(self: _convert_SRGBLinear, _rgb: *const SRGBLinear) SRGB {
             return SRGB{ .r = r, .g = g, .b = b, .alpha = rgb.alpha };
     }
 
-pub fn intoXYZd65(self: _convert_SRGBLinear, _rgb: *const SRGBLinear) XYZd65 {
-        _ = self;
+pub fn intoXYZd65(_rgb: *const SRGBLinear) XYZd65 {
             const MATRIX: [9]f32 = .{ 0.41239079926595934, 0.357584339383878, 0.1804807884018343, 0.21263900587151027, 0.715168678767756, 0.07219231536073371, 0.01933081871559182, 0.11919477979462598, 0.9505321522496607 };
             const rgb = _rgb.resolveMissing();
             const _t9 = multiplyMatrix((&MATRIX), rgb.r, rgb.g, rgb.b);
@@ -2358,8 +2350,7 @@ pub fn intoCssColor(rgb: *const P3, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoXYZd65(self: _convert_P3, _p3: *const P3) XYZd65 {
-        _ = self;
+pub fn intoXYZd65(_p3: *const P3) XYZd65 {
             const MATRIX: [9]f32 = .{ 0.4865709486482162, 0.26566769316909306, 0.1982172852343625, 0.2289745640697488, 0.6917385218365064, 0.079286914093745, 0.0, 0.04511338185890264, 1.043944368900976 };
             const p3 = _p3.resolveMissing();
             const _t10 = linSrgb(p3.r, p3.g, p3.b);
@@ -2384,8 +2375,7 @@ pub fn intoCssColor(rgb: *const A98, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoXYZd65(self: _convert_A98, _a98: *const A98) XYZd65 {
-        _ = self;
+pub fn intoXYZd65(_a98: *const A98) XYZd65 {
             const a98 = _a98.resolveMissing();
             const r = linA98rgbComponent(a98.r);
             const g = linA98rgbComponent(a98.g);
@@ -2409,8 +2399,7 @@ pub fn intoCssColor(rgb: *const ProPhoto, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoXYZd50(self: _convert_ProPhoto, _prophoto: *const ProPhoto) XYZd50 {
-        _ = self;
+pub fn intoXYZd50(_prophoto: *const ProPhoto) XYZd50 {
             const prophoto = _prophoto.resolveMissing();
             const r = linProPhotoComponent(prophoto.r);
             const g = linProPhotoComponent(prophoto.g);
@@ -2434,8 +2423,7 @@ pub fn intoCssColor(rgb: *const Rec2020, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoXYZd65(self: _convert_Rec2020, _rec2020: *const Rec2020) XYZd65 {
-        _ = self;
+pub fn intoXYZd65(_rec2020: *const Rec2020) XYZd65 {
             const rec2020 = _rec2020.resolveMissing();
             const r = linRec2020Component(rec2020.r);
             const g = linRec2020Component(rec2020.g);
@@ -2459,8 +2447,7 @@ pub fn intoCssColor(rgb: *const XYZd50, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoLAB(self: _convert_XYZd50, _xyz: *const XYZd50) LAB {
-        _ = self;
+pub fn intoLAB(_xyz: *const XYZd50) LAB {
             const E: f32 = (216.0 / 24389.0);
             const K: f32 = (24389.0 / 27.0);
             const xyz = _xyz.resolveMissing();
@@ -2476,8 +2463,7 @@ pub fn intoLAB(self: _convert_XYZd50, _xyz: *const XYZd50) LAB {
             return LAB{ .l = l, .a = a, .b = b, .alpha = xyz.alpha };
     }
 
-pub fn intoXYZd65(self: _convert_XYZd50, _xyz: *const XYZd50) XYZd65 {
-        _ = self;
+pub fn intoXYZd65(_xyz: *const XYZd50) XYZd65 {
             const MATRIX: [9]f32 = .{ 0.9554734527042182, -0.023098536874261423, 0.0632593086610217, -0.028369706963208136, 1.0099954580058226, 0.021041398966943008, 0.012314001688319899, -0.020507696433477912, 1.3303659366080753 };
             const xyz = _xyz.resolveMissing();
             const _t15 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2487,8 +2473,7 @@ pub fn intoXYZd65(self: _convert_XYZd50, _xyz: *const XYZd50) XYZd65 {
             return XYZd65{ .x = x, .y = y, .z = z, .alpha = xyz.alpha };
     }
 
-pub fn intoProPhoto(self: _convert_XYZd50, _xyz: *const XYZd50) ProPhoto {
-        _ = self;
+pub fn intoProPhoto(_xyz: *const XYZd50) ProPhoto {
             const MATRIX: [9]f32 = .{ 1.3457989731028281, -0.25558010007997534, -0.05110628506753401, -0.5446224939028347, 1.5082327413132781, 0.02053603239147973, 0.0, 0.0, 1.2119675456389454 };
             const xyz = _xyz.resolveMissing();
             const _t16 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2512,8 +2497,7 @@ pub fn intoCssColor(rgb: *const XYZd65, allocator: Allocator) CssColor {
             return CssColor{ .predefined = bun.create(allocator, PredefinedColor, rgb.into(.PredefinedColor)) };
     }
 
-pub fn intoXYZd50(self: _convert_XYZd65, _xyz: *const XYZd65) XYZd50 {
-        _ = self;
+pub fn intoXYZd50(_xyz: *const XYZd65) XYZd50 {
             const MATRIX: [9]f32 = .{ 1.0479298208405488, 0.022946793341019088, -0.05019222954313557, 0.029627815688159344, 0.990434484573249, -0.01707382502938514, -0.009243058152591178, 0.015055144896577895, 0.7518742899580008 };
             const xyz = _xyz.resolveMissing();
             const _t17 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2523,8 +2507,7 @@ pub fn intoXYZd50(self: _convert_XYZd65, _xyz: *const XYZd65) XYZd50 {
             return XYZd50{ .x = x, .y = y, .z = z, .alpha = xyz.alpha };
     }
 
-pub fn intoSRGBLinear(self: _convert_XYZd65, _xyz: *const XYZd65) SRGBLinear {
-        _ = self;
+pub fn intoSRGBLinear(_xyz: *const XYZd65) SRGBLinear {
             const MATRIX: [9]f32 = .{ 3.2409699419045226, -1.537383177570094, -0.4986107602930034, -0.9692436362808796, 1.8759675015077202, 0.04155505740717559, 0.05563007969699366, -0.20397695888897652, 1.0569715142428786 };
             const xyz = _xyz.resolveMissing();
             const _t18 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2534,8 +2517,7 @@ pub fn intoSRGBLinear(self: _convert_XYZd65, _xyz: *const XYZd65) SRGBLinear {
             return SRGBLinear{ .r = r, .g = g, .b = b, .alpha = xyz.alpha };
     }
 
-pub fn intoA98(self: _convert_XYZd65, _xyz: *const XYZd65) A98 {
-        _ = self;
+pub fn intoA98(_xyz: *const XYZd65) A98 {
             const MATRIX: [9]f32 = .{ 2.0415879038107465, -0.5650069742788596, -0.34473135077832956, -0.9692436362808795, 1.8759675015077202, 0.04155505740717557, 0.013444280632031142, -0.11836239223101838, 1.0151749943912054 };
             const xyz = _xyz.resolveMissing();
             const _t19 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2548,8 +2530,7 @@ pub fn intoA98(self: _convert_XYZd65, _xyz: *const XYZd65) A98 {
             return A98{ .r = r, .g = g, .b = b, .alpha = xyz.alpha };
     }
 
-pub fn intoRec2020(self: _convert_XYZd65, _xyz: *const XYZd65) Rec2020 {
-        _ = self;
+pub fn intoRec2020(_xyz: *const XYZd65) Rec2020 {
             const MATRIX: [9]f32 = .{ 1.7166511879712674, -0.35567078377639233, -0.25336628137365974, -0.6666843518324892, 1.6164812366349395, 0.01576854581391113, 0.017639857445310783, -0.042770613257808524, 0.9421031212354738 };
             const xyz = _xyz.resolveMissing();
             const _t20 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2562,8 +2543,7 @@ pub fn intoRec2020(self: _convert_XYZd65, _xyz: *const XYZd65) Rec2020 {
             return Rec2020{ .r = r, .g = g, .b = b, .alpha = xyz.alpha };
     }
 
-pub fn intoOKLAB(self: _convert_XYZd65, _xyz: *const XYZd65) OKLAB {
-        _ = self;
+pub fn intoOKLAB(_xyz: *const XYZd65) OKLAB {
             const XYZ_TO_LMS: [9]f32 = .{ 0.8190224432164319, 0.3619062562801221, -0.12887378261216414, 0.0329836671980271, 0.9292868468965546, 0.03614466816999844, 0.048177199566046255, 0.26423952494422764, 0.6335478258136937 };
             const LMS_TO_OKLAB: [9]f32 = .{ 0.2104542553, 0.793617785, -0.0040720468, 1.9779984951, -2.428592205, 0.4505937099, 0.0259040371, 0.7827717662, -0.808675766 };
             const cbrt = std.math.cbrt;
@@ -2579,8 +2559,7 @@ pub fn intoOKLAB(self: _convert_XYZd65, _xyz: *const XYZd65) OKLAB {
             return OKLAB{ .l = l, .a = a, .b = b, .alpha = xyz.alpha };
     }
 
-pub fn intoP3(self: _convert_XYZd65, _xyz: *const XYZd65) P3 {
-        _ = self;
+pub fn intoP3(_xyz: *const XYZd65) P3 {
             const MATRIX: [9]f32 = .{ 2.493496911941425, -0.9313836179191239, -0.40271078445071684, -0.8294889695615747, 1.7626640603183463, 0.023624685841943577, 0.03584583024378447, -0.07617238926804182, 0.9568845240076872 };
             const xyz = _xyz.resolveMissing();
             const _t23 = multiplyMatrix((&MATRIX), xyz.x, xyz.y, xyz.z);
@@ -2601,8 +2580,7 @@ pub fn intoCssColor(c: *const LCH, allocator: Allocator) CssColor {
             return CssColor{ .lab = bun.create(allocator, LABColor, LABColor{ .lch = c.* }) };
     }
 
-pub fn intoLAB(self: _convert_LCH, _lch: *const LCH) LAB {
-        _ = self;
+pub fn intoLAB(_lch: *const LCH) LAB {
             const lch = _lch.resolveMissing();
             const _t25 = polarToRectangular(lch.l, lch.c, lch.h);
             const l = _t25[0];
@@ -2631,8 +2609,7 @@ pub fn intoOKLCH(labb: *const OKLAB) OKLCH {
             return OKLCH{ .l = l, .c = c, .h = h, .alpha = lab.alpha };
     }
 
-pub fn intoXYZd65(self: _convert_OKLAB, _lab: *const OKLAB) XYZd65 {
-        _ = self;
+pub fn intoXYZd65(_lab: *const OKLAB) XYZd65 {
             const LMS_TO_XYZ: [9]f32 = .{ 1.2268798733741557, -0.5578149965554813, 0.28139105017721583, -0.04057576262431372, 1.1122868293970594, -0.07171106666151701, -0.07637294974672142, -0.4214933239627914, 1.5869240244272418 };
             const OKLAB_TO_LMS: [9]f32 = .{ 0.9999999984505198, 0.39633779217376786, 0.2158037580607588, 1.0000000088817609, -0.10556134232365635, -0.06385417477170591, 1.0000000546724108, -0.08948418209496575, -1.2914855378640917 };
             const lab = _lab.resolveMissing();
@@ -2654,8 +2631,7 @@ pub fn intoCssColor(c: *const OKLCH, allocator: Allocator) CssColor {
             return CssColor{ .lab = bun.create(allocator, LABColor, LABColor{ .oklch = c.* }) };
     }
 
-pub fn intoOKLAB(self: _convert_OKLCH, _lch: *const OKLCH) OKLAB {
-        _ = self;
+pub fn intoOKLAB(_lch: *const OKLCH) OKLAB {
             const lch = _lch.resolveMissing();
             const _t29 = polarToRectangular(lch.l, lch.c, lch.h);
             const l = _t29[0];
@@ -2722,14 +2698,12 @@ const bits = bun.bits;
 pub fn UnboundedColorGamut(comptime T: type) type {
         return struct {
 
-pub fn inGamut(self: @This(), unused_color: *const T) bool {
-        _ = self;
+pub fn inGamut(unused_color: *const T) bool {
             _ = &unused_color;
             return true;
     }
 
-pub fn clip(self: @This(), color_val: *const T) T {
-        _ = self;
+pub fn clip(color_val: *const T) T {
             return color_val.*;
     }
 };
@@ -2738,13 +2712,11 @@ pub fn clip(self: @This(), color_val: *const T) T {
 pub fn HslHwbColorGamut(comptime T: type, comptime a: []const u8, comptime b: []const u8) type {
         return struct {
 
-pub fn inGamut(self: @This(), color_val: *const T) bool {
-        _ = self;
+pub fn inGamut(color_val: *const T) bool {
             return ((((@field(color_val, a) >= 0.0) and (@field(color_val, a) <= 1.0)) and (@field(color_val, b) >= 0.0)) and (@field(color_val, b) <= 1.0));
     }
 
-pub fn clip(self: @This(), color_val: *const T) T {
-        _ = self;
+pub fn clip(color_val: *const T) T {
             var result: T = color_val.*;
             _ = &result;
             result.h = @mod(color_val.h, 360.0);
@@ -3058,8 +3030,7 @@ pub fn parsefn(self: *@This(), i: *css.Parser) Result(CssColor) {
             return self.parser.parseRelative(i, T, CssColor, @This().innerfn, .{});
     }
 
-pub fn innerfn(self: @This(), i: *css.Parser, p: *ComponentParser) Result(CssColor) {
-        _ = self;
+pub fn innerfn(i: *css.Parser, p: *ComponentParser) Result(CssColor) {
             const l = bun.clamp((switch (p.parsePercentage(i)) {
 .result => |v| v,
 .err => |e| {
@@ -3558,22 +3529,19 @@ pub fn rectangularToPolar(l: f32, a: f32, b: f32) F32x3 {
 pub fn ColorspaceConversions(comptime T: type) type {
         return struct {
 
-pub fn fromLABColor(self: @This(), color: *const LABColor) T {
-        _ = self;
+pub fn fromLABColor(color: *const LABColor) T {
             return (switch (color.*) {
 inline else => |*v| v.into(convert_type),
 });
     }
 
-pub fn fromPredefinedColor(self: @This(), color: *const PredefinedColor) T {
-        _ = self;
+pub fn fromPredefinedColor(color: *const PredefinedColor) T {
             return (switch (color.*) {
 inline else => |*v| v.into(convert_type),
 });
     }
 
-pub fn fromFloatColor(self: @This(), color: *const FloatColor) T {
-        _ = self;
+pub fn fromFloatColor(color: *const FloatColor) T {
             return (switch (color.*) {
 inline else => |*v| v.into(convert_type),
 });
@@ -3591,8 +3559,7 @@ pub fn tryFromCssColor(color: *const CssColor) ?T {
 });
     }
 
-pub fn hash(self: @This(), color_val: *const T, hasher: *std.hash.Wyhash) void {
-        _ = self;
+pub fn hash(color_val: *const T, hasher: *std.hash.Wyhash) void {
             return css.implementHash(T, color_val, hasher);
     }
     const convert_type: ConvertTo = .fromType(T);
@@ -3619,23 +3586,19 @@ pub fn DefineColorspace(comptime T: type, comptime ChannelTypeMap: anytype) type
         }
         return struct {
 
-pub fn components(self: @This(), color_val: *const T) struct { f32, f32, f32, f32 } {
-        _ = self;
+pub fn components(color_val: *const T) struct { f32, f32, f32, f32 } {
             return .{ @field(color_val, a), @field(color_val, b), @field(color_val, c), @field(color_val, alpha) };
     }
 
-pub fn channels(self: @This(), _: *const T) struct { []const u8, []const u8, []const u8 } {
-        _ = self;
+pub fn channels(_: *const T) struct { []const u8, []const u8, []const u8 } {
             return .{ a, b, c };
     }
 
-pub fn types(self: @This(), _: *const T) struct { ChannelType, ChannelType, ChannelType } {
-        _ = self;
+pub fn types(_: *const T) struct { ChannelType, ChannelType, ChannelType } {
             return .{ @field(ChannelTypeMap, a), @field(ChannelTypeMap, b), @field(ChannelTypeMap, c) };
     }
 
-pub fn resolveMissing(self: @This(), color_val: *const T) T {
-        _ = self;
+pub fn resolveMissing(color_val: *const T) T {
             var result: T = color_val.*;
             _ = &result;
             @field(result, a) = (if (std.math.isNan(@field(color_val, a))) 0.0 else @field(color_val, a));
@@ -3663,13 +3626,11 @@ pub fn BoundedColorGamut(comptime T: type) type {
         const c = (if (@typeInfo(@TypeOf(fields[2])) == .@"enum" or @typeInfo(@TypeOf(fields[2])) == .@"union") @tagName(fields[2]) else fields[2].name);
         return struct {
 
-pub fn inGamut(self: @This(), color_val: *const T) bool {
-        _ = self;
+pub fn inGamut(color_val: *const T) bool {
             return ((((((@field(color_val, a) >= 0.0) and (@field(color_val, a) <= 1.0)) and (@field(color_val, b) >= 0.0)) and (@field(color_val, b) <= 1.0)) and (@field(color_val, c) >= 0.0)) and (@field(color_val, c) <= 1.0));
     }
 
-pub fn clip(self: @This(), color_val: *const T) T {
-        _ = self;
+pub fn clip(color_val: *const T) T {
             var result: T = color_val.*;
             _ = &result;
             @field(result, a) = bun.clamp(@field(color_val, a), 0.0, 1.0);
@@ -3693,8 +3654,7 @@ pub fn DeriveInterpolate(comptime T: type, comptime a: []const u8, comptime b: [
         }
         return struct {
 
-pub fn fillMissingComponents(self: @This(), color_val: *T, other: *T) void {
-        _ = self;
+pub fn fillMissingComponents(color_val: *T, other: *T) void {
             if (std.math.isNan(@field(color_val, a))) {
                 @field(color_val, a) = @field(other, a);
             }
@@ -3709,8 +3669,7 @@ pub fn fillMissingComponents(self: @This(), color_val: *T, other: *T) void {
             }
     }
 
-pub fn interpolate(self: @This(), color_val: *const T, p1: f32, other: *const T, p2: f32) T {
-        _ = self;
+pub fn interpolate(color_val: *const T, p1: f32, other: *const T, p2: f32) T {
             var result: T = undefined;
             _ = &result;
             @field(result, a) = ((@field(color_val, a) * p1) + (@field(other, a) * p2));
@@ -4021,8 +3980,7 @@ pub fn polarToRectangular(l: f32, c: f32, h: f32) F32x3 {
 pub fn ColorIntoMixin(T: type, space: ConvertTo) type {
         return struct {
 
-pub fn into(self: @This(), color: *const T, comptime target_space: ConvertTo) target_space.Type() {
-        _ = self;
+pub fn into(color: *const T, comptime target_space: ConvertTo) target_space.Type() {
             if ((target_space == space)) {
                 return color.*;
             }

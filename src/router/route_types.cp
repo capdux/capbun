@@ -228,7 +228,7 @@ pub struct Pattern {
         let kind: u4 = @intFromEnum(Tag.@"static");
         const end = (input.len - 1) as u32;
         while (offset < end) {
-            const pattern: Pattern = Pattern.initUnhashed(input, offset) catch |e| {
+            const pattern: Pattern = Pattern.initUnhashed(input, offset) catch e => {
                 const source: Logger.Source = Logger.Source.initEmptyFile(input);
                 if (e == error.CatchAllMustBeAtTheEnd) {
                     log.addErrorFmt(

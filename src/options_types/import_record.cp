@@ -84,14 +84,14 @@ export enum ImportKind: u8 {
 
     @inline
     pub fn isCommonJS(): bool {
-        return switch (this) {
+        return switch (_) {
             .require | .require_resolve => true,
             else => false,
         };
     }
 
     pub fn jsonStringify(writer: auto): ! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 
     pub fn isFromCSS(): bool {
@@ -99,7 +99,7 @@ export enum ImportKind: u8 {
     }
 
     pub fn toAPI(): api.ImportKind {
-        return switch (this) {
+        return switch (_) {
             ImportKind.entry_point => api.ImportKind.entry_point,
             ImportKind.stmt => api.ImportKind.stmt,
             ImportKind.require => api.ImportKind.require,
@@ -199,7 +199,7 @@ enum ImportRecordTag {
 
     @inline
     pub fn isInternal(): bool {
-        return @intFromEnum(this) >= @intFromEnum(ImportRecordTag.runtime);
+        return @intFromEnum(_) >= @intFromEnum(ImportRecordTag.runtime);
     }
 }
 

@@ -1140,7 +1140,7 @@ pub fn processResponse(self: *@This(), response: PicoHTTP.Response, remain_buf: 
                 return;
             }
             const hdr_list = response.headers.list;
-            for (hdr_list) |header| {
+            for (cp_iter_slice(hdr_list)) |header| {
                 _ = &header;
                 switch ((if (@typeInfo(@TypeOf(header)) == .@"enum" or @typeInfo(@TypeOf(header)) == .@"union") @tagName(header) else header.name).len) {
 10 => {

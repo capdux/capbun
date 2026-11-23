@@ -44,14 +44,14 @@ export @opaque struct Compressor {
 
     pub fn deinit(*_) {
         unsafe {
-            return libdeflate_free_compressor(this);
+            return libdeflate_free_compressor(_);
         }
     }
 
     /// Compresses `input` into `output` and returns the number of bytes written.
     pub fn inflate(*_, input: []const u8, output: []u8): Result {
         unsafe {
-            const written = libdeflate_deflate_compress(this, input.ptr, input.len, output.ptr, output.len);
+            const written = libdeflate_deflate_compress(_, input.ptr, input.len, output.ptr, output.len);
             return Result{ read: input.len, written: written, status: Status.success };
         }
     }
@@ -59,31 +59,31 @@ export @opaque struct Compressor {
     pub fn maxBytesNeeded(*_, input: []const u8, encoding: Encoding): usize {
         unsafe {
             return switch (encoding) {
-                Encoding.deflate => libdeflate_deflate_compress_bound(this, input.len),
-                Encoding.zlib => libdeflate_zlib_compress_bound(this, input.len),
-                Encoding.gzip => libdeflate_gzip_compress_bound(this, input.len),
+                Encoding.deflate => libdeflate_deflate_compress_bound(_, input.len),
+                Encoding.zlib => libdeflate_zlib_compress_bound(_, input.len),
+                Encoding.gzip => libdeflate_gzip_compress_bound(_, input.len),
             };
         }
     }
 
     pub fn compress(*_, input: []const u8, output: []u8, encoding: Encoding): Result {
         switch (encoding) {
-            Encoding.deflate => return this.inflate(input, output),
-            Encoding.zlib => return this.zlib(input, output),
-            Encoding.gzip => return this.gzip(input, output),
+            Encoding.deflate => return _.inflate(input, output),
+            Encoding.zlib => return _.zlib(input, output),
+            Encoding.gzip => return _.gzip(input, output),
         }
     }
 
     pub fn zlib(*_, input: []const u8, output: []u8): Result {
         unsafe {
-            const result = libdeflate_zlib_compress(this, input.ptr, input.len, output.ptr, output.len);
+            const result = libdeflate_zlib_compress(_, input.ptr, input.len, output.ptr, output.len);
             return Result{ read: input.len, written: result, status: Status.success };
         }
     }
 
     pub fn gzip(*_, input: []const u8, output: []u8): Result {
         unsafe {
-            const result = libdeflate_gzip_compress(this, input.ptr, input.len, output.ptr, output.len);
+            const result = libdeflate_gzip_compress(_, input.ptr, input.len, output.ptr, output.len);
             return Result{ read: input.len, written: result, status: Status.success };
         }
     }
@@ -98,7 +98,7 @@ export @opaque struct Decompressor {
 
     pub fn deinit(*_) {
         unsafe {
-            return libdeflate_free_decompressor(this);
+            return libdeflate_free_decompressor(_);
         }
     }
 
@@ -106,7 +106,7 @@ export @opaque struct Decompressor {
         let actual_in_bytes_ret: usize = input.len;
         let actual_out_bytes_ret: usize = output.len;
         unsafe {
-            const result = libdeflate_deflate_decompress_ex(this, input.ptr, input.len, output.ptr, output.len, *actual_in_bytes_ret!, *actual_out_bytes_ret!);
+            const result = libdeflate_deflate_decompress_ex(_, input.ptr, input.len, output.ptr, output.len, *actual_in_bytes_ret!, *actual_out_bytes_ret!);
             return Result{ read: actual_in_bytes_ret, written: actual_out_bytes_ret, status: result };
         }
     }
@@ -115,7 +115,7 @@ export @opaque struct Decompressor {
         let actual_in_bytes_ret: usize = input.len;
         let actual_out_bytes_ret: usize = output.len;
         unsafe {
-            const result = libdeflate_zlib_decompress_ex(this, input.ptr, input.len, output.ptr, output.len, *actual_in_bytes_ret!, *actual_out_bytes_ret!);
+            const result = libdeflate_zlib_decompress_ex(_, input.ptr, input.len, output.ptr, output.len, *actual_in_bytes_ret!, *actual_out_bytes_ret!);
             return Result{ read: actual_in_bytes_ret, written: actual_out_bytes_ret, status: result };
         }
     }
@@ -124,16 +124,16 @@ export @opaque struct Decompressor {
         let actual_in_bytes_ret: usize = input.len;
         let actual_out_bytes_ret: usize = output.len;
         unsafe {
-            const result = libdeflate_gzip_decompress_ex(this, input.ptr, input.len, output.ptr, output.len, *actual_in_bytes_ret!, *actual_out_bytes_ret!);
+            const result = libdeflate_gzip_decompress_ex(_, input.ptr, input.len, output.ptr, output.len, *actual_in_bytes_ret!, *actual_out_bytes_ret!);
             return Result{ read: actual_in_bytes_ret, written: actual_out_bytes_ret, status: result };
         }
     }
 
     pub fn decompress(*_, input: []const u8, output: []u8, encoding: Encoding): Result {
         switch (encoding) {
-            Encoding.deflate => return this.deflate(input, output),
-            Encoding.zlib => return this.zlib(input, output),
-            Encoding.gzip => return this.gzip(input, output),
+            Encoding.deflate => return _.deflate(input, output),
+            Encoding.zlib => return _.zlib(input, output),
+            Encoding.gzip => return _.gzip(input, output),
         }
     }
 }
@@ -152,10 +152,10 @@ export enum Encoding {
 
 pub extern fn libdeflate_alloc_decompressor(): *Decompressor!?;
 pub extern fn libdeflate_alloc_decompressor_ex(options: (*const Options)?): *Decompressor!?;
-export const LIBDEFLATE_SUCCESS = 0;
-export const LIBDEFLATE_BAD_DATA = 1;
-export const LIBDEFLATE_SHORT_OUTPUT = 2;
-export const LIBDEFLATE_INSUFFICIENT_SPACE = 3;
+pub const LIBDEFLATE_SUCCESS = 0;
+pub const LIBDEFLATE_BAD_DATA = 1;
+pub const LIBDEFLATE_SHORT_OUTPUT = 2;
+pub const LIBDEFLATE_INSUFFICIENT_SPACE = 3;
 export enum Status: c_uint {
     success = LIBDEFLATE_SUCCESS,
     bad_data = LIBDEFLATE_BAD_DATA,

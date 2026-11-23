@@ -24,14 +24,14 @@ type AnyTaskCallback = fn (*!) bun.JSError!void;
 
     pub static fn New(comptime Type: type, comptime Callback: anytype): type {
         return struct {
-            pub fn init(ctx: *Type) AnyTask {
+            pub static fn init(ctx: *Type): AnyTask {
                 return AnyTask{
                     .callback = wrap,
                     .ctx = ctx,
                 };
             }
 
-            pub fn wrap(ptr: *!) bun.JSError!void {
+            pub static fn wrap(ptr: *!): bun.JSError!void {
                 const typed: *Type = @ptrCast(@alignCast(ptr));
                 return @call(bun.callmod_inline, Callback, .{typed});
             }

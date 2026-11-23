@@ -72,16 +72,16 @@ struct OSLogSignpost {
 
     pub fn emit(category: OSLogCategory) {
         unsafe {
-            Bun__signpost_emit(this.log, this.id, .Event, this.name, @intFromEnum(category));
+            Bun__signpost_emit(_.log, _.id, .Event, _.name, @intFromEnum(category));
         }
     }
 
     pub fn interval(category: OSLogCategory): OSLogInterval {
         unsafe {
-            Bun__signpost_emit(this.log, this.id, .IntervalBegin, this.name, @intFromEnum(category));
+            Bun__signpost_emit(_.log, _.id, .IntervalBegin, _.name, @intFromEnum(category));
         }
         return OSLogInterval{
-            signpost: this,
+            signpost: _,
             category: category,
         };
     }
@@ -110,7 +110,7 @@ export @opaque struct OSLog {
         return OSLogSignpost{
             id: signpost_id_counter.fetchAdd(1, .monotonic),
             name: name,
-            log: this,
+            log: _,
         };
     }
 }

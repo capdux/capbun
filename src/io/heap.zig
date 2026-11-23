@@ -33,22 +33,28 @@ pub fn peek(self: *const @This()) ?*T {
             return self.root;
     }
 
-pub fn count(self: *const @This()) usize {
+pub fn count(self: @This()) usize {
             return countInternal(self.root);
     }
 
 pub fn countInternal(node: ?*T) usize {
-            const current = ((node) orelse { return 0; });
-            var result: usize = 1;
-            _ = &result;
-            result = (result + countInternal(current.heap.child));
-            result = (result + countInternal(current.heap.next));
-            return result;
+            if (node) |current| {
+                _ = &current;
+                var result: usize = 1;
+                _ = &result;
+                result = (result + countInternal(current.heap.child));
+                result = (result + countInternal(current.heap.next));
+                return result;
+            }
+            return 0;
     }
 
 pub fn findMax(self: *const @This()) ?*T {
-            const root = ((self.root) orelse { return null; });
-            return findMaxInternal(self.context, root, root);
+            if (self.root) |root| {
+                _ = &root;
+                return findMaxInternal(self.context, root, root);
+            }
+            return null;
     }
 
 pub fn findMaxInternal(ctx: Context, node: *T, current_max: *T) *T {
@@ -69,23 +75,27 @@ pub fn findMaxInternal(ctx: Context, node: *T, current_max: *T) *T {
     }
 
 pub fn deleteMin(self: *@This()) ?*T {
-            const root = ((self.root) orelse { return null; });
-            if (root.heap.child) |child| {
-                _ = &child;
-                self.root = self.combine_siblings(child);
-            } else {
-                self.root = null;
+            if (self.root) |root| {
+                _ = &root;
+                if (root.heap.child) |child| {
+                    _ = &child;
+                    self.root = self.combine_siblings(child);
+                } else {
+                    self.root = null;
+                }
+                root.heap = .{};
+                return root;
             }
-            root.heap = .{};
-            return root;
+            return null;
     }
 
 pub fn remove(self: *@This(), v: *T) void {
-            const prev = ((v.heap.prev) orelse {
-            _ = assert((self.root.? == v));
-            _ = self.deleteMin();
-            return;
-});
+            if ((v.heap.prev == null)) {
+                _ = assert((self.root.? == v));
+                _ = self.deleteMin();
+                return;
+            }
+            const prev = v.heap.prev.?;
             if (v.heap.next) |next| {
                 _ = &next;
                 next.heap.prev = prev;
@@ -97,10 +107,12 @@ pub fn remove(self: *@This(), v: *T) void {
             }
             v.heap.prev = null;
             v.heap.next = null;
-            const child = ((v.heap.child) orelse { return; });
-            v.heap.child = null;
-            const x = self.combine_siblings(child);
-            self.root = self.meld(x, self.root.?);
+            if (v.heap.child) |child| {
+                _ = &child;
+                v.heap.child = null;
+                const x = self.combine_siblings(child);
+                self.root = self.meld(x, self.root.?);
+            }
     }
 
 pub fn meld(self: *@This(), a: *T, b: *T) *T {
@@ -139,26 +151,34 @@ pub fn combine_siblings(self: *@This(), left: *T) *T {
             var root: *T = left;
             _ = &root;
             while (true) {
-                var b = ((a.heap.next) orelse {
-                root = a;
-                break;
-});
+                var b: *T = undefined;
                 _ = &b;
+                if (a.heap.next) |bn| {
+                    _ = &bn;
+                    b = bn;
+                } else {
+                    root = a;
+                    break;
+                }
                 a.heap.next = null;
                 b = self.meld(a, b);
-                const next_a = ((b.heap.next) orelse {
-                root = b;
-                break;
-});
-                a = next_a;
+                if (b.heap.next) |next_a| {
+                    _ = &next_a;
+                    a = next_a;
+                } else {
+                    root = b;
+                    break;
+                }
             }
             while (true) {
-                var b = ((root.heap.prev) orelse { return root; });
-                _ = &b;
-                b.heap.next = null;
-                root = self.meld(b, root);
+                if (root.heap.prev) |b| {
+                    _ = &b;
+                    b.heap.next = null;
+                    root = self.meld(b, root);
+                } else {
+                    return root;
+                }
             }
     }
-    const Self = @This();
 };
 }

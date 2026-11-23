@@ -247,7 +247,7 @@ export union(enum) Source {
             return StdinTTYImpl.getStdinTTY(loop);
         }
 
-        const tty = bun.default_allocator.create(Source.Tty) catch |err_val| bun.handleOom(err_val);
+        const tty = bun.default_allocator.create(Source.Tty) catch err_val => bun.handleOom(err_val);
         switch (tty.init(loop, uv_fd)) {
             .err e => {
                 bun.default_allocator.destroy(tty);

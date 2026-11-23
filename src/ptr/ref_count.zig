@@ -187,7 +187,7 @@ pub fn hasOneRef(self: *@This()) bool {
             return (self.raw_count == 1);
     }
 
-pub fn get(self: *const @This()) u32 {
+pub fn get(self: @This()) u32 {
             return self.raw_count;
     }
 
@@ -198,7 +198,7 @@ pub fn dumpActiveRefs(self: *@This()) void {
             }
     }
 
-pub fn assertNoRefs(self: *const @This()) void {
+pub fn assertNoRefs(self: @This()) void {
             if (comptime bun.Environment.ci_assert) {
                 _ = bun.assert((self.raw_count == 0));
             }
@@ -280,11 +280,11 @@ pub fn dupeRef(target: *T) RefPtr(T) {
             return RefPtr(T).initRef(target);
     }
 
-pub fn get(self: *const @This()) u32 {
+pub fn get(self: @This()) u32 {
             return self.raw_count.load(.seq_cst);
     }
 
-pub fn hasOneRef(self: *const @This()) bool {
+pub fn hasOneRef(self: @This()) bool {
             if (enable_debug) {
                 _ = self.debug.assertValid();
             }
@@ -298,7 +298,7 @@ pub fn dumpActiveRefs(self: *@This()) void {
             }
     }
 
-pub fn assertNoRefs(self: *const @This()) void {
+pub fn assertNoRefs(self: @This()) void {
             if (comptime bun.Environment.ci_assert) {
                 _ = bun.assert((self.raw_count.load(.seq_cst) == 0));
             }
@@ -340,12 +340,12 @@ pub fn initRef(raw_ptr: *T) Self {
             return uncheckedAndUnsafeInit(raw_ptr, @returnAddress());
     }
 
-pub fn deref(self: *const @This()) void {
+pub fn deref(self: @This()) void {
             const empty_ctx: void = undefined;
             _ = self.derefWithContext(empty_ctx);
     }
 
-pub fn derefWithContext(self: *const @This(), ctx: Ctx) void {
+pub fn derefWithContext(self: @This(), ctx: Ctx) void {
             if (enable_debug) {
                 _ = self.data.ref_count.debug.releaseRef(self.debug, @returnAddress());
             }
@@ -356,7 +356,7 @@ pub fn derefWithContext(self: *const @This(), ctx: Ctx) void {
             }
             if (bun.Environment.isDebug) {
                 {
-                    @constCast(self).data = undefined;
+                    @constCast((&self)).data = undefined;
                 }
             }
     }
@@ -440,7 +440,7 @@ pub fn initEmpty() Debug {
             return Debug{ .magic = .valid, .lock = LockField{  }, .next_id = 0, .map = std.AutoHashMapUnmanaged(TrackedRef.Id, TrackedRef).empty, .frees = std.AutoArrayHashMapUnmanaged(TrackedRef.Id, TrackedDeref).empty, .allocation_scope = null, .count_pointer = null };
     }
 
-pub fn assertValid(self: *const @This()) void {
+pub fn assertValid(self: @This()) void {
             _ = bun.assert((self.magic == .valid));
     }
 
@@ -501,7 +501,8 @@ pub fn deinit(self: *@This(), data: []const u8, ret_addr: usize) void {
             }
     }
 
-pub fn onAllocationLeak(ptr: *anyopaque, data: []u8) void {
+pub fn onAllocationLeak(self: @This(), ptr: *anyopaque, data: []u8) void {
+        _ = self;
             const debug = (blk: {
             break :blk @as(*Debug, @ptrCast(@alignCast(ptr)));
 

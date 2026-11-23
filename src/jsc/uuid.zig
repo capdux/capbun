@@ -124,7 +124,8 @@ pub fn parse(buf: []const u8) UUIDError!UUID {
         return uuid;
 }
 
-pub fn newV4() UUID {
+pub fn newV4(self: UUID) UUID {
+    _ = self;
         return UUID.init();
 }
 pub const zero: UUID = UUID{ .bytes = @as([16]u8, @splat(@as(u8, 0))) };

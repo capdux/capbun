@@ -67,10 +67,10 @@ pub fn WorkTask(comptime Context: type) type {
 pub fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context) *This {
             var vm = globalThis.bunVM();
             _ = &vm;
-            var self = bun.new(This, .{ .event_loop = vm.eventLoop(), .ctx = value, .allocator = allocator, .globalThis = globalThis, .async_task_tracker = jsc.Debugger.AsyncTaskTracker.init(vm) });
-            _ = &self;
-            _ = self.ref.ref(self.event_loop.virtual_machine);
-            return self;
+            var inst = bun.new(This, .{ .event_loop = vm.eventLoop(), .ctx = value, .allocator = allocator, .globalThis = globalThis, .async_task_tracker = jsc.Debugger.AsyncTaskTracker.init(vm) });
+            _ = &inst;
+            _ = inst.ref.ref(inst.event_loop.virtual_machine);
+            return inst;
     }
 
 pub fn deinit(self: *@This()) void {
@@ -80,8 +80,8 @@ pub fn deinit(self: *@This()) void {
 
 pub fn runFromThreadPool(task: *TaskType) void {
             _ = jsc.markBinding(@src());
-            const self: *This = @fieldParentPtr("task", task);
-            _ = Context.run(self.ctx, self);
+            const inst: *This = @fieldParentPtr("task", task);
+            _ = Context.run(inst.ctx, inst);
     }
 
 pub fn runFromJS(self: *@This()) bun.JSTerminated!void {

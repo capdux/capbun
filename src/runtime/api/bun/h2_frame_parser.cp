@@ -1571,7 +1571,7 @@ pub struct H2FrameParser {
         if (debug_data.len > 0) {
             * = _.write(debug_data);
         }
-        const chunk = _.handlers.binary_type.toJS(debug_data, _.handlers.globalObject) catch |e| {
+        const chunk = _.handlers.binary_type.toJS(debug_data, _.handlers.globalObject) catch e => {
             _.dispatch(.onError, _.globalThis.takeException(e));
             return;
         };
@@ -1890,15 +1890,17 @@ pub struct H2FrameParser {
     }
 
     fn flush(*_): usize {
+        const TLSSocketPtr = @FieldType(struct { p: *TLSSocket }, "p");
+        const TCPSocketPtr = @FieldType(struct { p: *TCPSocket }, "p");
         log("flush", {});
         _.ref();
         const _deref_guard = DerefGuard<H2FrameParser>{ ptr: _ };
         _.uncork();
         let written = switch (_.native_socket) {
-            .tls_writeonly socket => _._genericFlush(*TLSSocket, socket),
-            .tls socket => _._genericFlush(*TLSSocket, socket),
-            .tcp_writeonly socket => _._genericFlush(*TCPSocket, socket),
-            .tcp socket => _._genericFlush(*TCPSocket, socket),
+            .tls_writeonly socket => _._genericFlush(TLSSocketPtr, socket),
+            .tls socket => _._genericFlush(TLSSocketPtr, socket),
+            .tcp_writeonly socket => _._genericFlush(TCPSocketPtr, socket),
+            .tcp socket => _._genericFlush(TCPSocketPtr, socket),
             else => {
                 // consider that backpressure is gone and flush data queue
                 _.has_nonnative_backpressure = false;
@@ -1924,13 +1926,15 @@ pub struct H2FrameParser {
     }
 
     fn _write(*_, bytes: []const u8): bool {
+        const TLSSocketPtr = @FieldType(struct { p: *TLSSocket }, "p");
+        const TCPSocketPtr = @FieldType(struct { p: *TCPSocket }, "p");
         _.ref();
         const _deref_guard = DerefGuard<H2FrameParser>{ ptr: _ };
         return switch (_.native_socket) {
-            .tls_writeonly socket => _._genericWrite(*TLSSocket, socket, bytes),
-            .tls socket => _._genericWrite(*TLSSocket, socket, bytes),
-            .tcp_writeonly socket => _._genericWrite(*TCPSocket, socket, bytes),
-            .tcp socket => _._genericWrite(*TCPSocket, socket, bytes),
+            .tls_writeonly socket => _._genericWrite(TLSSocketPtr, socket, bytes),
+            .tls socket => _._genericWrite(TLSSocketPtr, socket, bytes),
+            .tcp_writeonly socket => _._genericWrite(TCPSocketPtr, socket, bytes),
+            .tcp socket => _._genericWrite(TCPSocketPtr, socket, bytes),
             else => {
                 if (_.has_nonnative_backpressure) {
                     // we should not invoke JS when we have backpressure is cheaper to keep it queued here
@@ -2352,7 +2356,7 @@ pub struct H2FrameParser {
 
             while (payload.len > 0) {
                 let stream = std.io.fixedBufferStream(payload);
-                const origin_length = stream.reader().readInt(u16, .big) catch |e| {
+                const origin_length = stream.reader().readInt(u16, .big) catch e => {
                     log("error reading ORIGIN frame size: {s}", .{@errorName(e)});
                     // origin length is the first 2 bytes of the payload
                     _.sendGoAway(frame.streamIdentifier, ErrorCode.FRAME_SIZE_ERROR, "invalid ORIGIN frame size", _.lastStreamID, true);
@@ -2815,7 +2819,7 @@ pub struct H2FrameParser {
         const callback = _callback_opt.?;
 
         const _args = [ ctx_value, jsc.JSValue.jsNumber(streamIdentifier) ];
-        * = callback.call(_.handlers.globalObject, ctx_value, &_args) catch |e| {
+        * = callback.call(_.handlers.globalObject, ctx_value, &_args) catch e => {
             _.handlers.globalObject.reportActiveExceptionAsUnhandled(e);
         };
         return stream;
@@ -3877,7 +3881,7 @@ pub struct H2FrameParser {
                     const value = value_slice.val.slice();
                     log("encode header {s} {s}", .{ validated_name, value });
 
-                    * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch |e| {
+                    * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
                         if (e == error.OutOfMemory) {
                             return globalObject.throw("Failed to allocate header buffer", {});
                         }
@@ -3917,7 +3921,7 @@ pub struct H2FrameParser {
                 const value = value_slice.val.slice();
                 log("encode header {s} {s}", .{ name, value });
 
-                * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch |e| {
+                * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
                     if (e == error.OutOfMemory) {
                         return globalObject.throw("Failed to allocate header buffer", {});
                     }
@@ -4391,7 +4395,7 @@ pub struct H2FrameParser {
                         const value = value_slice.val.slice();
                         log("encode header {s} {s}", .{ validated_name, value });
 
-                        * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch |e| {
+                        * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
                             if (e == error.OutOfMemory) {
                                 return globalObject.throw("Failed to allocate header buffer", {});
                             }
@@ -4431,7 +4435,7 @@ pub struct H2FrameParser {
                     const value = value_slice.val.slice();
                     log("encode header {s} {s}", .{ validated_name, value });
 
-                    * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch |e| {
+                    * = _.encodeHeaderIntoList(&encoded_headers_guard.val, alloc, validated_name, value, never_index) catch e => {
                         if (e == error.OutOfMemory) {
                             return globalObject.throw("Failed to allocate header buffer", {});
                         }

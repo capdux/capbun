@@ -1273,322 +1273,638 @@ pub extern "c" fn _ZN2v85Array3NewENS_5LocalINS_7ContextEEEmSt8functionIFNS_10Ma
 })));
 const napi_functions_to_export = .{ napi_acquire_threadsafe_function, napi_add_async_cleanup_hook, napi_add_env_cleanup_hook, napi_add_finalizer, napi_adjust_external_memory, napi_async_destroy, napi_async_init, napi_call_function, napi_call_threadsafe_function, napi_cancel_async_work, napi_check_object_type_tag, napi_close_callback_scope, napi_close_escapable_handle_scope, napi_close_handle_scope, napi_coerce_to_bool, napi_coerce_to_number, napi_coerce_to_object, napi_create_array, napi_create_array_with_length, napi_create_arraybuffer, napi_create_async_work, napi_create_bigint_int64, napi_create_bigint_uint64, napi_create_bigint_words, napi_create_buffer, napi_create_buffer_copy, napi_create_dataview, napi_create_date, napi_create_double, napi_create_error, napi_create_external, napi_create_external_arraybuffer, napi_create_external_buffer, napi_create_int32, napi_create_int64, napi_create_object, napi_create_promise, napi_create_range_error, napi_create_reference, napi_create_string_latin1, napi_create_string_utf16, napi_create_string_utf8, napi_create_symbol, napi_create_threadsafe_function, napi_create_type_error, napi_create_typedarray, napi_create_uint32, napi_define_class, napi_define_properties, napi_delete_async_work, napi_delete_element, napi_delete_reference, napi_detach_arraybuffer, napi_escape_handle, napi_fatal_error, napi_fatal_exception, napi_get_all_property_names, napi_get_and_clear_last_exception, napi_get_array_length, napi_get_arraybuffer_info, napi_get_boolean, napi_get_buffer_info, napi_get_cb_info, napi_get_dataview_info, napi_get_date_value, napi_get_element, napi_get_global, napi_get_instance_data, napi_get_last_error_info, napi_get_new_target, napi_get_node_version, napi_get_null, napi_get_prototype, napi_get_reference_value, napi_get_threadsafe_function_context, napi_get_typedarray_info, napi_get_undefined, napi_get_uv_event_loop, napi_get_value_bigint_int64, napi_get_value_bigint_uint64, napi_get_value_bigint_words, napi_get_value_bool, napi_get_value_double, napi_get_value_external, napi_get_value_int32, napi_get_value_int64, napi_get_value_string_latin1, napi_get_value_string_utf16, napi_get_value_string_utf8, napi_get_value_uint32, napi_get_version, napi_has_element, napi_instanceof, napi_is_array, napi_is_arraybuffer, napi_is_buffer, napi_is_dataview, napi_is_date, napi_is_detached_arraybuffer, napi_is_error, napi_is_exception_pending, napi_is_promise, napi_is_typedarray, napi_make_callback, napi_new_instance, napi_open_callback_scope, napi_open_escapable_handle_scope, napi_open_handle_scope, napi_queue_async_work, napi_ref_threadsafe_function, napi_reference_ref, napi_reference_unref, napi_reject_deferred, napi_release_threadsafe_function, napi_remove_async_cleanup_hook, napi_remove_env_cleanup_hook, napi_remove_wrap, napi_resolve_deferred, napi_run_script, napi_set_element, napi_set_instance_data, napi_strict_equals, napi_throw, napi_throw_error, napi_throw_range_error, napi_throw_type_error, napi_type_tag_object, napi_typeof, napi_unref_threadsafe_function, napi_unwrap, napi_wrap, node_api_create_syntax_error, node_api_symbol_for, node_api_throw_syntax_error, node_api_create_external_string_latin1, node_api_create_external_string_utf16 };
 const uv_functions_to_export = (if (bun.Environment.isPosix) struct {
-    pub extern "c" fn uv_accept() void;
-    pub extern "c" fn uv_async_init() void;
-    pub extern "c" fn uv_async_send() void;
-    pub extern "c" fn uv_available_parallelism() void;
-    pub extern "c" fn uv_backend_fd() void;
-    pub extern "c" fn uv_backend_timeout() void;
-    pub extern "c" fn uv_barrier_destroy() void;
-    pub extern "c" fn uv_barrier_init() void;
-    pub extern "c" fn uv_barrier_wait() void;
-    pub extern "c" fn uv_buf_init() void;
-    pub extern "c" fn uv_cancel() void;
-    pub extern "c" fn uv_chdir() void;
-    pub extern "c" fn uv_check_init() void;
-    pub extern "c" fn uv_check_start() void;
-    pub extern "c" fn uv_check_stop() void;
-    pub extern "c" fn uv_clock_gettime() void;
-    pub extern "c" fn uv_close() void;
-    pub extern "c" fn uv_cond_broadcast() void;
-    pub extern "c" fn uv_cond_destroy() void;
-    pub extern "c" fn uv_cond_init() void;
-    pub extern "c" fn uv_cond_signal() void;
-    pub extern "c" fn uv_cond_timedwait() void;
-    pub extern "c" fn uv_cond_wait() void;
-    pub extern "c" fn uv_cpu_info() void;
-    pub extern "c" fn uv_cpumask_size() void;
-    pub extern "c" fn uv_cwd() void;
-    pub extern "c" fn uv_default_loop() void;
-    pub extern "c" fn uv_disable_stdio_inheritance() void;
-    pub extern "c" fn uv_dlclose() void;
-    pub extern "c" fn uv_dlerror() void;
-    pub extern "c" fn uv_dlopen() void;
-    pub extern "c" fn uv_dlsym() void;
-    pub extern "c" fn uv_err_name() void;
-    pub extern "c" fn uv_err_name_r() void;
-    pub extern "c" fn uv_exepath() void;
-    pub extern "c" fn uv_fileno() void;
-    pub extern "c" fn uv_free_cpu_info() void;
-    pub extern "c" fn uv_free_interface_addresses() void;
-    pub extern "c" fn uv_freeaddrinfo() void;
-    pub extern "c" fn uv_fs_access() void;
-    pub extern "c" fn uv_fs_chmod() void;
-    pub extern "c" fn uv_fs_chown() void;
-    pub extern "c" fn uv_fs_close() void;
-    pub extern "c" fn uv_fs_closedir() void;
-    pub extern "c" fn uv_fs_copyfile() void;
-    pub extern "c" fn uv_fs_event_getpath() void;
-    pub extern "c" fn uv_fs_event_init() void;
-    pub extern "c" fn uv_fs_event_start() void;
-    pub extern "c" fn uv_fs_event_stop() void;
-    pub extern "c" fn uv_fs_fchmod() void;
-    pub extern "c" fn uv_fs_fchown() void;
-    pub extern "c" fn uv_fs_fdatasync() void;
-    pub extern "c" fn uv_fs_fstat() void;
-    pub extern "c" fn uv_fs_fsync() void;
-    pub extern "c" fn uv_fs_ftruncate() void;
-    pub extern "c" fn uv_fs_futime() void;
-    pub extern "c" fn uv_fs_get_path() void;
-    pub extern "c" fn uv_fs_get_ptr() void;
-    pub extern "c" fn uv_fs_get_result() void;
-    pub extern "c" fn uv_fs_get_statbuf() void;
-    pub extern "c" fn uv_fs_get_system_error() void;
-    pub extern "c" fn uv_fs_get_type() void;
-    pub extern "c" fn uv_fs_lchown() void;
-    pub extern "c" fn uv_fs_link() void;
-    pub extern "c" fn uv_fs_lstat() void;
-    pub extern "c" fn uv_fs_lutime() void;
-    pub extern "c" fn uv_fs_mkdir() void;
-    pub extern "c" fn uv_fs_mkdtemp() void;
-    pub extern "c" fn uv_fs_mkstemp() void;
-    pub extern "c" fn uv_fs_open() void;
-    pub extern "c" fn uv_fs_opendir() void;
-    pub extern "c" fn uv_fs_poll_getpath() void;
-    pub extern "c" fn uv_fs_poll_init() void;
-    pub extern "c" fn uv_fs_poll_start() void;
-    pub extern "c" fn uv_fs_poll_stop() void;
-    pub extern "c" fn uv_fs_read() void;
-    pub extern "c" fn uv_fs_readdir() void;
-    pub extern "c" fn uv_fs_readlink() void;
-    pub extern "c" fn uv_fs_realpath() void;
-    pub extern "c" fn uv_fs_rename() void;
-    pub extern "c" fn uv_fs_req_cleanup() void;
-    pub extern "c" fn uv_fs_rmdir() void;
-    pub extern "c" fn uv_fs_scandir() void;
-    pub extern "c" fn uv_fs_scandir_next() void;
-    pub extern "c" fn uv_fs_sendfile() void;
-    pub extern "c" fn uv_fs_stat() void;
-    pub extern "c" fn uv_fs_statfs() void;
-    pub extern "c" fn uv_fs_symlink() void;
-    pub extern "c" fn uv_fs_unlink() void;
-    pub extern "c" fn uv_fs_utime() void;
-    pub extern "c" fn uv_fs_write() void;
-    pub extern "c" fn uv_get_available_memory() void;
-    pub extern "c" fn uv_get_constrained_memory() void;
-    pub extern "c" fn uv_get_free_memory() void;
-    pub extern "c" fn uv_get_osfhandle() void;
-    pub extern "c" fn uv_get_process_title() void;
-    pub extern "c" fn uv_get_total_memory() void;
-    pub extern "c" fn uv_getaddrinfo() void;
-    pub extern "c" fn uv_getnameinfo() void;
-    pub extern "c" fn uv_getrusage() void;
-    pub extern "c" fn uv_getrusage_thread() void;
-    pub extern "c" fn uv_gettimeofday() void;
-    pub extern "c" fn uv_guess_handle() void;
-    pub extern "c" fn uv_handle_get_data() void;
-    pub extern "c" fn uv_handle_get_loop() void;
-    pub extern "c" fn uv_handle_get_type() void;
-    pub extern "c" fn uv_handle_set_data() void;
-    pub extern "c" fn uv_handle_size() void;
-    pub extern "c" fn uv_handle_type_name() void;
-    pub extern "c" fn uv_has_ref() void;
-    pub extern "c" fn uv_hrtime() void;
-    pub extern "c" fn uv_idle_init() void;
-    pub extern "c" fn uv_idle_start() void;
-    pub extern "c" fn uv_idle_stop() void;
-    pub extern "c" fn uv_if_indextoiid() void;
-    pub extern "c" fn uv_if_indextoname() void;
-    pub extern "c" fn uv_inet_ntop() void;
-    pub extern "c" fn uv_inet_pton() void;
-    pub extern "c" fn uv_interface_addresses() void;
-    pub extern "c" fn uv_ip_name() void;
-    pub extern "c" fn uv_ip4_addr() void;
-    pub extern "c" fn uv_ip4_name() void;
-    pub extern "c" fn uv_ip6_addr() void;
-    pub extern "c" fn uv_ip6_name() void;
-    pub extern "c" fn uv_is_active() void;
-    pub extern "c" fn uv_is_closing() void;
-    pub extern "c" fn uv_is_readable() void;
-    pub extern "c" fn uv_is_writable() void;
-    pub extern "c" fn uv_key_create() void;
-    pub extern "c" fn uv_key_delete() void;
-    pub extern "c" fn uv_key_get() void;
-    pub extern "c" fn uv_key_set() void;
-    pub extern "c" fn uv_kill() void;
-    pub extern "c" fn uv_library_shutdown() void;
-    pub extern "c" fn uv_listen() void;
-    pub extern "c" fn uv_loadavg() void;
-    pub extern "c" fn uv_loop_alive() void;
-    pub extern "c" fn uv_loop_close() void;
-    pub extern "c" fn uv_loop_configure() void;
-    pub extern "c" fn uv_loop_delete() void;
-    pub extern "c" fn uv_loop_fork() void;
-    pub extern "c" fn uv_loop_get_data() void;
-    pub extern "c" fn uv_loop_init() void;
-    pub extern "c" fn uv_loop_new() void;
-    pub extern "c" fn uv_loop_set_data() void;
-    pub extern "c" fn uv_loop_size() void;
-    pub extern "c" fn uv_metrics_idle_time() void;
-    pub extern "c" fn uv_metrics_info() void;
-    pub extern "c" fn uv_mutex_destroy() void;
-    pub extern "c" fn uv_mutex_init() void;
-    pub extern "c" fn uv_mutex_init_recursive() void;
-    pub extern "c" fn uv_mutex_lock() void;
-    pub extern "c" fn uv_mutex_trylock() void;
-    pub extern "c" fn uv_mutex_unlock() void;
-    pub extern "c" fn uv_now() void;
-    pub extern "c" fn uv_once() void;
-    pub extern "c" fn uv_open_osfhandle() void;
-    pub extern "c" fn uv_os_environ() void;
-    pub extern "c" fn uv_os_free_environ() void;
-    pub extern "c" fn uv_os_free_group() void;
-    pub extern "c" fn uv_os_free_passwd() void;
-    pub extern "c" fn uv_os_get_group() void;
-    pub extern "c" fn uv_os_get_passwd() void;
-    pub extern "c" fn uv_os_get_passwd2() void;
-    pub extern "c" fn uv_os_getenv() void;
-    pub extern "c" fn uv_os_gethostname() void;
-    pub extern "c" fn uv_os_getpid() void;
-    pub extern "c" fn uv_os_getppid() void;
-    pub extern "c" fn uv_os_getpriority() void;
-    pub extern "c" fn uv_os_homedir() void;
-    pub extern "c" fn uv_os_setenv() void;
-    pub extern "c" fn uv_os_setpriority() void;
-    pub extern "c" fn uv_os_tmpdir() void;
-    pub extern "c" fn uv_os_uname() void;
-    pub extern "c" fn uv_os_unsetenv() void;
-    pub extern "c" fn uv_pipe() void;
-    pub extern "c" fn uv_pipe_bind() void;
-    pub extern "c" fn uv_pipe_bind2() void;
-    pub extern "c" fn uv_pipe_chmod() void;
-    pub extern "c" fn uv_pipe_connect() void;
-    pub extern "c" fn uv_pipe_connect2() void;
-    pub extern "c" fn uv_pipe_getpeername() void;
-    pub extern "c" fn uv_pipe_getsockname() void;
-    pub extern "c" fn uv_pipe_init() void;
-    pub extern "c" fn uv_pipe_open() void;
-    pub extern "c" fn uv_pipe_pending_count() void;
-    pub extern "c" fn uv_pipe_pending_instances() void;
-    pub extern "c" fn uv_pipe_pending_type() void;
-    pub extern "c" fn uv_poll_init() void;
-    pub extern "c" fn uv_poll_init_socket() void;
-    pub extern "c" fn uv_poll_start() void;
-    pub extern "c" fn uv_poll_stop() void;
-    pub extern "c" fn uv_prepare_init() void;
-    pub extern "c" fn uv_prepare_start() void;
-    pub extern "c" fn uv_prepare_stop() void;
-    pub extern "c" fn uv_print_active_handles() void;
-    pub extern "c" fn uv_print_all_handles() void;
-    pub extern "c" fn uv_process_get_pid() void;
-    pub extern "c" fn uv_process_kill() void;
-    pub extern "c" fn uv_queue_work() void;
-    pub extern "c" fn uv_random() void;
-    pub extern "c" fn uv_read_start() void;
-    pub extern "c" fn uv_read_stop() void;
-    pub extern "c" fn uv_recv_buffer_size() void;
-    pub extern "c" fn uv_ref() void;
-    pub extern "c" fn uv_replace_allocator() void;
-    pub extern "c" fn uv_req_get_data() void;
-    pub extern "c" fn uv_req_get_type() void;
-    pub extern "c" fn uv_req_set_data() void;
-    pub extern "c" fn uv_req_size() void;
-    pub extern "c" fn uv_req_type_name() void;
-    pub extern "c" fn uv_resident_set_memory() void;
-    pub extern "c" fn uv_run() void;
-    pub extern "c" fn uv_rwlock_destroy() void;
-    pub extern "c" fn uv_rwlock_init() void;
-    pub extern "c" fn uv_rwlock_rdlock() void;
-    pub extern "c" fn uv_rwlock_rdunlock() void;
-    pub extern "c" fn uv_rwlock_tryrdlock() void;
-    pub extern "c" fn uv_rwlock_trywrlock() void;
-    pub extern "c" fn uv_rwlock_wrlock() void;
-    pub extern "c" fn uv_rwlock_wrunlock() void;
-    pub extern "c" fn uv_sem_destroy() void;
-    pub extern "c" fn uv_sem_init() void;
-    pub extern "c" fn uv_sem_post() void;
-    pub extern "c" fn uv_sem_trywait() void;
-    pub extern "c" fn uv_sem_wait() void;
-    pub extern "c" fn uv_send_buffer_size() void;
-    pub extern "c" fn uv_set_process_title() void;
-    pub extern "c" fn uv_setup_args() void;
-    pub extern "c" fn uv_shutdown() void;
-    pub extern "c" fn uv_signal_init() void;
-    pub extern "c" fn uv_signal_start() void;
-    pub extern "c" fn uv_signal_start_oneshot() void;
-    pub extern "c" fn uv_signal_stop() void;
-    pub extern "c" fn uv_sleep() void;
-    pub extern "c" fn uv_socketpair() void;
-    pub extern "c" fn uv_spawn() void;
-    pub extern "c" fn uv_stop() void;
-    pub extern "c" fn uv_stream_get_write_queue_size() void;
-    pub extern "c" fn uv_stream_set_blocking() void;
-    pub extern "c" fn uv_strerror() void;
-    pub extern "c" fn uv_strerror_r() void;
-    pub extern "c" fn uv_tcp_bind() void;
-    pub extern "c" fn uv_tcp_close_reset() void;
-    pub extern "c" fn uv_tcp_connect() void;
-    pub extern "c" fn uv_tcp_getpeername() void;
-    pub extern "c" fn uv_tcp_getsockname() void;
-    pub extern "c" fn uv_tcp_init() void;
-    pub extern "c" fn uv_tcp_init_ex() void;
-    pub extern "c" fn uv_tcp_keepalive() void;
-    pub extern "c" fn uv_tcp_nodelay() void;
-    pub extern "c" fn uv_tcp_open() void;
-    pub extern "c" fn uv_tcp_simultaneous_accepts() void;
-    pub extern "c" fn uv_thread_create() void;
-    pub extern "c" fn uv_thread_create_ex() void;
-    pub extern "c" fn uv_thread_detach() void;
-    pub extern "c" fn uv_thread_equal() void;
-    pub extern "c" fn uv_thread_getaffinity() void;
-    pub extern "c" fn uv_thread_getcpu() void;
-    pub extern "c" fn uv_thread_getname() void;
-    pub extern "c" fn uv_thread_getpriority() void;
-    pub extern "c" fn uv_thread_join() void;
-    pub extern "c" fn uv_thread_self() void;
-    pub extern "c" fn uv_thread_setaffinity() void;
-    pub extern "c" fn uv_thread_setname() void;
-    pub extern "c" fn uv_thread_setpriority() void;
-    pub extern "c" fn uv_timer_again() void;
-    pub extern "c" fn uv_timer_get_due_in() void;
-    pub extern "c" fn uv_timer_get_repeat() void;
-    pub extern "c" fn uv_timer_init() void;
-    pub extern "c" fn uv_timer_set_repeat() void;
-    pub extern "c" fn uv_timer_start() void;
-    pub extern "c" fn uv_timer_stop() void;
-    pub extern "c" fn uv_translate_sys_error() void;
-    pub extern "c" fn uv_try_write() void;
-    pub extern "c" fn uv_try_write2() void;
-    pub extern "c" fn uv_tty_get_vterm_state() void;
-    pub extern "c" fn uv_tty_get_winsize() void;
-    pub extern "c" fn uv_tty_init() void;
-    pub extern "c" fn uv_tty_reset_mode() void;
-    pub extern "c" fn uv_tty_set_mode() void;
-    pub extern "c" fn uv_tty_set_vterm_state() void;
-    pub extern "c" fn uv_udp_bind() void;
-    pub extern "c" fn uv_udp_connect() void;
-    pub extern "c" fn uv_udp_get_send_queue_count() void;
-    pub extern "c" fn uv_udp_get_send_queue_size() void;
-    pub extern "c" fn uv_udp_getpeername() void;
-    pub extern "c" fn uv_udp_getsockname() void;
-    pub extern "c" fn uv_udp_init() void;
-    pub extern "c" fn uv_udp_init_ex() void;
-    pub extern "c" fn uv_udp_open() void;
-    pub extern "c" fn uv_udp_recv_start() void;
-    pub extern "c" fn uv_udp_recv_stop() void;
-    pub extern "c" fn uv_udp_send() void;
-    pub extern "c" fn uv_udp_set_broadcast() void;
-    pub extern "c" fn uv_udp_set_membership() void;
-    pub extern "c" fn uv_udp_set_multicast_interface() void;
-    pub extern "c" fn uv_udp_set_multicast_loop() void;
-    pub extern "c" fn uv_udp_set_multicast_ttl() void;
-    pub extern "c" fn uv_udp_set_source_membership() void;
-    pub extern "c" fn uv_udp_set_ttl() void;
-    pub extern "c" fn uv_udp_try_send() void;
-    pub extern "c" fn uv_udp_try_send2() void;
-    pub extern "c" fn uv_udp_using_recvmmsg() void;
-    pub extern "c" fn uv_unref() void;
-    pub extern "c" fn uv_update_time() void;
-    pub extern "c" fn uv_uptime() void;
-    pub extern "c" fn uv_utf16_length_as_wtf8() void;
-    pub extern "c" fn uv_utf16_to_wtf8() void;
-    pub extern "c" fn uv_version() void;
-    pub extern "c" fn uv_version_string() void;
-    pub extern "c" fn uv_walk() void;
-    pub extern "c" fn uv_write() void;
-    pub extern "c" fn uv_write2() void;
-    pub extern "c" fn uv_wtf8_length_as_utf16() void;
-    pub extern "c" fn uv_wtf8_to_utf16() void;
+
+pub extern "c" fn uv_accept(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_async_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_async_send(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_available_parallelism(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_backend_fd(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_backend_timeout(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_barrier_destroy(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_barrier_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_barrier_wait(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_buf_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cancel(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_chdir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_check_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_check_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_check_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_clock_gettime(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_close(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cond_broadcast(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cond_destroy(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cond_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cond_signal(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cond_timedwait(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cond_wait(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cpu_info(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cpumask_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_cwd(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_default_loop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_disable_stdio_inheritance(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_dlclose(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_dlerror(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_dlopen(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_dlsym(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_err_name(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_err_name_r(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_exepath(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fileno(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_free_cpu_info(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_free_interface_addresses(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_freeaddrinfo(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_access(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_chmod(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_chown(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_close(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_closedir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_copyfile(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_event_getpath(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_event_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_event_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_event_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_fchmod(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_fchown(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_fdatasync(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_fstat(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_fsync(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_ftruncate(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_futime(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_get_path(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_get_ptr(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_get_result(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_get_statbuf(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_get_system_error(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_get_type(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_lchown(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_link(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_lstat(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_lutime(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_mkdir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_mkdtemp(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_mkstemp(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_open(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_opendir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_poll_getpath(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_poll_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_poll_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_poll_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_read(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_readdir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_readlink(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_realpath(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_rename(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_req_cleanup(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_rmdir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_scandir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_scandir_next(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_sendfile(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_stat(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_statfs(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_symlink(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_unlink(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_utime(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_fs_write(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_get_available_memory(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_get_constrained_memory(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_get_free_memory(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_get_osfhandle(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_get_process_title(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_get_total_memory(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_getaddrinfo(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_getnameinfo(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_getrusage(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_getrusage_thread(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_gettimeofday(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_guess_handle(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_handle_get_data(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_handle_get_loop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_handle_get_type(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_handle_set_data(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_handle_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_handle_type_name(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_has_ref(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_hrtime(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_idle_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_idle_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_idle_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_if_indextoiid(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_if_indextoname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_inet_ntop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_inet_pton(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_interface_addresses(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_ip_name(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_ip4_addr(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_ip4_name(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_ip6_addr(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_ip6_name(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_is_active(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_is_closing(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_is_readable(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_is_writable(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_key_create(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_key_delete(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_key_get(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_key_set(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_kill(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_library_shutdown(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_listen(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loadavg(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_alive(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_close(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_configure(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_delete(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_fork(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_get_data(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_new(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_set_data(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_loop_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_metrics_idle_time(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_metrics_info(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_mutex_destroy(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_mutex_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_mutex_init_recursive(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_mutex_lock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_mutex_trylock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_mutex_unlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_now(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_once(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_open_osfhandle(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_environ(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_free_environ(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_free_group(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_free_passwd(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_get_group(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_get_passwd(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_get_passwd2(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_getenv(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_gethostname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_getpid(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_getppid(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_getpriority(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_homedir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_setenv(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_setpriority(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_tmpdir(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_uname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_os_unsetenv(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_bind(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_bind2(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_chmod(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_connect(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_connect2(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_getpeername(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_getsockname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_open(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_pending_count(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_pending_instances(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_pipe_pending_type(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_poll_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_poll_init_socket(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_poll_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_poll_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_prepare_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_prepare_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_prepare_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_print_active_handles(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_print_all_handles(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_process_get_pid(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_process_kill(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_queue_work(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_random(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_read_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_read_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_recv_buffer_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_ref(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_replace_allocator(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_req_get_data(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_req_get_type(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_req_set_data(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_req_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_req_type_name(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_resident_set_memory(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_run(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_destroy(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_rdlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_rdunlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_tryrdlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_trywrlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_wrlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_rwlock_wrunlock(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_sem_destroy(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_sem_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_sem_post(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_sem_trywait(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_sem_wait(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_send_buffer_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_set_process_title(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_setup_args(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_shutdown(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_signal_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_signal_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_signal_start_oneshot(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_signal_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_sleep(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_socketpair(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_spawn(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_stream_get_write_queue_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_stream_set_blocking(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_strerror(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_strerror_r(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_bind(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_close_reset(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_connect(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_getpeername(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_getsockname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_init_ex(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_keepalive(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_nodelay(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_open(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tcp_simultaneous_accepts(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_create(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_create_ex(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_detach(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_equal(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_getaffinity(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_getcpu(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_getname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_getpriority(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_join(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_self(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_setaffinity(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_setname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_thread_setpriority(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_again(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_get_due_in(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_get_repeat(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_set_repeat(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_timer_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_translate_sys_error(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_try_write(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_try_write2(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tty_get_vterm_state(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tty_get_winsize(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tty_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tty_reset_mode(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tty_set_mode(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_tty_set_vterm_state(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_bind(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_connect(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_get_send_queue_count(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_get_send_queue_size(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_getpeername(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_getsockname(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_init(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_init_ex(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_open(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_recv_start(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_recv_stop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_send(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_broadcast(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_membership(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_multicast_interface(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_multicast_loop(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_multicast_ttl(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_source_membership(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_set_ttl(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_try_send(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_try_send2(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_udp_using_recvmmsg(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_unref(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_update_time(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_uptime(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_utf16_length_as_wtf8(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_utf16_to_wtf8(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_version(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_version_string(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_walk(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_write(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_write2(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_wtf8_length_as_utf16(self: @This()) callconv(.c) void;
+
+pub extern "c" fn uv_wtf8_to_utf16(self: @This()) callconv(.c) void;
 } else struct {
 });
 const WorkPool = WorkPoolMod.WorkPool;

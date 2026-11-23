@@ -204,29 +204,29 @@ pub inline fn initErrWithP(e: bun.sys.SystemErrno, syscall: sys.Tag, file_path: 
             return .{ .err = .{ .errno = @intFromEnum(e), .syscall = syscall, .path = file_path } };
     }
 
-pub inline fn asErr(self: *const @This()) ?ErrorType {
-            if ((self.* == .err)) {
+pub inline fn asErr(self: @This()) ?ErrorType {
+            if ((self == .err)) {
                 return self.err;
             }
             return null;
     }
 
-pub inline fn asValue(self: *const @This()) ?ReturnType {
-            if ((self.* == .result)) {
+pub inline fn asValue(self: @This()) ?ReturnType {
+            if ((self == .result)) {
                 return self.result;
             }
             return null;
     }
 
-pub inline fn isOk(self: *const @This()) bool {
-            return (switch (self.*) {
+pub inline fn isOk(self: @This()) bool {
+            return (switch (self) {
 .result => true,
 .err => false,
 });
     }
 
-pub inline fn isErr(self: *const @This()) bool {
-            return (switch (self.*) {
+pub inline fn isErr(self: @This()) bool {
+            return (switch (self) {
 .result => false,
 .err => true,
 });
@@ -295,10 +295,11 @@ pub fn errnoSys(rc: anytype, syscall: sys.Tag) ?@This() {
                     }
                 }
             }
-            return (switch (sys.getErrno(rc)) {
-.SUCCESS => null,
-else => |e| @This(){ .err = .{ .errno = translateToErrInt(e), .syscall = syscall } },
-});
+            const err_code = sys.getErrno(rc);
+            if ((err_code == .SUCCESS)) {
+                return null;
+            }
+            return @This(){ .err = .{ .errno = translateToErrInt(err_code), .syscall = syscall } };
     }
 
 pub fn errno(e: anytype, syscall: sys.Tag) @This() {
@@ -314,10 +315,11 @@ pub fn errnoSysFd(rc: anytype, syscall: sys.Tag, fd: bun.FD) ?@This() {
                     }
                 }
             }
-            return (switch (sys.getErrno(rc)) {
-.SUCCESS => null,
-else => |e| @This(){ .err = .{ .errno = translateToErrInt(e), .syscall = syscall, .fd = fd } },
-});
+            const err_code = sys.getErrno(rc);
+            if ((err_code == .SUCCESS)) {
+                return null;
+            }
+            return @This(){ .err = .{ .errno = translateToErrInt(err_code), .syscall = syscall, .fd = fd } };
     }
 
 pub fn errnoSysP(rc: anytype, syscall: sys.Tag, file_path: anytype) ?@This() {
@@ -332,10 +334,11 @@ pub fn errnoSysP(rc: anytype, syscall: sys.Tag, file_path: anytype) ?@This() {
                     }
                 }
             }
-            return (switch (sys.getErrno(rc)) {
-.SUCCESS => null,
-else => |e| @This(){ .err = .{ .errno = translateToErrInt(e), .syscall = syscall, .path = bun.asByteSlice(file_path) } },
-});
+            const err_code = sys.getErrno(rc);
+            if ((err_code == .SUCCESS)) {
+                return null;
+            }
+            return @This(){ .err = .{ .errno = translateToErrInt(err_code), .syscall = syscall, .path = bun.asByteSlice(file_path) } };
     }
 
 pub fn errnoSysFP(rc: anytype, syscall: sys.Tag, fd: bun.FD, file_path: anytype) ?@This() {
@@ -347,10 +350,11 @@ pub fn errnoSysFP(rc: anytype, syscall: sys.Tag, fd: bun.FD, file_path: anytype)
                     }
                 }
             }
-            return (switch (sys.getErrno(rc)) {
-.SUCCESS => null,
-else => |e| @This(){ .err = .{ .errno = translateToErrInt(e), .syscall = syscall, .fd = fd, .path = bun.asByteSlice(file_path) } },
-});
+            const err_code = sys.getErrno(rc);
+            if ((err_code == .SUCCESS)) {
+                return null;
+            }
+            return @This(){ .err = .{ .errno = translateToErrInt(err_code), .syscall = syscall, .fd = fd, .path = bun.asByteSlice(file_path) } };
     }
 
 pub fn errnoSysPD(rc: anytype, syscall: sys.Tag, file_path: anytype, dest: anytype) ?@This() {
@@ -365,10 +369,11 @@ pub fn errnoSysPD(rc: anytype, syscall: sys.Tag, file_path: anytype, dest: anyty
                     }
                 }
             }
-            return (switch (sys.getErrno(rc)) {
-.SUCCESS => null,
-else => |e| @This(){ .err = .{ .errno = translateToErrInt(e), .syscall = syscall, .path = bun.asByteSlice(file_path), .dest = bun.asByteSlice(dest) } },
-});
+            const err_code = sys.getErrno(rc);
+            if ((err_code == .SUCCESS)) {
+                return null;
+            }
+            return @This(){ .err = .{ .errno = translateToErrInt(err_code), .syscall = syscall, .path = bun.asByteSlice(file_path), .dest = bun.asByteSlice(dest) } };
     }
 
 pub fn format(self: @This(), writer: *std.Io.Writer) !void {

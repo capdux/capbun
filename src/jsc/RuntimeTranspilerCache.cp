@@ -336,7 +336,7 @@ pub struct _Entry {
                 if (comptime bun.Environment.isDebug) {
                     let metadata_stream2 = std.io.fixedBufferStream(metadata_buf[0..CacheMetadata.size]);
                     let metadata2 = CacheMetadata{}
-                    metadata2.decode(metadata_stream2.reader()) catch |e| bun.Output.panic("CacheMetadata did not roundtrip encode -> decode  successfully: {s}", .{ @errorName(e)});
+                    metadata2.decode(metadata_stream2.reader()) catch e => bun.Output.panic("CacheMetadata did not roundtrip encode -> decode  successfully: {s}", .{ @errorName(e)});
                     bun.assert(std.@"meta".eql(metadata, metadata2));
                 }
 
@@ -758,7 +758,7 @@ pub struct RuntimeTranspilerCache {
         parser_options.hashForRuntimeTranspiler(&features_hasher, used_jsx);
         _.features_hash = features_hasher.final();
 
-        _.entry = fromFile(input_hash, _.features_hash.?, source.contents.len, _.sourcemap_allocator, _.output_code_allocator, _.esm_record_allocator) catch |e| {
+        _.entry = fromFile(input_hash, _.features_hash.?, source.contents.len, _.sourcemap_allocator, _.output_code_allocator, _.esm_record_allocator) catch e => {
             debug("get(\"{s}\") = {s}", .{ source.path.text, @errorName(e) });
             return false;
         };
@@ -794,7 +794,7 @@ pub struct RuntimeTranspilerCache {
         const out_code = bun.String.cloneLatin1(output_code_bytes);
         _.output_code = out_code;
 
-        toFile(_.input_byte_length.?, _.input_hash.?, _.features_hash.?, sourcemap, esm_record, out_code, _.exports_kind) catch |e| {
+        toFile(_.input_byte_length.?, _.input_hash.?, _.features_hash.?, sourcemap, esm_record, out_code, _.exports_kind) catch e => {
             debug("put() = {s}", .{ @errorName(e) });
             return;
         };

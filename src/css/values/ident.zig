@@ -318,7 +318,7 @@ pub fn deepClone(self: IdentOrRef, _: std.mem.Allocator) @This() {
             return self.*;
     }
     const Tag = IdentOrRefTag;
-    const DebugIdent = (if (bun.Environment.isDebug) struct { []const u8, Allocator } else void);
+    const DebugIdent = if (bun.Environment.isDebug) struct { []const u8, Allocator } else void;
 };
 
 pub const CustomIdent = struct {

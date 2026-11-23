@@ -756,7 +756,7 @@ pub const PrefillHotModuleReloading = struct {
     pub var DebugEnabledArgs: [1]Expr = .{ Expr{ .data = .{ .e_boolean = E.Boolean{ .value = true } }, .loc = logger.Loc.Empty } };
     pub var DebugDisabled: [1]Expr = .{ Expr{ .data = .{ .e_boolean = E.Boolean{ .value = false } }, .loc = logger.Loc.Empty } };
     pub var ActivateString: E.String = E.String{ .data = "activate" };
-    pub var ActivateIndex: E.Index = E.Index{ .index = .{ .data = .{ .e_string = *const ActivateString }, .loc = logger.Loc.Empty }, .target = undefined };
+    pub var ActivateIndex: E.Index = E.Index{ .index = .{ .data = .{ .e_string = (&ActivateString) }, .loc = logger.Loc.Empty }, .target = undefined };
 };
 
 pub const PrefillStringLiteral = struct {
@@ -793,16 +793,16 @@ pub const PrefillData = struct {
     pub var EMissing_: E.Missing = std.mem.zeroes(E.Missing);
     pub var SEmpty: Stmt.Data = Stmt.Data{ .s_empty = SEmpty_ };
     pub var SEmpty_: S.Empty = std.mem.zeroes(S.Empty);
-    pub var Filename: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.Filename };
-    pub var LineNumber: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.LineNumber };
-    pub var ColumnNumber: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.ColumnNumber };
+    pub var Filename: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.Filename) };
+    pub var LineNumber: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.LineNumber) };
+    pub var ColumnNumber: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.ColumnNumber) };
     pub var @"$$typeof": Expr.Data = Expr.Data{ .e_string = (&Prefill.String.@"$$typeof") };
-    pub var key: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.Key };
+    pub var key: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.Key) };
     pub var @"type": Expr.Data = Expr.Data{ .e_string = (&Prefill.String.@"type") };
     pub var @"ref": Expr.Data = Expr.Data{ .e_string = (&Prefill.String.@"ref") };
     pub var props: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.props) };
     pub var _owner: Expr.Data = Expr.Data{ .e_string = (&Prefill.String._owner) };
-    pub var REACT_ELEMENT_TYPE: Expr.Data = Expr.Data{ .e_string = *const Prefill.String.REACT_ELEMENT_TYPE };
+    pub var REACT_ELEMENT_TYPE: Expr.Data = Expr.Data{ .e_string = (&Prefill.String.REACT_ELEMENT_TYPE) };
     pub const This = Expr.Data{ .e_this = std.mem.zeroes(E.This) };
     pub const Zero = Expr.Data{ .e_number = PrefillValue.Zero };
 };
@@ -890,26 +890,26 @@ else => false,
     pub const HookContextPtr = ?HookContext;
     pub const HookContext = _ReactRefreshHookContext;
     pub const built_in_hooks = bun.ComptimeEnumMap(enum {
-            useState,
-            useReducer,
-            useEffect,
-            useLayoutEffect,
-            useMemo,
-            useCallback,
-            useRef,
-            useContext,
-            useImperativeHandle,
-            useDebugValue,
-            useId,
-            useDeferredValue,
-            useTransition,
-            useInsertionEffect,
-            useSyncExternalStore,
-            useFormStatus,
-            useFormState,
-            useActionState,
-            useOptimistic,
-        });
+        useState,
+        useReducer,
+        useEffect,
+        useLayoutEffect,
+        useMemo,
+        useCallback,
+        useRef,
+        useContext,
+        useImperativeHandle,
+        useDebugValue,
+        useId,
+        useDeferredValue,
+        useTransition,
+        useInsertionEffect,
+        useSyncExternalStore,
+        useFormStatus,
+        useFormState,
+        useActionState,
+        useOptimistic,
+    });
 };
 
 pub const ParseBindingOptions = struct {

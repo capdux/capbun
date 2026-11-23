@@ -128,7 +128,7 @@ pub const FileMode = enum(u32) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 
 pub fn toBunMode(self: FileMode) bun.Mode {
-            return (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(@intFromEnum(self))) else @as(bun.Mode, @intFromEnum(self)));
+            return (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(@intFromEnum(self))) == .int or @typeInfo(@TypeOf(@intFromEnum(self))) == .comptime_int)) @as(bun.Mode, @enumFromInt(@intFromEnum(self))) else @as(bun.Mode, @intFromEnum(self)));
     }
 
 pub fn fromU32(mode: u32) ?FileMode {
@@ -587,7 +587,7 @@ if (((line_cursor + part.lines.items.len) > lines.items.len)) {
 }
                 }
             }
-            const file_fd = (switch (bun.sys.openat(patch_dir, file_path, ((bun.O.CREAT | bun.O.WRONLY) | bun.O.TRUNC), (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(stat.mode)) else @as(bun.Mode, stat.mode)))) {
+            const file_fd = (switch (bun.sys.openat(patch_dir, file_path, ((bun.O.CREAT | bun.O.WRONLY) | bun.O.TRUNC), (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(stat.mode)) == .int or @typeInfo(@TypeOf(stat.mode)) == .comptime_int)) @as(bun.Mode, @enumFromInt(stat.mode)) else @as(bun.Mode, stat.mode)))) {
 .err => |e| {
 return .{ .err = e.withPath(file_path) };
 },
@@ -1386,7 +1386,7 @@ pub fn spawnOpts(old_folder: []const u8, new_folder: []const u8, cwd: [:0]const 
         if (PATH) |p| {
             _ = &p;
             {
-                envp_buf[cp_cast_int(usize, (envp_buf.len - 1))] = @as([*:0]const u8, @ptrCast(p.ptr));
+                envp_buf[cp_cast_int(usize, (envp_buf.len - 1))] = @as([*:0]const u8, @alignCast(@ptrCast(p.ptr)));
             }
         }
         break :brk envp_buf;

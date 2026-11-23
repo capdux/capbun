@@ -808,7 +808,7 @@ pub fn writeOpenFd(self: *Archive, fd: bun.FD) ArchiveResult {
 
 pub fn writeOpenMemory(self: *Archive, buf: ?*anyopaque, buf_size: usize, used: *usize) ArchiveResult {
             {
-                return archive_write_open_memory(self, buf, buf_size, @as([*c]usize, used));
+                return archive_write_open_memory(self, buf, buf_size, @as([*c]usize, @ptrCast(@alignCast(used))));
             }
     }
 

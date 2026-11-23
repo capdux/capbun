@@ -1809,7 +1809,7 @@ pub fn spawnWithArgv(options: *const Options, argv: [*:null]OptCStr, envp: [*:nu
 
 pub fn spawn(options: *const Options) !Maybe(Result) {
             const envp = ((options.envp) orelse ((blk: {
-            break :blk @as([*:null]OptCStr, @ptrCast(std.c.environ));
+            break :blk @as([*:null]OptCStr, @alignCast(@ptrCast(std.c.environ)));
 
 })));
             const argv = options.argv;
@@ -1887,7 +1887,7 @@ return .{ .err = e };
 },
 .result => |proces| proces,
 });
-            Bun__currentSyncPID = (if (no_orphans) (0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid)))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid)))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid))))) else (if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid)));
+            Bun__currentSyncPID = (if (no_orphans) (-(if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid)))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid)))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid))))) else (if (comptime @typeInfo(@TypeOf(process.pid)) == .@"enum") cp_cast_int(i32, @intFromEnum(process.pid)) else cp_cast_int(i32, process.pid)));
             var jc: JobControl = .{};
             _ = &jc;
             const pgid_pushed = (no_orphans and bun.ParentDeathWatchdog.pushSyncPgid(process.pid));
@@ -2319,36 +2319,39 @@ const pid_t = (if (Environment.isPosix) std.posix.pid_t else uv.uv_pid_t);
 const fd_t = (if (Environment.isPosix) std.posix.fd_t else i32);
 const log = bun.Output.scoped(.PROCESS, .visible);
 pub const Rusage = (if (Environment.isWindows) win_rusage else (if (Environment.isFreeBSD) extern struct {
-        utime: std.c.timeval,
-        stime: std.c.timeval,
-        maxrss: isize,
-        ixrss: isize,
-        idrss: isize,
-        isrss: isize,
-        minflt: isize,
-        majflt: isize,
-        nswap: isize,
-        inblock: isize,
-        oublock: isize,
-        msgsnd: isize,
-        msgrcv: isize,
-        nsignals: isize,
-        nvcsw: isize,
-        nivcsw: isize,
-    } else std.posix.rusage));
+    utime: std.c.timeval,
+    stime: std.c.timeval,
+    maxrss: isize,
+    ixrss: isize,
+    idrss: isize,
+    isrss: isize,
+    minflt: isize,
+    majflt: isize,
+    nswap: isize,
+    inblock: isize,
+    oublock: isize,
+    msgsnd: isize,
+    msgrcv: isize,
+    nsignals: isize,
+    nvcsw: isize,
+    nivcsw: isize,
+} else std.posix.rusage));
 pub const PidFDType = (if (Environment.isLinux) fd_t else u0);
 const process_poll_one_shot = (!Environment.isLinux);
 pub const Poller = (if (Environment.isPosix) PollerPosix else PollerWindows);
 pub const WaiterThread = (if (Environment.isPosix) WaiterThreadPosix else struct {
 
-pub inline fn shouldUseWaiterThread() bool {
+pub inline fn shouldUseWaiterThread(self: @This()) bool {
+        _ = self;
             return false;
     }
 
-pub fn setShouldUseWaiterThread() void {
+pub fn setShouldUseWaiterThread(self: @This()) void {
+        _ = self;
     }
 
-pub fn reloadHandlers() void {
+pub fn reloadHandlers(self: @This()) void {
+        _ = self;
     }
 });
 pub const SpawnOptions = (if (Environment.isPosix) PosixSpawnOptions else WindowsSpawnOptions);
@@ -2726,7 +2729,7 @@ pub fn spawnProcessWindows(options: *const WindowsSpawnOptions, argv: [*:null]Op
         const Stdio = WindowsSpawnOptions.Stdio;
         _ = &Stdio;
         const stdio_options: [3]Stdio = .{ options.stdin, options.stdout, options.stderr };
-        var dup_fds: [2]uv.uv_file = .{ (if (comptime @typeInfo(uv.uv_file) == .@"enum") @as(uv.uv_file, @enumFromInt(-1)) else @as(uv.uv_file, -1)), (if (comptime @typeInfo(uv.uv_file) == .@"enum") @as(uv.uv_file, @enumFromInt(-1)) else @as(uv.uv_file, -1)) };
+        var dup_fds: [2]uv.uv_file = .{ (if (comptime @typeInfo(uv.uv_file) == .@"enum" and (@typeInfo(@TypeOf(-1)) == .int or @typeInfo(@TypeOf(-1)) == .comptime_int)) @as(uv.uv_file, @enumFromInt(-1)) else @as(uv.uv_file, -1)), (if (comptime @typeInfo(uv.uv_file) == .@"enum" and (@typeInfo(@TypeOf(-1)) == .int or @typeInfo(@TypeOf(-1)) == .comptime_int)) @as(uv.uv_file, @enumFromInt(-1)) else @as(uv.uv_file, -1)) };
         _ = &dup_fds;
         var dup_src: ?u32 = null;
         _ = &dup_src;

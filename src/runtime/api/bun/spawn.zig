@@ -596,13 +596,13 @@ _ = (blk_catch_6: { break :blk_catch_6 ((posix_actions.openZ(bun.FD.fromNative(a
 
 pub fn waitpid(pid: pid_t, flags: u32) WaitPidMaybe {
             const PidStatus = c_int;
-            var status: PidStatus = (if (comptime @typeInfo(PidStatus) == .@"enum") @as(PidStatus, @enumFromInt(0)) else @as(PidStatus, 0));
+            var status: PidStatus = (if (comptime @typeInfo(PidStatus) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(PidStatus, @enumFromInt(0)) else @as(PidStatus, 0));
             _ = &status;
             while (true) {
-                const rc = system.waitpid(pid, (&status), (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) else @as(c_int, (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))));
+                const rc = system.waitpid(pid, (&status), (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) == .@"enum") cp_cast_int(c_int, @intFromEnum((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) else cp_cast_int(c_int, (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))));
                 switch (errno(rc)) {
 .SUCCESS => {
-return WaitPidMaybe{ .result = .{ .pid = (if (comptime @typeInfo(pid_t) == .@"enum") @as(pid_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else @as(pid_t, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))), .status = @as(u32, @bitCast(status)) } };
+return WaitPidMaybe{ .result = .{ .pid = (if (comptime @typeInfo(pid_t) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .comptime_int)) @as(pid_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else @as(pid_t, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))), .status = @as(u32, @bitCast(status)) } };
 },
 .INTR => {
 _ = continue;
@@ -616,16 +616,16 @@ return (bun.sys.Maybe(PosixWaitPidResult).errnoSys(rc, .waitpid)).?;
 
 pub fn wait4(pid: pid_t, flags: u32, usage: ?*proc.Rusage) WaitPidMaybe {
             const PidStatus = c_int;
-            var status: PidStatus = (if (comptime @typeInfo(PidStatus) == .@"enum") @as(PidStatus, @enumFromInt(0)) else @as(PidStatus, 0));
+            var status: PidStatus = (if (comptime @typeInfo(PidStatus) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(PidStatus, @enumFromInt(0)) else @as(PidStatus, 0));
             _ = &status;
             while (true) {
-                const rc = system.wait4(pid, (&status), (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) else @as(c_int, (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))), (blk: {
+                const rc = system.wait4(pid, (&status), (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) == .@"enum") cp_cast_int(c_int, @intFromEnum((if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))) else cp_cast_int(c_int, (if (comptime @typeInfo(@TypeOf(flags)) == .@"enum") cp_cast_int(i32, @intFromEnum(flags)) else cp_cast_int(i32, flags)))), (blk: {
                 break :blk @ptrCast(usage);
 
 }));
                 switch (errno(rc)) {
 .SUCCESS => {
-return WaitPidMaybe{ .result = .{ .pid = (if (comptime @typeInfo(pid_t) == .@"enum") @as(pid_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else @as(pid_t, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))), .status = @as(u32, @bitCast(status)) } };
+return WaitPidMaybe{ .result = .{ .pid = (if (comptime @typeInfo(pid_t) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) == .comptime_int)) @as(pid_t, @enumFromInt((if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))) else @as(pid_t, (if (comptime @typeInfo(@TypeOf(rc)) == .@"enum") cp_cast_int(i32, @intFromEnum(rc)) else cp_cast_int(i32, rc)))), .status = @as(u32, @bitCast(status)) } };
 },
 .INTR => {
 _ = continue;

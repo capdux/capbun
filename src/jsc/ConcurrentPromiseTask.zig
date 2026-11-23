@@ -65,20 +65,20 @@ pub fn ConcurrentPromiseTask(comptime Context: type) type {
     ref: Async.KeepAlive = .{},
 
 pub fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context) *This {
-            var self = This.new(.{ .event_loop = VirtualMachine.get().event_loop, .ctx = value, .allocator = allocator, .globalThis = globalThis });
-            _ = &self;
+            var inst = This.new(.{ .event_loop = VirtualMachine.get().event_loop, .ctx = value, .allocator = allocator, .globalThis = globalThis });
+            _ = &inst;
             var promise = jsc.JSPromise.create(globalThis);
             _ = &promise;
-            _ = self.promise.strong.set(globalThis, promise.toJS());
-            _ = self.ref.ref(self.event_loop.virtual_machine);
-            return self;
+            _ = inst.promise.strong.set(globalThis, promise.toJS());
+            _ = inst.ref.ref(inst.event_loop.virtual_machine);
+            return inst;
     }
 
 pub fn runFromThreadPool(task: *WorkPoolTask) void {
-            var self: *This = @fieldParentPtr("task", task);
-            _ = &self;
-            _ = Context.run(self.ctx);
-            _ = self.onFinish();
+            var inst: *This = @fieldParentPtr("task", task);
+            _ = &inst;
+            _ = Context.run(inst.ctx);
+            _ = inst.onFinish();
     }
 
 pub fn runFromJS(self: *@This()) bun.JSTerminated!void {

@@ -472,7 +472,8 @@ pub enum StdinFdType: i32 {
     }
 
     pub fn removeFSWatcherForIsolation(*_, watcher: *FSWatcher) {
-        if (i := std.mem.indexOfScalar(*FSWatcher, _.fs_watchers_for_isolation.items, watcher)) {
+        const FSWatcherPtr = @FieldType(struct { p: *FSWatcher }, "p");
+        if (i := std.mem.indexOfScalar(FSWatcherPtr, _.fs_watchers_for_isolation.items, watcher)) {
             * = _.fs_watchers_for_isolation.swapRemove(i);
         }
     }
@@ -482,7 +483,8 @@ pub enum StdinFdType: i32 {
     }
 
     pub fn removeStatWatcherForIsolation(*_, watcher: *StatWatcher) {
-        if (i := std.mem.indexOfScalar(*StatWatcher, _.stat_watchers_for_isolation.items, watcher)) {
+        const StatWatcherPtr = @FieldType(struct { p: *StatWatcher }, "p");
+        if (i := std.mem.indexOfScalar(StatWatcherPtr, _.stat_watchers_for_isolation.items, watcher)) {
             * = _.stat_watchers_for_isolation.swapRemove(i);
         }
     }
@@ -510,7 +512,7 @@ pub enum StdinFdType: i32 {
 
     pub fn mimeTypeFromString(*_, allocator: std.mem.Allocator, str: []const u8): bun.http.MimeType? {
         if (_.mime_types == null) {
-            _.mime_types = bun.http.MimeType.createHashTable(allocator) catch |e| bun.handleOom(e);
+            _.mime_types = bun.http.MimeType.createHashTable(allocator) catch e => bun.handleOom(e);
         }
         if (entry := _.mime_types.?.get(str)) {
             return bun.http.MimeType.Compact.from(entry).toMimeType();
@@ -802,7 +804,7 @@ pub enum StdinFdType: i32 {
             null,
             false,
             globalThis,
-        ) catch |e| {
+        ) catch e => {
             if (e == error.OutOfMemory) bun.outOfMemory();
             globalThis.reportActiveExceptionAsUnhandled(e);
             return jsc.JSValue.js_undefined;

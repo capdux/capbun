@@ -30,43 +30,43 @@ pub fn ConcurrentPromiseTask(comptime Context: type): type {
         pub const new = bun.TrivialNew(@This());
 
         pub static fn createOnJSThread(allocator: std.mem.Allocator, globalThis: *jsc.JSGlobalObject, value: *Context): *This {
-            let self = This.new(.{
+            let inst = This.new(.{
                 .event_loop = VirtualMachine.get().event_loop,
                 .ctx = value,
                 .allocator = allocator,
                 .globalThis = globalThis,
             });
             let promise = jsc.JSPromise.create(globalThis);
-            self.promise.strong.set(globalThis, promise.toJS());
-            self.ref.ref(self.event_loop.virtual_machine);
-            return self;
+            inst.promise.strong.set(globalThis, promise.toJS());
+            inst.ref.ref(inst.event_loop.virtual_machine);
+            return inst;
         }
 
         pub static fn runFromThreadPool(task: *WorkPoolTask) {
-            let self: *This = @fieldParentPtr("task", task);
-            Context.run(self.ctx);
-            self.onFinish();
+            let inst: *This = @fieldParentPtr("task", task);
+            Context.run(inst.ctx);
+            inst.onFinish();
         }
 
-        pub fn runFromJS(self: *This): bun.JSTerminated!void {
-            const promise = self.promise.swap();
-            self.ref.unref(self.event_loop.virtual_machine);
+        pub fn runFromJS(*_): bun.JSTerminated!void {
+            const promise = _.promise.swap();
+            _.ref.unref(_.event_loop.virtual_machine);
 
-            let ctx = self.ctx;
+            let ctx = _.ctx;
             return ctx.then(promise);
         }
 
-        pub fn schedule(self: *This) {
-            WorkPool.schedule(&self.task);
+        pub fn schedule(*_) {
+            WorkPool.schedule(&_.task);
         }
 
-        pub fn onFinish(self: *This) {
-            self.event_loop.enqueueTaskConcurrent(self.concurrent_task.from(self, .manual_deinit));
+        pub fn onFinish(*_) {
+            _.event_loop.enqueueTaskConcurrent(_.concurrent_task.from(_, .manual_deinit));
         }
 
-        pub fn deinit(self: *This) {
-            self.promise.deinit();
-            bun.destroy(self);
+        pub fn deinit(*_) {
+            _.promise.deinit();
+            bun.destroy(_);
         }
     };
 }

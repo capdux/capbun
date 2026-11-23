@@ -198,7 +198,7 @@ pub struct advanced {
         }
     }
 
-    pub inline fn getVersionPacket(): []const u8 {
+    pub static inline fn getVersionPacket(): []const u8 {
         return comptime std.mem.asBytes(&VersionPacket{});
     }
     pub static fn getAckPacket(): []const u8 {
@@ -299,7 +299,7 @@ pub struct json {
         const _g_str = ExternalStringDerefGuard{ ptr: unsafe { &str }, is_ascii: is_ascii, freed: unsafe { &was_ascii_string_freed } };
 
         const parse_res = str.toJSByParseJSON(globalThis);
-        const deserialized = parse_res catch |e| {
+        const deserialized = parse_res catch e => {
             if (e == error.JSError || e == error.JSTerminated) {
                 globalThis.clearException();
                 return IPCDecodeError.InvalidFormat;
@@ -1055,11 +1055,11 @@ pub const SendQueueOwner = IPCSendQueueOwner;
     pub fn windowsConfigureClient(*_, pipe_fd: bun.FD)! {
         log("configureClient", .{});
         const ipc_pipe = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));
-        (ipc_pipe.init(uv.Loop.get(), true).unwrap()) catch |e| {
+        (ipc_pipe.init(uv.Loop.get(), true).unwrap()) catch e => {
             bun.destroy(ipc_pipe);
             return e;
         };
-        (ipc_pipe.open(pipe_fd).unwrap()) catch |e| {
+        (ipc_pipe.open(pipe_fd).unwrap()) catch e => {
             ipc_pipe.closeAndDestroy();
             return e;
         };
@@ -1069,7 +1069,7 @@ pub const SendQueueOwner = IPCSendQueueOwner;
 
         const stream = ipc_pipe.asStream();
 
-        (stream.readStart(_, IPCHandlers.WindowsNamedPipe.onReadAlloc, IPCHandlers.WindowsNamedPipe.onReadError, IPCHandlers.WindowsNamedPipe.onRead).unwrap()) catch |e| {
+        (stream.readStart(_, IPCHandlers.WindowsNamedPipe.onReadAlloc, IPCHandlers.WindowsNamedPipe.onReadError, IPCHandlers.WindowsNamedPipe.onRead).unwrap()) catch e => {
             _.closeSocket(.failure, .user);
             return e;
         };
@@ -1224,7 +1224,7 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
             if (cmd.isString()) {
                 if (!cmd.isCell()) break :handle_message;
                 let has_cmd = true;
-                const cmd_str = bun.String.fromJS(cmd, globalThis) catch |e| brk: {
+                const cmd_str = bun.String.fromJS(cmd, globalThis) catch e => brk: {
                     * = globalThis.takeException(e);
                     has_cmd = false;
                     break :brk bun.String.empty;
@@ -1271,7 +1271,7 @@ fn handleIPCMessage(send_queue: *SendQueue, message: DecodedIPCMessage, globalTh
                 const vm = globalThis.bunVM();
                 vm.eventLoop().enter();
                 defer vm.eventLoop().exit();
-                * = ipcParse(globalThis, target, msg_data, fd.toJS(globalThis)) catch |e| {
+                * = ipcParse(globalThis, target, msg_data, fd.toJS(globalThis)) catch e => {
                     // ack written already, that's okay.
                     globalThis.reportActiveExceptionAsUnhandled(e);
                     return;
@@ -1323,7 +1323,7 @@ fn onData2(send_queue: *SendQueue, all_data: []const u8) {
 
             while (msg := json_buf.next()) {
                 const decode_res = decodeIPCMessage(.json, msg.data, globalThis, msg.newline_pos);
-                const result = decode_res catch |e| {
+                const result = decode_res catch e => {
                     if (e == error.NotEnoughBytes) {
                         log("hit NotEnoughBytes", .{});
                         return;
@@ -1348,7 +1348,7 @@ fn onData2(send_queue: *SendQueue, all_data: []const u8) {
             if (adv_buf.len == 0) {
                 while (true) {
                     const decode_res = decodeIPCMessage(.advanced, data, globalThis, null);
-                    const result = decode_res catch |e| {
+                    const result = decode_res catch e => {
                         if (e == error.NotEnoughBytes) {
                             * = bun.handleOom(adv_buf.write(bun.default_allocator, data));
                             log("hit NotEnoughBytes", .{});
@@ -1378,7 +1378,7 @@ fn onData2(send_queue: *SendQueue, all_data: []const u8) {
             let slice = adv_buf.slice();
             while (true) {
                 const decode_res = decodeIPCMessage(.advanced, slice, globalThis, null);
-                const result = decode_res catch |e| {
+                const result = decode_res catch e => {
                     if (e == error.NotEnoughBytes) {
                         // copy the remaining bytes to the start of the buffer
                         bun.copy(u8, adv_buf.ptr[0..slice.len], slice);
@@ -1562,7 +1562,7 @@ pub struct IPCWindowsNamedPipeHandler {
                 // Process complete messages using next() - avoids O(n²) re-scanning
                 while (msg := json_buf.next()) {
                     const decode_res = decodeIPCMessage(.json, msg.data, globalThis, msg.newline_pos);
-                    const result = decode_res catch |e| {
+                    const result = decode_res catch e => {
                         if (e == error.NotEnoughBytes) {
                             log("hit NotEnoughBytes3", .{});
                             return;
@@ -1590,7 +1590,7 @@ pub struct IPCWindowsNamedPipeHandler {
 
                 while (true) {
                     const decode_res = decodeIPCMessage(.advanced, slice, globalThis, null);
-                    const result = decode_res catch |e| {
+                    const result = decode_res catch e => {
                         if (e == error.NotEnoughBytes) {
                             // copy the remaining bytes to the start of the buffer
                             bun.copy(u8, adv_buf.ptr[0..slice.len], slice);

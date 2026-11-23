@@ -33,7 +33,7 @@ fn is_cp_result(comptime __T: type) bool {
     return @typeInfo(__T) == .@"union" and @hasDecl(__T, "__IS_CP_RESULT");
 }
 comptime {
-    const cow_size = (@sizeOf(CowSlice(u8)) - (if (cow_str_assertions) @sizeOf(OptionalType(*DebugData)) else 0));
+    const cow_size = (@sizeOf(CowSlice(u8)) - (if (cow_str_assertions) @sizeOf(?DebugDataPtr) else 0));
     _ = &cow_size;
     _ = bun.assertf((cow_size == @sizeOf(string)), "CowSlice should be the same size as a native slice, but it was {d} bytes instead of {d}", .{ cow_size, @sizeOf(string) });
 
@@ -98,7 +98,10 @@ const allocation_scope = bun.allocators.allocation_scope;
 const AllocationScope = allocation_scope.AllocationScope;
 const CowSliceLen = @Type(.{ .int = .{ .bits = (@bitSizeOf(usize) - 1), .signedness = .unsigned } });
 const DebugData = (if (cow_str_assertions) CowDebugData else void);
-const DebugField = (if (cow_str_assertions) OptionalType(*DebugData) else void);
+const DebugDataPtr = @FieldType(struct {
+    p: *DebugData,
+}, "p");
+const DebugField = (if (cow_str_assertions) ?DebugDataPtr else void);
 
 pub fn OptionalType(comptime T: type) type {
         return @Type(.{ .optional = .{ .child = T } });
@@ -274,7 +277,7 @@ pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             return try writer.writeAll(self.slice());
     }
 
-pub fn deinit(self: *const @This(), allocator: Allocator) void {
+pub fn deinit(self: @This(), allocator: Allocator) void {
             if (comptime cow_str_assertions) {
                 if (self.debug) |debug| {
                     _ = &debug;

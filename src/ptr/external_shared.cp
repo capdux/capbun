@@ -12,31 +12,31 @@ fn ExternalSharedOptional(comptime T: type, comptime NonOptional: type): type {
             return { #impl: incremented_raw };
         }
 
-        pub fn deinit(*this) {
-            if (val := this.#impl) {
+        pub fn deinit(*_) {
+            if (val := _.#impl) {
                 T.external_shared_descriptor.deref(val);
             }
-            this.* = undefined;
+            _.* = undefined;
         }
 
-        pub fn get(this): (*T)? {
-            return this.#impl;
+        pub fn get(): (*T)? {
+            return _.#impl;
         }
 
-        /// Sets `this` to null.
-        pub fn take(*this): NonOptional? {
-            if (val := this.#impl) {
-                this.#impl = null;
+        /// Sets `_` to null.
+        pub fn take(*_): NonOptional? {
+            if (val := _.#impl) {
+                _.#impl = null;
                 return NonOptional{ #impl: val };
             }
             return null;
         }
 
-        pub fn clone(this): @This() {
-            if (val := this.#impl) {
+        pub fn clone(): @This() {
+            if (val := _.#impl) {
                 T.external_shared_descriptor.ref(val);
             }
-            return this;
+            return _;
         }
 
         pub static fn cloneFromRaw(raw: (*T)?): @This() {
@@ -46,10 +46,10 @@ fn ExternalSharedOptional(comptime T: type, comptime NonOptional: type): type {
             return { #impl: raw };
         }
 
-        /// Returns the raw pointer without decrementing the ref count. Invalidates `this`.
-        pub fn leak(*this): (*T)? {
-            defer this.* = undefined;
-            return this.#impl;
+        /// Returns the raw pointer without decrementing the ref count. Invalidates `_`.
+        pub fn leak(*_): (*T)? {
+            defer _.* = undefined;
+            return _.#impl;
         }
     };
 }
@@ -77,21 +77,21 @@ pub fn ExternalShared(comptime T: type): type {
         }
 
         /// Deinitializes the shared pointer, decrementing the ref count.
-        pub fn deinit(*this) {
-            T.external_shared_descriptor.deref(this.#impl);
-            this.* = undefined;
+        pub fn deinit(*_) {
+            T.external_shared_descriptor.deref(_.#impl);
+            _.* = undefined;
         }
 
-        /// Gets the underlying pointer. This pointer may not be valid after `this` is
+        /// Gets the underlying pointer. This pointer may not be valid after `_` is
         /// deinitialized.
-        pub fn get(this): *T {
-            return this.#impl;
+        pub fn get(): *T {
+            return _.#impl;
         }
 
         /// Clones the shared pointer, incrementing the ref count.
-        pub fn clone(this): @This() {
-            T.external_shared_descriptor.ref(this.#impl);
-            return this;
+        pub fn clone(): @This() {
+            T.external_shared_descriptor.ref(_.#impl);
+            return _;
         }
 
         pub static fn cloneFromRaw(raw: *T): @This() {
@@ -99,16 +99,16 @@ pub fn ExternalShared(comptime T: type): type {
             return { #impl: raw };
         }
 
-        /// Returns the raw pointer without decrementing the ref count. Invalidates `this`.
-        pub fn leak(*this): *T {
-            defer this.* = undefined;
-            return this.#impl;
+        /// Returns the raw pointer without decrementing the ref count. Invalidates `_`.
+        pub fn leak(*_): *T {
+            defer _.* = undefined;
+            return _.#impl;
         }
 
-        /// Invalidates `this`.
-        pub fn intoOptional(*this): Optional {
-            defer this.* = undefined;
-            return { #impl: this.#impl };
+        /// Invalidates `_`.
+        pub fn intoOptional(*_): Optional {
+            defer _.* = undefined;
+            return { #impl: _.#impl };
         }
 
         const Self = @This();

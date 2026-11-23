@@ -153,7 +153,7 @@ pub fn convertFromExtern(extern_value: ExternType) ZigType {
                 return Child.convertOptionalFromExtern(extern_value);
             }
             if ((extern_value.tag == 0)) {
-                return (if (comptime @typeInfo(ZigType) == .@"enum") @as(ZigType, @enumFromInt(null)) else @as(ZigType, null));
+                return (if (comptime @typeInfo(ZigType) == .@"enum" and (@typeInfo(@TypeOf(null)) == .int or @typeInfo(@TypeOf(null)) == .comptime_int)) @as(ZigType, @enumFromInt(null)) else @as(ZigType, null));
             }
             _ = bun.assert_eql(extern_value.tag, 1);
             return Child.convertFromExtern(@field(extern_value.data, "1"));
@@ -196,9 +196,9 @@ pub fn ExternTaggedUnion(comptime field_types: []const type) type {
             _ = @compileError("too many union fields");
         }
         return extern struct {
-        data: ExternUnion(field_types),
-        tag: u8,
-    };
+    data: ExternUnion(field_types),
+    tag: u8,
+};
 }
 
 pub fn ExternUnion(comptime field_types: []const type) type {
@@ -279,10 +279,10 @@ pub fn convertFromExtern(extern_value: ExternType) ZigType {
 
 pub fn ExternArrayList(comptime Child: type) type {
         return extern struct {
-        data: ?[*]Child,
-        length: c_uint,
-        capacity: c_uint,
-    };
+    data: ?[*]Child,
+    length: c_uint,
+    capacity: c_uint,
+};
 }
 
 pub fn BindgenExternalShared(comptime T: type) type {

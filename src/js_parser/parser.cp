@@ -1113,7 +1113,7 @@ pub fn newLazyExportASTImpl(
         expr,
         runtime_api_call,
         symbols,
-    ) catch |e| {
+    ) catch e => {
         if (temp_log.errors == 0) {
             log_to_copy_into.addRangeError(source, parser.lexer.range(), @errorName(e)) catch unreachable;
         }

@@ -43,7 +43,7 @@ pub struct TimeoutImpl {
 
     const create = bun.TrivialNew(TimeoutImpl);
 
-    fn init(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64): *TimeoutImpl {
+    static fn init(vm: *jsc.VirtualMachine, signal_: *AbortSignal, milliseconds: u64): *TimeoutImpl {
         let timeout_inst: *TimeoutImpl = create(.{
             signal: signal_,
             generation: vm.test_isolation_generation,
@@ -155,7 +155,7 @@ pub struct TimeoutImpl {
             static fn callback(
                 ptr: *!?,
                 reason: JSValue,
-            ) callconv(.c) void {
+            ) callconv(.c)  {
                 const val = bun.cast(*Context, ptr.?);
                 call(val, reason);
             }

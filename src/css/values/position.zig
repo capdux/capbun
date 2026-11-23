@@ -404,74 +404,82 @@ pub fn eql(self: @This(), other: *const @This()) bool {
 
 pub fn PositionComponent(comptime S: type) type {
         return union(enum) {
-        /// The `center` keyword.
-        center,
-        /// A length or percentage from the top-left corner of the box.
-        length: LengthPercentage,
-        /// A side keyword with an optional offset.
-        side: PositionComponentSide(S),
+    center: void,
+    length: LengthPercentage,
+    side: PositionComponentSide(S),
 
-        const This = @This();
-
-        pub fn isZero(this: *const This) bool {
-            if (this.* == .length and this.length.isZero()) return true;
+pub fn isZero(self: @This()) bool {
+            if (((self == .length) and self.length.isZero())) {
+                return true;
+            }
             return false;
-        }
+    }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
-        }
+pub fn deepClone(self: @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
+    }
 
-        pub fn eql(this: *const This, other: *const This) bool {
-            return css.implementEql(@This(), this, other);
-        }
+pub fn eql(self: @This(), other: *const This) bool {
+            return css.implementEql(@This(), (&self), other);
+    }
 
-        pub fn parse(input: *css.Parser) Result(This) {
+pub fn parse(input: *css.Parser) Result(This) {
             if (input.tryParse(parseCenterIdent, .{}).isOk()) {
                 return .{ .result = .center };
             }
-
             if (input.tryParse(LengthPercentage.parse, .{}).asValue()) |lp| {
+                _ = &lp;
                 return .{ .result = .{ .length = lp } };
             }
-
-            const side = switch (S.parse(input)) {
-                .result => |vv| vv,
-                .err => |e| return .{ .err = e },
-            };
+            const side = (switch (S.parse(input)) {
+.result => |vv| vv,
+.err => |e| {
+return .{ .err = e };
+},
+});
             const offset = input.tryParse(LengthPercentage.parse, .{}).asValue();
             return .{ .result = .{ .side = .{ .side = side, .offset = offset } } };
-        }
+    }
 
-        pub fn toCss(this: *const @This(), dest: *css.Printer) css.PrintErr!void {
-            switch (this.*) {
-                .center => {
-                    if (dest.minify) {
-                        try dest.writeStr("50%");
-                    } else {
-                        try dest.writeStr("center");
-                    }
-                },
-                .length => |*lp| try lp.toCss(dest),
-                .side => |*s| {
-                    try s.side.toCss(dest);
-                    if (s.offset) |lp| {
-                        try dest.writeStr(" ");
-                        try lp.toCss(dest);
-                    }
-                },
+pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
+            switch (self) {
+.center => {
+if (dest.minify) {
+                _ = try dest.writeStr("50%");
+            } else {
+                _ = try dest.writeStr("center");
             }
-        }
+},
+.length => |*lp| {
+_ = try lp.toCss(dest);
+},
+.side => |*s| {
+_ = try s.side.toCss(dest);
+            if (s.offset) |lp| {
+                _ = &lp;
+                _ = try dest.writeStr(" ");
+                _ = try lp.toCss(dest);
+            }
+},
+}
+    }
 
-        pub fn isCenter(this: *const This) bool {
-            switch (this.*) {
-                .center => return true,
-                .length => |*l| {
-                    if (l.* == .percentage) return l.percentage.v == 0.5;
-                },
-                else => {},
+pub fn isCenter(self: @This()) bool {
+            switch (self) {
+.center => {
+return true;
+},
+.length => |*l| {
+if ((l.* == .percentage)) {
+                return (l.percentage.v == 0.5);
             }
+},
+else => {
+
+},
+}
             return false;
-        }
-    };
+    }
+    const This = @This();
+};
 }

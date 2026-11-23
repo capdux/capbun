@@ -14,7 +14,7 @@ export struct HeaderList {
     list: []Header = *EMPTY_HEADERS,
 
     pub fn get(name: string): string? {
-        for (header of this.list) {
+        for (header of _.list) {
             if (strings.eqlCaseInsensitiveASCII(header.name, name, true)) {
                 return header.value;
             }
@@ -24,7 +24,7 @@ export struct HeaderList {
 
     pub fn getIfOtherIsAbsent(name: string, other: string): string? {
         let value: string? = null;
-        for (header of this.list) {
+        for (header of _.list) {
             if (strings.eqlCaseInsensitiveASCII(header.name, other, true)) {
                 return null;
             }
@@ -42,7 +42,7 @@ export struct HeaderCURLFormatter {
     header: Header,
 
     pub fn format(writer: *std.Io.Writer): ! {
-        const header = this.header;
+        const header = _.header;
         if (header.value.len > 0) {
             writer.print("-H \"{s}: {s}\"", [header.name, header.value])?;
         } else {
@@ -64,29 +64,29 @@ export struct Header {
 
     pub fn format(writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
-            if (this.isMultiline()) {
-                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}", true)), [this.value])?;
+            if (_.isMultiline()) {
+                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}", true)), [_.value])?;
             } else {
-                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}<r><d>: <r>{s}", true)), [this.name, this.value])?;
+                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}<r><d>: <r>{s}", true)), [_.name, _.value])?;
             }
         } else {
-            if (this.isMultiline()) {
-                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}", false)), [this.value])?;
+            if (_.isMultiline()) {
+                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}", false)), [_.value])?;
             } else {
-                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}<r><d>: <r>{s}", false)), [this.name, this.value])?;
+                writer.print(@comptime(Output.prettyFmt("<r><cyan>{s}<r><d>: <r>{s}", false)), [_.name, _.value])?;
             }
         }
     }
 
     pub fn count(builder: *StringBuilder) {
-        builder.count(this.name);
-        builder.count(this.value);
+        builder.count(_.name);
+        builder.count(_.value);
     }
 
     pub fn clone(builder: *StringBuilder): Header {
         return Header{
-            name: builder.append(this.name),
-            value: builder.append(this.value),
+            name: builder.append(_.name),
+            value: builder.append(_.value),
         };
     }
 
@@ -116,7 +116,7 @@ export struct RequestCURLFormatter {
     }
 
     pub fn format(writer: *std.Io.Writer): ! {
-        const request = this.request;
+        const request = _.request;
         if (Output.enable_ansi_colors_stderr) {
             * = writer.write(Output.prettyFmt("<r><d>[fetch] $<r> ", true))?;
 
@@ -129,7 +129,7 @@ export struct RequestCURLFormatter {
             writer.print(" -X {s}", [request.method])?;
         }
 
-        if (this.ignore_insecure) {
+        if (_.ignore_insecure) {
             * = writer.writeAll(" -k")?;
         }
 
@@ -150,9 +150,9 @@ export struct RequestCURLFormatter {
             }
         }
 
-        if (this.body.len > 0 && RequestCURLFormatter.isPrintableBody(content_type)) {
+        if (_.body.len > 0 && RequestCURLFormatter.isPrintableBody(content_type)) {
             * = writer.writeAll(" --data-raw ")?;
-            bun.js_printer.writeJSONString(this.body, @typeOf(writer), writer, .utf8)?;
+            bun.js_printer.writeJSONString(_.body, @typeOf(writer), writer, .utf8)?;
         }
     }
 }
@@ -167,7 +167,7 @@ export struct Request {
     bytes_read: u32 = 0,
 
     pub fn curl(ignore_insecure: bool, body: []const u8): RequestCURLFormatter {
-        const r = this;
+        const r = _;
         return RequestCURLFormatter{
             request: r,
             ignore_insecure: ignore_insecure,
@@ -177,16 +177,16 @@ export struct Request {
 
     pub fn clone(out_headers: []Header, builder: *StringBuilder): Request {
         let i: usize = 0;
-        while (i < this.headers.len) : (i += 1) {
-            out_headers[i] = this.headers[i].clone(builder);
+        while (i < _.headers.len) : (i += 1) {
+            out_headers[i] = _.headers[i].clone(builder);
         }
 
         return Request{
-            method: builder.append(this.method),
-            path: builder.append(this.path),
-            minor_version: this.minor_version,
+            method: builder.append(_.method),
+            path: builder.append(_.path),
+            minor_version: _.minor_version,
             headers: out_headers,
-            bytes_read: this.bytes_read,
+            bytes_read: _.bytes_read,
         };
     }
 
@@ -194,8 +194,8 @@ export struct Request {
         if (Output.enable_ansi_colors_stderr) {
             * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
         }
-        writer.print("> HTTP/1.1 {s} {s}\n", [this.method, this.path])?;
-        for (header of this.headers) {
+        writer.print("> HTTP/1.1 {s} {s}\n", [_.method, _.path])?;
+        for (header of _.headers) {
             if (Output.enable_ansi_colors_stderr) {
                 * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
             }
@@ -247,15 +247,15 @@ struct StatusCodeFormatter {
 
     pub fn format(writer: *std.Io.Writer): ! {
         if (Output.enable_ansi_colors_stderr) {
-            if (this.code == 101 || (this.code >= 200 && this.code <= 299)) {
-                writer.print(@comptime(Output.prettyFmt("<r><green>{d}<r>", true)), [this.code])?;
-            } else if (this.code >= 300 && this.code <= 399) {
-                writer.print(@comptime(Output.prettyFmt("<r><yellow>{d}<r>", true)), [this.code])?;
+            if (_.code == 101 || (_.code >= 200 && _.code <= 299)) {
+                writer.print(@comptime(Output.prettyFmt("<r><green>{d}<r>", true)), [_.code])?;
+            } else if (_.code >= 300 && _.code <= 399) {
+                writer.print(@comptime(Output.prettyFmt("<r><yellow>{d}<r>", true)), [_.code])?;
             } else {
-                writer.print(@comptime(Output.prettyFmt("<r><red>{d}<r>", true)), [this.code])?;
+                writer.print(@comptime(Output.prettyFmt("<r><red>{d}<r>", true)), [_.code])?;
             }
         } else {
-            writer.print("{d}", [this.code])?;
+            writer.print("{d}", [_.code])?;
         }
     }
 }
@@ -276,12 +276,12 @@ export struct Response {
             "< {f} {s}\n",
             [
                 StatusCodeFormatter{
-                    code: this.status_code,
+                    code: _.status_code,
                 },
-                this.status,
+                _.status,
             ],
         )?;
-        for (header of this.headers.list) {
+        for (header of _.headers.list) {
             if (Output.enable_ansi_colors_stderr) {
                 * = writer.write(Output.prettyFmt("<r><d>[fetch]<r> ", true))?;
             }
@@ -292,25 +292,25 @@ export struct Response {
     }
 
     pub fn count(builder: *StringBuilder) {
-        builder.count(this.status);
+        builder.count(_.status);
 
-        for (header of this.headers.list) {
+        for (header of _.headers.list) {
             header.count(builder);
         }
     }
 
     pub fn clone(out_headers: []Header, builder: *StringBuilder): Response {
         let i: usize = 0;
-        while (i < this.headers.list.len) : (i += 1) {
-            out_headers[i] = this.headers.list[i].clone(builder);
+        while (i < _.headers.list.len) : (i += 1) {
+            out_headers[i] = _.headers.list[i].clone(builder);
         }
 
         return Response{
-            minor_version: this.minor_version,
-            status_code: this.status_code,
-            status: builder.append(this.status),
-            headers: HeaderList{ list: out_headers[0..this.headers.list.len] },
-            bytes_read: this.bytes_read,
+            minor_version: _.minor_version,
+            status_code: _.status_code,
+            status: builder.append(_.status),
+            headers: HeaderList{ list: out_headers[0.._.headers.list.len] },
+            bytes_read: _.bytes_read,
         };
     }
 
@@ -369,7 +369,7 @@ export struct Headers {
     headers: []const Header,
 
     pub fn format(writer: *std.Io.Writer): ! {
-        for (header of this.headers) {
+        for (header of _.headers) {
             writer.print("{s}: {s}\r\n", [header.name, header.value])?;
         }
     }

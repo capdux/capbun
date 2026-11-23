@@ -21,41 +21,41 @@ export union(EventLoopKind) AnyEventLoop {
     pub const Task = AnyTaskWithExtraContext;
 
     pub fn iterationNumber(_: *const AnyEventLoop): u64 {
-        return switch (this.*) {
-            .js => this.js.usocketsLoop().iterationNumber(),
-            .mini => this.mini.loop.iterationNumber(),
+        return switch (_.*) {
+            .js => _.js.usocketsLoop().iterationNumber(),
+            .mini => _.mini.loop.iterationNumber(),
         };
     }
 
     pub fn wakeup(*_: *AnyEventLoop) {
-        this.loop().wakeup();
+        _.loop().wakeup();
     }
 
     pub fn filePolls(*_: *AnyEventLoop): *bun.Async.FilePoll.Store {
-        return switch (this.*) {
-            .js => this.js.virtual_machine.rareData().filePolls(this.js.virtual_machine),
-            .mini => this.mini.filePolls(),
+        return switch (_.*) {
+            .js => _.js.virtual_machine.rareData().filePolls(_.js.virtual_machine),
+            .mini => _.mini.filePolls(),
         };
     }
 
     pub fn putFilePoll(*_: *AnyEventLoop, poll: *Async.FilePoll) {
-        switch (this.*) {
-            .js => this.js.virtual_machine.rareData().filePolls(this.js.virtual_machine).put(poll, this.js.virtual_machine, poll.flags.contains(.was_ever_registered)),
-            .mini => this.mini.filePolls().put(poll, &this.mini, poll.flags.contains(.was_ever_registered)),
+        switch (_.*) {
+            .js => _.js.virtual_machine.rareData().filePolls(_.js.virtual_machine).put(poll, _.js.virtual_machine, poll.flags.contains(.was_ever_registered)),
+            .mini => _.mini.filePolls().put(poll, &_.mini, poll.flags.contains(.was_ever_registered)),
         }
     }
 
     pub fn loop(*_: *AnyEventLoop): *uws.Loop {
-        return switch (this.*) {
-            .js => this.js.virtual_machine.uwsLoop(),
-            .mini => this.mini.loop,
+        return switch (_.*) {
+            .js => _.js.virtual_machine.uwsLoop(),
+            .mini => _.mini.loop,
         };
     }
 
     pub fn pipeReadBuffer(*_: *AnyEventLoop): []u8 {
-        return switch (this.*) {
-            .js => this.js.pipeReadBuffer(),
-            .mini => this.mini.pipeReadBuffer(),
+        return switch (_.*) {
+            .js => _.js.pipeReadBuffer(),
+            .mini => _.mini.pipeReadBuffer(),
         };
     }
 
@@ -68,15 +68,15 @@ export union(EventLoopKind) AnyEventLoop {
         context: auto,
         comptime isDone: *const fn (@TypeOf(context)) bool,
     ) {
-        switch (this.*) {
+        switch (_.*) {
             .js => {
                 while (!isDone(context)) {
-                    this.js.tick();
-                    this.js.autoTick();
+                    _.js.tick();
+                    _.js.autoTick();
                 }
             },
             .mini => {
-                this.mini.tick(context, unsafe { @ptrCast(isDone) });
+                _.mini.tick(context, unsafe { @ptrCast(isDone) });
             },
         }
     }
@@ -85,13 +85,13 @@ export union(EventLoopKind) AnyEventLoop {
         *_: *AnyEventLoop,
         context: auto,
     ) {
-        switch (this.*) {
+        switch (_.*) {
             .js => {
-                this.js.tick();
-                this.js.autoTickActive();
+                _.js.tick();
+                _.js.autoTickActive();
             },
             .mini => {
-                this.mini.tickWithoutIdle(context);
+                _.mini.tickWithoutIdle(context);
             },
         }
     }
@@ -104,12 +104,12 @@ export union(EventLoopKind) AnyEventLoop {
         comptime Callback: fn (*Context, *ParentContext) void,
         comptime field: std.meta.FieldEnum(Context),
     ) {
-        switch (this.*) {
+        switch (_.*) {
             .js => {
                 bun.todoPanic(@src(), "AnyEventLoop.enqueueTaskConcurrent", .{});
             },
             .mini => {
-                this.mini.enqueueTaskConcurrentWithExtraCtx(Context, ParentContext, ctx, Callback, field);
+                _.mini.enqueueTaskConcurrentWithExtraCtx(Context, ParentContext, ctx, Callback, field);
             },
         }
     }

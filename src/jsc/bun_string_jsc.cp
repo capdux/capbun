@@ -271,7 +271,7 @@ pub struct UnicodeTestingAPIs {
         const bytes = array_buffer.byteSlice();
 
         const allocator = bun.default_allocator;
-        const result = strings.toUTF16AllocForReal(allocator, bytes, false, true) catch |e| {
+        const result = strings.toUTF16AllocForReal(allocator, bytes, false, true) catch e => {
             return globalThis.throwError(e, "toUTF16AllocForReal failed");
         };
         const _result_guard = FreeZGuard<u16>{ allocator: allocator, slice: result };

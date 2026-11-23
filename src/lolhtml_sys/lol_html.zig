@@ -914,7 +914,7 @@ pub fn callback(container: *Container, user_data: ?*anyopaque) callconv(.c) Dire
             _ = auto_disable();
             {
                 const ud = @as(*UserDataType, @ptrCast(@alignCast(user_data.?)));
-                return @as(Directive, @enumFromInt((if (comptime @typeInfo(c_uint) == .@"enum") @as(c_uint, @enumFromInt(@intFromBool(Callback(ud, container)))) else @as(c_uint, @intFromBool(Callback(ud, container))))));
+                return @as(Directive, @enumFromInt((if (comptime @typeInfo(@TypeOf(@intFromBool(Callback(ud, container)))) == .@"enum") cp_cast_int(c_uint, @intFromEnum(@intFromBool(Callback(ud, container)))) else cp_cast_int(c_uint, @intFromBool(Callback(ud, container))))));
             }
     }
 }).callback;

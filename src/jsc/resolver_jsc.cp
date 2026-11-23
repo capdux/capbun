@@ -68,7 +68,7 @@ pub fn nodeModulePathsJSValue(in_str: bun.String, globalObject: *bun.jsc.JSGloba
                     root_path,
                     it.buffer[0 .. it_idx + part.len],
                 },
-            ) catch |e| bun.handleOom(e)) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e)) catch e => bun.handleOom(e);
         }
     }
 
@@ -79,7 +79,7 @@ pub fn nodeModulePathsJSValue(in_str: bun.String, globalObject: *bun.jsc.JSGloba
     list.val.append(bun.String.createFormat(
         "{s}" ++ std.fs.path.sep_str ++ "node_modules",
         .{root_path},
-    ) catch |e| bun.handleOom(e)) catch |e| bun.handleOom(e);
+    ) catch e => bun.handleOom(e)) catch e => bun.handleOom(e);
 
     return bun.String.toJSArray(globalObject, list.val.items) catch .zero;
 }

@@ -146,8 +146,8 @@ type InitializeCallback = *const @TypeOf(_initCbProto);
 
     static fn Initializer(comptime Ctx: type, comptime func: fn (*Ctx, obj: *JSObject, global: *JSGlobalObject) bun.JSError!void): type {
         return struct {
-            @callconv("c") pub fn call(this_ctx: *!, obj: *JSObject, global: *JSGlobalObject) {
-                func(@ptrCast(@alignCast(this_ctx)), obj, global) catch |e| bun.jsc.host_fn.voidFromJSError(e, global);
+            @callconv("c") pub static fn call(this_ctx: *!, obj: *JSObject, global: *JSGlobalObject) {
+                func(@ptrCast(@alignCast(this_ctx)), obj, global) catch e => bun.jsc.host_fn.voidFromJSError(e, global);
             }
         };
     }

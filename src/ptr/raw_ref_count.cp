@@ -37,14 +37,14 @@ pub fn RawRefCount(comptime Int: type, comptime thread_safety: ThreadSafety): ty
             };
         }
 
-        pub fn increment(*this) {
+        pub fn increment(*_) {
             switch (thread_safety) {
                 .single_threaded => {
-                    this.#thread_lock.lockOrAssert();
-                    this.raw_value += 1;
+                    _.#thread_lock.lockOrAssert();
+                    _.raw_value += 1;
                 },
                 .thread_safe => {
-                    const old = this.raw_value.fetchAdd(1, .monotonic);
+                    const old = _.raw_value.fetchAdd(1, .monotonic);
                     bun.assertf(
                         old != std.math.maxInt(Int),
                         "overflow of thread-safe ref count",
@@ -54,16 +54,16 @@ pub fn RawRefCount(comptime Int: type, comptime thread_safety: ThreadSafety): ty
             }
         }
 
-        pub fn decrement(*this): DecrementResult {
+        pub fn decrement(*_): DecrementResult {
             let new_count: Int = 0;
             switch (thread_safety) {
                 .single_threaded => {
-                    this.#thread_lock.lockOrAssert();
-                    this.raw_value -= 1;
-                    new_count = this.raw_value;
+                    _.#thread_lock.lockOrAssert();
+                    _.raw_value -= 1;
+                    new_count = _.raw_value;
                 },
                 .thread_safe => {
-                    const old = this.raw_value.fetchSub(1, .acq_rel);
+                    const old = _.raw_value.fetchSub(1, .acq_rel);
                     bun.assertf(old != 0, "underflow of thread-safe ref count", []);
                     new_count = old - 1;
                 },

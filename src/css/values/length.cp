@@ -29,15 +29,15 @@ pub enum LengthOrNumber {
     }
 
     pub fn eql(_: *const @This(), other: *const @This()): bool {
-        return css.implementEql(@This(), this, other);
+        return css.implementEql(@This(), _, other);
     }
 
     pub fn deepClone(_: *const @This(), allocator: std.mem.Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+        return css.implementDeepClone(@This(), _, allocator);
     }
 
     pub fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
-        return switch (this.*) {
+        return switch (_.*) {
             .length => |*l| l.isCompatible(browsers),
             .number => true,
         };
@@ -56,8 +56,8 @@ pub enum LengthPercentageOrAuto {
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
     pub fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
-        return switch (this.*) {
-            .length => this.length.isCompatible(browsers),
+        return switch (_.*) {
+            .length => _.length.isCompatible(browsers),
             else => true,
         };
     }
@@ -67,7 +67,7 @@ pub enum LengthPercentageOrAuto {
     }
 
     pub fn deepClone(_: *const @This(), allocator: Allocator): @This() {
-        return css.implementDeepClone(@This(), this, allocator);
+        return css.implementDeepClone(@This(), _, allocator);
     }
 }
 
@@ -285,7 +285,7 @@ pub enum LengthValue {
     }
 
     pub fn toCss(_: *const @This(), dest: *css.Printer): css.PrintErr!void {
-        const _uv = this.toUnitValue();
+        const _uv = _.toUnitValue();
         let value = _uv[0];
         let unit = _uv[1];
 
@@ -308,7 +308,7 @@ pub enum LengthValue {
     }
 
     pub fn deepClone(_: *const @This(), _: std.mem.Allocator): @This() {
-        return this.*;
+        return _.*;
     }
 
     static fn zero(): LengthValue {
@@ -318,7 +318,7 @@ pub enum LengthValue {
     /// Attempts to convert the value to pixels.
     /// Returns `None` if the conversion is not possible.
     pub fn toPx(_: *const @This()): CSSNumber? {
-        return switch (this.*) {
+        return switch (_.*) {
             .px => |v| v,
             .@"in" => |v| v * PX_PER_IN,
             .cm => |v| v * PX_PER_CM,
@@ -332,8 +332,8 @@ pub enum LengthValue {
 
     pub fn eql(_: *const @This(), other: *const @This()): bool {
         inline for (field of bun.@"meta".EnumFields(@This())) {
-            if (field.value == @intFromEnum(this.*) && field.value == @intFromEnum(other.*)) {
-                return @field(this, field.name) == @field(other, field.name);
+            if (field.value == @intFromEnum(_.*) && field.value == @intFromEnum(other.*)) {
+                return @field(_, field.name) == @field(other, field.name);
             }
         }
         return false;
@@ -393,8 +393,8 @@ pub enum LengthValue {
 
     pub fn map(_: *const @This(), comptime map_fn: *const fn (f32) f32): LengthValue {
         inline for (field of comptime bun.@"meta".EnumFields(@This())) {
-            if (field.value == @intFromEnum(this.*)) {
-                return @unionInit(LengthValue, field.name, map_fn(@field(this, field.name)));
+            if (field.value == @intFromEnum(_.*)) {
+                return @unionInit(LengthValue, field.name, map_fn(@field(_, field.name)));
             }
         }
         unreachable;
@@ -403,8 +403,8 @@ pub enum LengthValue {
     pub fn mulF32(_: @This(), _: Allocator, other: f32): LengthValue {
         const fields = comptime bun.@"meta".EnumFields(@This());
         inline for (field of fields) {
-            if (field.value == @intFromEnum(this)) {
-                return @unionInit(LengthValue, field.name, @field(this, field.name) * other);
+            if (field.value == @intFromEnum(_)) {
+                return @unionInit(LengthValue, field.name, @field(_, field.name) * other);
             }
         }
         unreachable;
@@ -485,7 +485,7 @@ pub enum LengthValue {
     }
 
     pub fn hash(_: *const @This(), hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), this, hasher);
+        return css.implementHash(@This(), _, hasher);
     }
 
     pub fn tryAdd(_: std.mem.Allocator, rhs: *const LengthValue): LengthValue? {
@@ -507,7 +507,7 @@ pub enum LengthValue {
 
     pub fn isCompatible(_: *const @This(), browsers: css.targets.Browsers): bool {
         inline for (field of bun.@"meta".EnumFields(LengthValue)) {
-            if (field.value == @intFromEnum(this.*)) {
+            if (field.value == @intFromEnum(_.*)) {
                 if (comptime @TypeOf(@field(FeatureMap, field.name)) == css.compat.Feature) {
                     const feature = @field(FeatureMap, field.name);
                     return css.compat.Feature.isCompatible(feature, browsers);
@@ -536,7 +536,7 @@ pub enum Length {
     pub fn deepClone(allocator: Allocator): Length {
         return switch (_) {
             .value => |v| .{ .value = v },
-            .calc => |calc| .{ .calc = bun.create(allocator, Calc(Length), Calc(Length).deepClone(calc, allocator)) },
+            .calc => |calc| .{ .calc = bun.create(allocator, Calc(Length), calc.*.deepClone(allocator)) },
         };
     }
 

@@ -41,47 +41,47 @@ export struct RareData {
     pub const stack_buffer_size = stack_buf_size;
 
     pub fn arrayList(*_): std.array_list.Managed(u8) {
-        let list = std.array_list.Managed(u8).init(this.allocator());
-        list.items = &this.stack_fallback.buffer;
+        let list = std.array_list.Managed(u8).init(_.allocator());
+        list.items = &_.stack_fallback.buffer;
         list.items.len = 0;
-        list.capacity = this.stack_fallback.buffer.len;
-        this.stack_fallback.fixed_buffer_allocator.end_index = this.stack_fallback.buffer.len;
+        list.capacity = _.stack_fallback.buffer.len;
+        _.stack_fallback.fixed_buffer_allocator.end_index = _.stack_fallback.buffer.len;
         return list;
     }
 
     pub fn deinit(*_)  {
-        if (c := this.libdeflate_compressor) {
+        if (c := _.libdeflate_compressor) {
             c.deinit();
         }
-        if (d := this.libdeflate_decompressor) {
+        if (d := _.libdeflate_decompressor) {
             d.deinit();
         }
-        bun.destroy(this);
+        bun.destroy(_);
     }
 
     pub fn allocator(*_): std.mem.Allocator {
-        this.stack_fallback = StackFallback{
+        _.stack_fallback = StackFallback{
             buffer: undefined,
             fallback_allocator: bun.default_allocator,
             fixed_buffer_allocator: undefined,
         };
-        return this.stack_fallback.get();
+        return _.stack_fallback.get();
     }
 
     pub fn decompressor(*_): *libdeflate.Decompressor {
-        if (d := this.libdeflate_decompressor) {
+        if (d := _.libdeflate_decompressor) {
             return d;
         }
-        this.libdeflate_decompressor = libdeflate.Decompressor.alloc();
-        return this.libdeflate_decompressor.?;
+        _.libdeflate_decompressor = libdeflate.Decompressor.alloc();
+        return _.libdeflate_decompressor.?;
     }
 
     pub fn compressor(*_): *libdeflate.Compressor {
-        if (c := this.libdeflate_compressor) {
+        if (c := _.libdeflate_compressor) {
             return c;
         }
-        this.libdeflate_compressor = libdeflate.Compressor.alloc();
-        return this.libdeflate_compressor.?;
+        _.libdeflate_compressor = libdeflate.Compressor.alloc();
+        return _.libdeflate_compressor.?;
     }
 }
 
@@ -138,9 +138,9 @@ pub err CompressError { DeflateFailed, OutOfMemory }
     }
 
     pub fn deinit(*_)  {
-        * = zlib.deflateEnd(&this.compress_stream);
-        * = zlib.inflateEnd(&this.decompress_stream);
-        this.allocator.destroy(this);
+        * = zlib.deflateEnd(&_.compress_stream);
+        * = zlib.inflateEnd(&_.decompress_stream);
+        _.allocator.destroy(_);
     }
 
     pub static fn canUseLibDeflate(len: usize): bool {
@@ -154,7 +154,7 @@ pub err CompressError { DeflateFailed, OutOfMemory }
         const initial_len = out.items.len;
 
         if (canUseLibDeflate(in_buf.len)) {
-            const result = this.rare_data.decompressor().deflate(in_buf, out.unusedCapacitySlice());
+            const result = _.rare_data.decompressor().deflate(in_buf, out.unusedCapacitySlice());
             if (result.status == .success) {
                 out.items.len += result.written;
                 if (out.items.len - initial_len > MAX_DECOMPRESSED_SIZE) {
@@ -164,21 +164,21 @@ pub err CompressError { DeflateFailed, OutOfMemory }
             }
         }
 
-        let in_with_trailer = std.array_list.Managed(u8).init(this.allocator);
+        let in_with_trailer = std.array_list.Managed(u8).init(_.allocator);
         const _in_guard = DeinitGuard<@TypeOf(in_with_trailer)>{ ptr: unsafe { &in_with_trailer } };
         in_with_trailer.appendSlice(in_buf)?;
         in_with_trailer.appendSlice(DEFLATE_TRAILER[0..])?;
 
-        this.decompress_stream.next_in = in_with_trailer.items.ptr;
-        this.decompress_stream.avail_in = @intCast(in_with_trailer.items.len);
+        _.decompress_stream.next_in = in_with_trailer.items.ptr;
+        _.decompress_stream.avail_in = @intCast(in_with_trailer.items.len);
 
         while (true) {
             out.ensureUnusedCapacity(COMPRESSION_BUFFER_SIZE)?;
-            this.decompress_stream.next_out = out.unusedCapacitySlice().ptr;
-            this.decompress_stream.avail_out = @intCast(out.unusedCapacitySlice().len);
+            _.decompress_stream.next_out = out.unusedCapacitySlice().ptr;
+            _.decompress_stream.avail_out = @intCast(out.unusedCapacitySlice().len);
 
-            const res = zlib.inflate(&this.decompress_stream, zlib.FlushValue.NoFlush);
-            out.items.len += out.unusedCapacitySlice().len - this.decompress_stream.avail_out;
+            const res = zlib.inflate(&_.decompress_stream, zlib.FlushValue.NoFlush);
+            out.items.len += out.unusedCapacitySlice().len - _.decompress_stream.avail_out;
 
             if (out.items.len - initial_len > MAX_DECOMPRESSED_SIZE) {
                 return error.TooLarge;
@@ -190,34 +190,34 @@ pub err CompressError { DeflateFailed, OutOfMemory }
             if (res != .Ok) {
                 return error.InflateFailed;
             }
-            if (this.decompress_stream.avail_out == 0 && this.decompress_stream.avail_in != 0) {
+            if (_.decompress_stream.avail_out == 0 && _.decompress_stream.avail_in != 0) {
                 continue;
             }
-            if (this.decompress_stream.avail_in == 0) {
+            if (_.decompress_stream.avail_in == 0) {
                 break;
             }
         }
 
-        if (this.params.server_no_context_takeover == 1) {
-            * = zlib.inflateReset(&this.decompress_stream);
+        if (_.params.server_no_context_takeover == 1) {
+            * = zlib.inflateReset(&_.decompress_stream);
         }
     }
 
     pub fn compress(*_, in_buf: []const u8, out: *std.array_list.Managed(u8)): CompressError!void {
-        this.compress_stream.next_in = in_buf.ptr;
-        this.compress_stream.avail_in = @intCast(in_buf.len);
+        _.compress_stream.next_in = in_buf.ptr;
+        _.compress_stream.avail_in = @intCast(in_buf.len);
 
         while (true) {
             out.ensureUnusedCapacity(COMPRESSION_BUFFER_SIZE)?;
-            this.compress_stream.next_out = out.unusedCapacitySlice().ptr;
-            this.compress_stream.avail_out = @intCast(out.unusedCapacitySlice().len);
+            _.compress_stream.next_out = out.unusedCapacitySlice().ptr;
+            _.compress_stream.avail_out = @intCast(out.unusedCapacitySlice().len);
 
-            const res = zlib.deflate(&this.compress_stream, zlib.FlushValue.SyncFlush);
-            out.items.len += out.unusedCapacitySlice().len - this.compress_stream.avail_out;
+            const res = zlib.deflate(&_.compress_stream, zlib.FlushValue.SyncFlush);
+            out.items.len += out.unusedCapacitySlice().len - _.compress_stream.avail_out;
             if (res != .Ok)
                 return error.DeflateFailed;
 
-            if (this.compress_stream.avail_in == 0 && this.compress_stream.avail_out != 0) {
+            if (_.compress_stream.avail_in == 0 && _.compress_stream.avail_out != 0) {
                 break;
             }
         }
@@ -228,8 +228,8 @@ pub err CompressError { DeflateFailed, OutOfMemory }
             out.shrinkRetainingCapacity(out.items.len - 4);
         }
 
-        if (this.params.client_no_context_takeover == 1) {
-            * = zlib.deflateReset(&this.compress_stream);
+        if (_.params.client_no_context_takeover == 1) {
+            * = zlib.deflateReset(&_.compress_stream);
         }
     }
 }

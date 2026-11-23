@@ -60,8 +60,6 @@ fn cp_eq(a: anytype, b: anytype) bool {
     return a == b;
 }
 fn cp_neq(a: anytype, b: anytype) bool { return !cp_eq(a, b); }
-fn cp_iter_slice(__cp_val: anytype) switch (@typeInfo(@TypeOf(__cp_val))) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => @TypeOf(__cp_val), .one => switch (@typeInfo(__cp_p.child)) { .array => []const @typeInfo(__cp_p.child).array.child, .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) __cp_p.child else @TypeOf(__cp_val), else => @TypeOf(__cp_val), }, else => @TypeOf(__cp_val), }, .array => @TypeOf(__cp_val), else => @TypeOf(__cp_val), } { const __T = @TypeOf(__cp_val); switch (@typeInfo(__T)) { .pointer => |__cp_p| switch (__cp_p.size) { .slice => return __cp_val, .one => switch (@typeInfo(__cp_p.child)) { .array => return __cp_val[0..], .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) return __cp_val.* else return __cp_val, else => return __cp_val, }, else => return __cp_val, }, .array => return __cp_val, else => return __cp_val, } }
-fn cp_mut_slice(__cp_ptr: anytype) switch (@typeInfo(@TypeOf(__cp_ptr.*))) { .array => []@typeInfo(@TypeOf(__cp_ptr.*)).array.child, .pointer => |__cp_p| switch (__cp_p.size) { .slice => []if (@typeInfo(__cp_p.child) == .pointer) @typeInfo(__cp_p.child).pointer.child else __cp_p.child, .one => switch (@typeInfo(__cp_p.child)) { .pointer => |__cp_sub_p| if (__cp_sub_p.size == .slice) []__cp_sub_p.child else @compileError("Cannot mutably iterate over non-collection"), else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), }, else => @compileError("Cannot mutably iterate over non-collection"), } { const __ValT = @TypeOf(__cp_ptr.*); switch (@typeInfo(__ValT)) { .array => return __cp_ptr[0..], .pointer => |__cp_p| switch (__cp_p.size) { .slice => return @constCast(__cp_ptr.*), .one => return @constCast(__cp_ptr.*.*), else => unreachable, }, else => unreachable, } }
 fn cp_shl(val: anytype, shift: anytype) @TypeOf(val) {
     const __T = @TypeOf(val);
     if (comptime @typeInfo(__T) == .comptime_int) return val << shift;
@@ -270,9 +268,9 @@ pub fn Calc(comptime V: type) type {
     function: *MathFunction(V),
 
 pub fn deepClone(self: @This(), allocator: Allocator) This {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| .{ .value = bun.create(allocator, V, (if (needs_deepclone) v.deepClone(allocator) else v.*)) },
-.number => self.*,
+.number => self,
 .sum => |sum| .{ .sum = .{ .left = bun.create(allocator, This, sum.left.deepClone(allocator)), .right = bun.create(allocator, This, sum.right.deepClone(allocator)) } },
 .product => |product| .{ .product = .{ .number = product.number, .expression = bun.create(allocator, This, product.expression.deepClone(allocator)) } },
 .function => |function| .{ .function = bun.create(allocator, MathFunction(V), function.deepClone(allocator)) },
@@ -317,7 +315,7 @@ pub fn deinit(self: *@This(), allocator: Allocator) void {
     }
 
 pub fn eql(self: @This(), other: *const @This()) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |a| {
 return ((other.* == .value) and css.generic.eql(V, a, other.value));
 },
@@ -546,7 +544,11 @@ return .{ .err = e };
             return .{ .result = This{ .function = bun.create(input.allocator(), MathFunction(V), MathFunction(V){ .max = reduced }) } };
 },
 .clamp => {
-const ClosureResult = .{ try This, This, try This };
+const ClosureResult = struct {
+    min: ?This,
+    center: This,
+    max: ?This,
+};
             const Closure = struct {
     ctx: @TypeOf(ctx),
 
@@ -577,7 +579,7 @@ return .{ .err = e };
 return .{ .err = e };
 },
 });
-            return .{ .result = .{ min, center, max } };
+            return .{ .result = .{ .min = min, .center = center, .max = max } };
     }
 
 pub fn parseIdentWrapper(self: *@This(), ident: []const u8) ?This {
@@ -592,11 +594,11 @@ pub fn parseIdentWrapper(self: *@This(), ident: []const u8) ?This {
 return .{ .err = e };
 },
 });
-            var min = clamp_res[0];
+            var min = clamp_res.min;
             _ = &min;
-            var center = clamp_res[1];
+            var center = clamp_res.center;
             _ = &center;
-            var max = clamp_res[2];
+            var max = clamp_res.max;
             _ = &max;
             const cmp = (if ((((max != null) and (max.? == .value)) and (center == .value))) css.generic.partialCmp(V, (if (@typeInfo(@TypeOf(center)) == .@"enum") @intFromEnum(center) else center.value), (if (@typeInfo(@TypeOf(max.?)) == .@"enum") @intFromEnum(max.?) else max.?.value)) else null);
             if (cmp) |cmp_val| {
@@ -658,13 +660,11 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
             return This.parseMathFn(i, @as(void, undefined), @This().rem, mathFunctionRem, self.ctx, parseIdent);
     }
 
-pub fn rem(self: @This(), _: void, a: f32, b: f32) f32 {
-        _ = self;
+pub fn rem(_: void, a: f32, b: f32) f32 {
             return @mod(a, b);
     }
 
-pub fn mathFunctionRem(self: @This(), _: void, a: This, b: This) MathFunction(V) {
-        _ = self;
+pub fn mathFunctionRem(_: void, a: This, b: This) MathFunction(V) {
             return MathFunction(V){ .rem = .{ .dividend = a, .divisor = b } };
     }
 };
@@ -680,13 +680,11 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
             return This.parseMathFn(i, @as(void, undefined), @This().modulo, mathFunctionMod, self.ctx, parseIdent);
     }
 
-pub fn modulo(self: @This(), _: void, a: f32, b: f32) f32 {
-        _ = self;
+pub fn modulo(_: void, a: f32, b: f32) f32 {
             return @mod((@mod(a, b) + b), b);
     }
 
-pub fn mathFunctionMod(self: @This(), _: void, a: This, b: This) MathFunction(V) {
-        _ = self;
+pub fn mathFunctionMod(_: void, a: This, b: This) MathFunction(V) {
             return MathFunction(V){ .mod_ = .{ .dividend = a, .divisor = b } };
     }
 };
@@ -1120,8 +1118,7 @@ pub fn parseTrig(input: *css.Parser, comptime trig_fn_kind: enum {
             }, to_angle: bool, ctx: anytype, comptime parse_ident: *const fn (@TypeOf(ctx), []const u8) ?This) Result(This) {
             const trig_fn = struct {
 
-pub fn run(self: @This(), x: f32) f32 {
-        _ = self;
+pub fn run(x: f32) f32 {
             const mathfn = (comptime (switch (trig_fn_kind) {
 .sin => std.math.sin,
 .cos => std.math.cos,
@@ -1187,8 +1184,7 @@ pub fn parseIdentFn(self: *@This(), ident: []const u8) ?Calc(Angle) {
 pub fn ParseIdentNone(comptime Ctx: type, comptime Value: type) type {
             return struct {
 
-pub fn func(self: @This(), _: Ctx, _: []const u8) ?Calc(Value) {
-        _ = self;
+pub fn func(_: Ctx, _: []const u8) ?Calc(Value) {
             return null;
     }
 };
@@ -1311,9 +1307,9 @@ pub fn parseHypot(allocator: Allocator, args: *ArrayList(This)) Result(?This) {
             _ = &errored;
             var sum: This = first;
             _ = &sum;
-            for (cp_mut_slice(&args.items[i..])) |*arg| {
-                _ = &arg;
-                if (This.applyOp((&sum), (arg.*), allocator, @as(void, undefined), calcHypotApplyOpFn)) |sum_val| {
+            while ((i < args.items.len)) : (i = (i + 1)) {
+                const arg = (&args.items[@as(usize, @intCast(i))]);
+                if (This.applyOp((&sum), arg, allocator, @as(void, undefined), calcHypotApplyOpFn)) |sum_val| {
                     _ = &sum_val;
                     sum = sum_val;
                 } else {
@@ -1341,8 +1337,8 @@ pub fn applyOp(a: *const This, b: *const This, allocator: std.mem.Allocator, ctx
             return null;
     }
 
-pub fn applyMap(self: @This(), allocator: Allocator, comptime op: *const fn (f32) f32) ?This {
-            switch (self.*) {
+pub fn applyMap(this_val: *const This, allocator: Allocator, comptime op: *const fn (f32) f32) ?This {
+            switch (this_val.*) {
 .number => |n| {
 return This{ .number = op(n) };
 },
@@ -1368,7 +1364,7 @@ pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
     }
 
 pub fn toCssImpl(self: @This(), dest: *css.Printer) css.PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| v.toCss(dest),
 .number => |n| CSSNumberFns.toCss((&n), dest),
 .sum => |sum| {
@@ -1397,11 +1393,11 @@ pub fn toCssImpl(self: @This(), dest: *css.Printer) css.PrintErr!void {
                 if ((@abs(num) < 1.0)) {
                     const div = (1.0 / num);
                     _ = try calc.toCss(dest);
-                    _ = dest.delim(try 47, true);
-                    _ = CSSNumberFns.toCss(try (&div), dest);
+                    _ = try dest.delim(47, true);
+                    _ = try CSSNumberFns.toCss((&div), dest);
                 } else {
-                    _ = CSSNumberFns.toCss(try (&num), dest);
-                    _ = dest.delim(try 42, true);
+                    _ = try CSSNumberFns.toCss((&num), dest);
+                    _ = try dest.delim(42, true);
                     _ = try calc.toCss(dest);
                 }
             }
@@ -1413,7 +1409,7 @@ return f.toCss(dest);
     }
 
 pub fn trySign(self: @This()) ?f32 {
-            return (switch (self.*) {
+            return (switch (self) {
 .value => |v| {
 return (if (V == f32) css.signfns.signF32(v) else v.trySign());
 },
@@ -1453,20 +1449,24 @@ else => This{ .product = .{ .number = other, .expression = bun.create(allocator,
 pub fn reduceArgs(allocator: Allocator, args: *ArrayList(This), order: std.math.Order) void {
             var reduced: ArrayList(This) = .{};
             _ = &reduced;
-            for (args.items) |*arg| {
-                _ = &arg;
+            var arg_i: usize = 0;
+            _ = &arg_i;
+            while ((arg_i < args.items.len)) : (arg_i = (arg_i + 1)) {
+                const arg = (&args.items[@as(usize, @intCast(arg_i))]);
                 var found: ??*This = null;
                 _ = &found;
-                switch ((arg.*).*) {
+                switch (arg.*) {
 .value => |val| {
-for (reduced.items) |*b| {
-                    _ = &b;
-                    switch ((b.*).*) {
+var b_i: usize = 0;
+                _ = &b_i;
+                while ((b_i < reduced.items.len)) : (b_i = (b_i + 1)) {
+                    const b = (&reduced.items[@as(usize, @intCast(b_i))]);
+                    switch (b.*) {
 .value => |v| {
 const result = css.generic.partialCmp(V, val, v);
                     if ((result != null)) {
                         if (((result.?) == order)) {
-                            found = (b.*);
+                            found = b;
                             break;
                         } else {
                             found = @as(?*This, null);
@@ -1488,24 +1488,24 @@ else => {
                     _ = &__r;
                     if (__r) |r| {
                         _ = &r;
-                        r.* = (arg.*).*;
-                        (arg.*).* = This{ .number = 420 };
+                        r.* = arg.*;
+                        arg.* = This{ .number = 420 };
                         continue;
                     }
                 } else {
-                    _ = bun.handleOom(reduced.append(allocator, (arg.*).*));
-                    (arg.*).* = This{ .number = 420 };
+                    _ = bun.handleOom(reduced.append(allocator, arg.*));
+                    arg.* = This{ .number = 420 };
                     continue;
                 }
-                _ = (arg.*).deinit(allocator);
-                (arg.*).* = This{ .number = 420 };
+                _ = arg.deinit(allocator);
+                arg.* = This{ .number = 420 };
             }
             _ = css.deepDeinit(This, allocator, args);
             args.* = reduced;
     }
 
 pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .sum => |*args| {
 return (args.left.isCompatible(browsers) and args.right.isCompatible(browsers));
 },
@@ -1550,7 +1550,7 @@ pub fn MathFunction(comptime V: type) type {
     hypot: ArrayList(ThisCalc),
 
 pub fn eql(self: @This(), other: *const @This()) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .calc => |a| {
 return ((other.* == .calc) and a.eql((&other.calc)));
 },
@@ -1585,7 +1585,7 @@ return ((other.* == .hypot) and css.generic.eqlList(ThisCalc, a, (&other.hypot))
     }
 
 pub fn deepClone(self: @This(), allocator: Allocator) @This() {
-            return (switch (self.*) {
+            return (switch (self) {
 .calc => |*calc| .{ .calc = calc.deepClone(allocator) },
 .min => |*min| .{ .min = css.deepClone(ThisCalc, allocator, min) },
 .max => |*max| .{ .max = css.deepClone(ThisCalc, allocator, max) },
@@ -1640,7 +1640,7 @@ _ = css.deepDeinit(ThisCalc, allocator, hyp);
     }
 
 pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
-            return (switch (self.*) {
+            return (switch (self) {
 .calc => |*calc| {
 {
                 _ = try dest.writeStr("calc(");
@@ -1760,7 +1760,7 @@ pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
 
 pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
             const F = css.compat.Feature;
-            return (switch (self.*) {
+            return (switch (self) {
 .calc => |*c| (F.isCompatible(F.calc_function, browsers) and c.isCompatible(browsers)),
 .min => |*m| (F.isCompatible(F.min_function, browsers) and brk: {
             for (m.items) |*arg| {

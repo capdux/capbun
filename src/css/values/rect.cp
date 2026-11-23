@@ -129,8 +129,8 @@ pub fn Rect(comptime T: type): type {
             return css.generic.parse(T, i);
         }
 
-        pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers): bool {
-            return this.top.isCompatible(browsers) && this.right.isCompatible(browsers) && this.bottom.isCompatible(browsers) && this.left.isCompatible(browsers);
+        pub fn isCompatible(browsers: css.targets.Browsers): bool {
+            return _.top.isCompatible(browsers) && _.right.isCompatible(browsers) && _.bottom.isCompatible(browsers) && _.left.isCompatible(browsers);
         }
     };
 }

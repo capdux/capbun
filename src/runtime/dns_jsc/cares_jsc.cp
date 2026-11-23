@@ -147,7 +147,7 @@ pub fn addrInfoToJSArray(addr_info: *c_ares.AddrInfo, globalThis: *jsc.JSGlobalO
             .address = addr_val,
             .ttl = this_node.ttl,
         };
-        const js_res = GetAddrInfo.Result.toJS(&res, globalThis) catch |e| return e;
+        const js_res = GetAddrInfo.Result.toJS(&res, globalThis) catch e => return e;
         array.putIndex(globalThis, j, js_res)?;
         j += 1;
     }
@@ -304,7 +304,7 @@ pub fn txtReplyToJSResponse(reply: *c_ares.struct_ares_txt_reply, parent_allocat
     let i: u32 = 0;
     while (txt != null) {
         const node = txt.?;
-        const js_item = node.toJS(globalThis, allocator) catch |e| return e;
+        const js_item = node.toJS(globalThis, allocator) catch e => return e;
         array.putIndex(globalThis, i, js_item)?;
         txt = node.next;
         i += 1;
@@ -450,7 +450,7 @@ fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, 
     const transformed = if (response.isString())
         (jsc.JSObject.create(.{
             .value = response,
-        }, globalThis) catch |e| return e).toJS()
+        }, globalThis) catch e => return e).toJS()
     else blk: {
         bun.assert(response.isObject());
         break :blk response;
@@ -464,25 +464,25 @@ fn anyReplyAppend(globalThis: *jsc.JSGlobalObject, array: jsc.JSValue, i: *u32, 
         idx += 1;
     }
 
-    const upper_js = bun.String.ascii(&upper).toJS(globalThis) catch |e| return e;
+    const upper_js = bun.String.ascii(&upper).toJS(globalThis) catch e => return e;
     transformed.put(globalThis, "type", upper_js);
-    array.putIndex(globalThis, i.*, transformed) catch |e| return e;
+    array.putIndex(globalThis, i.*, transformed) catch e => return e;
     i.* += 1;
 }
 
 fn anyReplyAppendAll(globalThis: *jsc.JSGlobalObject, allocator: std.mem.Allocator, array: jsc.JSValue, i: *u32, reply: auto, comptime lookup_name: []const u8): void! {
     const response: jsc.JSValue = if (comptime @hasDecl(@TypeOf(reply.*), "toJSForAny"))
-        (reply.toJSForAny(allocator, globalThis, lookup_name) catch |e| return e)
+        (reply.toJSForAny(allocator, globalThis, lookup_name) catch e => return e)
     else
-        (reply.toJSResponse(allocator, globalThis, lookup_name) catch |e| return e);
+        (reply.toJSResponse(allocator, globalThis, lookup_name) catch e => return e);
 
     if (response.isArray()) {
-        let iterator = response.arrayIterator(globalThis) catch |e| return e;
-        while (item := (iterator.next() catch |e| return e)) {
-            anyReplyAppend(globalThis, array, i, item, lookup_name) catch |e| return e;
+        let iterator = response.arrayIterator(globalThis) catch e => return e;
+        while (item := (iterator.next() catch e => return e)) {
+            anyReplyAppend(globalThis, array, i, item, lookup_name) catch e => return e;
         }
     } else {
-        anyReplyAppend(globalThis, array, i, response, lookup_name) catch |e| return e;
+        anyReplyAppend(globalThis, array, i, response, lookup_name) catch e => return e;
     }
 }
 
@@ -497,7 +497,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
             }
         }
         break :blk len;
-    }) catch |e| return e;
+    }) catch e => return e;
 
     let i: u32 = 0;
 
@@ -505,7 +505,7 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
         if (comptime std.mem.endsWith(u8, field.name, "_reply")) {
             if (rep := @field(reply, field.name)) {
                 const lookup_name = field.name[0 .. field.name.len - "_reply".len];
-                anyReplyAppendAll(globalThis, allocator, array, &i, rep, lookup_name) catch |e| return e;
+                anyReplyAppendAll(globalThis, allocator, array, &i, rep, lookup_name) catch e => return e;
             }
         }
     }
@@ -517,9 +517,9 @@ pub fn anyReplyToJS(reply: *c_ares.struct_any_reply, globalThis: *jsc.JSGlobalOb
 pub struct ErrorDeferredRejectContext {
     deferred: *ErrorDeferred,
     globalThis: *jsc.JSGlobalObject,
-    pub fn callback(context: *ErrorDeferredRejectContext): !void {
+    pub static fn callback(context: *ErrorDeferredRejectContext): !void {
         const _ctx_guard = DestroyGuard<ErrorDeferredRejectContext>{ ptr: context };
-        context.deferred.reject(context.globalThis) catch |e| return e;
+        context.deferred.reject(context.globalThis) catch e => return e;
     }
 }
 
@@ -541,46 +541,46 @@ export struct ErrorDeferred {
     }
 
     pub fn reject(*_, globalThis: *jsc.JSGlobalObject): !void {
-        const syscall_arg = this.syscall;
-        const code_full = caresErrorCode(this.errno);
+        const syscall_arg = _.syscall;
+        const code_full = caresErrorCode(_.errno);
         const code_arg = code_full[4..];
-        const msg = if (this.hostname != null) blk: {
-            const host_arg = this.hostname.?;
+        const msg = if (_.hostname != null) blk: {
+            const host_arg = _.hostname.?;
             break :blk bun.handleOom(bun.String.createFormat("{s} {s} {f}", .{ syscall_arg, code_arg, host_arg }));
         } else blk: {
             break :blk bun.handleOom(bun.String.createFormat("{s} {s}", .{ syscall_arg, code_arg }));
         };
 
         const system_error = jsc.SystemError{
-            .errno = @intFromEnum(this.errno),
+            .errno = @intFromEnum(_.errno),
             .code = bun.String.static(code_full),
             .message = msg,
-            .syscall = bun.String.cloneUTF8(this.syscall),
-            .hostname = this.hostname ?? bun.String.empty,
+            .syscall = bun.String.cloneUTF8(_.syscall),
+            .hostname = _.hostname ?? bun.String.empty,
         };
 
-        const instance = system_error.toErrorInstanceWithAsyncStack(globalThis, this.promise.get());
-        const dns_name = bun.String.static("DNSException").toJS(globalThis) catch |e| return e;
+        const instance = system_error.toErrorInstanceWithAsyncStack(globalThis, _.promise.get());
+        const dns_name = bun.String.static("DNSException").toJS(globalThis) catch e => return e;
         instance.put(globalThis, "name", dns_name);
 
-        const _self_guard = DeinitGuard<ErrorDeferred>{ ptr: this };
-        defer this.hostname = null;
-        return this.promise.reject(globalThis, instance);
+        const _self_guard = DeinitGuard<ErrorDeferred>{ ptr: _ };
+        defer _.hostname = null;
+        return _.promise.reject(globalThis, instance);
     }
 
     pub fn rejectLater(*_, globalThis: *jsc.JSGlobalObject) {
         let context = bun.handleOom(bun.default_allocator.create(ErrorDeferredRejectContext));
-        context.deferred = this;
+        context.deferred = _;
         context.globalThis = globalThis;
         globalThis.bunVM().enqueueTask(jsc.ManagedTask.New(ErrorDeferredRejectContext, ErrorDeferredRejectContext.callback).init(context));
     }
 
     pub fn deinit(*_) {
-        if (hostname := this.hostname) {
+        if (hostname := _.hostname) {
             hostname.deref();
         }
-        this.promise.deinit();
-        bun.destroy(this);
+        _.promise.deinit();
+        bun.destroy(_);
     }
 }
 
@@ -633,7 +633,7 @@ pub fn errorToJSWithSyscall(err: c_ares.Error, globalThis: *jsc.JSGlobalObject, 
         .message = bun.handleOom(bun.String.createFormat("{s} {s}", .{ syscall, err_code })),
     };
     const instance = sys_err.toErrorInstance(globalThis);
-    const dns_name = bun.String.static("DNSException").toJS(globalThis) catch |e| return e;
+    const dns_name = bun.String.static("DNSException").toJS(globalThis) catch e => return e;
     instance.put(globalThis, "name", dns_name);
     return instance;
 }
@@ -649,7 +649,7 @@ pub fn errorToJSWithSyscallAndHostname(err: c_ares.Error, globalThis: *jsc.JSGlo
         .hostname = bun.String.cloneUTF8(hostname),
     };
     const instance = sys_err.toErrorInstance(globalThis);
-    const dns_name = bun.String.static("DNSException").toJS(globalThis) catch |e| return e;
+    const dns_name = bun.String.static("DNSException").toJS(globalThis) catch e => return e;
     instance.put(globalThis, "name", dns_name);
     return instance;
 }
@@ -670,7 +670,7 @@ pub fn Bun__canonicalizeIP_(globalThis: *jsc.JSGlobalObject, callframe: *jsc.Cal
     }
     const INET6_ADDRSTRLEN = if (comptime bun.Environment.isWindows) 65 else 46;
 
-    let addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch |e| return e;
+    let addr_arg = arguments[0].toSlice(globalThis, bun.default_allocator) catch e => return e;
     const _addr_guard = DeinitGuard<jsc.ZigString.Slice>{ ptr: &addr_arg };
     const addr_str = addr_arg.slice();
     if (addr_str.len >= INET6_ADDRSTRLEN) {

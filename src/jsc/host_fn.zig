@@ -380,12 +380,13 @@ pub fn voidFromJSError(e: bun.JSError, globalThis: *jsc.JSGlobalObject) void {
 }
 
 pub fn Wrap1Struct(comptime func: anytype) type {
-        const p = checkWrapParams(func, 1);
+        _ = checkWrapParams(func, 1);
         return struct {
-        pub fn wrapped(arg0: p[0].@"type".?) callconv(.c) JSValue {
-            return toJSHostCall(arg0, @src(), func, .{arg0});
-        }
-    };
+
+pub fn wrapped(arg0: *JSGlobalObject) callconv(.c) JSValue {
+            return toJSHostCall(arg0, @src(), func, .{ arg0 });
+    }
+};
 }
 
 pub fn wrap1(comptime func: anytype) @TypeOf(Wrap1Struct(func).wrapped) {
@@ -394,11 +395,13 @@ pub fn wrap1(comptime func: anytype) @TypeOf(Wrap1Struct(func).wrapped) {
 
 pub fn Wrap2Struct(comptime func: anytype) type {
         const p = checkWrapParams(func, 2);
+        const A1 = p[1].@"type".?;
         return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?) callconv(.c) JSValue {
+
+pub fn wrapped(arg0: *JSGlobalObject, arg1: A1) callconv(.c) JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1 });
-        }
-    };
+    }
+};
 }
 
 pub fn wrap2(comptime func: anytype) @TypeOf(Wrap2Struct(func).wrapped) {
@@ -407,11 +410,14 @@ pub fn wrap2(comptime func: anytype) @TypeOf(Wrap2Struct(func).wrapped) {
 
 pub fn Wrap3Struct(comptime func: anytype) type {
         const p = checkWrapParams(func, 3);
+        const A1 = p[1].@"type".?;
+        const A2 = p[2].@"type".?;
         return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?) callconv(.c) JSValue {
+
+pub fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2) callconv(.c) JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2 });
-        }
-    };
+    }
+};
 }
 
 pub fn wrap3(comptime func: anytype) @TypeOf(Wrap3Struct(func).wrapped) {
@@ -420,11 +426,15 @@ pub fn wrap3(comptime func: anytype) @TypeOf(Wrap3Struct(func).wrapped) {
 
 pub fn Wrap4Struct(comptime func: anytype) type {
         const p = checkWrapParams(func, 4);
+        const A1 = p[1].@"type".?;
+        const A2 = p[2].@"type".?;
+        const A3 = p[3].@"type".?;
         return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?, arg3: p[3].@"type".?) callconv(.c) JSValue {
+
+pub fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2, arg3: A3) callconv(.c) JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2, arg3 });
-        }
-    };
+    }
+};
 }
 
 pub fn wrap4(comptime func: anytype) @TypeOf(Wrap4Struct(func).wrapped) {
@@ -433,11 +443,16 @@ pub fn wrap4(comptime func: anytype) @TypeOf(Wrap4Struct(func).wrapped) {
 
 pub fn Wrap5Struct(comptime func: anytype) type {
         const p = checkWrapParams(func, 5);
+        const A1 = p[1].@"type".?;
+        const A2 = p[2].@"type".?;
+        const A3 = p[3].@"type".?;
+        const A4 = p[4].@"type".?;
         return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?, arg3: p[3].@"type".?, arg4: p[4].@"type".?) callconv(.c) JSValue {
+
+pub fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2, arg3: A3, arg4: A4) callconv(.c) JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2, arg3, arg4 });
-        }
-    };
+    }
+};
 }
 
 pub fn wrap5(comptime func: anytype) @TypeOf(Wrap5Struct(func).wrapped) {
@@ -445,11 +460,14 @@ pub fn wrap5(comptime func: anytype) @TypeOf(Wrap5Struct(func).wrapped) {
 }
 
 pub fn checkWrapParams(comptime func: anytype, comptime N: u8) []const std.builtin.Type.Fn.Param {
+        const JSGlobalObjectPtr = @FieldType(struct {
+    p: *JSGlobalObject,
+}, "p");
         const params = @typeInfo(@TypeOf(func)).@"fn".params;
         if ((params.len != N)) {
             _ = @compileError(std.fmt.comptimePrint("arg length mismatch: {d} != {d}", .{ N, params.len }));
         } else {
-            if ((params[0].@"type".? != *JSGlobalObject)) {
+            if ((params[0].@"type".? != JSGlobalObjectPtr)) {
                 _ = @compileError("first arg must be *JSGlobalObject");
             }
         }
@@ -458,11 +476,15 @@ pub fn checkWrapParams(comptime func: anytype, comptime N: u8) []const std.built
 
 pub fn Wrap4vStruct(comptime func: anytype) type {
         const p = checkWrapParams(func, 4);
+        const A1 = p[1].@"type".?;
+        const A2 = p[2].@"type".?;
+        const A3 = p[3].@"type".?;
         return struct {
-        pub fn wrapped(arg0: p[0].@"type".?, arg1: p[1].@"type".?, arg2: p[2].@"type".?, arg3: p[3].@"type".?) callconv(jsc.conv) JSValue {
+
+pub fn wrapped(arg0: *JSGlobalObject, arg1: A1, arg2: A2, arg3: A3) callconv(jsc.conv) JSValue {
             return toJSHostCall(arg0, @src(), func, .{ arg0, arg1, arg2, arg3 });
-        }
-    };
+    }
+};
 }
 
 pub fn wrap4v(comptime func: anytype) @TypeOf(Wrap4vStruct(func).wrapped) {
@@ -514,37 +536,30 @@ pub fn DOMCallResultType(comptime Type: type) []const u8 {
 
 pub fn DOMCall(comptime class_name: []const u8, comptime Container: type, comptime functionName: []const u8, comptime dom_effect: DOMEffect) type {
         return extern struct {
-        const className = class_name;
-        pub const is_dom_call = true;
-        const Slowpath = @field(Container, functionName);
-        const SlowpathType = @TypeOf(@field(Container, functionName));
 
-        pub fn slowpath(
-            globalObject: *jsc.JSGlobalObject,
-            thisValue: jsc.JSValue,
-            arguments_ptr: [*]const jsc.JSValue,
-            arguments_len: usize,
-        ) callconv(jsc.conv) jsc.JSValue {
+pub fn slowpath(self: @This(), globalObject: *jsc.JSGlobalObject, thisValue: jsc.JSValue, arguments_ptr: [*]const jsc.JSValue, arguments_len: usize) callconv(jsc.conv) jsc.JSValue {
+        _ = self;
             return jsc.toJSHostCall(globalObject, @src(), @field(Container, functionName), .{ globalObject, thisValue, arguments_ptr[0..arguments_len] });
-        }
+    }
 
-        pub const fastpath = @field(Container, functionName ++ "WithoutTypeChecks");
-        pub const Fastpath = @TypeOf(fastpath);
-        pub const Arguments = std.@"meta".ArgsTuple(Fastpath);
-        const PutFnType = *const fn(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) callconv(.c) void;
-        const put_fn = @extern(PutFnType, .{ .name = className ++ "__" ++ functionName ++ "__put" });
-
-        pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
-            put_fn(globalObject, value);
-        }
-
-        pub const effect = dom_effect;
-
-        comptime {
-            @export(&slowpath, .{ .name = className ++ "__" ++ functionName ++ "__slowpath" });
-            @export(&fastpath, .{ .name = className ++ "__" ++ functionName ++ "__fastpath" });
-        }
-    };
+pub fn put(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
+            _ = put_fn(globalObject, value);
+    }
+    const className = class_name;
+    pub const is_dom_call = true;
+    const Slowpath = @field(Container, functionName);
+    const SlowpathType = @TypeOf(@field(Container, functionName));
+    pub const fastpath = @field(Container, (functionName ++ "WithoutTypeChecks"));
+    pub const Fastpath = @TypeOf(fastpath);
+    pub const Arguments = std.@"meta".ArgsTuple(Fastpath);
+    const PutFnType = *const fn(globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) callconv(.c) void;
+    const put_fn = @extern(PutFnType, .{ .name = (((className ++ "__") ++ functionName) ++ "__put") });
+    pub const effect = dom_effect;
+    comptime {
+                @export(&slowpath, .{ .name = className ++ "__" ++ functionName ++ "__slowpath" });
+                @export(&fastpath, .{ .name = className ++ "__" ++ functionName ++ "__fastpath" });
+            }
+};
 }
 
 pub fn InstanceMethodType(comptime Container: type) type {
@@ -590,25 +605,28 @@ pub fn method(instance: *Container, globalThis: *jsc.JSGlobalObject, callframe: 
                             @field(args, std.fmt.comptimePrint("{d}", .{ i })) = callframe;
                         } else {
                             if ((ArgType == jsc.Node.StringOrBuffer)) {
-                                const arg = ((iter.nextEat()) orelse {
-                                _ = iter.deinit();
-                                return globalThis.throwInvalidArguments("expected string or buffer", .{});
-});
-                                const __arg_val = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)) orelse {
-                                _ = iter.deinit();
-                                return globalThis.throwInvalidArguments("expected string or buffer", .{});
-});
-                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                const opt_arg = iter.nextEat();
+                                if ((opt_arg == null)) {
+                                    _ = iter.deinit();
+                                    return globalThis.throwInvalidArguments("expected string or buffer", .{});
+                                }
+                                const opt_val = try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), opt_arg.?);
+                                if ((opt_val == null)) {
+                                    _ = iter.deinit();
+                                    return globalThis.throwInvalidArguments("expected string or buffer", .{});
+                                }
+                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                             } else {
                                 if ((ArgType == Optional(jsc.Node.StringOrBuffer))) {
                                     if (iter.nextEat()) |arg| {
                                         _ = &arg;
                                         if ((!arg.isEmptyOrUndefinedOrNull())) {
-                                            const __arg_val = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)) orelse {
-                                            _ = iter.deinit();
-                                            return globalThis.throwInvalidArguments("expected string or buffer", .{});
-});
-                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                            const opt_val = try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg);
+                                            if ((opt_val == null)) {
+                                                _ = iter.deinit();
+                                                return globalThis.throwInvalidArguments("expected string or buffer", .{});
+                                            }
+                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                         } else {
                                             @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                                         }
@@ -619,11 +637,12 @@ pub fn method(instance: *Container, globalThis: *jsc.JSGlobalObject, callframe: 
                                     if ((ArgType == jsc.ArrayBuffer)) {
                                         if (iter.nextEat()) |arg| {
                                             _ = &arg;
-                                            const __arg_val = ((arg.asArrayBuffer(globalThis)) orelse {
-                                            _ = iter.deinit();
-                                            return globalThis.throwInvalidArguments("expected TypedArray", .{});
-});
-                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                            const opt_val = arg.asArrayBuffer(globalThis);
+                                            if ((opt_val == null)) {
+                                                _ = iter.deinit();
+                                                return globalThis.throwInvalidArguments("expected TypedArray", .{});
+                                            }
+                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                         } else {
                                             _ = iter.deinit();
                                             return globalThis.throwInvalidArguments("expected TypedArray", .{});
@@ -632,20 +651,23 @@ pub fn method(instance: *Container, globalThis: *jsc.JSGlobalObject, callframe: 
                                         if ((ArgType == Optional(jsc.ArrayBuffer))) {
                                             if (iter.nextEat()) |arg| {
                                                 _ = &arg;
-                                                const __arg_val = ((arg.asArrayBuffer(globalThis)) orelse {
-                                                _ = iter.deinit();
-                                                return globalThis.throwInvalidArguments("expected TypedArray", .{});
-});
-                                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                                const opt_val = arg.asArrayBuffer(globalThis);
+                                                if ((opt_val == null)) {
+                                                    _ = iter.deinit();
+                                                    return globalThis.throwInvalidArguments("expected TypedArray", .{});
+                                                }
+                                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                             } else {
                                                 @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                                             }
                                         } else {
                                             if ((ArgType == jsc.ZigString)) {
-                                                var string_value = ((eater((&iter))) orelse {
-                                                _ = iter.deinit();
-                                                return globalThis.throwInvalidArguments("Missing argument", .{});
-});
+                                                const opt_str = eater((&iter));
+                                                if ((opt_str == null)) {
+                                                    _ = iter.deinit();
+                                                    return globalThis.throwInvalidArguments("Missing argument", .{});
+                                                }
+                                                var string_value = opt_str.?;
                                                 _ = &string_value;
                                                 if (string_value.isUndefinedOrNull()) {
                                                     _ = iter.deinit();
@@ -665,31 +687,38 @@ pub fn method(instance: *Container, globalThis: *jsc.JSGlobalObject, callframe: 
                                                     }
                                                 } else {
                                                     if ((ArgType == *jsc.WebCore.Response)) {
-                                                        const __arg_val = ((((eater((&iter))) orelse {
-                                                        _ = iter.deinit();
-                                                        return globalThis.throwInvalidArguments("Missing Response object", .{});
-}).@"as"(jsc.WebCore.Response)) orelse {
-                                                        _ = iter.deinit();
-                                                        return globalThis.throwInvalidArguments("Expected Response object", .{});
-});
-                                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                                        const opt_eaten = eater((&iter));
+                                                        if ((opt_eaten == null)) {
+                                                            _ = iter.deinit();
+                                                            return globalThis.throwInvalidArguments("Missing Response object", .{});
+                                                        }
+                                                        const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Response);
+                                                        if ((opt_val == null)) {
+                                                            _ = iter.deinit();
+                                                            return globalThis.throwInvalidArguments("Expected Response object", .{});
+                                                        }
+                                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                                     } else {
                                                         if ((ArgType == *jsc.WebCore.Request)) {
-                                                            const __arg_val = ((((eater((&iter))) orelse {
-                                                            _ = iter.deinit();
-                                                            return globalThis.throwInvalidArguments("Missing Request object", .{});
-}).@"as"(jsc.WebCore.Request)) orelse {
-                                                            _ = iter.deinit();
-                                                            return globalThis.throwInvalidArguments("Expected Request object", .{});
-});
-                                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                                            const opt_eaten = eater((&iter));
+                                                            if ((opt_eaten == null)) {
+                                                                _ = iter.deinit();
+                                                                return globalThis.throwInvalidArguments("Missing Request object", .{});
+                                                            }
+                                                            const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Request);
+                                                            if ((opt_val == null)) {
+                                                                _ = iter.deinit();
+                                                                return globalThis.throwInvalidArguments("Expected Request object", .{});
+                                                            }
+                                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                                         } else {
                                                             if ((ArgType == jsc.JSValue)) {
-                                                                const val = ((eater((&iter))) orelse {
-                                                                _ = iter.deinit();
-                                                                return globalThis.throwInvalidArguments("Missing argument", .{});
-});
-                                                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = val;
+                                                                const opt_val = eater((&iter));
+                                                                if ((opt_val == null)) {
+                                                                    _ = iter.deinit();
+                                                                    return globalThis.throwInvalidArguments("Missing argument", .{});
+                                                                }
+                                                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                                             } else {
                                                                 if ((ArgType == Optional(jsc.JSValue))) {
                                                                     @field(args, std.fmt.comptimePrint("{d}", .{ i })) = eater((&iter));
@@ -752,27 +781,32 @@ pub fn method(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                     @field(args, std.fmt.comptimePrint("{d}", .{ i })) = globalThis;
                 } else {
                     if ((ArgType == jsc.Node.StringOrBuffer)) {
-                        const arg = ((iter.nextEat()) orelse {
-                        _ = iter.deinit();
-                        return globalThis.throwInvalidArguments("expected string or buffer", .{});
-});
-                        const __arg_val = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)) orelse {
-                        _ = iter.deinit();
-                        return globalThis.throwInvalidArguments("expected string or buffer", .{});
-});
-                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                        const opt_arg = iter.nextEat();
+                        if ((opt_arg == null)) {
+                            _ = iter.deinit();
+                            return globalThis.throwInvalidArguments("expected string or buffer", .{});
+                        }
+                        const opt_val = try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), opt_arg.?);
+                        if ((opt_val == null)) {
+                            _ = iter.deinit();
+                            return globalThis.throwInvalidArguments("expected string or buffer", .{});
+                        }
+                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                     } else {
                         if ((ArgType == Optional(jsc.Node.StringOrBuffer))) {
                             if (iter.nextEat()) |arg| {
                                 _ = &arg;
-                                const __arg_val = ((try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)) orelse (brk: {
-                                if (arg.isUndefined()) {
-                                    break :brk null;
+                                if (try jsc.Node.StringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)) |val| {
+                                    _ = &val;
+                                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = val;
+                                } else {
+                                    if (arg.isUndefined()) {
+                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
+                                    } else {
+                                        _ = iter.deinit();
+                                        return globalThis.throwInvalidArguments("expected string or buffer", .{});
+                                    }
                                 }
-                                _ = iter.deinit();
-                                return globalThis.throwInvalidArguments("expected string or buffer", .{});
-}));
-                                @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
                             } else {
                                 @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                             }
@@ -780,11 +814,12 @@ pub fn method(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                             if ((ArgType == jsc.Node.BlobOrStringOrBuffer)) {
                                 if (iter.nextEat()) |arg| {
                                     _ = &arg;
-                                    const __arg_val = ((try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg)) orelse {
-                                    _ = iter.deinit();
-                                    return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
-});
-                                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                    const opt_val = try jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, iter.@"arena".allocator(), arg);
+                                    if ((opt_val == null)) {
+                                        _ = iter.deinit();
+                                        return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
+                                    }
+                                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                 } else {
                                     _ = iter.deinit();
                                     return globalThis.throwInvalidArguments("expected blob, string or buffer", .{});
@@ -793,11 +828,12 @@ pub fn method(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                                 if ((ArgType == jsc.ArrayBuffer)) {
                                     if (iter.nextEat()) |arg| {
                                         _ = &arg;
-                                        const __arg_val = ((arg.asArrayBuffer(globalThis)) orelse {
-                                        _ = iter.deinit();
-                                        return globalThis.throwInvalidArguments("expected TypedArray", .{});
-});
-                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                        const opt_val = arg.asArrayBuffer(globalThis);
+                                        if ((opt_val == null)) {
+                                            _ = iter.deinit();
+                                            return globalThis.throwInvalidArguments("expected TypedArray", .{});
+                                        }
+                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                     } else {
                                         _ = iter.deinit();
                                         return globalThis.throwInvalidArguments("expected TypedArray", .{});
@@ -806,20 +842,23 @@ pub fn method(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                                     if ((ArgType == Optional(jsc.ArrayBuffer))) {
                                         if (iter.nextEat()) |arg| {
                                             _ = &arg;
-                                            const __arg_val = ((arg.asArrayBuffer(globalThis)) orelse {
-                                            _ = iter.deinit();
-                                            return globalThis.throwInvalidArguments("expected TypedArray", .{});
-});
-                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                            const opt_val = arg.asArrayBuffer(globalThis);
+                                            if ((opt_val == null)) {
+                                                _ = iter.deinit();
+                                                return globalThis.throwInvalidArguments("expected TypedArray", .{});
+                                            }
+                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                         } else {
                                             @field(args, std.fmt.comptimePrint("{d}", .{ i })) = null;
                                         }
                                     } else {
                                         if ((ArgType == jsc.ZigString)) {
-                                            var string_value = ((eater((&iter))) orelse {
-                                            _ = iter.deinit();
-                                            return globalThis.throwInvalidArguments("Missing argument", .{});
-});
+                                            const opt_str = eater((&iter));
+                                            if ((opt_str == null)) {
+                                                _ = iter.deinit();
+                                                return globalThis.throwInvalidArguments("Missing argument", .{});
+                                            }
+                                            var string_value = opt_str.?;
                                             _ = &string_value;
                                             if (string_value.isUndefinedOrNull()) {
                                                 _ = iter.deinit();
@@ -839,31 +878,38 @@ pub fn method(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JS
                                                 }
                                             } else {
                                                 if ((ArgType == *jsc.WebCore.Response)) {
-                                                    const __arg_val = ((((eater((&iter))) orelse {
-                                                    _ = iter.deinit();
-                                                    return globalThis.throwInvalidArguments("Missing Response object", .{});
-}).@"as"(jsc.WebCore.Response)) orelse {
-                                                    _ = iter.deinit();
-                                                    return globalThis.throwInvalidArguments("Expected Response object", .{});
-});
-                                                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                                    const opt_eaten = eater((&iter));
+                                                    if ((opt_eaten == null)) {
+                                                        _ = iter.deinit();
+                                                        return globalThis.throwInvalidArguments("Missing Response object", .{});
+                                                    }
+                                                    const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Response);
+                                                    if ((opt_val == null)) {
+                                                        _ = iter.deinit();
+                                                        return globalThis.throwInvalidArguments("Expected Response object", .{});
+                                                    }
+                                                    @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                                 } else {
                                                     if ((ArgType == *jsc.WebCore.Request)) {
-                                                        const __arg_val = ((((eater((&iter))) orelse {
-                                                        _ = iter.deinit();
-                                                        return globalThis.throwInvalidArguments("Missing Request object", .{});
-}).@"as"(jsc.WebCore.Request)) orelse {
-                                                        _ = iter.deinit();
-                                                        return globalThis.throwInvalidArguments("Expected Request object", .{});
-});
-                                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = __arg_val;
+                                                        const opt_eaten = eater((&iter));
+                                                        if ((opt_eaten == null)) {
+                                                            _ = iter.deinit();
+                                                            return globalThis.throwInvalidArguments("Missing Request object", .{});
+                                                        }
+                                                        const opt_val = opt_eaten.?.@"as"(jsc.WebCore.Request);
+                                                        if ((opt_val == null)) {
+                                                            _ = iter.deinit();
+                                                            return globalThis.throwInvalidArguments("Expected Request object", .{});
+                                                        }
+                                                        @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                                     } else {
                                                         if ((ArgType == jsc.JSValue)) {
-                                                            const val = ((eater((&iter))) orelse {
-                                                            _ = iter.deinit();
-                                                            return globalThis.throwInvalidArguments("Missing argument", .{});
-});
-                                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = val;
+                                                            const opt_val = eater((&iter));
+                                                            if ((opt_val == null)) {
+                                                                _ = iter.deinit();
+                                                                return globalThis.throwInvalidArguments("Missing argument", .{});
+                                                            }
+                                                            @field(args, std.fmt.comptimePrint("{d}", .{ i })) = opt_val.?;
                                                         } else {
                                                             if ((ArgType == Optional(jsc.JSValue))) {
                                                                 @field(args, std.fmt.comptimePrint("{d}", .{ i })) = eater((&iter));

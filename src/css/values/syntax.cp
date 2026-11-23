@@ -102,7 +102,7 @@ pub enum SyntaxString {
             components.append(
                 allocator,
                 component,
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
 
             trimmed_input = std.mem.trimLeft(u8, trimmed_input, SPACE_CHARACTERS);
             if (trimmed_input.len == 0) {
@@ -142,7 +142,7 @@ pub enum SyntaxString {
 
                     while (true) {
                         const value_result = input.tryParse(struct {
-                            fn parse(
+                            static fn parse(
                                 i: *css.Parser,
                                 comp: SyntaxComponent,
                             ): Result(ParsedComponent) {

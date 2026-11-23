@@ -746,18 +746,23 @@ pub fn normalizeStringGenericT(
     });
 }
 
+fn DefaultIsSeparator(comptime T: type): type {
+    return struct {
+        pub static fn call(char: T): bool {
+            if (comptime std.fs.path.sep == std.fs.path.sep_windows) {
+                return char == '\\' || char == '/';
+            } else {
+                return char == '/';
+            }
+        }
+    };
+}
+
 pub fn NormalizeOptions(comptime T: type): type {
     return struct {
         allow_above_root: bool = false,
         separator: T = std.fs.path.sep,
-        isSeparator: fn (T) bool = struct {
-            fn call(char: T) bool {
-                return if (comptime std.fs.path.sep == std.fs.path.sep_windows)
-                    char == '\\' or char == '/'
-                else
-                    char == '/';
-            }
-        }.call,
+        isSeparator: fn (T) bool = DefaultIsSeparator(T).call,
         preserve_trailing_slash: bool = false,
         zero_terminate: bool = false,
         add_nt_prefix: bool = false,

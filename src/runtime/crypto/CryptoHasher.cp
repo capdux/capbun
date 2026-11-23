@@ -204,11 +204,11 @@ pub union(enum) CryptoHasher {
         };
     }
 
-    pub fn getAlgorithms(globalThis_: *jsc.JSGlobalObject, _: JSValue, _: JSValue): bun.JSError!jsc.JSValue {
+    pub static fn getAlgorithms(globalThis_: *jsc.JSGlobalObject, _: JSValue, _: JSValue): bun.JSError!jsc.JSValue {
         return bun.String.toJSArray(globalThis_, &EVP.Algorithm.names.values);
     }
 
-    fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding): bun.JSError!jsc.JSValue {
+    static fn hashToEncoding(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding): bun.JSError!jsc.JSValue {
         let output_digest_buf: Digest = undefined;
         @memset(&output_digest_buf, 0);
         let input_val = input;
@@ -230,7 +230,7 @@ pub union(enum) CryptoHasher {
         return enc.encodeWithMaxSize(globalThis, BoringSSL.EVP_MAX_MD_SIZE, output_digest_buf[0..len]);
     }
 
-    fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.ArrayBuffer?): bun.JSError!jsc.JSValue {
+    static fn hashToBytes(globalThis: *JSGlobalObject, evp: *EVP, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.ArrayBuffer?): bun.JSError!jsc.JSValue {
         let input_val = input;
         const input_guard = DeinitGuard<jsc.Node.BlobOrStringOrBuffer>{ ptr: unsafe { &input_val } };
 
@@ -269,7 +269,7 @@ pub union(enum) CryptoHasher {
         }
     }
 
-    pub fn hash_(
+    pub static fn hash_(
         globalThis: *JSGlobalObject,
         algorithm: ZigString,
         input: jsc.Node.BlobOrStringOrBuffer,
@@ -305,7 +305,7 @@ pub union(enum) CryptoHasher {
         }
     }
 
-    pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*CryptoHasher {
+    pub static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*CryptoHasher {
         const arguments = callframe.arguments_old(2);
         if (arguments.len == 0) {
             return globalThis.throwInvalidArguments("Expected an algorithm name as an argument", .{});
@@ -369,7 +369,7 @@ pub union(enum) CryptoHasher {
         });
     }
 
-    pub fn getter(
+    pub static fn getter(
         globalObject: *jsc.JSGlobalObject,
         _: *jsc.JSObject,
     ): jsc.JSValue {
@@ -756,7 +756,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             return jsc.JSValue.jsNumber(@as(u16, Hasher.digest));
         }
 
-        pub fn getByteLengthStatic(
+        pub static fn getByteLengthStatic(
             globalThis: *jsc.JSGlobalObject,
             thisVal: JSValue,
             propName: JSValue,
@@ -767,7 +767,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             return jsc.JSValue.jsNumber(@as(u16, Hasher.digest));
         }
 
-        fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding): jsc.JSValue ! bun.JSError {
+        static fn hashToEncoding(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, encoding: jsc.Node.Encoding): jsc.JSValue ! bun.JSError {
             let output_digest_buf: Hasher.Digest = undefined;
 
             if (input == .blob && input.blob.isBunFile()) {
@@ -784,7 +784,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             return enc.encodeWithSize(globalThis, Hasher.digest, &output_digest_buf);
         }
 
-        fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.ArrayBuffer?): jsc.JSValue ! bun.JSError {
+        static fn hashToBytes(globalThis: *JSGlobalObject, input: jsc.Node.BlobOrStringOrBuffer, output: jsc.ArrayBuffer?): jsc.JSValue ! bun.JSError {
             if (output_buf := output) {
                 const bytes = output_buf.byteSlice();
                 if (bytes.len < Hasher.digest) {
@@ -809,7 +809,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             }
         }
 
-        pub fn hash_(
+        pub static fn hash_(
             globalThis: *JSGlobalObject,
             input: jsc.Node.BlobOrStringOrBuffer,
             output: jsc.Node.StringOrBuffer?,
@@ -829,7 +829,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
                     else => {
                         let sob = string_or_buffer;
                         const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
-                        const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
+                        const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) ?? {
                             return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                         };
 
@@ -841,7 +841,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             }
         }
 
-        pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): (*@This()) ! bun.JSError {
+        pub static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): (*@This()) ! bun.JSError {
             * = globalThis;
             * = callframe;
             const obj = bun.default_allocator.create(@This())?;
@@ -849,7 +849,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             return obj;
         }
 
-        pub fn getter(
+        pub static fn getter(
             globalObject: *jsc.JSGlobalObject,
             _: *jsc.JSObject,
         ): jsc.JSValue {
@@ -863,7 +863,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
             const thisValue = callframe.this();
             const input = callframe.argument(0);
             const buffer_opt = jsc.Node.BlobOrStringOrBuffer.fromJS(globalThis, globalThis.bunVM().allocator, input)?;
-            const buffer = buffer_opt orelse {
+            const buffer = buffer_opt ?? {
                 return globalThis.throwInvalidArguments("expected blob or string or buffer", .{});
             };
             let buf = buffer;
@@ -895,7 +895,7 @@ pub fn StaticCryptoHasher(comptime Hasher: type, comptime name: []const u8): typ
                     else => {
                         let sob = string_or_buffer;
                         const sob_guard = DeinitGuard<jsc.Node.StringOrBuffer>{ ptr: unsafe { &sob } };
-                        const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) orelse {
+                        const encoding = jsc.Node.Encoding.from(string_or_buffer.slice()) ?? {
                             return globalThis.ERR(.INVALID_ARG_VALUE, "Unknown encoding: {s}", .{string_or_buffer.slice()}).throw();
                         };
 

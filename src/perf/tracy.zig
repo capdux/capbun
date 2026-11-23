@@ -173,7 +173,8 @@ pub fn allocator(self: *@This()) std.mem.Allocator {
             return std.mem.Allocator{ .ptr = self, .vtable = (&std.mem.Allocator.VTable{ .alloc = allocFn, .resize = resizeFn, .free = freeFn }) };
     }
 
-pub fn allocFn(ptr: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+pub fn allocFn(self: *const @This(), ptr: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+        _ = self;
             {
                 const self_ptr = @as(*Self, @ptrCast(@alignCast(ptr)));
                 const result = self_ptr.parent_allocator.rawAlloc(len, ptr_align, ret_addr);
@@ -194,7 +195,8 @@ pub fn allocFn(ptr: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]
             }
     }
 
-pub fn resizeFn(ptr: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
+pub fn resizeFn(self: @This(), ptr: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
+        _ = self;
             {
                 const self_ptr = @as(*Self, @ptrCast(@alignCast(ptr)));
                 if (self_ptr.parent_allocator.rawResize(buf, buf_align, new_len, ret_addr)) {
@@ -212,7 +214,8 @@ pub fn resizeFn(ptr: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_a
             }
     }
 
-pub fn freeFn(ptr: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
+pub fn freeFn(self: @This(), ptr: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
+        _ = self;
             {
                 const self_ptr = @as(*Self, @ptrCast(@alignCast(ptr)));
                 _ = self_ptr.parent_allocator.rawFree(buf, buf_align, ret_addr);
@@ -347,12 +350,12 @@ pub inline fn freeNamed(ptr: [*]u8, comptime name: [:0]const u8) void {
 }
 
 pub fn ___tracy_startup_profiler() void {
-        const fn_ptr = (if (comptime @typeInfo(TracyStartupProfiler) == .@"enum") @as(TracyStartupProfiler, @enumFromInt(((dlsym(TracyStartupProfiler, "___tracy_startup_profiler")) orelse { return; }))) else @as(TracyStartupProfiler, ((dlsym(TracyStartupProfiler, "___tracy_startup_profiler")) orelse { return; })));
+        const fn_ptr = (if (comptime @typeInfo(TracyStartupProfiler) == .@"enum" and (@typeInfo(@TypeOf(((dlsym(TracyStartupProfiler, "___tracy_startup_profiler")) orelse { return; }))) == .int or @typeInfo(@TypeOf(((dlsym(TracyStartupProfiler, "___tracy_startup_profiler")) orelse { return; }))) == .comptime_int)) @as(TracyStartupProfiler, @enumFromInt(((dlsym(TracyStartupProfiler, "___tracy_startup_profiler")) orelse { return; }))) else @as(TracyStartupProfiler, ((dlsym(TracyStartupProfiler, "___tracy_startup_profiler")) orelse { return; })));
         _ = fn_ptr();
 }
 
 pub fn ___tracy_shutdown_profiler() void {
-        const fn_ptr = (if (comptime @typeInfo(TracyShutdownProfiler) == .@"enum") @as(TracyShutdownProfiler, @enumFromInt(((dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler")) orelse { return; }))) else @as(TracyShutdownProfiler, ((dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler")) orelse { return; })));
+        const fn_ptr = (if (comptime @typeInfo(TracyShutdownProfiler) == .@"enum" and (@typeInfo(@TypeOf(((dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler")) orelse { return; }))) == .int or @typeInfo(@TypeOf(((dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler")) orelse { return; }))) == .comptime_int)) @as(TracyShutdownProfiler, @enumFromInt(((dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler")) orelse { return; }))) else @as(TracyShutdownProfiler, ((dlsym(TracyShutdownProfiler, "___tracy_shutdown_profiler")) orelse { return; })));
         _ = fn_ptr();
 }
 
@@ -371,122 +374,122 @@ pub export fn stop() void {
 }
 
 pub fn ___tracy_connected() c_int {
-        const fn_ptr = (if (comptime @typeInfo(TracyConnected) == .@"enum") @as(TracyConnected, @enumFromInt((dlsym(TracyConnected, "___tracy_connected")).?)) else @as(TracyConnected, (dlsym(TracyConnected, "___tracy_connected")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyConnected) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyConnected, "___tracy_connected")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyConnected, "___tracy_connected")).?)) == .comptime_int)) @as(TracyConnected, @enumFromInt((dlsym(TracyConnected, "___tracy_connected")).?)) else @as(TracyConnected, (dlsym(TracyConnected, "___tracy_connected")).?));
         return fn_ptr();
 }
 
 pub fn ___tracy_set_thread_name(name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracySetThreadName) == .@"enum") @as(TracySetThreadName, @enumFromInt((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) else @as(TracySetThreadName, (dlsym(TracySetThreadName, "___tracy_set_thread_name")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracySetThreadName) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) == .comptime_int)) @as(TracySetThreadName, @enumFromInt((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) else @as(TracySetThreadName, (dlsym(TracySetThreadName, "___tracy_set_thread_name")).?));
         _ = fn_ptr(name);
 }
 
 pub fn ___tracy_emit_frame_mark_start(name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitFrameMarkStart) == .@"enum") @as(TracyEmitFrameMarkStart, @enumFromInt((dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start")).?)) else @as(TracyEmitFrameMarkStart, (dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitFrameMarkStart) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start")).?)) == .comptime_int)) @as(TracyEmitFrameMarkStart, @enumFromInt((dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start")).?)) else @as(TracyEmitFrameMarkStart, (dlsym(TracyEmitFrameMarkStart, "___tracy_emit_frame_mark_start")).?));
         _ = fn_ptr(name);
 }
 
 pub fn ___tracy_emit_frame_mark_end(name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitFrameMarkEnd) == .@"enum") @as(TracyEmitFrameMarkEnd, @enumFromInt((dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end")).?)) else @as(TracyEmitFrameMarkEnd, (dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitFrameMarkEnd) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end")).?)) == .comptime_int)) @as(TracyEmitFrameMarkEnd, @enumFromInt((dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end")).?)) else @as(TracyEmitFrameMarkEnd, (dlsym(TracyEmitFrameMarkEnd, "___tracy_emit_frame_mark_end")).?));
         _ = fn_ptr(name);
 }
 
 pub fn ___tracy_emit_zone_begin(srcloc: *const SourceLocationData, active: c_int) Ctx {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneBegin) == .@"enum") @as(TracyEmitZoneBegin, @enumFromInt((dlsym(TracyEmitZoneBegin, "___tracy_emit_zone_begin")).?)) else @as(TracyEmitZoneBegin, (dlsym(TracyEmitZoneBegin, "___tracy_emit_zone_begin")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneBegin) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneBegin, "___tracy_emit_zone_begin")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneBegin, "___tracy_emit_zone_begin")).?)) == .comptime_int)) @as(TracyEmitZoneBegin, @enumFromInt((dlsym(TracyEmitZoneBegin, "___tracy_emit_zone_begin")).?)) else @as(TracyEmitZoneBegin, (dlsym(TracyEmitZoneBegin, "___tracy_emit_zone_begin")).?));
         return fn_ptr(srcloc, active);
 }
 
 pub fn ___tracy_emit_zone_begin_callstack(srcloc: *const SourceLocationData, depth: c_int, active: c_int) Ctx {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneBeginCallstack) == .@"enum") @as(TracyEmitZoneBeginCallstack, @enumFromInt((dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack")).?)) else @as(TracyEmitZoneBeginCallstack, (dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneBeginCallstack) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack")).?)) == .comptime_int)) @as(TracyEmitZoneBeginCallstack, @enumFromInt((dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack")).?)) else @as(TracyEmitZoneBeginCallstack, (dlsym(TracyEmitZoneBeginCallstack, "___tracy_emit_zone_begin_callstack")).?));
         return fn_ptr(srcloc, depth, active);
 }
 
 pub fn ___tracy_emit_zone_text(ctx: Ctx, txt: [*]const u8, size: usize) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneText) == .@"enum") @as(TracyEmitZoneText, @enumFromInt((dlsym(TracyEmitZoneText, "___tracy_emit_zone_text")).?)) else @as(TracyEmitZoneText, (dlsym(TracyEmitZoneText, "___tracy_emit_zone_text")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneText) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneText, "___tracy_emit_zone_text")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneText, "___tracy_emit_zone_text")).?)) == .comptime_int)) @as(TracyEmitZoneText, @enumFromInt((dlsym(TracyEmitZoneText, "___tracy_emit_zone_text")).?)) else @as(TracyEmitZoneText, (dlsym(TracyEmitZoneText, "___tracy_emit_zone_text")).?));
         _ = fn_ptr(ctx, txt, size);
 }
 
 pub fn ___tracy_emit_zone_name(ctx: Ctx, txt: [*]const u8, size: usize) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneName) == .@"enum") @as(TracyEmitZoneName, @enumFromInt((dlsym(TracyEmitZoneName, "___tracy_emit_zone_name")).?)) else @as(TracyEmitZoneName, (dlsym(TracyEmitZoneName, "___tracy_emit_zone_name")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneName) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneName, "___tracy_emit_zone_name")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneName, "___tracy_emit_zone_name")).?)) == .comptime_int)) @as(TracyEmitZoneName, @enumFromInt((dlsym(TracyEmitZoneName, "___tracy_emit_zone_name")).?)) else @as(TracyEmitZoneName, (dlsym(TracyEmitZoneName, "___tracy_emit_zone_name")).?));
         _ = fn_ptr(ctx, txt, size);
 }
 
 pub fn ___tracy_emit_zone_color(ctx: Ctx, color: u32) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneColor) == .@"enum") @as(TracyEmitZoneColor, @enumFromInt((dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color")).?)) else @as(TracyEmitZoneColor, (dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneColor) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color")).?)) == .comptime_int)) @as(TracyEmitZoneColor, @enumFromInt((dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color")).?)) else @as(TracyEmitZoneColor, (dlsym(TracyEmitZoneColor, "___tracy_emit_zone_color")).?));
         _ = fn_ptr(ctx, color);
 }
 
 pub fn ___tracy_emit_zone_value(ctx: Ctx, value: u64) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneValue) == .@"enum") @as(TracyEmitZoneValue, @enumFromInt((dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value")).?)) else @as(TracyEmitZoneValue, (dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneValue) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value")).?)) == .comptime_int)) @as(TracyEmitZoneValue, @enumFromInt((dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value")).?)) else @as(TracyEmitZoneValue, (dlsym(TracyEmitZoneValue, "___tracy_emit_zone_value")).?));
         _ = fn_ptr(ctx, value);
 }
 
 pub fn ___tracy_emit_zone_end(ctx: Ctx) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneEnd) == .@"enum") @as(TracyEmitZoneEnd, @enumFromInt((dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end")).?)) else @as(TracyEmitZoneEnd, (dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitZoneEnd) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end")).?)) == .comptime_int)) @as(TracyEmitZoneEnd, @enumFromInt((dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end")).?)) else @as(TracyEmitZoneEnd, (dlsym(TracyEmitZoneEnd, "___tracy_emit_zone_end")).?));
         _ = fn_ptr(ctx);
 }
 
 pub fn ___tracy_emit_memory_alloc(ptr: *const anyopaque, size: usize, secure: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAlloc) == .@"enum") @as(TracyEmitMemoryAlloc, @enumFromInt((dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc")).?)) else @as(TracyEmitMemoryAlloc, (dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAlloc) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc")).?)) == .comptime_int)) @as(TracyEmitMemoryAlloc, @enumFromInt((dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc")).?)) else @as(TracyEmitMemoryAlloc, (dlsym(TracyEmitMemoryAlloc, "___tracy_emit_memory_alloc")).?));
         _ = fn_ptr(ptr, size, secure);
 }
 
 pub fn ___tracy_emit_memory_alloc_callstack(ptr: *const anyopaque, size: usize, depth: c_int, secure: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAllocCallstack) == .@"enum") @as(TracyEmitMemoryAllocCallstack, @enumFromInt((dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack")).?)) else @as(TracyEmitMemoryAllocCallstack, (dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAllocCallstack) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack")).?)) == .comptime_int)) @as(TracyEmitMemoryAllocCallstack, @enumFromInt((dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack")).?)) else @as(TracyEmitMemoryAllocCallstack, (dlsym(TracyEmitMemoryAllocCallstack, "___tracy_emit_memory_alloc_callstack")).?));
         _ = fn_ptr(ptr, size, depth, secure);
 }
 
 pub fn ___tracy_emit_memory_free(ptr: *const anyopaque, secure: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFree) == .@"enum") @as(TracyEmitMemoryFree, @enumFromInt((dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free")).?)) else @as(TracyEmitMemoryFree, (dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFree) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free")).?)) == .comptime_int)) @as(TracyEmitMemoryFree, @enumFromInt((dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free")).?)) else @as(TracyEmitMemoryFree, (dlsym(TracyEmitMemoryFree, "___tracy_emit_memory_free")).?));
         _ = fn_ptr(ptr, secure);
 }
 
 pub fn ___tracy_emit_memory_free_callstack(ptr: *const anyopaque, depth: c_int, secure: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFreeCallstack) == .@"enum") @as(TracyEmitMemoryFreeCallstack, @enumFromInt((dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack")).?)) else @as(TracyEmitMemoryFreeCallstack, (dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFreeCallstack) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack")).?)) == .comptime_int)) @as(TracyEmitMemoryFreeCallstack, @enumFromInt((dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack")).?)) else @as(TracyEmitMemoryFreeCallstack, (dlsym(TracyEmitMemoryFreeCallstack, "___tracy_emit_memory_free_callstack")).?));
         _ = fn_ptr(ptr, depth, secure);
 }
 
 pub fn ___tracy_emit_memory_alloc_named(ptr: *const anyopaque, size: usize, secure: c_int, name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAllocNamed) == .@"enum") @as(TracyEmitMemoryAllocNamed, @enumFromInt((dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named")).?)) else @as(TracyEmitMemoryAllocNamed, (dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAllocNamed) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named")).?)) == .comptime_int)) @as(TracyEmitMemoryAllocNamed, @enumFromInt((dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named")).?)) else @as(TracyEmitMemoryAllocNamed, (dlsym(TracyEmitMemoryAllocNamed, "___tracy_emit_memory_alloc_named")).?));
         _ = fn_ptr(ptr, size, secure, name);
 }
 
 pub fn ___tracy_emit_memory_alloc_callstack_named(ptr: *const anyopaque, size: usize, depth: c_int, secure: c_int, name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAllocCallstackNamed) == .@"enum") @as(TracyEmitMemoryAllocCallstackNamed, @enumFromInt((dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named")).?)) else @as(TracyEmitMemoryAllocCallstackNamed, (dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryAllocCallstackNamed) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named")).?)) == .comptime_int)) @as(TracyEmitMemoryAllocCallstackNamed, @enumFromInt((dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named")).?)) else @as(TracyEmitMemoryAllocCallstackNamed, (dlsym(TracyEmitMemoryAllocCallstackNamed, "___tracy_emit_memory_alloc_callstack_named")).?));
         _ = fn_ptr(ptr, size, depth, secure, name);
 }
 
 pub fn ___tracy_emit_memory_free_named(ptr: *const anyopaque, secure: c_int, name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFreeNamed) == .@"enum") @as(TracyEmitMemoryFreeNamed, @enumFromInt((dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named")).?)) else @as(TracyEmitMemoryFreeNamed, (dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFreeNamed) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named")).?)) == .comptime_int)) @as(TracyEmitMemoryFreeNamed, @enumFromInt((dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named")).?)) else @as(TracyEmitMemoryFreeNamed, (dlsym(TracyEmitMemoryFreeNamed, "___tracy_emit_memory_free_named")).?));
         _ = fn_ptr(ptr, secure, name);
 }
 
 pub fn ___tracy_emit_memory_free_callstack_named(ptr: *const anyopaque, depth: c_int, secure: c_int, name: [*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFreeCallstackNamed) == .@"enum") @as(TracyEmitMemoryFreeCallstackNamed, @enumFromInt((dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named")).?)) else @as(TracyEmitMemoryFreeCallstackNamed, (dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMemoryFreeCallstackNamed) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named")).?)) == .comptime_int)) @as(TracyEmitMemoryFreeCallstackNamed, @enumFromInt((dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named")).?)) else @as(TracyEmitMemoryFreeCallstackNamed, (dlsym(TracyEmitMemoryFreeCallstackNamed, "___tracy_emit_memory_free_callstack_named")).?));
         _ = fn_ptr(ptr, depth, secure, name);
 }
 
 pub fn ___tracy_emit_message(txt: [*]const u8, size: usize, callstack: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessage) == .@"enum") @as(TracyEmitMessage, @enumFromInt((dlsym(TracyEmitMessage, "___tracy_emit_message")).?)) else @as(TracyEmitMessage, (dlsym(TracyEmitMessage, "___tracy_emit_message")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessage) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMessage, "___tracy_emit_message")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMessage, "___tracy_emit_message")).?)) == .comptime_int)) @as(TracyEmitMessage, @enumFromInt((dlsym(TracyEmitMessage, "___tracy_emit_message")).?)) else @as(TracyEmitMessage, (dlsym(TracyEmitMessage, "___tracy_emit_message")).?));
         _ = fn_ptr(txt, size, callstack);
 }
 
 pub fn ___tracy_emit_messageL(txt: [*:0]const u8, callstack: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessageL) == .@"enum") @as(TracyEmitMessageL, @enumFromInt((dlsym(TracyEmitMessageL, "___tracy_emit_messageL")).?)) else @as(TracyEmitMessageL, (dlsym(TracyEmitMessageL, "___tracy_emit_messageL")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessageL) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMessageL, "___tracy_emit_messageL")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMessageL, "___tracy_emit_messageL")).?)) == .comptime_int)) @as(TracyEmitMessageL, @enumFromInt((dlsym(TracyEmitMessageL, "___tracy_emit_messageL")).?)) else @as(TracyEmitMessageL, (dlsym(TracyEmitMessageL, "___tracy_emit_messageL")).?));
         _ = fn_ptr(txt, callstack);
 }
 
 pub fn ___tracy_emit_messageC(txt: [*]const u8, size: usize, color: u32, callstack: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessageC) == .@"enum") @as(TracyEmitMessageC, @enumFromInt((dlsym(TracyEmitMessageC, "___tracy_emit_messageC")).?)) else @as(TracyEmitMessageC, (dlsym(TracyEmitMessageC, "___tracy_emit_messageC")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessageC) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMessageC, "___tracy_emit_messageC")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMessageC, "___tracy_emit_messageC")).?)) == .comptime_int)) @as(TracyEmitMessageC, @enumFromInt((dlsym(TracyEmitMessageC, "___tracy_emit_messageC")).?)) else @as(TracyEmitMessageC, (dlsym(TracyEmitMessageC, "___tracy_emit_messageC")).?));
         _ = fn_ptr(txt, size, color, callstack);
 }
 
 pub fn ___tracy_emit_messageLC(txt: [*:0]const u8, color: u32, callstack: c_int) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessageLC) == .@"enum") @as(TracyEmitMessageLC, @enumFromInt((dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC")).?)) else @as(TracyEmitMessageLC, (dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitMessageLC) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC")).?)) == .comptime_int)) @as(TracyEmitMessageLC, @enumFromInt((dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC")).?)) else @as(TracyEmitMessageLC, (dlsym(TracyEmitMessageLC, "___tracy_emit_messageLC")).?));
         _ = fn_ptr(txt, color, callstack);
 }
 
 pub fn ___tracy_emit_frame_mark(name: ?[*:0]const u8) void {
-        const fn_ptr = (if (comptime @typeInfo(TracyEmitFrameMark) == .@"enum") @as(TracyEmitFrameMark, @enumFromInt((dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark")).?)) else @as(TracyEmitFrameMark, (dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyEmitFrameMark) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark")).?)) == .comptime_int)) @as(TracyEmitFrameMark, @enumFromInt((dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark")).?)) else @as(TracyEmitFrameMark, (dlsym(TracyEmitFrameMark, "___tracy_emit_frame_mark")).?));
         _ = fn_ptr(name);
 }
 
@@ -511,7 +514,7 @@ pub export fn isConnected() bool {
         if ((!enable)) {
             return false;
         }
-        const fn_ptr = (if (comptime @typeInfo(TracyConnected) == .@"enum") @as(TracyConnected, @enumFromInt((dlsym(TracyConnected, "___tracy_connected")).?)) else @as(TracyConnected, (dlsym(TracyConnected, "___tracy_connected")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracyConnected) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracyConnected, "___tracy_connected")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracyConnected, "___tracy_connected")).?)) == .comptime_int)) @as(TracyConnected, @enumFromInt((dlsym(TracyConnected, "___tracy_connected")).?)) else @as(TracyConnected, (dlsym(TracyConnected, "___tracy_connected")).?));
         return (fn_ptr() != 0);
 }
 
@@ -522,7 +525,7 @@ pub export fn initThread(comptime name: [:0]const u8) void {
         if ((!enable)) {
             return;
         }
-        const fn_ptr = (if (comptime @typeInfo(TracySetThreadName) == .@"enum") @as(TracySetThreadName, @enumFromInt((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) else @as(TracySetThreadName, (dlsym(TracySetThreadName, "___tracy_set_thread_name")).?));
+        const fn_ptr = (if (comptime @typeInfo(TracySetThreadName) == .@"enum" and (@typeInfo(@TypeOf((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) == .int or @typeInfo(@TypeOf((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) == .comptime_int)) @as(TracySetThreadName, @enumFromInt((dlsym(TracySetThreadName, "___tracy_set_thread_name")).?)) else @as(TracySetThreadName, (dlsym(TracySetThreadName, "___tracy_set_thread_name")).?));
         _ = fn_ptr(name.ptr);
 }
 

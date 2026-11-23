@@ -149,12 +149,12 @@ pub fn init(allocator: std.mem.Allocator, params: Params, rare_data: *jsc.RareDa
         {
             inst.* = PerMessageDeflate{ .allocator = allocator, .params = params, .compress_stream = std.mem.zeroes(zlib.z_stream), .decompress_stream = std.mem.zeroes(zlib.z_stream), .rare_data = rare_data.websocketDeflate() };
         }
-        const compress_err = zlib.deflateInit2_((&inst.compress_stream), Z_DEFAULT_COMPRESSION, Z_DEFLATED, (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(inst.params.client_max_window_bits)) else @as(c_int, inst.params.client_max_window_bits))), Z_DEFAULT_MEM_LEVEL, Z_DEFAULT_STRATEGY, zlib.zlibVersion(), @sizeOf(zlib.z_stream));
+        const compress_err = zlib.deflateInit2_((&inst.compress_stream), Z_DEFAULT_COMPRESSION, Z_DEFLATED, (-(if (comptime @typeInfo(@TypeOf(inst.params.client_max_window_bits)) == .@"enum") cp_cast_int(c_int, @intFromEnum(inst.params.client_max_window_bits)) else cp_cast_int(c_int, inst.params.client_max_window_bits))), Z_DEFAULT_MEM_LEVEL, Z_DEFAULT_STRATEGY, zlib.zlibVersion(), @sizeOf(zlib.z_stream));
         if ((compress_err != .Ok)) {
             _ = allocator.destroy(inst);
             return error.DeflateInitFailed;
         }
-        const decompress_err = zlib.inflateInit2_((&inst.decompress_stream), (0 - (if (comptime @typeInfo(c_int) == .@"enum") @as(c_int, @enumFromInt(inst.params.server_max_window_bits)) else @as(c_int, inst.params.server_max_window_bits))), zlib.zlibVersion(), @sizeOf(zlib.z_stream));
+        const decompress_err = zlib.inflateInit2_((&inst.decompress_stream), (-(if (comptime @typeInfo(@TypeOf(inst.params.server_max_window_bits)) == .@"enum") cp_cast_int(c_int, @intFromEnum(inst.params.server_max_window_bits)) else cp_cast_int(c_int, inst.params.server_max_window_bits))), zlib.zlibVersion(), @sizeOf(zlib.z_stream));
         if ((decompress_err != .Ok)) {
             _ = zlib.deflateEnd((&inst.compress_stream));
             _ = allocator.destroy(inst);

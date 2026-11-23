@@ -178,7 +178,7 @@ pub fn valParse(i: *css.Parser) Result(T) {
             return css.generic.parse(T, i);
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
             return (((self.top.isCompatible(browsers) and self.right.isCompatible(browsers)) and self.bottom.isCompatible(browsers)) and self.left.isCompatible(browsers));
     }
     const This = @This();

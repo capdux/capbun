@@ -32,43 +32,43 @@ pub fn Cow(comptime T: type, comptime VTable: type): type {
             return { owned: val };
         }
 
-        pub fn replace(*this, allocator: Allocator, newval: T) {
-            if (this.* == .owned) {
-                this.deinit(allocator);
+        pub fn replace(*_, allocator: Allocator, newval: T) {
+            if (_.* == .owned) {
+                _.deinit(allocator);
             }
-            this.* = { owned: newval };
+            _.* = { owned: newval };
         }
 
         /// Get the underlying value.
-        pub inline fn inner(this: &@This()): &T {
-            return switch (this.*) {
-                .borrowed => this.borrowed,
-                .owned => &this.owned,
+        pub inline fn inner(): &T {
+            return switch (_.*) {
+                .borrowed => _.borrowed,
+                .owned => &_.owned,
             };
         }
 
-        pub inline fn innerMut(*this): (*T)? {
-            return switch (this.*) {
+        pub inline fn innerMut(*_): (*T)? {
+            return switch (_.*) {
                 .borrowed => null,
-                .owned => *this.owned,
+                .owned => *_.owned,
             };
         }
 
-        pub fn toOwned(*this, allocator: Allocator): *T {
-            switch (this.*) {
+        pub fn toOwned(*_, allocator: Allocator): *T {
+            switch (_.*) {
                 .borrowed => |b| {
-                    this.* = {
+                    _.* = {
                         owned: cowCopy(T, VTable, b, allocator),
                     };
                 },
                 .owned => {},
             }
-            return *this.owned;
+            return *_.owned;
         }
 
-        pub fn deinit(*this, allocator: Allocator) {
-            if (this.* == .owned) {
-                cowDeinit(T, VTable, *this.owned, allocator);
+        pub fn deinit(*_, allocator: Allocator) {
+            if (_.* == .owned) {
+                cowDeinit(T, VTable, *_.owned, allocator);
             }
         }
     };

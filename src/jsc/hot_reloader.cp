@@ -192,7 +192,7 @@ pub fn NewTask(comptime Ctx: type, comptime Reloader: type, comptime reload_imme
         concurrent_task: jsc.ConcurrentTask,
         reloader: *Reloader,
 
-        pub fn initEmpty(reloader: *Reloader): @This() {
+        pub static fn initEmpty(reloader: *Reloader): @This() {
             let task: @This() = undefined;
             task.reloader = reloader;
             task.hashes = [0, 0, 0, 0, 0, 0, 0, 0];
@@ -276,18 +276,18 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
             };
 
             clear_screen = clear_screen_flag;
-            const watcher = Watcher.init(Reloader, reloader, fs, bun.default_allocator) catch |e| {
+            const watcher = Watcher.init(Reloader, reloader, fs, bun.default_allocator) catch e => {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e)});
             };
-            watcher.start() catch |e| {
+            watcher.start() catch e => {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
                 Output.panic("Failed to start File Watcher: {s}", .{ @errorName(e)});
             };
             return watcher;
         }
 
-        fn debug(comptime fmt: string, args: auto) {
+        static fn debug(comptime fmt: string, args: auto) {
             if (Environment.enable_logs) {
                 Output.scoped(.hot_reloader, .visible)(fmt, args);
             } else {
@@ -334,7 +334,7 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
                         reloader,
                         ctx.transpiler.fs,
                         bun.default_allocator,
-                    ) catch |e| {
+                    ) catch e => {
                         bun.handleErrorReturnTrace(e, @errorReturnTrace());
                         Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e)});
                     } }
@@ -344,27 +344,29 @@ pub fn NewHotReloader(comptime Ctx: type, comptime EventLoopType: type, comptime
                         reloader,
                         ctx.transpiler.fs,
                         bun.default_allocator,
-                    ) catch |e| {
+                    ) catch e => {
                         bun.handleErrorReturnTrace(e, @errorReturnTrace());
                         Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e)});
                     } };
 
+                const WatcherPtr = @FieldType(struct { p: *Watcher }, "p");
                 if (reload_immediately) {
-                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.watch);
+                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(WatcherPtr, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.watch);
                 } else {
-                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.hot);
+                    ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(WatcherPtr, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.hot);
                 }
             } else {
+                const WatcherPtr = @FieldType(struct { p: *Watcher }, "p");
                 ctx.bun_watcher = Watcher.init(
                     Reloader,
                     reloader,
                     ctx.transpiler.fs,
                     bun.default_allocator,
-                ) catch |e| {
+                ) catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
                     Output.panic("Failed to enable File Watcher: {s}", .{ @errorName(e)});
                 };
-                ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(*Watcher, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.?);
+                ctx.transpiler.resolver.watcher = bun.resolver.ResolveWatcher(WatcherPtr, Watcher.onMaybeWatchDirectory).init(ctx.bun_watcher.?);
             }
 
             clear_screen = !ctx.transpiler.env.hasSetNoClearTerminalOnReload(!Output.enable_ansi_colors_stdout);

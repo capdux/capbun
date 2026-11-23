@@ -78,7 +78,7 @@ fn findPathInner(
         false,
         true,
         true,
-    ) catch |e| {
+    ) catch e => {
         if (e == error.JSError) {
             global.clearException();
         }
@@ -187,7 +187,7 @@ pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const
     let sfa_state = std.heap.stackFallback(8192, bun.default_allocator);
     const alloc = sfa_state.get();
     let str_slice_guard = DeinitGuard<@TypeOf(str.toUTF8(alloc))>{ val: str.toUTF8(alloc) };
-    onRequireExtensionModify(global, str_slice_guard.val.slice(), loader, value) catch |e| {
+    onRequireExtensionModify(global, str_slice_guard.val.slice(), loader, value) catch e => {
         if (e == error.OutOfMemory) bun.outOfMemory();
     };
 }
@@ -199,7 +199,7 @@ pub fn findLongestRegisteredExtension(vm: *jsc.VirtualMachine, filename: []const
     let sfa_state = std.heap.stackFallback(8192, bun.default_allocator);
     const alloc = sfa_state.get();
     let str_slice_guard = DeinitGuard<@TypeOf(str.toUTF8(alloc))>{ val: str.toUTF8(alloc) };
-    onRequireExtensionModifyNonFunction(global, str_slice_guard.val.slice()) catch |e| {
+    onRequireExtensionModifyNonFunction(global, str_slice_guard.val.slice()) catch e => {
         if (e == error.OutOfMemory) bun.outOfMemory();
     };
 }

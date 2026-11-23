@@ -99,7 +99,7 @@ pub fn dumpSource(vm: *VirtualMachine, specifier: string, printer: auto) {
 }
 
 pub fn dumpSourceString(vm: *VirtualMachine, specifier: string, written: []const u8) {
-    dumpSourceStringFailiable(vm, specifier, written) catch |e| {
+    dumpSourceStringFailiable(vm, specifier, written) catch e => {
         Output.debugWarn("Failed to dump source string: {}", .{ e });
     };
 }
@@ -144,7 +144,7 @@ pub fn dumpSourceStringFailiable(vm: *VirtualMachine, specifier: string, written
         parent.writeFile(.{
             .sub_path = std.fs.path.basename(specifier),
             .data = written,
-        }) catch |e| {
+        }) catch e => {
             Output.debugWarn("Failed to dump source string: writeFile {}", .{ e });
             return;
         };
@@ -575,7 +575,7 @@ pub struct TranspilerJobInternal {
                 .esm_ascii,
                 mapper.get(),
                 module_info,
-            ) catch |e| {
+            ) catch e => {
                 if (mi := module_info) mi.destroy();
                 _.parse_error = e;
                 return;
@@ -638,13 +638,13 @@ pub struct RuntimeTranspilerStore {
         const jsc_vm = vm.jsc_vm;
         let iter = batch.iterator();
         if (job := iter.next()) {
-            job.runFromJSThread() catch |e| global.reportUncaughtExceptionFromError(e);
+            job.runFromJSThread() catch e => global.reportUncaughtExceptionFromError(e);
         } else {
             return;
         }
         while (job := iter.next()) {
             event_loop.drainMicrotasksWithGlobal(global, jsc_vm) catch return;
-            job.runFromJSThread() catch |e| global.reportUncaughtExceptionFromError(e);
+            job.runFromJSThread() catch e => global.reportUncaughtExceptionFromError(e);
         }
     }
 
