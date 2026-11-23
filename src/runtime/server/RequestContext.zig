@@ -1308,10 +1308,7 @@ pub fn doRenderStream(pair: *StreamPair) void {
             _ = assignment_result.ensureStillAlive();
             _ = assert((!sink_signal.isDead()));
             if (comptime Environment.allow_assert) {
-                if ((blk: {
-                break :blk (resp).?.hasResponded();
-
-})) {
+                if (App.Response.hasResponded(resp)) {
                     _ = streamLog("responded", .{});
                 }
             }
@@ -1572,7 +1569,7 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
             const server_opt = req_ctx.server;
             if ((server_opt == null)) {
                 _ = req_ctx.renderMetadata();
-                _ = (resp).?.writeHeaderInt("content-length", 0);
+                _ = App.Response.writeHeaderInt(resp, "content-length", 0);
                 _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 return;
             }

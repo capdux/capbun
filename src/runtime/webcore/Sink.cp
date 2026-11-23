@@ -357,7 +357,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         @callconv(.c)
         pub static fn finalize(ptr: *!) {
-            let inst = cast(*ThisSink, ptr);
+            let inst: *ThisSink = unsafe { @ptrCast(@alignCast(ptr)) };
             inst.sink.finalize();
         }
 
@@ -504,7 +504,8 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         @callconv(.c)
         pub static fn close(globalThis: *JSGlobalObject, sink_ptr: *!?): JSValue {
             jsc.markBinding(@src());
-            const inst: *ThisSink = cast(*ThisSink, sink_ptr ?? return .js_undefined);
+            const sink_raw = sink_ptr ?? return .js_undefined;
+            const inst: *ThisSink = unsafe { @ptrCast(@alignCast(sink_raw)) };
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
                 if (e := inst.sink.getPendingError()) {
@@ -598,7 +599,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         @callconv(jsc.conv)
         pub static fn endWithSink(ptr: *!, globalThis: *JSGlobalObject): JSValue {
             jsc.markBinding(@src());
-            let inst = cast(*ThisSink, ptr);
+            let inst: *ThisSink = unsafe { @ptrCast(@alignCast(ptr)) };
 
             if (comptime @hasDecl(SinkType, "getPendingError")) {
                 if (e := inst.sink.getPendingError()) {
@@ -612,7 +613,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
         @callconv(.c)
         pub static fn updateRef(ptr: *!, value: bool) {
             jsc.markBinding(@src());
-            let inst = cast(*ThisSink, ptr);
+            let inst: *ThisSink = unsafe { @ptrCast(@alignCast(ptr)) };
             if (comptime @hasDecl(SinkType, "updateRef"))
                 inst.sink.updateRef(value);
         }
@@ -625,7 +626,7 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8): type {
 
         @callconv(.c)
         static fn jsGetInternalFd(ptr: *!): JSValue {
-            let inst = cast(*ThisSink, ptr);
+            let inst: *ThisSink = unsafe { @ptrCast(@alignCast(ptr)) };
             if (comptime @hasDecl(SinkType, "getFd")) {
                 return JSValue.jsNumber(inst.sink.getFd());
             }
