@@ -49,7 +49,7 @@ pub fn stringify(
     let stringifier: Stringifier = .init(global, space_value)?;
     const stringifier_guard = DeinitGuard<Stringifier>{ ptr: &stringifier };
 
-    stringifier.stringifyValue(global, value) catch |e| {
+    stringifier.stringifyValue(global, value) catch e => {
         if (e == error.StackOverflow) return global.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.JSTerminated) return error.JSTerminated;
@@ -90,7 +90,7 @@ pub fn parse(
 
     const source = &logger.Source.initPathString("input.json5", input.slice());
 
-    const root = json5.JSON5Parser.parse(source, &log, allocator) catch |e| {
+    const root = json5.JSON5Parser.parse(source, &log, allocator) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.StackOverflow) return global.throwStackOverflow();
         if (log.msgs.items.len > 0) {

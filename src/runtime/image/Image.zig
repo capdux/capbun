@@ -1068,7 +1068,7 @@ pub fn run(self: *PipelineTask) void {
             _ = &input;
             if (self.input.path) |p| {
                 _ = &p;
-                const oflags = (bun.O.RDONLY | (if (bun.Environment.isPosix) bun.O.NONBLOCK else (if (comptime @typeInfo(@TypeOf(bun.O.RDONLY)) == .@"enum") @as(@TypeOf(bun.O.RDONLY), @enumFromInt(0)) else @as(@TypeOf(bun.O.RDONLY), 0))));
+                const oflags = (bun.O.RDONLY | (if (bun.Environment.isPosix) bun.O.NONBLOCK else (if (comptime @typeInfo(@TypeOf(bun.O.RDONLY)) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(@TypeOf(bun.O.RDONLY), @enumFromInt(0)) else @as(@TypeOf(bun.O.RDONLY), 0))));
                 var file = (switch (bun.sys.File.openat(bun.FD.cwd(), p, oflags, 0)) {
 .result => |f| f,
 .err => |e| {

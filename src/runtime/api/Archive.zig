@@ -1097,63 +1097,49 @@ else => {
 
 pub fn AsyncTask(comptime Context: type) type {
         return struct {
-        const Self = @This();
+    ctx: Context,
+    promise: jsc.JSPromise.Strong,
+    vm: *jsc.VirtualMachine,
+    task: jsc.WorkPoolTask = .{ .callback = (&run) },
+    concurrent_task: jsc.ConcurrentTask = .{},
+    ref: bun.Async.KeepAlive = .{},
 
-        ctx: Context,
-        promise: jsc.JSPromise.Strong,
-        vm: *jsc.VirtualMachine,
-        task: jsc.WorkPoolTask = .{ .callback = &run },
-        concurrent_task: jsc.ConcurrentTask = .{},
-        ref: bun.Async.KeepAlive = .{},
-
-        fn create(globalThis: *jsc.JSGlobalObject, ctx: Context) error{OutOfMemory}!*Self {
+pub fn create(globalThis: *jsc.JSGlobalObject, ctx: Context) *Self {
             const vm = globalThis.bunVM();
-            const self = bun.new(Self, .{
-                .ctx = ctx,
-                .promise = jsc.JSPromise.Strong.init(globalThis),
-                .vm = vm,
-                .task = .{ .callback = &run },
-                .concurrent_task = .{},
-                .ref = .{},
-            });
-            self.ref.ref(vm);
-            return self;
-        }
+            const created = bun.new(Self, .{ .ctx = ctx, .promise = jsc.JSPromise.Strong.init(globalThis), .vm = vm, .task = .{ .callback = (&run) }, .concurrent_task = .{}, .ref = .{} });
+            _ = created.ref.ref(vm);
+            return created;
+    }
 
-        fn schedule(this: *Self) void {
-            jsc.WorkPool.schedule(&this.task);
-        }
+pub fn schedule(self: *@This()) void {
+            _ = jsc.WorkPool.schedule((&self.task));
+    }
 
-        fn run(work_task: *jsc.WorkPoolTask) void {
+pub fn run(work_task: *jsc.WorkPoolTask) void {
             const self_task: *Self = @fieldParentPtr("task", work_task);
-            const result = Context.run(&self_task.ctx);
-            self_task.ctx.result = if (@typeInfo(@TypeOf(result)) == .error_union)
-                result catch |e| .{ .err = e }
-            else
-                result;
-            self_task.vm.enqueueTaskConcurrent(
-                self_task.concurrent_task.from(self_task, .manual_deinit),
-            );
-        }
+            const result = Context.run((&self_task.ctx));
+            self_task.ctx.result = (if ((@typeInfo(@TypeOf(result)) == .error_union)) (blk_catch_0: { break :blk_catch_0 ((result) catch |e| { _ = &e; break :blk_catch_0 .{ .err = e }; }); }) else result);
+            _ = self_task.vm.enqueueTaskConcurrent(self_task.concurrent_task.from(self_task, .manual_deinit));
+    }
 
-        pub fn runFromJS(this: *Self) bun.JSTerminated!void {
-            this.ref.unref(this.vm);
-
+pub fn runFromJS(self: *@This()) bun.JSTerminated!void {
+            _ = self.ref.unref(self.vm);
             defer {
-                Context.deinit(&this.ctx);
-                bun.destroy(this);
+            {
+                _ = Context.deinit((&self.ctx));
+                _ = bun.destroy(self);
             }
-
-            if (this.vm.isShuttingDown()) return;
-
-            const globalThis = this.vm.global;
-            const promise = this.promise.swap();
-            const result = Context.runFromJS(&this.ctx, globalThis) catch |e| {
-                return promise.reject(globalThis, globalThis.takeException(e));
-            };
-            try result.fulfill(globalThis, promise);
-        }
-    };
+            }
+            if (self.vm.isShuttingDown()) {
+                return;
+            }
+            const globalThis = self.vm.global;
+            const promise = self.promise.swap();
+            const result = (blk_catch_1: { break :blk_catch_1 ((Context.runFromJS((&self.ctx), globalThis)) catch |e| { _ = &e; return promise.reject(globalThis, globalThis.takeException(e)); }); });
+            _ = try result.fulfill(globalThis, promise);
+    }
+    const Self = @This();
+};
 }
 
 pub fn startExtractTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store, path: []const u8, glob_patterns: ?PatternList) bun.JSError!jsc.JSValue {

@@ -276,7 +276,7 @@ pub struct BunObject {
     static fn toJSLazyPropertyCallback(comptime wrapped: auto): LazyPropertyCallback {
         return struct {
             @callconv(jsc.conv)
-            fn callback(global: *jsc.JSGlobalObject, object: *jsc.JSObject): JSValue {
+            static fn callback(global: *jsc.JSGlobalObject, object: *jsc.JSObject): JSValue {
                 return bun.jsc.toJSHostCall(global, @src(), wrapped, .{ global, object });
             }
         }.callback;
@@ -413,12 +413,12 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
 
     let lexer_output = lexer_output: {
         if (bun.strings.isAllASCII(brace_slice.slice())) {
-            break :lexer_output Braces.Lexer.tokenize(arena_g.val.allocator(), brace_slice.slice()) catch |e| {
+            break :lexer_output Braces.Lexer.tokenize(arena_g.val.allocator(), brace_slice.slice()) catch e => {
                 return global.throwError(e, "failed to tokenize braces");
             };
         }
 
-        break :lexer_output Braces.NewLexer(.wtf8).tokenize(arena_g.val.allocator(), brace_slice.slice()) catch |e| {
+        break :lexer_output Braces.NewLexer(.wtf8).tokenize(arena_g.val.allocator(), brace_slice.slice()) catch e => {
             return global.throwError(e, "failed to tokenize braces");
         };
     };
@@ -433,7 +433,7 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
     }
     if (opts.parse) {
         let parser = Braces.Parser.init(lexer_output.tokens.items[0..], arena_g.val.allocator());
-        const ast_node = parser.parse() catch |e| {
+        const ast_node = parser.parse() catch e => {
             return global.throwError(e, "failed to parse braces");
         };
         const str = bun.handleOom(std.fmt.allocPrint(global.bunVM().allocator, "{f}", .{ std.json.fmt(ast_node, .{}) }));
@@ -457,7 +457,7 @@ pub fn braces(global: *jsc.JSGlobalObject, brace_str: bun.String, opts: gen.Brac
         lexer_output.tokens.items[0..],
         expanded_strings,
         lexer_output.contains_nested,
-    ) catch |e| {
+    ) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
         return global.throwPretty("Unexpected token while expanding braces", .{});
     };
@@ -840,7 +840,7 @@ pub fn openInEditor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame):
         return globalThis.throw("No file path specified", .{});
     }
 
-    editor.open(edit.path, path, line, column, arguments_g.val.@"arena".allocator()) catch |e| {
+    editor.open(edit.path, path, line, column, arguments_g.val.@"arena".allocator()) catch e => {
         return globalThis.throw("Opening editor failed {s}", .{ @errorName(e) });
     };
 
@@ -1025,7 +1025,7 @@ pub fn resolveSync(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame)
 
 pub fn resolve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(3);
-    const value = doResolve(globalObject, arguments.slice()) catch |e| {
+    const value = doResolve(globalObject, arguments.slice()) catch e => {
         const err_val = globalObject.takeError(e);
         return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalObject, err_val);
     };
@@ -1255,7 +1255,7 @@ pub fn serve(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.
                         );
                         debugger.http_server_agent.notifyServerRoutesUpdated(
                             jsc.API.AnyServer.@"from"(server),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
 
                     return obj;
@@ -1481,7 +1481,7 @@ pub fn setTLSDefaultCiphers(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject, c
 }
 
 pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject): jsc.JSValue {
-    let valkey = jsc.API.Valkey.createNoJsNoPubsub(globalThis, &.{ .js_undefined }) catch |e| {
+    let valkey = jsc.API.Valkey.createNoJsNoPubsub(globalThis, &.{ .js_undefined }) catch e => {
         if (e != error.JSError) {
             if (globalThis.throwError(e, "Failed to create Redis client") == error.JSError) {}
             return JSValue.zero;
@@ -1492,7 +1492,7 @@ pub fn getValkeyDefaultClient(globalThis: *jsc.JSGlobalObject, _: *jsc.JSObject)
     const as_js = valkey.toJS(globalThis);
 
     valkey.this_value = jsc.JSRef.initWeak(as_js);
-    valkey._subscription_ctx = SubscriptionCtx.init(valkey) catch |e| {
+    valkey._subscription_ctx = SubscriptionCtx.init(valkey) catch e => {
         if (e != error.JSError) {
             if (globalThis.throwError(e, "Failed to create Redis client") == error.JSError) {}
             return JSValue.zero;
@@ -1710,7 +1710,7 @@ pub struct JSZlib {
     pub const Library = JSZlibLibrary;
 
     // This has to be `inline` due to the callframe.
-    inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZlibOptionsTuple {
+    static inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZlibOptionsTuple {
         const arguments = callframe.arguments_old(2).slice();
         const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
         const options_val: JSValue? =
@@ -1825,7 +1825,7 @@ pub struct JSZlib {
                 let reader = zlib.ZlibReaderArrayList.initWithOptions(compressed, &list, allocator, {
                     windowBits: opts.windowBits,
                     level: opts.level,
-                }) catch |e| {
+                }) catch e => {
                     list.deinit(allocator);
                     if (e == error.InvalidArgument) {
                         return globalThis.throw("Zlib error: Invalid argument", .{});
@@ -1936,7 +1936,7 @@ pub struct JSZlib {
                     windowBits: 15,
                     gzip: is_gzip,
                     level: level ?? 6,
-                }) catch |e| {
+                }) catch e => {
                     const _list_g = DeinitWithAllocGuard<std.ArrayListUnmanaged(u8)>{ val: list, alloc: allocator };
                     if (e == error.InvalidArgument) {
                         return globalThis.throw("Zlib error: Invalid argument", .{});
@@ -2103,7 +2103,7 @@ pub struct JSZstd {
         bun.allocators.freeWithoutSize(ctx);
     }
 
-    inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZstdOptionsTuple {
+    static inline fn getOptions(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZstdOptionsTuple {
         const arguments = callframe.arguments();
         const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
         const options_val: JSValue? =
@@ -2137,7 +2137,7 @@ pub struct JSZstd {
         return 3;
     }
 
-    inline fn getOptionsAsync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZstdOptionsAsyncTuple {
+    static inline fn getOptionsAsync(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!ZstdOptionsAsyncTuple {
         const arguments = callframe.arguments();
         const buffer_value: JSValue = if (arguments.len > 0) arguments[0] else .js_undefined;
         const options_val: JSValue? =
@@ -2197,7 +2197,7 @@ pub struct JSZstd {
         const input = buffer.slice();
         const allocator = bun.default_allocator;
 
-        const output = bun.zstd.decompressAlloc(allocator, input) catch |e| {
+        const output = bun.zstd.decompressAlloc(allocator, input) catch e => {
             return globalThis.ERR(.ZSTD, "Decompression failed: {s}", .{ @errorName(e) }).throw();
         };
 

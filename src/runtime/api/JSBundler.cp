@@ -919,13 +919,13 @@ struct IndentGuard {
                 };
 
                 const dir_guard = FDGuard{
-                    fd: bun.FD.fromStdDir(std.fs.cwd().openDir(path_guard.slice.slice(), .{}) catch |e| {
+                    fd: bun.FD.fromStdDir(std.fs.cwd().openDir(path_guard.slice.slice(), .{}) catch e => {
                         return globalThis.throwPretty("{s}: failed to open root directory: {s}", .{ @errorName(e), path_guard.slice.slice() });
                     }),
                 };
 
                 let rootdir_buf: bun.PathBuffer = undefined;
-                const rootdir = dir_guard.fd.getFdPath(&rootdir_buf) catch |e| {
+                const rootdir = dir_guard.fd.getFdPath(&rootdir_buf) catch e => {
                     return globalThis.throwPretty("{s}: failed to get full root directory path: {s}", .{ @errorName(e), path_guard.slice.slice() });
                 };
                 cfg_guard.cfg.rootdir.appendSliceExact(rootdir)?;
@@ -1556,7 +1556,7 @@ pub union(enum) BundlerLoadValue {
             } else {
                 const loader: api.Loader = @enumFromInt(loader_as_int.to(u8));
                 const global = _.bv2.plugins.?.globalObject();
-                const source_code = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(global, source_code_value, bun.default_allocator) catch |e| {
+                const source_code = jsc.Node.StringOrBuffer.fromJSToOwnedSlice(global, source_code_value, bun.default_allocator) catch e => {
                     switch (e) {
                         error.OutOfMemory => {
                             bun.outOfMemory();
@@ -1651,7 +1651,7 @@ extern fn JSBundlerPlugin__runSetupFunction(
         fn runOnEndCallbacks(*_, globalThis: *jsc.JSGlobalObject, build_promise: *jsc.JSPromise, build_result: jsc.JSValue, rejection: bun.JSError!jsc.JSValue): bun.JSError!jsc.JSValue {
             jsc.markBinding(@src());
 
-            const rejection_value = rejection catch |e| switch (e) {
+            const rejection_value = rejection catch e => switch (e) {
                 error.OutOfMemory => globalThis.createOutOfMemoryError(),
                 error.JSError => globalThis.takeError(e),
                 error.JSTerminated => return error.JSTerminated,
@@ -1811,7 +1811,7 @@ extern fn JSBundlerPlugin__runSetupFunction(
                 plugin.globalObject(),
                 file,
                 exception,
-            ) catch |e| switch (e) {
+            ) catch e => switch (e) {
                 error.OutOfMemory => bun.outOfMemory(),
                 error.JSError, error.JSTerminated => {
                     // We are already producing a build error for the original plugin

@@ -60,7 +60,7 @@ struct Corker {
             _.globalObject,
             if (this_value == .zero) .js_undefined else this_value,
             _.args,
-        ) catch |e| _.globalObject.takeException(e);
+        ) catch e => _.globalObject.takeException(e);
     }
 }
 
@@ -298,7 +298,7 @@ fn onPing(*_, _ws: uws.AnyWebSocket, data: []const u8) {
         globalThis,
         .js_undefined,
         &ping_args, // TODO: properly propagate exception upwards
-    ) catch |e| {
+    ) catch e => {
         const err_val = globalThis.takeException(e);
         log("onPing error", .{});
         handler.runErrorCallback(vm, globalThis, err_val);
@@ -328,7 +328,7 @@ fn onPong(*_, _ws: uws.AnyWebSocket, data: []const u8) {
         globalThis,
         .js_undefined,
         &pong_args, // TODO: properly propagate exception upwards
-    ) catch |e| {
+    ) catch e => {
         const err_val = globalThis.takeException(e);
         log("onPong error", .{});
         handler.runErrorCallback(vm, globalThis, err_val);
@@ -379,7 +379,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
             }
         }
 
-        const message_js = bun.String.createUTF8ForJS(globalObject, message) catch |e| {
+        const message_js = bun.String.createUTF8ForJS(globalObject, message) catch e => {
             const err_val = globalObject.takeException(e);
             log("onClose error (message) {}", .{_.#this_value.isNotEmpty()});
             handler.runErrorCallback(vm, globalObject, err_val);
@@ -387,7 +387,7 @@ fn onClose(*_, _ws: uws.AnyWebSocket, code: i32, message: []const u8) {
         };
 
         const close_args: [3]jsc.JSValue = [ _.#this_value.tryGet() ?? .js_undefined, JSValue.jsNumber(code), message_js ];
-        * = handler.onClose.call(globalObject, .js_undefined, &close_args) catch |e| {
+        * = handler.onClose.call(globalObject, .js_undefined, &close_args) catch e => {
             const err_val = globalObject.takeException(e);
             log("onClose error {}", .{_.#this_value.isNotEmpty()});
             handler.runErrorCallback(vm, globalObject, err_val);

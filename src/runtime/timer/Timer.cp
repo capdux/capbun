@@ -44,7 +44,8 @@ pub struct DerefGuard<T> {
     }
 }
 
-pub const TimeoutMap = std.AutoArrayHashMapUnmanaged(i32, *EventLoopTimer);
+struct EventLoopTimerPtrHolder { p: *EventLoopTimer }
+pub const TimeoutMap = std.AutoArrayHashMapUnmanaged(i32, @TypeOf(@as(EventLoopTimerPtrHolder, undefined).p));
 pub const TimerHeap = heap.Intrusive(EventLoopTimer, void, EventLoopTimer.less);
 
 pub enum Kind_Big: u32 {
@@ -404,7 +405,7 @@ export class All {
                         break :blk bun.String.createFormat(
                             "{d} does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.",
                             .{ countdown }
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     } else {
                         break :blk bun.String.ascii("Infinity does not fit into a 32-bit signed integer.\nTimeout duration was set to 1.");
                     }
@@ -414,7 +415,7 @@ export class All {
                         break :blk bun.String.createFormat(
                             "{d} is a negative number.\nTimeout duration was set to 1.",
                             .{ countdown }
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     } else {
                         break :blk bun.String.ascii("-Infinity is a negative number.\nTimeout duration was set to 1.");
                     }
@@ -659,7 +660,7 @@ export class All {
 }
 
 pub struct internal_bindings {
-    pub fn timerClockMs(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
+    static fn timerClockMs(globalThis: *jsc.JSGlobalObject, callFrame: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalThis;
         * = callFrame;
         const now = timespec.now(.allow_mocked_time).ms();

@@ -873,3 +873,4 @@
 - [Wave #100] `src/install/` 剩余 17 文件 `--strict` 清零（69/69 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查 `bun-pm-pkg`/`bun-patch`）与路 2（`27479990` `js_parser`/`js_printer`/`resolver`/`glob`）并行推进中。
 - [Wave #102] `src/glob/` 与 `src/js_parser/ast/` 15 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`f13a69d3` `js_parser`/`js_printer`/`resolver` 剩余 6 文件）并行推进中。
 - [Wave #103] `js_parser`/`js_printer`/`resolver` 剩余 6 文件 `--strict` 清零（四目录 100% 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`b3c832d8` `runtime/{api,image,timer,server}`）并行推进中。
+- [Wave #104] `runtime/{api,image,timer}/` 全清与 `server/` 4 文件共 18 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`83f48f33` `RequestContext.cp`+`server.cp`）并行推进中。

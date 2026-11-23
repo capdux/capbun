@@ -94,7 +94,7 @@ pub fn csrf__generate(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         expires_in_ms: expires_in,
         encoding: encoding,
         algorithm: algorithm,
-    }, &token_buffer) catch |e| {
+    }, &token_buffer) catch e => {
         return switch (e) {
             error.TokenCreationFailed => globalObject.throw("Failed to create CSRF token", {}),
             else => globalObject.throwError(e, "Failed to generate CSRF token"),

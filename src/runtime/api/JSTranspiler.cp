@@ -709,7 +709,7 @@ pub struct TransformTask {
         buffer_writer.reset();
 
         let printer = JSPrinter.BufferPrinter.init(buffer_writer);
-        const printed = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch |ex| {
+        const printed = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch ex => {
             _.e = ex;
             return;
         };
@@ -749,7 +749,7 @@ pub struct TransformTask {
     }
 
     fn finish(*_, promise: *jsc.JSPromise): bun.JSTerminated!void {
-        const value = _.output_code.transferToJS(_.global) catch |ex| {
+        const value = _.output_code.transferToJS(_.global) catch ex => {
             return promise.reject(_.global, _.global.takeException(ex));
         };
         return promise.resolve(_.global, value);
@@ -965,7 +965,7 @@ fn namedImportsToJS(global: *JSGlobalObject, import_records: []const ImportRecor
     pub const ref = RefCount.ref;
     pub const deref = RefCount.deref;
 
-pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*JSTranspiler {
+static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*JSTranspiler {
     const arguments = callframe.arguments_old(3);
     let client: *JSTranspiler = bun.new(JSTranspiler, .{
         config: {
@@ -997,7 +997,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
         log,
         config.transform,
         vm.transpiler.env,
-    ) catch |e| {
+    ) catch e => {
         if (log.warnings + log.errors > 0) {
             return globalThis.throwValue(log.toJS(globalThis, bun.default_allocator, "Failed to create transpiler")?);
         }
@@ -1008,7 +1008,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     transpiler.options.no_macros = config.no_macros;
     transpiler.configureLinkerWithAutoJSX(false);
     transpiler.options.env.behavior = .disable;
-    transpiler.configureDefines() catch |e| {
+    transpiler.configureDefines() catch e => {
         if (log.warnings + log.errors > 0) {
             return globalThis.throwValue(log.toJS(globalThis, bun.default_allocator, "Failed to load define")?);
         }
@@ -1046,12 +1046,12 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 }
 
 
-pub fn finalize(client: *JSTranspiler) {
+static fn finalize(client: *JSTranspiler) {
     client.deref();
 }
 
 
-pub fn deinit(client: *JSTranspiler) {
+static fn deinit(client: *JSTranspiler) {
     client.transpiler.log.clearAndFree();
     client.scan_pass_result.named_imports.deinit(client.scan_pass_result.import_records.allocator);
     client.scan_pass_result.import_records.deinit();
@@ -1068,7 +1068,7 @@ pub fn deinit(client: *JSTranspiler) {
 }
 
 
-pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     jsc.markBinding(@src());
     const arguments = callframe.arguments_old(3);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
@@ -1148,7 +1148,7 @@ pub fn scan(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *
 }
 
 
-pub fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn transform(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     jsc.markBinding(@src());
     const arguments = callframe.arguments_old(3);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
@@ -1298,7 +1298,7 @@ pub fn transformSync(
 
     buffer_writer.reset();
     let printer = JSPrinter.BufferPrinter.init(buffer_writer);
-    * = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch |e| {
+    * = _.transpiler.print(parse_result, @TypeOf(&printer), &printer, .esm_ascii) catch e => {
         return globalThis.throwError(e, "Failed to print code");
     };
 
@@ -1311,7 +1311,7 @@ pub fn transformSync(
 }
 
 
-pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments = callframe.arguments_old(2);
     let args = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments.slice());
     const args_guard = DeinitPtrGuard<@TypeOf(args)>{ ptr: &args };
@@ -1385,7 +1385,7 @@ pub fn scanImports(client: *JSTranspiler, globalThis: *jsc.JSGlobalObject, callf
         transpiler.options.define,
         &log,
         &source,
-    ) catch |e| {
+    ) catch e => {
         if (log.warnings + log.errors > 0) {
             return globalThis.throwValue(log.toJS(globalThis, globalThis.allocator(), "Failed to scan imports")?);
         }

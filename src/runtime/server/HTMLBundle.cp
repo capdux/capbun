@@ -448,7 +448,7 @@ pub struct Route {
                             &hashbuf,
                             "{f}",
                             .{bun.fmt.hexIntLower(output_file.hash)},
-                        ) catch |e| switch (e) {
+                        ) catch e => switch (e) {
                             error.NoSpaceLeft => unreachable,
                         };
                         bun.handleOom(headers.append("ETag", etag_str));

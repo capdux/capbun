@@ -210,7 +210,7 @@ pub struct WalkTask {
 
     fn run(*_) {
         defer decrPendingActivityFlag(_.has_pending_activity);
-        const result = _.walker.walk() catch |err_val| {
+        const result = _.walker.walk() catch err_val => {
             _.e = WalkTaskErr{ unknown: err_val };
             return;
         };
@@ -323,7 +323,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         return globWalker;
     }
 
-    pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*Glob {
+    static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*Glob {
         const arguments_ = callframe.arguments_old(1);
         let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
         let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
@@ -344,17 +344,17 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
     }
 
     @callconv("c")
-    pub fn finalize(client: *Glob) {
+    static fn finalize(client: *Glob) {
         bun.default_allocator.free(client.pattern);
         bun.destroy(client);
     }
 
     @callconv("c")
-    pub fn hasPendingActivity(client: *Glob): bool {
+    static fn hasPendingActivity(client: *Glob): bool {
         return client.has_pending_activity.load(.seq_cst) > 0;
     }
 
-    pub fn __scan(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    static fn __scan(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const alloc = bun.default_allocator;
 
         const arguments_ = callframe.arguments_old(1);
@@ -362,7 +362,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
 
         let arena_alloc = std.heap.ArenaAllocator.init(alloc);
-        const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scan", alloc, unsafe { &arena_alloc }) catch |e| {
+        const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scan", alloc, unsafe { &arena_alloc }) catch e => {
             arena_alloc.deinit();
             return e;
         };
@@ -384,7 +384,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         return task.promise.value();
     }
 
-    pub fn __scanSync(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    static fn __scanSync(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const alloc = bun.default_allocator;
 
         const arguments_ = callframe.arguments_old(1);
@@ -392,7 +392,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         let _args_guard = DeinitGuard<ArgumentsSlice>{ ptr: unsafe { &arguments } };
 
         let arena_alloc = std.heap.ArenaAllocator.init(alloc);
-        const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scanSync", alloc, unsafe { &arena_alloc }) catch |e| {
+        const globWalkerOpt = client.makeGlobWalker(globalThis, unsafe { &arguments }, "scanSync", alloc, unsafe { &arena_alloc }) catch e => {
             arena_alloc.deinit();
             return e;
         };
@@ -415,7 +415,7 @@ fn decrPendingActivityFlag(has_pending_activity: *std.atomic.Value(usize)) {
         return matchedPaths;
     }
 
-    pub fn match(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+    static fn match(client: *Glob, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
         const alloc = bun.default_allocator;
         let arena_alloc = Arena.init(alloc);
         let _arena_guard = DeinitGuard<Arena>{ ptr: unsafe { &arena_alloc } };

@@ -75,14 +75,14 @@ pub fn stringify(global: *JSGlobalObject, callFrame: *jsc.CallFrame): JSError!JS
     let stringifier: Stringifier = .init(scope.allocator(), global, space_value)?;
     let _stringifier_guard = DeinitGuard<Stringifier>{ ptr: unsafe { &stringifier } };
 
-    stringifier.findAnchorsAndAliases(global, value, .root) catch |e| {
+    stringifier.findAnchorsAndAliases(global, value, .root) catch e => {
         if (e == error.StackOverflow) return global.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.JSTerminated) return error.JSTerminated;
         return error.JSError;
     };
 
-    stringifier.stringifyValue(global, value) catch |e| {
+    stringifier.stringifyValue(global, value) catch e => {
         if (e == error.StackOverflow) return global.throwStackOverflow();
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.JSTerminated) return error.JSTerminated;
@@ -973,7 +973,7 @@ pub struct Stringifier {
 
     const source = &logger.Source.initPathString("input.yaml", input.slice());
 
-    const root = bun.interchange.yaml.YAML.parse(source, &log, arena_allocator.allocator()) catch |e| {
+    const root = bun.interchange.yaml.YAML.parse(source, &log, arena_allocator.allocator()) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
         if (e == error.StackOverflow) return global.throwStackOverflow();
         if (log.msgs.items.len > 0) {
@@ -1014,7 +1014,7 @@ struct ParserCtx {
     }
 
     @callconv("c") static fn run(ctx: *ParserCtx, args: *MarkedArgumentBuffer) {
-        ctx.result = ctx.toJS(args, ctx.root) catch |e| {
+        ctx.result = ctx.toJS(args, ctx.root) catch e => {
             if (e == error.OutOfMemory) {
                 ctx.result = ctx.global.throwOutOfMemoryValue();
                 return;

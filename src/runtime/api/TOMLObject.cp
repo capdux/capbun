@@ -42,7 +42,7 @@ pub fn parse(
     const input_slice_guard = DeinitGuard<@TypeOf(input_slice)>{ ptr: &input_slice };
     const source = &logger.Source.initPathString("input.toml", input_slice.slice());
     const log_ptr: *logger.Log = &log;
-    const parse_result = TOML.parse(source, log_ptr, allocator, false) catch |e| {
+    const parse_result = TOML.parse(source, log_ptr, allocator, false) catch e => {
         if (e == error.StackOverflow) {
             return globalThis.throwStackOverflow();
         }

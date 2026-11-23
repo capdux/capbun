@@ -2018,10 +2018,10 @@ pub fn computeStepInterval(comptime T: type, bits: T, _: u7, max: u7) ?u32 {
         var remaining = bits;
         _ = &remaining;
         const first: u32 = @ctz(remaining);
-        remaining = (remaining & (remaining - (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(1)) else @as(T, 1))));
+        remaining = (remaining & (remaining - (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(T, @enumFromInt(1)) else @as(T, 1))));
         const second: u32 = @ctz(remaining);
         const step = (second - first);
-        remaining = (remaining & (remaining - (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(1)) else @as(T, 1))));
+        remaining = (remaining & (remaining - (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(T, @enumFromInt(1)) else @as(T, 1))));
         var prev = second;
         _ = &prev;
         while ((remaining != 0)) {
@@ -2030,7 +2030,7 @@ pub fn computeStepInterval(comptime T: type, bits: T, _: u7, max: u7) ?u32 {
                 return null;
             }
             prev = next;
-            remaining = (remaining & (remaining - (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(1)) else @as(T, 1))));
+            remaining = (remaining & (remaining - (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(T, @enumFromInt(1)) else @as(T, 1))));
         }
         return step;
 }

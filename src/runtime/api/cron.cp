@@ -548,7 +548,7 @@ struct CronRegisterJob {
             return globalObject.throwInvalidArguments("Cron title must contain only alphanumeric characters, hyphens, and underscores", .{});
 
         // Parse and normalize cron schedule to numeric form for crontab/launchd/schtasks
-        const parsed = CronExpression.parse(schedule_slice.slice()) catch |e|
+        const parsed = CronExpression.parse(schedule_slice.slice()) catch e =>
             return globalObject.throwInvalidArguments("{s}", .{ CronExpression.errorMessage(e)});
         let fmt_buf: [512]u8 = undefined;
         const normalized_schedule = parsed.formatNumeric(&fmt_buf);
@@ -616,7 +616,7 @@ struct CronRegisterJob {
         };
 
         const xml_guard = OwnedSliceGuard{
-            slice: cronToTaskXml(_.parsed_cron, _.bun_exe, _.title, _.schedule, _.abs_path) catch |e| {
+            slice: cronToTaskXml(_.parsed_cron, _.bun_exe, _.title, _.schedule, _.abs_path) catch e => {
                 if (e == error.TooManyTriggers) {
                     _.setErr("This cron expression requires too many triggers for Windows Task Scheduler (max 48). Simplify the expression or use fewer restricted fields.", .{});
                 } else {
@@ -1208,7 +1208,7 @@ pub struct CronJob {
         const schedule_slice_guard = ZigSliceGuard{ slice: schedule_str_guard.str.toUTF8(bun.default_allocator) };
         const schedule_slice = schedule_slice_guard.slice;
 
-        const parsed = CronExpression.parse(schedule_slice.slice()) catch |e|
+        const parsed = CronExpression.parse(schedule_slice.slice()) catch e =>
             return globalObject.throwInvalidArguments("{s}", .{ CronExpression.errorMessage(e)});
 
         const vm = globalObject.bunVM();
@@ -1269,7 +1269,7 @@ pub fn cronParse(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
     const expr_slice_guard = ZigSliceGuard{ slice: expr_str_guard.str.toUTF8(bun.default_allocator) };
     const expr_slice = expr_slice_guard.slice;
 
-    const parsed = CronExpression.parse(expr_slice.slice()) catch |e|
+    const parsed = CronExpression.parse(expr_slice.slice()) catch e =>
         return globalObject.throwInvalidArguments("{s}", .{ CronExpression.errorMessage(e)});
 
     const from_ms: f64 = if (args[1] != .zero && !args[1].isUndefined() && args[1] != .@"null") blk: {
@@ -1337,11 +1337,11 @@ fn spawnCmdGeneric(comptime Self: type, job: *Self, argv: auto, stdin_opt: bun.s
             job.finish();
             return;
         }).ptr)) };
-    let spawned = (unsafe { bun.spawn.spawnProcess(&spawn_options, @ptrCast(@constCast(argv)), envp) } catch |e| {
+    let spawned = (unsafe { bun.spawn.spawnProcess(&spawn_options, @ptrCast(@constCast(argv)), envp) } catch e => {
         job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
         job.finish();
         return;
-    }).unwrap() catch |e| {
+    }).unwrap() catch e => {
         job.setErr("Failed to spawn process: {s}", .{ @errorName(e) });
         job.finish();
         return;

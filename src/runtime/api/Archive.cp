@@ -341,7 +341,7 @@ fn extractToDiskFiltered(
                 // Symlinks are only extracted on POSIX systems (Linux/macOS).
                 // On Windows, symlinks are skipped since they require elevated privileges.
                 if (bun.Environment.isPosix) {
-                    bun.sys.symlinkat(link_target, dir_fd, pathname).unwrap() catch |e| {
+                    bun.sys.symlinkat(link_target, dir_fd, pathname).unwrap() catch e => {
                         switch (e) {
                             error.EPERM, error.ENOENT => {
                                 if (parent := std.fs.path.dirname(pathname)) {
@@ -390,9 +390,9 @@ fn AsyncTask(comptime Context: type): type {
         concurrent_task: jsc.ConcurrentTask = .{},
         ref: bun.Async.KeepAlive = .{},
 
-        fn create(globalThis: *jsc.JSGlobalObject, ctx: Context) error{OutOfMemory}!*Self {
+        static fn create(globalThis: *jsc.JSGlobalObject, ctx: Context): *Self! {
             const vm = globalThis.bunVM();
-            const self = bun.new(Self, .{
+            const created = bun.new(Self, .{
                 .ctx = ctx,
                 .promise = jsc.JSPromise.Strong.init(globalThis),
                 .vm = vm,
@@ -400,19 +400,19 @@ fn AsyncTask(comptime Context: type): type {
                 .concurrent_task = .{},
                 .ref = .{},
             });
-            self.ref.ref(vm);
-            return self;
+            created.ref.ref(vm);
+            return created;
         }
 
-        fn schedule(this: *Self) void {
-            jsc.WorkPool.schedule(&this.task);
+        fn schedule(*_) {
+            jsc.WorkPool.schedule(&_.task);
         }
 
-        fn run(work_task: *jsc.WorkPoolTask) void {
+        static fn run(work_task: *jsc.WorkPoolTask) {
             const self_task: *Self = @fieldParentPtr("task", work_task);
             const result = Context.run(&self_task.ctx);
             self_task.ctx.result = if (@typeInfo(@TypeOf(result)) == .error_union)
-                result catch |e| .{ .err = e }
+                result catch e => .{ .err = e }
             else
                 result;
             self_task.vm.enqueueTaskConcurrent(
@@ -420,22 +420,22 @@ fn AsyncTask(comptime Context: type): type {
             );
         }
 
-        pub fn runFromJS(this: *Self) bun.JSTerminated!void {
-            this.ref.unref(this.vm);
+        pub fn runFromJS(*_): bun.JSTerminated!void {
+            _.ref.unref(_.vm);
 
             defer {
-                Context.deinit(&this.ctx);
-                bun.destroy(this);
+                Context.deinit(&_.ctx);
+                bun.destroy(_);
             }
 
-            if (this.vm.isShuttingDown()) return;
+            if (_.vm.isShuttingDown()) return;
 
-            const globalThis = this.vm.global;
-            const promise = this.promise.swap();
-            const result = Context.runFromJS(&this.ctx, globalThis) catch |e| {
+            const globalThis = _.vm.global;
+            const promise = _.promise.swap();
+            const result = Context.runFromJS(&_.ctx, globalThis) catch e => {
                 return promise.reject(globalThis, globalThis.takeException(e));
             };
-            try result.fulfill(globalThis, promise);
+            result.fulfill(globalThis, promise)?;
         }
     };
 }
@@ -539,7 +539,7 @@ struct BlobContext {
     fn run(*_): Result {
         switch (_.compress) {
             .gzip => |opts| {
-                return BlobContext.Result{ compressed: compressGzip(_.store.sharedView(), opts.level) catch |e| return BlobContext.Result{ @"err": e } };
+                return BlobContext.Result{ compressed: compressGzip(_.store.sharedView(), opts.level) catch e => return BlobContext.Result{ @"err": e } };
             },
             .none => return BlobContext.Result.uncompressed,
         }
@@ -621,7 +621,7 @@ struct WriteContext {
         let compressed_guard = OwnedBytes{};
         const data_to_write = switch (_.compress) {
             .gzip => |opts| blk: {
-                const compressed = compressGzip(source_data, opts.level) catch |e| return Result{ @"err": e };
+                const compressed = compressGzip(source_data, opts.level) catch e => return Result{ @"err": e };
                 compressed_guard.slice = compressed;
                 break :blk compressed;
             },
@@ -1079,14 +1079,14 @@ fn parsePatternArg(globalThis: *jsc.JSGlobalObject, arg: jsc.JSValue, api_name: 
     store: *jsc.WebCore.Blob.Store,
     compress: Compression = .none,
 
-    pub fn finalize(client: *Archive) {
+    static fn finalize(client: *Archive) {
     jsc.markBinding(@src());
     client.store.deref();
     bun.destroy(client);
 }
 
     /// Pretty-print for console.log
-pub fn writeFormat(client: *const Archive, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool)! {
+static fn writeFormat(client: *const Archive, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool)! {
     const Writer = @TypeOf(writer);
     const Output = bun.Output;
     const data = client.store.sharedView();
@@ -1115,7 +1115,7 @@ pub fn writeFormat(client: *const Archive, comptime Formatter: type, formatter: 
 /// - compress: "gzip" - Enable gzip compression
 /// - level: number (1-12) - Compression level (default 6)
 /// When no options are provided, no compression is applied
-pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*Archive {
+static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*Archive {
     const args2 = callframe.argumentsAsArray(2);
     const data_arg = args2[0];
     const options_arg = args2[1];
@@ -1154,7 +1154,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): 
 /// For Archive instances, uses the archive's compression settings unless overridden by options.
 /// Options:
 ///   - gzip: { level?: number } - Override compression settings
-pub fn write(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn write(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const args3 = callframe.argumentsAsArray(3);
     const path_arg = args3[0];
     const data_arg = args3[1];
@@ -1206,7 +1206,7 @@ pub fn write(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JS
 /// Options:
 ///   - glob: string | string[] - Only extract files matching the glob pattern(s). Supports negative patterns with "!".
 /// Returns Promise<number> with count of extracted files
-pub fn extract(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn extract(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const args2 = callframe.argumentsAsArray(2);
     const path_arg = args2[0];
     const options_arg = args2[1];
@@ -1237,19 +1237,19 @@ pub fn extract(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *js
 
     /// Instance method: archive.blob()
 /// Returns Promise<Blob> with the archive data (compressed if gzip was set in options)
-pub fn blob(client: *Archive, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn blob(client: *Archive, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     return startBlobTask(globalThis, client.store, client.compress, .blob);
 }
 
     /// Instance method: archive.bytes()
 /// Returns Promise<Uint8Array> with the archive data (compressed if gzip was set in options)
-pub fn bytes(client: *Archive, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn bytes(client: *Archive, globalThis: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     return startBlobTask(globalThis, client.store, client.compress, .bytes);
 }
 
     /// Instance method: archive.files(glob?)
 /// Returns Promise<Map<string, File>> with archive file contents
-pub fn files(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+static fn files(client: *Archive, globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const glob_arg = callframe.argument(0);
 
     let glob_guard = PatternOptGuard{};

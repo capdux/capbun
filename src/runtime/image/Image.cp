@@ -590,7 +590,7 @@ static fn setBackend(_: jsc.JSValue, global: *jsc.JSGlobalObject, value: jsc.JSV
 static fn fromClipboard(global: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     if (sb := comptime codecs.system_backend) {
         let bytes_opt: ([]u8)? = null;
-        if (clip := sb.clipboard() catch |e| {
+        if (clip := sb.clipboard() catch e => {
             if (e == error.OutOfMemory) return global.throwOutOfMemory();
             return jsc.JSValue.null;
         }) {
@@ -651,7 +651,7 @@ fn doMetadata(*_, global: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.J
             obj.put(global, jsc.ZigString.static("format"), jsc.ZigString.init(@tagName(p.format)).toJS(global));
             return jsc.JSPromise.resolvedPromiseValue(global, obj);
         } else {
-            const probe_err = codecs.probe(buf, _.max_pixels) catch |e| switch (e) {
+            const probe_err = codecs.probe(buf, _.max_pixels) catch e => switch (e) {
                 error.UnsupportedOnPlatform => null,
                 else => return jsc.JSPromise.rejectedPromise(global, rejectError(global, e)).asValue(global),
             };
@@ -735,7 +735,7 @@ fn doWrite(*_, global: *jsc.JSGlobalObject, cf: *jsc.CallFrame): bun.JSError!jsc
 fn schedule(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue, kind: PipelineTask.Kind, deliver: PipelineTask.Deliver): bun.JSError!jsc.JSValue {
     if (_.source == .blob)
         return BlobReadChain.start(_, global, this_value, kind, deliver);
-    let input = _.pinForTask(this_value, global) catch |e| {
+    let input = _.pinForTask(this_value, global) catch e => {
         // `deliver` may own a Strong; the task that would have freed it in
         // deinit() is never created on this branch.
         let mut_del = blk: { break :blk deliver; };
@@ -802,7 +802,7 @@ fn encodeForBody(*_, global: *jsc.JSGlobalObject, this_value: jsc.JSValue): bun.
             } else return global.throw(refuse, {});
         } else return global.throw(refuse, {});
     }
-    let input = _.pinForTask(this_value, global) catch |e| {
+    let input = _.pinForTask(this_value, global) catch e => {
         if (e == error.OutOfMemory) bun.outOfMemory();
         return global.throw("Image: source ArrayBuffer was detached", {});
     };
@@ -1032,7 +1032,7 @@ pub struct PipelineTask {
                 _.result = PipelineResult{ @"meta": MetaResult{ w: w, h: h, format: p.format } };
                 return;
             } else {
-                const probe_err = codecs.probe(input, _.max_pixels) catch |e| switch (e) {
+                const probe_err = codecs.probe(input, _.max_pixels) catch e => switch (e) {
                     error.UnsupportedOnPlatform => null,
                     else => {
                         _.result = PipelineResult{ @"err": e };
@@ -1063,7 +1063,7 @@ pub struct PipelineTask {
             hint = codecs.DecodeHint{ target_w: tw, target_h: th };
         }
 
-        let decoded = codecs.decode(input, _.max_pixels, hint) catch |e| {
+        let decoded = codecs.decode(input, _.max_pixels, hint) catch e => {
             _.result = PipelineResult{ @"err": e };
             return;
         };
@@ -1075,7 +1075,7 @@ pub struct PipelineTask {
         // metadata report the visually-upright dimensions, the way Sharp does.
         if (_.auto_orient && src_format == .jpeg) {
             const orient = exif.readJpeg(input);
-            if (orient != .normal) applyOrientation(&decoded, orient) catch |e| {
+            if (orient != .normal) applyOrientation(&decoded, orient) catch e => {
                 _.result = PipelineResult{ @"err": e };
                 return;
             };
@@ -1088,11 +1088,11 @@ pub struct PipelineTask {
         }
 
         if (_.kind == .placeholder) {
-            _.result = makePlaceholder(decoded.rgba, decoded.width, decoded.height) catch |e| PipelineResult{ @"err": e };
+            _.result = makePlaceholder(decoded.rgba, decoded.width, decoded.height) catch e => PipelineResult{ @"err": e };
             return;
         }
 
-        _.applyPipeline(&decoded) catch |e| {
+        _.applyPipeline(&decoded) catch e => {
             _.result = PipelineResult{ @"err": e };
             return;
         };
@@ -1115,7 +1115,7 @@ pub struct PipelineTask {
         // Jpegli XYB) as sRGB and visibly shifts the colours — see #30197.
         // JPEG/PNG/WebP embed it; HEIC/AVIF via the system backend do not.
         if (enc.icc_profile == null) enc.icc_profile = decoded.icc_profile;
-        const out = codecs.encode(decoded.rgba, decoded.width, decoded.height, enc) catch |e| {
+        const out = codecs.encode(decoded.rgba, decoded.width, decoded.height, enc) catch e => {
             _.result = PipelineResult{ @"err": e };
             return;
         };

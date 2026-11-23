@@ -156,6 +156,10 @@ pub fn __cp_deinit(self: *@This()) void {
     };
 }
 
+pub const EventLoopTimerPtrHolder = struct {
+    p: *EventLoopTimer,
+};
+
 pub const ID = extern struct {
     id: i32,
     kind: Kind.Big = .setTimeout,
@@ -797,7 +801,7 @@ pub const TimerObjectInternals = _TimerObjectInternals;
 pub const WTFTimer = _WTFTimer;
 pub const DateHeaderTimer = _DateHeaderTimer;
 pub const EventLoopDelayMonitor = _EventLoopDelayMonitor;
-pub const TimeoutMap = std.AutoArrayHashMapUnmanaged(i32, *EventLoopTimer);
+pub const TimeoutMap = std.AutoArrayHashMapUnmanaged(i32, @TypeOf(@as(EventLoopTimerPtrHolder, undefined).p));
 pub const TimerHeap = heap.Intrusive(EventLoopTimer, void, EventLoopTimer.less);
 
 pub export fn Bun__internal_drainTimers(vm: *VirtualMachine) callconv(.c) void {

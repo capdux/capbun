@@ -418,9 +418,9 @@ pub fn upgrade(client: *NodeHTTPResponse, data_value: JSValue, sec_websocket_pro
             client.flags.upgraded = true;
             _ = client.poll_ref.unref(client.server.globalThis().bunVM());
             if ((raw_response == .SSL)) {
-                _ = raw_response.SSL.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+                _ = raw_response.SSL.upgrade((&ServerWebSocket), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
             } else {
-                _ = raw_response.TCP.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+                _ = raw_response.TCP.upgrade((&ServerWebSocket), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
             }
         }
         return true;
@@ -907,7 +907,7 @@ pub fn onDataOrAborted(self: *NodeHTTPResponse, chunk: []const u8, last: bool, e
 
 pub fn onData(client: *NodeHTTPResponse, chunk: []const u8, last: bool) void {
         _ = log("onData({d} bytes, is_last = {d})", .{ chunk.len, @intFromBool(last) });
-        _ = onDataOrAborted(client, chunk, last, .none, client.getThisValue());
+        _ = client.onDataOrAborted(chunk, last, .none, client.getThisValue());
 }
 
 pub fn onDrainCorked(client: *NodeHTTPResponse, offset: u64) void {
@@ -1052,7 +1052,7 @@ if ((!callback_value.isUndefined())) {
                 _ = js.onWritableSetCached(js_this, globalObject, callback_value.withAsyncContextIfNeeded(globalObject));
                 _ = raw_response.onWritable(*NodeHTTPResponse, onDrain, self);
             }
-            return jsc.JSValue.jsNumberFromInt64((0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64))))))));
+            return jsc.JSValue.jsNumberFromInt64((-(if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) == .@"enum") cp_cast_int(i64, @intFromEnum((if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64)))))) else cp_cast_int(i64, (if (comptime @typeInfo(@TypeOf(@min(written, std.math.maxInt(i64)))) == .@"enum") cp_cast_int(i32, @intFromEnum(@min(written, std.math.maxInt(i64)))) else cp_cast_int(i32, @min(written, std.math.maxInt(i64))))))));
 },
 }
         }
@@ -1161,7 +1161,7 @@ if ((((!client.flags.request_has_completed) and (!client.flags.socket_closed)) a
 
 pub fn write(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments();
-        return writeOrEnd(client, globalObject, arguments, .zero, false);
+        return client.writeOrEnd(globalObject, arguments, .zero, false);
 }
 
 pub fn onAutoFlush(client: *NodeHTTPResponse) bool {
@@ -1206,7 +1206,7 @@ pub fn flushHeaders(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.C
 pub fn end(client: *NodeHTTPResponse, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!jsc.JSValue {
         const arguments = callframe.arguments();
         _ = resumeSocket(client);
-        return writeOrEnd(client, globalObject, arguments, callframe.this(), true);
+        return client.writeOrEnd(globalObject, arguments, callframe.this(), true);
 }
 
 pub fn getBytesWritten(client: *NodeHTTPResponse, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) jsc.JSValue {

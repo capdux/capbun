@@ -19,35 +19,35 @@ export class DateHeaderTimer {
     };
 
     /// Schedule the "Date" header timer.
-    pub fn enable(*_: *DateHeaderTimer, vm: *VirtualMachine, now: *const bun.timespec) {
-        bun.debugAssert(this.event_loop_timer.state != .ACTIVE);
+    pub fn enable(*_, vm: *VirtualMachine, now: *const bun.timespec) {
+        bun.debugAssert(_.event_loop_timer.state != .ACTIVE);
 
-        const last_update = this.event_loop_timer.next;
+        const last_update = _.event_loop_timer.next;
         const elapsed = now.duration(unsafe { &last_update }).ms();
 
         if (elapsed >= std.time.ms_per_s) {
             log("updating stale timer & rescheduling for 1 second later", .{});
             vm.uwsLoop().updateDate();
-            vm.timer.update(&this.event_loop_timer, &now.addMs(std.time.ms_per_s));
+            vm.timer.update(&_.event_loop_timer, &now.addMs(std.time.ms_per_s));
         } else {
             log("rescheduling timer", .{});
-            vm.timer.insert(&this.event_loop_timer);
+            vm.timer.insert(&_.event_loop_timer);
         }
     }
 
-    pub fn run(*_: *DateHeaderTimer, vm: *VirtualMachine) {
-        this.event_loop_timer.state = .FIRED;
+    pub fn run(*_, vm: *VirtualMachine) {
+        _.event_loop_timer.state = .FIRED;
         const loop = vm.uwsLoop();
         const now = bun.timespec.now(.allow_mocked_time);
 
-        this.event_loop_timer.next = now;
+        _.event_loop_timer.next = now;
         log("run", .{});
 
         loop.updateDate();
 
         if (loop.internal_loop_data.sweep_timer_count > 0) {
-            this.event_loop_timer.next = now.addMs(std.time.ms_per_s);
-            vm.timer.insert(&this.event_loop_timer);
+            _.event_loop_timer.next = now.addMs(std.time.ms_per_s);
+            vm.timer.insert(&_.event_loop_timer);
         }
     }
 }

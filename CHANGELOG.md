@@ -2229,3 +2229,5 @@
 - [Wave #102] 修改 .cp/.zig：`src/glob/GlobWalker.{cp,zig}`、`src/js_parser/ast/{Binding,foldStringAddition,ImportScanner,maybe,NewStore,parse,parseImportExport,Parser,parseStmt,parseTypescript,P,skipTypescript,visit,visitExpr}.{cp,zig}`（`zig:check` 5/5）。
 
 - [Wave #103] 修改 .cp/.zig：`src/js_parser/ast/visitStmt.{cp,zig}`、`src/js_parser/js_parser.{cp,zig}`、`src/js_printer/js_printer.{cp,zig}`、`src/resolver/{fs,package_json,resolver}.{cp,zig}`（`zig:check` 5/5）。
+
+- [Wave #104] 修改 .cp/.zig：`src/runtime/api/{Archive,BunObject,JSBundler,JSON5Object,JSONCObject,JSTranspiler,TOMLObject,YAMLObject,cron,csrf_jsc,glob}.{cp,zig}`、`src/runtime/image/Image.{cp,zig}`、`src/runtime/server/{HTMLBundle,NodeHTTPResponse,ServerConfig,ServerWebSocket}.{cp,zig}`、`src/runtime/timer/{DateHeaderTimer,Timer}.{cp,zig}`（`zig:check` 5/5）。

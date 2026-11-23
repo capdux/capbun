@@ -49,14 +49,14 @@ pub fn parse(
     let input_slice_guard = DeinitGuard<jsc.ZigString.Slice>{ val: input_value.toSlice(globalThis, bun.default_allocator)? };
     const source = &logger.Source.initPathString("input.jsonc", input_slice_guard.val.slice());
     const log_ptr: *logger.Log = &log_guard.val;
-    const parse_result = json.parseTSConfig(source, log_ptr, allocator, true) catch |e| {
+    const parse_result = json.parseTSConfig(source, log_ptr, allocator, true) catch e => {
         if (e == error.StackOverflow) {
             return globalThis.throwStackOverflow();
         }
         return globalThis.throwValue((log_guard.val.toJS(globalThis, default_allocator, "Failed to parse JSONC"))?);
     };
 
-    return parse_result.toJS(allocator, globalThis) catch |e| switch (e) {
+    return parse_result.toJS(allocator, globalThis) catch e => switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.JSError => return error.JSError,
         error.JSTerminated => return error.JSTerminated,

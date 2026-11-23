@@ -686,7 +686,7 @@ pub static fn fromJS(
                             .method = .@"any",
                         },
                         .callback = jsc.Strong.Optional.create(value.withAsyncContextIfNeeded(global), global),
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                     _guard_path.armed = false;
                     bun.default_allocator.free(path);
                     continue;
@@ -717,7 +717,7 @@ pub static fn fromJS(
                                         .method = .{ .specific = method },
                                     },
                                     .callback = jsc.Strong.Optional.create(function.withAsyncContextIfNeeded(global), global),
-                                }) catch |e| bun.handleOom(e);
+                                }) catch e => bun.handleOom(e);
                             } else if (html_route := AnyRoute.fromJS(global, path, function, init_ctx)?) {
                                 let method_set = bun.http.Method.Set.initEmpty();
                                 method_set.insert(method);
@@ -726,7 +726,7 @@ pub static fn fromJS(
                                     .path = bun.handleOom(bun.default_allocator.dupe(u8, path)),
                                     .route = html_route,
                                     .method = .{ .method = method_set },
-                                }) catch |e| bun.handleOom(e);
+                                }) catch e => bun.handleOom(e);
                             }
                         }
                     }
@@ -750,7 +750,7 @@ pub static fn fromJS(
                 args.static_routes.append(.{
                     .path = path,
                     .route = route,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
                 _guard_path.armed = false;
             }
 
