@@ -861,3 +861,4 @@
 - [用户] debug 无问题、release 编译报错，分析并解决。[回应] 定位 15 处去重错误（12 文件），修复 .cp 后 release 构建成功（build/release/bun，Bun.version 1.3.14），debug zig:check 5/5。[用户] 提示可用 `static struct`。[回应] 已验证 cpc 支持，纯工具类新模块可用。
 
 - [用户] 要求不再使用子智能体（配额不足），继续解决正式/运行问题。[回应] 已终止全部子智能体，单智能体定位并修复 `parseTypescript.cp` `parseTypeScriptDecorators` 与 `visit.cp` `visitTSDecorators` 两处语句丢失导致的 ASan SEGV；`zig:check` 5/5 通过，复测零崩溃。
+- [用户] 暂停后续工作，配额不足，待配额恢复再继续。[回应] 已终止后台 `task-21493`（`test/cli/install` 正式版测试），当前工作树干净（HEAD `ee81af1cbac`），`build/release/bun` 已就绪，静候配额恢复后继续。
