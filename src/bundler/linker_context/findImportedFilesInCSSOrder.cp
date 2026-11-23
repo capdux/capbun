@@ -73,7 +73,7 @@ pub struct Visitor {
         _.visited.append(
             _.temp_allocator,
             source_index,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
 
         const repr: *const bun.css.BundlerStyleSheet = _.css_asts[source_index.get()] ?? return; // Sanity check
         const top_level_rules = &repr.rules;
@@ -127,7 +127,7 @@ pub struct Visitor {
                                 conditions: all_conditions,
                                 condition_import_records: ext_import_records,
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     } else {
                         _.order.append(
                             _.allocator,
@@ -138,7 +138,7 @@ pub struct Visitor {
                                 conditions: wrapping_conditions.*,
                                 condition_import_records: wrapping_import_records.*,
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
                     debug(
                         "Push external: {d}={s}",
@@ -168,7 +168,7 @@ pub struct Visitor {
         _.order.append(_.allocator, Chunk.CssImportOrder{
             kind: .{ source_index: source_index },
             conditions: wrapping_conditions.*,
-        }) catch |e| bun.handleOom(e);
+        }) catch e => bun.handleOom(e);
     }
 }
 
@@ -404,7 +404,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
                 // Allocate a new set of duplicate indices to track this combination.
                 layer_duplicates.append(temp_allocator, DuplicateEntry{
                     layers: layers_key,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
             }
             let duplicates = layer_duplicates.at(index).indices.slice();
             let j = duplicates.len;
@@ -455,7 +455,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
             layer_duplicates.mut(index).indices.append(
                 temp_allocator,
                 @intCast(wip_order.len),
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
             bun.handleOom(wip_order.append(temp_allocator, entry.*));
         }
 
@@ -482,7 +482,7 @@ pub fn findImportedFilesInCSSOrder(c: *LinkerContext, temp_allocator: std.mem.Al
                     wip_order.mut(prev_index).kind.layers.toOwned(temp_allocator).appendSlice(
                         temp_allocator,
                         entry.kind.layers.inner().sliceConst(),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
             }
         }

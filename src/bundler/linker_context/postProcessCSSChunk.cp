@@ -96,7 +96,7 @@ pub fn postProcessCSSChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, ch
         worker.allocator,
         &j,
         @as(u32, @truncate(ctx.chunks.len)),
-    ) catch |e| bun.handleOom(e);
+    ) catch e => bun.handleOom(e);
     // TODO: meta contents
 
     chunk.isolated_hash = c.generateIsolatedHash(chunk);

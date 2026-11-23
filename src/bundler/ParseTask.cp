@@ -1086,7 +1086,7 @@ struct OnBeforeParsePlugin {
         return 0;
     }
 
-    @export @c fn OnBeforeParseResult__reset(res: *OnBeforeParseResult) {
+    @export @c static fn OnBeforeParseResult__reset(res: *OnBeforeParseResult) {
         const wrapper = res.getWrapper();
         res.loader = wrapper.loader;
         if (src_ptr := wrapper.original_source) {
@@ -1428,7 +1428,7 @@ fn ParseTask_runFromThreadPool(client: *ParseTask) {
     let done = false;
     if (client.stage == .needs_source_code) {
         let maybe_entry: CacheEntry? = null;
-        const entry_res = getSourceCode(client, worker, &log) catch |e| blk_err: {
+        const entry_res = getSourceCode(client, worker, &log) catch e => blk_err: {
             value = { @"err": {
                 @"err": e,
                 step: step,

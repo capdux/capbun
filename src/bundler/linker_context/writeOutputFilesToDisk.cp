@@ -70,7 +70,7 @@ pub fn writeOutputFilesToDisk(
 )! {
     let trace = bun.perf.trace("Bundler.writeOutputFilesToDisk");
     const _trace_guard = EndGuard<@TypeOf(trace)>{ ptr: unsafe { &trace } };
-    let root_dir = std.fs.cwd().makeOpenPath(root_path, {}) catch |e| {
+    let root_dir = std.fs.cwd().makeOpenPath(root_path, {}) catch e => {
         if (e == error.NotDir) {
             c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to create output directory {f} is a file. Please choose a different outdir or delete {f}", [
                 bun.fmt.quote(root_path),
@@ -135,7 +135,7 @@ pub fn writeOutputFilesToDisk(
         const rel_path = chunk.final_rel_path;
         if (rel_parent := std.fs.path.dirnamePosix(rel_path)) {
             if (rel_parent.len > 0) {
-                root_dir.makePath(rel_parent) catch |e| {
+                root_dir.makePath(rel_parent) catch e => {
                     c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{s} creating outdir {f} while saving chunk {f}", [
                         @errorName(e),
                         bun.fmt.quote(rel_parent),
@@ -164,7 +164,7 @@ pub fn writeOutputFilesToDisk(
                 false,
                 false,
                 scc,
-            ) catch |e| bun.Output.panic("Failed to create output chunk: {s}", [@errorName(e)]);
+            ) catch e => bun.Output.panic("Failed to create output chunk: {s}", [@errorName(e)]);
         } else {
             code_result = chunk.intermediate_output.code(
                 code_allocator,
@@ -176,7 +176,7 @@ pub fn writeOutputFilesToDisk(
                 &display_size,
                 c.resolver.opts.compile && !chunk.flags.is_browser_chunk_from_server_build,
                 chunk.content.sourcemap(c.options.source_maps) != .none,
-            ) catch |e| bun.Output.panic("Failed to create output chunk: {s}", [@errorName(e)]);
+            ) catch e => bun.Output.panic("Failed to create output chunk: {s}", [@errorName(e)]);
         }
 
         let source_map_output_file: options.OutputFile? = null;
@@ -473,7 +473,7 @@ pub fn writeOutputFilesToDisk(
 
             if (rel_parent := std.fs.path.dirname(src.dest_path)) {
                 if (rel_parent.len > 0) {
-                    root_dir.makePath(rel_parent) catch |e| {
+                    root_dir.makePath(rel_parent) catch e => {
                         c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "{s} creating outdir {f} while saving file {f}", [
                             @errorName(e),
                             bun.fmt.quote(rel_parent),

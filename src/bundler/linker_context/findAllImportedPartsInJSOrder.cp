@@ -219,7 +219,7 @@ struct FindImportedPartsVisitor {
                         part_index_begin: 0,
                         part_index_end: @as(u32, @truncate(parts.len)),
                     },
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
             }
         }
     }

@@ -140,7 +140,7 @@ pub struct Fs {
             file: if (rfs.needToCloseFiles() && cached_file_descriptor == null) file_handle else null,
         };
 
-        const file = (rfs.readFileWithHandle(path, null, file_handle, true, shared, _.stream)) catch |e| {
+        const file = (rfs.readFileWithHandle(path, null, file_handle, true, shared, _.stream)) catch e => {
             if (comptime Environment.isDebug) {
                 Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
             }
@@ -182,7 +182,7 @@ pub struct Fs {
             file_handle.seekTo(0)?;
         } else {
             if (FeatureFlags.store_file_descriptors && dirname_fd.isValid()) {
-                const fd_res = bun.sys.openatA(dirname_fd, std.fs.path.basename(path), bun.O.RDONLY, 0).unwrap() catch |e| brk: {
+                const fd_res = bun.sys.openatA(dirname_fd, std.fs.path.basename(path), bun.O.RDONLY, 0).unwrap() catch e => brk: {
                     if (e == error.ENOENT) {
                         const handle = bun.openFile(path, { mode: .read_only })?;
                         Output.prettyErrorln(
@@ -210,14 +210,14 @@ pub struct Fs {
         };
 
         const file = if (_.stream)
-            (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), true)) catch |e| {
+            (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), true)) catch e => {
                 if (Environment.isDebug) {
                     Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
                 }
                 return e;
             }
         else
-            (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), false)) catch |e| {
+            (rfs.readFileWithHandleAndAllocator(allocator, path, null, file_handle, use_shared_buffer, _.sharedBuffer(), false)) catch e => {
                 if (Environment.isDebug) {
                     Output.printError("{s}: readFile error -- {s}", .{ path, @errorName(e) });
                 }
@@ -267,7 +267,7 @@ pub struct JavaScript {
             return null;
         };
 
-        const result = parser.parse() catch |e| {
+        const result = parser.parse() catch e => {
             if (temp_log.errors == 0) {
                 log.addRangeError(source, parser.lexer.range(), @errorName(e)) catch unreachable;
             }

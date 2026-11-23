@@ -813,6 +813,7 @@
 
 ### [2026-11-23] 向 `cp_agy` 提交 `return struct` 静默丢弃语句严重隐患工单
 - `task-bun-20261123-return-struct-silent-drop` (`repro_as_trailing_comma_drop.cp`)：`return struct` 泛型工厂方法内若某条语句存在解析失败（如多行 `@as(u16, @truncate(c),)` 尾逗号），`cpc --lib` 仍返回 exit 0 且静默丢弃整条语句（导致 `src/js_parser/lexer.cp` `decodeJSXEntities` 丢失全部 `>0xFFFF` UTF-16 代理对输出）。
+- **结单验收与 `ack`**：`cp_agy` 已双重修复 `cpc/src/parser/{mod,primary}.rs`（新增 `validate_anon_container_expr` 严格校验 `return struct/union/enum` 内部语法 + 支持 `@as(...)` 可选尾逗号）及 `cpc/src/codegen/decl_class.rs`（严禁吞掉诊断返回残缺 AST）；本地实测 `/data/dev/cp/cap/bin/cpc --lib /data/dev/cp/temp/repro_as_trailing_comma_drop.cp` 完整生成 `out.appendAssumeCapacity` 且通过 `zig ast-check`，已执行 `ack`。
 
 ## [2026-11-23] Wave #84–85：Batch 4a（`node/` 71 文件）完成、修复 `lexer`/`unicode`/`udp_socket` 静默丢弃与逻辑偏差
 - **测试完成**：
@@ -839,6 +840,17 @@
   - `src/runtime/api/JSBundler.cp`：将 `TopExceptionScopeGuard` 改为持有 `*jsc.TopExceptionScope` 指针（修复按值拷贝 RAII `defer` 破坏 `location == &bytes[0]` 自指断言），并补 `BundlerCompileOptions.fromJS`/`Config.fromJS` `static fn`；
   - `src/runtime/node/node_fs_stat_watcher.cp`：移除 `StatWatcherScheduler.setIntervalOnMainThread` 中误加的 `DerefGuard<StatWatcherScheduler>`（修复提前双重 `deref` 导致仍在持有 watchers 时析构 panic）。
 - 推导下一阶段 Wave #90：Subagent 1 复测 `AsyncLocalStorage.test.ts` + `fs.watchFile.test.ts` 并启动 **Batch 5a**（`test/bundler/` 89 文件）；Subagent 2 只读排查 `readline`（27 fail）或检查全仓其他按值存自指结构体 Guard 隐患（零 `src/` 写冲突）。
+
+## [2026-11-23] Wave #90–91：Batch 5a（`bundler/` 90 文件）完成、修复 `Chunk`/`convertStmtsForChunk`/`SQLDataCell` 与全清 `src/bundler/` 49 文件 `--strict`
+- **Wave #89 复测**：`AsyncLocalStorage.test.ts` + `fs.watchFile.test.ts` **31 pass / 2 skip / 2 todo / 1 fail / 0 crash**（两处 `SIGILL` 彻底消除）；
+- **Batch 5a（`test/bundler/` 90 文件）**：88 文件完赛（**381 pass / 29 skip / 22 todo / 148 fail**，主因为缺 `filenamify` 夹具及 `--compile` 超时），定位 2 处 `SIGILL`（`metafile.test.ts` 与 `standalone.test.ts`）；
+- **只读排查**：确认 `readline.node.test.ts` 25/27 失败系环境 `TERM=dumb` 触发 `_ttyWriteDumb`；全仓扫描定位 `SQLDataCell.cp` 按值存储 `ExceptionValidationScope` 隐患；
+- **Wave #91 修复与纯化（25 文件）**：
+  - `src/bundler/Chunk.cp`：修复 `memcpyEscapingClosingTags` 笔误 `dest[dst + 2] = 2;` -> `dst += 2;`（消除 `standalone.test.ts` `remain.len == 0` 断言崩溃）并清 L732 `E0307`；
+  - `src/bundler/linker_context/convertStmtsForChunk.cp`：兼容 `s_local.decls.len` 多/零声明分支（消除 `metafile.test.ts` `decls.len == 1` 断言崩溃）；
+  - `src/sql_jsc/shared/SQLDataCell.cp`：`ExceptionScopeGuard` 改持有 `*jsc.ExceptionValidationScope` 指针；
+  - `src/bundler/` 其余 22 文件（含 `BundleThread.cp` `(*Self)?` / `static fn`、`LinkerContext.cp` / `transpiler.cp` `static fn` 及全部 `catch |...|`）：实现 **`src/bundler/` 49/49 全目录 `--strict` 零违例**。
+- 推导下一阶段 Wave #92：Subagent 1 复测 `metafile.test.ts` + `standalone.test.ts` 并启动 **Batch 5b**（`test/napi/` 59 文件 + `test/integration/` 20 文件 + `test/v8/` 1 文件 = 80 文件）；Subagent 2 并行只读检查 `src/bundler/bundle_v2.cp` 等是否存在其他按值传 `self` / `static fn` 漏标风险（零 `src/` 写冲突）。
 
 ### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
 - `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。

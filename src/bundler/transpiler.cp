@@ -185,7 +185,7 @@ pub struct Transpiler {
     }
 
     static fn _resolveEntryPoint(transpiler: *Transpiler, entry_point: string): !_resolver.Result {
-        return transpiler.resolver.resolveWithFramework(transpiler.fs.top_level_dir, entry_point, .entry_point_build) catch |e| {
+        return transpiler.resolver.resolveWithFramework(transpiler.fs.top_level_dir, entry_point, .entry_point_build) catch e => {
             // Relative entry points that were not resolved to a node_modules package are
             // interpreted as relative to the current working directory.
             if (!std.fs.path.isAbsolute(entry_point) &&
@@ -204,7 +204,7 @@ pub struct Transpiler {
     }
 
     static fn resolveEntryPoint(transpiler: *Transpiler, entry_point: string): !_resolver.Result {
-        return _resolveEntryPoint(transpiler, entry_point) catch |e| {
+        return _resolveEntryPoint(transpiler, entry_point) catch e => {
             let cache_bust_buf: bun.PathBuffer = undefined;
 
             // Bust directory cache and try again
@@ -438,7 +438,7 @@ pub struct Transpiler {
         js_ast.Stmt.Data.Store.reset();
     }
 
-    pub noinline fn dumpEnvironmentVariables(transpiler: *const Transpiler)  {
+    pub static noinline fn dumpEnvironmentVariables(transpiler: *const Transpiler) {
         @branchHint(.cold);
         const opts = std.json.Stringify.Options{
             whitespace: .indent_2,
@@ -560,7 +560,7 @@ pub struct Transpiler {
                     resolve_result.dirname_fd,
                     false,
                     null,
-                ) catch |e| {
+                ) catch e => {
                     transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} reading \"{s}\"", .{ @errorName(e), file_path.pretty }) catch {};
                     return null;
                 };
@@ -864,11 +864,11 @@ pub struct Transpiler {
             }
 
             if (strings.startsWith(path.text, "data:")) {
-                const data_url = DataURL.parseWithoutCheck(path.text) catch |e| {
+                const data_url = DataURL.parseWithoutCheck(path.text) catch e => {
                     transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} parsing data url \"{s}\"", .{ @errorName(e), path.text }) catch {};
                     return null;
                 };
-                const body = data_url.decodeData(this_parse.allocator) catch |e| {
+                const body = data_url.decodeData(this_parse.allocator) catch e => {
                     transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} decoding data \"{s}\"", .{ @errorName(e), path.text }) catch {};
                     return null;
                 };
@@ -882,7 +882,7 @@ pub struct Transpiler {
                 dirname_fd,
                 use_shared_buffer,
                 file_descriptor,
-            ) catch |e| {
+            ) catch e => {
                 transpiler.log.addErrorFmt(null, logger.Loc.Empty, transpiler.allocator, "{s} reading \"{s}\"", .{ @errorName(e), path.text }) catch {};
                 return null;
             };
@@ -1070,7 +1070,7 @@ pub struct Transpiler {
                             let decls = std.ArrayListUnmanaged(js_ast.G.Decl).initCapacity(
                                 allocator,
                                 properties.len,
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                             decls.expandToCapacity();
 
                             symbols = allocator.alloc(js_ast.Symbol, properties.len) catch return null;
@@ -1313,7 +1313,7 @@ pub struct Transpiler {
             const _store_guard = JsAstStoreResetGuard{};
             * = _store_guard;
 
-            const result = transpiler.resolver.resolve(transpiler.fs.top_level_dir, entry, .entry_point_build) catch |e| {
+            const result = transpiler.resolver.resolve(transpiler.fs.top_level_dir, entry, .entry_point_build) catch e => {
                 Output.prettyError("Error resolving \"{s}\": {s}\n", .{ entry, @errorName(e) });
                 continue;
             };

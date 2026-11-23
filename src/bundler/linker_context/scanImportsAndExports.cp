@@ -654,7 +654,7 @@ pub fn scanImportsAndExports(client: *LinkerContext): ScanImportsAndExportsError
                         dependencies: js_ast.Dependency.List.moveFromList(&dependencies),
                         can_be_removed_if_unused: false,
                     },
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
 
                 parts = parts_list[id].slice();
                 client.graph.@"meta".items(.entry_point_part_index)[id] = Index.part(entry_point_part_index);
@@ -1066,7 +1066,7 @@ struct ExportStarContext {
                             import_ref: name.@"ref",
                             source_index: Index.source(other_source_index),
                         },
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 } else if (gop.value_ptr.data.source_index.get() != other_source_index) {
                     // Two different re-exports colliding makes it potentially ambiguous
                     gop.value_ptr.potentially_ambiguous_export_star_refs.append(_.allocator, {
@@ -1075,7 +1075,7 @@ struct ExportStarContext {
                             import_ref: name.@"ref",
                             name_loc: name.alias_loc,
                         },
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 }
             }
 
@@ -1158,8 +1158,8 @@ struct Visitor {
                     _.allocator,
                     "<r>The value of <b>{s}<r> in the class <b>{s}<r> is undefined.",
                     [ property_name, local_original_name ],
-                ) catch |e| bun.handleOom(e),
-            ).cloneLineText(_.log.clone_line_text, _.log.msgs.allocator) catch |e| bun.handleOom(e),
+                ) catch e => bun.handleOom(e),
+            ).cloneLineText(_.log.clone_line_text, _.log.msgs.allocator) catch e => bun.handleOom(e),
             notes: _.allocator.dupe(
                 Logger.Data,
                 &[
@@ -1175,11 +1175,11 @@ struct Visitor {
                                 "The value of the {f} property for {f} may change unpredictably as the code is edited. " ++
                                 "Make sure that all definitions of {f} for {f} are in a single file.",
                             [ bun.fmt.quote(property_name), bun.fmt.quote(local_original_name), bun.fmt.quote(property_name), bun.fmt.quote(local_original_name) ],
-                        ) catch |e| bun.handleOom(e),
+                        ) catch e => bun.handleOom(e),
                     },
                 ],
-            ) catch |e| bun.handleOom(e),
-        }) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e),
+        }) catch e => bun.handleOom(e);
 
         // Don't warn more than once
         entry.value_ptr.source_index = Index.invalid.get();

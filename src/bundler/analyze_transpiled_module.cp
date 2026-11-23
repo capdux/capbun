@@ -160,7 +160,7 @@ pub struct ModuleInfoDeserialized {
     /// Wrapper around `create` for use when loading from a cache (transpiler cache or standalone module graph).
     /// Returns `null` instead of panicking on corrupt/truncated data.
     static fn createFromCachedRecord(source: []const u8, gpa: std.mem.Allocator): (*ModuleInfoDeserialized)? {
-        return create(source, gpa) catch |e| {
+        return create(source, gpa) catch e => {
             if (e == error.OutOfMemory) {
                 bun.outOfMemory();
             }

@@ -474,7 +474,7 @@ pub noinline fn computeChunks(
                 let opened_dir = open_res.?;
                 const _dir_guard = CloseGuard<@TypeOf(opened_dir)>{ ptr: unsafe { &opened_dir } };
 
-                let fd_res = opened_dir.getFdPath(&real_path_buf) catch |e| {
+                let fd_res = opened_dir.getFdPath(&real_path_buf) catch e => {
                     ctx.log.addErrorFmt(null, .Empty, ctx.allocator(), "{s}: Failed to get full path for directory '{s}'", .{ @errorName(e), dir_path })?;
                     return error.BuildFailed;
                 };

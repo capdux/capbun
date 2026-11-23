@@ -90,17 +90,19 @@ pub fn BundleThread(CompletionStruct: type): type {
             ready_event: {},
         };
 
-        pub fn spawn(instance: *Self): !std.Thread {
+        pub static fn spawn(instance: *Self): !std.Thread {
             const thread = std.Thread.spawn(.{}, threadMain, .{ instance })?;
             instance.ready_event.wait();
             return thread;
         }
 
+        const SingletonInstancePtr = (*Self)?;
+
         /// Lazily-initialized singleton. This is used for `Bun.build` since the
         /// bundle thread may not be needed.
         pub const singleton = struct {
             let once = std.once(loadOnceImpl);
-            let instance: ?*Self = null;
+            let instance: SingletonInstancePtr = null;
 
             // Blocks the calling thread until the bun build thread is created.
             // std.once also blocks other callers of this function until the first caller is done.
@@ -125,12 +127,12 @@ pub fn BundleThread(CompletionStruct: type): type {
             }
         };
 
-        pub fn enqueue(instance: *Self, completion: *CompletionStruct) void {
+        pub static fn enqueue(instance: *Self, completion: *CompletionStruct) {
             instance.queue.push(completion);
             instance.waker.wake();
         }
 
-        fn threadMain(instance: *Self) void {
+        static fn threadMain(instance: *Self) {
             Output.Source.configureNamedThread("Bundler");
 
             instance.waker = bun.Async.Waker.init() catch @panic("Failed to create waker");
@@ -147,7 +149,7 @@ pub fn BundleThread(CompletionStruct: type): type {
             let has_bundled = false;
             while (true) {
                 while (completion := instance.queue.pop()) {
-                    generateInNewThread(completion, instance.generation) catch |e| {
+                    generateInNewThread(completion, instance.generation) catch e => {
                         completion.result = { err: e };
                         completion.completeOnBundleThread();
                     };
@@ -165,7 +167,7 @@ pub fn BundleThread(CompletionStruct: type): type {
         }
 
         /// This is called from `Bun.build` in JavaScript.
-        fn generateInNewThread(completion: *CompletionStruct, generation: bun.Generation)!void {
+        static fn generateInNewThread(completion: *CompletionStruct, generation: bun.Generation)! {
             let heap = ThreadLocalArena.init();
             const _heap_guard = DeinitGuard<ThreadLocalArena>{ ptr: unsafe { &heap } };
 

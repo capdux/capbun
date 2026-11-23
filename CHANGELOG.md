@@ -2203,3 +2203,7 @@
 ### [2026-11-23] Wave #88–89（Batch 4c `node/` 72 文件收官与修复 `JSBundler`/`node_fs_stat_watcher` 崩溃）
 - 复测 `utimesSync` 4 pass / 0 fail；完成 Batch 4c `test/js/node/` 其余 72 文件（**2,058 pass / 35 fail / 2 crash**，至此 `test/js/node/` 全量 259 文件完成）；
 - 修复 `src/runtime/api/JSBundler.cp`（`TopExceptionScopeGuard` 改持有 `*jsc.TopExceptionScope` + `fromJS` `static fn`）与 `src/runtime/node/node_fs_stat_watcher.cp`（移除 `setIntervalOnMainThread` 误加 `DerefGuard`），消除两处 `SIGILL` panic。
+
+### [2026-11-23] Wave #90–91（Batch 5a `bundler/` 完成、修复 `Chunk`/`convertStmtsForChunk`/`SQLDataCell` 与 `bundler/` 49/49 `--strict` 清零）
+- 复测 `AsyncLocalStorage.test.ts` + `fs.watchFile.test.ts` **0 崩溃**；完成 Batch 5a `test/bundler/` 90 文件（88 文件 **381 pass**）；
+- 修复 `src/bundler/Chunk.cp`（`dst += 2;` 消除 `standalone.test.ts` 崩溃）、`src/bundler/linker_context/convertStmtsForChunk.cp`（`metafile.test.ts` 崩溃）与 `src/sql_jsc/shared/SQLDataCell.cp`（`ExceptionScopeGuard` 指针化），并完成 `src/bundler/` 全目录 49/49 `--strict` 清零。

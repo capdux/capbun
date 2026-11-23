@@ -98,7 +98,7 @@ pub struct AddPartIterator {
 
                 entry.value_ptr.* = .fromOwnedSlice(list.items);
             } else {
-                entry.value_ptr.* = BabyList(u32).fromSlice(_.graph.allocator, &[_.part_id]) catch |e| bun.handleOom(e);
+                entry.value_ptr.* = BabyList(u32).fromSlice(_.graph.allocator, &[_.part_id]) catch e => bun.handleOom(e);
             }
         } else {
             bun.handleOom(entry.value_ptr.append(_.graph.allocator, _.part_id));
@@ -205,9 +205,9 @@ pub struct AsyncDependencyState {
                 kind: kind,
                 original_name: original_name,
             },
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
 
-        _.ast.items(.module_scope)[source_index].generated.append(_.allocator, sym_ref) catch |e|
+        _.ast.items(.module_scope)[source_index].generated.append(_.allocator, sym_ref) catch e =>
             bun.handleOom(e);
         return sym_ref;
     }

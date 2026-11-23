@@ -333,7 +333,7 @@ const processor = HTMLProcessor(HTMLScanner, false);
             _.source,
             logger.Loc.Empty,
             message,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
     }
 
     pub fn onTag(*_, element: *lol.Element, path: []const u8, url_attribute: []const u8, kind: ImportKind) {

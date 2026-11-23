@@ -95,7 +95,7 @@ pub struct _SourceMapTask {
     source_index: Index.Int,
     thread_task: ThreadPoolLib.Task = .{ .callback = &runLineOffset },
 
-    pub fn runLineOffset(thread_task: *ThreadPoolLib.Task)  {
+    pub static fn runLineOffset(thread_task: *ThreadPoolLib.Task) {
         let task: *_SourceMapTask = @fieldParentPtr("thread_task", thread_task);
         defer {
             task.ctx.markPendingTaskDone();
@@ -107,7 +107,7 @@ pub struct _SourceMapTask {
         _SourceMapData.computeLineOffsets(task.ctx, worker.allocator, task.source_index);
     }
 
-    pub fn runQuotedSourceContents(thread_task: *ThreadPoolLib.Task)  {
+    pub static fn runQuotedSourceContents(thread_task: *ThreadPoolLib.Task) {
         let task: *_SourceMapTask = @fieldParentPtr("thread_task", thread_task);
         defer {
             task.ctx.markPendingTaskDone();
@@ -605,7 +605,7 @@ pub struct LinkerContext {
                     actual_ref,
                     1,
                     Index.runtime,
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
             }
         }
     }
@@ -779,7 +779,7 @@ pub struct LinkerContext {
                                 _.allocator(),
                                 "Cannot import a \".{s}\" file into a CSS file",
                                 .{@tagName(loader)},
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                         },
                         .css, .file, .toml, .wasm, .base64, .dataurl, .text, .bunsh => {},
                     }
@@ -869,19 +869,19 @@ pub struct LinkerContext {
     pub const postProcessJSChunk = postProcessJSChunkModule.postProcessJSChunk;
     pub const postProcessCSSChunk = postProcessCSSChunkModule.postProcessCSSChunk;
     pub const postProcessHTMLChunk = postProcessHTMLChunkModule.postProcessHTMLChunk;
-    pub fn generateChunk(ctx: GenerateChunkCtx, chunk: *Chunk, chunk_index: usize)  {
+    pub static fn generateChunk(ctx: GenerateChunkCtx, chunk: *Chunk, chunk_index: usize)  {
         const worker = ThreadPool.Worker.get(@fieldParentPtr("linker", ctx.c));
         let _worker_guard = WorkerUngetGuard<ThreadPool.Worker>{ ptr: unsafe { worker as *ThreadPool.Worker! } };
         switch (chunk.content) {
-            .javascript => postProcessJSChunk(ctx, worker, chunk, chunk_index) catch |e| Output.panic("TODO: handle error: {s}", .{@errorName(e)}),
-            .css => postProcessCSSChunk(ctx, worker, chunk) catch |e| Output.panic("TODO: handle error: {s}", .{@errorName(e)}),
-            .html => postProcessHTMLChunk(ctx, worker, chunk) catch |e| Output.panic("TODO: handle error: {s}", .{@errorName(e)}),
+            .javascript => postProcessJSChunk(ctx, worker, chunk, chunk_index) catch e => Output.panic("TODO: handle error: {s}", .{@errorName(e)}),
+            .css => postProcessCSSChunk(ctx, worker, chunk) catch e => Output.panic("TODO: handle error: {s}", .{@errorName(e)}),
+            .html => postProcessHTMLChunk(ctx, worker, chunk) catch e => Output.panic("TODO: handle error: {s}", .{@errorName(e)}),
         }
     }
 
     pub const renameSymbolsInChunk = renameSymbolsInChunkModule.renameSymbolsInChunk;
 
-    pub fn generateJSRenamer(ctx: GenerateChunkCtx, chunk: *Chunk, chunk_index: usize)  {
+    pub static fn generateJSRenamer(ctx: GenerateChunkCtx, chunk: *Chunk, chunk_index: usize)  {
         let worker = ThreadPool.Worker.get(@fieldParentPtr("linker", ctx.c));
         let _worker_guard = WorkerUngetGuard<ThreadPool.Worker>{ ptr: unsafe { worker as *ThreadPool.Worker! } };
         switch (chunk.content) {
@@ -891,7 +891,7 @@ pub struct LinkerContext {
         }
     }
 
-    fn generateJSRenamer_(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize)  {
+    static fn generateJSRenamer_(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, chunk: *Chunk, chunk_index: usize)  {
         * = chunk_index;
         chunk.renamer = ctx.c.renameSymbolsInChunk(
             worker.allocator,
@@ -1219,7 +1219,7 @@ pub struct LinkerContext {
                                 notes.append(Logger.Data{
                                     .text = bun.handleOom(std.fmt.allocPrint(_.allocator(), "The top-level await in {s} is here:", .{tla_pretty_path})),
                                     .location = .initOrNull(source, parent_result_tla_keyword),
-                                }) catch |e| bun.handleOom(e);
+                                }) catch e => bun.handleOom(e);
                                 break;
                             }
 
@@ -2415,7 +2415,7 @@ pub struct LinkerContext {
                         _.esm_runtime_ref,
                         1,
                         Index.runtime,
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
 
                     // Only mark __promiseAll as used if we have multiple async dependencies
                     if (needs_promise_all) {
@@ -2425,7 +2425,7 @@ pub struct LinkerContext {
                             _.promise_all_runtime_ref,
                             1,
                             Index.runtime,
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
                 }
             },

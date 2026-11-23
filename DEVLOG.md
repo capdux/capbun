@@ -1757,3 +1757,7 @@
 ### [2026-11-23] Wave #89 技术要点（自指结构体的指针 Guard 与引用计数对称性）
 - 含自指成员（如 `jsc.TopExceptionScope` 的 `location == &bytes[0]`）不可按值放入 CP RAII Guard（`~init()` 会将值拷贝到 `_drop_val` 导致地址失效）；必须栈上固定 `let scope: T = undefined;` 并让 Guard 持有 `*T` 指针。
 - `StatWatcherScheduler.setInterval()` `ref()` 后的引用在定时器回调 `workPoolCallback` 中释放，`setIntervalOnMainThread` 不得额外构造 `DerefGuard` 提前 `deref`。
+
+### [2026-11-23] Wave #91 技术要点（`Chunk.memcpyEscapingClosingTags` 与 `static noinline fn`）
+- `Chunk.cp` `memcpyEscapingClosingTags` 在未匹配关闭标签时误写为 `dest[dst + 2] = 2;` 而未推进 `dst += 2;`，导致 `remain.len != 0` 断言失败；`convertStmtsForChunk` 对 `.s_local` `decls` 须兼容多/零声明分支。
+- `transpiler.dumpEnvironmentVariables` 首句含 `@branchHint(.cold)`，若未标 `static fn` 会被 `cpc` 在函数体首行注入 `_ = self;`，导致 Zig 报 `@branchHint` 非首句；标注 `pub static noinline fn` 即可。

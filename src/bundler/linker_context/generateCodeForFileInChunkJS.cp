@@ -37,7 +37,7 @@ pub fn generateCodeForFileInChunkJS(
         const hmr_api_ref = ast.wrapper_ref;
 
         for (part of parts) {
-            c.convertStmtsForChunkForDevServer(stmts, part.stmts, allocator, &ast) catch |e|
+            c.convertStmtsForChunkForDevServer(stmts, part.stmts, allocator, &ast) catch e =>
                 return { err: e };
         }
 
@@ -91,7 +91,7 @@ pub fn generateCodeForFileInChunkJS(
                 c.options.target,
                 c.resolver.fs.top_level_dir,
                 allocator,
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
         }
 
         return c.printCodeForFileInChunkJS(
@@ -147,7 +147,7 @@ pub fn generateCodeForFileInChunkJS(
             temp_allocator,
             flags.wrap,
             &ast,
-        ) catch |e| {
+        ) catch e => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
             return { err: e };
         };
@@ -285,7 +285,7 @@ pub fn generateCodeForFileInChunkJS(
             temp_allocator,
             flags.wrap,
             &ast,
-        ) catch |e| return {
+        ) catch e => return {
             err: e,
         };
     }
@@ -541,7 +541,7 @@ pub fn generateCodeForFileInChunkJS(
                         Stmt.alloc(S.Local, {
                             decls: G.Decl.List.fromOwnedSlice(decls),
                         }, Logger.Loc.Empty),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else {
                     // // If this fails, then there will be places we reference
                     // // `init_foo` without it actually existing.
@@ -582,9 +582,9 @@ pub fn generateCodeForFileInChunkJS(
                                         Logger.Loc.Empty,
                                     ),
                                     value: value,
-                                }]) catch |e| bun.handleOom(e),
+                                }]) catch e => bun.handleOom(e),
                             }, Logger.Loc.Empty),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
                 }
             },
@@ -644,7 +644,7 @@ pub struct ExportHoist {
                 ),
                 value: null,
             },
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
 
         return Expr.initIdentifier(sym_ref, loc);
     }

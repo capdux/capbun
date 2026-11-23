@@ -42,7 +42,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                                 names: bun.css.SmallList(bun.css.LayerName, 1).fromBabyListNoDeinit(layers.inner().*),
                                 loc: bun.css.Location.dummy(),
                             },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                     }
                     let ast = bun.css.BundlerStyleSheet{
                         rules: rules,
@@ -63,7 +63,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                         entry.condition_import_records.append(
                             allocator,
                             bun.ImportRecord{ kind: .at, path: p.*, range: Logger.Range.none },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
 
                         // Handling a chain of nested conditions is complicated. We can't
                         // necessarily join them together because a) there may be multiple
@@ -92,7 +92,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                                     import_rule.conditionsMut().* = entry.conditions.at(j).*;
                                     rules.v.append(allocator, bun.css.BundlerCssRule{
                                         @"import": import_rule,
-                                    }) catch |e| bun.handleOom(e);
+                                    }) catch e => bun.handleOom(e);
                                     break :rules rules;
                                 },
                                 composes: {},
@@ -132,7 +132,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                         kind: .at,
                         path: p.*,
                         range: Logger.Range.none,
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
 
                     chunk.content.css.asts[i] = bun.css.BundlerStyleSheet{
                         rules: rules: {
@@ -141,7 +141,7 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                             import_rule.conditionsMut().* = actual_conditions.*;
                             rules.v.append(allocator, bun.css.BundlerCssRule{
                                 @"import": import_rule,
-                            }) catch |e| bun.handleOom(e);
+                            }) catch e => bun.handleOom(e);
                             break :rules rules;
                         },
                         sources: {},
@@ -217,11 +217,11 @@ fn prepareCssAstsForChunkImpl(c: *LinkerContext, chunk: *Chunk, allocator: std.m
                             let new_rules = bun.css.BundlerCssRuleList{};
                             for (rule of original_rules[0..prefix_end]) {
                                 if (rule == .layer_statement) {
-                                    new_rules.v.append(allocator, rule) catch |e| bun.handleOom(e);
+                                    new_rules.v.append(allocator, rule) catch e => bun.handleOom(e);
                                 }
                             }
                             for (rule of original_rules[prefix_end..]) {
-                                new_rules.v.append(allocator, rule) catch |e| bun.handleOom(e);
+                                new_rules.v.append(allocator, rule) catch e => bun.handleOom(e);
                             }
                             ast.rules = new_rules;
                         }
@@ -285,7 +285,7 @@ fn wrapRulesWithConditions(
                             loc: bun.css.Location.dummy(),
                         },
                     },
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
 
                 break :brk new_rules;
             };
@@ -307,7 +307,7 @@ fn wrapRulesWithConditions(
                             rules: ast.rules,
                             loc: bun.css.Location.dummy(),
                         },
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                     break :brk new_rules;
                 };
             }
@@ -324,7 +324,7 @@ fn wrapRulesWithConditions(
                         rules: ast.rules,
                         loc: bun.css.Location.dummy(),
                     },
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
                 break :brk new_rules;
             };
         }

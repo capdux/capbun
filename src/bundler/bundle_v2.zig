@@ -512,6 +512,10 @@ pub const PatchImportRecordsCtx_ = struct {
     force_save: bool = false,
 };
 
+pub const ParseTaskPtrHolder = struct {
+    p: *ParseTask,
+};
+
 pub const BundleV2 = struct {
     transpiler: *Transpiler,
     client_transpiler: ?*Transpiler,
@@ -2977,7 +2981,7 @@ pub fn bustDirCache(vm: *BundleV2, path: []const u8) bool {
     pub const ResolveImportRecordCtx = ResolveImportRecordCtx_;
     pub const ResolveImportRecordResult = ResolveImportRecordResult_;
     pub const PatchImportRecordsCtx = PatchImportRecordsCtx_;
-    const ResolveQueue = bun.StringHashMap(*ParseTask);
+    const ResolveQueue = bun.StringHashMap(@TypeOf(@as(ParseTaskPtrHolder, undefined).p));
 };
 
 pub const ImportData = struct {

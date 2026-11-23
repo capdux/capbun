@@ -89,7 +89,7 @@ pub fn validatePath(
     }
     const paths: [2][]const u8 = [ cwd, rel_path ];
     // TODO: switch to getFdPath()-based implementation
-    const out = std.fs.path.resolve(allocator, &paths) catch |e| {
+    const out = std.fs.path.resolve(allocator, &paths) catch e => {
         log.addErrorFmt(
             null,
             logger.Loc.Empty,
@@ -949,7 +949,7 @@ pub enum Loader: u8 {
         };
     }
 
-    pub fn forFileName(filename: string, obj: auto): Loader? {
+    pub static fn forFileName(filename: string, obj: auto): Loader? {
         const ext = std.fs.path.extension(filename);
         if (ext.len == 0 || (ext.len == 1 && ext[0] == '.')) return null;
 
@@ -2200,12 +2200,12 @@ pub struct BundleOptions {
 
 pub fn openOutputDir(output_dir: string): !std.fs.Dir {
     return std.fs.cwd().openDir(output_dir, {}) catch brk: {
-        std.fs.cwd().makeDir(output_dir) catch |e| {
+        std.fs.cwd().makeDir(output_dir) catch e => {
             Output.printErrorln("error: Unable to mkdir \"{s}\": \"{s}\"", [ output_dir, @errorName(e) ]);
             Global.crash();
         };
 
-        const handle = std.fs.cwd().openDir(output_dir, {}) catch |err2| {
+        const handle = std.fs.cwd().openDir(output_dir, {}) catch err2 => {
             Output.printErrorln("error: Unable to open \"{s}\": \"{s}\"", [ output_dir, @errorName(err2) ]);
             Global.crash();
         };
@@ -2524,7 +2524,7 @@ pub struct RouteConfig {
     pub const DefaultDir = "pages";
     pub const DefaultStaticDir: string = "public";
     pub const DefaultExtensions = [ "tsx", "ts", "mjs", "jsx", "js" ];
-    pub inline fn zero(): RouteConfig {
+    pub inline static fn zero(): RouteConfig {
         return RouteConfig{
             dir: DefaultDir,
             extensions: DefaultExtensions[0..],
@@ -2636,7 +2636,7 @@ pub struct PathTemplate {
         return strings.containsComptime(_.data, "[" ++ @tagName(field) ++ "]");
     }
 
-    inline fn writeReplacingSlashesOnWindows(w: auto, slice: []const u8)! {
+    inline static fn writeReplacingSlashesOnWindows(w: auto, slice: []const u8)! {
         if (Environment.isWindows) {
             let remain = slice;
             while (i := strings.indexOfChar(remain, '/')) {

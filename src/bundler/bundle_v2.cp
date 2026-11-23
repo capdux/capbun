@@ -402,6 +402,8 @@ pub struct PatchImportRecordsCtx_ {
     force_save: bool = false,
 }
 
+struct ParseTaskPtrHolder { p: *ParseTask }
+
 pub struct BundleV2 {
     transpiler: *Transpiler,
     /// When Server Component is enabled, this is used for the client bundles
@@ -479,7 +481,7 @@ pub struct BundleV2 {
 
     fn ensureClientTranspiler(*_) {
         if (_.client_transpiler == null) {
-            * = _.initializeClientTranspiler() catch |e| {
+            * = _.initializeClientTranspiler() catch e => {
                 std.debug.panic("Failed to initialize client transpiler: {s}", [ @errorName(e)]);
             };
         }
@@ -538,7 +540,7 @@ pub struct BundleV2 {
         if (!_.transpiler.options.server_components && _.linker.dev_server == null) {
             if (target == .browser && _.transpiler.options.target.isServerSide()) {
                 if (ct := _.client_transpiler) return ct;
-                return _.initializeClientTranspiler() catch |e| {
+                return _.initializeClientTranspiler() catch e => {
                     std.debug.panic("Failed to initialize client transpiler: {s}", [ @errorName(e)]);
                 };
             }
@@ -770,7 +772,7 @@ pub struct BundleV2 {
                         },
                         loader,
                         import_record.original_target,
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
                     entry.value_ptr.* = idx;
                     const record: *ImportRecord = &_.graph.ast.items(.import_records)[import_record.importer_source_index].slice()[import_record.import_record_index];
                     record.source_index = Index.init(idx);
@@ -789,7 +791,7 @@ pub struct BundleV2 {
             source_dir,
             import_record.specifier,
             import_record.kind,
-        ) catch |e| {
+        ) catch e => {
             // Only perform directory busting when hot-reloading is enabled
             if (e == error.ModuleNotFound) {
                 if (dev := _.transpiler.options.dev_server) {
@@ -807,7 +809,7 @@ pub struct BundleV2 {
                         import_record.specifier,
                         target.bakeGraph(),
                         _.graph.input_files.items(.loader)[import_record.importer_source_index],
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
 
                     // Turn this into an invalid AST, so that incremental mode skips it when printing.
                     _.graph.ast.items(.parts)[import_record.importer_source_index].len = 0;
@@ -926,7 +928,7 @@ pub struct BundleV2 {
                 },
                 loader,
                 import_record.original_target,
-            ) catch |oom_err| bun.handleOom(oom_err);
+            ) catch oom_err => bun.handleOom(oom_err);
             entry.value_ptr.* = idx;
             out_source_index = Index.init(idx);
 
@@ -936,7 +938,7 @@ pub struct BundleV2 {
                     secondary != path &&
                     !strings.eqlLong(secondary.text, path.text, true))
                 {
-                    const secondary_path_to_copy = secondary.dupeAlloc(_.allocator()) catch |oom_err| bun.handleOom(oom_err);
+                    const secondary_path_to_copy = secondary.dupeAlloc(_.allocator()) catch oom_err => bun.handleOom(oom_err);
                     _.graph.input_files.items(.secondary_path)[idx] = secondary_path_to_copy.text;
                     // Ensure the determinism pass runs.
                     _.graph.has_any_secondary_paths = true;
@@ -1371,7 +1373,7 @@ pub struct BundleV2 {
                         }
 
                         // Fall back to normal resolution if no plugins matched
-                        const resolved = transpiler.resolveEntryPoint(abs_path) catch |e| {
+                        const resolved = transpiler.resolveEntryPoint(abs_path) catch e => {
                             const dev = _.transpiler.options.dev_server.?;
                             dev.handleParseTaskFailure(
                                 e,
@@ -1379,7 +1381,7 @@ pub struct BundleV2 {
                                 abs_path,
                                 transpiler.log,
                                 _,
-                            ) catch |oom_err| bun.handleOom(oom_err);
+                            ) catch oom_err => bun.handleOom(oom_err);
                             transpiler.log.reset();
                             continue;
                         };
@@ -1599,7 +1601,7 @@ pub struct BundleV2 {
             source: source.*,
             loader: loader,
             side_effects: loader.sideEffects(),
-        }) catch |oom_err| bun.handleOom(oom_err);
+        }) catch oom_err => bun.handleOom(oom_err);
         let task = bun.handleOom(_.allocator().create(ParseTask));
         task.* = ParseTask.init(resolve_result, source_index, _);
         task.loader = loader;
@@ -1639,7 +1641,7 @@ pub struct BundleV2 {
             source: source.*,
             loader: loader,
             side_effects: loader.sideEffects(),
-        }) catch |oom_err| bun.handleOom(oom_err);
+        }) catch oom_err => bun.handleOom(oom_err);
         let task = bun.handleOom(_.allocator().create(ParseTask));
         task.* = {
             ctx: _,
@@ -1821,7 +1823,7 @@ pub struct BundleV2 {
 
         // Generate metafile if requested (CLI writes files in build_command.zig)
         const metafile: ([]const u8)? = if (bundle.linker.options.metafile)
-            LinkerContext.MetafileBuilder.generate(bun.default_allocator, &bundle.linker, chunks) catch |e| blk: {
+            LinkerContext.MetafileBuilder.generate(bun.default_allocator, &bundle.linker, chunks) catch e => blk: {
                 bun.Output.warn("Failed to generate metafile: {s}", [ @errorName(e)]);
                 break :blk null;
             }
@@ -1873,7 +1875,7 @@ pub struct BundleV2 {
         // allocation. If a later allocation fails we must still drain the
         // pool so workers aren't left holding pointers into the caller's
         // stack-allocated Transpiler.
-        bundle.enqueueEntryPoints(.normal, entry_points) catch |e| {
+        bundle.enqueueEntryPoints(.normal, entry_points) catch e => {
             bundle.waitForParse();
             return e;
         };
@@ -2036,7 +2038,7 @@ pub struct BundleV2 {
                     })) catch unreachable;
                     additional_files[index].append(_.allocator(), AdditionalFile{
                         output_file: @as(u32, @truncate(additional_output_files.items.len - 1)),
-                    }) catch |oom_err| bun.handleOom(oom_err);
+                    }) catch oom_err => bun.handleOom(oom_err);
                 }
             }
 
@@ -2186,7 +2188,7 @@ pub struct BundleV2 {
                         source.path.keyForIncrementalGraph(),
                         &temp_log,
                         bundle,
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
                 } else {
                     bun.handleOom(log.msgs.append(msg));
                     log.errors += @intFromBool(msg.kind == .err);
@@ -2228,7 +2230,7 @@ pub struct BundleV2 {
 
                         // Store the original entry point name for virtual entries that fall back to file resolution
                         if (idx := source_index) {
-                            bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier) catch |oom_err| bun.handleOom(oom_err);
+                            bundle.graph.entry_point_original_names.put(bundle.allocator(), idx, resolve.import_record.specifier) catch oom_err => bun.handleOom(oom_err);
                         }
                         return;
                     }
@@ -2272,7 +2274,7 @@ pub struct BundleV2 {
                     }
 
                     const existing = bundle.pathToSourceIndexMap(resolve.import_record.original_target)
-                        .getOrPutPath(bundle.allocator(), &path) catch |oom_err| bun.handleOom(oom_err);
+                        .getOrPutPath(bundle.allocator(), &path) catch oom_err => bun.handleOom(oom_err);
                     if (!existing.found_existing) {
                         const free_items: [2][]const u8 = [result.namespace, result.path];
                         bundle.free_list.appendSlice(&free_items) catch {};
@@ -2340,18 +2342,18 @@ pub struct BundleV2 {
 
                 if (source_index := out_source_index) {
                     if (resolve.import_record.kind == .entry_point_build) {
-                        bundle.graph.entry_points.append(bundle.allocator(), source_index) catch |oom_err| bun.handleOom(oom_err);
+                        bundle.graph.entry_points.append(bundle.allocator(), source_index) catch oom_err => bun.handleOom(oom_err);
 
                         // Store the original entry point name for virtual entries
                         // This preserves the original name for output file naming
-                        bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier) catch |oom_err| bun.handleOom(oom_err);
+                        bundle.graph.entry_point_original_names.put(bundle.allocator(), source_index.get(), resolve.import_record.specifier) catch oom_err => bun.handleOom(oom_err);
                     } else {
                         const source_import_records = &bundle.graph.ast.items(.import_records)[resolve.import_record.importer_source_index];
                         if (source_import_records.len <= resolve.import_record.import_record_index) {
                             const entry = bundle.resolve_tasks_waiting_for_import_source_index.getOrPut(
                                 bundle.allocator(),
                                 resolve.import_record.importer_source_index,
-                            ) catch |oom_err| bun.handleOom(oom_err);
+                            ) catch oom_err => bun.handleOom(oom_err);
                             if (!entry.found_existing) {
                                 entry.value_ptr.* = {};
                             }
@@ -2361,7 +2363,7 @@ pub struct BundleV2 {
                                     to_source_index: source_index,
                                     import_record_index: resolve.import_record.import_record_index,
                                 },
-                            ) catch |oom_err| bun.handleOom(oom_err);
+                            ) catch oom_err => bun.handleOom(oom_err);
                         } else {
                             const import_record: *ImportRecord = &source_import_records.slice()[resolve.import_record.import_record_index];
                             import_record.source_index = source_index;
@@ -2475,7 +2477,7 @@ pub struct BundleV2 {
 
         // Generate metafile if requested
         const metafile: ([]const u8)? = if (_.linker.options.metafile)
-            LinkerContext.MetafileBuilder.generate(bun.default_allocator, &_.linker, chunks) catch |e| blk: {
+            LinkerContext.MetafileBuilder.generate(bun.default_allocator, &_.linker, chunks) catch e => blk: {
                 bun.Output.warn("Failed to generate metafile: {s}", [ @errorName(e)]);
                 break :blk null;
             }
@@ -2484,7 +2486,7 @@ pub struct BundleV2 {
 
         // Generate markdown if metafile was generated and path specified
         const metafile_markdown: ([]const u8)? = if (_.linker.options.metafile_markdown_path.len > 0 && metafile != null)
-            LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?) catch |e| blk: {
+            LinkerContext.MetafileBuilder.generateMarkdown(bun.default_allocator, metafile.?) catch e => blk: {
                 bun.Output.warn("Failed to generate metafile markdown: {s}", [ @errorName(e)]);
                 break :blk null;
             }
@@ -2523,7 +2525,7 @@ pub struct BundleV2 {
     )! {
         if (outdir.len > 0) {
             // Open the output directory
-            let root_dir = bun.FD.cwd().stdDir().makeOpenPath(outdir, {}) catch |e| {
+            let root_dir = bun.FD.cwd().stdDir().makeOpenPath(outdir, {}) catch e => {
                 bun.Output.warn("Failed to open output directory '{s}': {s}", [ outdir, @errorName(e) ]);
                 return;
             };
@@ -2552,7 +2554,7 @@ pub struct BundleV2 {
                 file: { path: {
                     string: bun.PathString.init(file_path),
                 } },
-            }).unwrap() catch |e| {
+            }).unwrap() catch e => {
                 bun.Output.warn("Failed to write metafile to '{s}': {s}", [ file_path, @errorName(e) ]);
             };
         }
@@ -3238,7 +3240,7 @@ pub struct BundleV2 {
                         continue;
                     }
 
-                    const resolve_entry = resolve_queue.getOrPut(path_primary.text) catch |oom_err| bun.handleOom(oom_err);
+                    const resolve_entry = resolve_queue.getOrPut(path_primary.text) catch oom_err => bun.handleOom(oom_err);
                     if (resolve_entry.found_existing) {
                         import_record.path = resolve_entry.value_ptr.*.path;
                         continue;
@@ -3277,7 +3279,7 @@ pub struct BundleV2 {
                     source_dir,
                     import_record.path.text,
                     import_record.kind,
-                ) catch |e| blk_res: {
+                ) catch e => blk_res: {
                 const log = _.logForResolutionFailures(source.path.text, bake_graph);
 
                 // Only perform directory busting when hot-reloading is enabled
@@ -3301,7 +3303,7 @@ pub struct BundleV2 {
                                 import_record.path.text,
                                 ctx.target.bakeGraph(), // use the source file target not the altered one
                                 loader,
-                            ) catch |oom_err| bun.handleOom(oom_err);
+                            ) catch oom_err => bun.handleOom(oom_err);
                         }
                     }
                 }
@@ -3335,7 +3337,7 @@ pub struct BundleV2 {
                                                 "",
                                         ],
                                         import_record.kind,
-                                    ) catch |oom_err| bun.handleOom(oom_err);
+                                    ) catch oom_err => bun.handleOom(oom_err);
                                 } else if (!ctx.target.isBun() && strings.eqlComptime(import_record.path.text, "bun")) {
                                     addError(
                                         log,
@@ -3352,7 +3354,7 @@ pub struct BundleV2 {
                                                 "",
                                         ],
                                         import_record.kind,
-                                    ) catch |oom_err| bun.handleOom(oom_err);
+                                    ) catch oom_err => bun.handleOom(oom_err);
                                 } else if (!ctx.target.isBun() && strings.hasPrefixComptime(import_record.path.text, "bun:")) {
                                     addError(
                                         log,
@@ -3369,7 +3371,7 @@ pub struct BundleV2 {
                                                 "",
                                         ],
                                         import_record.kind,
-                                    ) catch |oom_err| bun.handleOom(oom_err);
+                                    ) catch oom_err => bun.handleOom(oom_err);
                                 } else {
                                     addError(
                                         log,
@@ -3379,7 +3381,7 @@ pub struct BundleV2 {
                                         "Could not resolve: \"{s}\". Maybe you need to \"bun install\"?",
                                         [ import_record.path.text],
                                         import_record.kind,
-                                    ) catch |oom_err| bun.handleOom(oom_err);
+                                    ) catch oom_err => bun.handleOom(oom_err);
                                 }
                             } else {
                                 const buf = bun.path_buffer_pool.get();
@@ -3399,7 +3401,7 @@ pub struct BundleV2 {
                                     "Could not resolve: \"{s}\"",
                                     [ specifier_to_use],
                                     import_record.kind,
-                                ) catch |oom_err| bun.handleOom(oom_err);
+                                ) catch oom_err => bun.handleOom(oom_err);
                             }
                         }
                     },
@@ -3446,7 +3448,7 @@ pub struct BundleV2 {
                         _.allocator(),
                         "Browser builds cannot import HTML files.",
                         {},
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
                     continue;
                 }
 
@@ -3468,7 +3470,7 @@ pub struct BundleV2 {
                         import_record.path.pretty = std.fmt.allocPrint(_.allocator(), bun.bake.DevServer.asset_prefix ++ "/{s}{s}", [ 
                             &std.fmt.bytesToHex(std.mem.asBytes(&hash), .lower),
                             std.fs.path.extension(path.text),
-                        ]) catch |oom_err| bun.handleOom(oom_err);
+                        ]) catch oom_err => bun.handleOom(oom_err);
                         import_record.path.is_disabled = false;
                     } else {
                         import_record.path.text = path.text;
@@ -3513,7 +3515,7 @@ pub struct BundleV2 {
                 import_record.kind = .html_manifest;
             }
 
-            const resolve_entry = resolve_queue.getOrPut(path.text) catch |oom_err| bun.handleOom(oom_err);
+            const resolve_entry = resolve_queue.getOrPut(path.text) catch oom_err => bun.handleOom(oom_err);
             if (resolve_entry.found_existing) {
                 import_record.path = resolve_entry.value_ptr.*.path;
                 continue;
@@ -3548,7 +3550,7 @@ pub struct BundleV2 {
                     secondary != path &&
                     !strings.eqlLong(secondary.text, path.text, true))
                 {
-                    resolve_task.secondary_path_for_commonjs_interop = secondary.dupeAlloc(_.allocator()) catch |oom_err| bun.handleOom(oom_err);
+                    resolve_task.secondary_path_for_commonjs_interop = secondary.dupeAlloc(_.allocator()) catch oom_err => bun.handleOom(oom_err);
                 }
             }
 
@@ -3724,7 +3726,7 @@ pub struct BundleV2 {
         _.ensureClientTranspiler();
     }
 
-    const ResolveQueue = bun.StringHashMap(*ParseTask);
+    const ResolveQueue = bun.StringHashMap(@TypeOf(@as(ParseTaskPtrHolder, undefined).p));
 
     fn onNotifyDefer(*_) {
         _.thread_lock.assertLocked();
@@ -3834,7 +3836,7 @@ pub struct BundleV2 {
                             // contents are allocated by bun.default_allocator
                             &.fromOwnedSlice(bun.default_allocator, @constCast(result.source.contents)),
                             result.content_hash_for_additional_file,
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
                 }
 
@@ -3910,7 +3912,7 @@ pub struct BundleV2 {
                                 named_exports: result.ast.named_exports,
                             } },
                             result.source,
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
 
                         const ssr_source = &result.source;
                         ssr_source.path.pretty = ssr_source.path.text;
@@ -3919,7 +3921,7 @@ pub struct BundleV2 {
                             ssr_source,
                             graph.input_files.items(.loader)[result.source.index.get()],
                             .bake_server_components_ssr,
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     } else {
                         // Enqueue only one file
                         const server_source = &result.source;
@@ -3929,7 +3931,7 @@ pub struct BundleV2 {
                             server_source,
                             graph.input_files.items(.loader)[result.source.index.get()],
                             .browser,
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
 
                         ssr_index = Index.invalid.get();
                     }
@@ -3938,7 +3940,7 @@ pub struct BundleV2 {
                         bundle.allocator(),
                         result.source.path.text,
                         reference_source_index,
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
 
                     graph.server_component_boundaries.put(
                         bundle.allocator(),
@@ -3946,7 +3948,7 @@ pub struct BundleV2 {
                         result.use_directive,
                         reference_source_index,
                         ssr_index,
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
                 }
             },
             .err => |*e| {
@@ -3962,7 +3964,7 @@ pub struct BundleV2 {
                             graph.input_files.items(.source)[e.source_index.get()].path.text,
                             &e.log,
                             bundle,
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     } else if (e.log.msgs.items.len > 0) {
                         e.log.cloneToWithRecycled(bundle.transpiler.log, true) catch unreachable;
                     } else {
@@ -4239,7 +4241,7 @@ pub struct PartRange {
     stable_source_index: Index.Int,
     ref: Ref,
 
-    pub fn isLessThan(_: void, a: StableRef, b: StableRef): bool {
+    pub static fn isLessThan(_: void, a: StableRef, b: StableRef): bool {
         return a.stable_source_index < b.stable_source_index ||
             (a.stable_source_index == b.stable_source_index && a.ref.innerIndex() < b.ref.innerIndex());
     }
@@ -4303,7 +4305,7 @@ pub struct CrossChunkImportItem_ {
 
     pub const List = bun.BabyList(CrossChunkImportItem_);
 
-    fn lessThan(_: void, a: CrossChunkImportItem_, b: CrossChunkImportItem_): bool {
+    static fn lessThan(_: void, a: CrossChunkImportItem_, b: CrossChunkImportItem_): bool {
         return strings.order(a.export_alias, b.export_alias) == .lt;
     }
 }
@@ -4314,7 +4316,7 @@ pub struct CrossChunkImport {
 
     pub const Item = CrossChunkImportItem_;
 
-    fn lessThan(_: void, a: CrossChunkImport, b: CrossChunkImport): bool {
+    static fn lessThan(_: void, a: CrossChunkImport, b: CrossChunkImport): bool {
         return std.math.order(a.chunk_index, b.chunk_index) == .lt;
     }
 

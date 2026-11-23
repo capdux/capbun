@@ -86,7 +86,7 @@ pub const SQLDataCellTag = enum(u8) {
 };
 
 pub const ExceptionScopeGuard = struct {
-    scope: jsc.ExceptionValidationScope = undefined,
+    scope: *jsc.ExceptionValidationScope,
     __cp_dropped: bool = false,
 
 pub fn __cp_deinit(self: *ExceptionScopeGuard) void {
@@ -264,16 +264,18 @@ pub fn raw(optional_bytes: ?*const Data) SQLDataCell {
 
 pub fn constructObjectFromDataCell(globalObject: *jsc.JSGlobalObject, encodedArrayValue: jsc.JSValue, encodedStructureValue: jsc.JSValue, cells: [*]SQLDataCell, count: u32, flags: SQLDataCellFlags, result_mode: u8, namesPtr: ?[*]bun.jsc.JSObject.ExternColumnIdentifier, namesCount: u32) anyerror!jsc.JSValue {
             if (comptime bun.Environment.ci_assert) {
-                var scope_guard = ExceptionScopeGuard{  };
-                _ = &scope_guard;
-                var __scope_guard_moved = false; _ = &__scope_guard_moved;
-                defer if (!__scope_guard_moved) { __scope_guard_moved = true; const __T = @TypeOf(scope_guard); if (@typeInfo(__T) == .optional) { if (scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = scope_guard; _drop_val.__cp_deinit(); } };
-                _ = scope_guard.scope.init(globalObject, @src());
+                var scope: jsc.ExceptionValidationScope = undefined;
+                _ = &scope;
+                _ = scope.init(globalObject, @src());
+                var _scope_guard = ExceptionScopeGuard{ .scope = (&scope) };
+                _ = &_scope_guard;
+                var ___scope_guard_moved = false; _ = &___scope_guard_moved;
+                defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
                 const value = (blk: {
                 break :blk constructObjectFromDataCellExtern(globalObject, encodedArrayValue, encodedStructureValue, cells, count, flags, result_mode, namesPtr, namesCount);
 
 });
-                _ = scope_guard.scope.assertExceptionPresenceMatches((value == .zero));
+                _ = _scope_guard.scope.assertExceptionPresenceMatches((value == .zero));
                 return (if ((value == .zero)) error.JSError else value);
             } else {
                 const value = (blk: {

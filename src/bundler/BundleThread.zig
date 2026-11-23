@@ -236,9 +236,10 @@ else => @compileError(("Unknown completion struct: " ++ CompletionStruct)),
     }
     const Self = @This();
     pub const uninitialized: Self = .{ .waker = undefined, .queue = .{}, .generation = 0, .ready_event = .{} };
+    const SingletonInstancePtr = ?*Self;
     pub const singleton = struct {
                 var once = std.once(loadOnceImpl);
-                var instance: ?*Self = null;
+                var instance: SingletonInstancePtr = null;
     
                 // Blocks the calling thread until the bun build thread is created.
                 // std.once also blocks other callers of this function until the first caller is done.

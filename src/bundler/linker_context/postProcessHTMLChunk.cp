@@ -20,7 +20,7 @@ pub fn postProcessHTMLChunk(ctx: GenerateChunkCtx, worker: *ThreadPool.Worker, c
         worker.allocator,
         &j,
         @as(u32, @truncate(ctx.chunks.len)),
-    ) catch |e| bun.handleOom(e);
+    ) catch e => bun.handleOom(e);
 
     chunk.isolated_hash = c.generateIsolatedHash(chunk);
 }

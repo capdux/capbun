@@ -389,33 +389,32 @@ pub fn convertStmtsForChunk(
                         );
                         stmt.data.s_local.is_export = false;
                     } else if (FeatureFlags.unwrap_commonjs_to_esm && s.was_commonjs_export && wrap == .cjs) {
-                        bun.assert(stmt.data.s_local.decls.len == 1);
-                        const decl = stmt.data.s_local.decls.ptr[0];
-                        if (decl_value := decl.value) {
-                            stmt = Stmt.alloc(
-                                S.SExpr,
-                                S.SExpr{
-                                    value: Expr.init(
-                                        E.Binary,
-                                        E.Binary{
-                                            op: .bin_assign,
-                                            left: Expr.init(
-                                                E.CommonJSExportIdentifier,
-                                                E.CommonJSExportIdentifier{
-                                                    ref: decl.binding.data.b_identifier.ref,
-                                                },
-                                                decl.binding.loc,
-                                            ),
-                                            right: decl_value,
-                                        },
-                                        stmt.loc,
-                                    ),
-                                },
-                                stmt.loc,
-                            );
-                        } else {
-                            continue;
+                        for (decl of stmt.data.s_local.decls.slice()) {
+                            if (decl_value := decl.value) {
+                                stmts.append(.inside_wrapper_suffix, Stmt.alloc(
+                                    S.SExpr,
+                                    S.SExpr{
+                                        value: Expr.init(
+                                            E.Binary,
+                                            E.Binary{
+                                                op: .bin_assign,
+                                                left: Expr.init(
+                                                    E.CommonJSExportIdentifier,
+                                                    E.CommonJSExportIdentifier{
+                                                        ref: decl.binding.data.b_identifier.ref,
+                                                    },
+                                                    decl.binding.loc,
+                                                ),
+                                                right: decl_value,
+                                            },
+                                            stmt.loc,
+                                        ),
+                                    },
+                                    stmt.loc,
+                                ))?;
+                            }
                         }
+                        continue;
                     }
                 },
 

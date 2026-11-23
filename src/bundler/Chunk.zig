@@ -341,7 +341,7 @@ pub fn memcpyEscapingClosingTags(dest: []u8, content: []const u8, close_tag: []c
                 } else {
                     dest[cp_cast_int(usize, dst)] = 60;
                     dest[cp_cast_int(usize, (dst + 1))] = 47;
-                    dest[cp_cast_int(usize, (dst + 2))] = 2;
+                    dst = (dst + 2);
                 }
             }
             _ = @memcpy(dest[dst..][0..remaining.len], remaining);

@@ -371,7 +371,7 @@ pub fn generateChunksInParallel(
                         data: {
                             text: std.fmt.allocPrint(bun.default_allocator, name ++ " naming is '{s}', consider adding '[hash]' to make filenames unique", [ template ])?,
                         },
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 }
             }
 
@@ -398,8 +398,8 @@ pub fn generateChunksInParallel(
                 else
                     c.options.public_path;
                 const normalizer = bun.bundle_v2.cheapPrefixNormalizer(public_path, ch.final_rel_path);
-                const resolved = std.fmt.allocPrint(c.allocator(), "{s}{s}", [ normalizer[0], normalizer[1] ]) catch |e| bun.handleOom(e);
-                unique_key_to_path.put(ch.unique_key, resolved) catch |e| bun.handleOom(e);
+                const resolved = std.fmt.allocPrint(c.allocator(), "{s}{s}", [ normalizer[0], normalizer[1] ]) catch e => bun.handleOom(e);
+                unique_key_to_path.put(ch.unique_key, resolved) catch e => bun.handleOom(e);
             }
         }
 
@@ -421,13 +421,13 @@ pub fn generateChunksInParallel(
                     replacements.append(c.allocator(), ModuleInfoReplacement{
                         old_id: @enumFromInt(@as(u32, @intCast(string_index))),
                         resolved_path: resolved_path,
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                 }
                 offset += len;
             }
 
             for (rep of replacements.items) {
-                const new_id = mi.str(rep.resolved_path) catch |e| bun.handleOom(e);
+                const new_id = mi.str(rep.resolved_path) catch e => bun.handleOom(e);
                 mi.replaceStringID(rep.old_id, new_id);
             }
 
@@ -502,7 +502,7 @@ pub fn generateChunksInParallel(
                 false,
                 false,
                 scc,
-            ) catch |e| bun.handleOom(e)).buffer;
+            ) catch e => bun.handleOom(e)).buffer;
         }
     }
 
@@ -570,7 +570,7 @@ pub fn generateChunksInParallel(
                     c.resolver.opts.compile && !chunk.flags.is_browser_chunk_from_server_build,
                     chunk.content.sourcemap(c.options.source_maps) != .none,
                 );
-            let code_result = _code_result catch |e| bun.handleOom(e);
+            let code_result = _code_result catch e => bun.handleOom(e);
 
             let sourcemap_output_file: options.OutputFile? = null;
             const input_path = bun.default_allocator.dupe(
@@ -715,7 +715,7 @@ pub fn generateChunksInParallel(
                             // an error
                             c.log.addErrorFmt(null, Logger.Loc.Empty, bun.default_allocator, "Failed to generate bytecode for {s}", [ 
                                 chunk.final_rel_path,
-                            ]) catch |e| bun.handleOom(e);
+                            ]) catch e => bun.handleOom(e);
                         }
                     }
                 }

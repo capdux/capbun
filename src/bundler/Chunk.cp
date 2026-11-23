@@ -362,7 +362,7 @@ pub union(enum) ChunkIntermediateOutput {
             } else {
                 dest[dst] = '<';
                 dest[dst + 1] = '/';
-                dest[dst + 2] = 2;
+                dst += 2;
             }
         }
         @memcpy(dest[dst..][0..remaining.len], remaining);
@@ -729,7 +729,7 @@ pub union(enum) ChunkIntermediateOutput {
                             graph.heap.allocator(),
                             "\n//# debugId={f}\n",
                             [ bun.SourceMap.DebugIDFormatter{ id: chunk.isolated_hash } ],
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
 
                         break :brk joiner.doneWithEnd(allocator, debug_id_fmt)?;
                     }

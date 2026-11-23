@@ -86,7 +86,7 @@ pub struct Visitor {
                 cooked: E.String.init(" "),
             },
             tail_loc: _.loc,
-        }) catch |e| bun.handleOom(e);
+        }) catch e => bun.handleOom(e);
 
         if (from_this_file) {
             _.inner_visited.set(css_ref.innerIndex());
@@ -111,7 +111,7 @@ pub struct Visitor {
             "The definition of {f} is here.",
             [bun.fmt.quote(name)],
             { loc: loc },
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
     }
 
     pub fn visitComposes(*_, ast: *bun.css.BundlerStyleSheet, css_ref: bun.css.CssRef, idx: Index.Int) {
@@ -139,7 +139,7 @@ pub struct Visitor {
                                     _.allocator,
                                     "Cannot use the \"composes\" property with the {f} file (it is not a CSS file)",
                                     [bun.fmt.quote(_.all_sources[import_record.source_index.get()].path.pretty)],
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
                                 continue;
                             }
                             const other_file = other_file_opt.?;
@@ -173,7 +173,7 @@ pub struct Visitor {
                                     },
                                     tail_loc: _.loc,
                                 },
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                         }
                     }
                 } else {
@@ -190,7 +190,7 @@ pub struct Visitor {
                                     bun.fmt.quote(name.v),
                                     bun.fmt.quote(_.all_sources[idx].path.pretty),
                                 ],
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                             continue;
                         }
                         const name_entry = name_entry_opt.?;
@@ -292,7 +292,7 @@ pub fn generateCodeForLazyExport(c: *LinkerContext, source_index: Index.Int): vo
                         value: value,
                         tail_loc: stmt.loc,
                         tail: { cooked: E.String.init("") },
-                    }) catch |e| bun.handleOom(e);
+                    }) catch e => bun.handleOom(e);
                     value = Expr.init(
                         E.Template,
                         E.Template{

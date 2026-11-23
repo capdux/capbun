@@ -117,7 +117,7 @@ pub fn writeEscapedJSON(index: u32, graph: *const Graph, linker_graph: *const Li
 }
 
 fn escapedJSONFormatter(client: HTMLImportManifest, writer: *std.Io.Writer)! {
-    return writeEscapedJSON(client.index, client.graph, client.linker_graph, client.chunks, writer) catch |e| {
+    return writeEscapedJSON(client.index, client.graph, client.linker_graph, client.chunks, writer) catch e => {
         if (e == error.OutOfMemory) return error.WriteFailed;
         unreachable;
     };
@@ -130,7 +130,7 @@ fn escapedJSONFormatter(client: HTMLImportManifest, writer: *std.Io.Writer)! {
     linker_graph: *const LinkerGraph,
 
     pub fn format(client: HTMLImportManifest, writer: *std.Io.Writer)! {
-        return write(client.index, client.graph, client.linker_graph, client.chunks, writer) catch |e| {
+        return write(client.index, client.graph, client.linker_graph, client.chunks, writer) catch e => {
             if (e == error.OutOfMemory) return error.OutOfMemory;
             unreachable;
         };
