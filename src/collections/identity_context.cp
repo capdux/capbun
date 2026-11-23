@@ -9,7 +9,7 @@ pub fn IdentityContext(comptime Key: type): type {
                 else => @compileError("unexpected identity context type"),
             };
         }
-        pub fn eql(this, a: Key, b: Key): bool { _ = this; return a == b; }
+        pub fn eql(a: Key, b: Key): bool { const self_ref = _; * = self_ref; return a == b; }
     };
 }
 

@@ -122,7 +122,7 @@ pub fn filter(
     if (trigger_set := consumeWatchTrigger(allocator)) {
         changed_files = trigger_set;
     } else {
-        changed_files = getChangedFiles(allocator, top_level_dir, changed_since) catch |e| switch (e) {
+        changed_files = getChangedFiles(allocator, top_level_dir, changed_since) catch e => switch (e) {
             error.GitNotFound => {
                 Output.errGeneric("<b>--changed<r> requires <b>git<r> to be installed and in PATH", .{});
                 Global.exit(1);
@@ -168,7 +168,7 @@ pub fn filter(
     let log = logger.Log.init(allocator);
     const _guard_log = DeinitGuard<logger.Log>{ ptr: &log };
 
-    let scan_transpiler = Transpiler.init(allocator, &log, ctx.args, vm.transpiler.env) catch |e| {
+    let scan_transpiler = Transpiler.init(allocator, &log, ctx.args, vm.transpiler.env) catch e => {
         Output.errGeneric("Failed to initialize module graph scanner for --changed: {s}", .{@errorName(e)});
         Global.exit(1);
     };
@@ -191,7 +191,7 @@ pub fn filter(
         allocator,
         jsc.AnyEventLoop.init(allocator),
         entry_points,
-    ) catch |e| {
+    ) catch e => {
         // Fall back to running every test rather than aborting the run.
         Output.warn("--changed: failed to build module graph ({s}); running all tests", .{@errorName(e)});
         Output.flush();
@@ -488,7 +488,7 @@ fn runGit(
         .windows = if (Environment.isWindows) .{
             .loop = jsc.EventLoopHandle.init(jsc.VirtualMachine.get()),
         } else @as(void, undefined),
-    }) catch |e| {
+    }) catch e => {
         Output.errGeneric("--changed: failed to spawn git: {s}", .{@errorName(e)});
         return GitResult{
             ok: false,

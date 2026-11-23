@@ -22,12 +22,12 @@ fn ZeroedEntry(comptime K: type, comptime V: type, comptime empty_hash: u64): ty
         key: K = std.mem.zeroes(K);
         value: V = std.mem.zeroes(V);
 
-        pub fn isEmpty(this): bool {
-            return this.hash == empty_hash;
+        pub fn isEmpty(): bool {
+            return _.hash == empty_hash;
         }
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            writer.print("(hash: {}, key: {}, value: {})", [this.hash, this.key, this.value])?;
+        pub fn format(writer: *std.Io.Writer): ! {
+            writer.print("(hash: {}, key: {}, value: {})", [_.hash, _.key, _.value])?;
         }
     };
 }
@@ -38,12 +38,12 @@ fn HashEntry(comptime K: type, comptime V: type, comptime empty_hash: u64): type
         key: K = undefined;
         value: V = undefined;
 
-        pub fn isEmpty(this): bool {
-            return this.hash == empty_hash;
+        pub fn isEmpty(): bool {
+            return _.hash == empty_hash;
         }
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            writer.print("(hash: {}, key: {}, value: {})", [this.hash, this.key, this.value])?;
+        pub fn format(writer: *std.Io.Writer): ! {
+            writer.print("(hash: {}, key: {}, value: {})", [_.hash, _.key, _.value])?;
         }
     };
 }
@@ -53,12 +53,12 @@ fn SortedEntry(comptime V: type, comptime empty_hash: [32]u8): type {
         hash: [32]u8 = empty_hash;
         value: V = undefined;
 
-        pub fn isEmpty(this): bool {
-            return sortedCmp(this.hash, empty_hash) == .eq;
+        pub fn isEmpty(): bool {
+            return sortedCmp(_.hash, empty_hash) == .eq;
         }
 
-        pub fn format(this, writer: *std.Io.Writer): ! {
-            writer.print("(hash: {x}, value: {})", [mem.asBytes(&this.hash), this.value])?;
+        pub fn format(writer: *std.Io.Writer): ! {
+            writer.print("(hash: {x}, value: {})", [mem.asBytes(&_.hash), _.value])?;
         }
     };
 }
@@ -174,33 +174,33 @@ pub fn HashMap(comptime K: type, comptime V: type, comptime Context: type, compt
             };
         }
 
-        pub fn deinit(*this, gpa: mem.Allocator) {
-            gpa.free(this.slice());
+        pub fn deinit(*_, gpa: mem.Allocator) {
+            gpa.free(_.slice());
         }
 
-        pub fn ensureUnusedCapacity(*this, gpa: mem.Allocator, count: usize): ! {
-            this.ensureTotalCapacity(gpa, this.len + count)?;
+        pub fn ensureUnusedCapacity(*_, gpa: mem.Allocator, count: usize): ! {
+            _.ensureTotalCapacity(gpa, _.len + count)?;
         }
 
-        pub fn ensureTotalCapacity(*this, gpa: mem.Allocator, count: usize): ! {
+        pub fn ensureTotalCapacity(*_, gpa: mem.Allocator, count: usize): ! {
             while (true) {
-                const capacity = @as(u64, 1) << (63 - this.shift + 1);
+                const capacity = @as(u64, 1) << (63 - _.shift + 1);
                 if (count <= capacity * max_load_percentage / 100) {
                     break;
                 }
-                this.grow(gpa)?;
+                _.grow(gpa)?;
             }
         }
 
-        fn grow(*this, gpa: mem.Allocator): ! {
-            const capacity = @as(u64, 1) << (63 - this.shift + 1);
-            const overflow = capacity / 10 + (63 - @as(usize, this.shift) + 1) << 1;
+        fn grow(*_, gpa: mem.Allocator): ! {
+            const capacity = @as(u64, 1) << (63 - _.shift + 1);
+            const overflow = capacity / 10 + (63 - @as(usize, _.shift) + 1) << 1;
 
             unsafe {
-                const end = this.entries + usize(capacity + overflow);
+                const end = _.entries + usize(capacity + overflow);
 
                 const map = Self.initCapacity(gpa, usize(capacity * 2))?;
-                let src = this.entries;
+                let src = _.entries;
                 let dst = map.entries;
 
                 while (src != end) {
@@ -216,28 +216,28 @@ pub fn HashMap(comptime K: type, comptime V: type, comptime Context: type, compt
                     dst += 1;
                 }
 
-                this.deinit(gpa);
-                this.entries = map.entries;
-                this.shift = map.shift;
+                _.deinit(gpa);
+                _.entries = map.entries;
+                _.shift = map.shift;
             }
         }
 
-        pub fn put(*this, gpa: mem.Allocator, key: K, value: V): ! {
-            this.putContext(gpa, key, value, undefined)?;
+        pub fn put(*_, gpa: mem.Allocator, key: K, value: V): ! {
+            _.putContext(gpa, key, value, undefined)?;
         }
 
-        pub fn putContext(*this, gpa: mem.Allocator, key: K, value: V, ctx: Context): ! {
-            this.ensureUnusedCapacity(gpa, 1)?;
-            this.putAssumeCapacityContext(key, value, ctx);
+        pub fn putContext(*_, gpa: mem.Allocator, key: K, value: V, ctx: Context): ! {
+            _.ensureUnusedCapacity(gpa, 1)?;
+            _.putAssumeCapacityContext(key, value, ctx);
         }
 
-        pub fn getOrPut(*this, gpa: mem.Allocator, key: K): GetOrPutResult! {
-            return this.getOrPutContext(gpa, key, undefined)?;
+        pub fn getOrPut(*_, gpa: mem.Allocator, key: K): GetOrPutResult! {
+            return _.getOrPutContext(gpa, key, undefined)?;
         }
 
-        pub fn getOrPutContext(*this, gpa: mem.Allocator, key: K, ctx: Context): GetOrPutResult! {
-            this.ensureUnusedCapacity(gpa, 1)?;
-            return this.getOrPutAssumeCapacityContext(key, ctx);
+        pub fn getOrPutContext(*_, gpa: mem.Allocator, key: K, ctx: Context): GetOrPutResult! {
+            _.ensureUnusedCapacity(gpa, 1)?;
+            return _.getOrPutAssumeCapacityContext(key, ctx);
         }
     };
 }
@@ -249,12 +249,12 @@ fn HashMapMixin(
     comptime Context: type,
 ): type {
     return struct {
-        pub fn clearRetainingCapacity(map_self: *Self) {
+        static fn clearRetainingCapacity(map_self: *Self) {
             @memset(map_self.slice(), Self.Entry{});
             map_self.len = 0;
         }
 
-        pub fn slice(map_self: *Self): []Self.Entry {
+        static fn slice(map_self: *Self): []Self.Entry {
             const capacity = @as(u64, 1) << (63 - map_self.shift + 1);
             const overflow = capacity / 10 + (63 - @as(usize, map_self.shift) + 1) << 1;
             unsafe {
@@ -262,20 +262,20 @@ fn HashMapMixin(
             }
         }
 
-        pub fn putAssumeCapacity(map_self: *Self, key: K, value: V) {
+        static fn putAssumeCapacity(map_self: *Self, key: K, value: V) {
             map_self.putAssumeCapacityContext(key, value, undefined);
         }
 
-        pub fn putAssumeCapacityContext(map_self: *Self, key: K, value: V, ctx: Context) {
+        static fn putAssumeCapacityContext(map_self: *Self, key: K, value: V, ctx: Context) {
             const result = map_self.getOrPutAssumeCapacityContext(key, ctx);
             if (!result.found_existing) unsafe { result.value_ptr.* = value; }
         }
 
-        pub fn getOrPutAssumeCapacity(map_self: *Self, key: K): Self.GetOrPutResult {
+        static fn getOrPutAssumeCapacity(map_self: *Self, key: K): Self.GetOrPutResult {
             return map_self.getOrPutAssumeCapacityContext(key, undefined);
         }
 
-        pub fn getOrPutAssumeCapacityContext(map_self: *Self, key: K, ctx: Context): Self.GetOrPutResult {
+        static fn getOrPutAssumeCapacityContext(map_self: *Self, key: K, ctx: Context): Self.GetOrPutResult {
             let it: Self.Entry = Self.Entry{ hash: ctx.hash(key), key: key, value: undefined };
             let i = it.hash >> map_self.shift;
 
@@ -292,7 +292,7 @@ fn HashMapMixin(
                         map_self.entries[i] = it;
                         if (entry.isEmpty()) {
                             map_self.len += 1;
-                            return Self.GetOrPutResult{ found_existing: false, value_ptr: &map_self.entries[inserted_at orelse i].value };
+                            return Self.GetOrPutResult{ found_existing: false, value_ptr: &map_self.entries[inserted_at ?? i].value };
                         }
                         if (inserted_at == null) {
                             inserted_at = i;
@@ -303,11 +303,11 @@ fn HashMapMixin(
             }
         }
 
-        pub fn get(map_self: *const Self, key: K): V? {
+        static fn get(map_self: *const Self, key: K): V? {
             return map_self.getContext(key, undefined);
         }
 
-        pub fn getContext(map_self: *const Self, key: K, ctx: Context): V? {
+        static fn getContext(map_self: *const Self, key: K, ctx: Context): V? {
             const hash = ctx.hash(key);
             assert(hash != Self.empty_hash);
 
@@ -323,11 +323,11 @@ fn HashMapMixin(
             }
         }
 
-        pub fn has(map_self: *const Self, key: K): bool {
+        static fn has(map_self: *const Self, key: K): bool {
             return map_self.hasContext(key, undefined);
         }
 
-        pub fn hasWithHash(map_self: *const Self, key_hash: u64): bool {
+        static fn hasWithHash(map_self: *const Self, key_hash: u64): bool {
             assert(key_hash != Self.empty_hash);
 
             unsafe {
@@ -341,7 +341,7 @@ fn HashMapMixin(
             return false;
         }
 
-        pub fn hasContext(map_self: *const Self, key: K, ctx: Context): bool {
+        static fn hasContext(map_self: *const Self, key: K, ctx: Context): bool {
             const hash = ctx.hash(key);
             assert(hash != Self.empty_hash);
 
@@ -358,11 +358,11 @@ fn HashMapMixin(
             unreachable;
         }
 
-        pub fn delete(map_self: *Self, key: K): V? {
+        static fn delete(map_self: *Self, key: K): V? {
             return map_self.deleteContext(key, undefined);
         }
 
-        pub fn deleteContext(map_self: *Self, key: K, ctx: Context): V? {
+        static fn deleteContext(map_self: *Self, key: K, ctx: Context): V? {
             const hash = ctx.hash(key);
             assert(hash != Self.empty_hash);
 
@@ -428,8 +428,8 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
             };
         }
 
-        pub fn deinit(*this, gpa: mem.Allocator) {
-            gpa.free(this.slice());
+        pub fn deinit(*_, gpa: mem.Allocator) {
+            gpa.free(_.slice());
         }
 
         /// In release-fast mode, LLVM will optimize this routine to utilize 109 cycles. This routine scatters
@@ -439,42 +439,42 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
             return usize(mem.readIntBig(u64, a[0..8]) >> shift);
         }
 
-        pub fn clearRetainingCapacity(*this) {
-            @memset(this.slice(), Entry{});
-            this.len = 0;
+        pub fn clearRetainingCapacity(*_) {
+            @memset(_.slice(), Entry{});
+            _.len = 0;
         }
 
-        pub fn slice(*this): []Entry {
-            const capacity = @as(u64, 1) << (63 - this.shift + 1);
-            const overflow = capacity / 10 + (63 - @as(usize, this.shift) + 1) << 1;
+        pub fn slice(*_): []Entry {
+            const capacity = @as(u64, 1) << (63 - _.shift + 1);
+            const overflow = capacity / 10 + (63 - @as(usize, _.shift) + 1) << 1;
             unsafe {
-                return this.entries[0..usize(capacity + overflow)];
+                return _.entries[0..usize(capacity + overflow)];
             }
         }
 
-        pub fn ensureUnusedCapacity(*this, gpa: mem.Allocator, count: usize): ! {
-            this.ensureTotalCapacity(gpa, this.len + count)?;
+        pub fn ensureUnusedCapacity(*_, gpa: mem.Allocator, count: usize): ! {
+            _.ensureTotalCapacity(gpa, _.len + count)?;
         }
 
-        pub fn ensureTotalCapacity(*this, gpa: mem.Allocator, count: usize): ! {
+        pub fn ensureTotalCapacity(*_, gpa: mem.Allocator, count: usize): ! {
             while (true) {
-                const capacity = @as(u64, 1) << (63 - this.shift + 1);
+                const capacity = @as(u64, 1) << (63 - _.shift + 1);
                 if (count <= capacity * max_load_percentage / 100) {
                     break;
                 }
-                this.grow(gpa)?;
+                _.grow(gpa)?;
             }
         }
 
-        fn grow(*this, gpa: mem.Allocator): ! {
-            const capacity = @as(u64, 1) << (63 - this.shift + 1);
-            const overflow = capacity / 10 + (63 - @as(usize, this.shift) + 1) << 1;
+        fn grow(*_, gpa: mem.Allocator): ! {
+            const capacity = @as(u64, 1) << (63 - _.shift + 1);
+            const overflow = capacity / 10 + (63 - @as(usize, _.shift) + 1) << 1;
 
             unsafe {
-                const end = this.entries + usize(capacity + overflow);
+                const end = _.entries + usize(capacity + overflow);
 
                 const map = Self.initCapacity(gpa, usize(capacity * 2))?;
-                let src = this.entries;
+                let src = _.entries;
                 let dst = map.entries;
 
                 while (src != end) {
@@ -490,62 +490,62 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
                     dst += 1;
                 }
 
-                this.deinit(gpa);
-                this.entries = map.entries;
-                this.shift = map.shift;
+                _.deinit(gpa);
+                _.entries = map.entries;
+                _.shift = map.shift;
             }
         }
 
-        pub fn put(*this, gpa: mem.Allocator, key: [32]u8, value: V): ! {
-            this.ensureUnusedCapacity(gpa, 1)?;
-            this.putAssumeCapacity(key, value);
+        pub fn put(*_, gpa: mem.Allocator, key: [32]u8, value: V): ! {
+            _.ensureUnusedCapacity(gpa, 1)?;
+            _.putAssumeCapacity(key, value);
         }
 
-        pub fn putAssumeCapacity(*this, key: [32]u8, value: V) {
-            const result = this.getOrPutAssumeCapacity(key);
+        pub fn putAssumeCapacity(*_, key: [32]u8, value: V) {
+            const result = _.getOrPutAssumeCapacity(key);
             if (!result.found_existing) unsafe { result.value_ptr.* = value; }
         }
 
-        pub fn getOrPut(*this, gpa: mem.Allocator, key: [32]u8): GetOrPutResult! {
-            this.ensureUnusedCapacity(gpa, 1)?;
-            return this.getOrPutAssumeCapacity(key);
+        pub fn getOrPut(*_, gpa: mem.Allocator, key: [32]u8): GetOrPutResult! {
+            _.ensureUnusedCapacity(gpa, 1)?;
+            return _.getOrPutAssumeCapacity(key);
         }
 
-        pub fn getOrPutAssumeCapacity(*this, key: [32]u8): GetOrPutResult {
-            assert(this.len < (@as(u64, 1) << (63 - this.shift + 1)));
+        pub fn getOrPutAssumeCapacity(*_, key: [32]u8): GetOrPutResult {
+            assert(_.len < (@as(u64, 1) << (63 - _.shift + 1)));
             assert(cmp(key, empty_hash) != .eq);
 
             let it: Entry = Entry{ hash: key, value: undefined };
-            let i = idx(key, this.shift);
+            let i = idx(key, _.shift);
 
             let inserted_at: usize? = null;
             while (true) : (i += 1) {
                 unsafe {
-                    const entry = this.entries[i];
+                    const entry = _.entries[i];
                     if (cmp(entry.hash, it.hash).compare(.gte)) {
                         if (cmp(entry.hash, key) == .eq) {
-                            return GetOrPutResult{ found_existing: true, value_ptr: &this.entries[i].value };
+                            return GetOrPutResult{ found_existing: true, value_ptr: &_.entries[i].value };
                         }
-                        this.entries[i] = it;
+                        _.entries[i] = it;
                         if (entry.isEmpty()) {
-                            this.len += 1;
-                            return GetOrPutResult{ found_existing: false, value_ptr: &this.entries[inserted_at orelse i].value };
+                            _.len += 1;
+                            return GetOrPutResult{ found_existing: false, value_ptr: &_.entries[inserted_at ?? i].value };
                         }
                         if (inserted_at == null) {
                             inserted_at = i;
                         }
                         it = entry;
                     }
-                    this.put_probe_count += 1;
+                    _.put_probe_count += 1;
                 }
             }
         }
 
-        pub fn get(*this, key: [32]u8): V? {
+        pub fn get(*_, key: [32]u8): V? {
             assert(cmp(key, empty_hash) != .eq);
 
             unsafe {
-                for (entry of this.entries[idx(key, this.shift)..]) {
+                for (entry of _.entries[idx(key, _.shift)..]) {
                     if (cmp(entry.hash, key).compare(.gte)) {
                         if (cmp(entry.hash, key) != .eq) {
                             return null;
@@ -556,34 +556,34 @@ pub fn SortedHashMap(comptime V: type, comptime max_load_percentage: comptime_in
             }
         }
 
-        pub fn delete(*this, key: [32]u8): V? {
+        pub fn delete(*_, key: [32]u8): V? {
             assert(cmp(key, empty_hash) != .eq);
 
-            let i = idx(key, this.shift);
+            let i = idx(key, _.shift);
             unsafe {
                 while (true) : (i += 1) {
-                    const entry = this.entries[i];
+                    const entry = _.entries[i];
                     if (cmp(entry.hash, key).compare(.gte)) {
                         if (cmp(entry.hash, key) != .eq) {
                             return null;
                         }
                         break;
                     }
-                    this.del_probe_count += 1;
+                    _.del_probe_count += 1;
                 }
 
-                const value = this.entries[i].value;
+                const value = _.entries[i].value;
 
                 while (true) : (i += 1) {
-                    const j = idx(this.entries[i + 1].hash, this.shift);
-                    if (i < j || this.entries[i + 1].isEmpty()) {
+                    const j = idx(_.entries[i + 1].hash, _.shift);
+                    if (i < j || _.entries[i + 1].isEmpty()) {
                         break;
                     }
-                    this.entries[i] = this.entries[i + 1];
-                    this.del_probe_count += 1;
+                    _.entries[i] = _.entries[i + 1];
+                    _.del_probe_count += 1;
                 }
-                this.entries[i] = Entry{};
-                this.len -= 1;
+                _.entries[i] = Entry{};
+                _.len -= 1;
 
                 return value;
             }

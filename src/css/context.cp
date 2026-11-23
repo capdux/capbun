@@ -105,7 +105,7 @@ pub struct PropertyHandlerContext {
         let dest = CssRuleArrayListT.initCapacity(
             _.allocator,
             _.supports.items.len,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
 
         for (*entry of _.supports.items) {
             dest.appendAssumeCapacity(CssRuleT{
@@ -165,7 +165,7 @@ pub struct PropertyHandlerContext {
                             let list = MediaQueryList.initCapacity(
                                 _.allocator,
                                 1,
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
 
                             list.appendAssumeCapacity(MediaQuery{
                                 qualifier: null,
@@ -197,13 +197,13 @@ pub struct PropertyHandlerContext {
                                 rules: {},
                                 loc: style_rule.loc,
                             },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
 
                         break :brk list;
                     },
                     loc: style_rule.loc,
                 },
-            }) catch |e| bun.handleOom(e);
+            }) catch e => bun.handleOom(e);
         }
 
         return dest;
@@ -293,7 +293,7 @@ pub struct PropertyHandlerContext {
                 condition: condition,
                 declarations: declarations,
                 important_declarations: important_declarations,
-            }) catch |e| bun.handleOom(e);
+            }) catch e => bun.handleOom(e);
         }
     }
 

@@ -1793,3 +1793,5 @@
 - [Wave #107] 清零 `src/runtime/node/**/*.cp` 全部 13 个报错文件（`assert/myers_diff`, `net/BlockList`, `node_assert`, `node_crypto_binding`, `node_fs_binding`, `node_fs`, `node_fs_stat_watcher`, `node_os`, `node_process`, `node_zlib_binding`, `path_watcher`, `Stat`, `types` -> **`src/runtime/node/` 100% `--strict` 全清**）；同步修复 `RequestContext.cp` `hasResponded`/`unsafe server_opt.?`；`zig:check` 5/5 通过。
 
 - [Wave #108–109] 清零 `bake/`（100% 全清）、`brotli/`、`bun.cp`、`bun.js.cp`、`bun_alloc/`、`bun_core/`、`bundler_jsc/`、`clap/`、`cli/create/SourceFileProjectGenerator.cp` 共 30 个文件的 `--strict` 违规（全仓剩余 `--strict` 报错降至 234 个）；修复 `WatcherAtomics.cp` `DbgEventPtrHolder`、`bun.cp` `Static` `static { let once }` 与 `SplitAtMutResult` `std.meta.Tuple`、`bun_core/output.cp` `ScopedLogger` `static fn`；`zig:check` 5/5 通过。
+
+- [Wave #110] 清零第 3 批 15 个 `--strict` 报错文件（`cli/test/{ChangedFilesFilter,parallel/Channel,parallel/runner}`, `collections/{StaticHashMap,array_list,baby_list,bounded_array,hive_array,identity_context,linear_fifo,multi_array_list}` -> 100% 全清, `crash_handler/{CPUFeatures,handle_oom}` -> 100% 全清, `csrf/csrf` -> 100% 全清, `css/context`）；`zig:check` 5/5 通过。

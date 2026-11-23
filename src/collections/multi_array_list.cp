@@ -97,37 +97,37 @@ fn MultiArrayListSlice(
             return @FieldType(Elem, @tagName(field));
         }
 
-        pub fn items(this, comptime field: Field): []FieldType(field) {
+        pub fn items(comptime field: Field): []FieldType(field) {
             const F = FieldType(field);
-            if (this.capacity == 0) {
+            if (_.capacity == 0) {
                 let empty_arr: [0]F = undefined;
                 return empty_arr[0..0];
             }
-            const byte_ptr = this.ptrs[@intFromEnum(field)];
+            const byte_ptr = _.ptrs[@intFromEnum(field)];
             unsafe {
                 const casted_ptr: [*]F! = if (@sizeOf(F) == 0)
                     undefined
                 else
                     @ptrCast(@alignCast(byte_ptr));
-                return casted_ptr[0..this.len];
+                return casted_ptr[0.._.len];
             }
         }
 
-        pub fn set(*this, index: usize, elem: T) {
+        pub fn set(*_, index: usize, elem: T) {
             const e = switch (@typeInfo(T)) {
                 .@"struct" => elem,
                 .@"union" => Elem.fromT(elem),
                 else => unreachable,
             };
             inline for (i of 0..fields.len) {
-                this.items(@as(Field, @enumFromInt(i)))[index] = @field(e, fields[i].name);
+                _.items(@as(Field, @enumFromInt(i)))[index] = @field(e, fields[i].name);
             }
         }
 
-        pub fn get(this, index: usize): T {
+        pub fn get(index: usize): T {
             let result: Elem = undefined;
             inline for (i of 0..fields.len) {
-                @field(result, fields[i].name) = this.items(@as(Field, @enumFromInt(i)))[index];
+                @field(result, fields[i].name) = _.items(@as(Field, @enumFromInt(i)))[index];
             }
             return switch (@typeInfo(T)) {
                 .@"struct" => result,
@@ -136,25 +136,25 @@ fn MultiArrayListSlice(
             };
         }
 
-        pub fn toMultiArrayList(this): ListSelf {
-            if (this.ptrs.len == 0 || this.capacity == 0) {
+        pub fn toMultiArrayList(): ListSelf {
+            if (_.ptrs.len == 0 || _.capacity == 0) {
                 return ListSelf{};
             }
-            const unaligned_ptr = this.ptrs[sizes.fields[0]];
+            const unaligned_ptr = _.ptrs[sizes.fields[0]];
             unsafe {
                 const aligned_ptr: [*]align(@alignOf(Elem)) u8 = @alignCast(unaligned_ptr);
                 return ListSelf{
                     bytes: aligned_ptr,
-                    len: this.len,
-                    capacity: this.capacity,
+                    len: _.len,
+                    capacity: _.capacity,
                 };
             }
         }
 
-        pub fn deinit(*this, gpa: Allocator) {
-            let other = this.toMultiArrayList();
+        pub fn deinit(*_, gpa: Allocator) {
+            let other = _.toMultiArrayList();
             other.deinit(gpa);
-            this.* = undefined;
+            _.* = undefined;
         }
 
         /// This function is used in the debugger pretty formatters in tools/ to fetch the
@@ -179,19 +179,19 @@ fn MultiArrayListSortContext(
         sub_ctx: Ctx;
         slice: Slice;
 
-        pub fn swap(this, a_index: usize, b_index: usize) {
+        pub fn swap(a_index: usize, b_index: usize) {
             inline for (i of 0..fields.len) {
                 const field_info = fields[i];
                 if (@sizeOf(field_info.type) != 0) {
                     const field: Field = @enumFromInt(i);
-                    const ptr = this.slice.items(field);
+                    const ptr = _.slice.items(field);
                     mem.swap(field_info.type, &ptr[a_index], &ptr[b_index]);
                 }
             }
         }
 
-        pub fn lessThan(this, a_index: usize, b_index: usize): bool {
-            return this.sub_ctx.lessThan(a_index, b_index);
+        pub fn lessThan(a_index: usize, b_index: usize): bool {
+            return _.sub_ctx.lessThan(a_index, b_index);
         }
     };
 }
@@ -332,35 +332,35 @@ pub fn MultiArrayList(comptime T: type): type {
         pub const Slice = MultiArrayListSlice(T, Self, Elem, Field, Entry, fields, sizes);
 
         /// Release all allocated memory.
-        pub fn deinit(*this, gpa: Allocator) {
-            this.#allocator.assertEq(gpa);
-            gpa.free(this.allocatedBytes());
-            this.* = undefined;
+        pub fn deinit(*_, gpa: Allocator) {
+            _.#allocator.assertEq(gpa);
+            gpa.free(_.allocatedBytes());
+            _.* = undefined;
         }
 
         /// The caller owns the returned memory. Empties this MultiArrayList.
-        pub fn toOwnedSlice(*this): Slice {
-            const result = this.slice();
-            this.* = Self{};
+        pub fn toOwnedSlice(*_): Slice {
+            const result = _.slice();
+            _.* = Self{};
             return result;
         }
 
         /// Compute pointers to the start of each field of the array.
         /// If you need to access multiple fields, calling this may
         /// be more efficient than calling `items()` multiple times.
-        pub fn slice(this): Slice {
+        pub fn slice(): Slice {
             let result: Slice = Slice{
                 ptrs: undefined,
-                len: this.len,
-                capacity: this.capacity,
+                len: _.len,
+                capacity: _.capacity,
             };
-            let ptr: [*]u8! = this.bytes;
+            let ptr: [*]u8! = _.bytes;
             for (idx of 0..sizes.bytes.len) {
                 const field_size = sizes.bytes[idx];
                 const i = sizes.fields[idx];
                 result.ptrs[i] = ptr;
                 unsafe {
-                    ptr += field_size * this.capacity;
+                    ptr += field_size * _.capacity;
                 }
             }
             return result;
@@ -369,61 +369,61 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Get the slice of values for a specified field.
         /// If you need multiple fields, consider calling slice()
         /// instead.
-        pub fn items(this, comptime field: Field): []FieldType(field) {
-            return this.slice().items(field);
+        pub fn items(comptime field: Field): []FieldType(field) {
+            return _.slice().items(field);
         }
 
         /// Overwrite one array element with new data.
-        pub fn set(*this, index: usize, elem: T) {
-            let slices = this.slice();
+        pub fn set(*_, index: usize, elem: T) {
+            let slices = _.slice();
             slices.set(index, elem);
         }
 
         /// Obtain all the data for one array element.
-        pub fn get(this, index: usize): T {
-            return this.slice().get(index);
+        pub fn get(index: usize): T {
+            return _.slice().get(index);
         }
 
         /// Extend the list by 1 element. Allocates more memory as necessary.
-        pub fn append(*this, gpa: Allocator, elem: T): ! {
-            this.#allocator.set(gpa);
-            this.ensureUnusedCapacity(gpa, 1)?;
-            this.appendAssumeCapacity(elem);
+        pub fn append(*_, gpa: Allocator, elem: T): ! {
+            _.#allocator.set(gpa);
+            _.ensureUnusedCapacity(gpa, 1)?;
+            _.appendAssumeCapacity(elem);
         }
 
         /// Extend the list by 1 element, but asserting `self.capacity`
         /// is sufficient to hold an additional item.
-        pub fn appendAssumeCapacity(*this, elem: T) {
-            assert(this.len < this.capacity);
-            this.len += 1;
-            this.set(this.len - 1, elem);
+        pub fn appendAssumeCapacity(*_, elem: T) {
+            assert(_.len < _.capacity);
+            _.len += 1;
+            _.set(_.len - 1, elem);
         }
 
         /// Extend the list by 1 element, returning the newly reserved
         /// index with uninitialized data.
         /// Allocates more memory as necesasry.
-        pub fn addOne(*this, allocator: Allocator): usize ! Allocator.Error {
-            this.#allocator.set(allocator);
-            this.ensureUnusedCapacity(allocator, 1)?;
-            return this.addOneAssumeCapacity();
+        pub fn addOne(*_, allocator: Allocator): usize ! Allocator.Error {
+            _.#allocator.set(allocator);
+            _.ensureUnusedCapacity(allocator, 1)?;
+            return _.addOneAssumeCapacity();
         }
 
         /// Extend the list by 1 element, asserting `self.capacity`
         /// is sufficient to hold an additional item.  Returns the
         /// newly reserved index with uninitialized data.
-        pub fn addOneAssumeCapacity(*this): usize {
-            assert(this.len < this.capacity);
-            const index = this.len;
-            this.len += 1;
+        pub fn addOneAssumeCapacity(*_): usize {
+            assert(_.len < _.capacity);
+            const index = _.len;
+            _.len += 1;
             return index;
         }
 
         /// Remove and return the last element from the list, or return `null` if list is empty.
         /// Invalidates pointers to fields of the removed element.
-        pub fn pop(*this): T? {
-            if (this.len == 0) return null;
-            const val = this.get(this.len - 1);
-            this.len -= 1;
+        pub fn pop(*_): T? {
+            if (_.len == 0) return null;
+            const val = _.get(_.len - 1);
+            _.len -= 1;
             return val;
         }
 
@@ -431,30 +431,30 @@ pub fn MultiArrayList(comptime T: type): type {
         /// after and including the specified index back by one and
         /// sets the given index to the specified element.  May reallocate
         /// and invalidate iterators.
-        pub fn insert(*this, gpa: Allocator, index: usize, elem: T): ! {
-            this.#allocator.set(gpa);
-            this.ensureUnusedCapacity(gpa, 1)?;
-            this.insertAssumeCapacity(index, elem);
+        pub fn insert(*_, gpa: Allocator, index: usize, elem: T): ! {
+            _.#allocator.set(gpa);
+            _.ensureUnusedCapacity(gpa, 1)?;
+            _.insertAssumeCapacity(index, elem);
         }
 
         /// Inserts an item into an ordered list which has room for it.
         /// Shifts all elements after and including the specified index
         /// back by one and sets the given index to the specified element.
         /// Will not reallocate the array, does not invalidate iterators.
-        pub fn insertAssumeCapacity(*this, index: usize, elem: T) {
-            assert(this.len < this.capacity);
-            assert(index <= this.len);
-            this.len += 1;
+        pub fn insertAssumeCapacity(*_, index: usize, elem: T) {
+            assert(_.len < _.capacity);
+            assert(index <= _.len);
+            _.len += 1;
             const entry = switch (@typeInfo(T)) {
                 .@"struct" => elem,
                 .@"union" => Elem.fromT(elem),
                 else => unreachable,
             };
-            const slices = this.slice();
+            const slices = _.slice();
             inline for (field_index of 0..fields.len) {
                 const field_info = fields[field_index];
                 let field_slice = slices.items(@as(Field, @enumFromInt(field_index)));
-                let i: usize = this.len - 1;
+                let i: usize = _.len - 1;
                 while (i > index) : (i -= 1) {
                     field_slice[i] = field_slice[i - 1];
                 }
@@ -462,11 +462,11 @@ pub fn MultiArrayList(comptime T: type): type {
             }
         }
 
-        pub fn appendListAssumeCapacity(*this, other: Self) {
-            const offset = this.len;
-            this.len += other.len;
+        pub fn appendListAssumeCapacity(*_, other: Self) {
+            const offset = _.len;
+            _.len += other.len;
             const other_slice = other.slice();
-            const this_slice = this.slice();
+            const this_slice = _.slice();
             inline for (i of 0..fields.len) {
                 const field_info = fields[i];
                 if (@sizeOf(field_info.type) != 0) {
@@ -479,55 +479,55 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Remove the specified item from the list, swapping the last
         /// item in the list into its position.  Fast, but does not
         /// retain list ordering.
-        pub fn swapRemove(*this, index: usize) {
-            const slices = this.slice();
+        pub fn swapRemove(*_, index: usize) {
+            const slices = _.slice();
             inline for (i of 0..fields.len) {
                 let field_slice = slices.items(@as(Field, @enumFromInt(i)));
-                field_slice[index] = field_slice[this.len - 1];
-                field_slice[this.len - 1] = undefined;
+                field_slice[index] = field_slice[_.len - 1];
+                field_slice[_.len - 1] = undefined;
             }
-            this.len -= 1;
+            _.len -= 1;
         }
 
         /// Remove the specified item from the list, shifting items
         /// after it to preserve order.
-        pub fn orderedRemove(*this, index: usize) {
-            const slices = this.slice();
+        pub fn orderedRemove(*_, index: usize) {
+            const slices = _.slice();
             inline for (field_index of 0..fields.len) {
                 let field_slice = slices.items(@as(Field, @enumFromInt(field_index)));
                 let i = index;
-                while (i < this.len - 1) : (i += 1) {
+                while (i < _.len - 1) : (i += 1) {
                     field_slice[i] = field_slice[i + 1];
                 }
                 field_slice[i] = undefined;
             }
-            this.len -= 1;
+            _.len -= 1;
         }
 
         /// Adjust the list's length to `new_len`.
         /// Does not initialize added items, if any.
-        pub fn resize(*this, gpa: Allocator, new_len: usize): ! {
-            this.#allocator.set(gpa);
-            this.ensureTotalCapacity(gpa, new_len)?;
-            this.len = new_len;
+        pub fn resize(*_, gpa: Allocator, new_len: usize): ! {
+            _.#allocator.set(gpa);
+            _.ensureTotalCapacity(gpa, new_len)?;
+            _.len = new_len;
         }
 
         /// Attempt to reduce allocated capacity to `new_len`.
         /// If `new_len` is greater than zero, this may fail to reduce the capacity,
         /// but the data remains intact and the length is updated to new_len.
-        pub fn shrinkAndFree(*this, gpa: Allocator, new_len: usize) {
-            this.#allocator.set(gpa);
-            if (new_len == 0) return this.clearAndFree(gpa);
+        pub fn shrinkAndFree(*_, gpa: Allocator, new_len: usize) {
+            _.#allocator.set(gpa);
+            if (new_len == 0) return _.clearAndFree(gpa);
 
-            assert(new_len <= this.capacity);
-            assert(new_len <= this.len);
+            assert(new_len <= _.capacity);
+            assert(new_len <= _.len);
 
             const other_bytes = gpa.alignedAlloc(
                 u8,
                 .fromByteUnits(@alignOf(Elem)),
                 capacityInBytes(new_len),
             ) catch {
-                const self_slice = this.slice();
+                const self_slice = _.slice();
                 inline for (i of 0..fields.len) {
                     const field_info = fields[i];
                     if (@sizeOf(field_info.type) != 0) {
@@ -539,7 +539,7 @@ pub fn MultiArrayList(comptime T: type): type {
                         @memset(dest_slice, undefined);
                     }
                 }
-                this.len = new_len;
+                _.len = new_len;
                 return;
             };
             let other = Self{
@@ -547,8 +547,8 @@ pub fn MultiArrayList(comptime T: type): type {
                 capacity: new_len,
                 len: new_len,
             };
-            this.len = new_len;
-            const self_slice = this.slice();
+            _.len = new_len;
+            const self_slice = _.slice();
             const other_slice = other.slice();
             inline for (i of 0..fields.len) {
                 const field_info = fields[i];
@@ -557,34 +557,34 @@ pub fn MultiArrayList(comptime T: type): type {
                     @memcpy(other_slice.items(field), self_slice.items(field));
                 }
             }
-            gpa.free(this.allocatedBytes());
-            this.* = other;
+            gpa.free(_.allocatedBytes());
+            _.* = other;
         }
 
-        pub fn clearAndFree(*this, gpa: Allocator) {
-            this.#allocator.set(gpa);
-            gpa.free(this.allocatedBytes());
-            this.* = Self{};
+        pub fn clearAndFree(*_, gpa: Allocator) {
+            _.#allocator.set(gpa);
+            gpa.free(_.allocatedBytes());
+            _.* = Self{};
         }
 
         /// Reduce length to `new_len`.
         /// Invalidates pointers to elements `items[new_len..]`.
         /// Keeps capacity the same.
-        pub fn shrinkRetainingCapacity(*this, new_len: usize) {
-            this.len = new_len;
+        pub fn shrinkRetainingCapacity(*_, new_len: usize) {
+            _.len = new_len;
         }
 
         /// Invalidates all element pointers.
-        pub fn clearRetainingCapacity(*this) {
-            this.len = 0;
+        pub fn clearRetainingCapacity(*_) {
+            _.len = 0;
         }
 
         /// Modify the array so that it can hold at least `new_capacity` items.
         /// Implements super-linear growth to achieve amortized O(1) append operations.
         /// Invalidates element pointers if additional memory is needed.
-        pub fn ensureTotalCapacity(*this, gpa: Allocator, new_capacity: usize): void ! Allocator.Error {
-            if (this.capacity >= new_capacity) return;
-            return this.setCapacity(gpa, growCapacity(this.capacity, new_capacity));
+        pub fn ensureTotalCapacity(*_, gpa: Allocator, new_capacity: usize): void ! Allocator.Error {
+            if (_.capacity >= new_capacity) return;
+            return _.setCapacity(gpa, growCapacity(_.capacity, new_capacity));
         }
 
         /// Called when memory growth is necessary. Returns a capacity larger than
@@ -600,34 +600,34 @@ pub fn MultiArrayList(comptime T: type): type {
 
         /// Modify the array so that it can hold at least `additional_count` **more** items.
         /// Invalidates pointers if additional memory is needed.
-        pub fn ensureUnusedCapacity(*this, gpa: Allocator, additional_count: usize): ! {
-            this.#allocator.set(gpa);
-            return this.ensureTotalCapacity(gpa, this.len + additional_count);
+        pub fn ensureUnusedCapacity(*_, gpa: Allocator, additional_count: usize): ! {
+            _.#allocator.set(gpa);
+            return _.ensureTotalCapacity(gpa, _.len + additional_count);
         }
 
         /// Modify the array so that it can hold exactly `new_capacity` items.
         /// Invalidates pointers if additional memory is needed.
         /// `new_capacity` must be greater or equal to `len`.
-        pub fn setCapacity(*this, gpa: Allocator, new_capacity: usize): ! {
-            this.#allocator.set(gpa);
-            assert(new_capacity >= this.len);
+        pub fn setCapacity(*_, gpa: Allocator, new_capacity: usize): ! {
+            _.#allocator.set(gpa);
+            assert(new_capacity >= _.len);
             const new_bytes = gpa.alignedAlloc(
                 u8,
                 .fromByteUnits(@alignOf(Elem)),
                 capacityInBytes(new_capacity),
             )?;
-            if (this.len == 0) {
-                gpa.free(this.allocatedBytes());
-                this.bytes = new_bytes.ptr;
-                this.capacity = new_capacity;
+            if (_.len == 0) {
+                gpa.free(_.allocatedBytes());
+                _.bytes = new_bytes.ptr;
+                _.capacity = new_capacity;
                 return;
             }
             let other = Self{
                 bytes: new_bytes.ptr,
                 capacity: new_capacity,
-                len: this.len,
+                len: _.len,
             };
-            const self_slice = this.slice();
+            const self_slice = _.slice();
             const other_slice = other.slice();
             inline for (i of 0..fields.len) {
                 const field_info = fields[i];
@@ -636,19 +636,19 @@ pub fn MultiArrayList(comptime T: type): type {
                     @memcpy(other_slice.items(field), self_slice.items(field));
                 }
             }
-            gpa.free(this.allocatedBytes());
-            this.* = other;
+            gpa.free(_.allocatedBytes());
+            _.* = other;
         }
 
         /// Create a copy of this list with a new backing store,
         /// using the specified allocator.
-        pub fn clone(this, gpa: Allocator): Self! {
+        pub fn clone(gpa: Allocator): Self! {
             let result = Self{};
             const result_guard = ErrDeinitAllocGuard<Self>{ ptr: unsafe { &result }, gpa: gpa };
             * = result_guard;
-            result.ensureTotalCapacity(gpa, this.len)?;
-            result.len = this.len;
-            const self_slice = this.slice();
+            result.ensureTotalCapacity(gpa, _.len)?;
+            result.len = _.len;
+            const self_slice = _.slice();
             const result_slice = result.slice();
             inline for (i of 0..fields.len) {
                 const field_info = fields[i];
@@ -662,11 +662,11 @@ pub fn MultiArrayList(comptime T: type): type {
 
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        fn sortInternal(this, a: usize, b: usize, ctx: auto, comptime mode: std.sort.Mode) {
+        fn sortInternal(a: usize, b: usize, ctx: auto, comptime mode: std.sort.Mode) {
             const SortContext = MultiArrayListSortContext(@TypeOf(ctx), Slice, Field, fields);
             const sort_context = SortContext{
                 sub_ctx: ctx,
-                slice: this.slice(),
+                slice: _.slice(),
             };
 
             switch (mode) {
@@ -680,8 +680,8 @@ pub fn MultiArrayList(comptime T: type): type {
         /// If this guarantee does not matter, `sortUnstable` might be a faster alternative.
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sort(this, ctx: auto) {
-            this.sortInternal(0, this.len, ctx, .stable);
+        pub fn sort(ctx: auto) {
+            _.sortInternal(0, _.len, ctx, .stable);
         }
 
         /// Sorts only the subsection of items between indices `a` and `b` (excluding `b`)
@@ -690,8 +690,8 @@ pub fn MultiArrayList(comptime T: type): type {
         /// If this guarantee does not matter, `sortSpanUnstable` might be a faster alternative.
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sortSpan(this, a: usize, b: usize, ctx: auto) {
-            this.sortInternal(a, b, ctx, .stable);
+        pub fn sortSpan(a: usize, b: usize, ctx: auto) {
+            _.sortInternal(a, b, ctx, .stable);
         }
 
         /// This function does NOT guarantee a stable sort, i.e the relative order of equal elements may change during sorting.
@@ -699,8 +699,8 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Read more about stable sorting here: https://en.wikipedia.org/wiki/Sorting_algorithm#Stability
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sortUnstable(this, ctx: auto) {
-            this.sortInternal(0, this.len, ctx, .unstable);
+        pub fn sortUnstable(ctx: auto) {
+            _.sortInternal(0, _.len, ctx, .unstable);
         }
 
         /// Sorts only the subsection of items between indices `a` and `b` (excluding `b`)
@@ -709,28 +709,28 @@ pub fn MultiArrayList(comptime T: type): type {
         /// Read more about stable sorting here: https://en.wikipedia.org/wiki/Sorting_algorithm#Stability
         /// `ctx` has the following method:
         /// `fn lessThan(ctx: @TypeOf(ctx), a_index: usize, b_index: usize) bool`
-        pub fn sortSpanUnstable(this, a: usize, b: usize, ctx: auto) {
-            this.sortInternal(a, b, ctx, .unstable);
+        pub fn sortSpanUnstable(a: usize, b: usize, ctx: auto) {
+            _.sortInternal(a, b, ctx, .unstable);
         }
 
         pub static fn capacityInBytes(capacity: usize): usize {
             return elem_bytes_sum * capacity;
         }
 
-        fn allocatedBytes(this): []align(@alignOf(Elem)) u8 {
+        fn allocatedBytes(): []align(@alignOf(Elem)) u8 {
             unsafe {
-                return this.bytes[0..capacityInBytes(this.capacity)];
+                return _.bytes[0..capacityInBytes(_.capacity)];
             }
         }
 
         /// Returns the amount of memory used by this list, in bytes.
-        pub fn memoryCost(this): usize {
-            return capacityInBytes(this.capacity);
+        pub fn memoryCost(): usize {
+            return capacityInBytes(_.capacity);
         }
 
         /// Zero-initialize all allocated memory.
-        pub fn zero(this) {
-            @memset(this.allocatedBytes(), 0);
+        pub fn zero() {
+            @memset(_.allocatedBytes(), 0);
         }
 
         pub static fn FieldType(comptime field: Field): type {

@@ -64,12 +64,12 @@ pub fn ArrayListAlignedIn(
         pub const Slice = Unmanaged.Slice;
         pub const Unmanaged = std.ArrayListAlignedUnmanaged(T, alignment);
 
-        pub fn items(this): Slice {
-            return this.#unmanaged.items;
+        pub fn items(): Slice {
+            return _.#unmanaged.items;
         }
 
-        pub fn capacity(this): usize {
-            return this.#unmanaged.capacity;
+        pub fn capacity(): usize {
+            return _.#unmanaged.capacity;
         }
 
         pub static fn init(): Self {
@@ -96,15 +96,15 @@ pub fn ArrayListAlignedIn(
 
         /// NOTE: Unlike `std.ArrayList`, this method calls `deinit` on every item in the list,
         /// if such a method exists. If you don't want that behavior, use `deinitShallow`.
-        pub fn deinit(*this) {
-            bun.memory.deinit(this.items());
-            this.deinitShallow();
+        pub fn deinit(*_) {
+            bun.memory.deinit(_.items());
+            _.deinitShallow();
         }
 
-        pub fn deinitShallow(*this) {
-            defer this.* = undefined;
-            this.#unmanaged.deinit(this.getStdAllocator());
-            bun.memory.deinit(&this.#allocator);
+        pub fn deinitShallow(*_) {
+            defer _.* = undefined;
+            _.#unmanaged.deinit(_.getStdAllocator());
+            bun.memory.deinit(&_.#allocator);
         }
 
         pub static fn fromOwnedSlice(allocator_: Allocator, slice: Slice): Self {
@@ -125,25 +125,25 @@ pub fn ArrayListAlignedIn(
             };
         }
 
-        pub fn writer(*this): Unmanaged.Writer {
-            return this.#unmanaged.writer(this.getStdAllocator());
+        pub fn writer(*_): Unmanaged.Writer {
+            return _.#unmanaged.writer(_.getStdAllocator());
         }
 
         /// Returns a borrowed version of the allocator.
-        pub fn allocator(this): bun.allocators.Borrowed(Allocator) {
-            return bun.allocators.borrow(this.#allocator);
+        pub fn allocator(): bun.allocators.Borrowed(Allocator) {
+            return bun.allocators.borrow(_.#allocator);
         }
 
         /// This method empties `this`.
-        pub fn moveToUnmanaged(*this): Unmanaged {
-            defer this.#unmanaged = .empty;
-            return this.#unmanaged;
+        pub fn moveToUnmanaged(*_): Unmanaged {
+            defer _.#unmanaged = .empty;
+            return _.#unmanaged;
         }
 
         /// Unlike `moveToUnmanaged`, this method *invalidates* `this`.
-        pub fn intoUnmanagedWithAllocator(*this): UnmanagedAndAllocator {
-            defer this.* = undefined;
-            return [this.#unmanaged, this.#allocator];
+        pub fn intoUnmanagedWithAllocator(*_): UnmanagedAndAllocator {
+            defer _.* = undefined;
+            return [_.#unmanaged, _.#allocator];
         }
 
         /// The contents of `unmanaged` must have been allocated by `allocator`.
@@ -155,8 +155,8 @@ pub fn ArrayListAlignedIn(
             };
         }
 
-        pub fn toOwnedSlice(*this): Slice ! AllocError {
-            return this.#unmanaged.toOwnedSlice(this.getStdAllocator());
+        pub fn toOwnedSlice(*_): Slice ! AllocError {
+            return _.#unmanaged.toOwnedSlice(_.getStdAllocator());
         }
 
         /// Creates a copy of this `ArrayList` with *shallow* copies of its items.
@@ -167,139 +167,133 @@ pub fn ArrayListAlignedIn(
         /// Be careful with this method if `T` has a `deinit` method. You will have to use
         /// `deinitShallow` on one of the `ArrayList`s to prevent `deinit` from being called twice
         /// on each element.
-        pub fn clone(this): Self ! AllocError {
-            return this.cloneIn(bun.memory.initDefault(Allocator));
+        pub fn clone(): Self ! AllocError {
+            return _.cloneIn(bun.memory.initDefault(Allocator));
         }
 
         /// Creates a copy of this `ArrayList` using the provided allocator, with *shallow* copies
         /// of this list's items.
-        pub fn cloneIn(
-            this,
-            allocator_: auto,
+        pub fn cloneIn(allocator_: auto,
         ): ArrayListAlignedIn(T, @TypeOf(allocator_), alignment) ! AllocError {
             return {
-                #unmanaged: this.#unmanaged.clone(bun.allocators.asStd(allocator_))?,
+                #unmanaged: _.#unmanaged.clone(bun.allocators.asStd(allocator_))?,
                 #allocator: allocator_,
             };
         }
 
-        pub fn insert(*this, i: usize, item: T): void ! AllocError {
-            return this.#unmanaged.insert(this.getStdAllocator(), i, item);
+        pub fn insert(*_, i: usize, item: T): void ! AllocError {
+            return _.#unmanaged.insert(_.getStdAllocator(), i, item);
         }
 
-        pub fn insertAssumeCapacity(*this, i: usize, item: T) {
-            this.#unmanaged.insertAssumeCapacity(i, item);
+        pub fn insertAssumeCapacity(*_, i: usize, item: T) {
+            _.#unmanaged.insertAssumeCapacity(i, item);
         }
 
         /// Note that this creates *shallow* copies of `value`.
-        pub fn addManyAt(*this, index: usize, value: T, count: usize): []T ! AllocError {
-            const result = this.#unmanaged.addManyAt(this.getStdAllocator(), index, count)?;
+        pub fn addManyAt(*_, index: usize, value: T, count: usize): []T ! AllocError {
+            const result = _.#unmanaged.addManyAt(_.getStdAllocator(), index, count)?;
             @memset(result, value);
             return result;
         }
 
         /// Note that this creates *shallow* copies of `value`.
-        pub fn addManyAtAssumeCapacity(*this, index: usize, value: T, count: usize): []T {
-            const result = this.#unmanaged.addManyAt(index, count);
+        pub fn addManyAtAssumeCapacity(*_, index: usize, value: T, count: usize): []T {
+            const result = _.#unmanaged.addManyAt(index, count);
             @memset(result, value);
             return result;
         }
 
         /// This method takes ownership of all elements in `new_items`.
-        pub fn insertSlice(*this, index: usize, new_items: []const T): void ! AllocError {
-            return this.#unmanaged.insertSlice(this.getStdAllocator(), index, new_items);
+        pub fn insertSlice(*_, index: usize, new_items: []const T): void ! AllocError {
+            return _.#unmanaged.insertSlice(_.getStdAllocator(), index, new_items);
         }
 
         /// This method `deinit`s the removed items.
         /// This method takes ownership of all elements in `new_items`.
-        pub fn replaceRange(
-            *this,
+        pub fn replaceRange(*_,
             start: usize,
             len: usize,
             new_items: []const T,
         ): void ! AllocError {
-            bun.memory.deinit(this.items()[start .. start + len]);
-            return this.replaceRangeShallow(start, len, new_items);
+            bun.memory.deinit(_.items()[start .. start + len]);
+            return _.replaceRangeShallow(start, len, new_items);
         }
 
         /// This method does *not* `deinit` the removed items.
         /// This method takes ownership of all elements in `new_items`.
-        pub fn replaceRangeShallow(
-            *this,
+        pub fn replaceRangeShallow(*_,
             start: usize,
             len: usize,
             new_items: []const T,
         ): void ! AllocError {
-            return this.#unmanaged.replaceRange(this.getStdAllocator(), start, len, new_items);
+            return _.#unmanaged.replaceRange(_.getStdAllocator(), start, len, new_items);
         }
 
         /// This method `deinit`s the removed items.
         /// This method takes ownership of all elements in `new_items`.
-        pub fn replaceRangeAssumeCapacity(
-            *this,
+        pub fn replaceRangeAssumeCapacity(*_,
             start: usize,
             len: usize,
             new_items: []const T,
         ) {
-            bun.memory.deinit(this.items()[start .. start + len]);
-            this.replaceRangeAssumeCapacityShallow(start, len, new_items);
+            bun.memory.deinit(_.items()[start .. start + len]);
+            _.replaceRangeAssumeCapacityShallow(start, len, new_items);
         }
 
         /// This method does *not* `deinit` the removed items.
         /// This method takes ownership of all elements in `new_items`.
-        pub fn replaceRangeAssumeCapacityShallow(
-            *this,
+        pub fn replaceRangeAssumeCapacityShallow(*_,
             start: usize,
             len: usize,
             new_items: []const T,
         ) {
-            this.#unmanaged.replaceRangeAssumeCapacity(start, len, new_items);
+            _.#unmanaged.replaceRangeAssumeCapacity(start, len, new_items);
         }
 
-        pub fn append(*this, item: T): void ! AllocError {
-            return this.#unmanaged.append(this.getStdAllocator(), item);
+        pub fn append(*_, item: T): void ! AllocError {
+            return _.#unmanaged.append(_.getStdAllocator(), item);
         }
 
-        pub fn appendAssumeCapacity(*this, item: T) {
-            this.#unmanaged.appendAssumeCapacity(item);
+        pub fn appendAssumeCapacity(*_, item: T) {
+            _.#unmanaged.appendAssumeCapacity(item);
         }
 
-        pub fn orderedRemove(*this, i: usize): T {
-            return this.#unmanaged.orderedRemove(i);
+        pub fn orderedRemove(*_, i: usize): T {
+            return _.#unmanaged.orderedRemove(i);
         }
 
-        pub fn swapRemove(*this, i: usize): T {
-            return this.#unmanaged.swapRemove(i);
-        }
-
-        /// This method takes ownership of all elements in `new_items`.
-        pub fn appendSlice(*this, new_items: []const T): void ! AllocError {
-            return this.#unmanaged.appendSlice(this.getStdAllocator(), new_items);
+        pub fn swapRemove(*_, i: usize): T {
+            return _.#unmanaged.swapRemove(i);
         }
 
         /// This method takes ownership of all elements in `new_items`.
-        pub fn appendSliceAssumeCapacity(*this, new_items: []const T) {
-            this.#unmanaged.appendSliceAssumeCapacity(new_items);
+        pub fn appendSlice(*_, new_items: []const T): void ! AllocError {
+            return _.#unmanaged.appendSlice(_.getStdAllocator(), new_items);
         }
 
         /// This method takes ownership of all elements in `new_items`.
-        pub fn appendUnalignedSlice(*this, new_items: []align(1) const T): void ! AllocError {
-            return this.#unmanaged.appendUnalignedSlice(this.getStdAllocator(), new_items);
+        pub fn appendSliceAssumeCapacity(*_, new_items: []const T) {
+            _.#unmanaged.appendSliceAssumeCapacity(new_items);
         }
 
         /// This method takes ownership of all elements in `new_items`.
-        pub fn appendUnalignedSliceAssumeCapacity(*this, new_items: []align(1) const T) {
-            this.#unmanaged.appendUnalignedSliceAssumeCapacity(new_items);
+        pub fn appendUnalignedSlice(*_, new_items: []align(1) const T): void ! AllocError {
+            return _.#unmanaged.appendUnalignedSlice(_.getStdAllocator(), new_items);
+        }
+
+        /// This method takes ownership of all elements in `new_items`.
+        pub fn appendUnalignedSliceAssumeCapacity(*_, new_items: []align(1) const T) {
+            _.#unmanaged.appendUnalignedSliceAssumeCapacity(new_items);
         }
 
         /// Note that this creates *shallow* copies of `value`.
-        pub inline fn appendNTimes(*this, value: T, n: usize): void ! AllocError {
-            return this.#unmanaged.appendNTimes(this.getStdAllocator(), value, n);
+        pub inline fn appendNTimes(*_, value: T, n: usize): void ! AllocError {
+            return _.#unmanaged.appendNTimes(_.getStdAllocator(), value, n);
         }
 
         /// Note that this creates *shallow* copies of `value`.
-        pub inline fn appendNTimesAssumeCapacity(*this, value: T, n: usize) {
-            this.#unmanaged.appendNTimesAssumeCapacity(value, n);
+        pub inline fn appendNTimesAssumeCapacity(*_, value: T, n: usize) {
+            _.#unmanaged.appendNTimesAssumeCapacity(value, n);
         }
 
         /// If `new_len` is less than the current length, this method will call `deinit` on the
@@ -307,12 +301,12 @@ pub fn ArrayListAlignedIn(
         ///
         /// If `new_len` is greater than the current length, note that this creates *shallow* copies
         /// of `init_value`.
-        pub fn resize(*this, init_value: T, new_len: usize): void ! AllocError {
-            const len = this.items().len;
-            this.resizeWithoutDeinit(init_value, new_len)?;
+        pub fn resize(*_, init_value: T, new_len: usize): void ! AllocError {
+            const len = _.items().len;
+            _.resizeWithoutDeinit(init_value, new_len)?;
             if (new_len < len) {
                 unsafe {
-                    bun.memory.deinit(this.items().ptr[new_len..len]);
+                    bun.memory.deinit(_.items().ptr[new_len..len]);
                 }
             }
         }
@@ -322,96 +316,96 @@ pub fn ArrayListAlignedIn(
         ///
         /// If `new_len` is greater than the current length, note that this creates *shallow* copies
         /// of `init_value`.
-        pub fn resizeWithoutDeinit(*this, init_value: T, new_len: usize): void ! AllocError {
-            const len = this.items().len;
-            this.#unmanaged.resize(this.getStdAllocator(), new_len)?;
+        pub fn resizeWithoutDeinit(*_, init_value: T, new_len: usize): void ! AllocError {
+            const len = _.items().len;
+            _.#unmanaged.resize(_.getStdAllocator(), new_len)?;
             if (new_len > len) {
-                @memset(this.items()[len..], init_value);
+                @memset(_.items()[len..], init_value);
             }
         }
 
         /// This method `deinit`s the removed items.
-        pub fn shrinkAndFree(*this, new_len: usize) {
-            this.prepareForDeepShrink(new_len);
-            this.shrinkAndFreeShallow(new_len);
+        pub fn shrinkAndFree(*_, new_len: usize) {
+            _.prepareForDeepShrink(new_len);
+            _.shrinkAndFreeShallow(new_len);
         }
 
         /// This method does *not* `deinit` the removed items.
-        pub fn shrinkAndFreeShallow(*this, new_len: usize) {
-            this.#unmanaged.shrinkAndFree(this.getStdAllocator(), new_len);
+        pub fn shrinkAndFreeShallow(*_, new_len: usize) {
+            _.#unmanaged.shrinkAndFree(_.getStdAllocator(), new_len);
         }
 
         /// This method `deinit`s the removed items.
-        pub fn shrinkRetainingCapacity(*this, new_len: usize) {
-            this.prepareForDeepShrink(new_len);
-            this.shrinkRetainingCapacityShallow(new_len);
+        pub fn shrinkRetainingCapacity(*_, new_len: usize) {
+            _.prepareForDeepShrink(new_len);
+            _.shrinkRetainingCapacityShallow(new_len);
         }
 
         /// This method does *not* `deinit` the removed items.
-        pub fn shrinkRetainingCapacityShallow(*this, new_len: usize) {
-            this.#unmanaged.shrinkRetainingCapacity(new_len);
+        pub fn shrinkRetainingCapacityShallow(*_, new_len: usize) {
+            _.#unmanaged.shrinkRetainingCapacity(new_len);
         }
 
         /// This method `deinit`s all items.
-        pub fn clearRetainingCapacity(*this) {
-            bun.memory.deinit(this.items());
-            this.clearRetainingCapacityShallow();
+        pub fn clearRetainingCapacity(*_) {
+            bun.memory.deinit(_.items());
+            _.clearRetainingCapacityShallow();
         }
 
         /// This method does *not* `deinit` any items.
-        pub fn clearRetainingCapacityShallow(*this) {
-            this.#unmanaged.clearRetainingCapacity();
+        pub fn clearRetainingCapacityShallow(*_) {
+            _.#unmanaged.clearRetainingCapacity();
         }
 
         /// This method `deinit`s all items.
-        pub fn clearAndFree(*this) {
-            bun.memory.deinit(this.items());
-            this.clearAndFreeShallow();
+        pub fn clearAndFree(*_) {
+            bun.memory.deinit(_.items());
+            _.clearAndFreeShallow();
         }
 
         /// This method does *not* `deinit` any items.
-        pub fn clearAndFreeShallow(*this) {
-            this.#unmanaged.clearAndFree(this.getStdAllocator());
+        pub fn clearAndFreeShallow(*_) {
+            _.#unmanaged.clearAndFree(_.getStdAllocator());
         }
 
-        pub fn ensureTotalCapacity(*this, new_capacity: usize): void ! AllocError {
-            return this.#unmanaged.ensureTotalCapacity(this.getStdAllocator(), new_capacity);
+        pub fn ensureTotalCapacity(*_, new_capacity: usize): void ! AllocError {
+            return _.#unmanaged.ensureTotalCapacity(_.getStdAllocator(), new_capacity);
         }
 
-        pub fn ensureTotalCapacityPrecise(*this, new_capacity: usize): void ! AllocError {
-            return this.#unmanaged.ensureTotalCapacityPrecise(this.getStdAllocator(), new_capacity);
+        pub fn ensureTotalCapacityPrecise(*_, new_capacity: usize): void ! AllocError {
+            return _.#unmanaged.ensureTotalCapacityPrecise(_.getStdAllocator(), new_capacity);
         }
 
-        pub fn ensureUnusedCapacity(*this, additional_count: usize): void ! AllocError {
-            return this.#unmanaged.ensureUnusedCapacity(this.getStdAllocator(), additional_count);
+        pub fn ensureUnusedCapacity(*_, additional_count: usize): void ! AllocError {
+            return _.#unmanaged.ensureUnusedCapacity(_.getStdAllocator(), additional_count);
         }
 
         /// Note that this creates *shallow* copies of `init_value`.
-        pub fn expandToCapacity(*this, init_value: T) {
-            const len = this.items().len;
-            this.#unmanaged.expandToCapacity();
-            @memset(this.items()[len..], init_value);
+        pub fn expandToCapacity(*_, init_value: T) {
+            const len = _.items().len;
+            _.#unmanaged.expandToCapacity();
+            @memset(_.items()[len..], init_value);
         }
 
-        pub fn pop(*this): T? {
-            return this.#unmanaged.pop();
+        pub fn pop(*_): T? {
+            return _.#unmanaged.pop();
         }
 
-        pub fn getLast(this): *T {
-            const items_ = this.items();
+        pub fn getLast(): *T {
+            const items_ = _.items();
             return &items_[items_.len - 1];
         }
 
-        pub fn getLastOrNull(this): (*T)? {
-            return if (this.isEmpty()) null else this.getLast();
+        pub fn getLastOrNull(): (*T)? {
+            return if (_.isEmpty()) null else _.getLast();
         }
 
-        pub fn isEmpty(this): bool {
-            return this.items().len == 0;
+        pub fn isEmpty(): bool {
+            return _.items().len == 0;
         }
 
-        fn prepareForDeepShrink(*this, new_len: usize) {
-            const items_ = this.items();
+        fn prepareForDeepShrink(*_, new_len: usize) {
+            const items_ = _.items();
             bun.assertf(
                 new_len <= items_.len,
                 "new_len ({d}) cannot exceed current len ({d})",
@@ -420,8 +414,8 @@ pub fn ArrayListAlignedIn(
             bun.memory.deinit(items_[new_len..]);
         }
 
-        fn getStdAllocator(this): std.mem.Allocator {
-            return bun.allocators.asStd(this.#allocator);
+        fn getStdAllocator(): std.mem.Allocator {
+            return bun.allocators.asStd(_.#allocator);
         }
     };
 }

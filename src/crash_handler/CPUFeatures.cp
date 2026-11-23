@@ -38,7 +38,7 @@ extern fn bun_cpu_features(): u8;
         let is_first = true;
         inline for (field of @typeInfo(Flags).@"struct".fields) {
             if (!comptime (bun.strings.eql(field.name, "padding") || bun.strings.eql(field.name, "none"))) {
-                if (@field(this.flags, field.name)) {
+                if (@field(_.flags, field.name)) {
                     if (!is_first) {
                         writer.writeAll(" ")?;
                     }

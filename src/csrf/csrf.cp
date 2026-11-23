@@ -26,8 +26,8 @@ export enum TokenFormat {
     base64url,
     hex,
 
-    pub fn toNodeEncoding(_: TokenFormat): jsc.Node.Encoding {
-        return switch (self) {
+    pub fn toNodeEncoding(): jsc.Node.Encoding {
+        return switch (_) {
             .base64 => .base64,
             .base64url => .base64url,
             .hex => .hex,

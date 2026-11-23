@@ -177,10 +177,10 @@ pub fn adopt(self: *@This(), vm: *jsc.VirtualMachine, fd: bun.FD) bool {
                 return true;
             }
             const g = ensurePosixGroup(vm);
-            const sock = ((Socket.fromFd(g, .dynamic, fd, Self, self, null, true)) orelse {
+            const sock = (if (Socket.fromFd(g, .dynamic, fd, Self, self, null, true)) |s| s else ({
             _ = fd.close();
             return false;
-});
+}));
             self.backend.socket = sock;
             _ = sock.setTimeout(0);
             return true;
@@ -251,14 +251,14 @@ pub fn submitWindowsWrite(self: *@This()) void {
             break :blk_catch_3 self.markDone(); }); });
     }
 
-pub fn isAttached(self: *const @This()) bool {
+pub fn isAttached(self: @This()) bool {
             if (Environment.isWindows) {
                 return (self.backend.pipe != null);
             }
             return (!self.backend.socket.isDetached());
     }
 
-pub fn hasPendingWrites(self: *const @This()) bool {
+pub fn hasPendingWrites(self: @This()) bool {
             if ((self.out.items.len > 0)) {
                 return true;
             }

@@ -44,7 +44,7 @@ pub fn BoundedArrayAligned(
         }
 
         /// View the internal array as a slice whose size was previously set.
-        pub fn slice(ba: auto): switch (@TypeOf(&ba.buffer)) {
+        static fn slice(ba: auto): switch (@TypeOf(&ba.buffer)) {
             *align(align_bytes) [buffer_capacity]T => []align(align_bytes) T,
             *align(align_bytes) const [buffer_capacity]T => []align(align_bytes) const T,
             else => unreachable,
@@ -53,20 +53,20 @@ pub fn BoundedArrayAligned(
         }
 
         /// View the internal array as a constant slice whose size was previously set.
-        pub fn constSlice(this): []align(align_bytes) const T {
-            return this.slice();
+        pub fn constSlice(): []align(align_bytes) const T {
+            return _.slice();
         }
 
         /// Adjust the slice's length to `len`.
         /// Does not initialize added items if any.
-        pub fn resize(*this, len: usize): void ! Overflow {
+        pub fn resize(*_, len: usize): void ! Overflow {
             if (len > buffer_capacity) return error.Overflow;
-            this.len = @intCast(len);
+            _.len = @intCast(len);
         }
 
         /// Remove all elements from the slice.
-        pub fn clear(*this) {
-            this.len = 0;
+        pub fn clear(*_) {
+            _.len = 0;
         }
 
         /// Copy the content of an existing slice.
@@ -77,62 +77,62 @@ pub fn BoundedArrayAligned(
         }
 
         /// Return the element at index `i` of the slice.
-        pub fn get(this, i: usize): T {
-            return this.constSlice()[i];
+        pub fn get(i: usize): T {
+            return _.constSlice()[i];
         }
 
         /// Set the value of the element at index `i` of the slice.
-        pub fn set(*this, i: usize, item: T) {
-            this.slice()[i] = item;
+        pub fn set(*_, i: usize, item: T) {
+            _.slice()[i] = item;
         }
 
         /// Return the maximum length of a slice.
-        pub fn capacity(this): usize {
-            return this.buffer.len;
+        pub fn capacity(): usize {
+            return _.buffer.len;
         }
 
         /// Check that the slice can hold at least `additional_count` items.
-        pub fn ensureUnusedCapacity(this, additional_count: usize): void ! Overflow {
-            if (this.len + additional_count > buffer_capacity) {
+        pub fn ensureUnusedCapacity(additional_count: usize): void ! Overflow {
+            if (_.len + additional_count > buffer_capacity) {
                 return error.Overflow;
             }
         }
 
         /// Increase length by 1, returning a pointer to the new item.
-        pub fn addOne(*this): *T ! Overflow {
-            this.ensureUnusedCapacity(1)?;
-            return this.addOneAssumeCapacity();
+        pub fn addOne(*_): *T ! Overflow {
+            _.ensureUnusedCapacity(1)?;
+            return _.addOneAssumeCapacity();
         }
 
         /// Increase length by 1, returning pointer to the new item.
         /// Asserts that there is space for the new item.
-        pub fn addOneAssumeCapacity(*this): *T {
-            assert(this.len < buffer_capacity);
-            this.len += 1;
-            return &this.slice()[this.len - 1];
+        pub fn addOneAssumeCapacity(*_): *T {
+            assert(_.len < buffer_capacity);
+            _.len += 1;
+            return &_.slice()[_.len - 1];
         }
 
         /// Resize the slice, adding `n` new elements, which have `undefined` values.
         /// The return value is a pointer to the array of uninitialized elements.
-        pub fn addManyAsArray(*this, comptime n: usize): *align(align_bytes) [n]T ! Overflow {
-            const prev_len = this.len;
-            this.resize(@as(usize, this.len) + n)?;
-            return this.slice()[prev_len..][0..n];
+        pub fn addManyAsArray(*_, comptime n: usize): *align(align_bytes) [n]T ! Overflow {
+            const prev_len = _.len;
+            _.resize(@as(usize, _.len) + n)?;
+            return _.slice()[prev_len..][0..n];
         }
 
         /// Resize the slice, adding `n` new elements, which have `undefined` values.
         /// The return value is a slice pointing to the uninitialized elements.
-        pub fn addManyAsSlice(*this, n: usize): []align(align_bytes) T ! Overflow {
-            const prev_len = this.len;
-            this.resize(this.len + n)?;
-            return this.slice()[prev_len..][0..n];
+        pub fn addManyAsSlice(*_, n: usize): []align(align_bytes) T ! Overflow {
+            const prev_len = _.len;
+            _.resize(_.len + n)?;
+            return _.slice()[prev_len..][0..n];
         }
 
         /// Remove and return the last element from the slice, or return `null` if the slice is empty.
-        pub fn pop(*this): T? {
-            if (this.len == 0) return null;
-            const item = this.get(this.len - 1);
-            this.len -= 1;
+        pub fn pop(*_): T? {
+            if (_.len == 0) return null;
+            const item = _.get(_.len - 1);
+            _.len -= 1;
             return item;
         }
 
@@ -140,42 +140,41 @@ pub fn BoundedArrayAligned(
         /// This can be useful for writing directly into it.
         /// Note that such an operation must be followed up with a
         /// call to `resize()`
-        pub fn unusedCapacitySlice(*this): []align(align_bytes) T {
-            return this.buffer[this.len..];
+        pub fn unusedCapacitySlice(*_): []align(align_bytes) T {
+            return _.buffer[_.len..];
         }
 
         /// Insert `item` at index `i` by moving `slice[n .. slice.len]` to make room.
         /// This operation is O(N).
-        pub fn insert(*this, i: usize, item: T): void ! Overflow {
-            if (i > this.len) {
+        pub fn insert(*_, i: usize, item: T): void ! Overflow {
+            if (i > _.len) {
                 return error.Overflow;
             }
-            * = this.addOne()?;
-            let s = this.slice();
+            * = _.addOne()?;
+            let s = _.slice();
             mem.copyBackwards(T, s[i + 1 .. s.len], s[i .. s.len - 1]);
-            this.buffer[i] = item;
+            _.buffer[i] = item;
         }
 
         /// Insert slice `items` at index `i` by moving `slice[i .. slice.len]` to make room.
         /// This operation is O(N).
-        pub fn insertSlice(*this, i: usize, items: []const T): void ! Overflow {
-            this.ensureUnusedCapacity(items.len)?;
-            this.len += @as(Length, @intCast(items.len));
-            mem.copyBackwards(T, this.slice()[i + items.len .. this.len], this.constSlice()[i .. this.len - items.len]);
-            @memcpy(this.slice()[i..][0..items.len], items);
+        pub fn insertSlice(*_, i: usize, items: []const T): void ! Overflow {
+            _.ensureUnusedCapacity(items.len)?;
+            _.len += @as(Length, @intCast(items.len));
+            mem.copyBackwards(T, _.slice()[i + items.len .. _.len], _.constSlice()[i .. _.len - items.len]);
+            @memcpy(_.slice()[i..][0..items.len], items);
         }
 
         /// Replace range of elements `slice[start..][0..len]` with `new_items`.
         /// Grows slice if `len < new_items.len`.
         /// Shrinks slice if `len > new_items.len`.
-        pub fn replaceRange(
-            *this,
+        pub fn replaceRange(*_,
             start: usize,
             len: usize,
             new_items: []const T,
         ): void ! Overflow {
             const after_range = start + len;
-            let range = this.slice()[start..after_range];
+            let range = _.slice()[start..after_range];
 
             if (range.len == new_items.len) {
                 @memcpy(range[0..new_items.len], new_items);
@@ -183,22 +182,22 @@ pub fn BoundedArrayAligned(
                 const first = new_items[0..range.len];
                 const rest = new_items[range.len..];
                 @memcpy(range[0..first.len], first);
-                this.insertSlice(after_range, rest)?;
+                _.insertSlice(after_range, rest)?;
             } else {
                 @memcpy(range[0..new_items.len], new_items);
                 const after_subrange = start + new_items.len;
                 let idx: usize = 0;
-                for (item of this.constSlice()[after_range..]) {
-                    this.slice()[after_subrange..][idx] = item;
+                for (item of _.constSlice()[after_range..]) {
+                    _.slice()[after_subrange..][idx] = item;
                     idx += 1;
                 }
-                this.len = @intCast(@as(usize, this.len) - @as(usize, len) - @as(usize, new_items.len));
+                _.len = @intCast(@as(usize, _.len) - @as(usize, len) - @as(usize, new_items.len));
             }
         }
 
         /// Extend the slice by 1 element.
-        pub fn append(*this, item: T): void ! Overflow {
-            const new_item_ptr = this.addOne()?;
+        pub fn append(*_, item: T): void ! Overflow {
+            const new_item_ptr = _.addOne()?;
             unsafe {
                 new_item_ptr.* = item;
             }
@@ -206,8 +205,8 @@ pub fn BoundedArrayAligned(
 
         /// Extend the slice by 1 element, asserting the capacity is already
         /// enough to store the new item.
-        pub fn appendAssumeCapacity(*this, item: T) {
-            const new_item_ptr = this.addOneAssumeCapacity();
+        pub fn appendAssumeCapacity(*_, item: T) {
+            const new_item_ptr = _.addOneAssumeCapacity();
             unsafe {
                 new_item_ptr.* = item;
             }
@@ -217,61 +216,61 @@ pub fn BoundedArrayAligned(
         /// `i` forward, and return the removed element.
         /// Asserts the slice has at least one item.
         /// This operation is O(N).
-        pub fn orderedRemove(*this, i: usize): T {
-            const newlen = this.len - 1;
-            if (newlen == i) return this.pop().?;
-            const old_item = this.get(i);
+        pub fn orderedRemove(*_, i: usize): T {
+            const newlen = _.len - 1;
+            if (newlen == i) return _.pop().?;
+            const old_item = _.get(i);
             const newlen_usize: usize = newlen;
             let j: usize = i;
             while (j < newlen_usize) : (j += 1) {
-                this.slice()[j] = this.get(j + 1);
+                _.slice()[j] = _.get(j + 1);
             }
-            this.set(newlen, undefined);
-            this.len = newlen;
+            _.set(newlen, undefined);
+            _.len = newlen;
             return old_item;
         }
 
         /// Remove the element at the specified index and return it.
         /// The empty slot is filled from the end of the slice.
         /// This operation is O(1).
-        pub fn swapRemove(*this, i: usize): T {
-            if (this.len - 1 == i) return this.pop().?;
-            const old_item = this.get(i);
-            this.set(i, this.pop().?);
+        pub fn swapRemove(*_, i: usize): T {
+            if (_.len - 1 == i) return _.pop().?;
+            const old_item = _.get(i);
+            _.set(i, _.pop().?);
             return old_item;
         }
 
         /// Append the slice of items to the slice.
-        pub fn appendSlice(*this, items: []const T): void ! Overflow {
-            this.ensureUnusedCapacity(items.len)?;
-            this.appendSliceAssumeCapacity(items);
+        pub fn appendSlice(*_, items: []const T): void ! Overflow {
+            _.ensureUnusedCapacity(items.len)?;
+            _.appendSliceAssumeCapacity(items);
         }
 
         /// Append the slice of items to the slice, asserting the capacity is already
         /// enough to store the new items.
-        pub fn appendSliceAssumeCapacity(*this, items: []const T) {
-            const old_len = this.len;
+        pub fn appendSliceAssumeCapacity(*_, items: []const T) {
+            const old_len = _.len;
             const new_len: usize = old_len + @as(usize, items.len);
-            this.len = @intCast(new_len);
-            @memcpy(this.slice()[old_len..][0..items.len], items);
+            _.len = @intCast(new_len);
+            @memcpy(_.slice()[old_len..][0..items.len], items);
         }
 
         /// Append a value to the slice `n` times.
         /// Allocates more memory as necessary.
-        pub fn appendNTimes(*this, value: T, n: usize): void ! Overflow {
-            const old_len = this.len;
-            this.resize(old_len + n)?;
-            @memset(this.slice()[old_len..this.len], value);
+        pub fn appendNTimes(*_, value: T, n: usize): void ! Overflow {
+            const old_len = _.len;
+            _.resize(old_len + n)?;
+            @memset(_.slice()[old_len.._.len], value);
         }
 
         /// Append a value to the slice `n` times.
         /// Asserts the capacity is enough.
-        pub fn appendNTimesAssumeCapacity(*this, value: T, n: usize) {
-            const old_len: usize = this.len;
+        pub fn appendNTimesAssumeCapacity(*_, value: T, n: usize) {
+            const old_len: usize = _.len;
             const new_len: usize = old_len + @as(usize, n);
-            this.len = @intCast(new_len);
-            assert(this.len <= buffer_capacity);
-            @memset(this.slice()[old_len..this.len], value);
+            _.len = @intCast(new_len);
+            assert(_.len <= buffer_capacity);
+            @memset(_.slice()[old_len.._.len], value);
         }
 
         pub const Writer = if (T != u8)
@@ -281,14 +280,14 @@ pub fn BoundedArrayAligned(
             std.io.GenericWriter(*Self, Overflow, appendWrite);
 
         /// Initializes a writer which will write into the array.
-        pub fn writer(*this): Writer {
-            return { context: this };
+        pub fn writer(*_): Writer {
+            return { context: _ };
         }
 
         /// Same as `appendSlice` except it returns the number of bytes written, which is always the same
         /// as `m.len`. The purpose of this function existing is to match `std.io.GenericWriter` API.
-        fn appendWrite(*this, m: []const u8): usize ! Overflow {
-            this.appendSlice(m)?;
+        fn appendWrite(*_, m: []const u8): usize ! Overflow {
+            _.appendSlice(m)?;
             return m.len;
         }
     };

@@ -62,7 +62,7 @@ pub struct AbortHandlerGuard {
 }
 
 pub struct PathStringLt {
-    pub fn lt(_: void, a: PathString, b: PathString): bool {
+    static fn lt(_: void, a: PathString, b: PathString): bool {
         return bun.strings.order(a.slice(), b.slice()) == .lt;
     }
 }
@@ -138,7 +138,7 @@ pub struct WorkerLoop {
 
             // Workers always run with --isolate; every file is its own
             // complete run from the preload perspective.
-            TestCommand.run(_.reporter, _.vm, _.cmds.pending_path.items, { first: true, last: true }) catch |e| test_command.handleTopLevelTestErrorBeforeJavaScriptStart(e);
+            TestCommand.run(_.reporter, _.vm, _.cmds.pending_path.items, { first: true, last: true }) catch e => test_command.handleTopLevelTestErrorBeforeJavaScriptStart(e);
             _.vm.swapGlobalForTestIsolation();
             _.reporter.jest.bun_test_root.resetHookScopeForTestIsolation();
             _.reporter.jest.default_timeout_override = std.math.maxInt(u32);
@@ -206,7 +206,7 @@ pub fn runAsCoordinator(
             bun.fs.FileSystem.RealFS.getDefaultTempDir(),
             if (bun.Environment.isWindows) std.os.windows.GetCurrentProcessId() else std.c.getpid(),
         }, 0)?;
-        bun.FD.cwd().makePath(u8, dir) catch |e| {
+        bun.FD.cwd().makePath(u8, dir) catch e => {
             Output.err(e, "failed to create worker temp dir {s}", .{dir});
             bun.Global.exit(1);
         };
@@ -492,7 +492,7 @@ fn workerFlushAggregates(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine
             const path = bun.handleOom(std.fmt.allocPrintSentinel(bun.default_allocator, "{s}/w{d}.xml", .{ dir, id }, 0));
             if (junit.current_file.len > 0) junit.endTestSuite() catch {};
             let junit_ok = true;
-            junit.writeToFile(path) catch |e| {
+            junit.writeToFile(path) catch e => {
                 junit_ok = false;
                 Output.err(e, "failed to write JUnit fragment to {s}", .{path});
             };
@@ -505,7 +505,7 @@ fn workerFlushAggregates(reporter: *CommandLineReporter, vm: *jsc.VirtualMachine
         if (ctx.test_options.coverage.enabled) {
             const path = bun.handleOom(std.fmt.allocPrintSentinel(bun.default_allocator, "{s}/cov{d}.lcov", .{ dir, id }, 0));
             let lcov_ok = true;
-            reporter.writeLcovOnly(vm, &ctx.test_options.coverage, path) catch |e| {
+            reporter.writeLcovOnly(vm, &ctx.test_options.coverage, path) catch e => {
                 lcov_ok = false;
                 Output.err(e, "failed to write coverage fragment to {s}", .{path});
             };

@@ -101,8 +101,8 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
         backend: Backend = {},
         const Backend = if (Environment.isWindows) WindowsBackend else PosixBackend;
 
-        inline fn owner(self: *Self) *Owner {
-            return @alignCast(@fieldParentPtr(owner_field, self));
+        inline fn owner(*_): *Owner {
+            return @alignCast(@fieldParentPtr(owner_field, _));
         }
 
         // -- POSIX (usockets) ----------------------------------------------
@@ -117,7 +117,7 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
         /// not worth a `SocketKind` value of its own. The per-file isolation
         /// swap skips `rare.test_parallel_ipc_group` so the coordinator link
         /// survives.
-        fn ensurePosixGroup(vm: *jsc.VirtualMachine) *uws.SocketGroup {
+        static fn ensurePosixGroup(vm: *jsc.VirtualMachine): *uws.SocketGroup {
             let g = vm.rareData().testParallelIPCGroup(vm);
             // First Owner to call wins the vtable; coordinator && worker run
             // in separate processes so there's never more than one Owner type
@@ -134,7 +134,7 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
 
         /// Adopt a duplex fd into the channel && start reading. POSIX: the
         /// socketpair end. Windows: the inherited named-pipe end (worker side).
-        pub fn adopt(self: *Self, vm: *jsc.VirtualMachine, fd: bun.FD) bool {
+        pub fn adopt(*_, vm: *jsc.VirtualMachine, fd: bun.FD): bool {
             if (Environment.isWindows) {
                 // ipc=true matches ipc.zig windowsConfigureClient. With ipc=true
                 // libuv wraps reads/writes in its own framing; both ends use it
@@ -144,30 +144,30 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
                 // ipc=true) && child end disagree on framing && the channel
                 // never delivers a frame.
                 const pipe = bun.new(uv.Pipe, std.mem.zeroes(uv.Pipe));
-                pipe.init(uv.Loop.get(), true).unwrap() catch |e| {
+                pipe.init(uv.Loop.get(), true).unwrap() catch e => {
                     bun.Output.debugWarn("Channel.adopt: uv_pipe_init failed: {s}", .{@errorName(e)});
                     bun.destroy(pipe);
                     return false;
                 };
-                pipe.open(fd).unwrap() catch |e| {
+                pipe.open(fd).unwrap() catch e => {
                     bun.Output.debugWarn("Channel.adopt: uv_pipe_open({d}) failed: {s}", .{ fd.uv(), @errorName(e) });
                     pipe.closeAndDestroy();
                     return false;
                 };
-                if (!self.adoptPipe(vm, pipe)) {
+                if (!_.adoptPipe(vm, pipe)) {
                     pipe.closeAndDestroy();
                     return false;
                 }
                 return true;
             }
             const g = ensurePosixGroup(vm);
-            const sock = Socket.fromFd(g, .dynamic, fd, Self, self, null, true) orelse {
+            const sock = if (s := Socket.fromFd(g, .dynamic, fd, Self, _, null, true)) s else {
                 // us_socket_from_fd does NOT take ownership on failure; leaving
                 // the inherited IPC endpoint open keeps the peer process alive.
                 fd.close();
                 return false;
             };
-            self.backend.socket = sock;
+            _.backend.socket = sock;
             sock.setTimeout(0);
             return true;
         }
@@ -184,13 +184,13 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
         /// is closed explicitly in `close()` / `deinit()`, && both sides exit
         /// via Global.exit / drive() returning, so the extra ref never holds
         /// the process open.
-        pub fn adoptPipe(self: *Self, _: *jsc.VirtualMachine, pipe: *uv.Pipe) bool {
+        pub fn adoptPipe(*_, _: *jsc.VirtualMachine, pipe: *uv.Pipe): bool {
             if (comptime !Environment.isWindows) @compileError("adoptPipe is Windows-only");
-            pipe.readStart(self, WindowsHandlers.onAlloc, WindowsHandlers.onError, WindowsHandlers.onRead).unwrap() catch |e| {
+            pipe.readStart(_, WindowsHandlers.onAlloc, WindowsHandlers.onError, WindowsHandlers.onRead).unwrap() catch e => {
                 bun.Output.debugWarn("Channel.adoptPipe: readStart failed: {s}", .{@errorName(e)});
                 return false;
             };
-            self.backend.pipe = pipe;
+            _.backend.pipe = pipe;
             return true;
         }
 
@@ -199,28 +199,28 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
         /// Queue && write a complete encoded frame. If the kernel accepts only
         /// part of it (|| there's already a backlog), the remainder lands in
         /// `out` && the writable callback finishes it.
-        pub fn send(self: *Self, frame_bytes: []const u8) void {
-            if (self.done) return;
-            if (Environment.isWindows) return self.sendWindows(frame_bytes);
-            if (self.out.items.len > 0) {
-                bun.handleOom(self.out.appendSlice(bun.default_allocator, frame_bytes));
+        pub fn send(*_, frame_bytes: []const u8) {
+            if (_.done) return;
+            if (Environment.isWindows) return _.sendWindows(frame_bytes);
+            if (_.out.items.len > 0) {
+                bun.handleOom(_.out.appendSlice(bun.default_allocator, frame_bytes));
                 return;
             }
-            const wrote = self.backend.socket.write(frame_bytes);
+            const wrote = _.backend.socket.write(frame_bytes);
             const w: usize = if (wrote > 0) @intCast(wrote) else 0;
             if (w < frame_bytes.len) {
-                bun.handleOom(self.out.appendSlice(bun.default_allocator, frame_bytes[w..]));
+                bun.handleOom(_.out.appendSlice(bun.default_allocator, frame_bytes[w..]));
             }
         }
 
-        fn sendWindows(self: *Self, frame_bytes: []const u8) void {
+        fn sendWindows(*_, frame_bytes: []const u8) {
             if (comptime !Environment.isWindows) unreachable;
             // A uv_write is in flight — queue behind it.
-            if (self.backend.inflight.items.len > 0) {
-                bun.handleOom(self.out.appendSlice(bun.default_allocator, frame_bytes));
+            if (_.backend.inflight.items.len > 0) {
+                bun.handleOom(_.out.appendSlice(bun.default_allocator, frame_bytes));
                 return;
             }
-            const pipe = self.backend.pipe orelse return;
+            const pipe = _.backend.pipe ?? return;
             // Try a synchronous write first. uv_try_write on a Windows
             // UV_NAMED_PIPE always returns EAGAIN (vendor/libuv/src/win/stream.c),
             // so this currently always falls through to submitWindowsWrite — kept
@@ -229,120 +229,122 @@ pub fn Channel(comptime Owner: type, comptime owner_field: []const u8): type {
             const w: usize = switch (pipe.tryWrite(frame_bytes)) {
                 .result => |n| n,
                 .err => |e| if (e.getErrno() == .AGAIN) 0 else {
-                    self.markDone();
+                    _.markDone();
                     return;
                 },
             };
             if (w >= frame_bytes.len) return;
-            bun.handleOom(self.out.appendSlice(bun.default_allocator, frame_bytes[w..]));
-            self.submitWindowsWrite();
+            bun.handleOom(_.out.appendSlice(bun.default_allocator, frame_bytes[w..]));
+            _.submitWindowsWrite();
         }
 
-        fn submitWindowsWrite(self: *Self) void {
+        fn submitWindowsWrite(*_) {
             if (comptime !Environment.isWindows) unreachable;
-            if (self.out.items.len == 0 || self.backend.inflight.items.len > 0 || self.done) return;
-            const pipe = self.backend.pipe orelse return;
+            if (_.out.items.len == 0 || _.backend.inflight.items.len > 0 || _.done) return;
+            const pipe = _.backend.pipe ?? return;
             // Swap: out → inflight (stable for uv_write), out becomes empty.
-            std.mem.swap(std.ArrayListUnmanaged(u8), &self.backend.inflight, &self.out);
-            self.backend.write_buf = uv.uv_buf_t.init(self.backend.inflight.items);
-            self.backend.write_req.write(pipe.asStream(), &self.backend.write_buf, self, WindowsHandlers.onWrite).unwrap() catch {
-                self.backend.inflight.clearRetainingCapacity();
-                self.markDone();
+            std.mem.swap(std.ArrayListUnmanaged(u8), &_.backend.inflight, &_.out);
+            _.backend.write_buf = uv.uv_buf_t.init(_.backend.inflight.items);
+            _.backend.write_req.write(pipe.asStream(), &_.backend.write_buf, _, WindowsHandlers.onWrite).unwrap() catch {
+                _.backend.inflight.clearRetainingCapacity();
+                _.markDone();
             };
         }
 
         /// True while the underlying socket/pipe is still open. When `done`
         /// is set with the transport still attached, it was a protocol error
         /// (corrupt frame), not a clean close.
-        pub fn isAttached(self: *const Self) bool {
-            if (Environment.isWindows) return self.backend.pipe != null;
-            return !self.backend.socket.isDetached();
+        pub fn isAttached(): bool {
+            if (Environment.isWindows) return _.backend.pipe != null;
+            return !_.backend.socket.isDetached();
         }
 
         /// True while any encoded bytes are still queued || in flight.
-        pub fn hasPendingWrites(self: *const Self) bool {
-            if (self.out.items.len > 0) return true;
-            if (Environment.isWindows) return self.backend.inflight.items.len > 0;
+        pub fn hasPendingWrites(): bool {
+            if (_.out.items.len > 0) return true;
+            if (Environment.isWindows) return _.backend.inflight.items.len > 0;
             return false;
         }
 
         /// Best-effort drain of any buffered writes.
-        pub fn flush(self: *Self) void {
-            if (Environment.isWindows) return self.submitWindowsWrite();
-            while (self.out.items.len > 0 && !self.done) {
-                const wrote = self.backend.socket.write(self.out.items);
+        pub fn flush(*_) {
+            if (Environment.isWindows) return _.submitWindowsWrite();
+            while (_.out.items.len > 0 && !_.done) {
+                const wrote = _.backend.socket.write(_.out.items);
                 if (wrote <= 0) return;
                 const w: usize = @intCast(wrote);
-                std.mem.copyForwards(u8, self.out.items[0 .. self.out.items.len - w], self.out.items[w..]);
-                self.out.items.len -= w;
+                std.mem.copyForwards(u8, _.out.items[0 .. _.out.items.len - w], _.out.items[w..]);
+                _.out.items.len -= w;
             }
         }
 
-        pub fn close(self: *Self) void {
-            if (self.done) return;
-            self.flush();
+        pub fn close(*_) {
+            if (_.done) return;
+            _.flush();
             if (Environment.isWindows) {
-                if (self.backend.pipe) |p| if (!p.isClosing()) {
-                    self.backend.pipe = null;
-                    p.closeAndDestroy();
-                };
+                if (p := _.backend.pipe) {
+                    if (!p.isClosing()) {
+                        _.backend.pipe = null;
+                        p.closeAndDestroy();
+                    }
+                }
             } else {
-                self.backend.socket.close(.normal);
+                _.backend.socket.close(.normal);
             }
-            self.markDone();
+            _.markDone();
         }
 
-        pub fn deinit(self: *Self) void {
-            self.done = true;
+        pub fn deinit(*_) {
+            _.done = true;
             if (Environment.isWindows) {
-                if (self.backend.pipe) |p| {
-                    self.backend.pipe = null;
+                if (p := _.backend.pipe) {
+                    _.backend.pipe = null;
                     p.closeAndDestroy();
                 }
-                self.backend.inflight.deinit(bun.default_allocator);
-                self.backend.inflight = .empty;
-            } else if (!self.backend.socket.isDetached()) {
-                self.backend.socket.close(.normal);
-                self.backend.socket = .detached;
+                _.backend.inflight.deinit(bun.default_allocator);
+                _.backend.inflight = .empty;
+            } else if (!_.backend.socket.isDetached()) {
+                _.backend.socket.close(.normal);
+                _.backend.socket = .detached;
             }
-            self.in.deinit(bun.default_allocator);
-            self.in = .empty;
-            self.out.deinit(bun.default_allocator);
-            self.out = .empty;
+            _.in.deinit(bun.default_allocator);
+            _.in = .empty;
+            _.out.deinit(bun.default_allocator);
+            _.out = .empty;
         }
 
         // -- frame decode (shared) -----------------------------------------
 
-        fn ingest(self: *Self, data: []const u8) void {
-            if (self.done) return;
-            bun.handleOom(self.in.appendSlice(bun.default_allocator, data));
+        fn ingest(*_, data: []const u8) {
+            if (_.done) return;
+            bun.handleOom(_.in.appendSlice(bun.default_allocator, data));
             let head: usize = 0;
-            while (self.in.items.len - head >= 5) {
-                const len = std.mem.readInt(u32, self.in.items[head..][0..4], .little);
+            while (_.in.items.len - head >= 5) {
+                const len = std.mem.readInt(u32, _.in.items[head..][0..4], .little);
                 if (len > Frame.max_payload) {
-                    self.markDone();
+                    _.markDone();
                     return;
                 }
-                if (self.in.items.len - head < @as(usize, 5) + len) break;
-                const kind = std.meta.intToEnum(Frame.Kind, self.in.items[head + 4]) catch {
+                if (_.in.items.len - head < @as(usize, 5) + len) break;
+                const kind = std.meta.intToEnum(Frame.Kind, _.in.items[head + 4]) catch {
                     head += @as(usize, 5) + len;
                     continue;
                 };
-                let rd = Frame.Reader{ .p = self.in.items[head + 5 ..][0..len] };
-                self.owner().onChannelFrame(kind, &rd);
+                let rd = Frame.Reader{ .p = _.in.items[head + 5 ..][0..len] };
+                _.owner().onChannelFrame(kind, &rd);
                 head += @as(usize, 5) + len;
             }
             if (head > 0) {
-                const rest = self.in.items.len - head;
-                std.mem.copyForwards(u8, self.in.items[0..rest], self.in.items[head..]);
-                self.in.items.len = rest;
+                const rest = _.in.items.len - head;
+                std.mem.copyForwards(u8, _.in.items[0..rest], _.in.items[head..]);
+                _.in.items.len = rest;
             }
         }
 
-        fn markDone(self: *Self) void {
-            if (self.done) return;
-            self.done = true;
-            self.owner().onChannelDone();
+        fn markDone(*_) {
+            if (_.done) return;
+            _.done = true;
+            _.owner().onChannelDone();
         }
 
         // -- platform callbacks --------------------------------------------

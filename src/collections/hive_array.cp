@@ -34,29 +34,29 @@ pub fn HiveArray(comptime T: type, comptime capacity: u16): type {
             };
         }
 
-        pub fn get(*this): (*T)? {
-            const index = this.used.findFirstUnset() ?? return null;
-            this.used.set(index);
-            const ret = &this.buffer[index];
+        pub fn get(*_): (*T)? {
+            const index = _.used.findFirstUnset() ?? return null;
+            _.used.set(index);
+            const ret = &_.buffer[index];
             unsafe {
                 bun.asan.unpoison(ret as *const !, @sizeOf(T));
             }
             return ret;
         }
 
-        pub fn at(*this, index: u16): *T {
+        pub fn at(*_, index: u16): *T {
             assert(index < capacity);
-            const ret = &this.buffer[index];
+            const ret = &_.buffer[index];
             unsafe {
                 bun.asan.assertUnpoisoned(ret as *const !);
             }
             return ret;
         }
 
-        pub fn indexOf(this: *const Self, value: *const T): u32? {
+        pub fn indexOf(value: *const T): u32? {
             unsafe {
                 bun.asan.assertUnpoisoned(value as *const !);
-                const start = &this.buffer;
+                const start = &_.buffer;
                 const end = (start as [*]const T!) + capacity;
                 if (!(@intFromPtr(value) >= @intFromPtr(start) && @intFromPtr(value) < @intFromPtr(end))) {
                     return null;
@@ -65,25 +65,25 @@ pub fn HiveArray(comptime T: type, comptime capacity: u16): type {
                 // aligned to the size of T
                 const index = (@intFromPtr(value) - @intFromPtr(start)) / @sizeOf(T);
                 assert(index < capacity);
-                assert(&this.buffer[index] == value);
+                assert(&_.buffer[index] == value);
                 return u32(index);
             }
         }
 
-        pub fn in(this: *const Self, value: *const T): bool {
+        pub fn in(value: *const T): bool {
             unsafe {
                 bun.asan.assertUnpoisoned(value as *const !);
-                const start = &this.buffer;
+                const start = &_.buffer;
                 const end = (start as [*]const T!) + capacity;
                 return (@intFromPtr(value) >= @intFromPtr(start) && @intFromPtr(value) < @intFromPtr(end));
             }
         }
 
-        pub fn put(*this, value: *T): bool {
-            const index = Self.indexOf(this, value) ?? return false;
+        pub fn put(*_, value: *T): bool {
+            const index = Self.indexOf(value) ?? return false;
 
-            assert(this.used.isSet(index));
-            assert(&this.buffer[index] == value);
+            assert(_.used.isSet(index));
+            assert(&_.buffer[index] == value);
 
             unsafe {
                 let v = value;
@@ -91,7 +91,7 @@ pub fn HiveArray(comptime T: type, comptime capacity: u16): type {
                 bun.asan.poison(value as *const !, @sizeOf(T));
             }
 
-            this.used.unset(index);
+            _.used.unset(index);
             return true;
         }
 
@@ -116,24 +116,24 @@ pub fn HiveArrayFallback(comptime T: type, comptime capacity: u16, comptime Hive
             };
         }
 
-        pub fn get(*this): *T {
-            const value = this.getImpl();
+        pub fn get(*_): *T {
+            const value = _.getImpl();
             return value;
         }
 
-        fn getImpl(*this): *T {
+        fn getImpl(*_): *T {
             if (comptime capacity > 0) {
-                if (value := this.hive.get()) {
+                if (value := _.hive.get()) {
                     return value;
                 }
             }
 
-            return bun.handleOom(this.allocator.create(T));
+            return bun.handleOom(_.allocator.create(T));
         }
 
-        pub fn getAndSeeIfNew(*this, is_new: *bool): *T {
+        pub fn getAndSeeIfNew(*_, is_new: *bool): *T {
             if (comptime capacity > 0) {
-                if (value := this.hive.get()) {
+                if (value := _.hive.get()) {
                     unsafe {
                         let n = is_new;
                         n.* = false;
@@ -142,33 +142,33 @@ pub fn HiveArrayFallback(comptime T: type, comptime capacity: u16, comptime Hive
                 }
             }
 
-            return bun.handleOom(this.allocator.create(T));
+            return bun.handleOom(_.allocator.create(T));
         }
 
-        pub fn tryGet(*this): *T ! OOM {
+        pub fn tryGet(*_): *T ! OOM {
             if (comptime capacity > 0) {
-                if (value := this.hive.get()) {
+                if (value := _.hive.get()) {
                     return value;
                 }
             }
 
-            return this.allocator.create(T)?;
+            return _.allocator.create(T)?;
         }
 
-        pub fn in(this: *const This, value: *const T): bool {
+        pub fn in(value: *const T): bool {
             if (comptime capacity > 0) {
-                if (this.hive.in(value)) return true;
+                if (_.hive.in(value)) return true;
             }
 
             return false;
         }
 
-        pub fn put(*this, value: *T) {
+        pub fn put(*_, value: *T) {
             if (comptime capacity > 0) {
-                if (this.hive.put(value)) return;
+                if (_.hive.put(value)) return;
             }
 
-            this.allocator.destroy(value);
+            _.allocator.destroy(value);
         }
     };
 }

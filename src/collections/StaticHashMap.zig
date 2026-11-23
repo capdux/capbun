@@ -150,7 +150,7 @@ pub fn sortedCmp(a: [32]u8, b: [32]u8) math.Order {
         if ((msa != msb)) {
             return (if ((mem.bigToNative(u64, msa) < mem.bigToNative(u64, msb))) .lt else .gt);
         } else {
-            if (@reduce(.And, ((if (comptime @typeInfo(@Vector(32, u8)) == .@"enum") @as(@Vector(32, u8), @enumFromInt(a)) else @as(@Vector(32, u8), a)) == (if (comptime @typeInfo(@Vector(32, u8)) == .@"enum") @as(@Vector(32, u8), @enumFromInt(b)) else @as(@Vector(32, u8), b))))) {
+            if (@reduce(.And, ((if (comptime @typeInfo(@Vector(32, u8)) == .@"enum" and (@typeInfo(@TypeOf(a)) == .int or @typeInfo(@TypeOf(a)) == .comptime_int)) @as(@Vector(32, u8), @enumFromInt(a)) else @as(@Vector(32, u8), a)) == (if (comptime @typeInfo(@Vector(32, u8)) == .@"enum" and (@typeInfo(@TypeOf(b)) == .int or @typeInfo(@TypeOf(b)) == .comptime_int)) @as(@Vector(32, u8), @enumFromInt(b)) else @as(@Vector(32, u8), b))))) {
                 return .eq;
             } else {
                 switch (math.order(mem.readIntBig(u64, a[8..16]), mem.readIntBig(u64, b[8..16]))) {

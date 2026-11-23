@@ -109,7 +109,8 @@ else => @compileError("unexpected identity context type"),
     }
 
 pub fn eql(self: @This(), a: Key, b: Key) bool {
-            _ = self;
+            const self_ref = self;
+            _ = &self_ref;
             return (a == b);
     }
 };

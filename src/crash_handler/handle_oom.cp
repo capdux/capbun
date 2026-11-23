@@ -56,7 +56,7 @@ pub fn HandleOomReturn(comptime ArgType: type): type {
 pub fn handleOom(error_union_or_set: auto): HandleOomReturn(@TypeOf(error_union_or_set)) {
     const ArgType = @TypeOf(error_union_or_set);
     const e = switch (comptime @typeInfo(ArgType)) {
-        .error_union => error_union_or_set catch |err_val| err_val,
+        .error_union => error_union_or_set catch err_val => err_val,
         .error_set => error_union_or_set,
         else => unreachable,
     };
