@@ -825,6 +825,12 @@
   - 修复 `src/runtime/socket/udp_socket.cp`（L304 `socket.getTruthy` -> `options.getTruthy` 修复 `binaryType` 读取与 `SendManyCtx.run` `static fn`）。
 - 推导下一阶段 Wave #86：Subagent 1 复测 `direct-readable-stream.test.tsx` + `udp_socket.test.ts` 并继续 **Batch 4b**（`test/js/node/{http,http2,tls,net,crypto,process,zlib,stream,worker_threads,child_process}` 等）；Subagent 2 并行只读排查 `fs.test.ts` 2 项失败（`readdir recursive` FD 泄漏与 `utimesSync` 2038 年后时间戳溢出，零 `src/` 写冲突）。
 
+## [2026-11-23] Wave #86–87：Wave #85 复测全绿、Batch 4b（`node/` 116 文件）完成与修复 `sys.cp` 2038 溢出
+- **Wave #85 修复复测**：`direct-readable-stream.test.tsx` + `udp_socket.test.ts` **447 pass / 268 skip / 0 fail**（81,625 expect，95.81s，exit 0），emoji 丢失与 `udpSocket` 5 fail 全部转绿；
+- **Batch 4b**（`test/js/node/` 10 核心目录 116 文件 / 2,231 用例，1287.07s）：**2,102 pass / 44 skip / 31 todo / 54 fail / 6 errors / 0 崩溃**（`crypto` 0 fail、`stream` 0 fail、`http2` 1 超时）；
+- **修复 `src/sys/sys.cp`**：将 `futimens`（L3711–3712）与 `utimensWithFlags`（L3735–3736）中的 `i32(atime.sec)` / `i32(mtime.sec)` 改回 `@intCast(...)`，修复 `utimesSync > works after 2038`（`2045 -> 1909`）64 位时间戳截断，通过 `cpc_brief.py` 4 项门禁（`ratio: 1.019`）。
+- 推导下一阶段 Wave #88：Subagent 1 复测 `fs.test.ts -t "utimesSync"` 并推进 **Batch 4c**（`test/js/node/` 其余全部目录：`test/js/node/*.test.*`、`util`、`readline`、`vm`、`module`、`async_hooks`、`watch`、`dns`、`dgram`、`inspector`、`v8`、`test_runner` 等）；Subagent 2 并行只读排查 `zlib.kMaxLength.global.test.js` ×8 与 `node-tls-connect.test.ts` `getPeerCertificate` ×2（零 `src/` 写冲突）。
+
 ### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
 - `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。
 - **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（将 `E0311` 收窄至真实函数返回 `: void` 签名，不再误报 `union`/`struct` 零大小字段）及 `cpc/src/parser/container.rs`（允许 `union` 字段省略 `: void` 默认为 `Type::Void`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0311_union_void.cp` 返回 `Check successful`，已执行 `ack`。

@@ -2195,3 +2195,7 @@
 ### [2026-11-23] Wave #84–85（Batch 4a `node/` 71 文件完成与修复 `lexer`/`unicode`/`udp_socket`）
 - 完成 `test/js/bun/*.test.*`（9 文件 **128 pass / 0 crash**）与 Batch 4a `test/js/node/` 12 核心目录（71 文件 **1,035 pass / 9 fail / 0 crash**）；
 - 修复 `src/js_parser/lexer.cp`（恢复 `decodeJSXEntities` UTF-16 代理对与 19 处 `static fn`）、`src/string/immutable/unicode.cp`（恢复被静默丢弃的 `appendUTF8MachineWordToUTF16MachineWord` 与 `cp1252ToCodepointAssumeNotASCII` 及 6 处 `static fn`）与 `src/runtime/socket/udp_socket.cp`（`options.getTruthy(..., "binaryType")` 与 `SendManyCtx.run` `static fn`）。
+
+### [2026-11-23] Wave #86–87（Wave #85 复测全绿、Batch 4b 116 文件完成与修复 `sys.cp` 2038 溢出）
+- 复测 `direct-readable-stream.test.tsx` + `udp_socket.test.ts` **447 pass / 0 fail**；完成 Batch 4b `test/js/node/` 10 核心目录（116 文件 **2,102 pass / 54 fail / 0 crash**）；
+- 修复 `src/sys/sys.cp` `futimens`/`utimensWithFlags` 64 位时间戳截断（`i32(...)` -> `@intCast(...)`），消除 `utimesSync > works after 2038` 溢出。

@@ -1035,7 +1035,7 @@ const fnctl_int = if (Environment.isLinux) usize else c_int;
 pub fn fcntl(fd: bun.FD, cmd: i32, arg: auto): Maybe(fnctl_int) {
     while (true) {
         const result = switch (@TypeOf(arg)) {
-            i32, comptime_int, c_int => fcntl_symbol(fd.native(), cmd, @as(c_int, arg)),
+            i32, comptime_int, c_int => fcntl_symbol(fd.native(), cmd, if (comptime Environment.isLinux) @as(usize, @intCast(arg)) else @as(c_int, arg)),
             i64 => fcntl_symbol(fd.cast(), cmd, @as(c_long, @bitCast(arg))),
             *const !, *!, usize => fcntl_symbol(fd.cast(), cmd, arg),
             else => @compileError("Unsupported argument type for fcntl"),
@@ -3708,8 +3708,8 @@ pub fn futimens(fd: bun.FD, atime: jsc.Node.TimeLike, mtime: jsc.Node.TimeLike):
 
     while (true) {
         let times: [2]syscall.timespec = undefined;
-        times[0] = { sec: i32(atime.sec), nsec: atime.nsec };
-        times[1] = { sec: i32(mtime.sec), nsec: mtime.nsec };
+        times[0] = { sec: @intCast(atime.sec), nsec: atime.nsec };
+        times[1] = { sec: @intCast(mtime.sec), nsec: mtime.nsec };
         const rc = syscall.futimens(fd.cast(), &times);
 
         log("futimens({f}, accessed=({d}, {d}), modified=({d}, {d})) = {d}", .{ fd, atime.sec, atime.nsec, mtime.sec, mtime.nsec, rc });
@@ -3732,8 +3732,8 @@ fn utimensWithFlags(path: bun.OSPathSliceZ, atime: jsc.Node.TimeLike, mtime: jsc
 
     while (true) {
         let times: [2]syscall.timespec = .{
-            { sec: i32(atime.sec), nsec: atime.nsec },
-            { sec: i32(mtime.sec), nsec: mtime.nsec },
+            { sec: @intCast(atime.sec), nsec: atime.nsec },
+            { sec: @intCast(mtime.sec), nsec: mtime.nsec },
         };
         const rc = syscall.utimensat(
             std.fs.cwd().fd,
