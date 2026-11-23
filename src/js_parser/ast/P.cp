@@ -214,7 +214,7 @@ pub struct TopLevelLowerUsingDeclarationsContext<P> {
                                     },
                                     alias: p.symbols.items[identifier.ref.inner_index].original_name,
                                     alias_loc: decl.binding.loc,
-                                }) catch |e| bun.handleOom(e);
+                                }) catch e => bun.handleOom(e);
                                 local.kind = .k_var;
                             }
                         }
@@ -246,12 +246,12 @@ pub struct TopLevelLowerUsingDeclarationsContext<P> {
             err_ref,
             has_err_ref,
         ];
-        scope.generated.appendSlice(p.allocator, &generated_refs) catch |e| bun.handleOom(e);
+        scope.generated.appendSlice(p.allocator, &generated_refs) catch e => bun.handleOom(e);
         p.declared_symbols.ensureUnusedCapacity(
             p.allocator,
             // 5 to include the _promise decl later on:
             if (_.has_await_using) 5 else 4,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         p.declared_symbols.appendAssumeCapacity({ is_top_level: is_top_level, ref: _.stack_ref });
         p.declared_symbols.appendAssumeCapacity({ is_top_level: is_top_level, ref: caught_ref });
         p.declared_symbols.appendAssumeCapacity({ is_top_level: is_top_level, ref: err_ref });
@@ -917,7 +917,7 @@ pub fn NewParser_(
         /// Extracts a matchable "shape" from a dynamic import argument.
         /// Template literals: static parts joined by \x00 placeholders.
         /// Everything else: empty string.
-        fn extractDynamicSpecifierShape(p: *P, arg: Expr, buf: *std.array_list.Managed(u8)): []const u8! {
+        static fn extractDynamicSpecifierShape(p: *P, arg: Expr, buf: *std.array_list.Managed(u8)): []const u8! {
             if (tmpl := arg.data.@"as"(.e_template)) {
                 if (tmpl.tag != null) return ""; // tagged template — opaque
                 switch (tmpl.head) {
@@ -954,7 +954,7 @@ pub fn NewParser_(
                     const _display_guard = FreeGuard{ allocator: p.allocator, slice: display };
                     for (*c of display) if (c == 0) {
                         c = '*';
-                    };
+                    }
                     p.log.addRangeErrorFmtWithNote(
                         p.source,
                         r,
@@ -1125,7 +1125,7 @@ pub fn NewParser_(
                                 loc: arg.loc,
                             },
                             import_record_id: import_record_index,
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         bun.handleOom(p.import_items_for_namespace.put(p.allocator, namespace_ref, ImportItemForNamespaceMap.init(p.allocator)));
                         p.recordUsage(namespace_ref);
 
@@ -1170,7 +1170,7 @@ pub fn NewParser_(
             return p.options.features.unwrap_commonjs_to_esm;
         }
 
-        fn isBindingUsed(p: *P, binding: Binding, default_export_ref: Ref): bool {
+        static fn isBindingUsed(p: *P, binding: Binding, default_export_ref: Ref): bool {
             switch (binding.data) {
                 .b_identifier => |ident| {
                     if (default_export_ref.eql(ident.ref)) return true;
@@ -1366,7 +1366,7 @@ pub fn NewParser_(
 
 
 
-        fn clearSymbolUsagesFromDeadPart(p: *P, part: *const js_ast.Part) {
+        static fn clearSymbolUsagesFromDeadPart(p: *P, part: *const js_ast.Part) {
             const symbol_use_refs = part.symbol_uses.keys();
             const symbol_use_values = part.symbol_uses.values();
             let symbols = p.symbols.items;
@@ -1385,7 +1385,7 @@ pub fn NewParser_(
 
         static fn s(p_unused: *const P, t: auto, loc: logger.Loc): Stmt {
             const Type = @TypeOf(t);
-            if (Type == type) {
+            if (@typeInfo(Type) == .type) {
                 return Stmt.alloc(t, std.mem.zeroes(t), loc);
             }
             if (!is_typescript_enabled && (Type == S.TypeScript || Type == *S.TypeScript)) {
@@ -1417,7 +1417,7 @@ pub fn NewParser_(
             }
         }
 
-        fn computeCharacterFrequency(p: *P): js_ast.CharFreq? {
+        static fn computeCharacterFrequency(p: *P): js_ast.CharFreq? {
             if (!p.options.features.minify_identifiers || p.isSourceRuntime()) {
                 return null;
             }
@@ -1448,7 +1448,7 @@ pub fn NewParser_(
 
         static fn newExpr(p: *P, t: auto, loc: logger.Loc): Expr {
             const Type = @TypeOf(t);
-            if (comptime Type == type) {
+            if (comptime @typeInfo(Type) == .type) {
                 return Expr.init(t, std.mem.zeroes(t), loc);
             }
 
@@ -1914,7 +1914,7 @@ pub fn NewParser_(
         }
 
 
-        fn generateReactRefreshImportHmr(
+        static fn generateReactRefreshImportHmr(
             p: *P,
             parts: *ListManaged(js_ast.Part),
             import_path: []const u8,
@@ -2077,7 +2077,7 @@ pub fn NewParser_(
             return false;
         }
 
-        fn substituteSingleUseSymbolInExpr(
+        static fn substituteSingleUseSymbolInExpr(
             p: *P,
             expr: Expr,
             sym_ref: Ref,
@@ -2630,7 +2630,7 @@ pub fn NewParser_(
             }
         }
 
-        fn ensureRequireSymbol(p: *P) {
+        static fn ensureRequireSymbol(p: *P) {
             if (p.runtime_imports.__require != null) return;
             const static_symbol = generatedSymbolName("__require");
             p.runtime_imports.__require = bun.handleOom(declareSymbolMaybeGenerated(p, .other, logger.Loc.Empty, static_symbol, true));
@@ -2644,11 +2644,11 @@ pub fn NewParser_(
             p.ensureRequireSymbol();
         }
 
-        fn willUseRenamer(p: *P): bool {
+        static fn willUseRenamer(p: *P): bool {
             return p.options.bundle || p.options.features.minify_identifiers;
         }
 
-        fn hoistSymbols(p: *P, scope: *js_ast.Scope) {
+        static fn hoistSymbols(p: *P, scope: *js_ast.Scope) {
             if (!scope.kindStopsHoisting()) {
                 let iter = scope.members.iterator();
                 const allocator = p.allocator;
@@ -2831,7 +2831,7 @@ pub fn NewParser_(
             }
         }
 
-        inline fn nextScopeInOrderForVisitPass(p: *P): ScopeOrder {
+        static inline fn nextScopeInOrderForVisitPass(p: *P): ScopeOrder {
             const head = p.scope_order_to_visit[0];
             p.scope_order_to_visit = p.scope_order_to_visit[1..p.scope_order_to_visit.len];
             return head;
@@ -2932,7 +2932,7 @@ pub fn NewParser_(
         // from expression to binding should be written to "invalidLog" instead. That
         // way we can potentially keep this as an expression if it turns out it's not
         // needed as a binding after all.
-        fn convertExprToBinding(p: *P, expr: ExprNodeIndex, invalid_loc: *LocList): Binding? {
+        static fn convertExprToBinding(p: *P, expr: ExprNodeIndex, invalid_loc: *LocList): Binding? {
             switch (expr.data) {
                 .e_missing => {
                     return null;
@@ -3361,7 +3361,7 @@ pub fn NewParser_(
             return p.s(stmt, loc);
         }
 
-        fn validateAndSetImportType(p: *P, path: *const ParsedPath, stmt: *S.Import)! {
+        static fn validateAndSetImportType(p: *P, path: *const ParsedPath, stmt: *S.Import)! {
             @branchHint(.cold);
 
             if (loader := path.loader) {
@@ -3973,7 +3973,7 @@ pub fn NewParser_(
                     p.allocator,
                     "panic here",
                     {},
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
             }
 
             p.log.level = .verbose;
@@ -4004,11 +4004,11 @@ pub fn NewParser_(
             return value;
         }
 
-        fn memberExpression(p: *P, loc: logger.Loc, initial_value: Expr, parts: []const []const u8): Expr {
+        static fn memberExpression(p: *P, loc: logger.Loc, initial_value: Expr, parts: []const []const u8): Expr {
             let value = initial_value;
 
             for (part of parts) {
-                if (p.maybeRewritePropertyAccess(
+                if (rewrote := p.maybeRewritePropertyAccess(
                     loc,
                     value,
                     part,
@@ -4019,7 +4019,7 @@ pub fn NewParser_(
                         // .is_template_tag = false,
                         is_delete_target: false,
                     },
-                )) |rewrote| {
+                )) {
                     value = rewrote;
                 } else {
                     value = p.newExpr(
@@ -4133,12 +4133,12 @@ pub fn NewParser_(
             }
         }
 
-        fn bindingCanBeRemovedIfUnused(p: *P, binding: Binding): bool {
+        static fn bindingCanBeRemovedIfUnused(p: *P, binding: Binding): bool {
             if (!p.options.features.dead_code_elimination) return false;
             return bindingCanBeRemovedIfUnusedWithoutDCECheck(p, binding);
         }
 
-        fn bindingCanBeRemovedIfUnusedWithoutDCECheck(p: *P, binding: Binding): bool {
+        static fn bindingCanBeRemovedIfUnusedWithoutDCECheck(p: *P, binding: Binding): bool {
             switch (binding.data) {
                 .b_array => |bi| {
                     for (*item of bi.items) {
@@ -4176,12 +4176,12 @@ pub fn NewParser_(
             return true;
         }
 
-        fn stmtsCanBeRemovedIfUnused(p: *P, stmts: []Stmt): bool {
+        static fn stmtsCanBeRemovedIfUnused(p: *P, stmts: []Stmt): bool {
             if (!p.options.features.dead_code_elimination) return false;
             return stmtsCanBeRemovedifUnusedWithoutDCECheck(p, stmts);
         }
 
-        fn stmtsCanBeRemovedifUnusedWithoutDCECheck(p: *P, stmts: []Stmt): bool {
+        static fn stmtsCanBeRemovedifUnusedWithoutDCECheck(p: *P, stmts: []Stmt): bool {
             for (stmt of stmts) {
                 switch (stmt.data) {
                     // These never have side effects
@@ -4466,7 +4466,7 @@ pub fn NewParser_(
             return exprCanBeRemovedIfUnusedWithoutDCECheck(p, expr);
         }
 
-        fn exprCanBeRemovedIfUnusedWithoutDCECheck(p: *P, expr: *const Expr): bool {
+        static fn exprCanBeRemovedIfUnusedWithoutDCECheck(p: *P, expr: *const Expr): bool {
             switch (expr.data) {
                 .e_null,
                 .e_undefined,
@@ -4904,7 +4904,7 @@ pub fn NewParser_(
         //     return false;
         // }
 
-        fn isSideEffectFreeUnboundIdentifierRef(p: *P, value: Expr, guard_condition: Expr, is_yes_branch_: bool): bool {
+        static fn isSideEffectFreeUnboundIdentifierRef(p: *P, value: Expr, guard_condition: Expr, is_yes_branch_: bool): bool {
             if (value.data != .e_identifier ||
                 p.symbols.items[value.data.e_identifier.ref.innerIndex()].kind != .unbound ||
                 guard_condition.data != .e_binary)
@@ -5192,7 +5192,7 @@ pub fn NewParser_(
             return;
         }
 
-        fn markExportedBindingInsideNamespace(p: *P, sym_ref: Ref, binding: BindingNodeIndex) {
+        static fn markExportedBindingInsideNamespace(p: *P, sym_ref: Ref, binding: BindingNodeIndex) {
             switch (binding.data) {
                 .b_missing => {},
                 .b_identifier => |ident| {
@@ -5251,7 +5251,7 @@ pub fn NewParser_(
                             decls: G.Decl.List.fromOwnedSlice(decls),
                             is_export: is_export,
                         }, stmt_loc),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else {
                     // Nested namespace: "let"
                     stmts.append(
@@ -5259,7 +5259,7 @@ pub fn NewParser_(
                             kind: .k_let,
                             decls: G.Decl.List.fromOwnedSlice(decls),
                         }, stmt_loc),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
             }
 
@@ -5287,7 +5287,7 @@ pub fn NewParser_(
                             right: p.newExpr(E.Object{ is_single_line: false }, name_loc),
                         }, name_loc),
                     );
-                };
+                }
 
                 // "name ||= {}"
                 p.recordUsage(name_ref);
@@ -5413,7 +5413,7 @@ pub fn NewParser_(
                                                 decorators.append(
                                                     p.allocator,
                                                     p.callRuntime(arg_decorator.loc, "__legacyDecorateParamTS", args),
-                                                ) catch |e| bun.handleOom(e);
+                                                ) catch e => bun.handleOom(e);
                                             }
                                         }
                                     },
@@ -5699,7 +5699,7 @@ pub fn NewParser_(
             }
         }
 
-        fn serializeMetadata(p: *P, ts_metadata: TypeScript.Metadata): Expr! {
+        static fn serializeMetadata(p: *P, ts_metadata: TypeScript.Metadata): Expr! {
             return switch (ts_metadata) {
                 .m_none,
                 .m_any,
@@ -5895,7 +5895,7 @@ pub fn NewParser_(
             };
         }
 
-        fn wrapIdentifierNamespace(
+        static fn wrapIdentifierNamespace(
             p: *P,
             loc: logger.Loc,
             sym_ref: Ref,
@@ -5910,7 +5910,7 @@ pub fn NewParser_(
             }, loc);
         }
 
-        fn wrapIdentifierHoisting(
+        static fn wrapIdentifierHoisting(
             p: *P,
             loc: logger.Loc,
             sym_ref: Ref,
@@ -6067,7 +6067,7 @@ pub fn NewParser_(
             return res;
         }
 
-        fn keepStmtSymbolName(p: *P, loc: logger.Loc, sym_ref: Ref, name: string): Stmt {
+        static fn keepStmtSymbolName(p: *P, loc: logger.Loc, sym_ref: Ref, name: string): Stmt {
             * = p;
             * = loc;
             * = sym_ref;
@@ -6076,7 +6076,7 @@ pub fn NewParser_(
             @compileError("not implemented");
         }
 
-        fn runtimeIdentifierRef(p: *P, loc: logger.Loc, comptime name: string): Ref {
+        static fn runtimeIdentifierRef(p: *P, loc: logger.Loc, comptime name: string): Ref {
             p.has_called_runtime = true;
 
             if (!p.runtime_imports.contains(name)) {
@@ -6101,7 +6101,7 @@ pub fn NewParser_(
             }
         }
 
-        fn runtimeIdentifier(p: *P, loc: logger.Loc, comptime name: string): Expr {
+        static fn runtimeIdentifier(p: *P, loc: logger.Loc, comptime name: string): Expr {
             const sym_ref = p.runtimeIdentifierRef(loc, name);
             p.recordUsage(sym_ref);
             return p.newExpr(
@@ -6196,7 +6196,7 @@ pub fn NewParser_(
 
             p.temp_refs_to_declare.append(p.allocator, {
                 ref: sym_ref,
-            }) catch |e| bun.handleOom(e);
+            }) catch e => bun.handleOom(e);
 
             bun.handleOom(scope.generated.append(p.allocator, sym_ref));
 
@@ -6298,7 +6298,7 @@ pub fn NewParser_(
             call.target.data.e_special = .hot_accept_visited;
         }
 
-        fn rewriteImportMetaHotAcceptString(p: *P, str: *E.String, loc: logger.Loc): Expr.Data? {
+        static fn rewriteImportMetaHotAcceptString(p: *P, str: *E.String, loc: logger.Loc): Expr.Data? {
             bun.handleOom(str.toUTF8(p.allocator));
             const specifier = str.data;
 
@@ -6383,7 +6383,7 @@ pub fn NewParser_(
                     val,
                     module_path,
                     p.newExpr(E.String{ data: original_name }, logger.Loc.Empty),
-                }) catch |e| bun.handleOom(e),
+                }) catch e => bun.handleOom(e),
             }, logger.Loc.Empty);
         }
 
@@ -6420,7 +6420,7 @@ pub fn NewParser_(
                 p.declared_symbols.append(p.allocator, {
                     is_top_level: true,
                     ref: ctx_storage.*.?.signature_cb,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
             }
             const ctx: *ReactRefresh.HookContext = &(ctx_storage.*.?);
 
@@ -6503,7 +6503,7 @@ pub fn NewParser_(
                 value: p.newExpr(E.Call{
                     target: Expr.initIdentifier(p.react_refresh.create_signature_ref, loc),
                 }, loc),
-            }}) catch |e| bun.handleOom(e) }, loc);
+            }}) catch e => bun.handleOom(e) }, loc);
         }
 
         static fn getReactRefreshHookSignalInit(p: *P, ctx: *ReactRefresh.HookContext, function_with_hook_calls: Expr): Expr {
@@ -6521,7 +6521,7 @@ pub fn NewParser_(
                 2 +
                     @as(usize, @intFromBool(have_force_arg)) +
                     @as(usize, @intFromBool(have_custom_hooks)),
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
 
             args[0] = function_with_hook_calls;
             args[1] = p.newExpr(E.String{ data: hash_data }, loc);
@@ -6536,7 +6536,7 @@ pub fn NewParser_(
                             p.s(S.Return{ value: p.newExpr(E.Array{
                                 items: ExprNodeList.fromBorrowedSliceDangerous(ctx.user_hooks.values()),
                             }, loc) }, loc),
-                        }) catch |e| bun.handleOom(e),
+                        }) catch e => bun.handleOom(e),
                         loc: loc,
                     },
                     prefer_expr: true,
@@ -6634,7 +6634,7 @@ pub fn NewParser_(
                                 part.import_record_indices.appendSlice(
                                     p.allocator,
                                     p.import_records_for_current_part.items,
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
                             }
 
                             parts.items[parts_end] = part;
@@ -6804,8 +6804,8 @@ pub fn NewParser_(
                             p.allocator,
                             "require_{f}",
                             .{p.source.fmtIdentifier()},
-                        ) catch |e| bun.handleOom(e),
-                    ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e),
+                    ) catch e => bun.handleOom(e);
                 }
 
                 break :brk Ref.None;
@@ -6882,7 +6882,7 @@ pub fn NewParser_(
         ///
         /// The logic in this function must be in sync with the hoisting
         /// logic in `LinkerContext.generateCodeForFileInChunkJS`
-        fn needsWrapperRef(p: *const P, parts: []const js_ast.Part): bool {
+        static fn needsWrapperRef(p: *const P, parts: []const js_ast.Part): bool {
             bun.assert(p.options.bundle);
             for (part of parts) {
                 for (stmt of part.stmts) {

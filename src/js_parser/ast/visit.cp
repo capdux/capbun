@@ -935,7 +935,7 @@ pub fn Visit(
                                                 },
                                                 data.func.name.?.loc,
                                             ),
-                                        }) catch |e| bun.handleOom(e);
+                                        }) catch e => bun.handleOom(e);
                                     }
                                 }
 
@@ -1227,7 +1227,7 @@ pub fn Visit(
                                 prev_stmt.data.s_local.decls.appendSlice(
                                     p.allocator,
                                     local.decls.slice(),
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
                                 continue;
                             }
                         }

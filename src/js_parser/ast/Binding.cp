@@ -40,8 +40,8 @@ pub fn ToExpr(comptime expr_type: type, comptime func_type: auto): type {
         allocator: std.mem.Allocator,
         pub const Context = @This();
 
-        pub fn wrapIdentifier(ctx: *const Context, loc: logger.Loc, ref: Ref): Expr {
-            return @call(.auto, func_type, .{ ctx.context, loc, ref });
+        static fn wrapIdentifier(ctx: *const Context, loc: logger.Loc, @"ref": Ref): Expr {
+            return @call(.auto, func_type, .{ ctx.context, loc, @"ref" });
         }
 
         pub fn init(context: *ExprType): Context {

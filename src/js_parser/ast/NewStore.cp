@@ -30,23 +30,23 @@ pub fn NewStore(comptime types: []const type, comptime count: usize): type {
 
             buffer: [size]u8 align(largest_align),
             bytes_used: Size = 0,
-            next: ?*Block = null,
+            next: (*Block)? = null,
 
-            pub inline fn zero(this: *Block) void {
-                this.bytes_used = 0;
-                this.next = null;
+            pub inline fn zero(*_) {
+                _.bytes_used = 0;
+                _.next = null;
             }
 
-            pub fn tryAlloc(this: *Block, comptime T: type) ?*T {
-                const start = std.mem.alignForward(usize, this.bytes_used, @alignOf(T));
-                if (start + @sizeOf(T) > this.buffer.len) return null;
-                defer this.bytes_used = @intCast(start + @sizeOf(T));
+            pub fn tryAlloc(*_, comptime T: type): (*T)? {
+                const start = std.mem.alignForward(usize, _.bytes_used, @alignOf(T));
+                if (start + @sizeOf(T) > _.buffer.len) return null;
+                defer _.bytes_used = @intCast(start + @sizeOf(T));
 
                 if (Environment.isDebug) {
-                    _ = this.buffer[this.bytes_used..][0..@sizeOf(T)];
+                    * = _.buffer[_.bytes_used..][0..@sizeOf(T)];
                 }
 
-                return @ptrCast(@alignCast(&this.buffer[start]));
+                return @ptrCast(@alignCast(&_.buffer[start]));
             }
         };
 
@@ -54,9 +54,9 @@ pub fn NewStore(comptime types: []const type, comptime count: usize): type {
             metadata: Store,
             first_block: Block,
 
-            pub inline fn zero(this: *PreAlloc) void {
-                this.first_block.zero();
-                this.metadata.current = &this.first_block;
+            pub inline fn zero(*_) {
+                _.first_block.zero();
+                _.metadata.current = &_.first_block;
             }
         };
 

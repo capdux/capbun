@@ -451,7 +451,7 @@ pub fn ParseTypescript(
                 exported_members.put(p.allocator, value.name, {
                     loc: value.loc,
                     data: .enum_property,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
 
                 if (p.lexer.token != .t_comma && p.lexer.token != .t_semicolon) {
                     break;
@@ -536,7 +536,7 @@ pub fn ParseTypescript(
                     }
                     break :scope_order_clone items;
                 },
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
 
             return p.s(S.Enum{
                 name: name,

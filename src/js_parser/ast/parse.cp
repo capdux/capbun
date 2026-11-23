@@ -69,7 +69,7 @@ pub fn Parse(
             }
 
             const had_pure_comment_before = p.lexer.has_pure_comment_before && !p.options.ignore_dce_annotations;
-            expr.* = try p.parsePrefix(level, errors, flags);
+            expr.* = p.parsePrefix(level, errors, flags)?;
 
             // There is no formal spec for "__PURE__" comments but from reverse-
             // engineering, it looks like they apply to the next CallExpression or
@@ -139,7 +139,7 @@ pub fn Parse(
                 // does and it probably doesn't have that high of a performance overhead
                 // because "extends" clauses aren't that frequent, so it should be ok.
                 if (comptime is_typescript_enabled) {
-                    * = try p.skipTypeScriptTypeArguments(false); // isInsideJSXElement
+                    * = p.skipTypeScriptTypeArguments(false)?; // isInsideJSXElement
                 }
             }
 
@@ -248,7 +248,7 @@ pub fn Parse(
                 p.lexer.rescanCloseBraceAsTemplateToken()?;
 
                 const tail: E.Template.Contents = brk: {
-                    if (!include_raw) break :brk { cooked: try p.lexer.toEString() };
+                    if (!include_raw) break :brk { cooked: p.lexer.toEString()? };
                     break :brk { raw: p.lexer.rawTemplateContents() };
                 };
 
@@ -318,7 +318,7 @@ pub fn Parse(
             p.lexer.nextInsideJSXElement()?;
             if (p.lexer.token == .t_string_literal) {
                 previous_string_with_backslash_loc.start = @max(p.lexer.loc().start, p.lexer.previous_backslash_quote_in_jsx.loc.start);
-                const expr = p.newExpr(try p.lexer.toEString(), previous_string_with_backslash_loc.*);
+                const expr = p.newExpr(p.lexer.toEString()?, previous_string_with_backslash_loc.*);
 
                 p.lexer.nextInsideJSXElement()?;
                 return expr;
@@ -391,7 +391,7 @@ pub fn Parse(
                 // There may be a "=" after the type (but not after an "as" cast)
                 if (is_typescript_enabled && p.lexer.token == .t_equals && !p.forbid_suffix_after_as_loc.eql(p.lexer.loc())) {
                     p.lexer.next()?;
-                    item.* = Expr.assign(item.*, try p.parseExpr(.comma));
+                    item.* = Expr.assign(item.*, p.parseExpr(.comma)?);
                 }
 
                 if (p.lexer.token != .t_comma) {
@@ -573,10 +573,10 @@ pub fn Parse(
 
             // Even anonymous classes can have TypeScript type parameters
             if (is_typescript_enabled) {
-                * = try p.skipTypeScriptTypeParameters({
+                * = p.skipTypeScriptTypeParameters({
                     allow_in_out_variance_annotations: true,
                     allow_const_modifier: true,
-                });
+                })?;
             }
             let class_opts = ParseClassOptions{
                 allow_ts_decorators: true,
@@ -616,7 +616,7 @@ pub fn Parse(
                 if (estr.isUTF8()) {
                     return estr.slice8();
                 } else {
-                    const alias_utf8 = strings.toUTF8AllocWithTypeWithoutInvalidSurrogatePairs(p.lexer.allocator, estr.slice16()) catch |e| {
+                    const alias_utf8 = strings.toUTF8AllocWithTypeWithoutInvalidSurrogatePairs(p.lexer.allocator, estr.slice16()) catch e => {
                         const r = p.source.rangeOfString(loc);
                         p.log.addRangeErrorFmt(p.source, r, p.allocator, "Invalid {s} alias because it contains an unpaired Unicode surrogate ({s})", .{ kind, @errorName(e) })?;
                         return p.source.textForRange(r);
@@ -639,7 +639,7 @@ pub fn Parse(
             const token_range = p.lexer.range();
 
             if (p.lexer.token != .t_identifier) {
-                return ExprOrLetStmt{ stmt_or_expr: js_ast.StmtOrExpr{ expr: try p.parseExpr(.lowest) } };
+                return ExprOrLetStmt{ stmt_or_expr: js_ast.StmtOrExpr{ expr: p.parseExpr(.lowest)? } };
             }
 
             const raw = p.lexer.raw();
@@ -744,7 +744,7 @@ pub fn Parse(
                         // TODO: implement saveExprCommentsHere and use using_loc here
                         loc: using_range.loc,
                     };
-                } else try p.parseExpr(.prefix);
+                } else p.parseExpr(.prefix)?;
 
                 if (p.lexer.token == .t_asterisk_asterisk) {
                     p.lexer.unexpected()?;
@@ -763,7 +763,7 @@ pub fn Parse(
             } else {
                 return ExprOrLetStmt{
                     stmt_or_expr: js_ast.StmtOrExpr{
-                        expr: try p.parseExpr(.lowest),
+                        expr: p.parseExpr(.lowest)?,
                     },
                 };
             }
@@ -1024,9 +1024,9 @@ pub fn Parse(
 
                 let value: js_ast.Expr? = null;
                 let local = switch (opts.is_using_statement) {
-                    inline else => |is_using| try p.parseBinding({
+                    inline else => |is_using| p.parseBinding({
                         is_using_statement: is_using,
-                    }),
+                    })?,
                 };
                 p.declareBinding(kind, &local, opts) catch unreachable;
 
@@ -1177,9 +1177,9 @@ pub fn Parse(
 
             while (true) {
                 for (comment of p.lexer.comments_to_preserve_before.items) {
-                    try stmts.append(p.s(S.Comment{
+                    stmts.append(p.s(S.Comment{
                         text: comment.text,
-                    }, p.lexer.loc()));
+                    }, p.lexer.loc()))?;
                 }
                 p.lexer.comments_to_preserve_before.clearRetainingCapacity();
 
@@ -1254,11 +1254,11 @@ pub fn Parse(
                     if (needsCheck && returnWithoutSemicolonStart != -1) {
                         switch (stmt.data) {
                             .s_expr => {
-                                try p.log.addWarning(
+                                p.log.addWarning(
                                     p.source,
                                     logger.Loc{ start: returnWithoutSemicolonStart + 6 },
                                     "The following expression is not returned because of an automatically-inserted semicolon",
-                                );
+                                )?;
                             },
                             else => {},
                         }
@@ -1318,7 +1318,7 @@ pub fn Parse(
                             ) };
                             p.lexer.next()?;
 
-                            * = try p.pushScopeForParsePass(.function_args, async_range.loc);
+                            * = p.pushScopeForParsePass(.function_args, async_range.loc)?;
                             const _scope_guard = ScopePopGuard<*P>{ p: p };
 
                             let data = FnOrArrowDataParse{
@@ -1341,7 +1341,7 @@ pub fn Parse(
                     // "async<T>()"
                     // "async <T>() => {}"
                     .t_less_than => {
-                        if (is_typescript_enabled && (!is_jsx_enabled || try TypeScript.isTSArrowFnJSX(p))) {
+                        if (is_typescript_enabled && (!is_jsx_enabled || TypeScript.isTSArrowFnJSX(p)?)) {
                             switch (p.trySkipTypeScriptTypeParametersThenOpenParenWithBacktracking()) {
                                 .did_not_skip_anything => {},
                                 else => |result| {

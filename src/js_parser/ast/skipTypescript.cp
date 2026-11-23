@@ -9,7 +9,7 @@ pub struct BacktrackingImpl<P> {
         const FnReturnType = bun.@"meta".ReturnOf(func);
         const Payload = @typeInfo(FnReturnType).error_union.payload;
         if (comptime Payload == bool || Payload == void) {
-            const ok = func(p) catch |e| brk: {
+            const ok = func(p) catch e => brk: {
                 if (e == error.Backtrack || p.lexer.did_panic) {
                     backtrack = true;
                 }
@@ -27,7 +27,7 @@ pub struct BacktrackingImpl<P> {
             }
             return !backtrack;
         } else {
-            const result = func(p) catch |e| brk: {
+            const result = func(p) catch e => brk: {
                 if (e == error.Backtrack || p.lexer.did_panic) {
                     backtrack = true;
                 }
@@ -57,7 +57,7 @@ pub struct BacktrackingImpl<P> {
         const FnReturnType = bun.@"meta".ReturnOf(func);
         const Payload = @typeInfo(FnReturnType).error_union.payload;
         if (comptime Payload == bool || Payload == void) {
-            const ok = @call(.auto, func, args) catch |e| brk: {
+            const ok = @call(.auto, func, args) catch e => brk: {
                 if (e == error.Backtrack) {
                     backtrack = true;
                 }
@@ -75,7 +75,7 @@ pub struct BacktrackingImpl<P> {
             }
             return backtrack;
         } else {
-            const result = @call(.auto, func, args) catch |e| brk: {
+            const result = @call(.auto, func, args) catch e => brk: {
                 if (e == error.Backtrack) {
                     backtrack = true;
                 }

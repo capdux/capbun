@@ -179,14 +179,14 @@ pub fn visit(symbols: []const js_ast.Symbol, char_freq: *js_ast.CharFreq, scope:
             while (iter.next()) |entry| {
                 const symbol = (&symbols[@as(usize, @intCast(entry.value_ptr.ref.innerIndex()))]);
                 if ((symbol.slotNamespace() != .must_not_be_renamed)) {
-                    _ = char_freq.scan(symbol.original_name, (0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))));
+                    _ = char_freq.scan(symbol.original_name, (-(if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))));
                 }
             }
             if (scope.label_ref) |sym_ref| {
                 _ = &sym_ref;
                 const symbol = (&symbols[@as(usize, @intCast(sym_ref.innerIndex()))]);
                 if ((symbol.slotNamespace() != .must_not_be_renamed)) {
-                    _ = char_freq.scan(symbol.original_name, ((0 - (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))) - 1));
+                    _ = char_freq.scan(symbol.original_name, ((-(if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(symbol.use_count_estimate)) == .@"enum") cp_cast_int(i32, @intFromEnum(symbol.use_count_estimate)) else cp_cast_int(i32, symbol.use_count_estimate))))) - 1));
                 }
             }
             for (cp_iter_slice(scope.children.slice())) |child| {
@@ -704,6 +704,7 @@ pub fn checkDynamicSpecifier(p: *P, arg: Expr, loc: logger.Loc, comptime kind: [
                             (c.*) = 42;
                         }
                     }
+                    _ = try p.log.addRangeErrorFmtWithNote(p.source, r, p.allocator, (("This " ++ kind) ++ " expression will not be bundled because the argument is not a string literal"), .{}, ("The specifier shape \"{s}\" does not match any --allow-unresolved pattern. " ++ "To allow it, add a matching pattern: Bun.build({{ allowUnresolved: [\"{s}\"] }}) or --allow-unresolved '{s}'"), .{ display, display, display }, r);
                 } else {
                     _ = try p.log.addRangeErrorFmtWithNote(p.source, r, p.allocator, (("This " ++ kind) ++ " expression will not be bundled because the argument is not a string literal"), .{}, "To allow opaque dynamic specifiers, use Bun.build({{ allowUnresolved: [\"\"] }}) or pass --allow-unresolved with an empty-string pattern", .{}, r);
                 }
@@ -1030,6 +1031,9 @@ pub fn clearSymbolUsagesFromDeadPart(p: *P, part: *const js_ast.Part) void {
 pub fn s(p_unused: *const P, t: anytype, loc: logger.Loc) Stmt {
         _ = p_unused;
             const Type = @TypeOf(t);
+            if ((@typeInfo(Type) == .type)) {
+                return Stmt.alloc(t, std.mem.zeroes(t), loc);
+            }
             if (((!is_typescript_enabled) and ((Type == S.TypeScript) or (Type == *S.TypeScript)))) {
                 _ = @compileError("Attempted to use TypeScript syntax in a non-TypeScript environment");
             }
@@ -1063,6 +1067,9 @@ pub fn computeCharacterFrequency(p: *P) ?js_ast.CharFreq {
 
 pub fn newExpr(p: *P, t: anytype, loc: logger.Loc) Expr {
             const Type = @TypeOf(t);
+            if (comptime (@typeInfo(Type) == .type)) {
+                return Expr.init(t, std.mem.zeroes(t), loc);
+            }
             comptime {
             if ((jsx_transform_type == .none)) {
                 if (((Type == E.JSXElement) or (Type == *E.JSXElement))) {
@@ -3832,6 +3839,7 @@ pub fn generateClosureForTypeScriptNamespaceOrEnum(p: *P, stmts: *ListManaged(St
                     break :arg_expr Expr.assign(Expr.initIdentifier(name_ref, name_loc), p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = p.newExpr(E.Dot{ .target = Expr.initIdentifier(namespace, name_loc), .name = name, .name_loc = name_loc }, name_loc), .right = p.newExpr(E.Object{ .is_single_line = false }, name_loc) }, name_loc));
                 }
             }
+            _ = p.recordUsage(name_ref);
             break :arg_expr p.newExpr(E.Binary{ .op = .bin_logical_or_assign, .left = Expr.initIdentifier(name_ref, name_loc), .right = p.newExpr(E.Object{ .is_single_line = false }, name_loc) }, name_loc);
 };
             var func_args = bun.handleOom(allocator.alloc(G.Arg, 1));

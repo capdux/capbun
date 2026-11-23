@@ -871,3 +871,4 @@
 - [Wave #98] `src/cli/` 剩余 18 文件 `--strict` 清零（47/47 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`329426b1` `src/install/**/*.cp`）并行推进中。
 - [Wave #99] `src/install/` 前 15 文件 `--strict` 清零与 `PackageManager`/`runTasks` 修复均通过门禁，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`23ca292d` `src/install/` 剩余 17 文件）并行推进中。
 - [Wave #100] `src/install/` 剩余 17 文件 `--strict` 清零（69/69 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查 `bun-pm-pkg`/`bun-patch`）与路 2（`27479990` `js_parser`/`js_printer`/`resolver`/`glob`）并行推进中。
+- [Wave #102] `src/glob/` 与 `src/js_parser/ast/` 15 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`f13a69d3` `js_parser`/`js_printer`/`resolver` 剩余 6 文件）并行推进中。

@@ -489,10 +489,10 @@ pub fn GlobWalkerDirectory_(comptime Accessor: type) type {
 pub fn GlobWalkerIterState_(comptime Accessor: type, comptime MatchedPath: type) type {
         const Directory = GlobWalkerDirectory_(Accessor);
         return union(enum) {
-        get_next,
-        directory: Directory,
-        matched: MatchedPath,
-    };
+    get_next: void,
+    directory: Directory,
+    matched: MatchedPath,
+};
 }
 
 pub fn GlobWalkerWorkItem_(comptime Accessor: type) type {
@@ -1549,7 +1549,7 @@ else => {
 }
             break :out out_of_check_wildcard_filepath: {
             if (((((component.len > 1) and (pattern[@as(usize, @intCast(component.start))] == 42)) and (pattern[@as(usize, @intCast((component.start + 1)))] == 46)) and ((component.start + 2) < pattern.len))) {
-                for (pattern[component.start + 2 ..]) |c| {
+                for (cp_iter_slice(pattern[(component.start + 2)..])) |c| {
                     _ = &c;
                     switch (c) {
 '[', '{', '?', '*' => {

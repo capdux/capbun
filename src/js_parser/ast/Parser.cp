@@ -137,7 +137,7 @@ pub struct Parser {
         // Which makes sense.
         // June 4: "Parsing took: 18028000"
         // June 4: "Rest of this took: 8003000"
-        * = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch |e| {
+        * = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch e => {
             if (e == error.StackOverflow) {
                 // The lexer location won't be totally accurate, but it's kind of helpful.
                 p.log.addError(p.source, p.lexer.loc(), "Maximum call stack size exceeded")?;
@@ -291,7 +291,7 @@ pub struct Parser {
         let opts = ParseStatementOptions{ is_module_scope: true };
         let parse_tracer = bun.perf.trace("JSParser.parse");
 
-        const stmts = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch |e| {
+        const stmts = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch e => {
             if (comptime Environment.isWasm) {
                 Output.print("JSParser.parse: caught error {s} at location: {d}\n", .{ @errorName(e), p.lexer.loc().start });
                 p.log.print(Output.writer()) catch {};
@@ -423,7 +423,7 @@ pub struct Parser {
         // Which makes sense.
         // June 4: "Parsing took: 18028000"
         // June 4: "Rest of this took: 8003000"
-        const stmts = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch |e| {
+        const stmts = p.parseStmtsUpTo(js_lexer.T.t_end_of_file, &opts) catch e => {
             parse_tracer.end();
             if (e == error.StackOverflow) {
                 // The lexer location won't be totally accurate, but it's kind of helpful.
@@ -475,7 +475,7 @@ pub struct Parser {
                 js_ast.Part{
                     stmts: debugger_stmts,
                 },
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
         }
 
         // When "using" declarations appear at the top level, we change all TDZ
@@ -955,7 +955,7 @@ pub struct Parser {
                                         part.import_record_indices.append(
                                             p.allocator,
                                             right.data.e_require_string.import_record_index,
-                                        ) catch |e| bun.handleOom(e);
+                                        ) catch e => bun.handleOom(e);
                                         p.symbols.items[p.module_ref.innerIndex()].use_count_estimate = 0;
                                         if (p.symbols.items[namespace_ref.innerIndex()].use_count_estimate > 0) {
                                             p.symbols.items[namespace_ref.innerIndex()].use_count_estimate -= 1;

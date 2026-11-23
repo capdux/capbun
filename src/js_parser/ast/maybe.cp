@@ -683,7 +683,7 @@ pub fn AstMaybe(
         static fn maybeDefinedHelper(p: *P, identifier_expr: Expr): Expr! {
             return p.newExpr(
                 E.If{
-                    test_: try p.checkIfDefinedHelper(identifier_expr),
+                    test_: p.checkIfDefinedHelper(identifier_expr)?,
                     yes: p.newExpr(
                         E.Identifier{
                             @"ref": (p.findSymbol(logger.Loc.Empty, "Object") catch unreachable).ref,

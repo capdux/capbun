@@ -339,7 +339,7 @@ const ComponentSet = bun.bit_set.AutoBitSet;
 
 fn MatchedMapCtx_(comptime sentinel: bool): type {
     return struct {
-        fn hash(_ctx: @This(), val: BunString): u32 {
+        static fn hash(_ctx: @This(), val: BunString): u32 {
             * = _ctx;
             bun.assert(val.tag == .ZigString);
             const slice = val.byteSlice();
@@ -350,7 +350,7 @@ fn MatchedMapCtx_(comptime sentinel: bool): type {
             return std.array_hash_map.hashString(slice);
         }
 
-        fn eql(_ctx: @This(), a: BunString, b: BunString, _idx: usize): bool {
+        static fn eql(_ctx: @This(), a: BunString, b: BunString, _idx: usize): bool {
             * = _ctx;
             * = _idx;
             return a.eql(b);
@@ -556,8 +556,8 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                 else => {},
             }
 
-            while (_.walker.workbuf.pop()) |work_item| {
-                if (work_item.fd) |fd| {
+            while (work_item := _.walker.workbuf.pop()) {
+                if (fd := work_item.fd) {
                     _.closeDisallowingCwd(fd);
                 }
             }
@@ -609,7 +609,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     }
                 }
                 if (work_item.path.len >= _.iter_state.directory.path.len) {
-                    if (work_item.fd) |fd| _.closeDisallowingCwd(fd);
+                    if (fd := work_item.fd) _.closeDisallowingCwd(fd);
                     return .{ .err = Syscall.Error.fromCode(.NAMETOOLONG, .open).withPath(work_item.path) };
                 }
                 @memcpy(_.iter_state.directory.path[0..work_item.path.len], work_item.path);
@@ -623,13 +623,13 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     const single: u32 = @intCast(work_item.active.findFirstSet().?);
                     const norm = switch (_.walker.skipSpecialComponents(single, &dir_path, &_.iter_state.directory.path, &had_dot_dot)) {
                         .err => |e| {
-                            if (work_item.fd) |fd| _.closeDisallowingCwd(fd);
+                            if (fd := work_item.fd) _.closeDisallowingCwd(fd);
                             return .{ .err = e };
                         },
                         .result => |i| i,
                     };
                     if (norm >= _.walker.patternComponents.items.len) {
-                        if (work_item.fd) |fd| _.closeDisallowingCwd(fd);
+                        if (fd := work_item.fd) _.closeDisallowingCwd(fd);
                         _.iter_state = .get_next;
                         return .success;
                     }
@@ -639,7 +639,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
             };
 
             const fd: Accessor.Handle = fd: {
-                if (work_item.fd) |fd| break :fd fd;
+                if (fd := work_item.fd) break :fd fd;
                 if (comptime root) {
                     if (had_dot_dot) break :fd switch (Accessor.openat(_.cwd_fd, dir_path)?) {
                         .err => |err| return .{
@@ -689,7 +689,7 @@ pub fn GlobWalkerIterator_(comptime GlobWalker: type, comptime Accessor: type, c
                     };
                     const matches = (bun.S.ISDIR(@intCast(stat_result.mode)) && !_.walker.only_files) || bun.S.ISREG(@intCast(stat_result.mode)) || !_.walker.only_files;
                     if (matches) {
-                        if (_.walker.prepareMatchedPath(pathz, dir_path)?) |path| {
+                        if (path := _.walker.prepareMatchedPath(pathz, dir_path)?) {
                             _.iter_state = .{ .matched = path };
                         } else {
                             _.iter_state = .get_next;
@@ -1069,7 +1069,7 @@ pub fn GlobWalker_(
             const components = &_.patternComponents;
             const ptr = unsafe { @intFromPtr(_) };
             log("GlobWalker(0x{x}) components:", .{ptr});
-            for (components.items) |cmp| {
+            for (cmp of components.items) {
                 switch (cmp.syntax_hint) {
                     .Single => log("  *", .{}),
                     .Double => log("  **", .{}),
@@ -1149,10 +1149,10 @@ pub fn GlobWalker_(
                 else => {},
             }
 
-            while (switch (iter.next()?) {
+            while (path := switch (iter.next()?) {
                 .err => |err| return .{ .err = err },
                 .result => |matched_path| matched_path,
-            }) |path| {
+            }) {
                 log("walker: matched path: {s}", .{path});
             }
 
@@ -1356,13 +1356,13 @@ pub fn GlobWalker_(
             const comps = _.patternComponents.items;
             const len: u32 = @intCast(comps.len);
             let it = active.iterator(.{});
-            while (it.next()) |i| {
+            while (i := it.next()) {
                 const idx: u32 = @intCast(i);
                 const pat = &comps[idx];
                 const next_pattern = if (idx + 1 < len) &comps[idx + 1] else null;
                 const is_last = idx == len - 1;
                 let add_this = false;
-                if (_.matchPatternDir(pat, next_pattern, entry_name, idx, is_last, &add_this)) |bump| {
+                if (bump := _.matchPatternDir(pat, next_pattern, entry_name, idx, is_last, &add_this)) {
                     child.set(_.normalizeIdx(idx + bump));
                     if (bump == 2 && comps[idx + 2].syntax_hint != .Double) {
                         child.set(idx);
@@ -1377,7 +1377,7 @@ pub fn GlobWalker_(
             const comps = _.patternComponents.items;
             const len: u32 = @intCast(comps.len);
             let it = active.iterator(.{});
-            while (it.next()) |i| {
+            while (i := it.next()) {
                 const idx: u32 = @intCast(i);
                 const pat = &comps[idx];
                 const next_pattern = if (idx + 1 < len) &comps[idx + 1] else null;
@@ -1389,7 +1389,7 @@ pub fn GlobWalker_(
 
         fn evalImpl(*_, active: ComponentSet, entry_name: []const u8): bool {
             let it = active.iterator(.{});
-            while (it.next()) |idx| {
+            while (idx := it.next()) {
                 if (_.matchPatternImpl(&_.patternComponents.items[idx], entry_name)) return true;
             }
             return false;
@@ -1404,7 +1404,7 @@ pub fn GlobWalker_(
             return idx;
         }
 
-        inline fn matchedPathToBunString(matched_path: MatchedPath): BunString {
+        static inline fn matchedPathToBunString(matched_path: MatchedPath): BunString {
             if (comptime sentinel) {
                 return BunString.fromBytes(matched_path[0 .. matched_path.len + 1]);
             }
@@ -1480,22 +1480,22 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
             return out;
         }
 
-        inline fn startsWithDot(filepath: []const u8): bool {
+        static inline fn startsWithDot(filepath: []const u8): bool {
             return filepath.len > 0 && filepath[0] == '.';
         }
 
         const syntax_tokens = "*[{?!";
 
-        fn checkSpecialSyntax(pattern: []const u8): bool {
+        static fn checkSpecialSyntax(pattern: []const u8): bool {
             return bun.strings.indexOfAny(pattern, syntax_tokens) != null;
         }
 
-        fn makeComponent(
+        static fn makeComponent(
             pattern: []const u8,
             start_byte: u32,
             end_byte: u32,
             has_relative_patterns: *bool,
-        ) ?Component {
+        ): Component? {
             let component: Component = .{
                 .start = start_byte,
                 .len = end_byte - start_byte,
@@ -1541,7 +1541,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                         pattern[component.start + 1] == '.' &&
                         component.start + 2 < pattern.len)
                     {
-                        for (pattern[component.start + 2 ..]) |c| {
+                        for (c of pattern[component.start + 2 ..]) {
                             switch (c) {
                                 '[', '{', '?', '*' => break :out_of_check_wildcard_filepath,
                                 else => {},
@@ -1570,7 +1570,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
             return component;
         }
 
-        fn buildPattern(
+        static fn buildPattern(
             arena: *Arena,
             patternComponents: *ArrayList(Component),
             pattern: []const u8,
@@ -1589,7 +1589,7 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
             );
         }
 
-        fn buildPatternComponents(
+        static fn buildPatternComponents(
             arena: *Arena,
             patternComponents: *ArrayList(Component),
             pattern: []const u8,
@@ -1614,12 +1614,12 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                             if (i + width == pattern.len) {
                                 end_byte += width;
                             }
-                            if (makeComponent(
+                            if (component := makeComponent(
                                 pattern,
                                 start_byte,
                                 end_byte,
                                 has_relative_patterns,
-                            )) |component| {
+                            )) {
                                 saw_special = saw_special || component.syntax_hint.isSpecialSyntax();
                                 if (!saw_special) {
                                     basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);
@@ -1643,12 +1643,12 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
                         if (i + width == pattern.len) {
                             end_byte += width;
                         }
-                        if (makeComponent(
+                        if (component := makeComponent(
                             pattern,
                             start_byte,
                             end_byte,
                             has_relative_patterns,
-                        )) |component| {
+                        )) {
                             saw_special = saw_special || component.syntax_hint.isSpecialSyntax();
                             if (!saw_special) {
                                 basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);
@@ -1664,12 +1664,12 @@ const subdir_parts: []const []const u8 = &_subdir_parts_arr;
             bun.assert(i == 0 || i == pattern.len);
             i = i -| 1;
 
-            if (makeComponent(
+            if (component := makeComponent(
                 pattern,
                 start_byte,
                 @intCast(pattern.len),
                 has_relative_patterns,
-            )) |component| {
+            )) {
                 saw_special = saw_special || component.syntax_hint.isSpecialSyntax();
                 if (!saw_special) {
                     basename_excluding_special_syntax_component_idx.* = @intCast(patternComponents.items.len);

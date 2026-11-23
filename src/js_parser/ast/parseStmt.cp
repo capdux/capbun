@@ -378,8 +378,8 @@ pub fn ParseStmt(
                                 .{
                                     path_name.fmtIdentifier(),
                                 },
-                            ) catch |e| bun.handleOom(e),
-                        ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e),
+                        ) catch e => bun.handleOom(e);
 
                         if (comptime track_symbol_usage_during_parse_pass) {
                             // In the scan pass, we need _some_ way of knowing *not* to mark as unused

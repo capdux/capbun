@@ -99,7 +99,7 @@ pub fn ParseImportExport(
                 const isIdentifier = p.lexer.token == .t_identifier;
                 const alias_loc = p.lexer.loc();
                 const alias = p.parseClauseAlias("import")?;
-                let name = LocRef{ loc: alias_loc, ref: try p.storeNameInRef(alias) };
+                let name = LocRef{ loc: alias_loc, ref: p.storeNameInRef(alias)? };
                 let original_name = alias;
                 p.lexer.next()?;
 
@@ -121,7 +121,7 @@ pub fn ParseImportExport(
                         p.lexer.next()?;
                         if (p.lexer.isContextualKeyword("as")) {
                             original_name = p.lexer.identifier;
-                            name = LocRef{ loc: p.lexer.loc(), ref: try p.storeNameInRef(original_name) };
+                            name = LocRef{ loc: p.lexer.loc(), ref: p.storeNameInRef(original_name)? };
                             p.lexer.next()?;
 
                             if (p.lexer.token == .t_identifier) {
@@ -133,19 +133,19 @@ pub fn ParseImportExport(
                             } else {
                                 // "import { type as as } from 'mod'"
 
-                                try items.append({
+                                items.append({
                                     alias: alias,
                                     alias_loc: alias_loc,
                                     name: name,
                                     original_name: original_name,
-                                });
+                                })?;
                             }
                         } else if (p.lexer.token == .t_identifier) {
                             had_type_only_imports = true;
 
                             // "import { type as xxx } from 'mod'"
                             original_name = p.lexer.identifier;
-                            name = LocRef{ loc: p.lexer.loc(), ref: try p.storeNameInRef(original_name) };
+                            name = LocRef{ loc: p.lexer.loc(), ref: p.storeNameInRef(original_name)? };
                             p.lexer.expect(.t_identifier)?;
 
                             if (isEvalOrArguments(original_name)) {
@@ -153,12 +153,12 @@ pub fn ParseImportExport(
                                 p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use {s} as an identifier here", .{original_name})?;
                             }
 
-                            try items.append({
+                            items.append({
                                 alias: alias,
                                 alias_loc: alias_loc,
                                 name: name,
                                 original_name: original_name,
-                            });
+                            })?;
                         }
                     } else {
                         const is_identifier = p.lexer.token == .t_identifier;
@@ -167,7 +167,7 @@ pub fn ParseImportExport(
                         // "import { type xx as yy } from 'mod'"
                         // "import { type if as yy } from 'mod'"
                         // "import { type 'xx' as yy } from 'mod'"
-                        * = try p.parseClauseAlias("import");
+                        * = p.parseClauseAlias("import")?;
                         p.lexer.next()?;
 
                         if (p.lexer.isContextualKeyword("as")) {
@@ -184,7 +184,7 @@ pub fn ParseImportExport(
                     if (p.lexer.isContextualKeyword("as")) {
                         p.lexer.next()?;
                         original_name = p.lexer.identifier;
-                        name = LocRef{ loc: alias_loc, ref: try p.storeNameInRef(original_name) };
+                        name = LocRef{ loc: alias_loc, ref: p.storeNameInRef(original_name)? };
                         p.lexer.expect(.t_identifier)?;
                     } else if (!isIdentifier) {
                         // An import where the name is a keyword must have an alias
@@ -197,12 +197,12 @@ pub fn ParseImportExport(
                         p.log.addRangeErrorFmt(p.source, r, p.allocator, "Cannot use \"{s}\" as an identifier here", .{original_name})?;
                     }
 
-                    try items.append(js_ast.ClauseItem{
+                    items.append(js_ast.ClauseItem{
                         alias: alias,
                         alias_loc: alias_loc,
                         name: name,
                         original_name: original_name,
-                    });
+                    })?;
                 }
 
                 if (p.lexer.token != .t_comma) {

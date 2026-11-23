@@ -114,18 +114,18 @@ const Ref = js_ast.Ref;
 pub fn ToExpr(comptime expr_type: type, comptime func_type: anytype) type {
         const ExprType = expr_type;
         return struct {
-        context: *ExprType,
-        allocator: std.mem.Allocator,
-        pub const Context = @This();
+    context: *ExprType,
+    allocator: std.mem.Allocator,
 
-        pub fn wrapIdentifier(ctx: *const Context, loc: logger.Loc, ref: Ref) Expr {
-            return @call(.auto, func_type, .{ ctx.context, loc, ref });
-        }
+pub fn wrapIdentifier(ctx: *const Context, loc: logger.Loc, @"ref": Ref) Expr {
+            return @call(.auto, func_type, .{ ctx.context, loc, @"ref" });
+    }
 
-        pub fn init(context: *ExprType) Context {
+pub fn init(context: *ExprType) Context {
             return Context{ .context = context, .allocator = context.allocator };
-        }
-    };
+    }
+    pub const Context = @This();
+};
 }
 
 pub fn toExpr(binding: *const Binding, wrapper: anytype) Expr {

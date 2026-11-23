@@ -277,7 +277,7 @@ pub struct FreeSliceGuard<T> {
                                         namespace_ref: namespace_ref,
                                         import_record_index: st.import_record_index,
                                     },
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
 
                                 const name: LocRef = item;
                                 const name_ref = name.ref.?;
@@ -303,7 +303,7 @@ pub struct FreeSliceGuard<T> {
                         p.named_imports.ensureUnusedCapacity(
                             p.allocator,
                             st.items.len + @as(usize, @intFromBool(st.default_name != null)) + @as(usize, @intFromBool(st.star_name_loc != null)),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
 
                         if (loc := st.star_name_loc) {
                             record.flags.contains_import_star = true;

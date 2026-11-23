@@ -247,7 +247,7 @@ fn VisitExprVisitors(
                         let args = bun.BabyList(Expr).initCapacity(
                             p.allocator,
                             2 + children_count,
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         args.appendAssumeCapacity(tag);
 
                         const num_props = e_.properties.len;
@@ -331,12 +331,12 @@ fn VisitExprVisitors(
                                     items: e_.children,
                                     is_single_line: e_.children.len < 2,
                                 }, e_.close_tag_loc),
-                            }) catch |e| bun.handleOom(e);
+                            }) catch e => bun.handleOom(e);
                         } else if (e_.children.len == 1) {
                             props.append(allocator, G.Property{
                                 key: children_key,
                                 value: e_.children.ptr[0],
-                            }) catch |e| bun.handleOom(e);
+                            }) catch e => bun.handleOom(e);
                         }
 
                         // Either:
@@ -1466,7 +1466,7 @@ fn VisitExprVisitors(
                         record.range,
                         copied,
                         name,
-                    ) catch |e| {
+                    ) catch e => {
                         if (e == error.MacroFailed) {
                             if (p.log.msgs.items.len == start_error_count) {
                                 p.log.addError(p.source, expr.loc, "macro threw exception") catch unreachable;
@@ -1531,8 +1531,8 @@ fn VisitExprVisitors(
                                 p.allocator,
                                 "\"useState\" is not available in a server component. If you need interactivity, consider converting part of this to a Client Component (by adding `\"use client\";` to the top of the file).",
                                 {},
-                            ) catch |e| bun.handleOom(e),
-                        ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e),
+                        ) catch e => bun.handleOom(e);
                     }
                 }
             }

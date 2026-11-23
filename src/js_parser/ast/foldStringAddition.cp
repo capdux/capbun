@@ -181,7 +181,7 @@ pub fn foldStringAddition(l: Expr, r: Expr, allocator: std.mem.Allocator, kind: 
                                             allocator,
                                             E.TemplatePart,
                                             concat_slices[0..],
-                                        ) catch |e| bun.handleOom(e);
+                                        ) catch e => bun.handleOom(e);
                                     }
                                     return lhs;
                                 }
