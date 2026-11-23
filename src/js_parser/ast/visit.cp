@@ -42,8 +42,8 @@ pub fn Visit(
             }
         }
 
-        static fn recordDeclaredSymbol(p: *P, sym_ref: Ref): anyerror!void {
-            bun.assert(ref.isSymbol());
+        static fn recordDeclaredSymbol(p: *P, sym_ref: Ref): ! {
+            bun.assert(sym_ref.isSymbol());
             p.declared_symbols.append(p.allocator, DeclaredSymbol{
                 @"ref": sym_ref,
                 is_top_level: p.current_scope == p.module_scope,
@@ -147,8 +147,10 @@ pub fn Visit(
         }
 
         static fn visitTSDecorators(p: *P, decs: ExprNodeList): ExprNodeList {
-            for (*dec of decs.slice()) {
-                dec.* = p.visitExpr(dec.*);
+            const slice = decs.slice();
+            let i: usize = 0;
+            while (i < slice.len) : (i += 1) {
+                slice[i] = p.visitExpr(slice[i]);
             }
 
             return decs;

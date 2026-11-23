@@ -35,7 +35,8 @@ pub fn ParseTypescript(
                     //
                     // This matches the behavior of the TypeScript compiler.
                     decorators.ensureUnusedCapacity(1)?;
-                    p.parseExprWithFlags(.new, Expr.EFlags.ts_decorator, &decorators.unusedCapacitySlice()[0])?;
+                    const slot = unsafe { &decorators.unusedCapacitySlice()[0] };
+                    p.parseExprWithFlags(.new, Expr.EFlags.ts_decorator, slot)?;
                     decorators.items.len += 1;
                 }
             }

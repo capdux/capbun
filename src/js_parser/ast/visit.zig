@@ -183,7 +183,8 @@ pub fn visitStmtsAndPrependTempRefs(p: *P, stmts: *ListManaged(Stmt), opts: *Pre
             }
     }
 
-pub fn recordDeclaredSymbol(p: *P, sym_ref: Ref) anyerror!void {
+pub fn recordDeclaredSymbol(p: *P, sym_ref: Ref) !void {
+            _ = bun.assert(sym_ref.isSymbol());
             _ = try p.declared_symbols.append(p.allocator, DeclaredSymbol{ .@"ref" = sym_ref, .is_top_level = (p.current_scope == p.module_scope) });
     }
 
@@ -260,9 +261,11 @@ pub fn visitArgs(p: *P, args: []G.Arg, opts: VisitArgsOpts) void {
     }
 
 pub fn visitTSDecorators(p: *P, decs: ExprNodeList) ExprNodeList {
-        _ = p;
-            for (cp_mut_slice(&decs.slice())) |*dec| {
-                _ = &dec;
+            const slice = decs.slice();
+            var i: usize = 0;
+            _ = &i;
+            while ((i < slice.len)) : (i = (i + 1)) {
+                slice[cp_cast_int(usize, i)] = p.visitExpr(slice[@as(usize, @intCast(i))]);
             }
             return decs;
     }
@@ -873,8 +876,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                     {
                         var i: i32 = 0;
                         _ = &i;
-                        const __end_12 = stmts.items.len;
-                        while (i < __end_12) : (i += 1) {
+                        const __end_11 = stmts.items.len;
+                        while (i < __end_11) : (i += 1) {
                             const stmt = (&stmts.items[@as(usize, @intCast(i))]);
                             if ((stmt.data == .s_enum)) {
                                 const old_scopes_in_order = p.scope_order_to_visit;
@@ -910,8 +913,8 @@ pub fn visitStmts(p: *P, stmts: *ListManaged(Stmt), kind: StmtsKind) anyerror!vo
                 {
                     var stmt_idx: i32 = 0;
                     _ = &stmt_idx;
-                    const __end_13 = stmts.items.len;
-                    while (stmt_idx < __end_13) : (stmt_idx += 1) {
+                    const __end_12 = stmts.items.len;
+                    while (stmt_idx < __end_12) : (stmt_idx += 1) {
                         const stmt = (&stmts.items[@as(usize, @intCast(stmt_idx))]);
                         const list = list_getter: {
                         switch (stmt.data) {
@@ -1067,8 +1070,8 @@ _ = ((non_fn_stmts.append(stmt)) catch unreachable);
                     {
                         var stmt_i: i32 = 0;
                         _ = &stmt_i;
-                        const __end_19 = items.len;
-                        while (stmt_i < __end_19) : (stmt_i += 1) {
+                        const __end_18 = items.len;
+                        while (stmt_i < __end_18) : (stmt_i += 1) {
                             const stmt = (&items[@as(usize, @intCast(stmt_i))]);
                             switch (stmt.data) {
 .s_empty, .s_comment, .s_directive, .s_debugger, .s_type_script => {

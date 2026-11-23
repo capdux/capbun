@@ -2209,3 +2209,5 @@
 - 修复 `src/bundler/Chunk.cp`（`dst += 2;` 消除 `standalone.test.ts` 崩溃）、`src/bundler/linker_context/convertStmtsForChunk.cp`（`metafile.test.ts` 崩溃）与 `src/sql_jsc/shared/SQLDataCell.cp`（`ExceptionScopeGuard` 指针化），并完成 `src/bundler/` 全目录 49/49 `--strict` 清零。
 
 - [release-fix] 修改 .cp/.zig：bundler/ParseTask, cli/Arguments, crash_handler/crash_handler, install/PackageInstall, jsc/{TopExceptionScope,VirtualMachine,event_loop}, paths/resolve_path, runtime/socket/Handlers, shell/AllocScope, shell/states/Base, string/immutable。`bun run build:release` 通过，`bun run zig:check` 5/5。
+
+- [Wave #93] 修改 .cp/.zig：`src/js_parser/ast/parseTypescript.{cp,zig}`、`src/js_parser/ast/visit.{cp,zig}`。`zig:check` 5/5 通过，`ts_example.test.ts` 与装饰器复现均无 ASan SEGV。
