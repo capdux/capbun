@@ -1739,3 +1739,7 @@
 - `bun.LinearFifo(*T, ...)` / `std.HashMapUnmanaged(..., *T, ...)` 等类型级指针实参在 CP 表达式解析中同样会被转为 `&T`，可通过 `fn MutPtr(comptime T: type): type { let x: T = undefined; return @TypeOf(&x); }` 安全构造可变指针类型。
 - JSC 类原型与 GC 回调（如 `getQueries`、`hasPendingActivity`、`estimatedSize`）即使方法体只读也必须保留 `*_` 接收者以匹配 `ZigGeneratedClasses.zig` 的 `*Self` 指针调用约定；`callconv(.c)` 函数（如 `BindAndExecuteCtx.run`）必须标注 `static fn`。
 - `CertificateInfo.deinit` 等只释放内部切片而由调用方传入 `*const` 值的析构方法应省略接收者（不用 `*_`），避免 `cast discards const qualifier`。
+
+### [2026-11-23] Wave #80 技术要点（`css/color.test.ts` `fuzz ansi256` 耗时定性与 `E0307` 遮蔽规则）
+- `test/js/bun/css/color.test.ts` 的 `fuzz ansi256` 在 `withoutAggressiveGC` 内同步执行 `256³ = 16,777,216` 次 FFI 调用，在 Debug+ASan 下呈 99% CPU 长时间运行而非死循环；排除该压测后 `color.test.ts` 916/916 全绿。
+- 预检 `bundle_v2.cp` 与 `pack_command.cp` `E0307` 确认嵌套 `catch |oom_err|` / `catch |err2|` 必须保留独立捕获名，不可盲目统一改为 `e` 以免遮蔽外层 `e`。

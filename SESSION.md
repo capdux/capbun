@@ -788,6 +788,13 @@
 - 全量 35 文件通过 `cpc_brief.py` 4 项门禁与 `bun run zig:check`（**5/5，29s**）。
 - 推导下一阶段 Wave #80：Subagent 1 运行 **Batch 3c**（`bun bd test test/js/bun/glob test/js/bun/md test/js/bun/cookie test/js/bun/css test/js/bun/crypto test/js/bun/ffi`）；Subagent 2 并行做只读排查/准备下一批 `--strict` 文件清单（如 `src/bundler/` 23 文件 `E0307` 或 `src/test_runner/` 剩余 11 文件精确行号清单）。
 
+## [2026-11-23] Wave #80：Batch 3c（`glob`/`md`/`cookie`/`css`/`crypto`/`ffi`）全量测试与 `--strict` 清单全提取
+- **Batch 3c（30 文件）全量零崩溃通过**：
+  - `glob` / `md` / `cookie` / `crypto` / `ffi`（26 文件，275.44s）：**11,484 pass / 15 skip / 6 fail / 1 error / 0 ASan crash**（`md`/`cookie`/`crypto` 全绿；`glob` 仅 `leaks`/`braces` 超时与缺 `fast-glob` 夹具、`ffi` 仅 `addr32`/`cc` 2 项编译夹具报错）；
+  - `css`（5 文件）：`color.test.ts`（排除 `256³` 同步压测 `fuzz ansi256` 后）**916/916** 全绿，`css.test.ts` **1,031 pass / 67 skip / 1 fail**（`font`），`css-fuzz`/`small-list-grow`/`doesnt_crash` 均为 Debug+ASan 超时，**0 ASan crash**。
+- 完成 `src/bundler/`、`src/test_runner/`、`src/runtime/`、`src/bake/`、`src/cli/`、`src/install/`、`src/shell/` 等剩余全仓 `E0307` 精确行号清单提取。
+- 推导下一阶段 Wave #81：Subagent 1 运行 **Batch 3d**（`s3`/`net`/`io`/`image`/`transpiler`/`websocket` 30 文件）；Subagent 2 只读排查 `css.test.ts > font` 与 `ffi` 2 项失败根因（零 `src/` 写冲突）。
+
 ### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
 - `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。
 - **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（将 `E0311` 收窄至真实函数返回 `: void` 签名，不再误报 `union`/`struct` 零大小字段）及 `cpc/src/parser/container.rs`（允许 `union` 字段省略 `: void` 默认为 `Type::Void`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0311_union_void.cp` 返回 `Check successful`，已执行 `ack`。

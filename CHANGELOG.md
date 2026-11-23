@@ -2184,3 +2184,6 @@
 ### [2026-11-23] Wave #78–79（Shell 复测零崩溃、Batch 3b `resolve` 完成与 `http`/`sql_jsc` 35 文件 `--strict` 纯化）
 - 完成 `bunshell.test.ts` + `ls.test.ts` 复测（377 pass / 0 crash）与 Batch 3b `test/js/bun/resolve`（34 文件 234 pass / 0 crash）；
 - 完成 `src/http/` 18 文件（全目录 36/36 清零）与 `src/sql_jsc/` 17 文件共 **35 个文件 `--strict` 纯化**，通过 `cpc_brief.py` 4 项门禁与 `bun run zig:check`（5/5）。
+
+### [2026-11-23] Wave #80（Batch 3c `glob`/`md`/`cookie`/`css`/`crypto`/`ffi` 全量测试零崩溃）
+- 完成 Batch 3c：`glob`/`md`/`cookie`/`crypto`/`ffi` 26 文件 **11,484 pass / 6 fail / 0 crash**（`md`/`cookie`/`crypto` 全绿），`css` `color.test.ts` 916/916 与 `css.test.ts` 1,031 pass / 1 fail / 0 crash；完成全仓剩余 `E0307` 精确行号清单提取。
