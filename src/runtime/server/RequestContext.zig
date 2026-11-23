@@ -1577,10 +1577,7 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
             break :blk server_opt.?;
 
 });
-            const globalThis = (blk: {
-            break :blk (server).?.globalThis;
-
-});
+            const globalThis = req_ctx.server.?.globalThis;
             if (response.getFetchHeaders()) |headers| {
                 _ = &headers;
                 if (comptime (!http3)) {
