@@ -21,13 +21,13 @@ pub struct Reader {
     }
 
     pub fn read(*_, count: usize): []u8! {
-        const read_count = @min(count, this.remain.len);
+        const read_count = @min(count, _.remain.len);
         if (read_count < count) {
             return err.EOF;
         }
 
-        const slice = this.remain[0..read_count];
-        this.remain = this.remain[read_count..];
+        const slice = _.remain[0..read_count];
+        _.remain = _.remain[read_count..];
         return slice;
     }
 
@@ -36,17 +36,17 @@ pub struct Reader {
             @compileError(std.fmt.comptimePrint("{s} must have unique representation.", [@typeName(T)]));
         }
 
-        return std.mem.bytesAsValue(T, this.read(@sizeOf(T))?);
+        return std.mem.bytesAsValue(T, _.read(@sizeOf(T))?);
     }
 
     @inline pub fn readByte(*_): u8! {
-        const s = this.read(1)?;
+        const s = _.read(1)?;
         return s[0];
     }
 
     pub fn readEnum(*_, comptime Enum: type): Enum! {
         const type_info = @typeInfo(Enum).Enum;
-        const tag = this.readInt(type_info.tag_type)?;
+        const tag = _.readInt(type_info.tag_type)?;
 
         inline for (field of std.meta.fields(Enum)) {
             if (tag == field.value) {
@@ -58,22 +58,22 @@ pub struct Reader {
     }
 
     pub fn readArray(*_, comptime T: type): ([]const T)! {
-        const length = this.readInt(u32)?;
+        const length = _.readInt(u32)?;
         if (length == 0) {
             return &[];
         }
 
         switch (T) {
             u8 => {
-                return this.read(length)?;
+                return _.read(length)?;
             },
             u16, u32, i8, i16, i32 => {
-                return std.mem.readIntSliceNative(T, this.read(length * @sizeOf(T))?);
+                return std.mem.readIntSliceNative(T, _.read(length * @sizeOf(T))?);
             },
             [:0]const u8, []const u8 => {
-                let array = this.allocator.alloc(T, length)?;
+                let array = _.allocator.alloc(T, length)?;
                 for (*a of array) {
-                    a.* = this.readArray(u8)?;
+                    a.* = _.readArray(u8)?;
                 }
                 return array;
             },
@@ -83,14 +83,14 @@ pub struct Reader {
                         switch (Struct.layout) {
                             .Packed => {
                                 const sizeof = @sizeOf(T);
-                                const slice = this.read(sizeof * length)?;
+                                const slice = _.read(sizeof * length)?;
                                 return std.mem.bytesAsSlice(T, slice);
                             },
                             else => {},
                         }
                     },
                     .Enum type_info => {
-                        const enum_values = this.read(length * @sizeOf(type_info.tag_type))?;
+                        const enum_values = _.read(length * @sizeOf(type_info.tag_type))?;
                         unsafe {
                             return (enum_values.ptr as [*]T!)[0..length];
                         }
@@ -98,9 +98,9 @@ pub struct Reader {
                     else => {},
                 }
 
-                let array = this.allocator.alloc(T, length)?;
+                let array = _.allocator.alloc(T, length)?;
                 for (*v of array) {
-                    v.* = this.readValue(T)?;
+                    v.* = _.readValue(T)?;
                 }
                 return array;
             },
@@ -108,43 +108,43 @@ pub struct Reader {
     }
 
     @inline pub fn readByteArray(*_): []u8! {
-        const length = this.readInt(u32)?;
+        const length = _.readInt(u32)?;
         if (length == 0) {
-            return this.read(0)?;
+            return _.read(0)?;
         }
 
-        return this.read(usize(length))?;
+        return _.read(usize(length))?;
     }
 
     @inline pub fn readInt(*_, comptime T: type): T! {
-        const slice = this.read(@sizeOf(T))?;
+        const slice = _.read(@sizeOf(T))?;
         return std.mem.readIntSliceNative(T, slice);
     }
 
     @inline pub fn readBool(*_): bool! {
-        const b = this.readByte()?;
+        const b = _.readByte()?;
         return b > 0;
     }
 
     @inline pub fn readValue(*_, comptime T: type): T! {
         switch (comptime T) {
             bool => {
-                return this.readBool()?;
+                return _.readBool()?;
             },
             u8 => {
-                return this.readByte()?;
+                return _.readByte()?;
             },
             [*:0]const u8!, [:0]const u8, []const u8 => {
-                return this.readArray(u8)?;
+                return _.readArray(u8)?;
             },
             []const [:0]const u8, []const [*:0]const u8!, []const []const u8 => {
-                return this.readArray(string)?;
+                return _.readArray(string)?;
             },
             []u8, [:0]u8, [*:0]u8! => {
-                return this.readArray(SliceU8)?;
+                return _.readArray(SliceU8)?;
             },
             u16, u32, i8, i16, i32 => {
-                return std.mem.readIntSliceNative(T, this.read(@sizeOf(T))?);
+                return std.mem.readIntSliceNative(T, _.read(@sizeOf(T))?);
             },
             else => {
                 switch (comptime @typeInfo(T)) {
@@ -152,19 +152,19 @@ pub struct Reader {
                         switch (Struct.layout) {
                             .Packed => {
                                 const sizeof = @sizeOf(T);
-                                let slice = this.read(sizeof)?;
+                                let slice = _.read(sizeof)?;
                                 return std.mem.bytesAsValue(T, slice[0..sizeof]).*;
                             },
                             else => {},
                         }
                     },
                     .Enum => {
-                        return this.readEnum(T)?;
+                        return _.readEnum(T)?;
                     },
                     else => {},
                 }
 
-                return T.decode(this)?;
+                return T.decode(_)?;
             },
         }
 
@@ -181,28 +181,28 @@ pub fn Writer(comptime WritableStream: type): type {
             return Self{ writable: writable };
         }
 
-        @inline pub fn write(*this, bytes: auto): void! {
-            * = this.writable.write(bytes)?;
+        @inline pub fn write(*_, bytes: auto): void! {
+            * = _.writable.write(bytes)?;
         }
 
-        @inline pub fn writeByte(*this, byte: u8): void! {
+        @inline pub fn writeByte(*_, byte: u8): void! {
             const arr: [1]u8 = [byte];
-            * = this.writable.write(&arr)?;
+            * = _.writable.write(&arr)?;
         }
 
-        @inline pub fn writeInt(*this, int: auto): void! {
-            this.write(std.mem.asBytes(&int))?;
+        @inline pub fn writeInt(*_, int: auto): void! {
+            _.write(std.mem.asBytes(&int))?;
         }
 
-        @inline pub fn writeFieldID(*this, comptime id: comptime_int): void! {
-            this.writeByte(id)?;
+        @inline pub fn writeFieldID(*_, comptime id: comptime_int): void! {
+            _.writeByte(id)?;
         }
 
-        @inline pub fn writeEnum(*this, val: auto): void! {
-            this.writeInt(@intFromEnum(val))?;
+        @inline pub fn writeEnum(*_, val: auto): void! {
+            _.writeInt(@intFromEnum(val))?;
         }
 
-        pub fn writeValue(*this, comptime SliceType: type, slice: SliceType): void! {
+        pub fn writeValue(*_, comptime SliceType: type, slice: SliceType): void! {
             switch (SliceType) {
                 []u16,
                 []u32,
@@ -234,7 +234,7 @@ pub fn Writer(comptime WritableStream: type): type {
                 [*:0]const i16!,
                 [*:0]const i32!,
                 [*:0]const i8! => {
-                    this.writeArray(SliceType, slice)?;
+                    _.writeArray(SliceType, slice)?;
                 },
 
                 []u8,
@@ -243,31 +243,31 @@ pub fn Writer(comptime WritableStream: type): type {
                 [:0]const u8,
                 [*:0]u8!,
                 [*:0]const u8! => {
-                    this.writeArray(u8, slice)?;
+                    _.writeArray(u8, slice)?;
                 },
 
                 u8 => {
-                    this.write(slice)?;
+                    _.write(slice)?;
                 },
                 u16, u32, i16, i32, i8 => {
-                    this.write(std.mem.asBytes(slice))?;
+                    _.write(std.mem.asBytes(slice))?;
                 },
 
                 else => {
-                    slice.encode(this)?;
+                    slice.encode(_)?;
                 },
             }
         }
 
-        pub fn writeArray(*this, comptime T: type, slice: auto): void! {
-            this.writeInt(slice.len as u32)?;
+        pub fn writeArray(*_, comptime T: type, slice: auto): void! {
+            _.writeInt(slice.len as u32)?;
 
             switch (T) {
                 u8 => {
-                    this.write(slice)?;
+                    _.write(slice)?;
                 },
                 u16, u32, i16, i32, i8 => {
-                    this.write(std.mem.asBytes(slice))?;
+                    _.write(std.mem.asBytes(slice))?;
                 },
                 [:0]u8,
                 []u8,
@@ -304,19 +304,19 @@ pub fn Writer(comptime WritableStream: type): type {
                 [*:0]const i32!,
                 [*:0]const i8! => {
                     for (num_slice of slice) {
-                        this.writeArray(std.meta.Child(@TypeOf(num_slice)), num_slice)?;
+                        _.writeArray(std.meta.Child(@TypeOf(num_slice)), num_slice)?;
                     }
                 },
                 else => {
                     for (val of slice) {
-                        val.encode(this)?;
+                        val.encode(_)?;
                     }
                 },
             }
         }
 
-        @inline pub fn endMessage(*this): void! {
-            this.writeByte(0)?;
+        @inline pub fn endMessage(*_): void! {
+            _.writeByte(0)?;
         }
     };
 }
@@ -336,7 +336,7 @@ enum AnalyticsOperatingSystem: u8 {
     _,
 
     pub fn jsonStringify(writer: auto): void! {
-        return writer.write(this.name)?;
+        return writer.write(_.name)?;
     }
 }
 
@@ -347,7 +347,7 @@ enum AnalyticsArchitecture: u8 {
     _,
 
     pub fn jsonStringify(writer: auto): void! {
-        return writer.write(this.name)?;
+        return writer.write(_.name)?;
     }
 }
 
@@ -361,7 +361,7 @@ enum AnalyticsEventKind: u32 {
     _,
 
     pub fn jsonStringify(writer: auto): void! {
-        return writer.write(this.name)?;
+        return writer.write(_.name)?;
     }
 }
 
@@ -380,9 +380,9 @@ pub struct AnalyticsPlatform {
     }
 
     pub fn encode(writer: auto): void! {
-        writer.writeEnum(this.os)?;
-        writer.writeEnum(this.arch)?;
-        writer.writeArray(u8, this.version)?;
+        writer.writeEnum(_.os)?;
+        writer.writeEnum(_.arch)?;
+        writer.writeArray(u8, _.version)?;
     }
 }
 
@@ -399,8 +399,8 @@ pub struct AnalyticsPlatform {
     }
 
     pub fn encode(writer: auto): void! {
-        writer.writeInt(this.first)?;
-        writer.writeInt(this.second)?;
+        writer.writeInt(_.first)?;
+        writer.writeInt(_.second)?;
     }
 }
 
@@ -427,13 +427,13 @@ pub struct AnalyticsEventListHeader {
     }
 
     pub fn encode(writer: auto): void! {
-        writer.writeValue(@TypeOf(this.machine_id), this.machine_id)?;
-        writer.writeInt(this.session_id)?;
-        writer.writeValue(@TypeOf(this.platform), this.platform)?;
-        writer.writeInt(this.build_id)?;
-        writer.writeValue(@TypeOf(this.project_id), this.project_id)?;
-        writer.writeInt(this.session_length)?;
-        writer.writeInt(this.feature_usage)?;
+        writer.writeValue(@TypeOf(_.machine_id), _.machine_id)?;
+        writer.writeInt(_.session_id)?;
+        writer.writeValue(@TypeOf(_.platform), _.platform)?;
+        writer.writeInt(_.build_id)?;
+        writer.writeValue(@TypeOf(_.project_id), _.project_id)?;
+        writer.writeInt(_.session_length)?;
+        writer.writeInt(_.feature_usage)?;
     }
 }
 
@@ -450,8 +450,8 @@ pub struct AnalyticsEventHeader {
     }
 
     pub fn encode(writer: auto): void! {
-        writer.writeValue(@TypeOf(this.timestamp), this.timestamp)?;
-        writer.writeEnum(this.kind)?;
+        writer.writeValue(@TypeOf(_.timestamp), _.timestamp)?;
+        writer.writeEnum(_.kind)?;
     }
 }
 
@@ -468,8 +468,8 @@ pub struct AnalyticsEventList {
     }
 
     pub fn encode(writer: auto): void! {
-        writer.writeValue(@TypeOf(this.header), this.header)?;
-        writer.writeInt(this.event_count)?;
+        writer.writeValue(@TypeOf(_.header), _.header)?;
+        writer.writeInt(_.event_count)?;
     }
 }
 

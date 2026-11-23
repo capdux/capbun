@@ -830,7 +830,7 @@ pub struct Expect {
         const prev_unhandled_pending_rejection_to_capture = vm.unhandled_pending_rejection_to_capture;
         vm.unhandled_pending_rejection_to_capture = &return_value;
         vm.onUnhandledRejection = &VirtualMachine.onQuietUnhandledRejectionHandlerCaptureValue;
-        return_value_from_function = value.call(globalThis, .js_undefined, []) catch |e| globalThis.takeException(e);
+        return_value_from_function = value.call(globalThis, .js_undefined, []) catch e => globalThis.takeException(e);
         vm.unhandled_pending_rejection_to_capture = prev_unhandled_pending_rejection_to_capture;
 
         vm.global.handleRejectedPromises();
@@ -1120,7 +1120,7 @@ pub struct Expect {
         let pretty_value = DeinitGuard<std.Io.Writer.Allocating>{ val: std.Io.Writer.Allocating.init(default_allocator) };
         _.matchAndFmtSnapshot(globalThis, value, property_matchers, &pretty_value.val.writer, fn_name)?;
 
-        const existing_value = Jest.runner.?.snapshots.getOrPut(_, pretty_value.val.written(), hint) catch |e| {
+        const existing_value = Jest.runner.?.snapshots.getOrPut(_, pretty_value.val.written(), hint) catch e => {
             const buntest_strong_opt = _.bunTest();
             if (buntest_strong_opt == null) {
                 return globalThis.throw("Snapshot matchers cannot be used outside of a test", .{});
@@ -2012,21 +2012,21 @@ pub struct ExpectCustomAsymmetricMatcher {
         const matcher_fn_opt = js.matcherFnGetCached(thisValue);
         if (matcher_fn_opt == null) return false;
         const matcher_fn: JSValue = matcher_fn_opt.?;
-        if (fn_value := matcher_fn.get(globalThis, "toAsymmetricMatcher") catch |e| return maybeClear(dontThrow, globalThis, e)) {
+        if (fn_value := matcher_fn.get(globalThis, "toAsymmetricMatcher") catch e => return maybeClear(dontThrow, globalThis, e)) {
             if (fn_value.jsType().isFunction()) {
                 const captured_args_opt = js.capturedArgsGetCached(thisValue);
                 if (captured_args_opt == null) return false;
                 const captured_args: JSValue = captured_args_opt.?;
                 let stack_fallback = std.heap.stackFallback(256, globalThis.allocator());
-                const args_len = captured_args.getLength(globalThis) catch |e| return maybeClear(dontThrow, globalThis, e);
+                const args_len = captured_args.getLength(globalThis) catch e => return maybeClear(dontThrow, globalThis, e);
                 let args = std.array_list.Managed(JSValue).initCapacity(stack_fallback.get(), args_len)?;
-                let iter = captured_args.arrayIterator(globalThis) catch |e| return maybeClear(dontThrow, globalThis, e);
-                while (arg := iter.next() catch |e| return maybeClear(dontThrow, globalThis, e)) {
+                let iter = captured_args.arrayIterator(globalThis) catch e => return maybeClear(dontThrow, globalThis, e);
+                while (arg := iter.next() catch e => return maybeClear(dontThrow, globalThis, e)) {
                     args.appendAssumeCapacity(arg);
                 }
 
-                const result = matcher_fn.call(globalThis, thisValue, args.items) catch |e| return maybeClear(dontThrow, globalThis, e);
-                writer.print("{f}", .{ result.toBunString(globalThis) catch |e| return maybeClear(dontThrow, globalThis, e) })?;
+                const result = matcher_fn.call(globalThis, thisValue, args.items) catch e => return maybeClear(dontThrow, globalThis, e);
+                writer.print("{f}", .{ result.toBunString(globalThis) catch e => return maybeClear(dontThrow, globalThis, e) })?;
             }
         }
         return false;
@@ -2274,7 +2274,7 @@ pub struct _AllCallsWithArgsFormatter {
     fn format(writer: *std.Io.Writer): std.Io.Writer.Error!void {
         let printed_once = false;
 
-        const calls_count = @as(u32, i32(_.calls.getLength(_.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e)));
+        const calls_count = @as(u32, i32(_.calls.getLength(_.globalThis) catch e => return bun.deprecated.jsErrorToWriteError(e)));
         if (calls_count == 0) {
             writer.writeAll("(no calls)")?;
             return;
@@ -2286,7 +2286,7 @@ pub struct _AllCallsWithArgsFormatter {
             printed_once = true;
 
             writer.print("           {d: >4}: ", .{ i + 1 })?;
-            const call_args = _.calls.getIndex(_.globalThis, i) catch |e| return bun.deprecated.jsErrorToWriteError(e);
+            const call_args = _.calls.getIndex(_.globalThis, i) catch e => return bun.deprecated.jsErrorToWriteError(e);
             writer.print("{f}", .{ call_args.toFmt(_.formatter) })?;
         }
     }
@@ -2311,16 +2311,16 @@ pub struct _AllCallsFormatter {
         let num_returns: i32 = 0;
         let num_calls: i32 = 0;
 
-        let iter = _.returns.arrayIterator(_.globalThis) catch |e| return bun.deprecated.jsErrorToWriteError(e);
-        while (item := iter.next() catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
+        let iter = _.returns.arrayIterator(_.globalThis) catch e => return bun.deprecated.jsErrorToWriteError(e);
+        while (item := iter.next() catch e => return bun.deprecated.jsErrorToWriteError(e)) {
             if (printed_once) writer.writeAll("\n")?;
             printed_once = true;
 
             num_calls += 1;
             writer.print("           {d: >2}: ", .{ num_calls })?;
 
-            const value = mock.jestMockReturnObject_value(_.globalThis, item) catch |e| return bun.deprecated.jsErrorToWriteError(e);
-            switch (mock.jestMockReturnObject_type(_.globalThis, item) catch |e| return bun.deprecated.jsErrorToWriteError(e)) {
+            const value = mock.jestMockReturnObject_value(_.globalThis, item) catch e => return bun.deprecated.jsErrorToWriteError(e);
+            switch (mock.jestMockReturnObject_type(_.globalThis, item) catch e => return bun.deprecated.jsErrorToWriteError(e)) {
                 .@"return" => {
                     writer.print("{f}", .{ value.toFmt(_.formatter) })?;
                     num_returns += 1;

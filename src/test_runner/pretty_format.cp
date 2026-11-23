@@ -732,24 +732,24 @@ pub struct PrettyFormatter {
             failed: bool = false,
             estimated_line_length: *usize = undefined,
 
-            static fn print(self: *@This(), comptime fmt: string, args: auto) {
-                self.ctx.print(fmt, args) catch {
-                    self.failed = true;
+            fn print(*_, comptime fmt: string, args: auto) {
+                _.ctx.print(fmt, args) catch {
+                    _.failed = true;
                 };
             }
 
-            static fn writeLatin1(self: *@This(), buf: []const u8) {
+            fn writeLatin1(*_, buf: []const u8) {
                 let remain = buf;
                 while (remain.len > 0) {
                     if (i := strings.firstNonASCII(remain)) {
                         if (i > 0) {
-                            self.ctx.writeAll(remain[0..i]) catch {
-                                self.failed = true;
+                            _.ctx.writeAll(remain[0..i]) catch {
+                                _.failed = true;
                                 return;
                             };
                         }
-                        self.ctx.writeAll(&strings.latin1ToCodepointBytesAssumeNotASCII(remain[i])) catch {
-                            self.failed = true;
+                        _.ctx.writeAll(&strings.latin1ToCodepointBytesAssumeNotASCII(remain[i])) catch {
+                            _.failed = true;
                         };
                         remain = remain[i + 1 ..];
                     } else {
@@ -757,22 +757,22 @@ pub struct PrettyFormatter {
                     }
                 }
 
-                self.ctx.writeAll(remain) catch return;
+                _.ctx.writeAll(remain) catch return;
             }
 
-            pub inline fn writeAll(self: *@This(), buf: []const u8) {
-                self.ctx.writeAll(buf) catch {
-                    self.failed = true;
+            inline fn writeAll(*_, buf: []const u8) {
+                _.ctx.writeAll(buf) catch {
+                    _.failed = true;
                 };
             }
 
-            pub inline fn writeString(self: *@This(), str: ZigString) {
-                self.print("{f}", .{ str});
+            inline fn writeString(*_, str: ZigString) {
+                _.print("{f}", .{ str});
             }
 
-            pub inline fn write16Bit(self: *@This(), input: []const u16) {
-                bun.fmt.formatUTF16Type(input, self.ctx) catch {
-                    self.failed = true;
+            inline fn write16Bit(*_, input: []const u16) {
+                bun.fmt.formatUTF16Type(input, _.ctx) catch {
+                    _.failed = true;
                 };
             }
         };
@@ -881,7 +881,7 @@ pub struct PrettyFormatter {
             const Self = @This();
             static fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
                 if (ctx == null) return;
-                let iter = bun.cast(*Self, ctx.?);
+                let iter: *Self = unsafe { @ptrCast(@alignCast(ctx.?)) };
                 if (iter.formatter.failed) return;
                 const key = jsc.JSObject.getIndex(nextValue, globalObject, 0) catch return;
                 const value = jsc.JSObject.getIndex(nextValue, globalObject, 1) catch return;
@@ -919,7 +919,7 @@ pub struct PrettyFormatter {
             const Self = @This();
             static fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: *!?, nextValue: JSValue) callconv(.c) {
                 if (ctx == null) return;
-                let iter = bun.cast(*Self, ctx.?);
+                let iter: *Self = unsafe { @ptrCast(@alignCast(ctx.?)) };
                 if (iter.formatter.failed) return;
                 iter.formatter.writeIndent(Writer, iter.writer) catch return;
                 const key_tag = Tag.get(nextValue, globalObject) catch return;
@@ -949,7 +949,7 @@ pub struct PrettyFormatter {
                 if (!value.jsType().isFunction()) {
                     const WW = PrettyFormatter.WrappedWriter(Writer);
                     let writer = WW{
-                        ctx: this.writer,
+                        ctx: _.writer,
                         failed: false,
                     };
                     let name_str = ZigString.init("");
@@ -965,19 +965,19 @@ pub struct PrettyFormatter {
                     }
                 }
 
-                this.always_newline = true;
-                this.formatter.estimated_line_length = this.formatter.indent * 2 + 1;
+                _.always_newline = true;
+                _.formatter.estimated_line_length = _.formatter.indent * 2 + 1;
 
-                if (this.formatter.indent == 0) this.writer.writeAll("\n") catch {};
+                if (_.formatter.indent == 0) _.writer.writeAll("\n") catch {};
                 let classname = ZigString.Empty;
                 value.getClassName(globalThis, &classname)?;
                 if (!classname.isEmpty() && !classname.eqlComptime("Object")) {
-                    this.writer.print("{f} ", .{ classname}) catch {};
+                    _.writer.print("{f} ", .{ classname}) catch {};
                 }
 
-                this.writer.writeAll("{\n") catch {};
-                this.formatter.indent += 1;
-                this.formatter.writeIndent(Writer, this.writer) catch {};
+                _.writer.writeAll("{\n") catch {};
+                _.formatter.indent += 1;
+                _.formatter.writeIndent(Writer, _.writer) catch {};
             }
 
             static fn forEach(
@@ -1428,7 +1428,7 @@ pub struct PrettyFormatter {
             },
             .Private => {
                 if (response := value.@"as"(jsc.WebCore.Response)) {
-                    response.writeFormat(Formatter, _, writer_, enable_ansi_colors) catch |e| {
+                    response.writeFormat(Formatter, _, writer_, enable_ansi_colors) catch e => {
                         _.failed = true;
                         if (!_.globalThis.hasException()) {
                             return _.globalThis.throwError(e, "failed to print Response");
@@ -1436,7 +1436,7 @@ pub struct PrettyFormatter {
                         return error.JSError;
                     };
                 } else if (request := value.@"as"(jsc.WebCore.Request)) {
-                    request.writeFormat(value, Formatter, _, writer_, enable_ansi_colors) catch |e| {
+                    request.writeFormat(value, Formatter, _, writer_, enable_ansi_colors) catch e => {
                         _.failed = true;
                         if (!_.globalThis.hasException()) {
                             return _.globalThis.throwError(e, "failed to print Request");
@@ -1445,7 +1445,7 @@ pub struct PrettyFormatter {
                     };
                     return;
                 } else if (build := value.@"as"(jsc.API.BuildArtifact)) {
-                    build.writeFormat(Formatter, _, writer_, enable_ansi_colors) catch |e| {
+                    build.writeFormat(Formatter, _, writer_, enable_ansi_colors) catch e => {
                         _.failed = true;
                         if (!_.globalThis.hasException()) {
                             return _.globalThis.throwError(e, "failed to print BuildArtifact");
@@ -1453,7 +1453,7 @@ pub struct PrettyFormatter {
                         return error.JSError;
                     };
                 } else if (blob := value.@"as"(jsc.WebCore.Blob)) {
-                    blob.writeFormat(Formatter, _, writer_, enable_ansi_colors) catch |e| {
+                    blob.writeFormat(Formatter, _, writer_, enable_ansi_colors) catch e => {
                         _.failed = true;
                         if (!_.globalThis.hasException()) {
                             return _.globalThis.throwError(e, "failed to print Blob");

@@ -785,7 +785,7 @@ else => continue,
                     _ = writer.writeAll(end);
                 }
                 any_non_ascii = false;
-                slice = (if (comptime @typeInfo(Slice) == .@"enum") @as(Slice, @enumFromInt(slice[@min(slice.len, (i + 1))..])) else @as(Slice, slice[@min(slice.len, (i + 1))..]));
+                slice = (if (comptime @typeInfo(Slice) == .@"enum" and (@typeInfo(@TypeOf(slice[@min(slice.len, (i + 1))..])) == .int or @typeInfo(@TypeOf(slice[@min(slice.len, (i + 1))..])) == .comptime_int)) @as(Slice, @enumFromInt(slice[@min(slice.len, (i + 1))..])) else @as(Slice, slice[@min(slice.len, (i + 1))..]));
                 i = 0;
                 len = @as(u32, @truncate(slice.len));
                 const next_value = self.remaining_values[0];
@@ -863,7 +863,10 @@ pub fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nex
             if ((ctx == null)) {
                 return;
             }
-            var iter = bun.cast(*Self, ctx.?);
+            var iter: *Self = (blk: {
+            break :blk @ptrCast(@alignCast(ctx.?));
+
+});
             _ = &iter;
             if (iter.formatter.failed) {
                 return;
@@ -893,7 +896,10 @@ pub fn forEach(vm: *jsc.VM, globalObject: *JSGlobalObject, ctx: ?*anyopaque, nex
             if ((ctx == null)) {
                 return;
             }
-            var iter = bun.cast(*Self, ctx.?);
+            var iter: *Self = (blk: {
+            break :blk @ptrCast(@alignCast(ctx.?));
+
+});
             _ = &iter;
             if (iter.formatter.failed) {
                 return;
@@ -1205,7 +1211,7 @@ const int = value.toInt64();
                 _ = &i;
                 const is_negative = (i < 0);
                 if (is_negative) {
-                    i = (0 - i);
+                    i = (-i);
                 }
                 const digits = (if ((i != 0)) (bun.fmt.fastDigitCount((if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) == .@"enum") cp_cast_int(usize, @intFromEnum((if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i)))) else cp_cast_int(usize, (if (comptime @typeInfo(@TypeOf(i)) == .@"enum") cp_cast_int(i32, @intFromEnum(i)) else cp_cast_int(i32, i))))) + (if (comptime @typeInfo(@TypeOf(@intFromBool(is_negative))) == .@"enum") cp_cast_int(usize, @intFromEnum(@intFromBool(is_negative))) else cp_cast_int(usize, @intFromBool(is_negative)))) else 1);
                 _ = self.addForNewLine(digits);

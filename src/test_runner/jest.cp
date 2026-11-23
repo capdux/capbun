@@ -306,14 +306,14 @@ pub struct Jest {
         bun_test.FakeTimers.putTimersFns(globalObject, jest, vi);
     }
 
-    extern fn Bun__Jest__testModuleObject(globalObject: *JSGlobalObject): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsMockFn(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsModuleMock(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsNow(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsSetSystemTime(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsRestoreAllMocks(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsClearAllMocks(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
-    @callconv(jsc.conv) extern fn JSMock__jsSpyOn(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    static extern fn Bun__Jest__testModuleObject(globalObject: *JSGlobalObject): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsMockFn(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsModuleMock(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsNow(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsSetSystemTime(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsRestoreAllMocks(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsClearAllMocks(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
+    @callconv(jsc.conv) static extern fn JSMock__jsSpyOn(globalObject: *JSGlobalObject, callframe: *CallFrame): JSValue;
 
     pub static fn call(
         globalObject: *JSGlobalObject,
@@ -378,7 +378,7 @@ pub struct on_unhandled_rejection {
             }
             buntest.onUncaughtException(globalObject, rejection, true, current_state_data);
             buntest.addResult(current_state_data);
-            bun_test.BunTest.run(buntest_strong, globalObject) catch |e| {
+            bun_test.BunTest.run(buntest_strong, globalObject) catch e => {
                 globalObject.reportUncaughtExceptionFromError(e);
             };
             return;

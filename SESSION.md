@@ -862,3 +862,6 @@
 
 - [用户] 要求不再使用子智能体（配额不足），继续解决正式/运行问题。[回应] 已终止全部子智能体，单智能体定位并修复 `parseTypescript.cp` `parseTypeScriptDecorators` 与 `visit.cp` `visitTSDecorators` 两处语句丢失导致的 ASan SEGV；`zig:check` 5/5 通过，复测零崩溃。
 - [用户] 暂停后续工作，配额不足，待配额恢复再继续。[回应] 已终止后台 `task-21493`（`test/cli/install` 正式版测试），当前工作树干净（HEAD `ee81af1cbac`），`build/release/bun` 已就绪，静候配额恢复后继续。
+
+- [用户] 配额已恢复，重开 2 个子智能体持续推进。[回应] 已同步核查上游看板，并启动 Wave #94 双路并行子智能体：路 1 使用 `build/release/bun` 运行 Batch 5c（`test/cli/install` 87 文件），路 2 纯化 `src/test_runner/`（4 剩余文件 -> 12/12 全清）与 `src/analytics/schema.cp` 的 `--strict` 违规。
+- [Wave #94] `src/test_runner/`（4 剩余文件 -> 12/12 全清）与 `src/analytics/schema.cp` `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`648fefb2` `valkey_jsc`+`bit_set`）并行推进中。

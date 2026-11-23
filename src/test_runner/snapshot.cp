@@ -571,12 +571,12 @@ pub struct Snapshots {
             }
 
             // 4. write out result_text to the file
-            file.file.seekTo(0) catch |e| {
+            file.file.seekTo(0) catch e => {
                 log.addErrorFmt(source, .{ .start = 0 }, arena_, "Failed to update inline snapshot: Seek file error: {s}", .{@errorName(e)}) catch {};
                 continue;
             };
 
-            file.file.writeAll(result_text.items) catch |e| {
+            file.file.writeAll(result_text.items) catch e => {
                 log.addErrorFmt(source, .{ .start = 0 }, arena_, "Failed to update inline snapshot: Write file error: {s}", .{@errorName(e)}) catch {};
                 continue;
             };

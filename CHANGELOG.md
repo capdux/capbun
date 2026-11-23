@@ -2211,3 +2211,5 @@
 - [release-fix] 修改 .cp/.zig：bundler/ParseTask, cli/Arguments, crash_handler/crash_handler, install/PackageInstall, jsc/{TopExceptionScope,VirtualMachine,event_loop}, paths/resolve_path, runtime/socket/Handlers, shell/AllocScope, shell/states/Base, string/immutable。`bun run build:release` 通过，`bun run zig:check` 5/5。
 
 - [Wave #93] 修改 .cp/.zig：`src/js_parser/ast/parseTypescript.{cp,zig}`、`src/js_parser/ast/visit.{cp,zig}`。`zig:check` 5/5 通过，`ts_example.test.ts` 与装饰器复现均无 ASan SEGV。
+
+- [Wave #94] 修改 .cp/.zig：`src/test_runner/{expect,jest,pretty_format,snapshot}.{cp,zig}`、`src/analytics/schema.{cp,zig}`（全部通过 `cpc_brief.py` 4 门禁与 `--strict` 零错误，`zig:check` 5/5）。
