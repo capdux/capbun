@@ -25,8 +25,13 @@ struct ErrDeinitGuard<T> {
 }
 
 struct PathOrBlobGuard {
-    ptr: *PathOrBlob!;
-    ~init() { unsafe { if (_.ptr.* == .path) _.ptr.path.deinit(); } }
+    ptr: (*PathOrBlob!)?;
+    ~errinit() {
+        if (p := _.ptr) {
+            unsafe { if (p.* == .path) p.path.deinit(); }
+        }
+    }
+    fn disarm(*_) { _.ptr = null; }
 }
 
 pub fn writeFormat(
@@ -99,7 +104,7 @@ pub fn presign(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVa
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
+    let _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
     if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to presign", .{});
@@ -112,6 +117,7 @@ pub fn presign(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVa
             }
             const options = args.nextEat();
             let blob = constructS3FileInternalStore(globalThis, path.path, options)?;
+            _guard_pob.disarm();
             const _guard_blob = DeinitGuard<Blob>{ ptr: &blob };
             return getPresignUrlFrom(&blob, globalThis, options);
         },
@@ -125,7 +131,7 @@ pub fn unlink(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
+    let _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
     if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to delete", .{});
     }
@@ -137,6 +143,7 @@ pub fn unlink(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
             }
             const options = args.nextEat();
             let blob = constructS3FileInternalStore(globalThis, path.path, options)?;
+            _guard_pob.disarm();
             const _guard_blob = DeinitGuard<Blob>{ ptr: &blob };
             return blob.store.?.data.s3.unlink(blob.store.?, globalThis, options);
         },
@@ -152,7 +159,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValu
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
+    let _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
     if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to upload", .{});
@@ -171,6 +178,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValu
                 return globalThis.throwInvalidArguments("Expected a S3 or path to upload", .{});
             }
             let blob = constructS3FileInternalStore(globalThis, path.path, options)?;
+            _guard_pob.disarm();
             const _guard_blob = DeinitGuard<Blob>{ ptr: &blob };
 
             let blob_internal: PathOrBlob = .{ .blob = blob };
@@ -192,7 +200,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
+    let _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
     if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
@@ -205,6 +213,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
                 return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
             }
             let blob = constructS3FileInternalStore(globalThis, path.path, options)?;
+            _guard_pob.disarm();
             const _guard_blob = DeinitGuard<Blob>{ ptr: &blob };
 
             return S3BlobStatTask.size(globalThis, &blob);
@@ -221,7 +230,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
+    let _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
     if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to check if it exists", .{});
@@ -234,6 +243,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSVal
                 return globalThis.throwInvalidArguments("Expected a S3 or path to check if it exists", .{});
             }
             let blob = constructS3FileInternalStore(globalThis, path.path, options)?;
+            _guard_pob.disarm();
             const _guard_blob = DeinitGuard<Blob>{ ptr: &blob };
 
             return S3BlobStatTask.exists(globalThis, &blob);
@@ -599,7 +609,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
     const _guard_args = DeinitGuard<CallFrame.ArgumentsSlice>{ ptr: &args };
 
     let path_or_blob = PathOrBlob.fromJSNoCopy(globalThis, &args)?;
-    const _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
+    let _guard_pob = PathOrBlobGuard{ ptr: &path_or_blob };
 
     if (path_or_blob == .blob && (path_or_blob.blob.store == null || path_or_blob.blob.store.?.data != .s3)) {
         return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
@@ -612,6 +622,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue
                 return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
             }
             let blob = constructS3FileInternalStore(globalThis, path.path, options)?;
+            _guard_pob.disarm();
             const _guard_blob = DeinitGuard<Blob>{ ptr: &blob };
 
             return S3BlobStatTask.stat(globalThis, &blob);

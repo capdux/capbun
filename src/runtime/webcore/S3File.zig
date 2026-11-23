@@ -123,17 +123,24 @@ pub fn disarm(self: *@This()) void {
 }
 
 pub const PathOrBlobGuard = struct {
-    ptr: *PathOrBlob,
-    __cp_dropped: bool = false,
+    ptr: ?*PathOrBlob,
+    __cp_errdropped: bool = false,
 
-pub fn __cp_deinit(self: *PathOrBlobGuard) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            {
-                if ((self.ptr.* == .path)) {
-                    _ = self.ptr.path.deinit();
+pub fn __cp_errdeinit(self: *PathOrBlobGuard) void {
+        if (self.__cp_errdropped) return;
+        self.__cp_errdropped = true;
+            if (self.ptr) |p| {
+                _ = &p;
+                {
+                    if ((p.* == .path)) {
+                        _ = p.path.deinit();
+                    }
                 }
             }
+    }
+
+pub fn disarm(self: *PathOrBlobGuard) void {
+            self.ptr = null;
     }
 };
 
@@ -355,7 +362,7 @@ pub fn presign(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSVal
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
-        defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
+        errdefer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _guard_pob.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _guard_pob; _drop_val.__cp_errdeinit(); } };
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to presign", .{});
         }
@@ -367,6 +374,7 @@ if ((path == .fd)) {
         const options = args.nextEat();
         var blob = try constructS3FileInternalStore(globalThis, path.path, options);
         _ = &blob;
+        _ = _guard_pob.disarm();
         var _guard_blob = DeinitGuard(Blob){ .ptr = (&blob) };
         _ = &_guard_blob;
         var ___guard_blob_moved = false; _ = &___guard_blob_moved;
@@ -392,7 +400,7 @@ pub fn unlink(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValu
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
-        defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
+        errdefer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _guard_pob.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _guard_pob; _drop_val.__cp_errdeinit(); } };
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to delete", .{});
         }
@@ -404,6 +412,7 @@ if ((path == .fd)) {
         const options = args.nextEat();
         var blob = try constructS3FileInternalStore(globalThis, path.path, options);
         _ = &blob;
+        _ = _guard_pob.disarm();
         var _guard_blob = DeinitGuard(Blob){ .ptr = (&blob) };
         _ = &_guard_blob;
         var ___guard_blob_moved = false; _ = &___guard_blob_moved;
@@ -429,7 +438,7 @@ pub fn write(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
-        defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
+        errdefer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _guard_pob.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _guard_pob; _drop_val.__cp_errdeinit(); } };
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to upload", .{});
         }
@@ -446,6 +455,7 @@ const options = args.nextEat();
         }
         var blob = try constructS3FileInternalStore(globalThis, path.path, options);
         _ = &blob;
+        _ = _guard_pob.disarm();
         var _guard_blob = DeinitGuard(Blob){ .ptr = (&blob) };
         _ = &_guard_blob;
         var ___guard_blob_moved = false; _ = &___guard_blob_moved;
@@ -473,7 +483,7 @@ pub fn size(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue 
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
-        defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
+        errdefer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _guard_pob.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _guard_pob; _drop_val.__cp_errdeinit(); } };
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
         }
@@ -485,6 +495,7 @@ const options = args.nextEat();
         }
         var blob = try constructS3FileInternalStore(globalThis, path.path, options);
         _ = &blob;
+        _ = _guard_pob.disarm();
         var _guard_blob = DeinitGuard(Blob){ .ptr = (&blob) };
         _ = &_guard_blob;
         var ___guard_blob_moved = false; _ = &___guard_blob_moved;
@@ -510,7 +521,7 @@ pub fn exists(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValu
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
-        defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
+        errdefer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _guard_pob.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _guard_pob; _drop_val.__cp_errdeinit(); } };
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to check if it exists", .{});
         }
@@ -522,6 +533,7 @@ const options = args.nextEat();
         }
         var blob = try constructS3FileInternalStore(globalThis, path.path, options);
         _ = &blob;
+        _ = _guard_pob.disarm();
         var _guard_blob = DeinitGuard(Blob){ .ptr = (&blob) };
         _ = &_guard_blob;
         var ___guard_blob_moved = false; _ = &___guard_blob_moved;
@@ -766,7 +778,7 @@ pub fn stat(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue 
         var _guard_pob = PathOrBlobGuard{ .ptr = (&path_or_blob) };
         _ = &_guard_pob;
         var ___guard_pob_moved = false; _ = &___guard_pob_moved;
-        defer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_pob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_pob; _drop_val.__cp_deinit(); } };
+        errdefer if (!___guard_pob_moved) { ___guard_pob_moved = true; const __T = @TypeOf(_guard_pob); if (@typeInfo(__T) == .optional) { if (_guard_pob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { __cp_opt_v.__cp_errdeinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_errdeinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_errdeinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_errdeinit")) { _guard_pob.__cp_errdeinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_errdeinit")) { var _drop_val = _guard_pob; _drop_val.__cp_errdeinit(); } };
         if (((path_or_blob == .blob) and ((path_or_blob.blob.store == null) or (path_or_blob.blob.store.?.data != .s3)))) {
             return globalThis.throwInvalidArguments("Expected a S3 or path to get size", .{});
         }
@@ -778,6 +790,7 @@ const options = args.nextEat();
         }
         var blob = try constructS3FileInternalStore(globalThis, path.path, options);
         _ = &blob;
+        _ = _guard_pob.disarm();
         var _guard_blob = DeinitGuard(Blob){ .ptr = (&blob) };
         _ = &_guard_blob;
         var ___guard_blob_moved = false; _ = &___guard_blob_moved;

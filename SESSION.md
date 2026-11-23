@@ -795,6 +795,14 @@
 - 完成 `src/bundler/`、`src/test_runner/`、`src/runtime/`、`src/bake/`、`src/cli/`、`src/install/`、`src/shell/` 等剩余全仓 `E0307` 精确行号清单提取。
 - 推导下一阶段 Wave #81：Subagent 1 运行 **Batch 3d**（`s3`/`net`/`io`/`image`/`transpiler`/`websocket` 30 文件）；Subagent 2 只读排查 `css.test.ts > font` 与 `ffi` 2 项失败根因（零 `src/` 写冲突）。
 
+## [2026-11-23] Wave #81–82：Batch 3d 全量测试、修复 `S3File.cp` `PathOrBlobGuard` 崩溃与并发超时排查
+- **Batch 3d（30 文件）**：`429 pass / 135 fail / 302 skip / 6 todo / 1 crash`（`transpiler` 43/43 全绿、`image` 219 pass / 1 fail / 0 crash）；暴露唯一崩溃 `s3-storage-class.test.ts`（`WTFStringImplStruct.deref` double-free panic）。
+- **Batch 3c/3d 只读排查**：
+  - `ffi/addr32.test.ts`（`cc` 缺 `-fPIC`）与 `ffi/cc.test.ts`（缺 `/usr/include/node/node_api.h`）均为环境问题；`css > font` 确认 `font.cp` 与 `font_.zig` 逻辑一致；
+  - `websocket-server.test.ts`（42 fail）与 `bun-write.test.js`（14 fail）**100% 为 `describe.concurrent` 下子进程/GC 调度超时**，0 处 `.cp` 逻辑缺陷。
+- **修复 `src/runtime/webcore/S3File.cp`**：将 `PathOrBlobGuard` 改用可空指针 + `~errinit()` + `disarm()`，并在 `presign`/`unlink`/`write`/`size`/`exists`/`stat` 6 个 `.path` 分支成功转移所有权后调用 `_guard_pob.disarm()`，消除 `WTFStringImplStruct.deref` double-free；通过 `cpc_brief.py` 与 `cpc check --strict`（0 报错）。
+- 推导下一阶段 Wave #83：Subagent 1 复测 `s3-storage-class.test.ts` 并继续 **Batch 3e**（`test/js/bun/` 其余根目录及 `console`/`cron`/`jsc`/`sqlite`/`terminal`/`udp`/`webview`/`dns`/`json5`/`plugin`/`sourcemap`/`yaml` 等）；Subagent 2 并行只读排查 `bun-write-leak.test.ts` `337 MB` 内存占用或准备 `src/runtime/api/` 15 文件 `E0307` 纯化。
+
 ### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
 - `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。
 - **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（将 `E0311` 收窄至真实函数返回 `: void` 签名，不再误报 `union`/`struct` 零大小字段）及 `cpc/src/parser/container.rs`（允许 `union` 字段省略 `: void` 默认为 `Type::Void`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0311_union_void.cp` 返回 `Check successful`，已执行 `ack`。

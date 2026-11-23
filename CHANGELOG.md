@@ -2187,3 +2187,7 @@
 
 ### [2026-11-23] Wave #80（Batch 3c `glob`/`md`/`cookie`/`css`/`crypto`/`ffi` 全量测试零崩溃）
 - 完成 Batch 3c：`glob`/`md`/`cookie`/`crypto`/`ffi` 26 文件 **11,484 pass / 6 fail / 0 crash**（`md`/`cookie`/`crypto` 全绿），`css` `color.test.ts` 916/916 与 `css.test.ts` 1,031 pass / 1 fail / 0 crash；完成全仓剩余 `E0307` 精确行号清单提取。
+
+### [2026-11-23] Wave #81–82（Batch 3d 测试与修复 `S3File.cp` `PathOrBlobGuard` double-free）
+- 完成 Batch 3d（30 文件，**429 pass / 1 crash**，其中 `transpiler` 43/43 全绿、`image` 219 pass / 0 crash）；确认 `websocket-server`（42 fail）与 `bun-write`（14 fail）均为并发超时；
+- 修复 `src/runtime/webcore/S3File.cp` `PathOrBlobGuard`（改 `~errinit()` + 6 处 `disarm()`），消除 `s3-storage-class.test.ts` `WTFStringImplStruct.deref` panic。

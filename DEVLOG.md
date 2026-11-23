@@ -1743,3 +1743,6 @@
 ### [2026-11-23] Wave #80 技术要点（`css/color.test.ts` `fuzz ansi256` 耗时定性与 `E0307` 遮蔽规则）
 - `test/js/bun/css/color.test.ts` 的 `fuzz ansi256` 在 `withoutAggressiveGC` 内同步执行 `256³ = 16,777,216` 次 FFI 调用，在 Debug+ASan 下呈 99% CPU 长时间运行而非死循环；排除该压测后 `color.test.ts` 916/916 全绿。
 - 预检 `bundle_v2.cp` 与 `pack_command.cp` `E0307` 确认嵌套 `catch |oom_err|` / `catch |err2|` 必须保留独立捕获名，不可盲目统一改为 `e` 以免遮蔽外层 `e`。
+
+### [2026-11-23] Wave #82 技术要点（`S3File.cp` `PathOrBlobGuard` 所有权转移与 `~errinit`）
+- `S3File.presign`/`unlink`/`write`/`size`/`exists`/`stat` 中 `constructS3FileInternalStore` 成功后会将 `path` 所有权转移至 `Blob.Store.S3`；`PathOrBlobGuard` 若使用 `~init()` 会在函数返回时与 `DeinitGuard<Blob>` 发生 `WTFStringImplStruct.deref` 双重释放。改用 `~errinit()` + 成功后 `disarm()` 即可与原版 `errdefer` 语义严格一致。
