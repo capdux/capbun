@@ -505,8 +505,7 @@ pub fn asStr(comptime T: type, val: *const T) []const u8 {
             _ = unreachable;
     }
 
-pub inline fn parse(self: enum_property_util, comptime T: type, input: *Parser) Result(T) {
-        _ = self;
+pub inline fn parse(comptime T: type, input: *Parser) Result(T) {
             const location = input.currentSourceLocation();
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
@@ -3095,8 +3094,7 @@ pub const TokenPercentage = struct {
     unit_value: f32,
     int_value: ?i32,
 
-pub fn eql(self: TokenPercentage, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return implementEql(@This(), lhs, rhs);
     }
 
@@ -3137,8 +3135,7 @@ pub const Token = union(TokenKind) {
     close_curly: void,
     comment: []const u8,
 
-pub fn eql(self: Token, lhs: *const Token, rhs: *const Token) bool {
-        _ = self;
+pub fn eql(lhs: *const Token, rhs: *const Token) bool {
             return implementEql(Token, lhs, rhs);
     }
 
@@ -3896,12 +3893,11 @@ pub fn maxDigits(comptime T: type) usize {
 
 pub const signfns = struct {
 
-pub inline fn isSignPositive(self: signfns, x: f32) bool {
-            return (!self.isSignNegative(x));
+pub inline fn isSignPositive(x: f32) bool {
+            return (!isSignNegative(x));
     }
 
-pub inline fn isSignNegative(self: signfns, x: f32) bool {
-        _ = self;
+pub inline fn isSignNegative(x: f32) bool {
             return ((@as(u32, @bitCast(x)) & 2147483648) != 0);
     }
 
@@ -4109,8 +4105,7 @@ pub fn longhands(vendor_prefix: VendorPrefix) []const PropertyId {
             _ = @compileError(todo_stuff.depth);
     }
 
-pub fn longhand(self: @This(), allocator: Allocator, property_id: *const PropertyId) ?Property {
-        _ = self;
+pub fn longhand(allocator: Allocator, property_id: *const PropertyId) ?Property {
             _ = &allocator;
             _ = &property_id;
             _ = @compileError(todo_stuff.depth);
@@ -4138,8 +4133,7 @@ return .{ .err = e };
             return .{ .result = .{ .top = rect.top, .right = rect.right, .bottom = rect.bottom, .left = rect.left } };
     }
 
-pub fn toCss(self: @This(), val: *const T, dest: *Printer) PrintErr!void {
-        _ = self;
+pub fn toCss(val: *const T, dest: *Printer) PrintErr!void {
             const rect: css_values.rect.Rect(V) = .{ .top = val.top, .right = val.right, .bottom = val.bottom, .left = val.left };
             return rect.toCss(dest);
     }
@@ -4152,14 +4146,12 @@ pub fn DefineSizeShorthand(comptime T: type, comptime V: type) type {
         }
         return struct {
 
-pub fn toCss(self: @This(), val: *const T, dest: *Printer) PrintErr!void {
-        _ = self;
+pub fn toCss(val: *const T, dest: *Printer) PrintErr!void {
             const size: css_values.size.Size2D(V) = .{ .a = @field(val, (if (@typeInfo(@TypeOf(std.@"meta".fields(T)[0])) == .@"enum" or @typeInfo(@TypeOf(std.@"meta".fields(T)[0])) == .@"union") @tagName(std.@"meta".fields(T)[0]) else std.@"meta".fields(T)[0].name)), .b = @field(val, (if (@typeInfo(@TypeOf(std.@"meta".fields(T)[1])) == .@"enum" or @typeInfo(@TypeOf(std.@"meta".fields(T)[1])) == .@"union") @tagName(std.@"meta".fields(T)[1]) else std.@"meta".fields(T)[1].name)) };
             return size.toCss(dest);
     }
 
-pub fn parse(self: @This(), input: *Parser) Result(T) {
-        _ = self;
+pub fn parse(input: *Parser) Result(T) {
             const size = (switch (css_values.size.Size2D(V).parse(input)) {
 .result => |v| v,
 .err => |e| {
@@ -4253,8 +4245,7 @@ return .{ .err = e };
             return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub inline fn generateCode(self: @This(), input: *Parser, comptime first_payload_index: usize, comptime maybe_first_void_index: ?usize, comptime void_count: usize, comptime payload_count: usize) Result(T) {
-        _ = self;
+pub inline fn generateCode(input: *Parser, comptime first_payload_index: usize, comptime maybe_first_void_index: ?usize, comptime void_count: usize, comptime payload_count: usize) Result(T) {
             const last_payload_index = ((first_payload_index + payload_count) - 1);
             if (comptime (maybe_first_void_index == null)) {
                 inline for (0..payload_count) |idx| {
@@ -4469,13 +4460,11 @@ pub fn DefineEnumProperty(comptime T: type) type {
         const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(T);
         return struct {
 
-pub fn eql(self: @This(), lhs: *const T, rhs: *const T) bool {
-        _ = self;
+pub fn eql(lhs: *const T, rhs: *const T) bool {
             return (@intFromEnum(lhs.*) == @intFromEnum(rhs.*));
     }
 
-pub fn parse(self: @This(), input: *Parser) Result(T) {
-        _ = self;
+pub fn parse(input: *Parser) Result(T) {
             const location = input.currentSourceLocation();
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
@@ -4816,7 +4805,7 @@ pub fn AtRulePrelude(comptime T: type) type {
     custom: T,
 
 pub fn allowedInStyleRule(self: @This()) bool {
-            return (switch (self.*) {
+            return (switch (self) {
 .media, .supports, .container, .moz_document, .layer, .starting_style, .scope, .nest, .unknown, .custom => true,
 .namespace, .font_face, .font_feature_values, .font_palette_values, .counter_style, .keyframes, .page, .property, .@"import", .custom_media, .viewport, .charset => false,
 });
@@ -4955,16 +4944,14 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                 return Nested.AtRuleParser.parsePrelude((&nested_rule_parser), name, input);
         }
     
-    pub fn parseBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
-            _ = self;
+    pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
                 parser.state = .body;
                 var nested_parser = parser.nested();
                 _ = &nested_parser;
                 return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock((&nested_parser), prelude, start, input);
         }
     
-    pub fn ruleWithoutBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
-            _ = self;
+    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
                 const loc_ = start.sourceLocation();
                 const loc = css_rules.Location{ .source_index = parser.options.source_index, .line = loc_.line, .column = loc_.column };
                 switch (prelude) {
@@ -5032,8 +5019,7 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
     };
     pub const QualifiedRuleParser = struct {
     
-    pub fn parsePrelude(self: @This(), parser: *This, input: *Parser) Result(Prelude) {
-            _ = self;
+    pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
                 parser.state = .body;
                 var nested_parser = parser.nested();
                 _ = &nested_parser;
@@ -5041,8 +5027,7 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                 return N.QualifiedRuleParser.parsePrelude((&nested_parser), input);
         }
     
-    pub fn parseBlock(self: @This(), parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
-            _ = self;
+    pub fn parseBlock(parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
                 var nested_parser = parser.nested();
                 _ = &nested_parser;
                 const N = @TypeOf(nested_parser);
@@ -5057,8 +5042,7 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
 pub fn NestedQualifiedRuleParser(comptime T: type, comptime This: type) type {
         return struct {
 
-pub fn parsePrelude(self: @This(), parser: *This, input: *Parser) Result(Prelude) {
-        _ = self;
+pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
             var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
             _ = &selector_parser;
             if (parser.is_in_style_rule) {
@@ -5068,8 +5052,7 @@ pub fn parsePrelude(self: @This(), parser: *This, input: *Parser) Result(Prelude
             }
     }
 
-pub fn parseBlock(self: @This(), parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
-        _ = self;
+pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
             const loc = parser.getLoc(start);
             defer {
             _ = parser.composes_refs.clearRetainingCapacity();
@@ -5402,8 +5385,7 @@ return .{ .err = e };
                 return .{ .result = result };
         }
     
-    pub fn parseBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
-            _ = self;
+    pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
     .font_face => {
@@ -5659,8 +5641,7 @@ return .{ .err = e };
     }
         }
     
-    pub fn ruleWithoutBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
-            _ = self;
+    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
     .layer => {
@@ -5695,21 +5676,18 @@ return .{ .err = e };
     pub const QualifiedRuleParser = NestedQualifiedRuleParser(T, This);
     pub const RuleBodyItemParser = struct {
     
-    pub fn parseQualified(self: @This(), parser: *This) bool {
-            _ = self;
+    pub fn parseQualified(parser: *This) bool {
                 _ = &parser;
                 return true;
         }
     
-    pub fn parseDeclarations(self: @This(), parser: *This) bool {
-            _ = self;
+    pub fn parseDeclarations(parser: *This) bool {
                 return parser.allow_declarations;
         }
     };
     pub const DeclarationParser = struct {
     
-    pub fn parseValue(self: @This(), parser: *This, name: []const u8, input: *Parser) Result(Declaration) {
-            _ = self;
+    pub fn parseValue(parser: *This, name: []const u8, input: *Parser) Result(Declaration) {
                 return css_decls.parse_declaration_impl(name, input, (&parser.declarations), (&parser.important_declarations), parser.options, parser);
         }
         pub const Declaration = void;

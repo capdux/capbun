@@ -556,7 +556,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
         }
 
         /// Returns a longhand property for this shorthand.
-        pub fn longhand(allocator: Allocator, property_id: *const PropertyId): Property? {
+        pub static fn longhand(allocator: Allocator, property_id: *const PropertyId): Property? {
             * = allocator; // autofix
             * = property_id; // autofix
             // inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
@@ -619,7 +619,7 @@ pub fn DefineRectShorthand(comptime T: type, comptime V: type): type {
             };
         }
 
-        pub fn toCss(val: *const T, dest: *Printer): PrintErr!void {
+        pub static fn toCss(val: *const T, dest: *Printer): PrintErr!void {
             const rect: css_values.rect.Rect(V) = .{
                 .top = val.top,
                 .right = val.right,
@@ -634,7 +634,7 @@ pub fn DefineRectShorthand(comptime T: type, comptime V: type): type {
 pub fn DefineSizeShorthand(comptime T: type, comptime V: type): type {
     if (std.@"meta".fields(T).len != 2) @compileError("DefineSizeShorthand must be used on a struct with 2 fields");
     return struct {
-        pub fn toCss(val: *const T, dest: *Printer): PrintErr!void {
+        pub static fn toCss(val: *const T, dest: *Printer): PrintErr!void {
             const size: css_values.size.Size2D(V) = .{
                 .a = @field(val, std.@"meta".fields(T)[0].name),
                 .b = @field(val, std.@"meta".fields(T)[1].name),
@@ -644,7 +644,7 @@ pub fn DefineSizeShorthand(comptime T: type, comptime V: type): type {
             // @panic(todo_stuff.depth);
         }
 
-        pub fn parse(input: *Parser): Result(T) {
+        pub static fn parse(input: *Parser): Result(T) {
             const size = switch (css_values.size.Size2D(V).parse(input)) {
                 .result => |v| v,
                 .err => |e| return { err: e },
@@ -752,7 +752,7 @@ pub fn DeriveParse(comptime T: type): type {
         /// and then try to parse the void fields.
         ///
         /// This parsing order is a detail copied from LightningCSS. I'm not sure if it is necessary. But it could be.
-        inline fn generateCode(
+        pub static inline fn generateCode(
             input: *Parser,
             comptime first_payload_index: usize,
             comptime maybe_first_void_index: usize?,
@@ -983,7 +983,7 @@ pub struct enum_property_util {
         unreachable;
     }
 
-    pub inline fn parse(comptime T: type, input: *Parser): Result(T) {
+    pub static inline fn parse(comptime T: type, input: *Parser): Result(T) {
         const location = input.currentSourceLocation();
         const ident = switch (input.expectIdent()) {
             .err => |e| return { err: e },
@@ -1008,11 +1008,11 @@ pub fn DefineEnumProperty(comptime T: type): type {
     const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(T);
 
     return struct {
-        pub fn eql(lhs: *const T, rhs: *const T): bool {
+        pub static fn eql(lhs: *const T, rhs: *const T): bool {
             return @intFromEnum(lhs.*) == @intFromEnum(rhs.*);
         }
 
-        pub fn parse(input: *Parser): Result(T) {
+        pub static fn parse(input: *Parser): Result(T) {
             const location = input.currentSourceLocation();
             const ident = switch (input.expectIdent()) {
                 .err => |e| return { err: e },
@@ -1781,7 +1781,7 @@ pub fn AtRulePrelude(comptime T: type): type {
         custom: T,
 
         pub fn allowedInStyleRule(): bool {
-            return switch (_.*) {
+            return switch (_) {
                 .media, .supports, .container, .moz_document, .layer, .starting_style, .scope, .nest, .unknown, .custom => true,
                 .namespace, .font_face, .font_feature_values, .font_palette_values, .counter_style, .keyframes, .page, .property, .@"import", .custom_media, .viewport, .charset => false,
             };
@@ -1987,13 +1987,13 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                 return Nested.AtRuleParser.parsePrelude(&nested_rule_parser, name, input);
             }
 
-            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser): Result(AtRuleParser.AtRule) {
+            pub static fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser): Result(AtRuleParser.AtRule) {
                 parser.state = .body;
                 let nested_parser = parser.nested();
                 return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock(&nested_parser, prelude, start, input);
             }
 
-            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState): Maybe(AtRuleParser.AtRule, void) {
+            pub static fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState): Maybe(AtRuleParser.AtRule, void) {
                 const loc_ = start.sourceLocation();
                 const loc = css_rules.Location{
                     .source_index = parser.options.source_index,
@@ -2090,14 +2090,14 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
             pub const Prelude = selector.parser.SelectorList;
             pub const QualifiedRule = void;
 
-            pub fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
+            pub static fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
                 parser.state = .body;
                 let nested_parser = parser.nested();
                 const N = @TypeOf(nested_parser);
                 return N.QualifiedRuleParser.parsePrelude(&nested_parser, input);
             }
 
-            pub fn parseBlock(parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser): Result(QualifiedRule) {
+            pub static fn parseBlock(parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser): Result(QualifiedRule) {
                 let nested_parser = parser.nested();
                 const N = @TypeOf(nested_parser);
                 return N.QualifiedRuleParser.parseBlock(&nested_parser, prelude, start, input);
@@ -2139,7 +2139,7 @@ pub fn NestedQualifiedRuleParser(comptime T: type, comptime This: type): type {
         pub const Prelude = selector.parser.SelectorList;
         pub const QualifiedRule = void;
 
-        pub fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
+        pub static fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
             let selector_parser = selector.parser.SelectorParser{
                 .is_nesting_allowed = true,
                 .options = parser.options,
@@ -2153,7 +2153,7 @@ pub fn NestedQualifiedRuleParser(comptime T: type, comptime This: type): type {
             }
         }
 
-        pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser): Result(QualifiedRule) {
+        pub static fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser): Result(QualifiedRule) {
             const loc = parser.getLoc(start);
             defer parser.composes_refs.clearRetainingCapacity();
             // allow composes if:
@@ -2438,7 +2438,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                 return .{ .result = result };
             }
 
-            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser): Result(AtRuleParser.AtRule) {
+            pub static fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser): Result(AtRuleParser.AtRule) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
                     .font_face => {
@@ -2758,7 +2758,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                 }
             }
 
-            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState): Maybe(AtRuleParser.AtRule, void) {
+            pub static fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState): Maybe(AtRuleParser.AtRule, void) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
                     .layer => {
@@ -2815,12 +2815,12 @@ pub fn NestedRuleParser(comptime T: type): type {
         pub const QualifiedRuleParser = NestedQualifiedRuleParser(T, This);
 
         pub const RuleBodyItemParser = struct {
-            pub fn parseQualified(parser: *This): bool {
+            pub static fn parseQualified(parser: *This): bool {
                 * = parser; // autofix
                 return true;
             }
 
-            pub fn parseDeclarations(parser: *This): bool {
+            pub static fn parseDeclarations(parser: *This): bool {
                 return parser.allow_declarations;
             }
         };
@@ -2828,7 +2828,7 @@ pub fn NestedRuleParser(comptime T: type): type {
         pub const DeclarationParser = struct {
             pub const Declaration = void;
 
-            pub fn parseValue(parser: *This, name: []const u8, input: *Parser): Result(Declaration) {
+            pub static fn parseValue(parser: *This, name: []const u8, input: *Parser): Result(Declaration) {
                 return css_decls.parse_declaration_impl(
                     name,
                     input,
@@ -6224,7 +6224,7 @@ pub struct TokenPercentage {
     unit_value: f32,
     int_value: i32?,
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return implementEql(@This(), lhs, rhs);
     }
 
@@ -6321,7 +6321,7 @@ pub union(TokenKind) Token {
     /// Not an actual token in the spec, but we keep it anyway
     comment: []const u8,
 
-    fn eql(lhs: *const Token, rhs: *const Token): bool {
+    pub static fn eql(lhs: *const Token, rhs: *const Token): bool {
         return implementEql(Token, lhs, rhs);
     }
 
@@ -7302,10 +7302,10 @@ pub fn parseImportant(input: *Parser): Result(void) {
 }
 
 pub struct signfns {
-    pub inline fn isSignPositive(x: f32): bool {
+    pub static inline fn isSignPositive(x: f32): bool {
         return !isSignNegative(x);
     }
-    pub inline fn isSignNegative(x: f32): bool {
+    pub static inline fn isSignNegative(x: f32): bool {
         // IEEE754 says: isSignMinus(x) is true if and only if x has negative sign. isSignMinus
         // applies to zeros and NaNs as well.
         // SAFETY: This is just transmuting to get the sign bit, it's fine.

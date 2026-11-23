@@ -71,11 +71,13 @@ pub const AnimationName = union(enum) {
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
 pub fn hash(self: AnimationName, hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), self, hasher);
+            return css.implementHash(@This(), (blk: {
+            break :blk (&self);
+
+}), hasher);
     }
 
-pub fn eql(self: AnimationName, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -86,7 +88,7 @@ pub fn toCss(self: AnimationName, dest: *Printer) PrintErr!void {
                 _ = &cm;
                 css_module_animation_enabled = cm.config.animation;
             }
-            switch (self.*) {
+            switch (self) {
 .none => {
 return dest.writeStr("none");
 },
@@ -129,8 +131,7 @@ pub fn default(self: AnimationIterationCount) AnimationIterationCount {
             return .{ .number = 1.0 };
     }
 
-pub fn eql(self: AnimationIterationCount, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
     
@@ -249,8 +250,7 @@ pub const AnimationTimeline = union(enum) {
     pub fn has(s: []const u8) bool { if (comptime @typeInfo(@This()).@"union".tag_type) |TagType| { return std.meta.stringToEnum(TagType, s) != null; } return false; }
     pub fn name(self: @This()) []const u8 { return @tagName(self); }
 
-pub fn eql(self: AnimationTimeline, lhs: *const @This(), rhs: *const @This()) bool {
-        _ = self;
+pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 

@@ -282,7 +282,7 @@ pub struct Background {
         return css.implementDeepClone(@This(), &s, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -293,7 +293,7 @@ pub struct BackgroundSizeExplicit {
     /// The height of the background.
     height: css.css_values.length.LengthPercentageOrAuto,
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -347,7 +347,7 @@ pub union(enum) BackgroundSize {
         };
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -388,7 +388,7 @@ pub struct BackgroundPosition {
         return pos.toCss(dest);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -481,7 +481,7 @@ pub struct BackgroundRepeat {
         }
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 

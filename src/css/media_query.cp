@@ -876,7 +876,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
         const This = @This();
 
         pub fn deepClone(allocator: std.mem.Allocator): This {
-            return switch (_.*) {
+            return switch (_) {
                 .plain => .{
                     .plain = .{
                         .name = _.plain.name,
@@ -917,14 +917,14 @@ pub fn QueryFeature(comptime FeatureId: type): type {
 
         pub fn needsParens(parent_operator: Operator?, targets: *const css.Targets): bool {
             return parent_operator != .@"and" &&
-                _.* == .interval &&
+                _ == .interval &&
                 targets.shouldCompileSame(.media_interval_syntax);
         }
 
         pub fn toCss(dest: *Printer): PrintErr!void {
             dest.writeChar('(')?;
 
-            switch (_.*) {
+            switch (_) {
                 .boolean => {
                     _.boolean.name.toCss(dest)?;
                 },

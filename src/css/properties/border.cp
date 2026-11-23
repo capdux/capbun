@@ -241,7 +241,7 @@ pub union(enum) BorderSideWidth {
 
     fn deinit(*_, _: std.mem.Allocator) {}
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -272,7 +272,7 @@ pub struct BorderColor {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -301,7 +301,7 @@ pub struct BorderStyle {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -330,7 +330,7 @@ pub struct BorderWidth {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -359,7 +359,7 @@ pub struct BorderBlockColor {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -386,7 +386,7 @@ pub struct BorderBlockStyle {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -413,7 +413,7 @@ pub struct BorderBlockWidth {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -442,7 +442,7 @@ pub struct BorderInlineColor {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -469,7 +469,7 @@ pub struct BorderInlineStyle {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -496,7 +496,7 @@ pub struct BorderInlineWidth {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -545,7 +545,7 @@ struct BorderShorthand {
     style: LineStyle? = null,
     color: CssColor? = null,
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 

@@ -225,10 +225,10 @@ pub enum AnimationName {
     const This = @This();
 
     fn hash(hasher: *std.hash.Wyhash) {
-        return css.implementHash(@This(), _, hasher);
+        return css.implementHash(@This(), unsafe { &_ }, hasher);
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 
@@ -238,7 +238,7 @@ pub enum AnimationName {
             css_module_animation_enabled = cm.config.animation;
         }
 
-        switch (_.*) {
+        switch (_) {
             .none => return dest.writeStr("none"),
             .ident => |s| {
                 if (css_module_animation_enabled) {
@@ -288,7 +288,7 @@ pub enum AnimationIterationCount {
         return { number: 1.0 };
     }
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -391,7 +391,7 @@ pub enum AnimationTimeline {
     pub const parse = css.DeriveParse(@This()).parse;
     pub const toCss = css.DeriveToCss(@This()).toCss;
 
-    pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 

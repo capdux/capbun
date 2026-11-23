@@ -1145,7 +1145,7 @@ pub fn QueryFeature(comptime FeatureId: type) type {
         },
 
 pub fn deepClone(self: @This(), allocator: std.mem.Allocator) This {
-            return (switch (self.*) {
+            return (switch (self) {
 .plain => .{ .plain = .{ .name = (if (@typeInfo(@TypeOf(self.plain)) == .@"enum" or @typeInfo(@TypeOf(self.plain)) == .@"union") @tagName(self.plain) else self.plain.name), .value = (if (@typeInfo(@TypeOf(self.plain)) == .@"enum") @intFromEnum(self.plain) else self.plain.value).deepClone(allocator) } },
 .boolean => .{ .boolean = .{ .name = (if (@typeInfo(@TypeOf(self.boolean)) == .@"enum" or @typeInfo(@TypeOf(self.boolean)) == .@"union") @tagName(self.boolean) else self.boolean.name) } },
 .range => .{ .range = .{ .name = (if (@typeInfo(@TypeOf(self.range)) == .@"enum" or @typeInfo(@TypeOf(self.range)) == .@"union") @tagName(self.range) else self.range.name), .operator = self.range.operator, .value = (if (@typeInfo(@TypeOf(self.range)) == .@"enum") @intFromEnum(self.range) else self.range.value).deepClone(allocator) } },
@@ -1162,12 +1162,12 @@ pub fn hash(self: @This(), hasher: anytype) void {
     }
 
 pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {
-            return (((parent_operator != .@"and") and (self.* == .interval)) and targets.shouldCompileSame(.media_interval_syntax));
+            return (((parent_operator != .@"and") and (self == .interval)) and targets.shouldCompileSame(.media_interval_syntax));
     }
 
 pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(40);
-            switch (self.*) {
+            switch (self) {
 .boolean => {
 _ = try (if (@typeInfo(@TypeOf(self.boolean)) == .@"enum" or @typeInfo(@TypeOf(self.boolean)) == .@"union") @tagName(self.boolean) else self.boolean.name).toCss(dest);
 },

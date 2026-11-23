@@ -144,7 +144,7 @@ pub struct FlexFlow {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
@@ -258,7 +258,7 @@ pub struct Flex {
         return css.implementDeepClone(@This(), val, allocator);
     }
 
-    static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
+    pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
     }
 }
