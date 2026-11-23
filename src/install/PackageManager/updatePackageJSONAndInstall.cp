@@ -643,7 +643,7 @@ fn initManagerOrCreate(
     cli: CommandLineArguments,
     subcommand: Subcommand,
 ): @TypeOf(PackageManager.init(ctx, cli, subcommand)) {
-    return PackageManager.init(ctx, cli, subcommand) catch |e| {
+    return PackageManager.init(ctx, cli, subcommand) catch e => {
         if (e == error.MissingPackageJSON) {
             switch (subcommand) {
                 .update => {

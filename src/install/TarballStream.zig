@@ -676,7 +676,7 @@ if (Environment.isPosix) {
         client.out_fd = null;
 },
 .file => {
-const mode = (if (comptime Environment.isWindows) (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0)) else @as(bun.Mode, @intCast((entry.perm() | 438))));
+const mode = (if (comptime Environment.isWindows) (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0)) else @as(bun.Mode, @intCast((entry.perm() | 438))));
         const fd = try openOutputFile(dest, path, path_slice, mode);
         client.entry_count = (client.entry_count + 1);
         if (comptime Environment.isLinux) {
@@ -799,7 +799,7 @@ pub fn applyWindowsNpmPathEscapes(path: [:0]bun.OSPathChar) void {
             _ = &char;
             switch ((char.*).*) {
 '|', '<', '>', '?', ':' => {
-(char.*).* = ((char.*).* + (if (comptime @typeInfo(bun.OSPathChar) == .@"enum") @as(bun.OSPathChar, @enumFromInt(61440)) else @as(bun.OSPathChar, 61440)));
+(char.*).* = ((char.*).* + (if (comptime @typeInfo(bun.OSPathChar) == .@"enum" and (@typeInfo(@TypeOf(61440)) == .int or @typeInfo(@TypeOf(61440)) == .comptime_int)) @as(bun.OSPathChar, @enumFromInt(61440)) else @as(bun.OSPathChar, 61440)));
 },
 else => {
 

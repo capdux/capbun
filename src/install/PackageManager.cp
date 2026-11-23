@@ -30,6 +30,9 @@ pub struct RootPackageId_ {
     }
 }
 
+struct NetworkTaskPtrHolder { p: *NetworkTask }
+struct PatchTaskPtrHolder { p: *PatchTask }
+
 @root struct PackageManager {
 cache_directory_: std.fs.Dir? = null,
 cache_directory_path: stringZ = "",
@@ -462,7 +465,7 @@ struct EnsureTempNodeGypScriptOnce_ {
         // used later for adding to path for scripts
         manager.node_gyp_tempdir_name = manager.allocator.dupe(u8, node_gyp_tempdir_name)?;
 
-        let node_gyp_tempdir = tempdir.handle.makeOpenPath(manager.node_gyp_tempdir_name, {}) catch |e| {
+        let node_gyp_tempdir = tempdir.handle.makeOpenPath(manager.node_gyp_tempdir_name, {}) catch e => {
             if (e == error.EEXIST) {
                 // it should not exist
                 Output.prettyErrorln("<r><red>error<r>: node-gyp tempdir already exists", {});
@@ -482,7 +485,7 @@ struct EnsureTempNodeGypScriptOnce_ {
             .windows => 0, // windows does not have an executable bit
         };
 
-        let node_gyp_file = node_gyp_tempdir.createFile(file_name, { mode: mode }) catch |e| {
+        let node_gyp_file = node_gyp_tempdir.createFile(file_name, { mode: mode }) catch e => {
             Output.prettyErrorln("<r><red>error<r>: <b><red>{s}<r> creating node-gyp tempdir", .{@errorName(e)});
             Global.crash();
         };
@@ -494,7 +497,7 @@ struct EnsureTempNodeGypScriptOnce_ {
                 "if [ \"x$npm_config_node_gyp\" = \"x\" ]; then\n  bun x --silent node-gyp $@\nelse\n  \"$npm_config_node_gyp\" $@\nfi\n",
         };
 
-        node_gyp_file.writeAll(content) catch |e| {
+        node_gyp_file.writeAll(content) catch e => {
             Output.prettyErrorln("<r><red>error<r>: <b><red>{s}<r> writing to " ++ file_name ++ " file", .{@errorName(e)});
             Global.crash();
         };
@@ -615,7 +618,7 @@ pub fn init(
                 break :child std.fs.cwd().openFileZ(
                     package_json_path,
                     { mode: if (need_write) .read_write else .read_only },
-                ) catch |e| {
+                ) catch e => {
                     if (e == error.FileNotFound) {
                         if (parent := std.fs.path.dirname(this_cwd)) {
                             this_cwd = strings.withoutTrailingSlash(parent);
@@ -1016,7 +1019,7 @@ pub fn initWithRuntimeOnce(
         null,
         0,
         true,
-    ) catch |e| {
+    ) catch e => {
         Output.err(e, "failed to read root directory: '{s}'", .{Fs.FileSystem.instance.top_level_dir});
         @panic("Failed to initialize package manager");
     };
@@ -1089,7 +1092,7 @@ pub fn initWithRuntimeOnce(
         cli,
         bun_install,
         .install,
-    ) catch |e| bun.handleOom(e);
+    ) catch e => bun.handleOom(e);
 
     manager.timestamp_for_manifest_cache_control = @as(u32, @truncate(@as(u64, @intCast(@max(std.time.timestamp(), 0))))) -| std.time.s_per_day;
 
@@ -1129,8 +1132,8 @@ const ResolveTaskQueue = bun.UnboundedQueue(Task, .next);
 const RepositoryMap = std.HashMapUnmanaged(Task.Id, bun.FD, IdentityContext(Task.Id), 80);
 const NpmAliasMap = std.HashMapUnmanaged(PackageNameHash, Dependency.Version, IdentityContext(u64), 80);
 
-const NetworkQueue = bun.LinearFifo(*NetworkTask, { Static: 32 });
-const PatchTaskFifo = bun.LinearFifo(*PatchTask, { Static: 32 });
+const NetworkQueue = bun.LinearFifo(@TypeOf(@as(NetworkTaskPtrHolder, undefined).p), { Static: 32 });
+const PatchTaskFifo = bun.LinearFifo(@TypeOf(@as(PatchTaskPtrHolder, undefined).p), { Static: 32 });
 
 // pub const ensureTempNodeGypScript = directories.ensureTempNodeGypScript;
 

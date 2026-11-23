@@ -237,7 +237,7 @@ fn readAndExtract(
                     manifest.network.callback.package_manifest.loaded_manifest,
                     manager,
                     manifest.network.callback.package_manifest.is_extended_manifest,
-                ) catch |e| {
+                ) catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
                     task_ptr.@"err" = e;
@@ -276,7 +276,7 @@ fn readAndExtract(
                 const result = task_ptr.request.extract.tarball.run(
                     &task_ptr.log,
                     buffer.slice(),
-                ) catch |e| {
+                ) catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
                     task_ptr.@"err" = e;
@@ -303,7 +303,7 @@ fn readAndExtract(
                         name,
                         https,
                         attempt,
-                    ) catch |e| {
+                    ) catch e => {
                         // Exit early if git checked and could
                         // not find the repository, skip ssh
                         if (e == error.RepositoryNotFound) {
@@ -331,7 +331,7 @@ fn readAndExtract(
                             name,
                             ssh,
                             attempt,
-                        ) catch |e| {
+                        ) catch e => {
                             task_ptr.@"err" = e;
                             task_ptr.status = Status.fail;
                             task_ptr.data = { git_clone: bun.invalid_fd };
@@ -358,7 +358,7 @@ fn readAndExtract(
                     git_checkout.name.slice(),
                     git_checkout.url.slice(),
                     git_checkout.resolved.slice(),
-                ) catch |e| {
+                ) catch e => {
                     task_ptr.@"err" = e;
                     task_ptr.status = Status.fail;
                     task_ptr.data = { git_checkout: {} };
@@ -386,7 +386,7 @@ fn readAndExtract(
                     tarball_path,
                     normalize,
                     &task_ptr.log,
-                ) catch |e| {
+                ) catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
                     task_ptr.@"err" = e;

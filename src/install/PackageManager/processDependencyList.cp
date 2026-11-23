@@ -88,7 +88,7 @@ pub fn processExtractedTarballPackage(
                         GitResolver,
                         &resolver,
                         Features.npm,
-                    ) catch |e| {
+                    ) catch e => {
                         if (log_level != .silent) {
                             const string_buf = manager.lockfile.buffers.string_bytes.items;
                             Output.err(e, "failed to parse package.json for <b>{f}<r>", .{
@@ -178,7 +178,7 @@ pub fn processExtractedTarballPackage(
                 TarballResolver,
                 &resolver,
                 Features.npm,
-            ) catch |e| {
+            ) catch e => {
                 if (log_level != .silent) {
                     const string_buf = manager.lockfile.buffers.string_bytes.items;
                     Output.prettyErrorln("<r><red>error:<r> expected package.json in <b>{f}<r> to be a JSON file: {s}\n", .{
@@ -226,7 +226,7 @@ pub fn processExtractedTarballPackage(
                     package_json_source,
                     manager.log,
                     manager.allocator,
-                ) catch |e| {
+                ) catch e => {
                     if (log_level != .silent) {
                         const string_buf = manager.lockfile.buffers.string_bytes.items;
                         Output.prettyErrorln("<r><red>error:<r> expected package.json in <b>{f}<r> to be a JSON file: {s}\n", .{

@@ -194,6 +194,14 @@ pub fn get(self: *RootPackageId_, lockfile: *const Lockfile, workspace_name_hash
     }
 };
 
+pub const NetworkTaskPtrHolder = struct {
+    p: *NetworkTask,
+};
+
+pub const PatchTaskPtrHolder = struct {
+    p: *PatchTask,
+};
+
 pub const PackageManager = @This();
 
 cache_directory_: ?std.fs.Dir = null,
@@ -495,8 +503,8 @@ const PreallocatedNetworkTasks = bun.HiveArray(NetworkTask, 128).Fallback;
 const ResolveTaskQueue = bun.UnboundedQueue(Task, .next);
 const RepositoryMap = std.HashMapUnmanaged(Task.Id, bun.FD, IdentityContext(Task.Id), 80);
 const NpmAliasMap = std.HashMapUnmanaged(PackageNameHash, Dependency.Version, IdentityContext(u64), 80);
-const NetworkQueue = bun.LinearFifo(*NetworkTask, .{ .Static = 32 });
-const PatchTaskFifo = bun.LinearFifo(*PatchTask, .{ .Static = 32 });
+const NetworkQueue = bun.LinearFifo(@TypeOf(@as(NetworkTaskPtrHolder, undefined).p), .{ .Static = 32 });
+const PatchTaskFifo = bun.LinearFifo(@TypeOf(@as(PatchTaskPtrHolder, undefined).p), .{ .Static = 32 });
 pub const PackageInstaller = PackageInstallerMod.PackageInstaller;
 pub const installWithManager = install_with_manager_mod.installWithManager;
 pub const attemptToCreatePackageJSON = directories.attemptToCreatePackageJSON;

@@ -31,7 +31,7 @@
         return 0;
     }
 
-    pub fn eql(
+    pub static fn eql(
         l: *const Bin,
         r: *const Bin,
         l_buf: string,
@@ -126,7 +126,7 @@
     }
 
     /// Used for packages read from text lockfile.
-    pub fn parseAppend(
+    pub static fn parseAppend(
         allocator: std.mem.Allocator,
         bin_expr: BunJSON.Expr,
         buf: *String.Buf,
@@ -218,7 +218,7 @@
         return {};
     }
 
-    pub fn parseAppendFromDirectories(allocator: std.mem.Allocator, bin_expr: BunJSON.Expr, buf: *String.Buf): Bin ! OOM {
+    pub static fn parseAppendFromDirectories(allocator: std.mem.Allocator, bin_expr: BunJSON.Expr, buf: *String.Buf): Bin ! OOM {
         if (bin_str := bin_expr.asString(allocator)) {
             return {
                 tag: .dir,
@@ -567,7 +567,7 @@ pub struct BinLinker {
     @"err": anyerror? = null,
     skipped_due_to_missing_bin: bool = false,
 
-    pub fn ensureUmask() {
+    pub static fn ensureUmask() {
         if (!has_set_umask) {
             has_set_umask = true;
             linker_umask = bun.sys.umask(0);
@@ -623,7 +623,7 @@ pub struct BinLinker {
         if (comptime !Environment.isWindows)
             _.createSymlink(abs_target, abs_dest, global)
         else {
-            const target = bun.sys.openat(.cwd(), abs_target, bun.O.RDONLY, 0).unwrap() catch |e| {
+            const target = bun.sys.openat(.cwd(), abs_target, bun.O.RDONLY, 0).unwrap() catch e => {
                 if (e != error.EISDIR) {
                     // ignore directories, creating a shim for one won't do anything
                     _.err = e;
@@ -645,7 +645,7 @@ pub struct BinLinker {
         }
     }
 
-    fn tryNormalizeShebang(abs_target: [:0]const u8) {
+    static fn tryNormalizeShebang(abs_target: [:0]const u8) {
         let shebang_buf: [2048]u8 = undefined;
 
         // any error here is ignored
@@ -750,7 +750,7 @@ pub struct BinLinker {
 
         const abs_bunx_file: [:0]const u16 = dest_buf[0 .. abs_dest_w.len + ".bunx".len :0];
 
-        const bunx_file = bun.sys.File.openatOSPath(bun.invalid_fd, abs_bunx_file, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664).unwrap() catch |e| bunx_file: {
+        const bunx_file = bun.sys.File.openatOSPath(bun.invalid_fd, abs_bunx_file, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664).unwrap() catch e => bunx_file: {
             if (e != error.ENOENT || global) {
                 _.err = e;
                 return;
@@ -761,7 +761,7 @@ pub struct BinLinker {
             bun.makePath(std.fs.cwd(), _.node_modules_path.slice()) catch {};
             node_modules_path_save.restore();
 
-            break :bunx_file bun.sys.File.openatOSPath(bun.invalid_fd, abs_bunx_file, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664).unwrap() catch |real_err| {
+            break :bunx_file bun.sys.File.openatOSPath(bun.invalid_fd, abs_bunx_file, bun.O.WRONLY | bun.O.CREAT | bun.O.TRUNC, 0o664).unwrap() catch real_err => {
                 _.err = real_err;
                 return;
             };
@@ -809,7 +809,7 @@ pub struct BinLinker {
             return;
         };
 
-        bunx_file.writer().writeAll(metadata) catch |e| {
+        bunx_file.writer().writeAll(metadata) catch e => {
             _.err = e;
             return;
         };
@@ -817,7 +817,7 @@ pub struct BinLinker {
         @memcpy(dest_buf[abs_dest_w.len..][0..".exe\x00".len], comptime strings.literal(u16, ".exe\x00"));
         const abs_exe_file: [:0]const u16 = dest_buf[0 .. abs_dest_w.len + ".exe".len :0];
 
-        bun.sys.File.writeFile(bun.invalid_fd, abs_exe_file, WinBinLinkingShim.embedded_executable_data).unwrap() catch |e| {
+        bun.sys.File.writeFile(bun.invalid_fd, abs_exe_file, WinBinLinkingShim.embedded_executable_data).unwrap() catch e => {
             if (e == error.EBUSY) {
                 // exe is most likely running. bunx file has already been updated, ignore error
                 return;
@@ -867,7 +867,7 @@ pub struct BinLinker {
                         },
                         .result => { return; },
                     }
-                    bun.sys.symlinkRunningExecutable(rel_target, abs_dest).unwrap() catch |real_err| {
+                    bun.sys.symlinkRunningExecutable(rel_target, abs_dest).unwrap() catch real_err => {
                         _.err = real_err;
                     };
                     return;
@@ -881,7 +881,7 @@ pub struct BinLinker {
 
         // delete and try again
         std.fs.deleteTreeAbsolute(abs_dest) catch {};
-        bun.sys.symlinkRunningExecutable(rel_target, abs_dest).unwrap() catch |e| {
+        bun.sys.symlinkRunningExecutable(rel_target, abs_dest).unwrap() catch e => {
             _.err = e;
         };
     }
@@ -1050,7 +1050,7 @@ pub struct BinLinker {
                 // for normalizing `target`
                 const abs_target_dir = path.joinAbsStringZ(package_dir, &.{target}, .auto);
 
-                let target_dir = bun.openDirAbsolute(abs_target_dir) catch |open_err| {
+                let target_dir = bun.openDirAbsolute(abs_target_dir) catch open_err => {
                     if (open_err == error.ENOENT) {
                         // https://github.com/npm/cli/blob/366c07e2f3cb9d1c6ddbd03e624a4d73fbd2676e/node_modules/bin-links/lib/link-gently.js#L43
                         // avoid erroring when the directory does not exist
@@ -1144,7 +1144,7 @@ pub struct BinLinker {
 
                 const abs_target_dir = path.joinAbsStringZ(package_dir, &.{target}, .auto);
 
-                let target_dir = bun.openDirAbsolute(abs_target_dir) catch |e| {
+                let target_dir = bun.openDirAbsolute(abs_target_dir) catch e => {
                     _.err = e;
                     return;
                 };

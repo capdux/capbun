@@ -2221,3 +2221,5 @@
 - [Wave #97] 修改 .cp/.zig：`src/cli/{Arguments,audit_command,build_command,bunfig,bunx_command,cli,colon_list_type,create_command,exec_command,filter_arg,filter_run,init_command,install_command,install_completions_command,link_command}.{cp,zig}`（全部通过 `cpc_brief.py` 4 门禁与 `--strict` 零错误，`zig:check` 5/5）。
 
 - [Wave #98] 修改 .cp/.zig：`src/cli/{multi_run,open,outdated_command,pack_command,package_manager_command,pm_pkg_command,pm_trusted_command,pm_version_command,pm_view_command,publish_command,repl,repl_command,run_command,scan_command,test_command,unlink_command,update_interactive_command,upgrade_command}.{cp,zig}`（`src/cli/` 47/47 全清，`zig:check` 5/5）。
+
+- [Wave #99] 修改 .cp/.zig：`src/install/{NetworkTask,PackageInstall,PackageInstaller,PackageManager,PackageManagerTask,TarballStream,bin}.{cp,zig}` 及 `src/install/PackageManager/{CommandLineArguments,PackageManagerDirectories,PackageManagerEnqueue,PackageManagerResolution,UpdateRequest,processDependencyList,runTasks,updatePackageJSONAndInstall}.{cp,zig}`。

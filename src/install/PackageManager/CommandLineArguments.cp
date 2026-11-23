@@ -310,7 +310,7 @@ audit_ignore_list: []const string = [],
 cpu: Npm.Architecture = Npm.Architecture.current,
 os: Npm.OperatingSystem = Npm.OperatingSystem.current,
 
-pub fn printHelp(subcommand: Subcommand) {
+pub static fn printHelp(subcommand: Subcommand) {
 
     // the output of --help uses the following syntax highlighting
     // template: <b>Usage<r>: <b><green>bun <command><r> <cyan>[flags]<r> <blue>[arguments]<r>
@@ -769,7 +769,7 @@ pub fn printHelp(subcommand: Subcommand) {
     }
 }
 
-pub fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcommand): !CommandLineArguments {
+pub static fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcommand): !CommandLineArguments {
     Output.is_verbose = Output.isVerbose();
 
     const params: []const ParamType = switch (subcommand) {
@@ -799,7 +799,7 @@ pub fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcommand): !Co
     let args = clap.parse(clap.Help, params, {
         diagnostic: &diag,
         allocator: allocator,
-    }) catch |e| {
+    }) catch e => {
         printHelp(subcommand);
         diag.report(Output.errorWriter(), e) catch {};
         Global.exit(1);
@@ -1070,7 +1070,7 @@ pub fn parse(allocator: std.mem.Allocator, comptime subcommand: Subcommand): !Co
             buf[cwd_.len] = 0;
             final_path = buf[0..cwd_.len :0];
         }
-        bun.sys.chdir("", final_path).unwrap() catch |e| {
+        bun.sys.chdir("", final_path).unwrap() catch e => {
             Output.errGeneric("failed to change directory to \"{s}\": {s}\n", .{ final_path, @errorName(e) });
             Global.crash();
         };

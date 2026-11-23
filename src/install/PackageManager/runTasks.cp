@@ -117,7 +117,7 @@ pub fn runTasks(
                     if (task_id := ptask.callback.apply.task_id) {
                         * = task_id; // autofix
 
-                    } else if (Ctx == *PackageInstaller) {
+                    } else if (@typeInfo(Ctx) == .pointer && @typeInfo(Ctx).pointer.child == PackageInstaller) {
                         if (*ctx := ptask.callback.apply.install_context) {
                             let installer = extract_ctx;
                             const path = ctx.path;
@@ -179,7 +179,7 @@ pub fn runTasks(
                             entry_id: task.entry_id,
                             installer: installer,
                         },
-                    ) catch |e| {
+                    ) catch e => {
                         // .monotonic is okay for the same reason as `.done`: we popped this
                         // task from the `UnboundedQueue`, and the task is no longer running.
                         entries.items(.step)[task.entry_id.get()].store(.done, .monotonic);
@@ -268,7 +268,7 @@ pub fn runTasks(
                                 manager.allocator,
                                 fmt,
                                 .{ @errorName(e), name.slice() },
-                            ) catch |oom_err| bun.handleOom(oom_err);
+                            ) catch oom_err => bun.handleOom(oom_err);
                         } else {
                             manager.log.addWarningFmt(
                                 null,
@@ -276,7 +276,7 @@ pub fn runTasks(
                                 manager.allocator,
                                 fmt,
                                 .{ @errorName(e), name.slice() },
-                            ) catch |oom_err| bun.handleOom(oom_err);
+                            ) catch oom_err => bun.handleOom(oom_err);
                         }
 
                         if (manager.subcommand != .remove) {
@@ -326,7 +326,7 @@ pub fn runTasks(
                             manager.allocator,
                             "<r><red><b>GET<r><red> {s}<d> - {d}<r>",
                             .{ metadata.url, response.status_code },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     } else {
                         manager.log.addWarningFmt(
                             null,
@@ -334,7 +334,7 @@ pub fn runTasks(
                             manager.allocator,
                             "<r><yellow><b>GET<r><yellow> {s}<d> - {d}<r>",
                             .{ metadata.url, response.status_code },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
                     if (manager.subcommand != .remove) {
                         for (*request of manager.update_requests) {
@@ -517,7 +517,7 @@ pub fn runTasks(
                                 extract.name.slice(),
                                 extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto),
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     } else {
                         manager.log.addWarningFmt(
                             null,
@@ -529,7 +529,7 @@ pub fn runTasks(
                                 extract.name.slice(),
                                 extract.resolution.fmt(manager.lockfile.buffers.string_bytes.items, .auto),
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
                     if (manager.subcommand != .remove) {
                         for (*request of manager.update_requests) {
@@ -608,7 +608,7 @@ pub fn runTasks(
                                 metadata.url,
                                 response.status_code,
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     } else {
                         manager.log.addWarningFmt(
                             null,
@@ -619,7 +619,7 @@ pub fn runTasks(
                                 metadata.url,
                                 response.status_code,
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
                     if (manager.subcommand != .remove) {
                         for (*request of manager.update_requests) {
@@ -702,7 +702,7 @@ pub fn runTasks(
                                 @errorName(e),
                                 name.slice(),
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
 
                     continue;
@@ -794,7 +794,7 @@ pub fn runTasks(
                                 @errorName(e),
                             alias,
                         },
-                    ) catch |oom_err| bun.handleOom(oom_err);
+                    ) catch oom_err => bun.handleOom(oom_err);
 
                     // Void-callback fallback (resolve phase): drain the
                     // `task_queue` entry too so a later install-phase
@@ -977,12 +977,12 @@ pub fn runTasks(
                                 @errorName(e),
                                 name,
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
                     continue;
                 }
 
-                if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{})) && Ctx == *PackageInstaller) {
+                if (comptime (@TypeOf(callbacks.onExtract) != void && @TypeOf(callbacks.onExtract) != @TypeOf(.{})) && (@typeInfo(Ctx) == .pointer && @typeInfo(Ctx).pointer.child == PackageInstaller)) {
                     // Installing!
                     // this dependency might be something other than a git dependency! only need the name and
                     // behavior, use the resolution from the task.
@@ -1061,7 +1061,7 @@ pub fn runTasks(
                                 @errorName(e),
                                 alias.slice(),
                             },
-                        ) catch |oom_err| bun.handleOom(oom_err);
+                        ) catch oom_err => bun.handleOom(oom_err);
                     }
 
                     continue;
@@ -1325,7 +1325,7 @@ pub fn generateNetworkTaskForTarball(
                 client.lockfile.str(&package.name),
                 *FileSystem.FilenameStore,
                 FileSystem.FilenameStore.instance,
-            ) catch |oom_err| bun.handleOom(oom_err),
+            ) catch oom_err => bun.handleOom(oom_err),
             resolution: package.resolution,
             cache_dir: client.getCacheDirectory(),
             temp_dir: client.getTemporaryDirectory().handle,
@@ -1335,7 +1335,7 @@ pub fn generateNetworkTaskForTarball(
                 url,
                 *FileSystem.FilenameStore,
                 FileSystem.FilenameStore.instance,
-            ) catch |oom_err| bun.handleOom(oom_err),
+            ) catch oom_err => bun.handleOom(oom_err),
         },
         scope,
         authorization,

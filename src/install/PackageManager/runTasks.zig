@@ -210,7 +210,7 @@ pub fn runTasks(manager: *PackageManager, comptime Ctx: type, extract_ctx: Ctx, 
                             _ = &task_id;
                             _ = &task_id;
                         } else {
-                            if ((Ctx == *PackageInstaller)) {
+                            if (((@typeInfo(Ctx) == .pointer) and (@typeInfo(Ctx).pointer.child == PackageInstaller))) {
                                 if (ptask.callback.apply.install_context) |*ctx| {
                                     _ = &ctx;
                                     var installer = extract_ctx;
@@ -753,7 +753,7 @@ else => continue,
                 }
                 continue;
             }
-            if (comptime (((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{}))) and (Ctx == *PackageInstaller))) {
+            if (comptime (((@TypeOf(callbacks.onExtract) != void) and (@TypeOf(callbacks.onExtract) != @TypeOf(.{}))) and ((@typeInfo(Ctx) == .pointer) and (@typeInfo(Ctx).pointer.child == PackageInstaller)))) {
                 const dep_id = clone.dep_id;
                 const dep = manager.lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
                 const dep_name = (if (@typeInfo(@TypeOf(dep)) == .@"enum" or @typeInfo(@TypeOf(dep)) == .@"union") @tagName(dep) else dep.name).slice(manager.lockfile.buffers.string_bytes.items);

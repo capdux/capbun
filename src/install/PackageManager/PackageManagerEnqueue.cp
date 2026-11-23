@@ -118,7 +118,7 @@ pub fn enqueueDependencyList(
             &dependency,
             resolution,
             false,
-        ) catch |e| {
+        ) catch e => {
             const note_fmt = "error occurred while resolving {f}";
             const note_arg = bun.fmt.fmtPath(u8, lockfile.str(&dependency.realname()), {
                 path_sep: if (dependency.version.tag == .folder) .@"auto" else .@"any",
@@ -362,7 +362,7 @@ pub fn enqueueDependencyToRoot(
         };
         dummy.countWithDifferentBuffers(name, version_buf, @TypeOf(&builder), &builder);
 
-        builder.allocate() catch |e| return { failure: e };
+        builder.allocate() catch e => return { failure: e };
 
         const dep = dummy.cloneWithDifferentBuffers(mgr, name, version_buf, @TypeOf(&builder), &builder) catch unreachable;
         builder.clamp();
@@ -385,7 +385,7 @@ pub fn enqueueDependencyToRoot(
             false,
             assignRootResolution,
             failRootResolution,
-        ) catch |e| {
+        ) catch e => {
             return { failure: e };
         };
     }
@@ -560,7 +560,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 );
 
                 retry_with_new_resolve_result: while (true) {
-                    const resolve_result = resolve_result_ catch |e| {
+                    const resolve_result = resolve_result_ catch e => {
                         if (e == error.DistTagNotFound) {
                             if (dependency.behavior.isRequired()) {
                                 if (fail := failFn) {
@@ -1021,7 +1021,7 @@ pub fn enqueueDependencyWithMainAndSuccessFn(
                 resolution,
                 install_peer,
                 successFn,
-            ) catch |e| brk: {
+            ) catch e => brk: {
                 if (e == error.MissingPackageJSON) {
                     break :brk @as(ResolvedPackageResult?, null);
                 }
@@ -1467,7 +1467,7 @@ struct EnqueueClosure {
                 },
                 false,
                 manager.options.log_level,
-            ) catch |e| {
+            ) catch e => {
                 closure.e = e;
                 return true;
             };

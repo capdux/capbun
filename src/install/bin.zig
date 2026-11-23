@@ -1145,7 +1145,7 @@ const string = []const u8;
 const stringZ = [:0]const u8;
 const MAX_PATH_BYTES = bun.MAX_PATH_BYTES;
 const MAX_SHEBANG_INPUT = WinBinLinkingShim.Shebang.max_shebang_input_length;
-var linker_umask: bun.Mode = (if (@typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
+var linker_umask: bun.Mode = (if (@typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(bun.Mode, @enumFromInt(0)) else @as(bun.Mode, 0));
 var has_set_umask = false;
 const log = bun.Output.scoped(.BinLinker, .hidden);
 const ExternalStringList = Install.ExternalStringList;

@@ -272,7 +272,7 @@ pub const ForTarballError = OOM || error{
                         allocator,
                         "Failed to join registry {f} and package {f} URLs",
                         [ bun.fmt.QuotedFormatter{ text: scope.url.href }, bun.fmt.QuotedFormatter{ text: name } ],
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else {
                     _.package_manager.log.addWarningFmt(
                         null,
@@ -280,7 +280,7 @@ pub const ForTarballError = OOM || error{
                         allocator,
                         "Failed to join registry {f} and package {f} URLs",
                         [ bun.fmt.QuotedFormatter{ text: scope.url.href }, bun.fmt.QuotedFormatter{ text: name } ],
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
                 return error.InvalidURL;
             }
@@ -293,7 +293,7 @@ pub const ForTarballError = OOM || error{
                         allocator,
                         "Registry URL must be http:// or https://\nReceived: \"{f}\"",
                         [ tmp ],
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else {
                     _.package_manager.log.addWarningFmt(
                         null,
@@ -301,7 +301,7 @@ pub const ForTarballError = OOM || error{
                         allocator,
                         "Registry URL must be http:// or https://\nReceived: \"{f}\"",
                         [ tmp ],
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
                 return error.InvalidURL;
             }

@@ -161,7 +161,7 @@ const log = Output.scoped(.TarballStream, .hidden);
 /// this the whole body is buffered as before; the resumable libarchive
 /// state machine is only worth its per-chunk overhead for tarballs that
 /// would otherwise consume a noticeable amount of memory.
-pub fn minSize(): usize {
+pub static fn minSize(): usize {
     return @as(usize, @intCast(bun.env_var.BUN_INSTALL_STREAMING_MIN_SIZE.get()));
 }
 
@@ -195,7 +195,7 @@ pub fn init(
     });
 }
 
-pub fn deinit(client: *TarballStream) {
+pub static fn deinit(client: *TarballStream) {
     if (fd := client.out_fd) fd.close();
     if (d := client.dest) d.close();
     if (a := client.archive) {
@@ -212,7 +212,7 @@ pub fn deinit(client: *TarballStream) {
 /// without touching the filesystem or libarchive; actual processing is
 /// deferred to `drain` on a worker so the HTTP event loop stays
 /// responsive.
-pub fn onChunk(client: *TarballStream, chunk: []const u8, is_last: bool, e: anyerror?) {
+pub static fn onChunk(client: *TarballStream, chunk: []const u8, is_last: bool, e: anyerror?) {
     client.mutex.lock();
     if (chunk.len > 0) {
         bun.handleOom(client.pending.appendSlice(client.allocator, chunk));
@@ -225,12 +225,12 @@ pub fn onChunk(client: *TarballStream, chunk: []const u8, is_last: bool, e: anye
     client.scheduleDrain();
 }
 
-fn scheduleDrain(client: *TarballStream) {
+static fn scheduleDrain(client: *TarballStream) {
     if (client.draining.swap(true, .acq_rel)) return;
     client.package_manager.thread_pool.schedule(ThreadPool.Batch.@"from"(&client.drain_task));
 }
 
-fn drainCallback(task: *ThreadPool.Task) {
+static fn drainCallback(task: *ThreadPool.Task) {
     const stream: *TarballStream = @fieldParentPtr("drain_task", task);
     stream.drain();
 }
@@ -238,7 +238,7 @@ fn drainCallback(task: *ThreadPool.Task) {
 /// Pull whatever compressed bytes are available into libarchive, writing
 /// entries to disk, until libarchive reports `ARCHIVE_RETRY` (out of
 /// input — yield) or a terminal state (EOF / error — finish).
-fn drain(client: *TarballStream) {
+static fn drain(client: *TarballStream) {
     Output.Source.configureThread();
 
     while (true) {
@@ -250,7 +250,7 @@ fn drain(client: *TarballStream) {
             // remainder of the download.
             const more = client.takePending();
 
-            client.step() catch |e| {
+            client.step() catch e => {
                 client.fail = e;
                 client.closeOutputFile();
             };
@@ -327,7 +327,7 @@ fn drain(client: *TarballStream) {
 /// Move any bytes still sitting in `pending` into `reading` so the read
 /// callback can hand them to libarchive. Returns true if new bytes were
 /// added or the stream is now closed.
-fn takePending(client: *TarballStream): bool {
+static fn takePending(client: *TarballStream): bool {
     client.mutex.lock();
     const _guard_mutex = UnlockGuard<@TypeOf(&client.mutex)>{ ptr: &client.mutex };
 
@@ -364,7 +364,7 @@ fn takePending(client: *TarballStream): bool {
 /// Run libarchive until it needs more input (`.retry`) or hits a
 /// terminal state. All libarchive state persists on the heap, so
 /// returning from here and re-entering later is safe.
-fn step(client: *TarballStream)! {
+static fn step(client: *TarballStream)! {
     if (client.archive == null) client.openArchive()?;
     if (client.dest == null) client.openDestination()?;
 
@@ -416,7 +416,7 @@ fn step(client: *TarballStream)! {
     }
 }
 
-fn openArchive(client: *TarballStream)! {
+static fn openArchive(client: *TarballStream)! {
     const ar = lib.Archive.readNew();
     let guard_ar = ArchiveGuard<@TypeOf(ar)>{ ar: ar };
     // Bypass bidding entirely: the stream is always gzip → tar, and
@@ -452,7 +452,7 @@ fn openArchive(client: *TarballStream)! {
     guard_ar.ar = null;
 }
 
-fn openDestination(client: *TarballStream)! {
+static fn openDestination(client: *TarballStream)! {
     const tarball = &client.extract_task.request.extract.tarball;
     const name_pair = tarball.nameAndBasename();
     const basename = name_pair[1];
@@ -467,7 +467,7 @@ fn openDestination(client: *TarballStream)! {
     client.dest = .fromStdDir(bun.MakePath.makeOpenPath(tarball.temp_dir, client.tmpname, {})?);
 }
 
-fn closeOutputFile(client: *TarballStream) {
+static fn closeOutputFile(client: *TarballStream) {
     if (fd := client.out_fd) {
         // Same trailing-hole handling as `Archive.readDataIntoFd`:
         // extend the file to cover the furthest block we were asked
@@ -485,7 +485,7 @@ fn closeOutputFile(client: *TarballStream) {
 /// Process one entry header returned by `readNextHeader`. Opens the
 /// output file (or creates the directory/symlink) and transitions to
 /// `.want_data` so the next `step()` iteration starts pulling its body.
-fn beginEntry(client: *TarballStream, entry: *lib.Archive.Entry)! {
+static fn beginEntry(client: *TarballStream, entry: *lib.Archive.Entry)! {
     let pathname: bun.OSPathSliceZ = if (comptime Environment.isWindows)
         entry.pathnameW()
     else
@@ -606,7 +606,7 @@ fn beginEntry(client: *TarballStream, entry: *lib.Archive.Entry)! {
     }
 }
 
-fn openOutputFile(
+static fn openOutputFile(
     dest_fd: bun.FD,
     path: [:0]bun.OSPathChar,
     path_slice: bun.OSPathSlice,
@@ -637,7 +637,7 @@ fn openOutputFile(
     };
 }
 
-fn makeDirectory(
+static fn makeDirectory(
     entry: *lib.Archive.Entry,
     dest_fd: bun.FD,
     path: [:0]bun.OSPathChar,
@@ -665,7 +665,7 @@ fn makeDirectory(
     }
 }
 
-fn makeSymlink(
+static fn makeSymlink(
     entry: *lib.Archive.Entry,
     dest_fd: bun.FD,
     path: [:0]bun.OSPathChar,
@@ -681,7 +681,7 @@ fn makeSymlink(
         const resolved = bun.path.joinAbsStringBuf("/packages/", &join_buf, &{ symlink_dir, target }, .posix);
         if (!strings.hasPrefix(resolved, "/packages/")) return;
     }
-    bun.sys.symlinkat(target, dest_fd, path).unwrap() catch |e| switch (e) {
+    bun.sys.symlinkat(target, dest_fd, path).unwrap() catch e => switch (e) {
         error.EPERM, error.ENOENT => {
             dest_fd.makePath(u8, std.fs.path.dirname(path_slice) ?? return) catch {};
             bun.sys.symlinkat(target, dest_fd, path).unwrap() catch {};
@@ -690,7 +690,7 @@ fn makeSymlink(
     };
 }
 
-fn applyWindowsNpmPathEscapes(path: [:0]bun.OSPathChar) {
+static fn applyWindowsNpmPathEscapes(path: [:0]bun.OSPathChar) {
     // Same transformation as Archiver.extractToDir: encode characters
     // Windows rejects in filenames into the 0xf000 private-use range so
     // the extraction round-trips with node-tar.
@@ -708,7 +708,7 @@ fn applyWindowsNpmPathEscapes(path: [:0]bun.OSPathChar) {
 /// `entry_actual_offset` / `entry_final_offset` persist across calls so
 /// `closeOutputFile` can perform the same trailing `ftruncate` the
 /// buffered path does after its block loop.
-fn writeDataBlock(client: *TarballStream, fd: bun.FD, block: lib.Archive.Block)! {
+static fn writeDataBlock(client: *TarballStream, fd: bun.FD, block: lib.Archive.Block)! {
     const file = bun.sys.File{ handle: fd };
     const data = block.bytes;
     if (data.len == 0) return;
@@ -760,7 +760,7 @@ fn writeDataBlock(client: *TarballStream, fd: bun.FD, block: lib.Archive.Block)!
     }
 }
 
-fn finish(client: *TarballStream) {
+static fn finish(client: *TarballStream) {
     const task = client.extract_task;
     const network = client.network_task;
     const manager = client.package_manager;
@@ -808,7 +808,7 @@ fn finish(client: *TarballStream) {
     manager.wake();
 }
 
-fn populateResult(client: *TarballStream, task: *Task) {
+static fn populateResult(client: *TarballStream, task: *Task) {
     const tarball = &task.request.extract.tarball;
     task.data = { extract: {} };
 
@@ -872,7 +872,7 @@ fn populateResult(client: *TarballStream, task: *Task) {
         name,
         basename,
         client.resolved_github_dirname,
-    ) catch |e| {
+    ) catch e => {
         task.err = e;
         task.status = .fail;
         return;
@@ -905,7 +905,7 @@ fn populateResult(client: *TarballStream, task: *Task) {
 
 /// Prepare this stream for another HTTP attempt after a failed request
 /// that never scheduled a drain.
-pub fn resetForRetry(client: *TarballStream) {
+pub static fn resetForRetry(client: *TarballStream) {
     client.mutex.lock();
     client.pending.clearRetainingCapacity();
     client.closed = false;

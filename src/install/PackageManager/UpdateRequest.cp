@@ -47,14 +47,14 @@ pub const Subcommand = PackageManager.Subcommand;
     pub const Array = std.ArrayListUnmanaged(UpdateRequest);
     pub const fromJS = update_request_jsc.fromJS;
 
-pub inline fn matches(client: PackageManager.UpdateRequest, dependency: Dependency, string_buf: []const u8): bool {
+pub static inline fn matches(client: PackageManager.UpdateRequest, dependency: Dependency, string_buf: []const u8): bool {
     return client.name_hash == if (client.name.len == 0)
         SemverString.Builder.stringHash(dependency.version.literal.slice(string_buf))
     else
         dependency.name_hash;
 }
 
-pub fn getName(client: *const UpdateRequest): string {
+pub static fn getName(client: *const UpdateRequest): string {
     return if (client.is_aliased)
         client.name
     else
@@ -62,7 +62,7 @@ pub fn getName(client: *const UpdateRequest): string {
 }
 
 /// If `this.package_id` is not `invalid_package_id`, it must be less than `lockfile.packages.len`.
-pub fn getNameInLockfile(client: *const UpdateRequest, lockfile: *const Lockfile): string? {
+pub static fn getNameInLockfile(client: *const UpdateRequest, lockfile: *const Lockfile): string? {
     return if (client.package_id == invalid_package_id)
         null
     else
@@ -74,7 +74,7 @@ pub fn getNameInLockfile(client: *const UpdateRequest, lockfile: *const Lockfile
 ///
 /// `this` needs to be a pointer! If `this` is a copy and the name returned from
 /// resolved_name is inlined, you will return a pointer to stack memory.
-pub fn getResolvedName(client: *const UpdateRequest, lockfile: *const Lockfile): string {
+pub static fn getResolvedName(client: *const UpdateRequest, lockfile: *const Lockfile): string {
     if (client.is_aliased) {
         return client.name;
     }
@@ -85,7 +85,7 @@ pub fn getResolvedName(client: *const UpdateRequest, lockfile: *const Lockfile):
 }
 
 
-pub fn parse(
+pub static fn parse(
     allocator: std.mem.Allocator,
     pm: (*PackageManager)?,
     log: *logger.Log,
@@ -96,7 +96,7 @@ pub fn parse(
     return parseWithError(allocator, pm, log, positionals, update_requests, subcommand, true) catch Global.crash();
 }
 
-pub fn parseWithError(
+pub static fn parseWithError(
     allocator: std.mem.Allocator,
     pm: (*PackageManager)?,
     log: *logger.Log,
@@ -172,7 +172,7 @@ pub fn parseWithError(
             } else {
                 log.addErrorFmt(null, logger.Loc.Empty, allocator, "unrecognised dependency format: {s}", .{
                     positional,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
             }
 
             return error.UnrecognizedDependencyFormat;
@@ -205,7 +205,7 @@ pub fn parseWithError(
             } else {
                 log.addErrorFmt(null, logger.Loc.Empty, allocator, "unrecognised dependency format: {s}", .{
                     positional,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
             }
 
             return error.UnrecognizedDependencyFormat;

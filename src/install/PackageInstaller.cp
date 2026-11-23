@@ -284,7 +284,7 @@ pub struct PackageInstaller {
                             "Failed to link <b>{s}<r>: {s}",
                             .{ alias, @errorName(e) },
                             {},
-                        ) catch |oom| bun.handleOom(oom);
+                        ) catch oom => bun.handleOom(oom);
                     }
 
                     if (_.options.enable.fail_early) {
@@ -347,7 +347,7 @@ pub struct PackageInstaller {
                     optional,
                     output_in_foreground,
                     null,
-                ) catch |e| {
+                ) catch e => {
                     if (log_level != .silent) {
                         const fmt = "\n<r><red>error:<r> failed to spawn life-cycle scripts for <b>{s}<r>: {s}\n";
 
@@ -432,7 +432,7 @@ pub struct PackageInstaller {
 
             const optional = entry.optional;
             const output_in_foreground = false;
-            _.manager.spawnPackageLifecycleScripts(_.command_ctx, entry.list, optional, output_in_foreground, null) catch |e| {
+            _.manager.spawnPackageLifecycleScripts(_.command_ctx, entry.list, optional, output_in_foreground, null) catch e => {
                 if (log_level != .silent) {
                     const fmt = "\n<r><red>error:<r> failed to spawn life-cycle scripts for <b>{s}<r>: {s}\n";
 
@@ -638,7 +638,7 @@ pub struct PackageInstaller {
                 &string_builder,
                 _.manager.log,
                 folder_path,
-            ) catch |e| {
+            ) catch e => {
                 if (log_level != .silent) {
                     Output.errGeneric("failed to fill lifecycle scripts for <b>{s}<r>: {s}", .{
                         alias,
@@ -932,7 +932,7 @@ pub struct PackageInstaller {
                             url,
                             context,
                             patch_name_and_version_hash,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.OutOfMemory) {
                                 bun.outOfMemory();
                             } else if (e == error.InvalidURL) {
@@ -959,7 +959,7 @@ pub struct PackageInstaller {
                             resolution.value.remote_tarball.slice(_.lockfile.buffers.string_bytes.items),
                             context,
                             patch_name_and_version_hash,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.OutOfMemory) {
                                 bun.outOfMemory();
                             } else if (e == error.InvalidURL) {
@@ -990,7 +990,7 @@ pub struct PackageInstaller {
                             resolution.value.npm.url.slice(_.lockfile.buffers.string_bytes.items),
                             context,
                             patch_name_and_version_hash,
-                        ) catch |e| {
+                        ) catch e => {
                             if (e == error.OutOfMemory) {
                                 bun.outOfMemory();
                             } else if (e == error.InvalidURL) {
@@ -1038,12 +1038,12 @@ pub struct PackageInstaller {
                     dependency_id: dependency_id,
                     tree_id: _.current_tree_id,
                     path: bun.handleOom(_.node_modules.path.clone()),
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
                 return;
             }
 
             // creating this directory now, right before installing package
-            let destination_dir = _.node_modules.makeAndOpenDir(_.root_node_modules_folder) catch |e| {
+            let destination_dir = _.node_modules.makeAndOpenDir(_.root_node_modules_folder) catch e => {
                 if (log_level != .silent) {
                     Output.err(e, "Failed to open node_modules folder for <r><red>{s}<r> in {f}", .{
                         @TypeOf(pkg_name).slice(&pkg_name, _.lockfile.buffers.string_bytes.items),
@@ -1068,7 +1068,7 @@ pub struct PackageInstaller {
                         // and is not hoisted.
                         const dirname = std.fs.path.dirname(_.node_modules.path.items) ?? _.node_modules.path.items;
 
-                        installer.cache_dir = _.root_node_modules_folder.openDir(dirname, { iterate: true, access_sub_paths: true }) catch |e|
+                        installer.cache_dir = _.root_node_modules_folder.openDir(dirname, { iterate: true, access_sub_paths: true }) catch e =>
                             break :result .fail(e, .opening_cache_dir, @errorReturnTrace());
 
                         const result = if (resolution.tag == .root)
@@ -1149,11 +1149,11 @@ pub struct PackageInstaller {
                                     _.manager.trusted_deps_to_add_to_package_json.append(
                                         _.manager.allocator,
                                         bun.handleOom(_.manager.allocator.dupe(u8, alias.slice(_.lockfile.buffers.string_bytes.items))),
-                                    ) catch |e| bun.handleOom(e);
+                                    ) catch e => bun.handleOom(e);
 
                                     if (_.lockfile.trusted_dependencies == null) _.lockfile.trusted_dependencies = {};
                                     const void_val: void = undefined;
-                                    _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, void_val) catch |e| bun.handleOom(e);
+                                    _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, void_val) catch e => bun.handleOom(e);
                                 }
                             }
                         }
@@ -1218,7 +1218,7 @@ pub struct PackageInstaller {
                         // will exit early, otherwise set a flag to not re-stat
                         if (!NodeModulesOkSingleton.node_modules_is_ok) {
                             if (!Environment.isWindows) {
-                                const stat = bun.sys.fstat(.fromStdDir(lazy_package_dir.getDir() catch |e| {
+                                const stat = bun.sys.fstat(.fromStdDir(lazy_package_dir.getDir() catch e => {
                                     Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{
                                         @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items),
                                     });
@@ -1226,7 +1226,7 @@ pub struct PackageInstaller {
                                         Output.err(e, "Failed to stat node_modules", {});
                                     }
                                     Global.exit(1);
-                                })).unwrap() catch |e| {
+                                })).unwrap() catch e => {
                                     Output.err("EACCES", "Permission denied while installing <b>{s}<r>", .{
                                         @TypeOf(_.names[package_id]).slice(&_.names[package_id], _.lockfile.buffers.string_bytes.items),
                                     });
@@ -1345,13 +1345,13 @@ pub struct PackageInstaller {
                             _.manager.trusted_deps_to_add_to_package_json.append(
                                 _.manager.allocator,
                                 bun.handleOom(_.manager.allocator.dupe(u8, alias.slice(_.lockfile.buffers.string_bytes.items))),
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                         }
 
                         if (add_to_lockfile) {
                             if (_.lockfile.trusted_dependencies == null) _.lockfile.trusted_dependencies = {};
                             const void_val: void = undefined;
-                            _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, void_val) catch |e| bun.handleOom(e);
+                            _.lockfile.trusted_dependencies.?.put(_.manager.allocator, truncated_dep_name_hash, void_val) catch e => bun.handleOom(e);
                         }
                     }
                 }
@@ -1385,7 +1385,7 @@ pub struct PackageInstaller {
             package_path,
             folder_name,
             resolution,
-        ) catch |e| {
+        ) catch e => {
             if (log_level != .silent) {
                 const fmt = "\n<r><red>error:<r> failed to enqueue lifecycle scripts for <b>{s}<r>: {s}\n";
 
@@ -1426,7 +1426,7 @@ pub struct PackageInstaller {
                 list: scripts_list.?,
                 tree_id: _.current_tree_id,
                 optional: optional,
-            }) catch |e| bun.handleOom(e);
+            }) catch e => bun.handleOom(e);
 
             return true;
         }

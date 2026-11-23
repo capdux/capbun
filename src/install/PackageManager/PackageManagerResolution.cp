@@ -84,7 +84,7 @@ pub fn getInstalledVersionsFromDiskCache(client: *PackageManager, tags_buf: *std
     let list = std.array_list.Managed(Semver.Version).init(allocator);
     let dir = client.getCacheDirectory().openDir(package_name, {
         iterate: true,
-    }) catch |e| switch (e) {
+    }) catch e => switch (e) {
         error.FileNotFound, error.NotDir, error.AccessDenied, error.DeviceBusy => return list,
         else => return e,
     };
@@ -128,7 +128,7 @@ pub fn resolveFromDiskCache(client: *PackageManager, package_name: []const u8, v
     let stack_fallback = std.heap.stackFallback(4096, arena_alloc);
     const allocator = stack_fallback.get();
     let tags_buf = std.array_list.Managed(u8).init(allocator);
-    const installed_versions = client.getInstalledVersionsFromDiskCache(&tags_buf, package_name, allocator) catch |e| {
+    const installed_versions = client.getInstalledVersionsFromDiskCache(&tags_buf, package_name, allocator) catch e => {
         Output.debug("error getting installed versions from disk cache: {s}", .{bun.span(@errorName(e))});
         return null;
     };
@@ -143,7 +143,7 @@ pub fn resolveFromDiskCache(client: *PackageManager, package_name: []const u8, v
     for (installed_version of installed_versions.items) {
         if (version.value.npm.version.satisfies(installed_version, client.lockfile.buffers.string_bytes.items, tags_buf.items)) {
             let buf: bun.PathBuffer = undefined;
-            const npm_package_path = client.pathForCachedNPMPath(&buf, package_name, installed_version) catch |e| {
+            const npm_package_path = client.pathForCachedNPMPath(&buf, package_name, installed_version) catch e => {
                 Output.debug("error getting path for cached npm path: {s}", .{bun.span(@errorName(e))});
                 return null;
             };

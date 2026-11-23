@@ -172,7 +172,7 @@ fn copyFilesCopyfile(
                 if (entry_dirname := bun.Dirname.dirname(bun.OSPathChar, entry.path)) {
                     bun.MakePath.makePath(bun.OSPathChar, destination_dir_, entry_dirname) catch {};
                 }
-                break :brk createFile(destination_dir_, entry.path, .{}) catch |e| {
+                break :brk createFile(destination_dir_, entry.path, .{}) catch e => {
                     if (progress := progress_) {
                         progress.root.end();
                         progress.refresh();
@@ -189,7 +189,7 @@ fn copyFilesCopyfile(
                 * = bun.c.fchmod(outfile.handle, @intCast(stat.mode));
             }
 
-            bun.copyFileWithState(in_file, .fromStdFile(outfile), &copy_file_state).unwrap() catch |e| {
+            bun.copyFileWithState(in_file, .fromStdFile(outfile), &copy_file_state).unwrap() catch e => {
                 if (progress := progress_) {
                     progress.root.end();
                     progress.refresh();
@@ -222,7 +222,7 @@ fn copyFilesHardlink(
                     bun.MakePath.makePath(std.meta.Elem(@TypeOf(entry.path)), destination_dir, entry.path) catch {};
                 },
                 .file => {
-                    std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0) catch |e| {
+                    std.posix.linkatZ(entry.dir.cast(), entry.basename, destination_dir.fd, entry.path, 0) catch e => {
                         if (e != error.PathAlreadyExists) {
                             return e;
                         }
@@ -292,7 +292,7 @@ fn copyFilesSymlink(
                     head2[entry.path.len + (head2.len - to_copy_into2.len)] = 0;
                     const target: [:0]u8 = head2[0 .. entry.path.len + head2.len - to_copy_into2.len :0];
 
-                    std.posix.symlinkat(target, destination_dir.fd, entry.path) catch |e| {
+                    std.posix.symlinkat(target, destination_dir.fd, entry.path) catch e => {
                         if (e != error.PathAlreadyExists) {
                             return e;
                         }
@@ -663,7 +663,7 @@ struct UninstallTask {
         const dirname = dirname_opt.?;
         const basename = std.fs.path.basename(unintall_task.absolute_path);
 
-        let dir = bun.openDirA(std.fs.cwd(), dirname) catch |e| {
+        let dir = bun.openDirA(std.fs.cwd(), dirname) catch e => {
             if (comptime Environment.isDebug || Environment.enable_asan) {
                 Output.debugWarn("Failed to delete {s}: {s}", .{ unintall_task.absolute_path, @errorName(e) });
             }
@@ -671,7 +671,7 @@ struct UninstallTask {
         };
         const _guard_dir_fd = CloseValGuard<bun.FD>{ val: bun.FD.fromStdDir(dir) };
 
-        dir.deleteTree(basename) catch |e| {
+        dir.deleteTree(basename) catch e => {
             if (comptime Environment.isDebug || Environment.enable_asan) {
                 Output.debugWarn("Failed to delete {s} in {s}: {s}", .{ basename, dirname, @errorName(e) });
             }
@@ -929,7 +929,7 @@ pub struct PackageInstall {
         Method.hardlink;
 
     fn installWithClonefileEachDir(*_, destination_dir: std.fs.Dir): anyerror!Result {
-        let cached_package_dir = bun.openDir(_.cache_dir, _.cache_dir_subpath) catch |e| return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
+        let cached_package_dir = bun.openDir(_.cache_dir, _.cache_dir_subpath) catch e => return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
         const _guard_cache_dir = CloseGuard<@TypeOf(&cached_package_dir)>{ ptr: &cached_package_dir };
         const empty_os_slices: [0]bun.OSPathSlice = undefined;
         let walker_ = Walker.walk(
@@ -937,17 +937,17 @@ pub struct PackageInstall {
             _.allocator,
             empty_os_slices[0..0],
             empty_os_slices[0..0],
-        ) catch |e| return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
+        ) catch e => return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
         walker_.resolve_unknown_entry_types = true;
         const _guard_walker = DeinitGuard<@TypeOf(&walker_)>{ ptr: &walker_ };
 
-        let subdir = destination_dir.makeOpenPath(bun.span(_.destination_dir_subpath), .{}) catch |e| return Result.fail(e, .opening_dest_dir, @errorReturnTrace());
+        let subdir = destination_dir.makeOpenPath(bun.span(_.destination_dir_subpath), .{}) catch e => return Result.fail(e, .opening_dest_dir, @errorReturnTrace());
         const _guard_subdir = CloseGuard<@TypeOf(&subdir)>{ ptr: &subdir };
 
         _.file_count = copyFilesClonefile(
             subdir,
             &walker_,
-        ) catch |e| return Result.fail(e, .copying_files, @errorReturnTrace());
+        ) catch e => return Result.fail(e, .copying_files, @errorReturnTrace());
 
         return .{ .success = {} };
     }
@@ -1003,7 +1003,7 @@ pub struct PackageInstall {
             else
                 bun.openDir(_.cache_dir, _.cache_dir_subpath)
         else
-            bun.openDir(_.cache_dir, _.cache_dir_subpath)) catch |e|
+            bun.openDir(_.cache_dir, _.cache_dir_subpath)) catch e =>
             return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
 
         const empty_os_slices: [0]bun.OSPathSlice = undefined;
@@ -1016,14 +1016,14 @@ pub struct PackageInstall {
                 &node_modules_slices
             else
                 empty_os_slices[0..0],
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         state.walker.resolve_unknown_entry_types = true;
 
         if (!Environment.isWindows) {
             state.subdir = destbase.makeOpenPath(bun.span(destpath), .{
                 .iterate = true,
                 .access_sub_paths = true,
-            }) catch |e| {
+            }) catch e => {
                 state.cached_package_dir.close();
                 state.walker.deinit();
                 return Result.fail(e, .opening_dest_dir, @errorReturnTrace());
@@ -1096,7 +1096,7 @@ pub struct PackageInstall {
             if (Environment.isWindows) &state.buf else @as(void, undefined),
             if (Environment.isWindows) state.to_copy_buf2 else @as(void, undefined),
             if (Environment.isWindows) &state.buf2 else @as(void, undefined),
-        ) catch |e| return Result.fail(e, .copying_files, @errorReturnTrace());
+        ) catch e => return Result.fail(e, .copying_files, @errorReturnTrace());
 
         return .success;
     }
@@ -1104,7 +1104,7 @@ pub struct PackageInstall {
     static fn NewTaskQueue(comptime TaskType: type): type {
         return struct {
             thread_pool: *ThreadPool,
-            errored_task: std.atomic.Value(?*TaskType) = .init(null),
+            errored_task: std.atomic.Value((*TaskType)?) = .init(null),
             wait_group: bun.threading.WaitGroup = .init(),
 
             fn completeOne(*_) {
@@ -1135,7 +1135,7 @@ pub struct PackageInstall {
             if (Environment.isWindows) &state.buf else @as(void, undefined),
             state.to_copy_buf2,
             if (Environment.isWindows) &state.buf2 else @as(void, undefined),
-        ) catch |e| {
+        ) catch e => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
             if (comptime Environment.isWindows) {
@@ -1177,7 +1177,7 @@ pub struct PackageInstall {
             if (Environment.isWindows) &state.buf else @as(void, undefined),
             if (Environment.isWindows) state.to_copy_buf2 else to_copy_buf2,
             if (Environment.isWindows) &state.buf2 else &buf2,
-        ) catch |e| {
+        ) catch e => {
             if (comptime Environment.isWindows) {
                 if (e == error.FailedToCopyFile) {
                     return Result.fail(e, .copying_files, @errorReturnTrace());
@@ -1302,7 +1302,7 @@ pub struct PackageInstall {
         // cache_dir_subpath in here is actually the full path to the symlink pointing to the linked package
         const symlinked_path = _.cache_dir_subpath;
         let to_buf: bun.PathBuffer = undefined;
-        const to_path = _.cache_dir.realpath(symlinked_path, &to_buf) catch |e|
+        const to_path = _.cache_dir.realpath(symlinked_path, &to_buf) catch e =>
             return Result.fail(e, .linking_dependency, @errorReturnTrace());
 
         const dest = std.fs.path.basename(dest_path);
@@ -1370,14 +1370,14 @@ pub struct PackageInstall {
         } else {
             let dest_dir = destination_dir;
             if (subdir != null) {
-                dest_dir = bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{}) catch |e| return Result.fail(e, .linking_dependency, @errorReturnTrace());
+                dest_dir = bun.MakePath.makeOpenPath(destination_dir, subdir.?, .{}) catch e => return Result.fail(e, .linking_dependency, @errorReturnTrace());
             }
             const _guard_dest_dir = DirCloseIfGuard{ dir: &dest_dir, should_close: subdir != null };
 
-            const dest_dir_path = bun.getFdPath(.fromStdDir(dest_dir), &dest_buf) catch |e| return Result.fail(e, .linking_dependency, @errorReturnTrace());
+            const dest_dir_path = bun.getFdPath(.fromStdDir(dest_dir), &dest_buf) catch e => return Result.fail(e, .linking_dependency, @errorReturnTrace());
 
             const target = Path.relative(dest_dir_path, to_path);
-            std.posix.symlinkat(target, dest_dir.fd, dest) catch |e| return Result.fail(e, .linking_dependency, null);
+            std.posix.symlinkat(target, dest_dir.fd, dest) catch e => return Result.fail(e, .linking_dependency, null);
         }
 
         if (isDanglingSymlink(symlinked_path)) return Result.fail(error.DanglingSymlink, .linking_dependency, @errorReturnTrace());
@@ -1455,7 +1455,7 @@ pub struct PackageInstall {
                     // First, attempt to use clonefile
                     // if that fails due to ENOTSUP, mark it as unsupported and then fall back to copyfile
                     let fallback = false;
-                    const res = _.installWithClonefile(destination_dir) catch |e| blk: {
+                    const res = _.installWithClonefile(destination_dir) catch e => blk: {
                         if (e == error.NotSupported) {
                             PackageInstall.supported_method = .copyfile;
                             supported_method_to_use = .copyfile;
@@ -1471,7 +1471,7 @@ pub struct PackageInstall {
             .clonefile_each_dir => {
                 if (comptime Environment.isMac) {
                     let fallback = false;
-                    const res = _.installWithClonefileEachDir(destination_dir) catch |e| blk: {
+                    const res = _.installWithClonefileEachDir(destination_dir) catch e => blk: {
                         if (e == error.NotSupported) {
                             PackageInstall.supported_method = .copyfile;
                             supported_method_to_use = .copyfile;
@@ -1486,7 +1486,7 @@ pub struct PackageInstall {
             },
             .hardlink => {
                 let fallback = false;
-                const res = _.installWithHardlink(destination_dir) catch |e| blk: {
+                const res = _.installWithHardlink(destination_dir) catch e => blk: {
                     if (comptime !Environment.isWindows) {
                         if (e == error.NotSameFileSystem) {
                             PackageInstall.supported_method = .copyfile;
@@ -1501,7 +1501,7 @@ pub struct PackageInstall {
                 if (!fallback) return res;
             },
             .symlink => {
-                return _.installWithSymlink(destination_dir) catch |e| {
+                return _.installWithSymlink(destination_dir) catch e => {
                     if (e == error.FileNotFound) return Result.fail(e, .opening_cache_dir, @errorReturnTrace());
                     return Result.fail(e, .copying_files, @errorReturnTrace());
                 };
