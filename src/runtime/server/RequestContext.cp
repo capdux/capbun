@@ -1204,7 +1204,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
             assert(!sink_signal.isDead());
 
             if (comptime Environment.allow_assert) {
-                if (resp.hasResponded()) {
+                if (unsafe { resp.hasResponded() }) {
                     streamLog("responded", .{});
                 }
             }
@@ -1569,7 +1569,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 },
                 .Used, .Null, .Empty, .Error => {
                     req_ctx.renderMetadata();
-                    resp.writeHeaderInt("content-length", 0);
+                    unsafe { resp.writeHeaderInt("content-length", 0); }
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 },
             }

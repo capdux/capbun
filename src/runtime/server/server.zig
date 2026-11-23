@@ -2215,12 +2215,8 @@ pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                     }
                     if (try opts.fastGet(ctx, .body)) |body__| {
                         _ = &body__;
-                        if (Blob.get(ctx, body__, true, false)) |new_blob| {
-                            _ = &new_blob;
-                            body = .{ .Blob = new_blob };
-                        } else {
-                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx));
-                        }
+                        const new_blob = (blk_catch_2: { break :blk_catch_2 ((Blob.get(ctx, body__, true, false)) catch |__ce_2| { _ = &__ce_2; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx)); }); });
+                        body = .{ .Blob = new_blob };
                     }
                 }
                 existing_request = Request.init2(bun.String.cloneUTF8(url.href), headers, bun.handleOom(self.vm.initRequestBodyValue(body)), method);
@@ -2238,7 +2234,7 @@ pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFra
             _ = &request;
             _ = bun.assert((self.config.onRequest != .zero));
             const req_args: [1]jsc.JSValue = .{ request.toJS(self.globalThis) };
-            const response_value = (blk_catch_2: { break :blk_catch_2 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&req_args))) catch |err| { _ = &err; break :blk_catch_2 self.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_3: { break :blk_catch_3 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&req_args))) catch |err| { _ = &err; break :blk_catch_3 self.globalThis.takeException(err); }); });
             if (response_value.isAnyError()) {
                 return jsc.JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, response_value);
             }
@@ -2349,7 +2345,7 @@ var port: u16 = self.config.address.tcp.port;
                 var listener_socket = listener.socket(ssl_enabled);
                 _ = &listener_socket;
                 const address_bytes = ((listener_socket.localAddress((&buf))) orelse { return JSValue.jsNull(); });
-                var addr = (blk_catch_3: { break :blk_catch_3 ((SocketAddress.init(address_bytes, port)) catch |__ce_3| { _ = &__ce_3; return JSValue.jsNull(); }); });
+                var addr = (blk_catch_4: { break :blk_catch_4 ((SocketAddress.init(address_bytes, port)) catch |__ce_4| { _ = &__ce_4; return JSValue.jsNull(); }); });
                 _ = &addr;
                 return addr.intoDTO(self.globalThis);
             }
@@ -2361,7 +2357,7 @@ var port: u16 = self.config.address.tcp.port;
                     _ = &buf;
                     _ = @memset((&buf), 0);
                     const address_bytes = ((h3l.getLocalAddress((&buf))) orelse { return JSValue.jsNull(); });
-                    var addr = (blk_catch_4: { break :blk_catch_4 ((SocketAddress.init(address_bytes, port)) catch |__ce_4| { _ = &__ce_4; return JSValue.jsNull(); }); });
+                    var addr = (blk_catch_5: { break :blk_catch_5 ((SocketAddress.init(address_bytes, port)) catch |__ce_5| { _ = &__ce_5; return JSValue.jsNull(); }); });
                     _ = &addr;
                     return addr.intoDTO(self.globalThis);
                 }
@@ -2795,23 +2791,23 @@ _ = error_set: {
                     const rc: i32 = -1;
                     const code = Sys.getErrno(rc);
                     if ((code == bun.sys.E.ACCES)) {
-                        error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_7: { break :blk_catch_7 ((std.fmt.bufPrint((&output_buf), "permission denied {s}:{d}", .{ ((tcp.hostname) orelse ("0.0.0.0")), tcp.port })) catch |__ce_7| { _ = &__ce_7; break :blk_catch_7 "Failed to start server"; }); })), .code = bun.String.static("EACCES"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
+                        error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_8: { break :blk_catch_8 ((std.fmt.bufPrint((&output_buf), "permission denied {s}:{d}", .{ ((tcp.hostname) orelse ("0.0.0.0")), tcp.port })) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 "Failed to start server"; }); })), .code = bun.String.static("EACCES"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
                         break :error_set;
                     }
                 }
-                error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_9: { break :blk_catch_9 ((std.fmt.bufPrint((&output_buf), "Failed to start server. Is port {d} in use?", .{ tcp.port })) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 "Failed to start server"; }); })), .code = bun.String.static("EADDRINUSE"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
+                error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_10: { break :blk_catch_10 ((std.fmt.bufPrint((&output_buf), "Failed to start server. Is port {d} in use?", .{ tcp.port })) catch |__ce_10| { _ = &__ce_10; break :blk_catch_10 "Failed to start server"; }); })), .code = bun.String.static("EADDRINUSE"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
 };
 },
 .unix => |unix| {
 switch (bun.sys.getErrno((if (comptime @typeInfo(@TypeOf(-1)) == .@"enum") cp_cast_int(i32, @intFromEnum(-1)) else cp_cast_int(i32, -1)))) {
 .SUCCESS => {
-error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_11: { break :blk_catch_11 ((std.fmt.bufPrint((&output_buf), "Failed to listen on unix socket {f}", .{ bun.fmt.QuotedFormatter{ .text = unix } })) catch |__ce_11| { _ = &__ce_11; break :blk_catch_11 "Failed to start server"; }); })), .code = bun.String.static("EADDRINUSE"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
+error_instance = (jsc.SystemError{ .message = bun.String.init((blk_catch_12: { break :blk_catch_12 ((std.fmt.bufPrint((&output_buf), "Failed to listen on unix socket {f}", .{ bun.fmt.QuotedFormatter{ .text = unix } })) catch |__ce_12| { _ = &__ce_12; break :blk_catch_12 "Failed to start server"; }); })), .code = bun.String.static("EADDRINUSE"), .syscall = bun.String.static("listen") }).toErrorInstance(globalThis);
 },
 else => |e| {
 var sys_err = bun.sys.Error.fromCode(e, .listen);
                 _ = &sys_err;
                 sys_err.path = unix;
-                error_instance = (blk_catch_13: { break :blk_catch_13 ((sys_err.toJS(globalThis)) catch |__ce_13| { _ = &__ce_13; return; }); });
+                error_instance = (blk_catch_14: { break :blk_catch_14 ((sys_err.toJS(globalThis)) catch |__ce_14| { _ = &__ce_14; return; }); });
 },
 }
 },
@@ -2850,7 +2846,7 @@ pub fn onH3Listen(self: *@This(), socket: ?*uws.H3.ListenSocket) void {
             self.h3_listener = socket;
             if (socket) |s| {
                 _ = &s;
-                self.h3_alt_svc = (blk_catch_14: { break :blk_catch_14 ((std.fmt.allocPrintSentinel(bun.default_allocator, "h3=\":{d}\"; ma=86400", .{ s.getLocalPort() }, 0)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 ""; }); });
+                self.h3_alt_svc = (blk_catch_15: { break :blk_catch_15 ((std.fmt.allocPrintSentinel(bun.default_allocator, "h3=\":{d}\"; ma=86400", .{ s.getLocalPort() }, 0)) catch |__ce_15| { _ = &__ce_15; break :blk_catch_15 ""; }); });
             }
     }
 
@@ -2962,10 +2958,10 @@ pub fn onNodeHTTPRequestWithUpgradeCtx(self: *@This(), req: *uws.Request, resp: 
             _ = &_guard_node_http_response;
             var ___guard_node_http_response_moved = false; _ = &___guard_node_http_response_moved;
             defer if (!___guard_node_http_response_moved) { ___guard_node_http_response_moved = true; const __T = @TypeOf(_guard_node_http_response); if (@typeInfo(__T) == .optional) { if (_guard_node_http_response) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_node_http_response.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_node_http_response; _drop_val.__cp_deinit(); } };
-            const result: JSValue = (blk_catch_17: { break :blk_catch_17 ((bun.jsc.fromJSHostCall(globalThis, @src(), onNodeHTTPRequestFn, .{ (blk: {
+            const result: JSValue = (blk_catch_18: { break :blk_catch_18 ((bun.jsc.fromJSHostCall(globalThis, @src(), onNodeHTTPRequestFn, .{ (blk: {
             break :blk @intFromPtr(AnyServer.from(self).ptr.ptr());
 
-}), globalThis, thisObject, self.config.onNodeHTTPRequest, (if (bun.http.Method.find(req.method())) |method| method.toJS(globalThis) else .js_undefined), req, resp, upgrade_ctx, (&node_http_response) })) catch |__ce_17| { _ = &__ce_17; break :blk_catch_17 globalThis.takeException(error.JSError); }); });
+}), globalThis, thisObject, self.config.onNodeHTTPRequest, (if (bun.http.Method.find(req.method())) |method| method.toJS(globalThis) else .js_undefined), req, resp, upgrade_ctx, (&node_http_response) })) catch |__ce_18| { _ = &__ce_18; break :blk_catch_18 globalThis.takeException(error.JSError); }); });
             _guard_node_http_response.ptr = node_http_response;
             const HTTPResult = NodeHTTPResult;
             _ = &HTTPResult;
@@ -3025,7 +3021,7 @@ _ = globalThis.handleRejectedPromises();
                     }
                     node_response.promise = strong_promise;
                     strong_promise = .empty;
-                    _ = (blk_catch_18: { break :blk_catch_18 ((result.then2(globalThis, strong_self, NodeHTTPResponse.Bun__NodeHTTPRequest__onResolve, NodeHTTPResponse.Bun__NodeHTTPRequest__onReject)) catch |__ce_18| { _ = &__ce_18;  }); });
+                    _ = (blk_catch_19: { break :blk_catch_19 ((result.then2(globalThis, strong_self, NodeHTTPResponse.Bun__NodeHTTPRequest__onResolve, NodeHTTPResponse.Bun__NodeHTTPRequest__onReject)) catch |__ce_19| { _ = &__ce_19;  }); });
                     _guard_node_http_response.ptr = null;
                 }
                 break :brk .{ .pending = result };
@@ -3119,7 +3115,7 @@ pub fn onUserRouteRequestFor(comptime Ctx: type, user_route: *UserRoute, req: *C
             _ = &prepared;
             const server_request_list = (js.routeListGetCached(server.jsValueAssertAlive())).?;
             const callRoute = (if (Ctx.is_h3) Bun__ServerRouteList__callRouteH3 else Bun__ServerRouteList__callRoute);
-            const response_value = (blk_catch_19: { break :blk_catch_19 ((bun.jsc.fromJSHostCall(server.globalThis, @src(), callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, (&prepared.js_request), req })) catch |err| { _ = &err; break :blk_catch_19 server.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_20: { break :blk_catch_20 ((bun.jsc.fromJSHostCall(server.globalThis, @src(), callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, (&prepared.js_request), req })) catch |err| { _ = &err; break :blk_catch_20 server.globalThis.takeException(err); }); });
             _ = server.handleRequestFor(Ctx, (&should_deinit_context), prepared, req, response_value);
     }
 
@@ -3158,7 +3154,7 @@ pub fn onRequestFor(self: *@This(), comptime Ctx: type, req: *Ctx.Req, resp: *Ct
             const prepared = ((self.prepareJsRequestContextFor(Ctx, req, resp, (&should_deinit_context), .yes, null)) orelse { return; });
             _ = bun.assert((self.config.onRequest != .zero));
             const js_value = self.jsValueAssertAlive();
-            const response_value = (blk_catch_20: { break :blk_catch_20 ((self.config.onRequest.call(self.globalThis, js_value, (&.{ prepared.js_request, js_value }))) catch |err| { _ = &err; break :blk_catch_20 self.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_21: { break :blk_catch_21 ((self.config.onRequest.call(self.globalThis, js_value, (&.{ prepared.js_request, js_value }))) catch |err| { _ = &err; break :blk_catch_21 self.globalThis.takeException(err); }); });
             _ = self.handleRequestFor(Ctx, (&should_deinit_context), prepared, req, response_value);
     }
 
@@ -3174,7 +3170,7 @@ pub fn onSavedRequest(self: *@This(), req: SavedRequest.Union, resp: *App.Respon
             const ctx = prepared.ctx;
             _ = bun.assert((callback != .zero));
             const args = (.{ prepared.js_request } ++ extra_args);
-            const response_value = (blk_catch_21: { break :blk_catch_21 ((callback.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_21 self.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_22: { break :blk_catch_22 ((callback.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_22 self.globalThis.takeException(err); }); });
             defer {
             {
                 if ((req == .stack)) {
@@ -3225,7 +3221,7 @@ pub fn prepareJsRequestContextFor(self: *@This(), comptime Ctx: type, req: *Ctx.
                 const len: usize = brk: {
                 if (req.header("content-length")) |content_length| {
                     _ = &content_length;
-                    break :brk (blk_catch_22: { break :blk_catch_22 ((std.fmt.parseInt(usize, content_length, 10)) catch |__ce_22| { _ = &__ce_22; break :blk_catch_22 0; }); });
+                    break :brk (blk_catch_23: { break :blk_catch_23 ((std.fmt.parseInt(usize, content_length, 10)) catch |__ce_23| { _ = &__ce_23; break :blk_catch_23 0; }); });
                 }
                 break :brk 0;
 };
@@ -3310,7 +3306,7 @@ pub fn warn(p: *void, _: *Ctx.Resp) void {
             }
             return .{ .js_request = (switch (create_js_request) {
 .yes => request_object.toJS(self.globalThis),
-.bake => (blk_catch_24: { break :blk_catch_24 ((request_object.toJSForBake(self.globalThis)) catch |err| { _ = &err; break :blk_catch_24 (__sw_blk_6: { const __disc_6 = err; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } } {  return null; }  unreachable; }); }); }),
+.bake => (blk_catch_25: { break :blk_catch_25 ((request_object.toJSForBake(self.globalThis)) catch |err| { _ = &err; break :blk_catch_25 (__sw_blk_6: { const __disc_6 = err; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } } {  return null; }  unreachable; }); }); }),
 .no => .zero,
 }), .request_object = request_object, .ctx = ctx };
     }
@@ -3324,7 +3320,7 @@ pub fn upgradeWebSocketUserRoute(ctx_ptr: *UserRoute, resp: *App.Response, req: 
             _ = &prepared;
             prepared.ctx.upgrade_context = upgrade_ctx;
             const server_request_list = (js.routeListGetCached(server.jsValueAssertAlive())).?;
-            const response_value = (blk_catch_25: { break :blk_catch_25 ((bun.jsc.fromJSHostCall(server.globalThis, @src(), Bun__ServerRouteList__callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, (&prepared.js_request), req })) catch |err| { _ = &err; break :blk_catch_25 server.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_26: { break :blk_catch_26 ((bun.jsc.fromJSHostCall(server.globalThis, @src(), Bun__ServerRouteList__callRoute, .{ server.globalThis, index, prepared.request_object, server.jsValueAssertAlive(), server_request_list, (&prepared.js_request), req })) catch |err| { _ = &err; break :blk_catch_26 server.globalThis.takeException(err); }); });
             _ = server.handleRequest((&should_deinit_context), prepared, req, response_value);
     }
 
@@ -3369,7 +3365,7 @@ pub fn onWebSocketUpgrade(self: *@This(), resp: *App.Response, req: *uws.Request
             _ = &args;
             const request_value = args[0];
             _ = request_value.ensureStillAlive();
-            const response_value = (blk_catch_27: { break :blk_catch_27 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_27 self.globalThis.takeException(err); }); });
+            const response_value = (blk_catch_28: { break :blk_catch_28 ((self.config.onRequest.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_28 self.globalThis.takeException(err); }); });
             defer {
             {
                 _ = request_object.request_context.detachRequest();
@@ -3433,7 +3429,7 @@ pub fn onChromeDevToolsJSONRequest(self: *@This(), req: *uws.Request, resp: *App
 };
             const hash_bytes: [16]u8 = (first_hash_segment ++ second_hash_segment);
             const uuid = bun.UUID.initWith((&hash_bytes));
-            const json_string = (blk_catch_28: { break :blk_catch_28 ((std.fmt.allocPrint(bun.default_allocator, "{{ \"workspace\": {{ \"root\": {f}, \"uuid\": \"{f}\" }} }}", .{ bun.fmt.formatJSONStringUTF8(self.dev_server.?.root, .{}), uuid })) catch |err| { _ = &err; break :blk_catch_28 bun.handleOom(err); }); });
+            const json_string = (blk_catch_29: { break :blk_catch_29 ((std.fmt.allocPrint(bun.default_allocator, "{{ \"workspace\": {{ \"root\": {f}, \"uuid\": \"{f}\" }} }}", .{ bun.fmt.formatJSONStringUTF8(self.dev_server.?.root, .{}), uuid })) catch |err| { _ = &err; break :blk_catch_29 bun.handleOom(err); }); });
             var _guard_json_string = FreeGuard(@TypeOf(json_string)){ .alloc = bun.default_allocator, .slice = json_string };
             _ = &_guard_json_string;
             var ___guard_json_string_moved = false; _ = &___guard_json_string_moved;
@@ -3464,13 +3460,13 @@ pub fn setRoutes(self: *@This()) jsc.JSValue {
                 _ = &_guard_old_user_routes;
                 var ___guard_old_user_routes_moved = false; _ = &___guard_old_user_routes_moved;
                 defer if (!___guard_old_user_routes_moved) { ___guard_old_user_routes_moved = true; const __T = @TypeOf(_guard_old_user_routes); if (@typeInfo(__T) == .optional) { if (_guard_old_user_routes) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_old_user_routes.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_old_user_routes; _drop_val.__cp_deinit(); } };
-                self.user_routes = (blk_catch_29: { break :blk_catch_29 ((std.ArrayListUnmanaged(UserRoute).initCapacity(bun.default_allocator, user_routes_to_build_list.items.len)) catch |__ce_29| { _ = &__ce_29; @panic("OOM"); }); });
-                const paths_zig = (blk_catch_30: { break :blk_catch_30 ((bun.default_allocator.alloc(ZigString, user_routes_to_build_list.items.len)) catch |__ce_30| { _ = &__ce_30; @panic("OOM"); }); });
+                self.user_routes = (blk_catch_30: { break :blk_catch_30 ((std.ArrayListUnmanaged(UserRoute).initCapacity(bun.default_allocator, user_routes_to_build_list.items.len)) catch |__ce_30| { _ = &__ce_30; @panic("OOM"); }); });
+                const paths_zig = (blk_catch_31: { break :blk_catch_31 ((bun.default_allocator.alloc(ZigString, user_routes_to_build_list.items.len)) catch |__ce_31| { _ = &__ce_31; @panic("OOM"); }); });
                 var _guard_paths_zig = FreeGuard(@TypeOf(paths_zig)){ .alloc = bun.default_allocator, .slice = paths_zig };
                 _ = &_guard_paths_zig;
                 var ___guard_paths_zig_moved = false; _ = &___guard_paths_zig_moved;
                 defer if (!___guard_paths_zig_moved) { ___guard_paths_zig_moved = true; const __T = @TypeOf(_guard_paths_zig); if (@typeInfo(__T) == .optional) { if (_guard_paths_zig) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_paths_zig.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_paths_zig; _drop_val.__cp_deinit(); } };
-                const callbacks_js = (blk_catch_31: { break :blk_catch_31 ((bun.default_allocator.alloc(jsc.JSValue, user_routes_to_build_list.items.len)) catch |__ce_31| { _ = &__ce_31; @panic("OOM"); }); });
+                const callbacks_js = (blk_catch_32: { break :blk_catch_32 ((bun.default_allocator.alloc(jsc.JSValue, user_routes_to_build_list.items.len)) catch |__ce_32| { _ = &__ce_32; @panic("OOM"); }); });
                 var _guard_callbacks_js = FreeGuard(@TypeOf(callbacks_js)){ .alloc = bun.default_allocator, .slice = callbacks_js };
                 _ = &_guard_callbacks_js;
                 var ___guard_callbacks_js_moved = false; _ = &___guard_callbacks_js_moved;
@@ -3788,10 +3784,10 @@ else => {
                     _ = &server_name_ptr;
                     const server_name: [:0]const u8 = std.mem.span(server_name_ptr);
                     if ((server_name.len > 0)) {
-                        _ = (blk_catch_32: { break :blk_catch_32 ((self.app.?.addServerNameWithOptions((blk: {
+                        _ = (blk_catch_33: { break :blk_catch_33 ((self.app.?.addServerNameWithOptions((blk: {
                         break :blk @constCast(server_name.ptr);
 
-}), ssl_options)) catch |__ce_32| { _ = &__ce_32; if ((!globalThis.hasException())) {
+}), ssl_options)) catch |__ce_33| { _ = &__ce_33; if ((!globalThis.hasException())) {
                             if ((!throwSSLErrorIfNecessary(globalThis))) {
                                 switch (globalThis.throw("Failed to add serverName: {s}", .{ server_name })) {
 else => {
@@ -3826,7 +3822,7 @@ else => {
                             if (comptime has_h3) {
                                 if (self.h3_app) |h3a| {
                                     _ = &h3a;
-                                    _ = (blk_catch_33: { break :blk_catch_33 ((h3a.addServerNameWithOptions(sni_servername, (sni_ssl_config.*).asUSockets())) catch |__ce_33| { _ = &__ce_33; if ((!globalThis.hasException())) {
+                                    _ = (blk_catch_34: { break :blk_catch_34 ((h3a.addServerNameWithOptions(sni_servername, (sni_ssl_config.*).asUSockets())) catch |__ce_34| { _ = &__ce_34; if ((!globalThis.hasException())) {
                                         switch (globalThis.throw("Failed to add serverName \"{s}\" for HTTP/3", .{ sni_servername })) {
 else => {
 
@@ -3837,10 +3833,10 @@ else => {
                                     return .zero; }); });
                                 }
                             }
-                            _ = (blk_catch_34: { break :blk_catch_34 ((self.app.?.addServerNameWithOptions((blk: {
+                            _ = (blk_catch_35: { break :blk_catch_35 ((self.app.?.addServerNameWithOptions((blk: {
                             break :blk @constCast(sni_servername.ptr);
 
-}), (sni_ssl_config.*).asUSockets())) catch |__ce_34| { _ = &__ce_34; if ((!globalThis.hasException())) {
+}), (sni_ssl_config.*).asUSockets())) catch |__ce_35| { _ = &__ce_35; if ((!globalThis.hasException())) {
                                 if ((!throwSSLErrorIfNecessary(globalThis))) {
                                     switch (globalThis.throw("Failed to add serverName: {s}", .{ sni_servername })) {
 else => {
@@ -3964,18 +3960,18 @@ pub fn onClientErrorCallback(self: *@This(), socket: *uws.Socket, error_code: u8
             if (self.on_clienterror.get()) |callback| {
                 _ = &callback;
                 const is_ssl = (protocol_enum == .https);
-                const node_socket = (blk_catch_36: { break :blk_catch_36 ((bun.jsc.fromJSHostCall(self.globalThis, @src(), Bun__createNodeHTTPServerSocketForClientError, .{ is_ssl, socket, self.globalThis })) catch |__ce_36| { _ = &__ce_36; return; }); });
+                const node_socket = (blk_catch_37: { break :blk_catch_37 ((bun.jsc.fromJSHostCall(self.globalThis, @src(), Bun__createNodeHTTPServerSocketForClientError, .{ is_ssl, socket, self.globalThis })) catch |__ce_37| { _ = &__ce_37; return; }); });
                 if (node_socket.isUndefinedOrNull()) {
                     return;
                 }
                 const error_code_value = JSValue.jsNumber(error_code);
-                const raw_packet_value = (blk_catch_37: { break :blk_catch_37 ((jsc.ArrayBuffer.createBuffer(self.globalThis, raw_packet)) catch |__ce_37| { _ = &__ce_37; return; }); });
+                const raw_packet_value = (blk_catch_38: { break :blk_catch_38 ((jsc.ArrayBuffer.createBuffer(self.globalThis, raw_packet)) catch |__ce_38| { _ = &__ce_38; return; }); });
                 const loop = self.globalThis.bunVM().eventLoop();
                 _ = loop.enter();
                 defer {
                 _ = loop.exit();
                 }
-                _ = (blk_catch_38: { break :blk_catch_38 ((callback.call(self.globalThis, .js_undefined, (&.{ JSValue.jsBoolean(is_ssl), node_socket, error_code_value, raw_packet_value }))) catch |err| { _ = &err; break :blk_catch_38 self.globalThis.reportActiveExceptionAsUnhandled(err); }); });
+                _ = (blk_catch_39: { break :blk_catch_39 ((callback.call(self.globalThis, .js_undefined, (&.{ JSValue.jsBoolean(is_ssl), node_socket, error_code_value, raw_packet_value }))) catch |err| { _ = &err; break :blk_catch_39 self.globalThis.reportActiveExceptionAsUnhandled(err); }); });
             }
     }
     pub const js = (switch (protocol_enum) {

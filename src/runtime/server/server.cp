@@ -1465,11 +1465,10 @@ pub fn NewServer(comptime protocol_enum: ProtocolEnum, comptime development_kind
                     }
 
                     if (body__ := opts.fastGet(ctx, .body)?) {
-                        if (new_blob := Blob.get(ctx, body__, true, false)) {
-                            body = .{ .Blob = new_blob };
-                        } else {
+                        const new_blob = Blob.get(ctx, body__, true, false) catch {
                             return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx));
-                        }
+                        };
+                        body = .{ .Blob = new_blob };
                     }
                 }
 

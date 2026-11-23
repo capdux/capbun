@@ -1308,7 +1308,10 @@ pub fn doRenderStream(pair: *StreamPair) void {
             _ = assignment_result.ensureStillAlive();
             _ = assert((!sink_signal.isDead()));
             if (comptime Environment.allow_assert) {
-                if ((resp).?.hasResponded()) {
+                if ((blk: {
+                break :blk (resp).?.hasResponded();
+
+})) {
                     _ = streamLog("responded", .{});
                 }
             }
@@ -1651,7 +1654,9 @@ _ = req_ctx.renderMetadata();
 },
 .Used, .Null, .Empty, .Error => {
 _ = req_ctx.renderMetadata();
-            _ = (resp).?.writeHeaderInt("content-length", 0);
+            {
+                _ = (resp).?.writeHeaderInt("content-length", 0);
+            }
             _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 }
