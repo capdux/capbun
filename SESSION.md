@@ -802,6 +802,28 @@
   - `websocket-server.test.ts`（42 fail）与 `bun-write.test.js`（14 fail）**100% 为 `describe.concurrent` 下子进程/GC 调度超时**，0 处 `.cp` 逻辑缺陷。
 - **修复 `src/runtime/webcore/S3File.cp`**：将 `PathOrBlobGuard` 改用可空指针 + `~errinit()` + `disarm()`，并在 `presign`/`unlink`/`write`/`size`/`exists`/`stat` 6 个 `.path` 分支成功转移所有权后调用 `_guard_pob.disarm()`，消除 `WTFStringImplStruct.deref` double-free；通过 `cpc_brief.py` 与 `cpc check --strict`（0 报错）。
 - 推导下一阶段 Wave #83：Subagent 1 复测 `s3-storage-class.test.ts` 并继续 **Batch 3e**（`test/js/bun/` 其余根目录及 `console`/`cron`/`jsc`/`sqlite`/`terminal`/`udp`/`webview`/`dns`/`json5`/`plugin`/`sourcemap`/`yaml` 等）；Subagent 2 并行只读排查 `bun-write-leak.test.ts` `337 MB` 内存占用或准备 `src/runtime/api/` 15 文件 `E0307` 纯化。
+26. **用户**：`汇报工作成果, 还剩多少工作位完成`
+    - **主智能体回应**：汇报 Wave #75–83 最新成果：（1）全仓 1,295 个 `.cp` 文件 100% 编译通过（`zig:check` 5/5），近几波又完成 `http/`（18 文件，全目录 36/36 零违例）、`sql_jsc/`（17 文件）、`s3`/`crypto`/`install`/`jsc`/`sql`/`valkey`/`zlib`/`zstd`/`watcher`/`threading`/`safety` 等 **107 个文件 `--strict` 纯化**；（2）连续根除 `shell.Builtin`（3 处 SEGV）、`Cmd.cp`（`Allocation scope leaked` 与 `BufferedIoClosed.close` SEGV，复测 `bunshell+ls` 377 pass/0 crash）、`Blob.cp:doImage`、`S3File.cp` `PathOrBlobGuard`（复测 `s3-storage-class.test.ts` 9/9 全绿）；（3）完成 `resolve`（234 pass/0 crash）、`glob/md/cookie/css/crypto/ffi`（11,484 pass/0 crash）、`s3/net/io/image/transpiler/websocket`（429 pass）等测试；Batch 3e 正在运行（已通知 `1011a761` 跳过卡死的 `repl` 交互子进程）。剩余工作：Batch 3e 剩余目录 + `test/js/bun/` 根目录 9 文件、Batch 4 `test/js/node/`（252 文件）、Batch 5 `test/{cli,bundler,napi,integration,v8}`（319 文件）、剩余约 140 个普通结构体文件 `--strict` 纯化及最后 Release 构建验收。
+27. **用户**：`bun bd test 剩余测试批次（约 624 个测试文件）, 已经完成了多少文件?`
+    - **主智能体回应**：实盘盘点：已完成实测 **489 个测试文件**（`test/js/bun/` 已完成 18 个子目录共 345 个文件 + `test/js/web/` 全量 144 个文件，未计入正在运行的 Batch 3e）；核心待跑批次共 **639 个文件**（Batch 3e 及 `bun/` 其余 61 个 + `test/js/node/` 259 个 + `test/{cli,bundler,napi,integration,v8}` 319 个），另全仓 `test/` 总计 1,729 个 `.test.*` 文件（含 `test/regression/` 385 个及其他零散目录）。
+28. **用户**：`bun bd test 剩余测试批次`
+    - **主智能体回应**：清理卡在 `terminal-platform-gaps.test.ts` 的 `rem1` 挂起进程（`rem2` 10 文件已出结果：254 pass / 18 skip / 23 fail），并立即启动 **Wave #84 双路并行**：Subagent 1 (`7471bc68`) 运行 `test/js/bun/*.test.*`（9 文件）+ **Batch 4a**（`test/js/node/{path,fs,url,os,events,assert,console,diagnostics_channel,promise,string_decoder,timers,timers.promises}` 约 54 文件）；Subagent 2 (`2bf55a68`) 只读排查 `direct-readable-stream.test.tsx` emoji 丢失与 `udpSocket` 5 项失败根因。
+29. **用户**：`Agent(self: Wave #83 bun bd test (s3 复测 + Batch 3e...) · Gemini 4 Hydrogen Generating · 5h57m51s 6个小时, 确认还活着吗?`
+    - **主智能体回应**：确认该旧子智能体（`1011a761`）因等待 `terminal-platform-gaps.test.ts` 挂起子进程已卡死近 6 小时，已执行 `manage_subagents(kill)` 终止释放，当前仅保留 Wave #84 的 2 个新子智能体（`7471bc68` 与 `2bf55a68`）健康并行运行。
+
+### [2026-11-23] 向 `cp_agy` 提交 `return struct` 静默丢弃语句严重隐患工单
+- `task-bun-20261123-return-struct-silent-drop` (`repro_as_trailing_comma_drop.cp`)：`return struct` 泛型工厂方法内若某条语句存在解析失败（如多行 `@as(u16, @truncate(c),)` 尾逗号），`cpc --lib` 仍返回 exit 0 且静默丢弃整条语句（导致 `src/js_parser/lexer.cp` `decodeJSXEntities` 丢失全部 `>0xFFFF` UTF-16 代理对输出）。
+
+## [2026-11-23] Wave #84–85：Batch 4a（`node/` 71 文件）完成、修复 `lexer`/`unicode`/`udp_socket` 静默丢弃与逻辑偏差
+- **测试完成**：
+  - `test/js/bun/*.test.*`（根目录 9 文件，26.42s）：**128 pass / 1 skip / 9 fail / 0 crash**（8 项 `Bun.secrets` 缺 dbus/libsecret，1 项 `symbols.test.ts` 宿主机 glibc）；
+  - **Batch 4a**（`test/js/node/` 12 核心目录 71 文件，1394.66s）：**1,035 pass / 26 skip / 12 todo / 9 fail / 0 crash**（仅 `fs.test.ts` 2 项功能失败：`readdir recursive fail x 100` FD 泄漏与 `utimesSync` 2038 年时间戳溢出，其余 7 项均为 Debug 超时）。
+- **全仓 `@as(...,)` / `@builtin(...,)` 尾逗号静默丢弃扫描与修复**：
+  - 扫描全仓 1,295 `.cp` 文件确认仅 4 处 `@as(...,)` 尾逗号触发静默丢弃（其余 59 处 `@builtin(...,)` 均 0 丢弃）；
+  - 修复 `src/js_parser/lexer.cp`（移除 `decodeJSXEntities` `@as(...,)` 尾逗号恢复 `>0xFFFF` JSX 代理对输出 + 补全 19 处 `static fn`）；
+  - 修复 `src/string/immutable/unicode.cp`（提取 `half_usize` 与移除 `@as(...,)` 尾逗号恢复被静默丢弃的 `appendUTF8MachineWordToUTF16MachineWord` 与 `cp1252ToCodepointAssumeNotASCII` + 补全 6 处 `static fn`）；
+  - 修复 `src/runtime/socket/udp_socket.cp`（L304 `socket.getTruthy` -> `options.getTruthy` 修复 `binaryType` 读取与 `SendManyCtx.run` `static fn`）。
+- 推导下一阶段 Wave #86：Subagent 1 复测 `direct-readable-stream.test.tsx` + `udp_socket.test.ts` 并继续 **Batch 4b**（`test/js/node/{http,http2,tls,net,crypto,process,zlib,stream,worker_threads,child_process}` 等）；Subagent 2 并行只读排查 `fs.test.ts` 2 项失败（`readdir recursive` FD 泄漏与 `utimesSync` 2038 年后时间戳溢出，零 `src/` 写冲突）。
 
 ### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
 - `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。

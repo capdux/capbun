@@ -2191,3 +2191,7 @@
 ### [2026-11-23] Wave #81–82（Batch 3d 测试与修复 `S3File.cp` `PathOrBlobGuard` double-free）
 - 完成 Batch 3d（30 文件，**429 pass / 1 crash**，其中 `transpiler` 43/43 全绿、`image` 219 pass / 0 crash）；确认 `websocket-server`（42 fail）与 `bun-write`（14 fail）均为并发超时；
 - 修复 `src/runtime/webcore/S3File.cp` `PathOrBlobGuard`（改 `~errinit()` + 6 处 `disarm()`），消除 `s3-storage-class.test.ts` `WTFStringImplStruct.deref` panic。
+
+### [2026-11-23] Wave #84–85（Batch 4a `node/` 71 文件完成与修复 `lexer`/`unicode`/`udp_socket`）
+- 完成 `test/js/bun/*.test.*`（9 文件 **128 pass / 0 crash**）与 Batch 4a `test/js/node/` 12 核心目录（71 文件 **1,035 pass / 9 fail / 0 crash**）；
+- 修复 `src/js_parser/lexer.cp`（恢复 `decodeJSXEntities` UTF-16 代理对与 19 处 `static fn`）、`src/string/immutable/unicode.cp`（恢复被静默丢弃的 `appendUTF8MachineWordToUTF16MachineWord` 与 `cp1252ToCodepointAssumeNotASCII` 及 6 处 `static fn`）与 `src/runtime/socket/udp_socket.cp`（`options.getTruthy(..., "binaryType")` 与 `SendManyCtx.run` `static fn`）。

@@ -241,7 +241,7 @@ struct SendManyCtx {
     callframe: *CallFrame!,
     result: JSValue ! bun.JSError,
 
-    fn run(ctx: *@This(), payload_roots: *jsc.MarkedArgumentBuffer) callconv(.c) {
+    static fn run(ctx: *@This(), payload_roots: *jsc.MarkedArgumentBuffer) callconv(.c) {
         ctx.result = UDPSocket.sendManyImpl(ctx.this_ptr, ctx.globalThis, ctx.callframe, payload_roots);
     }
 }
@@ -301,7 +301,7 @@ pub struct UDPSocketConfig {
                 return globalThis.throwInvalidArguments("Expected \"socket\" to be an object", .{});
             }
 
-            if (value := socket.getTruthy(globalThis, "binaryType")?) {
+            if (value := options.getTruthy(globalThis, "binaryType")?) {
                 if (!value.isString()) {
                     return globalThis.throwInvalidArguments("Expected \"socket.binaryType\" to be a string", .{});
                 }

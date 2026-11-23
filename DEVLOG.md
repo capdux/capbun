@@ -1746,3 +1746,7 @@
 
 ### [2026-11-23] Wave #82 技术要点（`S3File.cp` `PathOrBlobGuard` 所有权转移与 `~errinit`）
 - `S3File.presign`/`unlink`/`write`/`size`/`exists`/`stat` 中 `constructS3FileInternalStore` 成功后会将 `path` 所有权转移至 `Blob.Store.S3`；`PathOrBlobGuard` 若使用 `~init()` 会在函数返回时与 `DeinitGuard<Blob>` 发生 `WTFStringImplStruct.deref` 双重释放。改用 `~errinit()` + 成功后 `disarm()` 即可与原版 `errdefer` 语义严格一致。
+
+### [2026-11-23] Wave #85 技术要点（`@as(...,)` 尾逗号与 `*[expr / 2]T` 静默丢弃规律）
+- `cpc` 在解析 `return struct` 内多行 `@as(T, val,)` 尾逗号或形参 `*[@sizeOf(usize) / 2]u16` 除法表达式失败时可能仍以 `exit 0` 退出并静默丢弃整条语句或函数（已提交 `task-bun-20261123-return-struct-silent-drop`）；需去掉 `@as` 尾逗号并提前声明 `const half_usize = @sizeOf(usize) / 2;`。
+- 随重编 `return struct` 内部未标注 `static fn` 的辅助方法时，旧版未自动注入 `self: @This()` 的函数会被新版 `cpc` 注入 `self` 并在函数体内将同名局部变量（如 `current`、`end`）误改写为 `self.current`、`self.end`，须核对并补全 `static fn`。

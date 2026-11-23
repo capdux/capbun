@@ -298,6 +298,7 @@ const u3_fast = strings.u3_fast;
 const unicode_replacement = strings.unicode_replacement;
 pub const CodepointIterator = NewCodePointIterator(CodePoint, -1);
 pub const UnsignedCodepointIterator = NewCodePointIterator(u32, 0);
+const half_usize = (@sizeOf(usize) / 2);
 pub const TestingAPIs = bun_string_jsc.UnicodeTestingAPIs;
 pub const w = toUTF16Literal;
 const UTF8_ACCEPT: u8 = 0;
@@ -378,7 +379,7 @@ pub inline fn next(it: *const Iterator, cursor: *Cursor) bool {
                 return false;
             } else {
                 if ((cp_len == 1)) {
-                    cp = (if (comptime @typeInfo(CodePointType) == .@"enum") @as(CodePointType, @enumFromInt(it.bytes[@as(usize, @intCast(pos))])) else @as(CodePointType, it.bytes[@as(usize, @intCast(pos))]));
+                    cp = (if (comptime @typeInfo(CodePointType) == .@"enum" and (@typeInfo(@TypeOf(it.bytes[@as(usize, @intCast(pos))])) == .int or @typeInfo(@TypeOf(it.bytes[@as(usize, @intCast(pos))])) == .comptime_int)) @as(CodePointType, @enumFromInt(it.bytes[@as(usize, @intCast(pos))])) else @as(CodePointType, it.bytes[@as(usize, @intCast(pos))]));
                 } else {
                     const remaining = it.bytes[pos..];
                     const rem_len = @min(remaining.len, 4);
@@ -451,10 +452,10 @@ pub fn nextCodepoint(it: *Iterator) CodePointType {
             const slice = it.nextCodepointSlice();
             it.c = (switch (slice.len) {
 0 => zeroValue,
-1 => (if (comptime @typeInfo(CodePointType) == .@"enum") @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(slice[0])) == .@"enum") cp_cast_int(i32, @intFromEnum(slice[0])) else cp_cast_int(i32, slice[0])))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(slice[0])) == .@"enum") cp_cast_int(i32, @intFromEnum(slice[0])) else cp_cast_int(i32, slice[0])))),
-2 => (if (comptime @typeInfo(CodePointType) == .@"enum") @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode2(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode2(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode2(slice)) catch unreachable))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode2(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode2(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode2(slice)) catch unreachable))))),
-3 => (if (comptime @typeInfo(CodePointType) == .@"enum") @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode3(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode3(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode3(slice)) catch unreachable))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode3(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode3(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode3(slice)) catch unreachable))))),
-4 => (if (comptime @typeInfo(CodePointType) == .@"enum") @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode4(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode4(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode4(slice)) catch unreachable))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode4(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode4(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode4(slice)) catch unreachable))))),
+1 => (if (comptime @typeInfo(CodePointType) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(slice[0])) == .@"enum") cp_cast_int(i32, @intFromEnum(slice[0])) else cp_cast_int(i32, slice[0])))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(slice[0])) == .@"enum") cp_cast_int(i32, @intFromEnum(slice[0])) else cp_cast_int(i32, slice[0])))) == .comptime_int)) @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(slice[0])) == .@"enum") cp_cast_int(i32, @intFromEnum(slice[0])) else cp_cast_int(i32, slice[0])))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(slice[0])) == .@"enum") cp_cast_int(i32, @intFromEnum(slice[0])) else cp_cast_int(i32, slice[0])))),
+2 => (if (comptime @typeInfo(CodePointType) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode2(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode2(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode2(slice)) catch unreachable))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode2(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode2(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode2(slice)) catch unreachable))))) == .comptime_int)) @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode2(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode2(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode2(slice)) catch unreachable))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode2(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode2(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode2(slice)) catch unreachable))))),
+3 => (if (comptime @typeInfo(CodePointType) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode3(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode3(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode3(slice)) catch unreachable))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode3(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode3(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode3(slice)) catch unreachable))))) == .comptime_int)) @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode3(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode3(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode3(slice)) catch unreachable))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode3(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode3(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode3(slice)) catch unreachable))))),
+4 => (if (comptime @typeInfo(CodePointType) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode4(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode4(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode4(slice)) catch unreachable))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode4(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode4(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode4(slice)) catch unreachable))))) == .comptime_int)) @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode4(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode4(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode4(slice)) catch unreachable))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(((std.unicode.utf8Decode4(slice)) catch unreachable))) == .@"enum") cp_cast_int(i32, @intFromEnum(((std.unicode.utf8Decode4(slice)) catch unreachable))) else cp_cast_int(i32, ((std.unicode.utf8Decode4(slice)) catch unreachable))))),
 else => unreachable,
 });
             return it.c;
@@ -679,14 +680,14 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
             var count = (latin1.len / ascii_vector_size);
             _ = &count;
             while ((count > 0)) : (count = (count - 1)) {
-                const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum") @as(AsciiVector, @enumFromInt((latin1[0..ascii_vector_size]).*)) else @as(AsciiVector, (latin1[0..ascii_vector_size]).*));
+                const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum" and (@typeInfo(@TypeOf((latin1[0..ascii_vector_size]).*)) == .int or @typeInfo(@TypeOf((latin1[0..ascii_vector_size]).*)) == .comptime_int)) @as(AsciiVector, @enumFromInt((latin1[0..ascii_vector_size]).*)) else @as(AsciiVector, (latin1[0..ascii_vector_size]).*));
                 if ((@reduce(.Max, vec) > 127)) {
                     const Int = u64;
                     const size = @sizeOf(Int);
                     if (comptime (ascii_vector_size >= 8)) {
                         {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .comptime_int)) @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             if ((mask > 0)) {
                                 const first_set_byte = (@ctz(mask) / 8);
                                 if (comptime Environment.allow_assert) {
@@ -703,7 +704,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                         }
                         if (comptime (ascii_vector_size >= 16)) {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .comptime_int)) @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             if ((mask > 0)) {
                                 const first_set_byte = (@ctz(mask) / 8);
                                 if (comptime Environment.allow_assert) {
@@ -726,7 +727,7 @@ pub fn allocateLatin1IntoUTF8WithList(list_: std.array_list.Managed(u8), offset_
                 const Int = u64;
                 const size = @sizeOf(Int);
                 const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
+                const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .comptime_int)) @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                 if ((mask > 0)) {
                     const first_set_byte = (@ctz(mask) / 8);
                     if (comptime Environment.allow_assert) {
@@ -885,7 +886,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
             var remaining_runs = (@min(buf.len, latin1.len) / ascii_vector_size);
             _ = &remaining_runs;
             while ((remaining_runs > 0)) : (remaining_runs = (remaining_runs - 1)) {
-                const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum") @as(AsciiVector, @enumFromInt((latin1[0..ascii_vector_size]).*)) else @as(AsciiVector, (latin1[0..ascii_vector_size]).*));
+                const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum" and (@typeInfo(@TypeOf((latin1[0..ascii_vector_size]).*)) == .int or @typeInfo(@TypeOf((latin1[0..ascii_vector_size]).*)) == .comptime_int)) @as(AsciiVector, @enumFromInt((latin1[0..ascii_vector_size]).*)) else @as(AsciiVector, (latin1[0..ascii_vector_size]).*));
                 if ((@reduce(.Max, vec) > 127)) {
                     if (comptime stop) {
                         return .{ .written = std.math.maxInt(u32), .read = std.math.maxInt(u32) };
@@ -895,7 +896,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                         const size = @sizeOf(Int);
                         {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .comptime_int)) @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             (buf[0..size]).* = @as([size]u8, @bitCast(bytes));
                             if ((mask > 0)) {
                                 const first_set_byte = (@ctz(mask) / 8);
@@ -911,7 +912,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                         }
                         if (comptime (ascii_vector_size >= 16)) {
                             const bytes = @as(Int, @bitCast((latin1[0..size]).*));
-                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
+                            const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .comptime_int)) @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                             (buf[0..size]).* = @as([size]u8, @bitCast(bytes));
                             if (comptime Environment.allow_assert) {
                                 _ = assert((mask > 0));
@@ -937,7 +938,7 @@ pub fn copyLatin1IntoUTF8StopOnNonASCII(buf_: []u8, latin1_: []const u8, comptim
                 while ((@min(buf.len, latin1.len) >= size)) {
                     const bytes = @as(Int, @bitCast((latin1[0..size]).*));
                     (buf[0..size]).* = @as([size]u8, @bitCast(bytes));
-                    const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
+                    const mask = (bytes & (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) == .comptime_int)) @as(Int, @enumFromInt((cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))) else @as(Int, (cp_shl((if (comptime @typeInfo(@TypeOf(2155905152)) == .@"enum") cp_cast_int(u64, @intFromEnum(2155905152)) else cp_cast_int(u64, 2155905152)), 32) | 2155905152))));
                     if ((mask > 0)) {
                         const first_set_byte = (@ctz(mask) / 8);
                         if (comptime stop) {
@@ -1067,6 +1068,10 @@ pub fn toUTF8AllocZ(allocator: std.mem.Allocator, js: []const u16) OOM![:0]u8 {
         _ = try toUTF8AppendToList((&list), js);
         _ = try list.append(0);
         return list.items[0..(list.items.len - 1) :0];
+}
+
+pub inline fn appendUTF8MachineWordToUTF16MachineWord(output: *[half_usize]u16, input: *const [half_usize]u8) void {
+        (output[0..half_usize]).* = @as([4]u16, @bitCast((if (comptime @typeInfo(@Vector(4, u16)) == .@"enum" and (@typeInfo(@TypeOf(@as(@Vector(4, u8), @bitCast((input[0..half_usize]).*)))) == .int or @typeInfo(@TypeOf(@as(@Vector(4, u8), @bitCast((input[0..half_usize]).*)))) == .comptime_int)) @as(@Vector(4, u16), @enumFromInt(@as(@Vector(4, u8), @bitCast((input[0..half_usize]).*)))) else @as(@Vector(4, u16), @as(@Vector(4, u8), @bitCast((input[0..half_usize]).*))))));
 }
 
 pub inline fn copyU8IntoU16(output_: []u16, input_: []const u8) void {
@@ -1384,13 +1389,13 @@ pub fn utf16CodepointWithFFFD(input: []const u16) UTF16Replacement {
 }
 
 pub fn utf16CodepointWithFFFDAndFirstInputChar(char: u16, input: []const u16) UTF16Replacement {
-        const c0 = (if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(char)) else @as(u21, char));
-        if (((c0 & (~(if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(1023)) else @as(u21, 1023)))) == 55296)) {
+        const c0 = (if (comptime @typeInfo(@TypeOf(char)) == .@"enum") cp_cast_int(u21, @intFromEnum(char)) else cp_cast_int(u21, char));
+        if (((c0 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) == 55296)) {
             if ((input.len == 1)) {
                 return .{ .len = 1, .is_lead = true };
             }
-            const c1 = (if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(input[1])) else @as(u21, input[1]));
-            if (((c1 & (~(if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(1023)) else @as(u21, 1023)))) != 56320)) {
+            const c1 = (if (comptime @typeInfo(@TypeOf(input[1])) == .@"enum") cp_cast_int(u21, @intFromEnum(input[1])) else cp_cast_int(u21, input[1]));
+            if (((c1 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) != 56320)) {
                 if ((input.len == 1)) {
                     return .{ .len = 1 };
                 } else {
@@ -1399,7 +1404,7 @@ pub fn utf16CodepointWithFFFDAndFirstInputChar(char: u16, input: []const u16) UT
             }
             return .{ .len = 2, .code_point = (65536 + (cp_shl((c0 & 1023), 10) | (c1 & 1023))) };
         } else {
-            if (((c0 & (~(if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(1023)) else @as(u21, 1023)))) == 56320)) {
+            if (((c0 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) == 56320)) {
                 return .{ .fail = true, .len = 1, .code_point = unicode_replacement };
             } else {
                 return .{ .code_point = c0, .len = 1 };
@@ -1408,20 +1413,20 @@ pub fn utf16CodepointWithFFFDAndFirstInputChar(char: u16, input: []const u16) UT
 }
 
 pub fn utf16Codepoint(input: []const u16) UTF16Replacement {
-        const c0 = (if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(input[0])) else @as(u21, input[0]));
-        if (((c0 & (~(if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(1023)) else @as(u21, 1023)))) == 55296)) {
+        const c0 = (if (comptime @typeInfo(@TypeOf(input[0])) == .@"enum") cp_cast_int(u21, @intFromEnum(input[0])) else cp_cast_int(u21, input[0]));
+        if (((c0 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) == 55296)) {
             if ((input.len == 1)) {
                 return .{ .len = 1 };
             }
-            const c1 = (if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(input[1])) else @as(u21, input[1]));
-            if (((c1 & (~(if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(1023)) else @as(u21, 1023)))) != 56320)) {
+            const c1 = (if (comptime @typeInfo(@TypeOf(input[1])) == .@"enum") cp_cast_int(u21, @intFromEnum(input[1])) else cp_cast_int(u21, input[1]));
+            if (((c1 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) != 56320)) {
                 if ((input.len == 1)) {
                     return .{ .len = 1 };
                 }
             }
             return .{ .len = 2, .code_point = (65536 + (cp_shl((c0 & 1023), 10) | (c1 & 1023))) };
         } else {
-            if (((c0 & (~(if (comptime @typeInfo(u21) == .@"enum") @as(u21, @enumFromInt(1023)) else @as(u21, 1023)))) == 56320)) {
+            if (((c0 & (~(if (comptime @typeInfo(@TypeOf(1023)) == .@"enum") cp_cast_int(u21, @intFromEnum(1023)) else cp_cast_int(u21, 1023)))) == 56320)) {
                 return .{ .len = 1 };
             } else {
                 return .{ .code_point = c0, .len = 1 };
@@ -1551,7 +1556,7 @@ pub fn convertUTF16toUTF8InBuffer(buf: []u8, input: []const u16) ![]const u8 {
 }
 
 pub fn cp1252ToCodepointAssumeNotASCII(char: u8, comptime CodePointType: type) CodePointType {
-    _ = char;
+        return (if (comptime @typeInfo(CodePointType) == .@"enum" and (@typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(cp1252ToCodepointBytesAssumeNotASCII16(char))) == .@"enum") cp_cast_int(i32, @intFromEnum(cp1252ToCodepointBytesAssumeNotASCII16(char))) else cp_cast_int(i32, cp1252ToCodepointBytesAssumeNotASCII16(char))))) == .int or @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(cp1252ToCodepointBytesAssumeNotASCII16(char))) == .@"enum") cp_cast_int(i32, @intFromEnum(cp1252ToCodepointBytesAssumeNotASCII16(char))) else cp_cast_int(i32, cp1252ToCodepointBytesAssumeNotASCII16(char))))) == .comptime_int)) @as(CodePointType, @enumFromInt((if (comptime @typeInfo(@TypeOf(cp1252ToCodepointBytesAssumeNotASCII16(char))) == .@"enum") cp_cast_int(i32, @intFromEnum(cp1252ToCodepointBytesAssumeNotASCII16(char))) else cp_cast_int(i32, cp1252ToCodepointBytesAssumeNotASCII16(char))))) else @as(CodePointType, (if (comptime @typeInfo(@TypeOf(cp1252ToCodepointBytesAssumeNotASCII16(char))) == .@"enum") cp_cast_int(i32, @intFromEnum(cp1252ToCodepointBytesAssumeNotASCII16(char))) else cp_cast_int(i32, cp1252ToCodepointBytesAssumeNotASCII16(char)))));
 }
 
 pub fn latin1ToCodepointBytesAssumeNotASCII(char: u32) [2]u8 {
@@ -1839,7 +1844,7 @@ pub inline fn decodeWTF8RuneTMultibyte(p: *const [4]u8, len: u3_fast, comptime T
             return zero;
         }
         if ((len == 2)) {
-            const val = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((p[0] & 31))) else @as(T, (p[0] & 31))), 6) | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63)))))) else @as(T, (cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((p[0] & 31))) else @as(T, (p[0] & 31))), 6) | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))))));
+            const val = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 31))) == .int or @typeInfo(@TypeOf((p[0] & 31))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 31))) else @as(T, (p[0] & 31))), 6) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63)))))) == .int or @typeInfo(@TypeOf((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 31))) == .int or @typeInfo(@TypeOf((p[0] & 31))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 31))) else @as(T, (p[0] & 31))), 6) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63)))))) == .comptime_int)) @as(T, @enumFromInt((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 31))) == .int or @typeInfo(@TypeOf((p[0] & 31))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 31))) else @as(T, (p[0] & 31))), 6) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63)))))) else @as(T, (cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 31))) == .int or @typeInfo(@TypeOf((p[0] & 31))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 31))) else @as(T, (p[0] & 31))), 6) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))))));
             if ((val < 128)) {
                 return zero;
             }
@@ -1850,7 +1855,7 @@ pub inline fn decodeWTF8RuneTMultibyte(p: *const [4]u8, len: u3_fast, comptime T
             return zero;
         }
         if ((len == 3)) {
-            const val = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(((cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((p[0] & 15))) else @as(T, (p[0] & 15))), 12) | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63)))))) else @as(T, ((cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((p[0] & 15))) else @as(T, (p[0] & 15))), 12) | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))))));
+            const val = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 15))) == .int or @typeInfo(@TypeOf((p[0] & 15))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 15))) else @as(T, (p[0] & 15))), 12) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63)))))) == .int or @typeInfo(@TypeOf(((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 15))) == .int or @typeInfo(@TypeOf((p[0] & 15))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 15))) else @as(T, (p[0] & 15))), 12) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63)))))) == .comptime_int)) @as(T, @enumFromInt(((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 15))) == .int or @typeInfo(@TypeOf((p[0] & 15))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 15))) else @as(T, (p[0] & 15))), 12) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63)))))) else @as(T, ((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 15))) == .int or @typeInfo(@TypeOf((p[0] & 15))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 15))) else @as(T, (p[0] & 15))), 12) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))))));
             if ((val < 2048)) {
                 return zero;
             }
@@ -1861,7 +1866,7 @@ pub inline fn decodeWTF8RuneTMultibyte(p: *const [4]u8, len: u3_fast, comptime T
             return zero;
         }
         {
-            const val = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((((cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((p[0] & 7))) else @as(T, (p[0] & 7))), 18) | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 12)) | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s3 & 63))) else @as(T, (s3 & 63)))))) else @as(T, (((cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((p[0] & 7))) else @as(T, (p[0] & 7))), 18) | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 12)) | cp_shl((if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt((s3 & 63))) else @as(T, (s3 & 63))))));
+            const val = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 7))) == .int or @typeInfo(@TypeOf((p[0] & 7))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 7))) else @as(T, (p[0] & 7))), 18) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 12)) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s3 & 63))) == .int or @typeInfo(@TypeOf((s3 & 63))) == .comptime_int)) @as(T, @enumFromInt((s3 & 63))) else @as(T, (s3 & 63)))))) == .int or @typeInfo(@TypeOf((((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 7))) == .int or @typeInfo(@TypeOf((p[0] & 7))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 7))) else @as(T, (p[0] & 7))), 18) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 12)) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s3 & 63))) == .int or @typeInfo(@TypeOf((s3 & 63))) == .comptime_int)) @as(T, @enumFromInt((s3 & 63))) else @as(T, (s3 & 63)))))) == .comptime_int)) @as(T, @enumFromInt((((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 7))) == .int or @typeInfo(@TypeOf((p[0] & 7))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 7))) else @as(T, (p[0] & 7))), 18) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 12)) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s3 & 63))) == .int or @typeInfo(@TypeOf((s3 & 63))) == .comptime_int)) @as(T, @enumFromInt((s3 & 63))) else @as(T, (s3 & 63)))))) else @as(T, (((cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((p[0] & 7))) == .int or @typeInfo(@TypeOf((p[0] & 7))) == .comptime_int)) @as(T, @enumFromInt((p[0] & 7))) else @as(T, (p[0] & 7))), 18) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s1 & 63))) == .int or @typeInfo(@TypeOf((s1 & 63))) == .comptime_int)) @as(T, @enumFromInt((s1 & 63))) else @as(T, (s1 & 63))), 12)) | cp_shl((if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s2 & 63))) == .int or @typeInfo(@TypeOf((s2 & 63))) == .comptime_int)) @as(T, @enumFromInt((s2 & 63))) else @as(T, (s2 & 63))), 6)) | (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf((s3 & 63))) == .int or @typeInfo(@TypeOf((s3 & 63))) == .comptime_int)) @as(T, @enumFromInt((s3 & 63))) else @as(T, (s3 & 63))))));
             if (((val < 65536) or (val > 1114111))) {
                 return zero;
             }

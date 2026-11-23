@@ -311,7 +311,7 @@ fn NewLexer_(
 
         /// Look ahead at the next n codepoints without advancing the iterator.
         /// If fewer than n codepoints are available, then return the remainder of the string.
-        fn peek(it: *LexerType, n: usize): string {
+        static fn peek(it: *LexerType, n: usize): string {
             const original_i = it.current;
             defer it.current = original_i;
 
@@ -326,7 +326,7 @@ fn NewLexer_(
             return it.source.contents[original_i..end_ix];
         }
 
-        pub inline fn isIdentifierOrKeyword(lexer: *const LexerType): bool {
+        pub inline static fn isIdentifierOrKeyword(lexer: *const LexerType): bool {
             return @intFromEnum(lexer.token) >= @intFromEnum(T.t_identifier);
         }
 
@@ -336,7 +336,7 @@ fn NewLexer_(
             _.comments_to_preserve_before.clearAndFree();
         }
 
-        fn decodeEscapeSequences(lexer: *LexerType, start: usize, text: string, comptime BufType: type, buf_: *BufType)! {
+        static fn decodeEscapeSequences(lexer: *LexerType, start: usize, text: string, comptime BufType: type, buf_: *BufType)! {
             let buf = buf_.*;
             defer buf_.* = buf;
             if (comptime is_json) lexer.is_ascii_only = false;
@@ -675,7 +675,7 @@ fn NewLexer_(
 
         pub const InnerStringLiteral = LexerInnerStringLiteral;
 
-        fn parseStringLiteralInner(lexer: *LexerType, comptime quote: CodePoint): InnerStringLiteral! {
+        static fn parseStringLiteralInner(lexer: *LexerType, comptime quote: CodePoint): InnerStringLiteral! {
             let suffix_len: u2 = if (comptime quote == 0) 0 else 1;
             let needs_decode = false;
             stringLiteral: while (true) {
@@ -798,7 +798,7 @@ fn NewLexer_(
             return InnerStringLiteral{ needs_decode: needs_decode, suffix_len: suffix_len };
         }
 
-        pub fn parseStringLiteral(lexer: *LexerType, comptime quote: CodePoint)! {
+        pub static fn parseStringLiteral(lexer: *LexerType, comptime quote: CodePoint)! {
             if (comptime quote != '`') {
                 lexer.token = T.t_string_literal;
             } else if (lexer.rescan_close_brace_as_template_token) {
@@ -829,7 +829,7 @@ fn NewLexer_(
             }
         }
 
-        inline fn nextCodepointSlice(it: *const LexerType): []const u8 {
+        inline static fn nextCodepointSlice(it: *const LexerType): []const u8 {
             if (it.current >= it.source.contents.len) {
                 return "";
             }
@@ -837,11 +837,11 @@ fn NewLexer_(
             return if (!(cp_len + it.current > it.source.contents.len)) it.source.contents[it.current .. cp_len + it.current] else "";
         }
 
-        fn remaining(it: *const LexerType): []const u8 {
+        static fn remaining(it: *const LexerType): []const u8 {
             return it.source.contents[it.current..];
         }
 
-        inline fn nextCodepoint(it: *LexerType): CodePoint {
+        inline static fn nextCodepoint(it: *LexerType): CodePoint {
             if (it.current >= it.source.contents.len) {
                 it.end = it.source.contents.len;
                 return -1;
@@ -865,7 +865,7 @@ fn NewLexer_(
             return code_point;
         }
 
-        pub fn step(lexer: *LexerType) {
+        pub static fn step(lexer: *LexerType) {
             lexer.code_point = lexer.nextCodepoint();
 
             // Track the approximate number of newlines in the file so we can preallocate
@@ -885,7 +885,7 @@ fn NewLexer_(
             _.next()?;
         }
 
-        pub inline fn expectOrInsertSemicolon(lexer: *LexerType)! {
+        pub inline static fn expectOrInsertSemicolon(lexer: *LexerType)! {
             if (lexer.token == T.t_semicolon || (!lexer.has_newline_before &&
                 lexer.token != T.t_close_brace && lexer.token != T.t_end_of_file))
             {
@@ -903,7 +903,7 @@ fn NewLexer_(
 
         // This is an edge case that doesn't really exist in the wild, so it doesn't
         // need to be as fast as possible.
-        pub fn scanIdentifierWithEscapes(lexer: *LexerType, kind: IdentifierKind): ScanResult! {
+        pub static fn scanIdentifierWithEscapes(lexer: *LexerType, kind: IdentifierKind): ScanResult! {
             let result = ScanResult{ token: .t_end_of_file, contents: "" };
             // First pass: scan over the identifier to see how long it is
             while (true) {
@@ -1026,7 +1026,7 @@ fn NewLexer_(
             _.next()?;
         }
 
-        pub fn maybeExpandEquals(lexer: *LexerType)! {
+        pub static fn maybeExpandEquals(lexer: *LexerType)! {
             switch (lexer.code_point) {
                 '>' => {
                     // "=" + ">" = "=>"
@@ -1048,7 +1048,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn expectLessThan(lexer: *LexerType, comptime is_inside_jsx_element: bool)! {
+        pub static fn expectLessThan(lexer: *LexerType, comptime is_inside_jsx_element: bool)! {
             switch (lexer.token) {
                 .t_less_than => {
                     if (is_inside_jsx_element) {
@@ -1076,7 +1076,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn expectGreaterThan(lexer: *LexerType, comptime is_inside_jsx_element: bool)! {
+        pub static fn expectGreaterThan(lexer: *LexerType, comptime is_inside_jsx_element: bool)! {
             switch (lexer.token) {
                 .t_greater_than => {
                     if (is_inside_jsx_element) {
@@ -1118,7 +1118,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn next(lexer: *LexerType)! {
+        pub static fn next(lexer: *LexerType)! {
             lexer.has_newline_before = lexer.end == 0;
             lexer.has_pure_comment_before = false;
             lexer.has_no_side_effect_comment_before = false;
@@ -1833,7 +1833,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn unexpected(lexer: *LexerType)! {
+        pub static fn unexpected(lexer: *LexerType)! {
             const found = finder: {
                 lexer.start = @min(lexer.start, lexer.end);
 
@@ -1898,7 +1898,7 @@ fn NewLexer_(
             }
         }
 
-        fn scanCommentText(lexer: *LexerType, for_pragma: bool) {
+        static fn scanCommentText(lexer: *LexerType, for_pragma: bool) {
             const text = lexer.source.contents[lexer.start..lexer.end];
             const has_legal_annotation = text.len > 2 && text[2] == '!';
             const is_multiline_comment = text.len > 1 && text[1] == '*';
@@ -1956,7 +1956,7 @@ fn NewLexer_(
         }
 
         /// This scans a "// comment" in a single pass over the input.
-        fn scanSingleLineComment(lexer: *LexerType) {
+        static fn scanSingleLineComment(lexer: *LexerType) {
             while (true) {
                 // Find index of newline (ASCII/Unicode), non-ASCII, '#', or '@'.
                 if (relative_index := bun.highway.indexOfNewlineOrNonASCIIOrHashOrAt(lexer.remaining())) {
@@ -2018,7 +2018,7 @@ fn NewLexer_(
         /// Scans the string for a pragma.
         /// offset is used when there's an issue with the JSX pragma later on.
         /// Returns the byte length to advance by if found, otherwise 0.
-        fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: string, allow_newline: bool): usize {
+        static fn scanPragma(lexer: *LexerType, offset_for_errors: usize, chunk: string, allow_newline: bool): usize {
             if (!lexer.has_pure_comment_before) {
                 if (strings.hasPrefixWithWordBoundary(chunk, "__PURE__")) {
                     lexer.has_pure_comment_before = true;
@@ -2057,7 +2057,7 @@ fn NewLexer_(
             return 0;
         }
         // TODO: implement this
-        pub fn removeMultilineCommentIndent(_: *LexerType, _: string, text: string): string {
+        pub static fn removeMultilineCommentIndent(_: *LexerType, _: string, text: string): string {
             return text;
         }
 
@@ -2068,7 +2068,7 @@ fn NewLexer_(
             };
         }
 
-        pub fn initJSON(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator): LexerType! {
+        pub static fn initJSON(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator): LexerType! {
             let lex = LexerType{
                 log: log,
                 source: source.*,
@@ -2084,7 +2084,7 @@ fn NewLexer_(
             return lex;
         }
 
-        pub fn initWithoutReading(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator): LexerType {
+        pub static fn initWithoutReading(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator): LexerType {
             return LexerType{
                 log: log,
                 source: source.*,
@@ -2104,7 +2104,7 @@ fn NewLexer_(
             return lex;
         }
 
-        pub fn toEString(lexer: *LexerType): js_ast.E.String! {
+        pub static fn toEString(lexer: *LexerType): js_ast.E.String! {
             switch (lexer.string_literal_raw_format) {
                 .ascii => {
                     // string_literal_raw_content contains ascii without escapes
@@ -2136,7 +2136,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn toUTF8EString(lexer: *LexerType): js_ast.E.String! {
+        pub static fn toUTF8EString(lexer: *LexerType): js_ast.E.String! {
             let res = lexer.toEString()?;
             res.toUTF8(lexer.allocator)?;
             return res;
@@ -2147,7 +2147,7 @@ fn NewLexer_(
             if (comptime is_json) unreachable;
         }
 
-        pub fn scanRegExp(lexer: *LexerType)! {
+        pub static fn scanRegExp(lexer: *LexerType)! {
             assertNotJSON();
             lexer.regex_flags_start = null;
             while (true) {
@@ -2209,10 +2209,10 @@ fn NewLexer_(
             }
         }
 
-        pub fn utf16ToString(lexer: *const LexerType, js: JavascriptString): string! {
+        pub static fn utf16ToString(lexer: *const LexerType, js: JavascriptString): string! {
             return strings.toUTF8AllocWithType(lexer.allocator, js)?;
         }
-        pub fn nextInsideJSXElement(lexer: *LexerType)! {
+        pub static fn nextInsideJSXElement(lexer: *LexerType)! {
             assertNotJSON();
 
             lexer.has_newline_before = false;
@@ -2362,7 +2362,7 @@ fn NewLexer_(
                 return;
             }
         }
-        pub fn parseJSXStringLiteral(lexer: *LexerType, comptime quote: u8)! {
+        pub static fn parseJSXStringLiteral(lexer: *LexerType, comptime quote: u8)! {
             * = quote;
             assertNotJSON();
 
@@ -2436,7 +2436,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn expectJSXElementChild(lexer: *LexerType, token: T)! {
+        pub static fn expectJSXElementChild(lexer: *LexerType, token: T)! {
             assertNotJSON();
 
             if (lexer.token != token) {
@@ -2446,7 +2446,7 @@ fn NewLexer_(
             lexer.nextJSXElementChild()?;
         }
 
-        pub fn nextJSXElementChild(lexer: *LexerType)! {
+        pub static fn nextJSXElementChild(lexer: *LexerType)! {
             assertNotJSON();
 
             lexer.has_newline_before = false;
@@ -2518,7 +2518,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn fixWhitespaceAndDecodeJSXEntities(lexer: *LexerType, text: string, decoded: *std.array_list.Managed(u16))! {
+        pub static fn fixWhitespaceAndDecodeJSXEntities(lexer: *LexerType, text: string, decoded: *std.array_list.Managed(u16))! {
             assertNotJSON();
 
             let after_last_non_whitespace: u32? = null;
@@ -2567,7 +2567,7 @@ fn NewLexer_(
             }
         }
 
-        fn maybeDecodeJSXEntity(lexer: *LexerType, text: string, cursor: *strings.CodepointIterator.Cursor) {
+        static fn maybeDecodeJSXEntity(lexer: *LexerType, text: string, cursor: *strings.CodepointIterator.Cursor) {
             assertNotJSON();
 
             if (length := strings.indexOfChar(text[cursor.width + cursor.i ..], ';')) {
@@ -2599,7 +2599,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn decodeJSXEntities(lexer: *LexerType, text: string, out: *std.array_list.Managed(u16))! {
+        pub static fn decodeJSXEntities(lexer: *LexerType, text: string, out: *std.array_list.Managed(u16))! {
             assertNotJSON();
 
             const iterator = strings.CodepointIterator.init(text);
@@ -2613,18 +2613,12 @@ fn NewLexer_(
                 } else {
                     cursor.c -= 0x10000;
                     out.ensureUnusedCapacity(2)?;
-                    out.appendAssumeCapacity(@as(
-                        u16,
-                        @truncate(@as(u32, @bitCast(@as(i32, 0xD800) + ((cursor.c >> 10) & 0x3FF)))),
-                    ));
-                    out.appendAssumeCapacity(@as(
-                        u16,
-                        @truncate(@as(u32, @bitCast(@as(i32, 0xDC00) + (cursor.c & 0x3FF)))),
-                    ));
+                    out.appendAssumeCapacity(@as(u16, @truncate(@as(u32, @bitCast(@as(i32, 0xD800) + ((cursor.c >> 10) & 0x3FF))))));
+                    out.appendAssumeCapacity(@as(u16, @truncate(@as(u32, @bitCast(@as(i32, 0xDC00) + (cursor.c & 0x3FF))))));
                 }
             }
         }
-        pub fn expectInsideJSXElement(lexer: *LexerType, token: T)! {
+        pub static fn expectInsideJSXElement(lexer: *LexerType, token: T)! {
             assertNotJSON();
 
             if (lexer.token != token) {
@@ -2635,7 +2629,7 @@ fn NewLexer_(
             lexer.nextInsideJSXElement()?;
         }
 
-        pub fn expectInsideJSXElementWithName(lexer: *LexerType, token: T, name: string)! {
+        pub static fn expectInsideJSXElementWithName(lexer: *LexerType, token: T, name: string)! {
             assertNotJSON();
 
             if (lexer.token != token) {
@@ -2646,7 +2640,7 @@ fn NewLexer_(
             lexer.nextInsideJSXElement()?;
         }
 
-        fn scanRegExpValidateAndStep(lexer: *LexerType)! {
+        static fn scanRegExpValidateAndStep(lexer: *LexerType)! {
             assertNotJSON();
 
             if (lexer.code_point == '\\') {
@@ -2667,7 +2661,7 @@ fn NewLexer_(
             }
         }
 
-        pub fn rescanCloseBraceAsTemplateToken(lexer: *LexerType)! {
+        pub static fn rescanCloseBraceAsTemplateToken(lexer: *LexerType)! {
             assertNotJSON();
 
             if (lexer.token != .t_close_brace) {
@@ -2682,7 +2676,7 @@ fn NewLexer_(
             lexer.rescan_close_brace_as_template_token = false;
         }
 
-        pub fn rawTemplateContents(lexer: *LexerType): string {
+        pub static fn rawTemplateContents(lexer: *LexerType): string {
             assertNotJSON();
 
             let text: string = undefined;
@@ -2734,7 +2728,7 @@ fn NewLexer_(
             return bytes.toOwnedSliceLength(end);
         }
 
-        fn parseNumericLiteralOrDot(lexer: *LexerType)! {
+        static fn parseNumericLiteralOrDot(lexer: *LexerType)! {
             // Number or dot;
             const first = lexer.code_point;
             lexer.step();

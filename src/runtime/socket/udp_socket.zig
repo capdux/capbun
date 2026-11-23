@@ -244,7 +244,7 @@ pub fn fromJS(globalThis: *JSGlobalObject, options: JSValue, thisValue: JSValue)
                 if ((!socket.isObject())) {
                     return globalThis.throwInvalidArguments("Expected \"socket\" to be an object", .{});
                 }
-                if (try socket.getTruthy(globalThis, "binaryType")) |value| {
+                if (try options.getTruthy(globalThis, "binaryType")) |value| {
                     _ = &value;
                     if ((!value.isString())) {
                         return globalThis.throwInvalidArguments("Expected \"socket.binaryType\" to be a string", .{});

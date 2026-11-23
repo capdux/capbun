@@ -132,7 +132,7 @@ pub fn scanSourceMappingURLValue(start: usize, offset_for_errors: usize, chunk: 
 };
             const url = url_and_rest_of_code[0..url_len];
             const absolute_arg_start = ((start + offset_for_errors) + prefix);
-            result.* = (if (comptime @typeInfo(OptSpan) == .@"enum") @as(OptSpan, @enumFromInt(js_ast.Span{ .range = logger.Range{ .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))), .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) } }, .text = url })) else @as(OptSpan, js_ast.Span{ .range = logger.Range{ .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))), .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) } }, .text = url }));
+            result.* = (if (comptime @typeInfo(OptSpan) == .@"enum" and (@typeInfo(@TypeOf(js_ast.Span{ .range = logger.Range{ .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))), .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) } }, .text = url })) == .int or @typeInfo(@TypeOf(js_ast.Span{ .range = logger.Range{ .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))), .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) } }, .text = url })) == .comptime_int)) @as(OptSpan, @enumFromInt(js_ast.Span{ .range = logger.Range{ .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))), .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) } }, .text = url })) else @as(OptSpan, js_ast.Span{ .range = logger.Range{ .len = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(url_len)) == .@"enum") cp_cast_int(i32, @intFromEnum(url_len)) else cp_cast_int(i32, url_len)))), .loc = .{ .start = (if (comptime @typeInfo(@TypeOf((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) == .@"enum") cp_cast_int(i32, @intFromEnum((if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) else cp_cast_int(i32, (if (comptime @typeInfo(@TypeOf(absolute_arg_start)) == .@"enum") cp_cast_int(i32, @intFromEnum(absolute_arg_start)) else cp_cast_int(i32, absolute_arg_start)))) } }, .text = url }));
             return (prefix + url_len);
     }
 
@@ -932,7 +932,7 @@ pub inline fn nextCodepoint(it: *LexerType) CodePoint {
             const slice = (if ((!((cp_len + it.current) > it.source.contents.len))) it.source.contents[it.current..(cp_len + it.current)] else "");
             const code_point = (switch (slice.len) {
 0 => -1,
-1 => (if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(slice[0])) else @as(CodePoint, slice[0])),
+1 => (if (comptime @typeInfo(CodePoint) == .@"enum" and (@typeInfo(@TypeOf(slice[0])) == .int or @typeInfo(@TypeOf(slice[0])) == .comptime_int)) @as(CodePoint, @enumFromInt(slice[0])) else @as(CodePoint, slice[0])),
 else => strings.decodeWTF8RuneTMultibyte((blk: {
             break :blk slice.ptr[0..4];
 
@@ -2447,6 +2447,8 @@ pub fn decodeJSXEntities(lexer: *LexerType, text: []const u8, out: *std.array_li
                 } else {
                     cursor.c = (cursor.c - 65536);
                     _ = try out.ensureUnusedCapacity(2);
+                    _ = out.appendAssumeCapacity(@as(u16, @truncate(@as(u32, @bitCast(((if (comptime @typeInfo(@TypeOf(55296)) == .@"enum") cp_cast_int(i32, @intFromEnum(55296)) else cp_cast_int(i32, 55296)) + (cp_shr(cursor.c, 10) & 1023)))))));
+                    _ = out.appendAssumeCapacity(@as(u16, @truncate(@as(u32, @bitCast(((if (comptime @typeInfo(@TypeOf(56320)) == .@"enum") cp_cast_int(i32, @intFromEnum(56320)) else cp_cast_int(i32, 56320)) + (cursor.c & 1023)))))));
                 }
             }
     }
@@ -2869,22 +2871,22 @@ pub fn isIdentifierUTF16(text: []const u16) bool {
         _ = &i;
         while ((i < n)) {
             const is_start = (i == 0);
-            var cp = (if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(text[@as(usize, @intCast(i))])) else @as(CodePoint, text[@as(usize, @intCast(i))]));
+            var cp = (if (comptime @typeInfo(CodePoint) == .@"enum" and (@typeInfo(@TypeOf(text[@as(usize, @intCast(i))])) == .int or @typeInfo(@TypeOf(text[@as(usize, @intCast(i))])) == .comptime_int)) @as(CodePoint, @enumFromInt(text[@as(usize, @intCast(i))])) else @as(CodePoint, text[@as(usize, @intCast(i))]));
             _ = &cp;
             i = (i + 1);
             if ((((cp >= 55296) and (cp <= 56319)) and (i < n))) {
-                const surrogate = (if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(text[@as(usize, @intCast(i))])) else @as(CodePoint, text[@as(usize, @intCast(i))]));
+                const surrogate = (if (comptime @typeInfo(CodePoint) == .@"enum" and (@typeInfo(@TypeOf(text[@as(usize, @intCast(i))])) == .int or @typeInfo(@TypeOf(text[@as(usize, @intCast(i))])) == .comptime_int)) @as(CodePoint, @enumFromInt(text[@as(usize, @intCast(i))])) else @as(CodePoint, text[@as(usize, @intCast(i))]));
                 if (((surrogate >= 56320) and (surrogate <= 57343))) {
-                    cp = (if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(((cp_shl(cp, 10) + surrogate) + ((65536 - cp_shl(55296, 10)) - 56320)))) else @as(CodePoint, ((cp_shl(cp, 10) + surrogate) + ((65536 - cp_shl(55296, 10)) - 56320))));
+                    cp = (if (comptime @typeInfo(CodePoint) == .@"enum" and (@typeInfo(@TypeOf(((cp_shl(cp, 10) + surrogate) + ((65536 - cp_shl(55296, 10)) - 56320)))) == .int or @typeInfo(@TypeOf(((cp_shl(cp, 10) + surrogate) + ((65536 - cp_shl(55296, 10)) - 56320)))) == .comptime_int)) @as(CodePoint, @enumFromInt(((cp_shl(cp, 10) + surrogate) + ((65536 - cp_shl(55296, 10)) - 56320)))) else @as(CodePoint, ((cp_shl(cp, 10) + surrogate) + ((65536 - cp_shl(55296, 10)) - 56320))));
                     i = (i + 1);
                 }
             }
             if (is_start) {
-                if ((!isIdentifierStart((if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(cp)) else @as(CodePoint, cp))))) {
+                if ((!isIdentifierStart((if (comptime @typeInfo(CodePoint) == .@"enum" and (@typeInfo(@TypeOf(cp)) == .int or @typeInfo(@TypeOf(cp)) == .comptime_int)) @as(CodePoint, @enumFromInt(cp)) else @as(CodePoint, cp))))) {
                     return false;
                 }
             } else {
-                if ((!isIdentifierContinue((if (comptime @typeInfo(CodePoint) == .@"enum") @as(CodePoint, @enumFromInt(cp)) else @as(CodePoint, cp))))) {
+                if ((!isIdentifierContinue((if (comptime @typeInfo(CodePoint) == .@"enum" and (@typeInfo(@TypeOf(cp)) == .int or @typeInfo(@TypeOf(cp)) == .comptime_int)) @as(CodePoint, @enumFromInt(cp)) else @as(CodePoint, cp))))) {
                     return false;
                 }
             }
@@ -3000,7 +3002,13 @@ pub fn skipToInterestingCharacterInMultilineComment(text_: []const u8) ?u32 {
         _ = bun.assertWithLocation((text_end_len <= text.len), @src());
         const text_end_ptr = (text.ptr + text_end_len);
         while ((text_end_ptr != text.ptr)) {
-            const vec = (if (comptime @typeInfo(strings.AsciiVector) == .@"enum") @as(strings.AsciiVector, @enumFromInt((blk: {
+            const vec = (if (comptime @typeInfo(strings.AsciiVector) == .@"enum" and (@typeInfo(@TypeOf((blk: {
+            break :blk (text.ptr[0..strings.ascii_vector_size]).*;
+
+}))) == .int or @typeInfo(@TypeOf((blk: {
+            break :blk (text.ptr[0..strings.ascii_vector_size]).*;
+
+}))) == .comptime_int)) @as(strings.AsciiVector, @enumFromInt((blk: {
             break :blk (text.ptr[0..strings.ascii_vector_size]).*;
 
 }))) else @as(strings.AsciiVector, (blk: {

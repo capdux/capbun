@@ -81,7 +81,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
         /// Advance forward until the scalar function returns true.
         /// THe simd function is "best effort" and expected to sometimes return a result which `scalar` will return false for.
         /// This is because we don't decode UTF-8 in the SIMD code path.
-        pub fn skip(it: *const Iterator, cursor: *Cursor, simd: SimdScanFn, scalar: fn (CodePointType): bool): SkipResult {
+        pub static fn skip(it: *const Iterator, cursor: *Cursor, simd: SimdScanFn, scalar: fn (CodePointType): bool): SkipResult {
             while (true) {
                 // 1. Get current position. Check for EOF.
                 const current_byte_index = cursor.i;
@@ -143,7 +143,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             unreachable;
         }
 
-        pub inline fn next(it: *const Iterator, cursor: *Cursor): bool {
+        pub inline static fn next(it: *const Iterator, cursor: *Cursor): bool {
             const pos: u32 = @as(u32, cursor.width) + cursor.i;
             if (pos >= it.bytes.len) {
                 return false;
@@ -177,7 +177,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             return true;
         }
 
-        fn nextCodepointSlice(it: *Iterator) callconv(bun.callconv_inline): []const u8 {
+        static fn nextCodepointSlice(it: *Iterator) callconv(bun.callconv_inline): []const u8 {
             const bytes = it.bytes;
             const prev = it.i;
             const next_ = prev + it.next_width;
@@ -192,7 +192,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             return slice;
         }
 
-        pub fn needsUTF8Decoding(slice: string): bool {
+        pub static fn needsUTF8Decoding(slice: string): bool {
             let it = Iterator{ .bytes = slice, .i = 0 };
 
             while (true) {
@@ -206,7 +206,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             }
         }
 
-        pub fn scanUntilQuotedValueOrEOF(iter: *Iterator, comptime quote: CodePointType): usize {
+        pub static fn scanUntilQuotedValueOrEOF(iter: *Iterator, comptime quote: CodePointType): usize {
             while (iter.c > -1) {
                 if (!switch (iter.nextCodepoint()) {
                     quote => false,
@@ -225,7 +225,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
             return iter.i;
         }
 
-        pub fn nextCodepoint(it: *Iterator): CodePointType {
+        pub static fn nextCodepoint(it: *Iterator): CodePointType {
             const slice = it.nextCodepointSlice();
 
             it.c = switch (slice.len) {
@@ -242,7 +242,7 @@ pub fn NewCodePointIterator(comptime CodePointType_: type, comptime zeroValue: c
 
         /// Look ahead at the next n codepoints without advancing the iterator.
         /// If fewer than n codepoints are available, then return the remainder of the string.
-        pub fn peek(it: *Iterator, n: usize): []const u8 {
+        pub static fn peek(it: *Iterator, n: usize): []const u8 {
             const original_i = it.i;
             defer it.i = original_i;
 
@@ -618,7 +618,7 @@ pub struct UTF16Replacement {
     can_buffer: bool = true,
     is_lead: bool = false,
 
-    pub inline fn utf8Width(replacement: UTF16Replacement): u3_fast {
+    pub inline static fn utf8Width(replacement: UTF16Replacement): u3_fast {
         return switch (replacement.code_point) {
             0..=0x7F => 1,
             0x80..=0x7FF => 2,
@@ -922,14 +922,9 @@ pub fn toUTF8AllocZ(allocator: std.mem.Allocator, js: []const u16): OOM![:0]u8 {
     return list.items[0 .. list.items.len - 1 :0];
 }
 
-pub inline fn appendUTF8MachineWordToUTF16MachineWord(output: *[@sizeOf(usize) / 2]u16, input: *const [@sizeOf(usize) / 2]u8) {
-    output[0 .. @sizeOf(usize) / 2].* = @as(
-        [4]u16,
-        @bitCast(@as(
-            @Vector(4, u16),
-            @as(@Vector(4, u8), @bitCast(input[0 .. @sizeOf(usize) / 2].*)),
-        )),
-    );
+const half_usize = @sizeOf(usize) / 2;
+pub inline fn appendUTF8MachineWordToUTF16MachineWord(output: *[half_usize]u16, input: *const [half_usize]u8) {
+    output[0..half_usize].* = @as([4]u16, @bitCast(@as(@Vector(4, u16), @as(@Vector(4, u8), @bitCast(input[0..half_usize].*)))));
 }
 
 pub inline fn copyU8IntoU16(output_: []u16, input_: []const u8) {
@@ -1648,10 +1643,7 @@ pub fn convertUTF16toUTF8InBuffer(
 }
 
 pub fn cp1252ToCodepointAssumeNotASCII(char: u8, comptime CodePointType: type): CodePointType {
-    return @as(
-        CodePointType,
-        i32(cp1252ToCodepointBytesAssumeNotASCII16(char)),
-    );
+    return @as(CodePointType, i32(cp1252ToCodepointBytesAssumeNotASCII16(char)));
 }
 
 const cp1252_to_utf16_conversion_table: [256]u16 = [
