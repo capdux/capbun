@@ -80,7 +80,7 @@ pub struct NodeJSPathName {
     ext: string,
     filename: string,
 
-    fn init(_path: string, comptime isWindows: bool): NodeJSPathName {
+    static fn init(_path: string, comptime isWindows: bool): NodeJSPathName {
         const platform: path_handler.Platform = if (isWindows) .windows else .posix;
         const getLastSep = comptime platform.getLastSeparatorFunc();
 
@@ -157,7 +157,7 @@ pub struct PathName {
     ext: string,
     filename: string,
 
-    fn findExtname(_path: string): string {
+    static fn findExtname(_path: string): string {
         let start: usize = 0;
         if (i := bun.path.lastIndexOfSep(_path)) {
             start = i + 1;
@@ -222,7 +222,7 @@ pub struct PathName {
         return unsafe { _.dir.ptr[0 .. _.dir.len + extra] };
     }
 
-    fn init(_path: string): PathName {
+    static fn init(_path: string): PathName {
         if (comptime Environment.isWindows && Environment.isDebug) {
             // It path is likely incorrect. I think it may be *possible*
             // but it is almost entirely certainly a bug.
@@ -411,7 +411,7 @@ pub struct Path {
         }
     }
 
-    pub inline fn assertFilePathIsAbsolute(path: *const Path) {
+    static inline fn assertFilePathIsAbsolute(path: *const Path) {
         if (bun.Environment.ci_assert) {
             if (path.isFile()) {
                 bun.assert(std.fs.path.isAbsolute(path.text));
@@ -419,7 +419,7 @@ pub struct Path {
         }
     }
 
-    pub inline fn isPrettyPathPosix(path: *const Path): bool {
+    static inline fn isPrettyPathPosix(path: *const Path): bool {
         if (!Environment.isWindows) return true;
         return bun.strings.indexOfChar(path.pretty, '\\') == null;
     }
@@ -546,7 +546,7 @@ pub struct Path {
         };
     }
 
-    pub inline fn initWithNamespaceVirtual(comptime text: string, comptime namespace: string, comptime package: string): Path {
+    static inline fn initWithNamespaceVirtual(comptime text: string, comptime namespace: string, comptime package: string): Path {
         return comptime Path{
             pretty: namespace ++ ":" ++ package,
             is_symlink: true,
@@ -556,7 +556,7 @@ pub struct Path {
         };
     }
 
-    pub inline fn initForKitBuiltIn(comptime namespace: string, comptime package: string): Path {
+    static inline fn initForKitBuiltIn(comptime namespace: string, comptime package: string): Path {
         return comptime Path{
             pretty: namespace ++ ":" ++ package,
             is_symlink: true,
@@ -774,7 +774,7 @@ pub struct _RealFSLimit {
             return Entry.Lookup{ .entry = result, .diff_case = null };
         }
 
-        fn comptimeToLower(comptime str: auto): [u8; str.len] {
+        static fn comptimeToLower(comptime str: auto): [u8; str.len] {
             let buf: [u8; str.len] = undefined;
             let i: usize = 0;
             while (i < str.len) : (i += 1) {
@@ -1110,7 +1110,7 @@ pub struct RealFS {
         file_limit: usize = 32,
         file_quota: usize = 32,
 
-        fn #platformTempDir(): []const u8 {
+        static fn #platformTempDir(): []const u8 {
             // Try TMPDIR, TMP, and TEMP in that order, matching Node.js.
             // https://github.com/nodejs/node/blob/e172be269890702bf2ad06252f2f152e7604d76c/src/node_credentials.cc#L132
             if (dir := (bun.env_var.TMPDIR.getNotEmpty() ??
@@ -1132,7 +1132,7 @@ pub struct RealFS {
                             bun.default_allocator,
                             "{s}\\Temp",
                             .{strings.withoutTrailingSlash(windir)},
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
 
                     if (profile := bun.env_var.HOME.get()) {
@@ -1149,7 +1149,7 @@ pub struct RealFS {
                         bun.default_allocator,
                         "{s}\\Windows\\Temp",
                         .{strings.withoutTrailingSlash(root)},
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 },
                 .mac => "/private/tmp",
                 else => if (comptime Environment.isAndroid) "/data/local/tmp" else "/tmp",
@@ -1186,7 +1186,7 @@ pub struct RealFS {
             let existing = _.entries.atIndex(index) ?? return null;
             if (existing.* == .entries) {
                 if (existing.entries.generation < generation) {
-                    let handle = bun.openDirForIteration(FD.cwd(), existing.entries.dir).unwrap() catch |e| {
+                    let handle = bun.openDirForIteration(FD.cwd(), existing.entries.dir).unwrap() catch e => {
                         existing.entries.data.clearAndFree(bun.default_allocator);
 
                         return _.readDirectoryError(existing.entries.dir, e) catch unreachable;
@@ -1204,7 +1204,7 @@ pub struct RealFS {
 
                         void,
                         undefined,
-                    ) catch |e| {
+                    ) catch e => {
                         existing.entries.data.clearAndFree(bun.default_allocator);
                         return _.readDirectoryError(existing.entries.dir, e) catch unreachable;
                     };
@@ -1466,7 +1466,7 @@ pub struct RealFS {
                 }
             }
 
-            let handle = maybe_handle ?? (RealFS.openDir(fs, dir) catch |e| {
+            let handle = maybe_handle ?? (RealFS.openDir(fs, dir) catch e => {
                 return RealFS.readDirectoryError(fs, dir, e)?;
             });
 
@@ -1495,7 +1495,7 @@ pub struct RealFS {
 
                 Iterator,
                 iterator,
-            ) catch |e| {
+            ) catch e => {
                 if (existing := in_place) existing.data.clearAndFree(bun.default_allocator);
                 return RealFS.readDirectoryError(fs, dir, e)?;
             };
@@ -1568,7 +1568,7 @@ pub struct RealFS {
                 shared_buffer.reset();
 
                 // Skip the extra file.stat() call when possible
-                let size = size_hint ?? (file.getEndPos() catch |e| {
+                let size = size_hint ?? (file.getEndPos() catch e => {
                     RealFS.readFileError(fs, path, e);
                     return e;
                 });
@@ -1596,7 +1596,7 @@ pub struct RealFS {
                 // during HMR
                 while (true) {
                     // We use pread to ensure if the file handle was open, it doesn't seek from the last position
-                    const read_count = file.readAll(shared_buffer.list.items[bytes_read..]) catch |e| {
+                    const read_count = file.readAll(shared_buffer.list.items[bytes_read..]) catch e => {
                         RealFS.readFileError(fs, path, e);
                         return e;
                     };
@@ -1607,7 +1607,7 @@ pub struct RealFS {
                     if (comptime stream) {
                         // check again that stat() didn't change the file size
                         // another reason to only do it when stream
-                        const new_size = file.getEndPos() catch |e| {
+                        const new_size = file.getEndPos() catch e => {
                             RealFS.readFileError(fs, path, e);
                             return e;
                         };
@@ -1642,7 +1642,7 @@ pub struct RealFS {
                 // that we need to dynamically allocate memory to read it.
                 const initial_read = if (size_hint == null) brk: {
                     const buf: []u8 = &initial_buf;
-                    const read_count = file.readAll(buf).unwrap() catch |e| {
+                    const read_count = file.readAll(buf).unwrap() catch e => {
                         RealFS.readFileError(fs, path, e);
                         return e;
                     };
@@ -1662,7 +1662,7 @@ pub struct RealFS {
                 } else initial_buf[0..0];
 
                 // Skip the extra file.stat() call when possible
-                const size = size_hint ?? (file.getEndPos().unwrap() catch |e| {
+                const size = size_hint ?? (file.getEndPos().unwrap() catch e => {
                     RealFS.readFileError(fs, path, e);
                     return e;
                 });
@@ -1678,7 +1678,7 @@ pub struct RealFS {
                 // stick a zero at the end
                 buf[size] = 0;
 
-                const read_count = file.readAll(buf[initial_read.len..]).unwrap() catch |e| {
+                const read_count = file.readAll(buf[initial_read.len..]).unwrap() catch e => {
                     RealFS.readFileError(fs, path, e);
                     return e;
                 };
@@ -1937,7 +1937,7 @@ pub struct FileSystem {
 
     pub static let max_fd: std.posix.fd_t = 0;
 
-    pub inline fn setMaxFd(fd: std.posix.fd_t) {
+    static inline fn setMaxFd(fd: std.posix.fd_t) {
         if (Environment.isWindows) {
             return;
         }
@@ -2139,11 +2139,11 @@ pub fn printHandle(handle: auto): std.fmt.Alt(@TypeOf(handle), FmtHandleFnGenera
 }
 fn FmtHandleFnGenerator(comptime T: type): type {
     return struct {
-        fn fmtHandle(handle: T, writer: *std.Io.Writer): std.Io.Writer.Error!void {
+        static fn fmtHandle(handle: T, writer: *std.Io.Writer): std.Io.Writer.Error!void {
             switch (@TypeOf(handle)) {
-                i32, c_int => try writer.print("{d}", .{handle}),
-                *! => try writer.print("{*}", .{handle}),
-                FD => try writer.print("{f}", .{handle}),
+                i32, c_int => writer.print("{d}", .{handle})?,
+                *! => writer.print("{*}", .{handle})?,
+                FD => writer.print("{f}", .{handle})?,
                 else => {
                     @compileError("unsupported type for fmtHandle: " ++ @typeName(T));
                 },

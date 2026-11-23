@@ -419,7 +419,7 @@ fn VisitStmtVisitors(
                                             value: data.value.expr,
                                         },
                                     })?,
-                                }, stmt.loc)) catch |e| bun.handleOom(e);
+                                }, stmt.loc)) catch e => bun.handleOom(e);
 
                                 data.value = { expr: .initIdentifier(ref_to_use, stmt.loc) };
 
@@ -1429,7 +1429,7 @@ fn VisitStmtVisitors(
                                 p.allocator,
                                 value.ref,
                                 { enum_number: num.value },
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
 
                             next_numeric_value = num.value + 1.0;
                         },
@@ -1442,7 +1442,7 @@ fn VisitStmtVisitors(
                                 p.allocator,
                                 value.ref,
                                 { enum_string: str },
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                         },
                         else => {
                             if (visited.knownPrimitive() == .@"string") {
@@ -1465,7 +1465,7 @@ fn VisitStmtVisitors(
                         p.allocator,
                         value.ref,
                         { enum_number: num },
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else {
                     value.value = p.newExpr(E.Undefined{}, value.loc);
                 }
@@ -1521,7 +1521,7 @@ fn VisitStmtVisitors(
                             }, value.loc),
                             name_as_e_string.?,
                         ),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                     p.recordUsage(data.arg);
                 }
             }

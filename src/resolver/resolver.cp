@@ -1,6 +1,7 @@
 import data_url_mod from "./data_url.zig";
 pub const DataURL = data_url_mod.DataURL;
 import DirInfo from "./dir_info.zig";
+struct TSConfigPtrHolder { p: *TSConfigJSON }
 
 const debuglog = Output.scoped(.Resolver, .hidden);
 
@@ -1142,7 +1143,7 @@ pub struct Resolver {
         switch (tmp) {
             .success => |*result| {
                 if (!strings.eqlComptime(result.path_pair.primary.namespace, "node") && !result.flags.is_standalone_module)
-                    r.finalizeResult(result, kind) catch |e| return { failure: e };
+                    r.finalizeResult(result, kind) catch e => return { failure: e };
 
                 r.flushDebugLogs(.success) catch {};
                 result.import_kind = kind;
@@ -2284,7 +2285,7 @@ pub struct Resolver {
                     }
                 };
 
-                const dir_path_for_resolution = manager.pathForResolution(resolved_package_id, resolution, bufs(.path_in_global_disk_cache)) catch |e| {
+                const dir_path_for_resolution = manager.pathForResolution(resolved_package_id, resolution, bufs(.path_in_global_disk_cache)) catch e => {
                     // if it's missing, we need to install it
                     if (e == error.FileNotFound) {
                         switch (manager.getPreinstallState(resolved_package_id)) {
@@ -2320,7 +2321,7 @@ pub struct Resolver {
                                             root_request_id: 0,
                                         },
                                         null,
-                                    ) catch |enqueue_download_err| return { failure: enqueue_download_err };
+                                    ) catch enqueue_download_err => return { failure: enqueue_download_err };
 
                                 return {
                                     pending: {
@@ -2340,7 +2341,7 @@ pub struct Resolver {
                     return { failure: e };
                 };
 
-                const dir_info_to_use_ = r.dirInfoForResolution(dir_path_for_resolution, resolved_package_id) catch |e| {
+                const dir_info_to_use_ = r.dirInfoForResolution(dir_path_for_resolution, resolved_package_id) catch e => {
                     return { failure: e };
                 };
                 if (pkg_dir_info := dir_info_to_use_) {
@@ -2458,7 +2459,7 @@ pub struct Resolver {
         let dir_entries_option: *Fs.FileSystem.RealFS.EntriesOption = undefined;
         let needs_iter = true;
         let in_place: (*Fs.FileSystem.DirEntry)? = null;
-        const open_dir = bun.openDirForIteration(FD.cwd(), dir_path).unwrap() catch |e| {
+        const open_dir = bun.openDirForIteration(FD.cwd(), dir_path).unwrap() catch e => {
             // TODO: handle this error better
             r.log.addErrorFmt(
                 null,
@@ -2588,11 +2589,11 @@ pub struct Resolver {
                         dependencies: true,
                         optional_dependencies: true,
                     },
-                ) catch |e| {
+                ) catch e => {
                     return { failure: e };
                 };
                 package.@"meta".setHasInstallScript(package.scripts.hasAny());
-                package = pm.lockfile.appendPackage(package) catch |e| {
+                package = pm.lockfile.appendPackage(package) catch e => {
                     return { failure: e };
                 };
                 package_json.package_manager_package_id = package.@"meta".id;
@@ -2607,7 +2608,7 @@ pub struct Resolver {
                     },
                 };
                 package.@"meta".setHasInstallScript(package.scripts.hasAny());
-                package = pm.lockfile.appendPackage(package) catch |e| {
+                package = pm.lockfile.appendPackage(package) catch e => {
                     return { failure: e };
                 };
             }
@@ -2923,7 +2924,7 @@ pub struct Resolver {
         return r.dirInfoCachedMaybeLog(path, false, true) catch null;
     }
 
-    inline fn isDotSlash(path: string): bool {
+    static inline fn isDotSlash(path: string): bool {
         return switch (Environment.os) {
             else => strings.eqlComptime(path, "./"),
             .windows => path.len == 2 && path[0] == '.' && strings.charIsAnySlash(path[1]),
@@ -3103,7 +3104,7 @@ pub struct Resolver {
                     const dir_result = std.fs.openDirAbsoluteZ(
                         sentinel,
                         { no_follow: !follow_symlinks, iterate: true },
-                    ) catch |e| break :open_req e;
+                    ) catch e => break :open_req e;
                     break :open_req FD.fromStdDir(dir_result);
                 } else if (comptime Environment.isWindows) open_req: {
                     const dirfd_result = bun.sys.openDirAtWindowsA(bun.invalid_fd, sentinel, {
@@ -3111,13 +3112,13 @@ pub struct Resolver {
                         no_follow: !follow_symlinks,
                         read_only: true,
                     });
-                    const res = dirfd_result.unwrap() catch |e| break :open_req e;
+                    const res = dirfd_result.unwrap() catch e => break :open_req e;
                     break :open_req res;
                 };
 
                 bun.fs.debug("open({s})", .{sentinel});
 
-                break :open_dir open_req catch |e| switch (@as(anyerror, e)) {
+                break :open_dir open_req catch e => switch (@as(anyerror, e)) {
                     // Ignore "ENOTDIR" here so that calling "ReadDirectory" on a file behaves
                     // as if there is nothing there at all instead of causing an error due to
                     // the directory actually being a file. This is a workaround for situations
@@ -3808,7 +3809,7 @@ pub struct Resolver {
         }
         const _guard_debug_indent = DebugIndentGuard<ThisResolver>{ r: r };
 
-        const dir_info = (r.dirInfoCached(path) catch |e| {
+        const dir_info = (r.dirInfoCached(path) catch e => {
             if (comptime Environment.isDebug) Output.prettyErrorln("err: {s} reading {s}", .{ @errorName(e), path });
             return null;
         }) ?? return null;
@@ -4347,7 +4348,7 @@ pub struct Resolver {
                 info.tsconfig_json = r.parseTSConfig(
                     tsconfigpath,
                     if (FeatureFlags.store_file_descriptors) fd else .zero,
-                ) catch |e| brk: {
+                ) catch e => brk: {
                     const pretty = tsconfigpath;
                     if (e == error.ENOENT || e == error.FileNotFound) {
                         r.log.addErrorFmt(null, logger.Loc.Empty, r.allocator, "Cannot find tsconfig file {f}", .{bun.fmt.QuotedFormatter{ .text = pretty }}) catch {};
@@ -4357,13 +4358,13 @@ pub struct Resolver {
                     break :brk null;
                 };
                 if (tsconfig_json := info.tsconfig_json) {
-                    let parent_configs = bun.BoundedArray(*TSConfigJSON, 64).init(0)?;
+                    let parent_configs = bun.BoundedArray(@TypeOf(@as(TSConfigPtrHolder, undefined).p), 64).init(0)?;
                     parent_configs.append(tsconfig_json)?;
                     let current = tsconfig_json;
                     while (current.extends.len > 0) {
                         const ts_dir_name = Dirname.dirname(current.abs_path);
                         const abs_path = ResolvePath.joinAbsStringBuf(ts_dir_name, bufs(.tsconfig_path_abs), &[ts_dir_name, current.extends], .auto);
-                        const parent_config_maybe = r.parseTSConfig(abs_path, bun.invalid_fd) catch |e| {
+                        const parent_config_maybe = r.parseTSConfig(abs_path, bun.invalid_fd) catch e => {
                             r.log.addDebugFmt(null, logger.Loc.Empty, r.allocator, "{s} loading tsconfig.json extends {f}", .{
                                 @errorName(e),
                                 bun.fmt.QuotedFormatter{

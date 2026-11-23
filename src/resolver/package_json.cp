@@ -115,7 +115,7 @@ pub union(enum) PackageJSON_SideEffects {
     const GlobList = PackageJSON_SideEffectsGlobList;
     const MixedPatterns = PackageJSON_SideEffectsMixedPatterns;
 
-    fn hasSideEffects(side_effects: PackageJSON_SideEffects, path: []const u8): bool {
+    static fn hasSideEffects(side_effects: PackageJSON_SideEffects, path: []const u8): bool {
         return sideEffectsHasSideEffects(side_effects, path);
     }
 }
@@ -653,7 +653,7 @@ pub struct PackageJSON {
             dirname_fd,
             false,
             null,
-        ) catch |e| {
+        ) catch e => {
             if (e != error.IsDir) {
                 r.log.addErrorFmt(null, logger.Loc.Empty, allocator, "Cannot read file \"{s}\": {s}", .{ input_path, @errorName(e) }) catch unreachable;
             }
@@ -672,7 +672,7 @@ pub struct PackageJSON {
         let json_source = logger.Source.initPathString(key_path.text, entry.contents);
         json_source.path.pretty = json_source.path.text;
 
-        const json: js_ast.Expr = (r.caches.json.parsePackageJSON(r.log, &json_source, allocator, true) catch |e| {
+        const json: js_ast.Expr = (r.caches.json.parsePackageJSON(r.log, &json_source, allocator, true) catch e => {
             if (Environment.isDebug) {
                 Output.printError("{s}: JSON parse error: {s}", .{ package_json_path, @errorName(e) });
             }

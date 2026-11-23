@@ -295,6 +295,10 @@ pub const BrowserMapPathKind = enum {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const TSConfigPtrHolder = struct {
+    p: *TSConfigJSON,
+};
+
 pub const SideEffectsData = struct {
     source: *logger.Source,
     range: logger.Range,
@@ -2608,7 +2612,7 @@ _ = debuglog("Failed to load DirEntry {s}  {s} - {s}", .{ top, @errorName(e.orig
                 break :open_req res;
 } else null));
                 _ = bun.fs.debug("open({s})", .{ sentinel });
-                break :open_dir (blk_catch_57: { break :blk_catch_57 ((open_req) catch |e| { _ = &e; break :blk_catch_57 (switch ((if (comptime @typeInfo(anyerror) == .@"enum") @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
+                break :open_dir (blk_catch_57: { break :blk_catch_57 ((open_req) catch |e| { _ = &e; break :blk_catch_57 (switch ((if (comptime @typeInfo(anyerror) == .@"enum" and (@typeInfo(@TypeOf(e)) == .int or @typeInfo(@TypeOf(e)) == .comptime_int)) @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.ENOTDIR, error.IsDir, error.NotDir => {
 return null;
 },
@@ -2617,7 +2621,7 @@ else => {
                     const cached_dir_entry_result = ((rfs.entries.getOrPut(queue_top.unsafe_path)) catch unreachable);
                     _ = r.dir_cache.markNotFound(queue_top.result);
                     _ = rfs.entries.markNotFound(cached_dir_entry_result);
-                    switch ((if (comptime @typeInfo(anyerror) == .@"enum") @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
+                    switch ((if (comptime @typeInfo(anyerror) == .@"enum" and (@typeInfo(@TypeOf(e)) == .int or @typeInfo(@TypeOf(e)) == .comptime_int)) @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.ENOENT, error.FileNotFound => {
 
 },
@@ -3536,7 +3540,7 @@ pub fn dirInfoUncached(r: *ThisResolver, info: *DirInfo, path: []const u8, _entr
 }; }); });
                     if (info.tsconfig_json) |tsconfig_json| {
                         _ = &tsconfig_json;
-                        var parent_configs = try bun.BoundedArray(*TSConfigJSON, 64).init(0);
+                        var parent_configs = try bun.BoundedArray(@TypeOf(@as(TSConfigPtrHolder, undefined).p), 64).init(0);
                         _ = &parent_configs;
                         _ = try parent_configs.append(tsconfig_json);
                         var current = tsconfig_json;

@@ -1093,7 +1093,7 @@ pub fn hash(self: RealFSModKey) u64 {
 
 pub fn generate(_: *RealFS, _: []const u8, file: std.fs.File) anyerror!RealFSModKey {
             const stat = try file.stat();
-            const seconds = @divTrunc(stat.mtime, (if (comptime @typeInfo(@TypeOf(stat.mtime)) == .@"enum") @as(@TypeOf(stat.mtime), @enumFromInt(std.time.ns_per_s)) else @as(@TypeOf(stat.mtime), std.time.ns_per_s)));
+            const seconds = @divTrunc(stat.mtime, (if (comptime @typeInfo(@TypeOf(stat.mtime)) == .@"enum" and (@typeInfo(@TypeOf(std.time.ns_per_s)) == .int or @typeInfo(@TypeOf(std.time.ns_per_s)) == .comptime_int)) @as(@TypeOf(stat.mtime), @enumFromInt(std.time.ns_per_s)) else @as(@TypeOf(stat.mtime), std.time.ns_per_s)));
             if (((seconds == 0) and (std.time.ns_per_s == 0))) {
                 return error.Unusable;
             }
@@ -1154,7 +1154,8 @@ pub const RealFSTmpfileWindows = struct {
     fd: bun.FD = bun.invalid_fd,
     existing_path: []const u8 = "",
 
-pub inline fn dir() std.fs.Dir {
+pub inline fn dir(self: RealFSTmpfileWindows) std.fs.Dir {
+        _ = self;
             return Fs.FileSystem.instance.tmpdir();
     }
 

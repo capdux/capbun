@@ -1781,3 +1781,5 @@
 - [Wave #100] 清零 `src/install/` 剩余 17 个报错文件（-> **69/69 `src/install/` 100% `--strict` 清零**）；修复 `lifecycle_script_runner.cp` `PackageManagerPtrHolder`、`isolated_install/Store.cp`、`lockfile/Package.cp` `PackageDiff`、`lockfile.cp` & `repository.cp` `static fn`；`zig:check` 5/5 通过。
 
 - [Wave #102] 清零 `src/glob/GlobWalker.cp` 与 `src/js_parser/ast/` 14 文件（`Binding`, `foldStringAddition`, `ImportScanner`, `maybe`, `NewStore`, `parse`, `parseImportExport`, `Parser`, `parseStmt`, `parseTypescript`, `P`, `skipTypescript`, `visit`, `visitExpr`）的 `--strict` 违规；`zig:check` 5/5 通过。
+
+- [Wave #103] 清零 `src/js_parser/`、`src/js_printer/`、`src/resolver/` 剩余 6 文件（`visitStmt.cp`, `js_parser.cp`, `js_printer.cp`, `fs.cp`, `package_json.cp`, `resolver.cp` -> 四目录 100% `--strict` 全清）；修复 `js_printer.cp` `@TypeOf(&buffer_printer)` 与 `resolver.cp` `TSConfigPtrHolder`；`zig:check` 5/5 通过。

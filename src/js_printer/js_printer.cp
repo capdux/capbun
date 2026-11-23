@@ -5837,7 +5837,7 @@ pub fn NewWriter(
         static fn print(writer: *Self, comptime ValueType: type, str: ValueType) {
             switch (ValueType) {
                 comptime_int, u16, u8 => {
-                    const written = writeByte(&writer.ctx, @as(u8, @intCast(str))) catch |e| brk: {
+                    const written = writeByte(&writer.ctx, @as(u8, @intCast(str))) catch e => brk: {
                         writer.orig_err = e;
                         break :brk 0;
                     };
@@ -5846,7 +5846,7 @@ pub fn NewWriter(
                     writer.@"err" = if (written == 0) error.WriteFailed else writer.@"err";
                 },
                 else => {
-                    const written = writeAllFn(&writer.ctx, str) catch |e| brk: {
+                    const written = writeAllFn(&writer.ctx, str) catch e => brk: {
                         writer.orig_err = e;
                         break :brk 0;
                     };
@@ -6299,7 +6299,7 @@ pub fn @"print"(
     let buffer_printer = BufferPrinter.init(buffer_writer);
 
     return printWithWriter(
-        *BufferPrinter,
+        @TypeOf(&buffer_printer),
         &buffer_printer,
         target,
         ast,
@@ -6395,10 +6395,10 @@ pub fn printWithWriterAndPlatform(
 
         for (part of parts) {
             for (stmt of part.stmts) {
-                printer.printStmt(stmt, PrinterType.TopLevel.init(.yes)) catch |e| {
+                printer.printStmt(stmt, PrinterType.TopLevel.init(.yes)) catch e => {
                     return { @"err": e };
                 };
-                printer.writer.getError() catch |e| {
+                printer.writer.getError() catch e => {
                     return { @"err": e };
                 };
                 printer.printSemicolonIfNeeded();
@@ -6406,7 +6406,7 @@ pub fn printWithWriterAndPlatform(
         }
     }
 
-    printer.writer.done() catch |e| {
+    printer.writer.done() catch e => {
         // In bundle_v2, this is backed by an arena, but incremental uses
         // `dev.allocator` for this buffer, so it must be freed.
         printer.source_map_builder.source_map.ctx.data.deinit();

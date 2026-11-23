@@ -2227,3 +2227,5 @@
 - [Wave #100] 修改 .cp/.zig：`src/install/{extract_tarball,isolated_install,lifecycle_script_runner,lockfile,migration,npm,patch_install,pnpm,repository}.{cp,zig}`、`src/install/isolated_install/{FileCopier,Store}.{cp,zig}`、`src/install/lockfile/{Package,Package/WorkspaceMap,bun.lock}.{cp,zig}`、`src/install/resolvers/folder_resolver.{cp,zig}`、`src/install/windows-shim/{BinLinkingShim,bun_shim_impl}.{cp,zig}`（`src/install/` 69/69 全清，`zig:check` 5/5）。
 
 - [Wave #102] 修改 .cp/.zig：`src/glob/GlobWalker.{cp,zig}`、`src/js_parser/ast/{Binding,foldStringAddition,ImportScanner,maybe,NewStore,parse,parseImportExport,Parser,parseStmt,parseTypescript,P,skipTypescript,visit,visitExpr}.{cp,zig}`（`zig:check` 5/5）。
+
+- [Wave #103] 修改 .cp/.zig：`src/js_parser/ast/visitStmt.{cp,zig}`、`src/js_parser/js_parser.{cp,zig}`、`src/js_printer/js_printer.{cp,zig}`、`src/resolver/{fs,package_json,resolver}.{cp,zig}`（`zig:check` 5/5）。
