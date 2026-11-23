@@ -517,7 +517,7 @@ pub fn insert(self: *@This(), allocator: std.mem.Allocator, new: T, ctx: *const 
                         return;
                     }
                     if ((order == .lt)) {
-                        _ = try self.list.insert(allocator, i, new);
+                        _ = try self.list.insert(allocator, @as(usize, @intCast(i)), new);
                         return;
                     }
                 }
@@ -540,7 +540,7 @@ pub fn insertAssumeCapacity(self: *@This(), new: T, ctx: *const Ctx) void {
                         return;
                     }
                     if ((order == .lt)) {
-                        _ = self.list.insertAssumeCapacity(i, new);
+                        _ = self.list.insertAssumeCapacity(@as(usize, @intCast(i)), new);
                         return;
                     }
                 }

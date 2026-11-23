@@ -105,7 +105,7 @@ pub fn OrderedArraySet(comptime T: type, comptime Ctx: type): type {
                 }
 
                 if (order == .lt) {
-                    _.list.insert(allocator, i, new)?;
+                    _.list.insert(allocator, @as(usize, @intCast(i)), new)?;
                     return;
                 }
             }
@@ -127,7 +127,7 @@ pub fn OrderedArraySet(comptime T: type, comptime Ctx: type): type {
                 }
 
                 if (order == .lt) {
-                    _.list.insertAssumeCapacity(i, new);
+                    _.list.insertAssumeCapacity(@as(usize, @intCast(i)), new);
                     return;
                 }
             }
