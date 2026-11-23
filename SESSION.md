@@ -727,3 +727,15 @@
   - `src/runtime/webcore/Blob.cp`（恢复 `lifetimeWrap`/`toUint8Array`/`getBytes`/`getJSON`/`getText` 与 `AnyBlob.toJSONShare`/`toActionValue`/`toPromise` 的 `JSPromise.wrap`）；
   - `src/runtime/webcore/ReadableStream.cp`（L161 `toAnyBlob` 增加 `_.isLocked(globalThis)` 校验）。
 - 推导下一阶段 Wave #74：Subagent 1 运行 `bun bd test` 验证 `blob-oom.test.ts`、`stream-fast-path.test.ts`、`client-fetch.test.ts`、`body-stream.test.ts`（`-t "method"`）与 `fetch.test.ts`；Subagent 2 根据 `streams.test.js` 定位结果修复死循环并覆盖 `test/js/web/websocket`。
+24. **用户**：`已重启agy并切换了配额账号，已恢复当前会话上下文...重开2个子智能体...读取 COMM.md 保持通信畅通...持续工作`
+    - **主智能体回应**：已读取 `/root/.agy/comm/COMM.md` 并核查 `task_queue.py unacked`（`[]`）与 `agy-comm.service` 状态；立即新开 2 路并行子智能体继续 Batch 2c 后半段测试（`636ed04c`）与其余 20 个核心目录只读完整性核查（`9a04f692`）。
+
+## [2026-11-23] Wave #74：Batch 2c 收官、全仓 110 目录覆检完成与 `Blob`/`ParentDeathWatchdog` 修复提交
+- 完成 Wave #73 验证与 Batch 2c（`test/js/web/` 其余 58 文件）：
+  - `fetch.test.ts` `decontaminate()` SIGABRT 崩溃彻底消除（326 pass / 0 崩溃），`stream-fast-path.test.ts` 18/18 全绿；
+  - Batch 2c 后半段 30 文件跑出 **889 pass / 17 fail / 16 skip / 2 todo**（63,034 expect，804.61s，**0 崩溃**）；
+  - 完成全仓 **110 个目录组 / 1,295 个 `.cp` 文件** 100% 完整性覆检（`throwTODO` 除 `Blob.doImage` 外零新增，仅确认 `ParentDeathWatchdog.cp` 行解析细节偏差）。
+- 完成 2 个模块修复与验证（均通过 `cpc_brief.py` 4 项门禁 + `bun run zig:check` 5/5 通过）：
+  - `src/runtime/webcore/Blob.cp`（恢复 `Any.toArrayBufferTransfer`/`toUint8ArrayTransfer`/`toStringTransfer` 走 `.transfer` 路径，将 `getFormData` 桩替换为 `toFormData`/`toFormDataWithBytes`，补全 `onStructuredCloneTransfer` 与 `toStreamWithOffset`）；
+  - `src/aio/ParentDeathWatchdog.cp`（恢复 `[u8; 32768]` 缓冲区与 `tokenizeAny(u8, contents, " \n")`）。
+- 推导下一阶段 Wave #75：Subagent 1 启动 **Batch 3a**（`bun bd test test/js/bun/spawn test/js/bun/shell`，77 个测试文件）；待 `worker.test.ts` 只读排查返回后继续推进 `Batch 3` 与针对性修复。

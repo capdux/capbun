@@ -2169,3 +2169,6 @@
 
 ### [2026-11-23] Wave #73（修复 `fetch`/`FetchTasklet`/`Blob`/`ReadableStream` 与验证 `-0.0`）
 - 修复 `fetch.cp`（`req.method` 保留）、`FetchTasklet.cp`（`onBodyReceived` 清理顺序与 `fromJS` `static fn`）、`Blob.cp`（`getBytes`/`getJSON`/`getText` OOM 检查与 `AnyBlob.toPromise` `JSPromise.wrap`）与 `ReadableStream.cp`（`toAnyBlob` `isLocked` 检查），通过 `bun run zig:check`（5/5）；`-0.0` 与 `toIncludeRepeated` 相关测试全绿。
+
+### [2026-11-23] Wave #74（补全 `Blob.cp` `FormData`/`transfer`/`CloneTransfer` 与 `ParentDeathWatchdog.cp`）
+- 补全 `Blob.cp`（`getFormData`/`toFormData`/`toFormDataWithBytes`、`onStructuredCloneTransfer`、`toStreamWithOffset` 与 `Any.to*Transfer`）与修复 `ParentDeathWatchdog.cp`（`32768` 缓冲区与 `tokenizeAny " \n"`），通过 `bun run zig:check`（5/5）；完成 Batch 2c 后半段（889 pass / 0 崩溃）与全仓 110 目录完整性覆检。

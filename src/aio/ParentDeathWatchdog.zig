@@ -106,9 +106,9 @@ pub const exit_code: u8 = (128 + 1);
 const Environment = bun.Environment;
 const jsc = bun.jsc;
 var enabled: bool = false;
-var original_ppid: std.c.pid_t = (if (@typeInfo(std.c.pid_t) == .@"enum") @as(std.c.pid_t, @enumFromInt(0)) else @as(std.c.pid_t, 0));
-var install_thread_id: std.Thread.Id = (if (@typeInfo(std.Thread.Id) == .@"enum") @as(std.Thread.Id, @enumFromInt(0)) else @as(std.Thread.Id, 0));
-const zero_pid: std.c.pid_t = (if (@typeInfo(std.c.pid_t) == .@"enum") @as(std.c.pid_t, @enumFromInt(0)) else @as(std.c.pid_t, 0));
+var original_ppid: std.c.pid_t = (if (@typeInfo(std.c.pid_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.c.pid_t, @enumFromInt(0)) else @as(std.c.pid_t, 0));
+var install_thread_id: std.Thread.Id = (if (@typeInfo(std.Thread.Id) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.Thread.Id, @enumFromInt(0)) else @as(std.Thread.Id, 0));
+const zero_pid: std.c.pid_t = (if (@typeInfo(std.c.pid_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.c.pid_t, @enumFromInt(0)) else @as(std.c.pid_t, 0));
 var sync_pgids_buf: [4]std.c.pid_t = .{ zero_pid, zero_pid, zero_pid, zero_pid };
 var sync_pgids: []std.c.pid_t = sync_pgids_buf[0..0];
 var event_loop_installed = std.atomic.Value(bool).init(false);
@@ -156,7 +156,7 @@ pub fn killSyncScriptTree() void {
         for (cp_iter_slice(sync_pgids)) |pgid| {
             _ = &pgid;
             if ((pgid > 1)) {
-                _ = std.c.kill((0 - pgid), std.posix.SIG.KILL);
+                _ = std.c.kill((-pgid), std.posix.SIG.KILL);
             }
         }
         if (comptime Environment.isMac) {
@@ -463,10 +463,10 @@ pub fn listChildPids(parent: std.c.pid_t, out: []std.c.pid_t) ?usize {
                 var child_path_buf: [128]u8 = undefined;
                 _ = &child_path_buf;
                 const child_path = (blk_catch_13: { break :blk_catch_13 ((std.fmt.bufPrintZ((&child_path_buf), "/proc/{d}/task/{s}/children", .{ parent, (if (@typeInfo(@TypeOf(entry)) == .@"enum" or @typeInfo(@TypeOf(entry)) == .@"union") @tagName(entry) else entry.name) })) catch |__ce_13| { _ = &__ce_13; continue; }); });
-                var read_buf: [4096]u8 = undefined;
+                var read_buf: [32768]u8 = undefined;
                 _ = &read_buf;
                 const contents = ((readFileOnce(child_path, (&read_buf))) orelse continue);
-                var tok = std.mem.tokenizeScalar(u8, contents, 32);
+                var tok = std.mem.tokenizeAny(u8, contents, " \n");
                 _ = &tok;
                 while (tok.next()) |pid_str| {
                     if ((written >= out.len)) {

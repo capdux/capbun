@@ -944,13 +944,11 @@ return false;
     }
 
 pub fn toArrayBufferTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
-            const bytes = self.slice();
-            return ArrayBuffer.create(globalObject, bytes, .ArrayBuffer);
+            return self.toArrayBuffer(globalObject, .transfer);
     }
 
 pub fn toUint8ArrayTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
-            const bytes = self.slice();
-            return ArrayBuffer.create(globalObject, bytes, .Uint8Array);
+            return self.toUint8Array(globalObject, .transfer);
     }
 
 pub fn toJSONShare(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
@@ -958,8 +956,7 @@ pub fn toJSONShare(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValu
     }
 
 pub fn toStringTransfer(self: *BlobAny, globalObject: *JSGlobalObject) JSError!JSValue {
-            const bytes = self.slice();
-            return String.fromBytes(bytes).toJS(globalObject);
+            return self.toString(globalObject, .transfer);
     }
 
 pub fn toActionValue(self: *BlobAny, globalThis: *JSGlobalObject, action: webcore.streams.BufferAction.Tag) JSError!JSValue {
@@ -1853,8 +1850,40 @@ pub fn getExists(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSErro
 }
 
 pub fn getFormData(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
-        _ = self.size;
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.js_undefined);
+        if (self.store) |store| {
+            _ = &store;
+            _ = store.ref();
+        }
+        var _guard_store = OptDerefGuard(BlobStore){ .ptr = self.store };
+        _ = &_guard_store;
+        var ___guard_store_moved = false; _ = &___guard_store_moved;
+        defer if (!___guard_store_moved) { ___guard_store_moved = true; const __T = @TypeOf(_guard_store); if (@typeInfo(__T) == .optional) { if (_guard_store) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_store.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_store; _drop_val.__cp_deinit(); } };
+        return JSPromise.wrap(globalThis, Blob.lifetimeWrap(toFormData, .temporary), .{ self, globalThis });
+}
+
+pub fn toFormDataWithBytes(blob: *Blob, global: *JSGlobalObject, buf: []u8, comptime _: webcore.Lifetime) JSValue {
+        const encoder = ((blob.getFormDataEncoding()) orelse { return ZigString.init("Invalid encoding").toErrorInstance(global); });
+        defer {
+        _ = encoder.deinit();
+        }
+        return (blk_catch_6: { break :blk_catch_6 ((bun.FormData.toJS(global, buf, encoder.encoding)) catch |e| { _ = &e; break :blk_catch_6 global.createErrorInstance("FormData encoding failed: {s}", .{ @errorName(e) }); }); });
+}
+
+pub fn toFormData(blob: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime) bun.JSTerminated!JSValue {
+        if (blob.needsToReadFile()) {
+            return blob.doReadFile(toFormDataWithBytes, global);
+        }
+        if (blob.isS3()) {
+            return blob.doReadFromS3(toFormDataWithBytes, global);
+        }
+        const view_ = blob.sharedView();
+        if ((view_.len == 0)) {
+            return jsc.DOMFormData.create(global);
+        }
+        return toFormDataWithBytes(blob, global, (blk: {
+        break :blk @constCast(view_);
+
+}), lifetime);
 }
 
 pub fn doImage(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
@@ -1897,7 +1926,7 @@ pub fn doReadFile(self: *Blob, comptime Function: anytype, global: *JSGlobalObje
             _ = read_file_mod.ReadFileUV.start(handler.globalThis.bunVM().eventLoop(), self.store.?, self.offset, self.size, Handler, handler);
             return promise_value;
         }
-        const file_read = (blk_catch_6: { break :blk_catch_6 ((read_file_mod.ReadFile.create(default_allocator, self.store.?, self.offset, self.size, @TypeOf(handler), handler, Handler.run)) catch |e| { _ = &e; break :blk_catch_6 bun.handleOom(e); }); });
+        const file_read = (blk_catch_7: { break :blk_catch_7 ((read_file_mod.ReadFile.create(default_allocator, self.store.?, self.offset, self.size, @TypeOf(handler), handler, Handler.run)) catch |e| { _ = &e; break :blk_catch_7 bun.handleOom(e); }); });
         var read_file_task = read_file_mod.ReadFileTask.createOnJSThread(default_allocator, global, file_read);
         _ = &read_file_task;
         var promise = JSPromise.create(global);
@@ -1939,7 +1968,7 @@ pub fn toStringWithBytes(blob: *Blob, global: *JSGlobalObject, raw_bytes: []cons
 });
         const could_be_all_ascii = ((blob_ascii) orelse (blob.store.?.is_all_ascii));
         if (((could_be_all_ascii == null) or (!could_be_all_ascii.?))) {
-            if ((blk_catch_7: { break :blk_catch_7 ((strings.toUTF16Alloc(default_allocator, buf, false, false)) catch |__ce_7| { _ = &__ce_7; return global.throwOutOfMemory(); }); })) |external| {
+            if ((blk_catch_8: { break :blk_catch_8 ((strings.toUTF16Alloc(default_allocator, buf, false, false)) catch |__ce_8| { _ = &__ce_8; return global.throwOutOfMemory(); }); })) |external| {
                 _ = &external;
                 if ((lifetime != .temporary)) {
                     blob.charset = .fromBool(false);
@@ -2027,7 +2056,7 @@ pub fn toJSONWithBytes(blob: *Blob, global: *JSGlobalObject, raw_bytes: []const 
             var stack_fallback = std.heap.stackFallback(4096, default_allocator);
             _ = &stack_fallback;
             const allocator = stack_fallback.get();
-            if ((blk_catch_8: { break :blk_catch_8 ((strings.toUTF16Alloc(allocator, buf, false, false)) catch |__ce_8| { _ = &__ce_8; break :blk_catch_8 null; }); })) |external| {
+            if ((blk_catch_9: { break :blk_catch_9 ((strings.toUTF16Alloc(allocator, buf, false, false)) catch |__ce_9| { _ = &__ce_9; break :blk_catch_9 null; }); })) |external| {
                 _ = &external;
                 if (comptime (lifetime != .temporary)) {
                     blob.charset = .fromBool(false);
@@ -2396,6 +2425,12 @@ pub fn getStream(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSErro
         return webcore.ReadableStream.fromBlobCopyRef(globalThis, self, 0);
 }
 
+pub fn toStreamWithOffset(globalThis: *JSGlobalObject, callframe: *CallFrame) JSError!JSValue {
+        const blob = ((callframe.this().as(Blob)) orelse (@panic("this is not a Blob")));
+        const args = callframe.arguments_old(1).slice();
+        return webcore.ReadableStream.fromFileBlobWithOffset(globalThis, blob, @intCast(args[0].toInt64()));
+}
+
 pub fn getText(self: *Blob, globalThis: *JSGlobalObject, _: *CallFrame) JSError!JSValue {
         if (self.store) |store| {
             _ = &store;
@@ -2671,7 +2706,14 @@ pub fn onStructuredCloneSerialize(self: *Blob, globalThis: *JSGlobalObject, ctx:
         _ = &globalThis;
         const Writer = std.Io.GenericWriter(StructuredCloneWriter, StructuredCloneWriter.WriteError, StructuredCloneWriter.write);
         const writer = Writer{ .context = .{ .ctx = ctx, .impl = writeBytes } };
-        _ = (blk_catch_9: { break :blk_catch_9 ((_onStructuredCloneSerialize(self, Writer, writer)) catch |__ce_9| { _ = &__ce_9;  }); });
+        _ = (blk_catch_10: { break :blk_catch_10 ((_onStructuredCloneSerialize(self, Writer, writer)) catch |__ce_10| { _ = &__ce_10;  }); });
+}
+
+pub fn onStructuredCloneTransfer(self: *Blob, globalThis: *JSGlobalObject, ctx: *anyopaque, write: *const fn (*anyopaque, [*]const u8, usize) callconv(.c) void) void {
+        _ = &write;
+        _ = &ctx;
+        _ = self;
+        _ = &globalThis;
 }
 
 pub fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8, end: [*]u8) JSError!JSValue {
@@ -2685,7 +2727,7 @@ pub fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8
 }));
         _ = &buffer_stream;
         const reader = buffer_stream.reader();
-        const result = (blk_catch_10: { break :blk_catch_10 ((_onStructuredCloneDeserialize(globalThis, @TypeOf(reader), reader)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        const result = (blk_catch_11: { break :blk_catch_11 ((_onStructuredCloneDeserialize(globalThis, @TypeOf(reader), reader)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             return globalThis.throwOutOfMemory();
         }
         return globalThis.throw("Blob.onStructuredCloneDeserialize failed", .{}); }); });
@@ -2990,7 +3032,7 @@ pub fn pipeReadableStreamToBlob(self: *Blob, globalThis: *JSGlobalObject, readab
         _ = &store;
         if (self.isS3()) {
             const s3 = (&self.store.?.data.s3);
-            var aws_options = (blk_catch_11: { break :blk_catch_11 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
+            var aws_options = (blk_catch_12: { break :blk_catch_12 ((s3.getCredentialsWithOptions(extra_options, globalThis)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, globalThis.takeException(e)); }); });
             _ = &aws_options;
             var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
             _ = &_guard_aws;
@@ -3419,7 +3461,7 @@ _ = fd.close();
         }
 },
 .s3 => |*s3| {
-var aws_options = (blk_catch_12: { break :blk_catch_12 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+var aws_options = (blk_catch_13: { break :blk_catch_13 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
         _ = &aws_options;
         var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
         _ = &_guard_aws;
@@ -3472,7 +3514,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                 const promise_value = promise.asValue(ctx);
                 _ = promise_value.ensureStillAlive();
                 _ = write_file_promise.promise.strong.set(ctx, promise_value);
-                _ = (blk_catch_13: { break :blk_catch_13 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
+                _ = (blk_catch_14: { break :blk_catch_14 ((write_file_mod.WriteFileWindows.create(ctx.bunVM().eventLoop(), destination_blob.*, source_blob.*, WriteFilePromisePtr, write_file_promise, (&WriteFilePromise.run), ((options.mkdirp_if_not_exists) orelse (true)))) catch |e| { _ = &e; if ((e == error.JSTerminated)) {
                     return error.JSTerminated;
                 } }); });
                 return promise_value;
@@ -3517,7 +3559,7 @@ pub fn writeFileWithSourceDestination(ctx: *JSGlobalObject, source_blob: *Blob, 
                         } else {
                             if ((destination_type == .s3)) {
                                 const s3 = (&destination_store.data.s3);
-                                var aws_options = (blk_catch_15: { break :blk_catch_15 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
+                                var aws_options = (blk_catch_16: { break :blk_catch_16 ((s3.getCredentialsWithOptions(options.extra_options, ctx)) catch |e| { _ = &e; return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ctx.takeException(e)); }); });
                                 _ = &aws_options;
                                 var _guard_aws = DeinitGuard(S3.S3CredentialsWithOptions){ .ptr = (&aws_options) };
                                 _ = &_guard_aws;
@@ -3585,7 +3627,7 @@ pub fn writeStringToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Pat
                 needs_async.* = true;
                 return .zero;
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_16: { break :blk_catch_16 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_16| { _ = &__ce_16; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_17: { break :blk_catch_17 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_17| { _ = &__ce_17; return .zero; }); }));
         }
 },
 });
@@ -3627,9 +3669,9 @@ truncate = false;
                     return .zero;
                 }
                 if (comptime (!needs_open)) {
-                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_17: { break :blk_catch_17 ((e.toJS(globalThis)) catch |__ce_17| { _ = &__ce_17; return .zero; }); }));
+                    return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_18: { break :blk_catch_18 ((e.toJS(globalThis)) catch |__ce_18| { _ = &__ce_18; return .zero; }); }));
                 }
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_18: { break :blk_catch_18 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_18| { _ = &__ce_18; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_19: { break :blk_catch_19 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_19| { _ = &__ce_19; return .zero; }); }));
 },
 }
             }
@@ -3651,7 +3693,7 @@ pub fn writeBytesToFileFast(globalThis: *JSGlobalObject, pathlike: jsc.Node.Path
                     return .zero;
                 }
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_19: { break :blk_catch_19 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_19| { _ = &__ce_19; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_20: { break :blk_catch_20 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_20| { _ = &__ce_20; return .zero; }); }));
         }
 },
 });
@@ -3686,9 +3728,9 @@ if ((!Environment.isWindows)) {
                 }
             }
             if (comptime (!needs_open)) {
-                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_20: { break :blk_catch_20 ((e.toJS(globalThis)) catch |__ce_20| { _ = &__ce_20; return .zero; }); }));
+                return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_21: { break :blk_catch_21 ((e.toJS(globalThis)) catch |__ce_21| { _ = &__ce_21; return .zero; }); }));
             }
-            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_21: { break :blk_catch_21 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_21| { _ = &__ce_21; return .zero; }); }));
+            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(globalThis, (blk_catch_22: { break :blk_catch_22 ((e.withPath(pathlike.path.slice()).toJS(globalThis)) catch |__ce_22| { _ = &__ce_22; return .zero; }); }));
 },
 }
         }
@@ -4495,7 +4537,7 @@ blob.name = name_value_str.dupeRef();
 }
 
 pub export fn JSDOMFile__construct(globalThis: *JSGlobalObject, callframe: *CallFrame) callconv(jsc.conv) ?*Blob {
-        return (blk_catch_22: { break :blk_catch_22 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
+        return (blk_catch_23: { break :blk_catch_23 ((JSDOMFile__construct_(globalThis, callframe)) catch |e| { _ = &e; if ((e == error.OutOfMemory)) {
             if ((globalThis.throwOutOfMemory() == error.JSError)) {
             }
         }

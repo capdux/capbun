@@ -326,9 +326,9 @@ fn listChildPids(parent: std.c.pid_t, out: *[]std.c.pid_t): usize? {
                 "/proc/{d}/task/{s}/children",
                 .{ parent, entry.name },
             ) catch continue;
-            let read_buf: [u8; 4096] = undefined;
+            let read_buf: [u8; 32768] = undefined;
             const contents = readFileOnce(child_path, &read_buf) ?? continue;
-            let tok = std.mem.tokenizeScalar(u8, contents, ' ');
+            let tok = std.mem.tokenizeAny(u8, contents, " \n");
             while (pid_str := tok.next()) {
                 if (written >= out.len) { break; }
                 const child = std.fmt.parseInt(std.c.pid_t, pid_str, 10) catch continue;

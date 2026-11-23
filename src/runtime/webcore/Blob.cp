@@ -1639,13 +1639,11 @@ pub union(enum) BlobAny {
     }
 
     fn toArrayBufferTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
-        const bytes = _.slice();
-        return ArrayBuffer.create(globalObject, bytes, .ArrayBuffer);
+        return _.toArrayBuffer(globalObject, .transfer);
     }
 
     fn toUint8ArrayTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
-        const bytes = _.slice();
-        return ArrayBuffer.create(globalObject, bytes, .Uint8Array);
+        return _.toUint8Array(globalObject, .transfer);
     }
 
     fn toJSONShare(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
@@ -1653,8 +1651,7 @@ pub union(enum) BlobAny {
     }
 
     fn toStringTransfer(*_, globalObject: *JSGlobalObject): JSValue ! JSError {
-        const bytes = _.slice();
-        return String.fromBytes(bytes).toJS(globalObject);
+        return _.toString(globalObject, .transfer);
     }
 
     fn toActionValue(*_, globalThis: *JSGlobalObject, action: webcore.streams.BufferAction.Tag): JSValue ! JSError {
@@ -2793,8 +2790,35 @@ pub struct BlobExternalSharedDescriptor {
     }
 
     fn getFormData(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
-        * = _.size;
-        return JSPromise.resolvedPromiseValue(globalThis, JSValue.js_undefined);
+        if (store := _.store) {
+            store.ref();
+        }
+        const _guard_store = OptDerefGuard<BlobStore>{ ptr: _.store };
+        return JSPromise.wrap(globalThis, lifetimeWrap(toFormData, .temporary), .{ _, globalThis });
+    }
+
+    static fn toFormDataWithBytes(blob: *Blob, global: *JSGlobalObject, buf: []u8, comptime _: webcore.Lifetime): JSValue {
+        const encoder = blob.getFormDataEncoding() ?? return ZigString.init("Invalid encoding").toErrorInstance(global);
+        defer encoder.deinit();
+
+        return bun.FormData.toJS(global, buf, encoder.encoding) catch e =>
+            global.createErrorInstance("FormData encoding failed: {s}", .{@errorName(e)});
+    }
+
+    static fn toFormData(blob: *Blob, global: *JSGlobalObject, comptime lifetime: webcore.Lifetime): JSValue ! bun.JSTerminated {
+        if (blob.needsToReadFile()) {
+            return blob.doReadFile(toFormDataWithBytes, global);
+        }
+        if (blob.isS3()) {
+            return blob.doReadFromS3(toFormDataWithBytes, global);
+        }
+
+        const view_ = blob.sharedView();
+        if (view_.len == 0) {
+            return jsc.DOMFormData.create(global);
+        }
+
+        return toFormDataWithBytes(blob, global, unsafe { @constCast(view_) }, lifetime);
     }
 
     fn doImage(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
@@ -3285,6 +3309,17 @@ pub struct BlobExternalSharedDescriptor {
         return webcore.ReadableStream.fromBlobCopyRef(globalThis, _, 0);
     }
 
+    static fn toStreamWithOffset(globalThis: *JSGlobalObject, callframe: *CallFrame): JSError!JSValue {
+        const blob = callframe.this().as(Blob) ?? @panic("this is not a Blob");
+        const args = callframe.arguments_old(1).slice();
+
+        return webcore.ReadableStream.fromFileBlobWithOffset(
+            globalThis,
+            blob,
+            @intCast(args[0].toInt64()),
+        );
+    }
+
     fn getText(*_, globalThis: *JSGlobalObject, _: *CallFrame): JSError!JSValue {
         if (store := _.store) {
             store.ref();
@@ -3566,6 +3601,18 @@ pub struct BlobExternalSharedDescriptor {
             },
         };
         _onStructuredCloneSerialize(_, Writer, writer) catch {};
+    }
+
+    fn onStructuredCloneTransfer(
+        *_,
+        globalThis: *JSGlobalObject,
+        ctx: *!,
+        write: *const fn (*!, [*]const u8, usize) callconv(.c) void,
+    ) {
+        * = write;
+        * = ctx;
+        * = _;
+        * = globalThis;
     }
 
     static fn onStructuredCloneDeserialize(globalThis: *JSGlobalObject, raw_ptr: *[*]u8, end: [*]u8): JSError!JSValue {

@@ -1722,3 +1722,7 @@
 ### [2026-11-23] Wave #73 技术要点（`Blob` Promise 包装与 `ReadableStream` 锁定校验）
 - `Blob.getBytes`/`getJSON`/`getText` 与 `AnyBlob.toPromise` 必须经由 `JSPromise.wrap` 异步包装，否则同步校验（如 `synthetic_allocation_limit` OOM 与非法 JSON `SyntaxError`）会直接抛出同步异常而非返回 rejected Promise。
 - `ReadableStream.toAnyBlob` 必须先检查 `_.isLocked(globalThis)`，否则已锁定但未 disturbed 的流会跳过 `readableStreamToBlob` 抛错分支。
+
+### [2026-11-23] Wave #74 技术要点（`Blob` `.transfer` 路径与 Linux `/proc` PID 分隔符）
+- `Any.toArrayBufferTransfer`/`toUint8ArrayTransfer`/`toStringTransfer` 必须转发至 `_.to*(globalObject, .transfer)` 以确保 `.Blob` 文件/S3 异步路径与 `.InternalBlob`/`.WTFStringImpl` 所有权转移完整生效。
+- `ParentDeathWatchdog` 读取 `/proc/<pid>/task/<tid>/children` 时末尾可能包含 `\n`，必须使用 `std.mem.tokenizeAny(u8, contents, " \n")` 而非 `tokenizeScalar(..., ' ')`。
