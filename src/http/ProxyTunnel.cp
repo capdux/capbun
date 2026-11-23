@@ -333,23 +333,23 @@ export @root @value struct ProxyTunnel {
     }
 
     fn close(*_, err: anyerror) {
-        this.shutdown_err = err;
-        this.shutdown();
+        _.shutdown_err = err;
+        _.shutdown();
     }
 
     fn shutdown(*_) {
-        if (*wrapper := this.wrapper) {
+        if (*wrapper := _.wrapper) {
             * = wrapper.shutdown(true);
         }
     }
 
     fn onWritable(*_, comptime is_ssl: bool, socket: auto) {
         * = is_ssl;
-        this.ref();
+        _.ref();
         const _deref_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { _ as *ProxyTunnel! } };
         const _flush_guard = TunnelFlushGuard{ ptr: unsafe { _ as *ProxyTunnel! } };
 
-        const encoded_data = this.write_buffer.slice();
+        const encoded_data = _.write_buffer.slice();
         if (encoded_data.len == 0) {
             return;
         }
@@ -357,70 +357,70 @@ export @root @value struct ProxyTunnel {
         const written: i32 = socket.write(encoded_data);
 
         if (written == encoded_data.len) {
-            this.write_buffer.reset();
+            _.write_buffer.reset();
         } else {
-            this.write_buffer.cursor += written as usize;
+            _.write_buffer.cursor += written as usize;
         }
     }
 
     fn receive(*_, buf: string) {
-        this.ref();
+        _.ref();
         const _deref_guard = DerefGuard<ProxyTunnel>{ ptr: unsafe { _ as *ProxyTunnel! } };
 
-        if (*wrapper := this.wrapper) {
+        if (*wrapper := _.wrapper) {
             wrapper.receiveData(buf);
         }
     }
 
     fn write(*_, buf: string): !usize {
-        if (*wrapper := this.wrapper) {
+        if (*wrapper := _.wrapper) {
             return wrapper.writeData(buf);
         }
         return error.ConnectionClosed;
     }
 
     fn detachSocket(*_) {
-        this.socket = { none: {} };
+        _.socket = { none: {} };
     }
 
     fn detachAndDeref(*_) {
-        this.detachSocket();
-        this.deref();
+        _.detachSocket();
+        _.deref();
     }
 
     fn detachOwner(*_, client: *HTTPClient) {
-        this.socket = { none: {} };
-        this.did_have_handshaking_error = client.flags.did_have_handshaking_error;
-        this.established_with_reject_unauthorized = this.established_with_reject_unauthorized || client.flags.reject_unauthorized;
+        _.socket = { none: {} };
+        _.did_have_handshaking_error = client.flags.did_have_handshaking_error;
+        _.established_with_reject_unauthorized = _.established_with_reject_unauthorized || client.flags.reject_unauthorized;
     }
 
     fn adopt(*_, client: *HTTPClient, comptime is_ssl: bool, socket: auto) {
-        this.write_buffer.reset();
+        _.write_buffer.reset();
 
-        if (*wrapper := this.wrapper) {
+        if (*wrapper := _.wrapper) {
             wrapper.handlers.ctx = client;
         }
         if (is_ssl) {
-            this.socket = { ssl: socket };
+            _.socket = { ssl: socket };
         } else {
-            this.socket = { tcp: socket };
+            _.socket = { tcp: socket };
         }
 
-        client.proxy_tunnel = this;
+        client.proxy_tunnel = _;
         client.flags.proxy_tunneling = false;
-        client.flags.did_have_handshaking_error = this.did_have_handshaking_error;
+        client.flags.did_have_handshaking_error = _.did_have_handshaking_error;
         client.state.request_stage = .proxy_headers;
         client.state.response_stage = .proxy_headers;
         client.state.request_sent_len = 0;
     }
 
     pub fn deinit(*_) {
-        this.socket = { none: {} };
-        if (*wrapper := this.wrapper) {
+        _.socket = { none: {} };
+        if (*wrapper := _.wrapper) {
             wrapper.deinit();
-            this.wrapper = null;
+            _.wrapper = null;
         }
-        this.write_buffer.deinit();
-        bun.destroy(this);
+        _.write_buffer.deinit();
+        bun.destroy(_);
     }
 }

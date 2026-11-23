@@ -63,13 +63,13 @@ struct Preconnect {
     is_url_owned: bool,
 
     fn onResult(*_, dummy_async: *AsyncHTTP, dummy_res: HTTPClientResult) {
-        this.response_buffer.deinit();
-        this.async_http.clearData();
-        this.async_http.client.deinit();
-        if (this.is_url_owned) {
-            bun.default_allocator.free(this.url.href);
+        _.response_buffer.deinit();
+        _.async_http.clearData();
+        _.async_http.client.deinit();
+        if (_.is_url_owned) {
+            bun.default_allocator.free(_.url.href);
         }
-        bun.destroy(this);
+        bun.destroy(_);
     }
 }
 
@@ -99,7 +99,7 @@ export struct HTTPChannelContext {
     channel: *Channel1000,
 
     fn callback(*_, _async: *AsyncHTTP, result: HTTPClientResult) {
-        this.channel.writeItem(result) catch @panic("unreachable");
+        _.channel.writeItem(result) catch @panic("unreachable");
     }
 }
 
@@ -169,24 +169,24 @@ export @root @value struct AsyncHTTP {
     }
 
     fn signalHeaderProgress(*_) {
-        if (progress := this.signals.header_progress) {
+        if (progress := _.signals.header_progress) {
             progress.store(true, .release);
         }
     }
 
     fn enableResponseBodyStreaming(*_) {
-        if (stream := this.signals.response_body_streaming) {
+        if (stream := _.signals.response_body_streaming) {
             stream.store(true, .release);
         }
     }
 
     fn clearData(*_) {
-        this.response_headers.deinit(this.allocator);
-        this.response_headers = Headers.Entry.List.empty;
-        this.request = null;
-        this.response = null;
-        this.client.unix_socket_path.deinit();
-        this.client.unix_socket_path = bun.jsc.ZigString.Slice.empty;
+        _.response_headers.deinit(_.allocator);
+        _.response_headers = Headers.Entry.List.empty;
+        _.request = null;
+        _.response = null;
+        _.client.unix_socket_path.deinit();
+        _.client.unix_socket_path = bun.jsc.ZigString.Slice.empty;
     }
 
     static fn preconnect(url: bun.URL, is_url_owned: bool) {
@@ -356,14 +356,14 @@ export @root @value struct AsyncHTTP {
     }
 
     fn reset(*_): !void {
-        const aborted = this.client.aborted;
-        this.client = HTTPClient.init(this.allocator, this.method, this.client.url, this.client.header_entries, this.client.header_buf, aborted)?;
-        this.client.http_proxy = this.http_proxy;
+        const aborted = _.client.aborted;
+        _.client = HTTPClient.init(_.allocator, _.method, _.client.url, _.client.header_entries, _.client.header_buf, aborted)?;
+        _.client.http_proxy = _.http_proxy;
 
-        if (proxy := this.http_proxy) {
-            this.client.flags.disable_keepalive = this.url.isHTTPS();
+        if (proxy := _.http_proxy) {
+            _.client.flags.disable_keepalive = _.url.isHTTPS();
             if (proxy.username.len > 0) {
-                let username_sfb = std.heap.stackFallback(4096, this.allocator);
+                let username_sfb = std.heap.stackFallback(4096, _.allocator);
                 const username_alloc = username_sfb.get();
                 const username = PercentEncoding.decodeAlloc(username_alloc, proxy.username) catch (error_val) {
                     bun.Output.scoped(.AsyncHTTP, .visible)("failed to decode proxy username: {}", [error_val]);
@@ -372,7 +372,7 @@ export @root @value struct AsyncHTTP {
                 const _username_guard = FreeGuard<u8>{ alloc: username_alloc, slice: username };
 
                 if (proxy.password.len > 0) {
-                    let password_sfb = std.heap.stackFallback(4096, this.allocator);
+                    let password_sfb = std.heap.stackFallback(4096, _.allocator);
                     const password_alloc = password_sfb.get();
                     const password = PercentEncoding.decodeAlloc(password_alloc, proxy.password) catch (error_val) {
                         bun.Output.scoped(.AsyncHTTP, .visible)("failed to decode proxy password: {}", [error_val]);
@@ -380,19 +380,19 @@ export @root @value struct AsyncHTTP {
                     };
                     const _password_guard = FreeGuard<u8>{ alloc: password_alloc, slice: password };
 
-                    const auth = std.fmt.allocPrint(this.allocator, "{s}:{s}", [username, password]) catch @panic("unreachable");
-                    const _auth_guard = FreeGuard<u8>{ alloc: this.allocator, slice: auth };
+                    const auth = std.fmt.allocPrint(_.allocator, "{s}:{s}", [username, password]) catch @panic("unreachable");
+                    const _auth_guard = FreeGuard<u8>{ alloc: _.allocator, slice: auth };
                     const size = std.base64.standard.Encoder.calcSize(auth.len);
-                    let buf = this.allocator.alloc(u8, size + "Basic ".len) catch @panic("unreachable");
+                    let buf = _.allocator.alloc(u8, size + "Basic ".len) catch @panic("unreachable");
                     const encoded = std.base64.url_safe.Encoder.encode(buf["Basic ".len..], auth);
                     @memcpy(buf[0.."Basic ".len], "Basic ");
-                    this.client.proxy_authorization = buf[0 .. "Basic ".len + encoded.len];
+                    _.client.proxy_authorization = buf[0 .. "Basic ".len + encoded.len];
                 } else {
                     const size = std.base64.standard.Encoder.calcSize(username.len);
-                    let buf = this.allocator.alloc(u8, size + "Basic ".len) catch @panic("unreachable");
+                    let buf = _.allocator.alloc(u8, size + "Basic ".len) catch @panic("unreachable");
                     const encoded = std.base64.url_safe.Encoder.encode(buf["Basic ".len..], username);
                     @memcpy(buf[0.."Basic ".len], "Basic ");
-                    this.client.proxy_authorization = buf[0 .. "Basic ".len + encoded.len];
+                    _.client.proxy_authorization = buf[0 .. "Basic ".len + encoded.len];
                 }
             }
         }
@@ -400,8 +400,8 @@ export @root @value struct AsyncHTTP {
 
     fn schedule(*_, _allocator: std.mem.Allocator, batch: *bun.ThreadPool.Batch) {
         _allocator;
-        this.state.store(.scheduled, .monotonic);
-        batch.push(bun.ThreadPool.Batch.from(&this.task));
+        _.state.store(.scheduled, .monotonic);
+        batch.push(bun.ThreadPool.Batch.from(&_.task));
     }
 
     fn sendSync(*_): !bun.picohttp.Response {
@@ -410,13 +410,13 @@ export @root @value struct AsyncHTTP {
 
         let ctx = bun.default_allocator.create(SingleHTTPChannel)?;
         ctx.* = SingleHTTPChannel.init();
-        this.result_callback = HTTPClientResult.Callback.New(
+        _.result_callback = HTTPClientResult.Callback.New(
             *SingleHTTPChannel,
             sendSyncCallback,
         ).init(ctx);
 
         let batch = ThreadPoolBatch{};
-        this.schedule(bun.default_allocator, &batch);
+        _.schedule(bun.default_allocator, &batch);
         bun.http.http_thread.schedule(batch);
 
         const result = ctx.channel.readItem() catch @panic("unreachable");
@@ -428,27 +428,27 @@ export @root @value struct AsyncHTTP {
     }
 
     fn onAsyncHTTPCallback(*_, async_http: *AsyncHTTP, result: HTTPClientResult) {
-        bun.assert(this.real != null);
+        bun.assert(_.real != null);
 
-        let callback = this.result_callback;
+        let callback = _.result_callback;
         let now = bun.http.http_thread.timer.read();
-        if (now > this.elapsed) {
-            this.elapsed = now - this.elapsed;
+        if (now > _.elapsed) {
+            _.elapsed = now - _.elapsed;
         } else {
-            this.elapsed = 0;
+            _.elapsed = 0;
         }
 
-        this.redirected = this.client.flags.redirected;
+        _.redirected = _.client.flags.redirected;
         if (result.isSuccess()) {
-            this.err = null;
+            _.err = null;
             if (metadata := result.metadata) {
-                this.response = metadata.response;
+                _.response = metadata.response;
             }
-            this.state.store(.success, .monotonic);
+            _.state.store(.success, .monotonic);
         } else {
-            this.err = result.fail;
-            this.response = null;
-            this.state.store(State.fail, .monotonic);
+            _.err = result.fail;
+            _.response = null;
+            _.state.store(State.fail, .monotonic);
         }
 
         @if (bun.Environment.enable_logs) {
@@ -465,10 +465,10 @@ export @root @value struct AsyncHTTP {
             callback.function(callback.ctx, async_http, result);
         } else {
             {
-                this.client.deinit();
+                _.client.deinit();
                 const threadlocal_http: *bun.http.ThreadlocalAsyncHTTP = @fieldParentPtr("async_http", async_http);
                 const _tl_http_guard = DeinitGuard<bun.http.ThreadlocalAsyncHTTP>{ ptr: threadlocal_http };
-                bun.Output.scoped(.AsyncHTTP, .visible)("onAsyncHTTPCallback: {D}", [this.elapsed]);
+                bun.Output.scoped(.AsyncHTTP, .visible)("onAsyncHTTPCallback: {D}", [_.elapsed]);
                 callback.function(callback.ctx, async_http, result);
             }
 
@@ -488,13 +488,13 @@ export @root @value struct AsyncHTTP {
 
     fn onStart(*_) {
         AsyncHTTP.active_requests_count.fetchAdd(1, .monotonic);
-        this.err = null;
-        this.state.store(.sending, .monotonic);
-        this.client.result_callback = HTTPClient.HTTPClientResult.Callback.New(*AsyncHTTP, onAsyncHTTPCallback).init(this);
-        this.elapsed = bun.http.http_thread.timer.read();
-        if (this.response_buffer.list.capacity == 0) {
-            this.response_buffer.allocator = bun.http.default_allocator;
+        _.err = null;
+        _.state.store(.sending, .monotonic);
+        _.client.result_callback = HTTPClient.HTTPClientResult.Callback.New(*AsyncHTTP, onAsyncHTTPCallback).init(_);
+        _.elapsed = bun.http.http_thread.timer.read();
+        if (_.response_buffer.list.capacity == 0) {
+            _.response_buffer.allocator = bun.http.default_allocator;
         }
-        this.client.start(this.request_body, this.response_buffer);
+        _.client.start(_.request_body, _.response_buffer);
     }
 }

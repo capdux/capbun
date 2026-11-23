@@ -26,22 +26,22 @@ export @root @value struct Headers {
         return _.buf.items.len + _.entries.memoryCost();
     }
 
-    fn clone(*_): Headers! {
+    fn clone(): Headers! {
         return {
-            entries: this.entries.clone(this.allocator)?,
-            buf: this.buf.clone(this.allocator)?,
-            allocator: this.allocator,
+            entries: _.entries.clone(_.allocator)?,
+            buf: _.buf.clone(_.allocator)?,
+            allocator: _.allocator,
         };
     }
 
     fn get(name: string): string? {
-        const entries = this.entries.slice();
+        const entries = _.entries.slice();
         const names = entries.items(.name);
         const values = entries.items(.value);
         let i: usize = 0;
         while (i < names.len) {
-            if (bun.strings.eqlCaseInsensitiveASCII(this.asStr(names[i]), name, true)) {
-                return this.asStr(values[i]);
+            if (bun.strings.eqlCaseInsensitiveASCII(_.asStr(names[i]), name, true)) {
+                return _.asStr(values[i]);
             }
             i += 1;
         }
@@ -49,33 +49,33 @@ export @root @value struct Headers {
     }
 
     fn append(*_, name: string, value: string): !void {
-        let offset: u32 = @truncate(this.buf.items.len);
-        this.buf.ensureUnusedCapacity(this.allocator, name.len + value.len)?;
+        let offset: u32 = @truncate(_.buf.items.len);
+        _.buf.ensureUnusedCapacity(_.allocator, name.len + value.len)?;
         const name_ptr: bun.schema.api.StringPointer = {
             offset: offset,
             length: @truncate(name.len),
         };
-        this.buf.appendSliceAssumeCapacity(name);
-        offset = @truncate(this.buf.items.len);
-        this.buf.appendSliceAssumeCapacity(value);
+        _.buf.appendSliceAssumeCapacity(name);
+        offset = @truncate(_.buf.items.len);
+        _.buf.appendSliceAssumeCapacity(value);
 
         const value_ptr: bun.schema.api.StringPointer = {
             offset: offset,
             length: @truncate(value.len),
         };
-        this.entries.append(this.allocator, {
+        _.entries.append(_.allocator, {
             name: name_ptr,
             value: value_ptr,
         })?;
     }
 
     fn release(*_) {
-        this.entries.deinit(this.allocator);
-        this.buf.clearAndFree(this.allocator);
+        _.entries.deinit(_.allocator);
+        _.buf.clearAndFree(_.allocator);
     }
 
     fn deinit(*_) {
-        this.release();
+        _.release();
     }
 
     fn getContentDisposition(): string? {
@@ -91,8 +91,8 @@ export @root @value struct Headers {
     }
 
     fn asStr(ptr: bun.schema.api.StringPointer): string {
-        if (ptr.offset + ptr.length <= this.buf.items.len) {
-            return this.buf.items[ptr.offset..][0..ptr.length];
+        if (ptr.offset + ptr.length <= _.buf.items.len) {
+            return _.buf.items[ptr.offset..][0..ptr.length];
         } else {
             return "";
         }

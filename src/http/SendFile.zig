@@ -30,8 +30,8 @@ pub fn isEligible(url: bun.URL) bool {
 }
 
 pub fn write(self: *SendFile, socket: anytype) Status {
-        const adjusted_count_temporary = @min((if (comptime @typeInfo(@TypeOf(self.remain)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.remain)) else cp_cast_int(u64, self.remain)), (if (comptime @typeInfo(u63) == .@"enum") @as(u63, @enumFromInt(std.math.maxInt(u63))) else @as(u63, std.math.maxInt(u63))));
-        const adjusted_count = (if (comptime @typeInfo(u63) == .@"enum") @as(u63, @enumFromInt(adjusted_count_temporary)) else @as(u63, adjusted_count_temporary));
+        const adjusted_count_temporary = @min((if (comptime @typeInfo(@TypeOf(self.remain)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.remain)) else cp_cast_int(u64, self.remain)), (if (comptime @typeInfo(@TypeOf(std.math.maxInt(u63))) == .@"enum") cp_cast_int(u63, @intFromEnum(std.math.maxInt(u63))) else cp_cast_int(u63, std.math.maxInt(u63))));
+        const adjusted_count = (if (comptime @typeInfo(@TypeOf(adjusted_count_temporary)) == .@"enum") cp_cast_int(u63, @intFromEnum(adjusted_count_temporary)) else cp_cast_int(u63, adjusted_count_temporary));
         if (bun.Environment.isLinux) {
             var signed_offset: i64 = (if (comptime @typeInfo(@TypeOf(self.offset)) == .@"enum") cp_cast_int(i64, @intFromEnum(self.offset)) else cp_cast_int(i64, self.offset));
             _ = &signed_offset;
@@ -57,7 +57,7 @@ pub fn write(self: *SendFile, socket: anytype) Status {
             }
         } else {
             if (bun.Environment.isFreeBSD) {
-                var sbytes = (if (comptime @typeInfo(std.c.off_t) == .@"enum") @as(std.c.off_t, @enumFromInt(0)) else @as(std.c.off_t, 0));
+                var sbytes = (if (comptime @typeInfo(std.c.off_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.c.off_t, @enumFromInt(0)) else @as(std.c.off_t, 0));
                 _ = &sbytes;
                 const signed_offset: i64 = @bitCast((if (comptime @typeInfo(@TypeOf(self.offset)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.offset)) else cp_cast_int(u64, self.offset)));
                 const errcode = bun.sys.getErrno(std.c.sendfile(self.fd.cast(), socket.fd().cast(), signed_offset, adjusted_count, null, (&sbytes), 0));
@@ -76,7 +76,7 @@ pub fn write(self: *SendFile, socket: anytype) Status {
                 }
             } else {
                 if (bun.Environment.isPosix) {
-                    var sbytes = (if (comptime @typeInfo(std.c.off_t) == .@"enum") @as(std.c.off_t, @enumFromInt(adjusted_count)) else @as(std.c.off_t, adjusted_count));
+                    var sbytes = (if (comptime @typeInfo(std.c.off_t) == .@"enum" and (@typeInfo(@TypeOf(adjusted_count)) == .int or @typeInfo(@TypeOf(adjusted_count)) == .comptime_int)) @as(std.c.off_t, @enumFromInt(adjusted_count)) else @as(std.c.off_t, adjusted_count));
                     _ = &sbytes;
                     const signed_offset: i64 = @bitCast((if (comptime @typeInfo(@TypeOf(self.offset)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.offset)) else cp_cast_int(u64, self.offset)));
                     const errcode = bun.sys.getErrno(std.c.sendfile(self.fd.cast(), socket.fd().cast(), signed_offset, (&sbytes), null, 0));

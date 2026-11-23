@@ -32,24 +32,24 @@ pub struct ErrDeinitGuard<T> {
     }
 
     pub fn deinit(*_) {
-        if (this.prepared_statement_name.len > 0) {
-            bun.default_allocator.free(this.prepared_statement_name);
+        if (_.prepared_statement_name.len > 0) {
+            bun.default_allocator.free(_.prepared_statement_name);
         }
-        if (this.name.len > 0) {
-            bun.default_allocator.free(this.name);
+        if (_.name.len > 0) {
+            bun.default_allocator.free(_.name);
         }
-        if (this.fields.len > 0) {
-            bun.default_allocator.free(this.fields);
+        if (_.fields.len > 0) {
+            bun.default_allocator.free(_.fields);
         }
-        if (this.query.len > 0) {
-            bun.default_allocator.free(this.query);
+        if (_.query.len > 0) {
+            bun.default_allocator.free(_.query);
         }
     }
 
-    pub fn hash(_: *const @This()): u64 {
+    pub fn hash(): u64 {
         let hasher = std.hash.Wyhash.init(0);
-        hasher.update(this.name);
-        hasher.update(std.mem.sliceAsBytes(this.fields));
+        hasher.update(_.name);
+        hasher.update(std.mem.sliceAsBytes(_.fields));
         return hasher.final();
     }
 

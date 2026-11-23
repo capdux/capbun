@@ -91,12 +91,12 @@ const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
 const StringBuilder = bun.StringBuilder;
 
-pub fn toJS(self: ErrorResponse, globalObject: *jsc.JSGlobalObject) JSValue {
+pub fn toJS(err_resp: *const ErrorResponse, globalObject: *jsc.JSGlobalObject) JSValue {
         var b_guard = StringBuilderGuard{  };
         _ = &b_guard;
         var __b_guard_moved = false; _ = &__b_guard_moved;
         defer if (!__b_guard_moved) { __b_guard_moved = true; const __T = @TypeOf(b_guard); if (@typeInfo(__T) == .optional) { if (b_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { b_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = b_guard; _drop_val.__cp_deinit(); } };
-        const items = self.messages.items;
+        const items = err_resp.messages.items;
         for (cp_iter_slice(items)) |msg| {
             _ = &msg;
             b_guard.val.cap = (b_guard.val.cap + ((switch (msg) {

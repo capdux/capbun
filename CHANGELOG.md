@@ -2180,3 +2180,7 @@
 - 完成 Batch 3a 测试：`spawn` 39 文件 **262 pass / 0 主进程崩溃**，`shell` 合计 **479 pass** 并验证 `Builtin` 3 处 SEGV 彻底消除；
 - 修复 `src/shell/states/Cmd.cp`（`Expansion` 分支释放顺序消除 `Allocation scope leaked 30 bytes`，`initSubproc` 直传 `&_.exec.subproc.child` 消除 `BufferedIoClosed.close` SEGV）与恢复 `src/runtime/webcore/Blob.cp` `doImage`（`Image.fromBlobJS`）及清零 9 处 `E0307`；
 - 完成 `s3/*`、`crypto/*`、`install/*`、`jsc/*`、`shell/{EnvMap,subproc}.cp`、`sql/{postgres,mysql,shared}/*`、`valkey`、`zlib`/`zstd`、`watcher/*`、`threading/*`、`safety/*` 共 **70 个文件 `--strict` 纯化**，全部通过 `cpc check --strict`（0 报错）与 `bun run zig:check`（5/5）。
+
+### [2026-11-23] Wave #78–79（Shell 复测零崩溃、Batch 3b `resolve` 完成与 `http`/`sql_jsc` 35 文件 `--strict` 纯化）
+- 完成 `bunshell.test.ts` + `ls.test.ts` 复测（377 pass / 0 crash）与 Batch 3b `test/js/bun/resolve`（34 文件 234 pass / 0 crash）；
+- 完成 `src/http/` 18 文件（全目录 36/36 清零）与 `src/sql_jsc/` 17 文件共 **35 个文件 `--strict` 纯化**，通过 `cpc_brief.py` 4 项门禁与 `bun run zig:check`（5/5）。

@@ -146,8 +146,8 @@ pub struct ValueBytes {
     pinned: JSC.JSValue = .zero,
 
     pub fn deinit(*_) {
-        if (this.pinned != .zero) unsafe { JSC__JSValue__unpinArrayBuffer(this.pinned); }
-        this.slice.deinit();
+        if (_.pinned != .zero) unsafe { JSC__JSValue__unpinArrayBuffer(_.pinned); }
+        _.slice.deinit();
     }
 }
 
@@ -192,32 +192,32 @@ pub struct ValueDateTime {
         };
     }
 
-    pub fn toBinary(_: *const @This(), field_type: FieldType, buffer: []u8): u8 {
+    pub fn toBinary(field_type: FieldType, buffer: []u8): u8 {
         switch (field_type) {
             .MYSQL_TYPE_YEAR => {
                 buffer[0] = 2;
-                std.mem.writeInt(u16, buffer[1..3], this.year, .little);
+                std.mem.writeInt(u16, buffer[1..3], _.year, .little);
                 return 3;
             },
             .MYSQL_TYPE_DATE => {
                 buffer[0] = 4;
-                std.mem.writeInt(u16, buffer[1..3], this.year, .little);
-                buffer[3] = this.month;
-                buffer[4] = this.day;
+                std.mem.writeInt(u16, buffer[1..3], _.year, .little);
+                buffer[3] = _.month;
+                buffer[4] = _.day;
                 return 5;
             },
             .MYSQL_TYPE_DATETIME => {
-                buffer[0] = if (this.microsecond == 0) @as(u8, 7) else @as(u8, 11);
-                std.mem.writeInt(u16, buffer[1..3], this.year, .little);
-                buffer[3] = this.month;
-                buffer[4] = this.day;
-                buffer[5] = this.hour;
-                buffer[6] = this.minute;
-                buffer[7] = this.second;
-                if (this.microsecond == 0) {
+                buffer[0] = if (_.microsecond == 0) @as(u8, 7) else @as(u8, 11);
+                std.mem.writeInt(u16, buffer[1..3], _.year, .little);
+                buffer[3] = _.month;
+                buffer[4] = _.day;
+                buffer[5] = _.hour;
+                buffer[6] = _.minute;
+                buffer[7] = _.second;
+                if (_.microsecond == 0) {
                     return 8;
                 } else {
-                    std.mem.writeInt(u32, buffer[8..12], this.microsecond, .little);
+                    std.mem.writeInt(u32, buffer[8..12], _.microsecond, .little);
                     return 12;
                 }
             },
@@ -225,15 +225,15 @@ pub struct ValueDateTime {
         }
     }
 
-    pub fn toJSTimestamp(_: *const @This(), globalObject: *JSC.JSGlobalObject): bun.JSError!f64 {
+    pub fn toJSTimestamp(globalObject: *JSC.JSGlobalObject): bun.JSError!f64 {
         return globalObject.gregorianDateTimeToMS(
-            this.year,
-            this.month,
-            this.day,
-            this.hour,
-            this.minute,
-            this.second,
-            if (this.microsecond > 0) @intCast(@divFloor(this.microsecond, 1000)) else 0,
+            _.year,
+            _.month,
+            _.day,
+            _.hour,
+            _.minute,
+            _.second,
+            if (_.microsecond > 0) @intCast(@divFloor(_.microsecond, 1000)) else 0,
         );
     }
 
@@ -261,7 +261,7 @@ pub struct ValueDateTime {
     }
 
     pub fn toJS(globalObject: *JSC.JSGlobalObject): JSValue {
-        return JSValue.fromDateNumber(globalObject, this.toJSTimestamp());
+        return JSValue.fromDateNumber(globalObject, _.toJSTimestamp());
     }
 
     pub static fn fromJS(value: JSValue, globalObject: *JSC.JSGlobalObject): @This()! {
@@ -324,12 +324,12 @@ pub struct ValueTime {
         };
     }
 
-    pub fn toUnixTimestamp(_: *const @This()): i64 {
+    pub fn toUnixTimestamp(): i64 {
         let total_ms: i64 = 0;
-        total_ms = total_ms +| (@as(i64, this.days) * 86400000);
-        total_ms = total_ms +| (@as(i64, this.hours) * 3600000);
-        total_ms = total_ms +| (@as(i64, this.minutes) * 60000);
-        total_ms = total_ms +| (@as(i64, this.seconds) * 1000);
+        total_ms = total_ms +| (@as(i64, _.days) * 86400000);
+        total_ms = total_ms +| (@as(i64, _.hours) * 3600000);
+        total_ms = total_ms +| (@as(i64, _.minutes) * 60000);
+        total_ms = total_ms +| (@as(i64, _.seconds) * 1000);
         return total_ms;
     }
 
@@ -356,40 +356,40 @@ pub struct ValueTime {
         return time;
     }
 
-    pub fn toJSTimestamp(_: *const @This()): f64 {
+    pub fn toJSTimestamp(): f64 {
         let total_ms: i64 = 0;
-        total_ms = total_ms +| (@as(i64, this.days) * 86400000);
-        total_ms = total_ms +| (@as(i64, this.hours) * 3600000);
-        total_ms = total_ms +| (@as(i64, this.minutes) * 60000);
-        total_ms = total_ms +| (@as(i64, this.seconds) * 1000);
-        total_ms = total_ms +| @divFloor(this.microseconds, 1000);
+        total_ms = total_ms +| (@as(i64, _.days) * 86400000);
+        total_ms = total_ms +| (@as(i64, _.hours) * 3600000);
+        total_ms = total_ms +| (@as(i64, _.minutes) * 60000);
+        total_ms = total_ms +| (@as(i64, _.seconds) * 1000);
+        total_ms = total_ms +| @divFloor(_.microseconds, 1000);
 
-        if (this.negative) {
+        if (_.negative) {
             total_ms = -total_ms;
         }
         const total_f: f64 = @floatFromInt(total_ms);
         return total_f;
     }
 
-    pub fn toJS(*_, globalObject: *JSC.JSGlobalObject): JSValue {
+    pub fn toJS(globalObject: *JSC.JSGlobalObject): JSValue {
         * = globalObject;
-        return JSValue.jsDoubleNumber(this.toJSTimestamp());
+        return JSValue.jsDoubleNumber(_.toJSTimestamp());
     }
 
-    pub fn toBinary(_: *const @This(), field_type: FieldType, buffer: []u8): u8 {
+    pub fn toBinary(field_type: FieldType, buffer: []u8): u8 {
         switch (field_type) {
             .MYSQL_TYPE_TIME, .MYSQL_TYPE_TIME2 => {
-                buffer[1] = if (this.negative) @as(u8, 1) else @as(u8, 0);
-                std.mem.writeInt(u32, buffer[2..6], this.days, .little);
-                buffer[6] = this.hours;
-                buffer[7] = this.minutes;
-                buffer[8] = this.seconds;
-                if (this.microseconds == 0) {
+                buffer[1] = if (_.negative) @as(u8, 1) else @as(u8, 0);
+                std.mem.writeInt(u32, buffer[2..6], _.days, .little);
+                buffer[6] = _.hours;
+                buffer[7] = _.minutes;
+                buffer[8] = _.seconds;
+                if (_.microseconds == 0) {
                     buffer[0] = 8;
                     return 9;
                 } else {
                     buffer[0] = 12;
-                    std.mem.writeInt(u32, buffer[9..][0..4], this.microseconds, .little);
+                    std.mem.writeInt(u32, buffer[9..][0..4], _.microseconds, .little);
                     return 12;
                 }
             },
@@ -404,7 +404,7 @@ pub struct ValueDecimal {
     negative: bool,
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        allocator.free(this.digits);
+        allocator.free(_.digits);
     }
 
     pub fn toJS(globalObject: *JSC.JSGlobalObject): JSValue {
@@ -412,23 +412,22 @@ pub struct ValueDecimal {
         let str = std.array_list.Managed(u8).init(stack.get());
         const _str_guard = DeinitGuard<@TypeOf(str)>{ ptr: unsafe { &str } };
 
-        if (this.negative) {
+        if (_.negative) {
             str.append('-') catch return JSValue.jsNumber(0);
         }
 
-        const decimal_pos = this.digits.len - this.scale;
-        for (i of 0..this.digits.len) {
-            if (i == decimal_pos && this.scale > 0) {
+        const decimal_pos = _.digits.len - _.scale;
+        for (i of 0.._.digits.len) {
+            if (i == decimal_pos && _.scale > 0) {
                 str.append('.') catch return JSValue.jsNumber(0);
             }
-            str.append(this.digits[i] + '0') catch return JSValue.jsNumber(0);
+            str.append(_.digits[i] + '0') catch return JSValue.jsNumber(0);
         }
 
         return bun.String.createUTF8ForJS(globalObject, str.items) catch .zero;
     }
 
-    pub fn toBinary(*_, field_type: FieldType): Data! {
-        const __unused_self = _; * = __unused_self;
+    pub fn toBinary(field_type: FieldType): Data! {
         * = field_type;
         bun.todoPanic(@src(), "Decimal.toBinary not implemented", .{});
     }
@@ -459,7 +458,7 @@ pub union(enum) Value {
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
         * = allocator;
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .@"string" => |*slice| slice.deinit(),
             .bytes => |*b| b.deinit(),
             inline .string_data, .bytes_data => |*data| data.deinit(),
@@ -467,11 +466,11 @@ pub union(enum) Value {
         }
     }
 
-    pub fn toData(_: *const @This(), field_type: FieldType): AnyMySQLError.Error!Data {
+    pub fn toData(field_type: FieldType): AnyMySQLError.Error!Data {
         let buffer: [15]u8 = undefined;
         let stream = std.io.fixedBufferStream(&buffer);
         let writer = stream.writer();
-        switch (unsafe { this.* }) {
+        switch (_) {
             .@"null" => return Data{ empty: undefined },
             .@"bool" => |b| writer.writeByte(if (b) 1 else 0) catch undefined,
             .short => |s| writer.writeInt(i16, s, .little) catch undefined,

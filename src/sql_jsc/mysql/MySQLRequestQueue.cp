@@ -4,7 +4,11 @@ import bun from "bun";
 
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
-const Queue = bun.LinearFifo(*JSMySQLQuery, .Dynamic);
+fn MutPtr(comptime T: type): type {
+    let x: T = undefined;
+    return @TypeOf(&x);
+}
+const Queue = bun.LinearFifo(MutPtr(JSMySQLQuery), .Dynamic);
 const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
 
 pub struct DeinitGuard<T> {
@@ -44,64 +48,64 @@ pub struct AdvanceCleanupGuard {
     #waiting_to_prepare: bool = false,
     #is_ready_for_query: bool = true,
 
-    pub inline fn canExecuteQuery(_: *const @This(), connection: *const MySQLConnection): bool {
+    pub inline fn canExecuteQuery(connection: *const MySQLConnection): bool {
         return connection.isAbleToWrite() &&
-            this.#is_ready_for_query &&
-            this.#nonpipelinable_requests == 0 &&
-            this.#pipelined_requests == 0;
+            _.#is_ready_for_query &&
+            _.#nonpipelinable_requests == 0 &&
+            _.#pipelined_requests == 0;
     }
 
-    pub inline fn canPrepareQuery(_: *const @This(), connection: *const MySQLConnection): bool {
+    pub inline fn canPrepareQuery(connection: *const MySQLConnection): bool {
         return connection.isAbleToWrite() &&
-            this.#is_ready_for_query &&
-            !this.#waiting_to_prepare &&
-            this.#pipelined_requests == 0;
+            _.#is_ready_for_query &&
+            !_.#waiting_to_prepare &&
+            _.#pipelined_requests == 0;
     }
 
     pub inline fn markAsReadyForQuery(*_) {
-        this.#is_ready_for_query = true;
+        _.#is_ready_for_query = true;
     }
 
     pub inline fn markAsPrepared(*_) {
-        this.#waiting_to_prepare = false;
-        if (request := this.current()) {
+        _.#waiting_to_prepare = false;
+        if (request := _.current()) {
             debug("markAsPrepared markAsPrepared", .{});
             request.markAsPrepared();
         }
     }
 
-    pub inline fn canPipeline(*_, connection: *MySQLConnection): bool {
+    pub inline fn canPipeline(connection: *MySQLConnection): bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;
         }
 
-        return this.#is_ready_for_query &&
-            this.#nonpipelinable_requests == 0 &&
-            !this.#waiting_to_prepare &&
+        return _.#is_ready_for_query &&
+            _.#nonpipelinable_requests == 0 &&
+            !_.#waiting_to_prepare &&
             connection.isAbleToWrite();
     }
 
     pub fn markCurrentRequestAsFinished(*_, item: *JSMySQLQuery) {
-        this.#waiting_to_prepare = false;
+        _.#waiting_to_prepare = false;
         if (item.isBeingPrepared()) {
             debug("markCurrentRequestAsFinished markAsPrepared", .{});
             item.markAsPrepared();
         } else if (item.isRunning()) {
             if (item.isPipelined()) {
-                this.#pipelined_requests -= 1;
+                _.#pipelined_requests -= 1;
             } else {
-                this.#nonpipelinable_requests -= 1;
+                _.#nonpipelinable_requests -= 1;
             }
         }
     }
 
     pub fn advance(*_, connection: *MySQLConnection) {
         let offset: usize = 0;
-        const _guard_advance = AdvanceCleanupGuard{ queue: unsafe { this as *MySQLRequestQueue! } };
+        const _guard_advance = AdvanceCleanupGuard{ queue: unsafe { _ as *MySQLRequestQueue! } };
 
-        while (this.#requests.readableLength() > offset && connection.isAbleToWrite()) {
-            let request: *JSMySQLQuery = this.#requests.peekItem(offset);
+        while (_.#requests.readableLength() > offset && connection.isAbleToWrite()) {
+            let request: *JSMySQLQuery = _.#requests.peekItem(offset);
 
             if (request.isCompleted()) {
                 if (offset > 0) {
@@ -109,19 +113,19 @@ pub struct AdvanceCleanupGuard {
                     continue;
                 }
                 debug("isCompleted", .{});
-                this.#requests.discard(1);
+                _.#requests.discard(1);
                 request.deref();
                 continue;
             }
 
             if (request.isBeingPrepared()) {
                 debug("isBeingPrepared", .{});
-                this.#waiting_to_prepare = true;
+                _.#waiting_to_prepare = true;
                 return;
             }
             if (request.isRunning()) {
                 debug("isRunning", .{});
-                const total_requests_running = this.#pipelined_requests + this.#nonpipelinable_requests;
+                const total_requests_running = _.#pipelined_requests + _.#nonpipelinable_requests;
                 if (offset < total_requests_running) {
                     offset += total_requests_running;
                 } else {
@@ -130,11 +134,11 @@ pub struct AdvanceCleanupGuard {
                 continue;
             }
 
-            request.run(connection) catch |e| {
+            request.run(connection) catch e => {
                 debug("run failed", .{});
                 connection.onError(request, e);
                 if (offset == 0) {
-                    this.#requests.discard(1);
+                    _.#requests.discard(1);
                     request.deref();
                 }
                 offset += 1;
@@ -143,17 +147,17 @@ pub struct AdvanceCleanupGuard {
             if (request.isBeingPrepared()) {
                 debug("isBeingPrepared", .{});
                 connection.resetConnectionTimeout();
-                this.#is_ready_for_query = false;
-                this.#waiting_to_prepare = true;
+                _.#is_ready_for_query = false;
+                _.#waiting_to_prepare = true;
                 return;
             } else if (request.isRunning()) {
                 connection.resetConnectionTimeout();
                 debug("isRunning after run", .{});
-                this.#is_ready_for_query = false;
+                _.#is_ready_for_query = false;
 
                 if (request.isPipelined()) {
-                    this.#pipelined_requests += 1;
-                    if (this.canPipeline(connection)) {
+                    _.#pipelined_requests += 1;
+                    if (_.canPipeline(connection)) {
                         debug("pipelined requests", .{});
                         offset += 1;
                         continue;
@@ -161,7 +165,7 @@ pub struct AdvanceCleanupGuard {
                     return;
                 }
                 debug("nonpipelinable requests", .{});
-                this.#nonpipelinable_requests += 1;
+                _.#nonpipelinable_requests += 1;
             }
             return;
         }
@@ -171,42 +175,42 @@ pub struct AdvanceCleanupGuard {
         return MySQLRequestQueue{ #requests: Queue.init(bun.default_allocator) };
     }
 
-    pub fn isEmpty(*_): bool {
-        return this.#requests.readableLength() == 0;
+    pub fn isEmpty(): bool {
+        return _.#requests.readableLength() == 0;
     }
 
     pub fn add(*_, request: *JSMySQLQuery) {
         debug("add", .{});
         if (request.isBeingPrepared()) {
-            this.#is_ready_for_query = false;
-            this.#waiting_to_prepare = true;
+            _.#is_ready_for_query = false;
+            _.#waiting_to_prepare = true;
         } else if (request.isRunning()) {
-            this.#is_ready_for_query = false;
+            _.#is_ready_for_query = false;
 
             if (request.isPipelined()) {
-                this.#pipelined_requests += 1;
+                _.#pipelined_requests += 1;
             } else {
-                this.#nonpipelinable_requests += 1;
+                _.#nonpipelinable_requests += 1;
             }
         }
         request.ref();
-        bun.handleOom(this.#requests.writeItem(request));
+        bun.handleOom(_.#requests.writeItem(request));
     }
 
-    pub inline fn current(_: *const @This()): (*JSMySQLQuery)? {
-        if (this.#requests.readableLength() == 0) {
+    pub inline fn current(): (*JSMySQLQuery)? {
+        if (_.#requests.readableLength() == 0) {
             return null;
         }
 
-        return this.#requests.peekItem(0);
+        return _.#requests.peekItem(0);
     }
 
     pub fn clean(*_, reason: JSValue?, queries_array: JSValue) {
-        let requests = this.#requests;
-        this.#requests = Queue.init(bun.default_allocator);
-        this.#pipelined_requests = 0;
-        this.#nonpipelinable_requests = 0;
-        this.#waiting_to_prepare = false;
+        let requests = _.#requests;
+        _.#requests = Queue.init(bun.default_allocator);
+        _.#pipelined_requests = 0;
+        _.#nonpipelinable_requests = 0;
+        _.#waiting_to_prepare = false;
         const _guard_requests = DeinitGuard<Queue>{ ptr: &requests };
 
         while (request := requests.readItem()) {
@@ -223,14 +227,14 @@ pub struct AdvanceCleanupGuard {
     }
 
     pub fn deinit(*_) {
-        for (request of this.#requests.readableSlice(0)) {
-            this.#requests.discard(1);
+        for (request of _.#requests.readableSlice(0)) {
+            _.#requests.discard(1);
             request.markAsFailed();
             request.deref();
         }
-        this.#pipelined_requests = 0;
-        this.#nonpipelinable_requests = 0;
-        this.#waiting_to_prepare = false;
-        this.#requests.deinit();
+        _.#pipelined_requests = 0;
+        _.#nonpipelinable_requests = 0;
+        _.#waiting_to_prepare = false;
+        _.#requests.deinit();
     }
 }

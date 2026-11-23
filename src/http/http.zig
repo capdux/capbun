@@ -690,7 +690,7 @@ pub fn toResult(self: *HTTPClient) HTTPClientResult {
         return HTTPClientResult{ .body = self.state.body_out_str, .metadata = null, .redirected = self.flags.redirected, .fail = self.state.fail, .has_more = ((certificate_info != null) or ((self.state.fail == null) and (!self.state.isDone()))), .body_size = body_size, .certificate_info = certificate_info, .can_stream = (((self.state.request_stage == .body) or (self.state.request_stage == .proxy_body)) and self.flags.is_streaming_request_body), .is_http2 = (self.flags.protocol != .http1_1) };
 }
 
-pub fn getSslCtx(self: *HTTPClient, comptime is_ssl: bool) *NewHTTPContext(is_ssl) {
+pub fn getSslCtx(self: *const HTTPClient, comptime is_ssl: bool) *NewHTTPContext(is_ssl) {
         if (comptime is_ssl) {
             return ((self.custom_ssl_ctx) orelse ((&http_thread.https_context)));
         } else {
@@ -707,7 +707,7 @@ pub fn setCustomSslCtx(self: *HTTPClient, ctx: *HTTPContextTLS) void {
         self.custom_ssl_ctx = ctx;
 }
 
-pub inline fn getRequestBodySendBuffer(self: *HTTPClient) HTTPThread.RequestBodyBuffer {
+pub inline fn getRequestBodySendBuffer(self: HTTPClient) HTTPThread.RequestBodyBuffer {
         const actual_estimated_size = (self.state.request_body.len + self.estimatedRequestHeaderByteLength());
         const estimated_size = (if (self.isHTTPS()) @min(actual_estimated_size, max_tls_record_size) else (actual_estimated_size * 2));
         return http_thread.getRequestBodySendBuffer(estimated_size);
@@ -1491,7 +1491,7 @@ pub fn closeAndAbort(self: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPCo
         _ = self.closeAndFail(error.Aborted, is_ssl, socket);
 }
 
-pub fn setTimeout(self: *HTTPClient, socket: anytype) void {
+pub fn setTimeout(self: HTTPClient, socket: anytype) void {
         if (self.flags.disable_timeout) {
             return;
         }

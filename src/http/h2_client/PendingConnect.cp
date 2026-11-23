@@ -14,15 +14,15 @@ export @root struct PendingConnect {
     ssl_config: *SSLConfig? = null,
     waiters: std.ArrayListUnmanaged(*bun.http.HTTPClient) = .{},
 
-    fn matches(&_, hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
-        return this.port == port && this.ssl_config == ssl_config && bun.strings.eqlLong(this.hostname, hostname, true);
+    fn matches(hostname: string, port: u16, ssl_config: *SSLConfig?): bool {
+        return _.port == port && _.ssl_config == ssl_config && bun.strings.eqlLong(_.hostname, hostname, true);
     }
 
     fn unregisterFrom(*_, ctx: *HTTPContextTLS) {
         const list = &ctx.pending_h2_connects;
         let i: usize = 0;
         while (i < list.items.len) {
-            if (list.items[i] == this) {
+            if (list.items[i] == _) {
                 list.swapRemove(i);
                 return;
             }

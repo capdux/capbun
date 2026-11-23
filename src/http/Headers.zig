@@ -69,7 +69,7 @@ pub fn memoryCost(self: Headers) usize {
         return (self.buf.items.len + self.entries.memoryCost());
 }
 
-pub fn clone(self: *Headers) !Headers {
+pub fn clone(self: Headers) !Headers {
         return .{ .entries = try self.entries.clone(self.allocator), .buf = try self.buf.clone(self.allocator), .allocator = self.allocator };
 }
 

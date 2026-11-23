@@ -604,7 +604,7 @@ pub fn unregisterAutoFlusher(self: *PostgresSQLConnection) void {
         }
 }
 
-pub fn getTimeoutInterval(self: *const PostgresSQLConnection) u32 {
+pub fn getTimeoutInterval(self: PostgresSQLConnection) u32 {
         return (switch (self.status) {
 .connected => self.idle_timeout_interval_ms,
 .failed => 0,
@@ -635,8 +635,7 @@ pub fn resetConnectionTimeout(self: *PostgresSQLConnection) void {
 }
 
 pub fn getQueries(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         if (js.queriesGetCached(thisValue)) |value| {
             _ = &value;
             return value;
@@ -646,8 +645,9 @@ pub fn getQueries(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalOb
         return array;
 }
 
-pub fn getOnConnect(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
-    _ = self;
+pub fn getOnConnect(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _global: *jsc.JSGlobalObject) jsc.JSValue {
+        _ = self;
+        _ = &_global;
         if (js.onconnectGetCached(thisValue)) |value| {
             _ = &value;
             return value;
@@ -656,13 +656,13 @@ pub fn getOnConnect(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *js
 }
 
 pub fn setOnConnect(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         _ = js.onconnectSetCached(thisValue, globalObject, value);
 }
 
-pub fn getOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject) jsc.JSValue {
-    _ = self;
+pub fn getOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _global: *jsc.JSGlobalObject) jsc.JSValue {
+        _ = self;
+        _ = &_global;
         if (js.oncloseGetCached(thisValue)) |value| {
             _ = &value;
             return value;
@@ -671,8 +671,7 @@ pub fn getOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.
 }
 
 pub fn setOnClose(self: *PostgresSQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         _ = js.oncloseSetCached(thisValue, globalObject, value);
 }
 
@@ -971,9 +970,8 @@ if ((ssl_error.error_no != 0)) {
         }
 }
 
-pub fn onTimeout(self: *PostgresSQLConnection) void {
-        const __unused_self = self;
-        _ = &__unused_self;
+pub fn onTimeout(self: PostgresSQLConnection) void {
+    _ = self;
         _ = debug("onTimeout", .{});
 }
 
@@ -1393,7 +1391,7 @@ pub fn hasQueryRunning(self: *PostgresSQLConnection) bool {
         return ((!self.flags.is_ready_for_query) or (self.current() != null));
 }
 
-pub fn canPipeline(self: *PostgresSQLConnection) bool {
+pub fn canPipeline(self: PostgresSQLConnection) bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;
@@ -1426,7 +1424,7 @@ if (item.flags.simple) {
 }
 }
 
-pub fn canPrepareQuery(self: *const PostgresSQLConnection) bool {
+pub fn canPrepareQuery(self: PostgresSQLConnection) bool {
         return ((self.flags.is_ready_for_query and (!self.flags.waiting_to_prepare)) and (self.pipelined_requests == 0));
 }
 
@@ -1736,7 +1734,7 @@ if ((offset > 0)) {
         }
 }
 
-pub fn getQueriesArray(self: *const PostgresSQLConnection) JSValue {
+pub fn getQueriesArray(self: PostgresSQLConnection) JSValue {
         if (self.js_value.isEmptyOrUndefinedOrNull()) {
             return JSValue.js_undefined;
         }
@@ -2247,7 +2245,7 @@ pub fn getConnected(self: *PostgresSQLConnection, _: *jsc.JSGlobalObject) JSValu
         return JSValue.jsBoolean((self.status == Status.connected));
 }
 
-pub fn consumeOnConnectCallback(self: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+pub fn consumeOnConnectCallback(self: PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
         _ = debug("consumeOnConnectCallback", .{});
         const on_connect_opt = js.onconnectGetCached(self.js_value);
         if ((on_connect_opt == null)) {
@@ -2259,7 +2257,7 @@ pub fn consumeOnConnectCallback(self: *const PostgresSQLConnection, globalObject
         return on_connect;
 }
 
-pub fn consumeOnCloseCallback(self: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+pub fn consumeOnCloseCallback(self: PostgresSQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
         _ = debug("consumeOnCloseCallback", .{});
         const on_close_opt = js.oncloseGetCached(self.js_value);
         if ((on_close_opt == null)) {
@@ -2294,9 +2292,15 @@ const AutoFlusher = jsc.WebCore.AutoFlusher;
 const uws = bun.uws;
 const Socket = uws.AnySocket;
 const U64IdentityContext = bun.IdentityContext(u64);
-const PreparedStatementsMap = std.HashMapUnmanaged(u64, *PostgresSQLStatement, U64IdentityContext, 80);
+const PreparedStatementsMap = std.HashMapUnmanaged(u64, MutPtr(PostgresSQLStatement), U64IdentityContext, 80);
 const debug = bun.Output.scoped(.Postgres, .visible);
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const AtomicU32 = std.atomic.Value(u32);
 const Base64XorBuf = [bun.base64.encodeLenFromSize(32)]u8;
 const jscall = jsc.toJSHostFn(PostgresSQLConnection.call);
+
+pub fn MutPtr(comptime T: type) type {
+        var x: T = undefined;
+        _ = &x;
+        return @TypeOf((&x));
+}

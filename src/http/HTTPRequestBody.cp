@@ -9,8 +9,8 @@ export @value struct StreamBody {
     ended: bool = false,
 
     fn detach(*_) {
-        if (buf := this.buffer) {
-            this.buffer = null;
+        if (buf := _.buffer) {
+            _.buffer = null;
             buf.deref();
         }
     }
@@ -21,21 +21,21 @@ export enum HTTPRequestBody {
     sendfile: SendFile,
     stream: StreamBody,
 
-    pub fn isStream(*_): bool {
-        return this.* == .stream;
+    pub fn isStream(): bool {
+        return _ == .stream;
     }
 
     pub fn deinit(*_) {
-        switch (this.*) {
+        switch (_.*) {
             .sendfile, .bytes => {},
-            .stream => this.stream.detach(),
+            .stream => _.stream.detach(),
         }
     }
 
-    pub fn len(*_): usize {
-        return switch (this.*) {
-            .bytes => this.bytes.len,
-            .sendfile => this.sendfile.content_size,
+    pub fn len(): usize {
+        return switch (_) {
+            .bytes => _.bytes.len,
+            .sendfile => _.sendfile.content_size,
             .stream => ~(@as(usize, 0)),
         };
     }

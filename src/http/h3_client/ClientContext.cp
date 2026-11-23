@@ -23,17 +23,17 @@ pub fn getOrCreate(loop: *uws.Loop): (*ClientContext)? {
     const maybe_qctx = quic.Context.createClient(
         loop,
         0,
-        @sizeOf(*ClientSession),
-        @sizeOf(*Stream),
+        @sizeOf(usize),
+        @sizeOf(usize),
     );
     if (maybe_qctx == null) return null;
     const qctx = maybe_qctx.?;
 
     callbacks.register(qctx);
-    let self = bun.handleOom(bun.default_allocator.create(ClientContext));
-    self.* = ClientContext { qctx: qctx };
-    instance = self;
-    return self;
+    let ctx = bun.handleOom(bun.default_allocator.create(ClientContext));
+    ctx.* = ClientContext { qctx: qctx };
+    instance = ctx;
+    return ctx;
 }
 
 export @root struct ClientContext {

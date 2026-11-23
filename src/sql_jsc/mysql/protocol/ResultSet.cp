@@ -60,7 +60,7 @@ export struct Row {
     bigint: bool = false,
     globalObject: *jsc.JSGlobalObject,
 
-    pub fn toJS(*_, globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: SQLQueryResultMode, cached_structure: CachedStructure?): anyerror!JSValue {
+    pub fn toJS(globalObject: *jsc.JSGlobalObject, array: JSValue, structure: JSValue, flags: SQLDataCell.Flags, result_mode: SQLQueryResultMode, cached_structure: CachedStructure?): anyerror!JSValue {
         let names: [*]jsc.JSObject.ExternColumnIdentifier? = null;
         let names_count: u32 = 0;
         if (c := cached_structure) {
@@ -74,8 +74,8 @@ export struct Row {
             globalObject,
             array,
             structure,
-            this.values.ptr,
-            @truncate(this.values.len),
+            _.values.ptr,
+            @truncate(_.values.len),
             flags,
             @intFromEnum(result_mode),
             names,
@@ -85,18 +85,18 @@ export struct Row {
 
     pub fn deinit(*_, allocator: std.mem.Allocator)  {
         let i: usize = 0;
-        while (i < this.values.len) {
-            this.values[i].deinit();
+        while (i < _.values.len) {
+            _.values[i].deinit();
             i += 1;
         }
-        allocator.free(this.values);
+        allocator.free(_.values);
     }
 
     pub fn decodeInternal(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
-        if (this.binary) {
-            this.decodeBinary(allocator, Context, reader)?;
+        if (_.binary) {
+            _.decodeBinary(allocator, Context, reader)?;
         } else {
-            this.decodeText(allocator, Context, reader)?;
+            _.decodeText(allocator, Context, reader)?;
         }
     }
 
@@ -142,7 +142,7 @@ export struct Row {
                             cell.* = SQLDataCell{ tag: .uint4, value: { uint4: @intCast(val) } };
                             return;
                         }
-                        if (this.bigint) {
+                        if (_.bigint) {
                             cell.* = SQLDataCell{ tag: .uint8, value: { uint8: val } };
                             return;
                         }
@@ -152,7 +152,7 @@ export struct Row {
                             cell.* = SQLDataCell{ tag: .int4, value: { int4: @intCast(val) } };
                             return;
                         }
-                        if (this.bigint) {
+                        if (_.bigint) {
                             cell.* = SQLDataCell{ tag: .int8, value: { int8: val } };
                             return;
                         }
@@ -172,8 +172,8 @@ export struct Row {
                 .MYSQL_TYPE_DATE, .MYSQL_TYPE_DATETIME, .MYSQL_TYPE_TIMESTAMP => {
                     let str = bun.String.init(value.slice());
                     const _str_guard = DerefGuard<bun.String>{ ptr: unsafe { &str } };
-                    const date = str.parseDate(this.globalObject) catch |e| {
-                        * = this.globalObject.takeException(e);
+                    const date = str.parseDate(_.globalObject) catch e => {
+                        * = _.globalObject.takeException(e);
                         cell.* = SQLDataCell{ tag: .date, value: { date: std.math.nan(f64) } };
                         return;
                     };
@@ -200,7 +200,7 @@ export struct Row {
     }
 
     fn decodeText(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
-        const cells = allocator.alloc(SQLDataCell, this.columns.len)?;
+        const cells = allocator.alloc(SQLDataCell, _.columns.len)?;
         @memset(cells, SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
         const _cells_guard = CellsErrGuard{ cells: cells, allocator: allocator };
 
@@ -208,14 +208,14 @@ export struct Row {
         while (index < cells.len) {
             let value = &cells[index];
             if (result := decodeLengthInt(reader.peek())) {
-                const column = this.columns[index];
+                const column = _.columns[index];
                 if (result.value == 0xfb) {
                     reader.skip(result.bytes_read);
                     unsafe {
                         value.* = SQLDataCell{ tag: .@"null", value: { @"null": 0 } };
                     }
                 } else {
-                    if (this.raw) {
+                    if (_.raw) {
                         let data = reader.encodeLenString()?;
                         const _data_guard = DeinitGuard<@TypeOf(data)>{ ptr: unsafe { &data } };
                         unsafe {
@@ -225,7 +225,7 @@ export struct Row {
                         reader.skip(result.bytes_read);
                         let string_data = reader.read(@intCast(result.value))?;
                         const _str_data_guard = DeinitGuard<@TypeOf(string_data)>{ ptr: unsafe { &string_data } };
-                        this.parseValueAndSetCell(value, &column, &string_data);
+                        _.parseValueAndSetCell(value, &column, &string_data);
                     }
                 }
                 value.index = switch (column.name_or_index) {
@@ -243,17 +243,17 @@ export struct Row {
             index += 1;
         }
 
-        this.values = cells;
+        _.values = cells;
     }
 
     fn decodeBinary(*_, allocator: std.mem.Allocator, comptime Context: type, reader: NewReader(Context)): AnyMySQLError.Error!void {
         * = reader.int(u8)?;
 
-        const bitmap_bytes = (this.columns.len + 7 + 2) / 8;
+        const bitmap_bytes = (_.columns.len + 7 + 2) / 8;
         let null_bitmap = reader.read(bitmap_bytes)?;
         const _bitmap_guard = DeinitGuard<@TypeOf(null_bitmap)>{ ptr: unsafe { &null_bitmap } };
 
-        const cells = allocator.alloc(SQLDataCell, this.columns.len)?;
+        const cells = allocator.alloc(SQLDataCell, _.columns.len)?;
         @memset(cells, SQLDataCell{ tag: .@"null", value: { @"null": 0 } });
         const _cells_guard = CellsErrGuard{ cells: cells, allocator: allocator };
         const bitmap_offset: usize = 2;
@@ -273,9 +273,9 @@ export struct Row {
                 continue;
             }
 
-            const column = this.columns[i];
+            const column = _.columns[i];
             unsafe {
-                value.* = decodeBinaryValue(this.globalObject, column.column_type, column.column_length, this.raw, this.bigint, column.flags.UNSIGNED, column.flags.BINARY, column.character_set, Context, reader) catch |e| return @errorCast(e);
+                value.* = decodeBinaryValue(_.globalObject, column.column_type, column.column_length, _.raw, _.bigint, column.flags.UNSIGNED, column.flags.BINARY, column.character_set, Context, reader) catch e => return @errorCast(e);
             }
             value.index = switch (column.name_or_index) {
                 .index idx => idx,
@@ -289,7 +289,7 @@ export struct Row {
             i += 1;
         }
 
-        this.values = cells;
+        _.values = cells;
     }
 
     pub const decode = decoderWrap(Row, decodeInternal).decodeAllocator;

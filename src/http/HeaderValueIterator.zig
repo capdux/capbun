@@ -6,7 +6,7 @@ const string = []const u8;
 
 pub const HeaderValueIterator = @This();
 
-iterator: std.mem.TokenIterator(u8,.scalar),
+iterator: std.mem.TokenIterator(u8, .scalar),
 
 pub fn init(input: []const u8) HeaderValueIterator {
         return .{ .iterator = std.mem.tokenizeScalar(u8, std.mem.trim(u8, input, " \t"), 44) };

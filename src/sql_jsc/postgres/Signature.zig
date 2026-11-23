@@ -104,7 +104,7 @@ pub fn deinit(self: *Signature) void {
         }
 }
 
-pub fn hash(self: *const Signature) u64 {
+pub fn hash(self: Signature) u64 {
         var hasher = std.hash.Wyhash.init(0);
         _ = &hasher;
         _ = hasher.update(self.name);

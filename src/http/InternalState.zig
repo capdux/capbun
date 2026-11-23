@@ -139,7 +139,7 @@ pub fn init(body: HTTPRequestBody, body_out_str: *bun.MutableString) InternalSta
         return InternalState{ .original_request_body = body, .request_body = req_body, .compressed_body = MutableString{ .allocator = bun.http.default_allocator, .list = .{} }, .response_message_buffer = MutableString{ .allocator = bun.http.default_allocator, .list = .{} }, .body_out_str = body_out_str, .stage = Stage.pending, .pending_response = null };
 }
 
-pub fn isChunkedEncoding(self: *InternalState) bool {
+pub fn isChunkedEncoding(self: InternalState) bool {
         return (self.transfer_encoding == Encoding.chunked);
 }
 
@@ -177,7 +177,7 @@ pub fn getBodyBuffer(self: *InternalState) *bun.MutableString {
         _ = @panic("body_out_str is null");
 }
 
-pub fn isDone(self: *InternalState) bool {
+pub fn isDone(self: InternalState) bool {
         if (self.isChunkedEncoding()) {
             return self.flags.received_last_chunk;
         }

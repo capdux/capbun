@@ -25,15 +25,15 @@ pub fn createMySQLError(
     return opts_obj;
 }
 
-pub fn toJS(_: ErrorPacket, globalObject: *JSC.JSGlobalObject): JSValue {
-    let msg = this.error_message.slice();
+pub fn toJS(pkt: ErrorPacket, globalObject: *JSC.JSGlobalObject): JSValue {
+    let msg = pkt.error_message.slice();
     if (msg.len == 0) {
         msg = "MySQL error occurred";
     }
 
     return createMySQLError(globalObject, msg, MySQLErrorOptions{
-        code: if (this.error_code == 1064) "ERR_MYSQL_SYNTAX_ERROR" else "ERR_MYSQL_SERVER_ERROR",
-        errno: this.error_code,
-        sqlState: this.sql_state,
-    }) catch |e| globalObject.takeException(e);
+        code: if (pkt.error_code == 1064) "ERR_MYSQL_SYNTAX_ERROR" else "ERR_MYSQL_SERVER_ERROR",
+        errno: pkt.error_code,
+        sqlState: pkt.sql_state,
+    }) catch e => globalObject.takeException(e);
 }

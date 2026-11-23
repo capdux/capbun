@@ -15,41 +15,41 @@ const JSValue = jsc.JSValue;
     any_failed: bool = false,
 
     pub fn next(*_): jsc.JSValue? {
-        if (this.array.isEmptyOrUndefinedOrNull() || this.columns.isEmptyOrUndefinedOrNull()) {
-            this.any_failed = true;
+        if (_.array.isEmptyOrUndefinedOrNull() || _.columns.isEmptyOrUndefinedOrNull()) {
+            _.any_failed = true;
             return null;
         }
-        if (this.row_i >= this.array_length) {
+        if (_.row_i >= _.array_length) {
             return null;
         }
 
-        const cell_i = this.cell_i;
-        this.cell_i += 1;
-        const row_i = this.row_i;
+        const cell_i = _.cell_i;
+        _.cell_i += 1;
+        const row_i = _.row_i;
 
-        const globalObject = this.globalObject;
+        const globalObject = _.globalObject;
 
-        if (this.current_row == .zero) {
-            this.current_row = jsc.JSObject.getIndex(this.array, globalObject, @intCast(row_i)) catch |e| {
-                this.any_failed = true;
+        if (_.current_row == .zero) {
+            _.current_row = jsc.JSObject.getIndex(_.array, globalObject, @intCast(row_i)) catch e => {
+                _.any_failed = true;
                 return null;
             };
-            if (this.current_row.isEmptyOrUndefinedOrNull()) {
+            if (_.current_row.isEmptyOrUndefinedOrNull()) {
                 if (globalObject.throw("Expected a row to be returned at index {d}", .{row_i}) == error.JSError) {}
                 return null;
             }
         }
 
         defer {
-            if (this.cell_i >= this.columns_count) {
-                this.cell_i = 0;
-                this.current_row = .zero;
-                this.row_i += 1;
+            if (_.cell_i >= _.columns_count) {
+                _.cell_i = 0;
+                _.current_row = .zero;
+                _.row_i += 1;
             }
         }
 
-        const property = jsc.JSObject.getIndex(this.columns, globalObject, @intCast(cell_i)) catch |e| {
-            this.any_failed = true;
+        const property = jsc.JSObject.getIndex(_.columns, globalObject, @intCast(cell_i)) catch e => {
+            _.any_failed = true;
             return null;
         };
         if (property.isUndefined()) {
@@ -57,12 +57,12 @@ const JSValue = jsc.JSValue;
             return null;
         }
 
-        const value = this.current_row.getOwnByValue(globalObject, property);
+        const value = _.current_row.getOwnByValue(globalObject, property);
         if (value == .zero || (value != null && value.?.isUndefined())) {
             if (!globalObject.hasException()) {
                 if (globalObject.throw("Expected a value at index {d} in row {d}", .{ cell_i, row_i }) == error.JSError) {}
             }
-            this.any_failed = true;
+            _.any_failed = true;
             return null;
         }
         return value;

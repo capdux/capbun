@@ -1734,3 +1734,8 @@
 ### [2026-11-23] Wave #77 技术要点（`Cmd` 生命周期/子进程就地构造与 `cpc` 静态/类型实参规律）
 - `Cmd.childDone` 的 `Expansion` 分支不能用 RAII `~init` 在 `return writeFailingError` 后释放 `base.allocator()` 分配的错误对象（因 `writeFailingError` 会同步触发 `Cmd.deinit -> endScope` 检查）；须先用 `bun.default_allocator` 格式化并提前 `e.deinit(_.base.allocator())`。`Cmd.initSubproc` 必须直传 `&_.exec.subproc.child` 而非临时栈数组，否则 `spawnAsync` 内同步触发 `BufferedIoClosed.close` 时 `child.stderr` 尚未赋值。
 - 实参位置传递指针类型（如 `*Child` / `*PackageInstaller`）在 CP 表达式解析中会被转为 `&T`，须改用 `@TypeOf(&val)`；`pub enum` / `pub static struct` 内静态方法必须显式标注 `static fn`（或声明 `static struct`），否则重编后将被注入 `self` 接收者参数。
+
+### [2026-11-23] Wave #79 技术要点（泛型容器指针类型实参、JSC 原型 `*_` 与 `@const` 接收者兼容）
+- `bun.LinearFifo(*T, ...)` / `std.HashMapUnmanaged(..., *T, ...)` 等类型级指针实参在 CP 表达式解析中同样会被转为 `&T`，可通过 `fn MutPtr(comptime T: type): type { let x: T = undefined; return @TypeOf(&x); }` 安全构造可变指针类型。
+- JSC 类原型与 GC 回调（如 `getQueries`、`hasPendingActivity`、`estimatedSize`）即使方法体只读也必须保留 `*_` 接收者以匹配 `ZigGeneratedClasses.zig` 的 `*Self` 指针调用约定；`callconv(.c)` 函数（如 `BindAndExecuteCtx.run`）必须标注 `static fn`。
+- `CertificateInfo.deinit` 等只释放内部切片而由调用方传入 `*const` 值的析构方法应省略接收者（不用 `*_`），避免 `cast discards const qualifier`。

@@ -777,6 +777,17 @@
 - 全量 72 个修改文件通过 `cpc_brief.py` 4 项门禁、`cpc check --strict`（0 报错）与 `bun run zig:check`（**5/5，30s**）。
 - 推导下一阶段 Wave #78：Subagent 1 运行 `bun bd test test/js/bun/shell/bunshell.test.ts test/js/bun/shell/commands/ls.test.ts` 验证 `Cmd.cp` 修复后推进 Batch 3b（`test/js/bun/resolve` 等）；Subagent 2 先行只读分析 `spawn` 23 fail / `util` 48 fail 归因或准备下一批 `--strict` 文件清单（零 `src/` 写冲突）。
 
+## [2026-11-23] Wave #78：Shell 崩溃清零复测、Batch 3b（`resolve`）全量完成与失败归因
+- `bunshell.test.ts` + `ls.test.ts` 复测（465 用例，193.82s）：**377 pass / 83 todo / 5 fail / 0 crash**（`Allocation scope leaked` 与 `BufferedIoClosed.close` SEGV 彻底清零；5 fail 均为 `uid=0` 权限或 `bun install` 5s 超时）。
+- **Batch 3b（`test/js/bun/resolve` 34 文件 / 245 用例，260.14s）**：**234 pass / 2 skip / 5 todo / 4 fail / 0 crash**（2 项 10,000 次导入超时、1 项缺 `reflect-metadata` 夹具、1 项 `--hot` stdout 关闭）。
+- 只读排查 Wave #76 `shell_rest`（3 处 `BufferedIoClosed.close` SEGV 已随 `Cmd.cp` 修复消除）与 `spawn`（23 fail + 4 errors 全为 Debug+ASan 启动耗时与紧阈值超时，0 处 CP 退化）。
+
+## [2026-11-23] Wave #79：`src/http/`（18 文件）与 `src/sql_jsc/`（17 文件）共 35 文件 `--strict` 纯化与 `zig:check` 5/5 通过
+- `src/http/` 18 文件（含 `http.cp` 等全部剩余文件）全部通过 `cpc check --strict`（`errors: 0`），实现 `src/http/` 全目录 36/36 零违例（其中 `CertificateInfo.deinit` 省略接收者以兼容 `*const CertificateInfo`、`ClientContext.cp` 用 `@sizeOf(usize)`、`HTTPRequestBody.cp` 改用 `_`、`Signals.cp` 清理 `@comptime`）。
+- `src/sql_jsc/` 17 文件（含 `PostgresSQLConnection.cp`、`JSMySQLConnection.cp`、`MySQLQuery.cp` 等）完成 `--strict` 纯化（除 `JSMySQLConnection.cp` 泛型工厂内 2 处 `E0307` 外全零，保留 JSC 原型/GC 绑定 `*_`、补 `MutPtr(T)` 辅助函数与 `MySQLQuery.BindAndExecuteCtx.run` `static fn`）。
+- 全量 35 文件通过 `cpc_brief.py` 4 项门禁与 `bun run zig:check`（**5/5，29s**）。
+- 推导下一阶段 Wave #80：Subagent 1 运行 **Batch 3c**（`bun bd test test/js/bun/glob test/js/bun/md test/js/bun/cookie test/js/bun/css test/js/bun/crypto test/js/bun/ffi`）；Subagent 2 并行做只读排查/准备下一批 `--strict` 文件清单（如 `src/bundler/` 23 文件 `E0307` 或 `src/test_runner/` 剩余 11 文件精确行号清单）。
+
 ### [2026-11-23] 向 `cp_agy` 提交 `cpc check --strict` `E0311` `union(enum)` 字段冲突工单
 - `task-bun-20261123-strict-e0311-union-void` (`repro_strict_e0311_union_void.cp`)：`union(enum)` 省略 `: void` 报 `E0111`（parser 强制要求冒号），写 `none: void` 又报 `E0311`（`--strict` 禁止 `: void`），影响 `Installer.cp`、`http.cp` 等 `union(enum)` 声明。
 - **结单验收与 `ack`**：`cp_agy` 已修复 `cpc/src/strict.rs`（将 `E0311` 收窄至真实函数返回 `: void` 签名，不再误报 `union`/`struct` 零大小字段）及 `cpc/src/parser/container.rs`（允许 `union` 字段省略 `: void` 默认为 `Type::Void`）；本地实测 `/data/dev/cp/cap/bin/cpc check --strict /data/dev/cp/temp/repro_strict_e0311_union_void.cp` 返回 `Check successful`，已执行 `ack`。

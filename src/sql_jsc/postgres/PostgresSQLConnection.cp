@@ -33,7 +33,11 @@ const AutoFlusher = jsc.WebCore.AutoFlusher;
 const uws = bun.uws;
 const Socket = uws.AnySocket;
 const U64IdentityContext = bun.IdentityContext(u64);
-const PreparedStatementsMap = std.HashMapUnmanaged(u64, *PostgresSQLStatement, U64IdentityContext, 80);
+fn MutPtr(comptime T: type): type {
+    let x: T = undefined;
+    return @TypeOf(&x);
+}
+const PreparedStatementsMap = std.HashMapUnmanaged(u64, MutPtr(PostgresSQLStatement), U64IdentityContext, 80);
 const debug = bun.Output.scoped(.Postgres, .visible);
 const MAX_PIPELINE_SIZE = std.math.maxInt(u16);
 const AtomicU32 = std.atomic.Value(u32);
@@ -43,12 +47,12 @@ export struct Writer {
     connection: *PostgresSQLConnection,
 
     pub fn write(data: []const u8): AnyPostgresError!void {
-        let conn = this.connection;
+        let conn = _.connection;
         conn.write_buffer.write(bun.default_allocator, data)?;
     }
 
     pub fn pwrite(data: []const u8, index: usize): AnyPostgresError!void {
-        @memcpy(this.connection.write_buffer.byte_list.slice()[index..][0..data.len], data);
+        @memcpy(_.connection.write_buffer.byte_list.slice()[index..][0..data.len], data);
     }
 
     pub fn offset(): usize {
@@ -71,21 +75,21 @@ export struct Reader {
     }
 
     pub fn skip(count: usize)  {
-        let conn = this.connection;
+        let conn = _.connection;
         conn.read_buffer.head = @min(conn.read_buffer.head + @as(u32, @truncate(count)), conn.read_buffer.byte_list.len);
     }
 
     pub fn ensureCapacity(count: usize): bool {
-        return @as(usize, this.connection.read_buffer.head) + count <= @as(usize, this.connection.read_buffer.byte_list.len);
+        return @as(usize, _.connection.read_buffer.head) + count <= @as(usize, _.connection.read_buffer.byte_list.len);
     }
 
     pub fn read(count: usize): AnyPostgresError!Data {
-        const remaining = this.connection.read_buffer.remaining();
+        const remaining = _.connection.read_buffer.remaining();
         if (@as(usize, remaining.len) < count) {
             return error.ShortRead;
         }
 
-        this.skip(count);
+        _.skip(count);
         return Data{
             temporary: remaining[0..count],
         };
@@ -465,75 +469,75 @@ pub struct DataCellsGuard<P, C> {
     pub const toJS = js.toJS;
 
     pub fn onAutoFlush(*_): bool {
-        if (this.flags.has_backpressure) {
+        if (_.flags.has_backpressure) {
             debug("onAutoFlush: has backpressure", .{});
-            this.auto_flusher.registered = false;
+            _.auto_flusher.registered = false;
             return false;
         }
-        this.ref();
-        const _deref_guard = ConnDerefGuard{ conn: this };
+        _.ref();
+        const _deref_guard = ConnDerefGuard{ conn: _ };
         debug("onAutoFlush: draining", .{});
-        this.drainInternal();
+        _.drainInternal();
 
-        const keep_flusher_registered = !this.flags.has_backpressure && this.write_buffer.len() > 0;
+        const keep_flusher_registered = !_.flags.has_backpressure && _.write_buffer.len() > 0;
         debug("onAutoFlush: keep_flusher_registered: {}", .{keep_flusher_registered});
-        this.auto_flusher.registered = keep_flusher_registered;
+        _.auto_flusher.registered = keep_flusher_registered;
         return keep_flusher_registered;
     }
 
     fn registerAutoFlusher(*_)  {
-        const data_to_send = this.write_buffer.len();
-        debug("registerAutoFlusher: backpressure: {} registered: {} data_to_send: {}", .{ this.flags.has_backpressure, this.auto_flusher.registered, data_to_send });
+        const data_to_send = _.write_buffer.len();
+        debug("registerAutoFlusher: backpressure: {} registered: {} data_to_send: {}", .{ _.flags.has_backpressure, _.auto_flusher.registered, data_to_send });
 
-        if (!this.auto_flusher.registered &&
-            !this.flags.has_backpressure &&
+        if (!_.auto_flusher.registered &&
+            !_.flags.has_backpressure &&
             data_to_send > 0 &&
-            this.status == .connected)
+            _.status == .connected)
         {
-            AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(PostgresSQLConnection, this, this.vm);
-            this.auto_flusher.registered = true;
+            AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(PostgresSQLConnection, _, _.vm);
+            _.auto_flusher.registered = true;
         }
     }
 
     fn unregisterAutoFlusher(*_)  {
-        debug("unregisterAutoFlusher registered: {}", .{this.auto_flusher.registered});
-        if (this.auto_flusher.registered) {
-            AutoFlusher.unregisterDeferredMicrotaskWithType(PostgresSQLConnection, this, this.vm);
-            this.auto_flusher.registered = false;
+        debug("unregisterAutoFlusher registered: {}", .{_.auto_flusher.registered});
+        if (_.auto_flusher.registered) {
+            AutoFlusher.unregisterDeferredMicrotaskWithType(PostgresSQLConnection, _, _.vm);
+            _.auto_flusher.registered = false;
         }
     }
 
-    fn getTimeoutInterval(_: *const PostgresSQLConnection): u32 {
-        return switch (this.status) {
-            .connected => this.idle_timeout_interval_ms,
+    fn getTimeoutInterval(): u32 {
+        return switch (_.status) {
+            .connected => _.idle_timeout_interval_ms,
             .failed => 0,
-            else => this.connection_timeout_ms,
+            else => _.connection_timeout_ms,
         };
     }
 
     pub fn disableConnectionTimeout(*_)  {
-        if (this.timer.state == .ACTIVE) {
-            this.vm.timer.remove(&this.timer);
+        if (_.timer.state == .ACTIVE) {
+            _.vm.timer.remove(&_.timer);
         }
-        this.timer.state = .CANCELLED;
+        _.timer.state = .CANCELLED;
     }
 
     pub fn resetConnectionTimeout(*_)  {
-        if (this.flags.is_processing_data) return;
-        const interval = this.getTimeoutInterval();
-        if (this.timer.state == .ACTIVE) {
-            this.vm.timer.remove(&this.timer);
+        if (_.flags.is_processing_data) return;
+        const interval = _.getTimeoutInterval();
+        if (_.timer.state == .ACTIVE) {
+            _.vm.timer.remove(&_.timer);
         }
         if (interval == 0) {
             return;
         }
 
-        this.timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(interval));
-        this.vm.timer.insert(&this.timer);
+        _.timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(interval));
+        _.vm.timer.insert(&_.timer);
     }
 
     pub fn getQueries(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         if (value := js.queriesGetCached(thisValue)) {
             return value;
         }
@@ -544,7 +548,9 @@ pub struct DataCellsGuard<P, C> {
         return array;
     }
 
-    pub fn getOnConnect(_: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject): jsc.JSValue {
+    pub fn getOnConnect(*_, thisValue: jsc.JSValue, _global: *jsc.JSGlobalObject): jsc.JSValue {
+        * = _;
+        * = _global;
         if (value := js.onconnectGetCached(thisValue)) {
             return value;
         }
@@ -553,11 +559,13 @@ pub struct DataCellsGuard<P, C> {
     }
 
     pub fn setOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         js.onconnectSetCached(thisValue, globalObject, value);
     }
 
-    pub fn getOnClose(_: *PostgresSQLConnection, thisValue: jsc.JSValue, _: *jsc.JSGlobalObject): jsc.JSValue {
+    pub fn getOnClose(*_, thisValue: jsc.JSValue, _global: *jsc.JSGlobalObject): jsc.JSValue {
+        * = _;
+        * = _global;
         if (value := js.oncloseGetCached(thisValue)) {
             return value;
         }
@@ -566,113 +574,113 @@ pub struct DataCellsGuard<P, C> {
     }
 
     pub fn setOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue)  {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         js.oncloseSetCached(thisValue, globalObject, value);
     }
 
     pub fn setupTLS(*_)  {
         debug("setupTLS", .{});
-        const tls_group = this.vm.rareData().postgresGroup(this.vm, true);
-        const new_socket_opt = this.socket.SocketTCP.socket.connected.adoptTLS(
+        const tls_group = _.vm.rareData().postgresGroup(_.vm, true);
+        const new_socket_opt = _.socket.SocketTCP.socket.connected.adoptTLS(
             tls_group,
             .postgres_tls,
-            this.secure.?,
-            this.tls_config.server_name,
+            _.secure.?,
+            _.tls_config.server_name,
             @sizeOf(*PostgresSQLConnection),
             @sizeOf(*PostgresSQLConnection),
         );
         if (new_socket_opt == null) {
-            this.fail("Failed to upgrade to TLS", error.TLSUpgradeFailed);
+            _.fail("Failed to upgrade to TLS", error.TLSUpgradeFailed);
             return;
         }
         const new_socket = new_socket_opt.?;
         unsafe {
-            new_socket.ext(*PostgresSQLConnection).* = this;
+            new_socket.ext(*PostgresSQLConnection).* = _;
         }
-        this.socket = Socket{ SocketTLS: { socket: { connected: new_socket } } };
+        _.socket = Socket{ SocketTLS: { socket: { connected: new_socket } } };
         new_socket.startTLSHandshake();
-        this.start();
+        _.start();
     }
 
     fn setupMaxLifetimeTimerIfNecessary(*_)  {
-        if (this.max_lifetime_interval_ms == 0) return;
-        if (this.max_lifetime_timer.state == .ACTIVE) return;
+        if (_.max_lifetime_interval_ms == 0) return;
+        if (_.max_lifetime_timer.state == .ACTIVE) return;
 
-        this.max_lifetime_timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(this.max_lifetime_interval_ms));
-        this.vm.timer.insert(&this.max_lifetime_timer);
+        _.max_lifetime_timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(_.max_lifetime_interval_ms));
+        _.vm.timer.insert(&_.max_lifetime_timer);
     }
 
     pub fn onConnectionTimeout(*_)  {
         debug("onConnectionTimeout", .{});
 
-        this.timer.state = .FIRED;
-        if (this.flags.is_processing_data) {
+        _.timer.state = .FIRED;
+        if (_.flags.is_processing_data) {
             return;
         }
 
-        if (this.getTimeoutInterval() == 0) {
-            this.resetConnectionTimeout();
+        if (_.getTimeoutInterval() == 0) {
+            _.resetConnectionTimeout();
             return;
         }
 
-        switch (this.status) {
+        switch (_.status) {
             .connected => {
-                this.failFmt("ERR_POSTGRES_IDLE_TIMEOUT", "Idle timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.idle_timeout_interval_ms) * std.time.ns_per_ms)});
+                _.failFmt("ERR_POSTGRES_IDLE_TIMEOUT", "Idle timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.idle_timeout_interval_ms) * std.time.ns_per_ms)});
             },
             .sent_startup_message => {
-                this.failFmt("ERR_POSTGRES_CONNECTION_TIMEOUT", "Connection timeout after {f} (sent startup message, but never received response)", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.connection_timeout_ms) * std.time.ns_per_ms)});
+                _.failFmt("ERR_POSTGRES_CONNECTION_TIMEOUT", "Connection timeout after {f} (sent startup message, but never received response)", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.connection_timeout_ms) * std.time.ns_per_ms)});
             },
             else => {
-                this.failFmt("ERR_POSTGRES_CONNECTION_TIMEOUT", "Connection timeout after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.connection_timeout_ms) * std.time.ns_per_ms)});
+                _.failFmt("ERR_POSTGRES_CONNECTION_TIMEOUT", "Connection timeout after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.connection_timeout_ms) * std.time.ns_per_ms)});
             },
         }
     }
 
     pub fn onMaxLifetimeTimeout(*_)  {
         debug("onMaxLifetimeTimeout", .{});
-        this.max_lifetime_timer.state = .FIRED;
-        if (this.status == .failed) return;
-        this.failFmt("ERR_POSTGRES_LIFETIME_TIMEOUT", "Max lifetime timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.max_lifetime_interval_ms) * std.time.ns_per_ms)});
+        _.max_lifetime_timer.state = .FIRED;
+        if (_.status == .failed) return;
+        _.failFmt("ERR_POSTGRES_LIFETIME_TIMEOUT", "Max lifetime timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.max_lifetime_interval_ms) * std.time.ns_per_ms)});
     }
 
     fn start(*_)  {
-        this.setupMaxLifetimeTimerIfNecessary();
-        this.resetConnectionTimeout();
-        this.sendStartupMessage();
+        _.setupMaxLifetimeTimerIfNecessary();
+        _.resetConnectionTimeout();
+        _.sendStartupMessage();
 
-        this.drainInternal();
+        _.drainInternal();
     }
 
     pub fn hasPendingActivity(*_): bool {
-        return this.pending_activity_count.load(.acquire) > 0;
+        return _.pending_activity_count.load(.acquire) > 0;
     }
 
     fn updateHasPendingActivity(*_)  {
-        const a = @as(u32, @intFromBool(this.requests.readableLength() > 0));
-        const b = switch (this.status) {
-            .disconnected, .failed => @as(u32, @intFromBool(!this.socket.isClosed())),
+        const a = @as(u32, @intFromBool(_.requests.readableLength() > 0));
+        const b = switch (_.status) {
+            .disconnected, .failed => @as(u32, @intFromBool(!_.socket.isClosed())),
             else => @as(u32, 1),
         };
-        this.pending_activity_count.store(a + b, .release);
+        _.pending_activity_count.store(a + b, .release);
     }
 
     pub fn setStatus(*_, status: Status)  {
-        if (this.status == status) return;
-        const _pending_guard = PendingActivityGuard{ conn: this };
+        if (_.status == status) return;
+        const _pending_guard = PendingActivityGuard{ conn: _ };
 
-        this.status = status;
-        this.resetConnectionTimeout();
-        if (this.vm.isShuttingDown()) return;
+        _.status = status;
+        _.resetConnectionTimeout();
+        if (_.vm.isShuttingDown()) return;
 
         switch (status) {
             .connected => {
-                const on_connect_opt = this.consumeOnConnectCallback(this.globalObject);
+                const on_connect_opt = _.consumeOnConnectCallback(_.globalObject);
                 if (on_connect_opt == null) return;
                 const on_connect = on_connect_opt.?;
-                const js_value = this.js_value;
+                const js_value = _.js_value;
                 js_value.ensureStillAlive();
-                this.globalObject.queueMicrotask(on_connect, &[JSValue.jsNull(), js_value]);
-                this.poll_ref.unref(this.vm);
+                _.globalObject.queueMicrotask(on_connect, &[JSValue.jsNull(), js_value]);
+                _.poll_ref.unref(_.vm);
             },
             else => {},
         }
@@ -680,123 +688,123 @@ pub struct DataCellsGuard<P, C> {
 
     pub fn finalize(*_)  {
         debug("PostgresSQLConnection finalize", .{});
-        this.stopTimers();
-        this.js_value = .zero;
-        this.deref();
+        _.stopTimers();
+        _.js_value = .zero;
+        _.deref();
     }
 
     pub fn flushDataAndResetTimeout(*_)  {
-        this.resetConnectionTimeout();
-        this.registerAutoFlusher();
+        _.resetConnectionTimeout();
+        _.registerAutoFlusher();
     }
 
     pub fn flushData(*_)  {
-        if (this.flags.has_backpressure) {
+        if (_.flags.has_backpressure) {
             debug("flushData: has backpressure", .{});
             return;
         }
 
-        const chunk = this.write_buffer.remaining();
+        const chunk = _.write_buffer.remaining();
         if (chunk.len == 0) {
             debug("flushData: no data to flush", .{});
             return;
         }
 
-        const wrote = this.socket.write(chunk);
-        this.flags.has_backpressure = wrote < chunk.len;
+        const wrote = _.socket.write(chunk);
+        _.flags.has_backpressure = wrote < chunk.len;
         debug("flushData: wrote {d}/{d} bytes", .{ wrote, chunk.len });
         if (wrote > 0) {
             SocketMonitor.write(chunk[0..@intCast(wrote)]);
-            this.write_buffer.consume(@intCast(wrote));
+            _.write_buffer.consume(@intCast(wrote));
         }
     }
 
     pub fn failWithJSValue(*_, value: JSValue)  {
-        const _pending_guard = PendingActivityGuard{ conn: this };
-        this.stopTimers();
-        if (this.status == .failed) return;
+        const _pending_guard = PendingActivityGuard{ conn: _ };
+        _.stopTimers();
+        if (_.status == .failed) return;
 
-        this.status = .failed;
+        _.status = .failed;
 
-        this.ref();
-        const _deref_guard = ConnDerefGuard{ conn: this };
-        const _ref_close_guard = RefAndCloseGuard{ conn: this, value: value };
-        const on_close_opt = this.consumeOnCloseCallback(this.globalObject);
+        _.ref();
+        const _deref_guard = ConnDerefGuard{ conn: _ };
+        const _ref_close_guard = RefAndCloseGuard{ conn: _, value: value };
+        const on_close_opt = _.consumeOnCloseCallback(_.globalObject);
         if (on_close_opt == null) return;
         const on_close = on_close_opt.?;
 
-        const loop = this.vm.eventLoop();
+        const loop = _.vm.eventLoop();
         loop.enter();
         let js_error = value.toError() ?? value;
         if (js_error == .zero) {
-            js_error = postgresErrorToJS(this.globalObject, "Connection closed", error.ConnectionClosed);
+            js_error = postgresErrorToJS(_.globalObject, "Connection closed", error.ConnectionClosed);
         }
         js_error.ensureStillAlive();
         const _loop_guard = EventLoopExitGuard<@TypeOf(loop)>{ loop: loop };
         * = on_close.call(
-            this.globalObject,
+            _.globalObject,
             .js_undefined,
             &[
                 js_error,
-                this.getQueriesArray(),
+                _.getQueriesArray(),
             ],
-        ) catch |e| this.globalObject.reportActiveExceptionAsUnhandled(e);
+        ) catch e => _.globalObject.reportActiveExceptionAsUnhandled(e);
     }
 
     pub fn failFmt(*_, code: []const u8, comptime fmt: [:0]const u8, args: anytype)  {
         const message = bun.handleOom(std.fmt.allocPrint(bun.default_allocator, fmt, args));
         const _message_free_guard = FreeGuard<@TypeOf(message)>{ slice: message };
 
-        const pg_err = createPostgresError(this.globalObject, message, { code: code }) catch |e| this.globalObject.takeError(e);
+        const pg_err = createPostgresError(_.globalObject, message, { code: code }) catch e => _.globalObject.takeError(e);
 
-        this.failWithJSValue(pg_err);
+        _.failWithJSValue(pg_err);
     }
 
     pub fn fail(*_, message: []const u8, pg_err: AnyPostgresError)  {
         debug("failed: {s}: {s}", .{ message, @errorName(pg_err) });
 
-        const globalObject = this.globalObject;
+        const globalObject = _.globalObject;
 
-        this.failWithJSValue(postgresErrorToJS(globalObject, message, pg_err));
+        _.failWithJSValue(postgresErrorToJS(globalObject, message, pg_err));
     }
 
     pub fn onClose(*_)  {
-        this.unregisterAutoFlusher();
+        _.unregisterAutoFlusher();
 
-        if (this.vm.isShuttingDown()) {
-            const _pending_guard = PendingActivityGuard{ conn: this };
-            this.stopTimers();
-            if (this.status == .failed) return;
+        if (_.vm.isShuttingDown()) {
+            const _pending_guard = PendingActivityGuard{ conn: _ };
+            _.stopTimers();
+            if (_.status == .failed) return;
 
-            this.status = .failed;
-            this.cleanUpRequests(null);
+            _.status = .failed;
+            _.cleanUpRequests(null);
         } else {
-            const loop = this.vm.eventLoop();
+            const loop = _.vm.eventLoop();
             loop.enter();
             const _loop_guard = EventLoopExitGuard<@TypeOf(loop)>{ loop: loop };
-            this.poll_ref.unref(this.vm);
+            _.poll_ref.unref(_.vm);
 
-            this.fail("Connection closed", error.ConnectionClosed);
+            _.fail("Connection closed", error.ConnectionClosed);
         }
     }
 
     fn sendStartupMessage(*_)  {
-        if (this.status != .connecting) return;
+        if (_.status != .connecting) return;
         debug("sendStartupMessage", .{});
-        this.status = .sent_startup_message;
+        _.status = .sent_startup_message;
         let msg = protocol.StartupMessage{
-            user: Data{ temporary: this.user },
-            database: Data{ temporary: this.database },
-            options: Data{ temporary: this.options },
+            user: Data{ temporary: _.user },
+            database: Data{ temporary: _.database },
+            options: Data{ temporary: _.options },
         };
-        msg.writeInternal(Writer, this.writer()) catch |e| {
-            this.fail("Failed to write startup message", e);
+        msg.writeInternal(Writer, _.writer()) catch e => {
+            _.fail("Failed to write startup message", e);
         };
     }
 
     fn startTLS(*_, socket: uws.AnySocket)  {
         debug("startTLS", .{});
-        const offset = switch (this.tls_status) {
+        const offset = switch (_.tls_status) {
             .message_sent => |count| count,
             else => @as(u8, 0),
         };
@@ -807,11 +815,11 @@ pub struct DataCellsGuard<P, C> {
 
         const written = socket.write(ssl_request[offset..]);
         if (written > 0) {
-            this.tls_status = {
+            _.tls_status = {
                 message_sent: offset + @as(u8, @intCast(written)),
             };
         } else {
-            this.tls_status = {
+            _.tls_status = {
                 message_sent: offset,
             };
         }
@@ -820,34 +828,34 @@ pub struct DataCellsGuard<P, C> {
     pub fn onOpen(*_, socket: Socket)  {
         _.socket = socket;
 
-        this.poll_ref.ref(this.vm);
-        this.updateHasPendingActivity();
+        _.poll_ref.ref(_.vm);
+        _.updateHasPendingActivity();
 
-        if (this.tls_status == .message_sent || this.tls_status == .pending) {
-            this.startTLS(socket);
+        if (_.tls_status == .message_sent || _.tls_status == .pending) {
+            _.startTLS(socket);
             return;
         }
 
-        this.start();
+        _.start();
     }
 
     pub fn onHandshake(*_, success: i32, ssl_error: uws.us_bun_verify_error_t)  {
         debug("onHandshake: {d} {d}", .{ success, ssl_error.error_no });
         const handshake_success = if (success == 1) true else false;
         if (handshake_success) {
-            if (this.tls_config.reject_unauthorized != 0) {
-                switch (this.ssl_mode) {
+            if (_.tls_config.reject_unauthorized != 0) {
+                switch (_.ssl_mode) {
                     .verify_ca, .verify_full => {
                         if (ssl_error.error_no != 0) {
-                            this.failWithJSValue(ssl_error.toJS(this.globalObject) catch return);
+                            _.failWithJSValue(ssl_error.toJS(_.globalObject) catch return);
                             return;
                         }
 
-                        const ssl_ptr: *BoringSSL.c.SSL = unsafe { @ptrCast(this.socket.getNativeHandle()) };
+                        const ssl_ptr: *BoringSSL.c.SSL = unsafe { @ptrCast(_.socket.getNativeHandle()) };
                         if (servername := BoringSSL.c.SSL_get_servername(ssl_ptr, 0)) {
                             const hostname = unsafe { servername[0..bun.len(servername)] };
                             if (!BoringSSL.checkServerIdentity(ssl_ptr, hostname)) {
-                                this.failWithJSValue(ssl_error.toJS(this.globalObject) catch return);
+                                _.failWithJSValue(ssl_error.toJS(_.globalObject) catch return);
                             }
                         }
                     },
@@ -855,64 +863,63 @@ pub struct DataCellsGuard<P, C> {
                 }
             }
         } else {
-            this.failWithJSValue(ssl_error.toJS(this.globalObject) catch return);
+            _.failWithJSValue(ssl_error.toJS(_.globalObject) catch return);
         }
     }
 
-    pub fn onTimeout(*_)  {
-        const __unused_self = _; * = __unused_self;
+    pub fn onTimeout()  {
         debug("onTimeout", .{});
     }
 
     pub fn onDrain(*_)  {
         debug("onDrain", .{});
-        this.flags.has_backpressure = false;
-        if (this.tls_status == .message_sent) {
-            if (this.tls_status.message_sent < 8) {
-                this.startTLS(this.socket);
+        _.flags.has_backpressure = false;
+        if (_.tls_status == .message_sent) {
+            if (_.tls_status.message_sent < 8) {
+                _.startTLS(_.socket);
             }
 
             return;
         }
 
-        this.drainInternal();
+        _.drainInternal();
     }
 
     fn drainInternal(*_)  {
         debug("drainInternal", .{});
-        if (this.vm.isShuttingDown()) return this.close();
+        if (_.vm.isShuttingDown()) return _.close();
 
-        const event_loop = this.vm.eventLoop();
+        const event_loop = _.vm.eventLoop();
         event_loop.enter();
         const _event_loop_guard = EventLoopExitGuard<@TypeOf(event_loop)>{ loop: event_loop };
 
-        this.flushData();
+        _.flushData();
 
-        if (!this.flags.has_backpressure && this.flags.is_ready_for_query) {
-            this.advance();
-            this.flushData();
+        if (!_.flags.has_backpressure && _.flags.is_ready_for_query) {
+            _.advance();
+            _.flushData();
         }
     }
 
     pub fn onData(*_, data: []const u8)  {
-        this.ref();
-        this.flags.is_processing_data = true;
-        const vm = this.vm;
+        _.ref();
+        _.flags.is_processing_data = true;
+        const vm = _.vm;
 
-        this.disableConnectionTimeout();
-        const _data_read_guard = DataReadGuard{ conn: this, vm: vm };
+        _.disableConnectionTimeout();
+        const _data_read_guard = DataReadGuard{ conn: _, vm: vm };
 
         const event_loop = vm.eventLoop();
         event_loop.enter();
         const _event_loop_guard = EventLoopExitGuard<@TypeOf(event_loop)>{ loop: event_loop };
         SocketMonitor.read(data);
-        this.read_buffer.head = this.last_message_start;
+        _.read_buffer.head = _.last_message_start;
 
-        if (this.read_buffer.remaining().len == 0) {
+        if (_.read_buffer.remaining().len == 0) {
             let consumed: usize = 0;
             let offset: usize = 0;
             const reader = protocol.StackReader.init(data, &consumed, &offset);
-            PostgresRequest.onData(this, protocol.StackReader, reader) catch |e| {
+            PostgresRequest.onData(_, protocol.StackReader, reader) catch e => {
                 if (e == error.ShortRead) {
                     if (comptime bun.Environment.allow_assert) {
                         debug("read_buffer: empty and received short read: last_message_start: {d}, head: {d}, len: {d}", .{
@@ -922,39 +929,39 @@ pub struct DataCellsGuard<P, C> {
                         });
                     }
 
-                    this.read_buffer.head = 0;
-                    this.last_message_start = 0;
-                    this.read_buffer.byte_list.len = 0;
-                    this.read_buffer.write(bun.default_allocator, data[offset..]) catch @panic("failed to write to read buffer");
+                    _.read_buffer.head = 0;
+                    _.last_message_start = 0;
+                    _.read_buffer.byte_list.len = 0;
+                    _.read_buffer.write(bun.default_allocator, data[offset..]) catch @panic("failed to write to read buffer");
                 } else {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
-                    this.fail("Failed to read data", e);
+                    _.fail("Failed to read data", e);
                 }
             };
             return;
         }
-        this.read_buffer.write(bun.default_allocator, data) catch @panic("failed to write to read buffer");
-        PostgresRequest.onData(this, Reader, this.bufferedReader()) catch |e| {
+        _.read_buffer.write(bun.default_allocator, data) catch @panic("failed to write to read buffer");
+        PostgresRequest.onData(_, Reader, _.bufferedReader()) catch e => {
             if (e != error.ShortRead) {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
-                this.fail("Failed to read data", e);
+                _.fail("Failed to read data", e);
                 return;
             }
 
             if (comptime bun.Environment.allow_assert) {
                 debug("read_buffer: not empty and received short read: last_message_start: {d}, head: {d}, len: {d}", .{
-                    this.last_message_start,
-                    this.read_buffer.head,
-                    this.read_buffer.byte_list.len,
+                    _.last_message_start,
+                    _.read_buffer.head,
+                    _.read_buffer.byte_list.len,
                 });
             }
             return;
         };
 
         debug("clean read_buffer", .{});
-        this.last_message_start = 0;
-        this.read_buffer.head = 0;
+        _.last_message_start = 0;
+        _.read_buffer.head = 0;
     }
 
     pub static fn constructor(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*PostgresSQLConnection {
@@ -1123,7 +1130,7 @@ pub struct DataCellsGuard<P, C> {
             else
                 uws.SocketTCP.connectGroup(group, .postgres, null, hostname.slice(), port, ptr, false);
 
-            ptr.socket = { SocketTCP: result catch |e| {
+            ptr.socket = { SocketTCP: result catch e => {
                 ptr.deinit();
                 return globalObject.throwError(e, "failed to connect to postgresql");
             } };
@@ -1146,150 +1153,150 @@ pub struct DataCellsGuard<P, C> {
     }
 
     pub fn doRef(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        this.poll_ref.ref(this.vm);
-        this.updateHasPendingActivity();
+        _.poll_ref.ref(_.vm);
+        _.updateHasPendingActivity();
         return JSValue.js_undefined;
     }
 
     pub fn doUnref(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
-        this.poll_ref.unref(this.vm);
-        this.updateHasPendingActivity();
+        _.poll_ref.unref(_.vm);
+        _.updateHasPendingActivity();
         return JSValue.js_undefined;
     }
 
     pub fn doFlush(*_, _: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!jsc.JSValue {
-        this.registerAutoFlusher();
+        _.registerAutoFlusher();
         return JSValue.js_undefined;
     }
 
     fn close(*_)  {
-        this.disconnect();
-        this.unregisterAutoFlusher();
-        this.write_buffer.clearAndFree(bun.default_allocator);
+        _.disconnect();
+        _.unregisterAutoFlusher();
+        _.write_buffer.clearAndFree(bun.default_allocator);
     }
 
     pub fn doClose(*_, globalObject: *jsc.JSGlobalObject, _: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
-        this.close();
+        _.close();
         return JSValue.js_undefined;
     }
 
     pub fn stopTimers(*_)  {
-        if (this.timer.state == .ACTIVE) {
-            this.vm.timer.remove(&this.timer);
+        if (_.timer.state == .ACTIVE) {
+            _.vm.timer.remove(&_.timer);
         }
-        if (this.max_lifetime_timer.state == .ACTIVE) {
-            this.vm.timer.remove(&this.max_lifetime_timer);
+        if (_.max_lifetime_timer.state == .ACTIVE) {
+            _.vm.timer.remove(&_.max_lifetime_timer);
         }
     }
 
     pub fn deinit(*_)  {
-        this.disconnect();
-        this.stopTimers();
-        let iter = this.statements.valueIterator();
+        _.disconnect();
+        _.stopTimers();
+        let iter = _.statements.valueIterator();
         while (stmt_ptr := iter.next()) {
             let stmt = unsafe { stmt_ptr.* };
             stmt.deref();
         }
-        this.statements.deinit(bun.default_allocator);
-        this.requests.deinit();
-        this.write_buffer.deinit(bun.default_allocator);
-        this.read_buffer.deinit(bun.default_allocator);
-        this.backend_parameters.deinit();
+        _.statements.deinit(bun.default_allocator);
+        _.requests.deinit();
+        _.write_buffer.deinit(bun.default_allocator);
+        _.read_buffer.deinit(bun.default_allocator);
+        _.backend_parameters.deinit();
 
-        bun.freeSensitive(bun.default_allocator, this.options_buf);
+        bun.freeSensitive(bun.default_allocator, _.options_buf);
 
-        this.tls_config.deinit();
-        if (s := this.secure) bun.BoringSSL.c.SSL_CTX_free(s);
-        bun.default_allocator.destroy(this);
+        _.tls_config.deinit();
+        if (s := _.secure) bun.BoringSSL.c.SSL_CTX_free(s);
+        bun.default_allocator.destroy(_);
     }
 
     fn cleanUpRequests(*_, js_reason: jsc.JSValue?)  {
-        while (request := this.current()) {
+        while (request := _.current()) {
             switch (request.status) {
                 .pending => {
                     let stmt = request.statement ?? continue;
                     stmt.error_response = { postgres_error: AnyPostgresError.ConnectionClosed };
                     stmt.status = .failed;
-                    if (!this.vm.isShuttingDown()) {
+                    if (!_.vm.isShuttingDown()) {
                         if (reason := js_reason) {
-                            request.onJSError(reason, this.globalObject);
+                            request.onJSError(reason, _.globalObject);
                         } else {
-                            request.onError({ postgres_error: AnyPostgresError.ConnectionClosed }, this.globalObject);
+                            request.onError({ postgres_error: AnyPostgresError.ConnectionClosed }, _.globalObject);
                         }
                     }
                 },
                 .binding, .running, .partial_response => {
-                    this.finishRequest(request);
-                    if (!this.vm.isShuttingDown()) {
+                    _.finishRequest(request);
+                    if (!_.vm.isShuttingDown()) {
                         if (reason := js_reason) {
-                            request.onJSError(reason, this.globalObject);
+                            request.onJSError(reason, _.globalObject);
                         } else {
-                            request.onError({ postgres_error: AnyPostgresError.ConnectionClosed }, this.globalObject);
+                            request.onError({ postgres_error: AnyPostgresError.ConnectionClosed }, _.globalObject);
                         }
                     }
                 },
                 .success, .fail => {},
             }
             request.deref();
-            this.requests.discard(1);
+            _.requests.discard(1);
         }
     }
 
     fn refAndClose(*_, js_reason: jsc.JSValue?)  {
-        if (!this.socket.isClosed()) {
-            this.poll_ref.ref(this.vm);
-            this.socket.close();
+        if (!_.socket.isClosed()) {
+            _.poll_ref.ref(_.vm);
+            _.socket.close();
         }
 
-        this.cleanUpRequests(js_reason);
+        _.cleanUpRequests(js_reason);
     }
 
     pub fn disconnect(*_)  {
-        this.stopTimers();
-        this.unregisterAutoFlusher();
-        if (this.status == .connected) {
-            this.status = .disconnected;
-            this.refAndClose(null);
+        _.stopTimers();
+        _.unregisterAutoFlusher();
+        if (_.status == .connected) {
+            _.status = .disconnected;
+            _.refAndClose(null);
         }
     }
 
     fn current(*_): (*PostgresSQLQuery)? {
-        if (this.requests.readableLength() == 0) {
+        if (_.requests.readableLength() == 0) {
             return null;
         }
 
-        return this.requests.peekItem(0);
+        return _.requests.peekItem(0);
     }
 
     pub fn hasQueryRunning(*_): bool {
-        return !this.flags.is_ready_for_query || this.current() != null;
+        return !_.flags.is_ready_for_query || _.current() != null;
     }
 
-    pub fn canPipeline(*_): bool {
+    pub fn canPipeline(): bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;
         }
 
-        return this.nonpipelinable_requests == 0 &&
-            !this.flags.use_unnamed_prepared_statements &&
-            !this.flags.waiting_to_prepare &&
-            !this.flags.has_backpressure &&
-            this.write_buffer.len() < MAX_PIPELINE_SIZE;
+        return _.nonpipelinable_requests == 0 &&
+            !_.flags.use_unnamed_prepared_statements &&
+            !_.flags.waiting_to_prepare &&
+            !_.flags.has_backpressure &&
+            _.write_buffer.len() < MAX_PIPELINE_SIZE;
     }
 
     pub fn writer(*_): protocol.NewWriter(Writer) {
         return {
             wrapped: {
-                connection: this,
+                connection: _,
             },
         };
     }
 
     pub fn bufferedReader(*_): protocol.NewReader(Reader) {
         return {
-            wrapped: { connection: this },
+            wrapped: { connection: _ },
         };
     }
 
@@ -1297,61 +1304,61 @@ pub struct DataCellsGuard<P, C> {
         switch (item.status) {
             .running, .binding, .partial_response => {
                 if (item.flags.simple) {
-                    this.nonpipelinable_requests -= 1;
+                    _.nonpipelinable_requests -= 1;
                 } else if (item.flags.pipelined) {
-                    this.pipelined_requests -= 1;
+                    _.pipelined_requests -= 1;
                 }
             },
             .success, .fail, .pending => {},
         }
     }
 
-    pub fn canPrepareQuery(_: *const PostgresSQLConnection): bool {
-        return this.flags.is_ready_for_query && !this.flags.waiting_to_prepare && this.pipelined_requests == 0;
+    pub fn canPrepareQuery(): bool {
+        return _.flags.is_ready_for_query && !_.flags.waiting_to_prepare && _.pipelined_requests == 0;
     }
 
     pub fn advanceAndFlush(*_)  {
-        if (!this.flags.has_backpressure && this.flags.is_ready_for_query) {
-            this.advance();
-            this.flushData();
+        if (!_.flags.has_backpressure && _.flags.is_ready_for_query) {
+            _.advance();
+            _.flushData();
         }
     }
 
     fn advance(*_)  {
         let offset: usize = 0;
         debug("advance", .{});
-        const _drain_guard = RequestsDrainGuard{ conn: this };
-        while (this.requests.readableLength() > offset && !this.flags.has_backpressure) {
-            if (this.vm.isShuttingDown()) return this.close();
+        const _drain_guard = RequestsDrainGuard{ conn: _ };
+        while (_.requests.readableLength() > offset && !_.flags.has_backpressure) {
+            if (_.vm.isShuttingDown()) return _.close();
 
-            let req: *PostgresSQLQuery = this.requests.peekItem(offset);
+            let req: *PostgresSQLQuery = _.requests.peekItem(offset);
             switch (req.status) {
                 .pending => {
                     if (req.flags.simple) {
-                        if (this.pipelined_requests > 0 || !this.flags.is_ready_for_query) {
-                            debug("cannot execute simple query, pipelined_requests: {d}, is_ready_for_query: {}", .{ this.pipelined_requests, this.flags.is_ready_for_query });
+                        if (_.pipelined_requests > 0 || !_.flags.is_ready_for_query) {
+                            debug("cannot execute simple query, pipelined_requests: {d}, is_ready_for_query: {}", .{ _.pipelined_requests, _.flags.is_ready_for_query });
                             return;
                         }
                         let query_str = req.query.toUTF8(bun.default_allocator);
                         const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
                         debug("execute simple query: {s}", .{query_str.slice()});
-                        PostgresRequest.executeQuery(query_str.slice(), Writer, this.writer()) catch |e| {
-                            if (err_ := this.globalObject.tryTakeException()) {
-                                req.onJSError(err_, this.globalObject);
+                        PostgresRequest.executeQuery(query_str.slice(), Writer, _.writer()) catch e => {
+                            if (err_ := _.globalObject.tryTakeException()) {
+                                req.onJSError(err_, _.globalObject);
                             } else {
-                                req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                             }
                             if (offset == 0) {
                                 req.deref();
-                                this.requests.discard(1);
+                                _.requests.discard(1);
                             } else {
                                 req.status = .fail;
                             }
                             debug("executeQuery failed: {s}", .{@errorName(e)});
                             continue;
                         };
-                        this.nonpipelinable_requests += 1;
-                        this.flags.is_ready_for_query = false;
+                        _.nonpipelinable_requests += 1;
+                        _.flags.is_ready_for_query = false;
                         req.status = .running;
                         return;
                     } else {
@@ -1360,10 +1367,10 @@ pub struct DataCellsGuard<P, C> {
                                 .failed => {
                                     debug("stmt failed", .{});
                                     bun.assert(statement.error_response != null);
-                                    req.onError(statement.error_response.?, this.globalObject);
+                                    req.onError(statement.error_response.?, _.globalObject);
                                     if (offset == 0) {
                                         req.deref();
-                                        this.requests.discard(1);
+                                        _.requests.discard(1);
                                     } else {
                                         req.status = .fail;
                                         offset += 1;
@@ -1377,7 +1384,7 @@ pub struct DataCellsGuard<P, C> {
                                         bun.assertf(false, "query value was freed earlier than expected", .{});
                                         if (offset == 0) {
                                             req.deref();
-                                            this.requests.discard(1);
+                                            _.requests.discard(1);
                                         } else {
                                             req.status = .fail;
                                             offset += 1;
@@ -1389,19 +1396,19 @@ pub struct DataCellsGuard<P, C> {
                                     const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) ?? .zero;
                                     req.flags.binary = statement.fields.len > 0;
 
-                                    if (this.flags.use_unnamed_prepared_statements) {
+                                    if (_.flags.use_unnamed_prepared_statements) {
                                         debug("parse, bind and execute unnamed stmt", .{});
                                         let query_str = req.query.toUTF8(bun.default_allocator);
                                         const _query_str_deinit_guard = DeinitGuard<@TypeOf(query_str)>{ val: query_str };
-                                        PostgresRequest.parseAndBindAndExecute(this.globalObject, query_str.slice(), statement, binding_value, columns_value, false, Writer, this.writer()) catch |e| {
-                                            if (err_ := this.globalObject.tryTakeException()) {
-                                                req.onJSError(err_, this.globalObject);
+                                        PostgresRequest.parseAndBindAndExecute(_.globalObject, query_str.slice(), statement, binding_value, columns_value, false, Writer, _.writer()) catch e => {
+                                            if (err_ := _.globalObject.tryTakeException()) {
+                                                req.onJSError(err_, _.globalObject);
                                             } else {
-                                                req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                                req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                                             }
                                             if (offset == 0) {
                                                 req.deref();
-                                                this.requests.discard(1);
+                                                _.requests.discard(1);
                                             } else {
                                                 req.status = .fail;
                                                 offset += 1;
@@ -1411,15 +1418,15 @@ pub struct DataCellsGuard<P, C> {
                                         };
                                     } else {
                                         debug("binding and executing stmt", .{});
-                                        PostgresRequest.bindAndExecute(this.globalObject, statement, binding_value, columns_value, Writer, this.writer()) catch |e| {
-                                            if (err_ := this.globalObject.tryTakeException()) {
-                                                req.onJSError(err_, this.globalObject);
+                                        PostgresRequest.bindAndExecute(_.globalObject, statement, binding_value, columns_value, Writer, _.writer()) catch e => {
+                                            if (err_ := _.globalObject.tryTakeException()) {
+                                                req.onJSError(err_, _.globalObject);
                                             } else {
-                                                req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                                req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                                             }
                                             if (offset == 0) {
                                                 req.deref();
-                                                this.requests.discard(1);
+                                                _.requests.discard(1);
                                             } else {
                                                 req.status = .fail;
                                                 offset += 1;
@@ -1429,12 +1436,12 @@ pub struct DataCellsGuard<P, C> {
                                         };
                                     }
 
-                                    this.flags.is_ready_for_query = false;
+                                    _.flags.is_ready_for_query = false;
                                     req.status = .binding;
                                     req.flags.pipelined = true;
-                                    this.pipelined_requests += 1;
+                                    _.pipelined_requests += 1;
 
-                                    if (this.flags.use_unnamed_prepared_statements || !this.canPipeline()) {
+                                    if (_.flags.use_unnamed_prepared_statements || !_.canPipeline()) {
                                         debug("cannot pipeline more stmt", .{});
                                         return;
                                     }
@@ -1443,7 +1450,7 @@ pub struct DataCellsGuard<P, C> {
                                     continue;
                                 },
                                 .pending => {
-                                    if (!this.canPrepareQuery()) {
+                                    if (!_.canPrepareQuery()) {
                                         debug("need to wait to finish the pipeline before starting a new query preparation", .{});
                                         return;
                                     }
@@ -1456,7 +1463,7 @@ pub struct DataCellsGuard<P, C> {
                                             bun.assertf(false, "query value was freed earlier than expected", .{});
                                             if (offset == 0) {
                                                 req.deref();
-                                                this.requests.discard(1);
+                                                _.requests.discard(1);
                                             } else {
                                                 req.status = .fail;
                                                 offset += 1;
@@ -1466,17 +1473,17 @@ pub struct DataCellsGuard<P, C> {
                                         const thisValue = thisValue_opt.?;
                                         const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) ?? .zero;
                                         debug("prepareAndQueryWithSignature", .{});
-                                        PostgresRequest.prepareAndQueryWithSignature(this.globalObject, query_str.slice(), binding_value, Writer, this.writer(), &statement.signature) catch |e| {
-                                            if (err_ := this.globalObject.tryTakeException()) {
-                                                req.onJSError(err_, this.globalObject);
+                                        PostgresRequest.prepareAndQueryWithSignature(_.globalObject, query_str.slice(), binding_value, Writer, _.writer(), &statement.signature) catch e => {
+                                            if (err_ := _.globalObject.tryTakeException()) {
+                                                req.onJSError(err_, _.globalObject);
                                             } else {
                                                 statement.status = .failed;
                                                 statement.error_response = { postgres_error: e };
-                                                req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                                req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                                             }
                                             if (offset == 0) {
                                                 req.deref();
-                                                this.requests.discard(1);
+                                                _.requests.discard(1);
                                             } else {
                                                 req.status = .fail;
                                             }
@@ -1484,86 +1491,86 @@ pub struct DataCellsGuard<P, C> {
 
                                             continue;
                                         };
-                                        this.flags.is_ready_for_query = false;
-                                        this.flags.waiting_to_prepare = true;
+                                        _.flags.is_ready_for_query = false;
+                                        _.flags.waiting_to_prepare = true;
                                         req.status = .binding;
                                         statement.status = .parsing;
-                                        this.flushDataAndResetTimeout();
+                                        _.flushDataAndResetTimeout();
                                         return;
                                     }
 
-                                    if (this.flags.use_unnamed_prepared_statements) {
+                                    if (_.flags.use_unnamed_prepared_statements) {
                                         const thisValue_opt = req.thisValue.tryGet();
                                         if (thisValue_opt == null) {
                                             bun.assertf(false, "query value was freed earlier than expected", .{});
                                             bun.assert(offset == 0);
                                             req.deref();
-                                            this.requests.discard(1);
+                                            _.requests.discard(1);
                                             continue;
                                         }
                                         const thisValue = thisValue_opt.?;
                                         const binding_value = PostgresSQLQuery.js.bindingGetCached(thisValue) ?? .zero;
                                         const columns_value = PostgresSQLQuery.js.columnsGetCached(thisValue) ?? .zero;
                                         debug("parseAndBindAndExecute (unnamed, first execution)", .{});
-                                        PostgresRequest.parseAndBindAndExecute(this.globalObject, query_str.slice(), statement, binding_value, columns_value, true, Writer, this.writer()) catch |e| {
-                                            if (err_ := this.globalObject.tryTakeException()) {
-                                                req.onJSError(err_, this.globalObject);
+                                        PostgresRequest.parseAndBindAndExecute(_.globalObject, query_str.slice(), statement, binding_value, columns_value, true, Writer, _.writer()) catch e => {
+                                            if (err_ := _.globalObject.tryTakeException()) {
+                                                req.onJSError(err_, _.globalObject);
                                             } else {
                                                 statement.status = .failed;
                                                 statement.error_response = { postgres_error: e };
-                                                req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                                req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                                             }
                                             bun.assert(offset == 0);
                                             req.deref();
-                                            this.requests.discard(1);
+                                            _.requests.discard(1);
                                             debug("parseAndBindAndExecute failed: {s}", .{@errorName(e)});
                                             continue;
                                         };
-                                        this.flags.is_ready_for_query = false;
-                                        this.flags.waiting_to_prepare = true;
+                                        _.flags.is_ready_for_query = false;
+                                        _.flags.waiting_to_prepare = true;
                                         req.status = .binding;
                                         statement.status = .parsing;
                                         req.flags.pipelined = true;
-                                        this.pipelined_requests += 1;
-                                        this.flushDataAndResetTimeout();
+                                        _.pipelined_requests += 1;
+                                        _.flushDataAndResetTimeout();
                                         return;
                                     }
 
-                                    const connection_writer = this.writer();
+                                    const connection_writer = _.writer();
                                     debug("writing query", .{});
-                                    PostgresRequest.writeQuery(query_str.slice(), statement.signature.prepared_statement_name, statement.signature.fields, Writer, connection_writer) catch |e| {
-                                        if (err_ := this.globalObject.tryTakeException()) {
-                                            req.onJSError(err_, this.globalObject);
+                                    PostgresRequest.writeQuery(query_str.slice(), statement.signature.prepared_statement_name, statement.signature.fields, Writer, connection_writer) catch e => {
+                                        if (err_ := _.globalObject.tryTakeException()) {
+                                            req.onJSError(err_, _.globalObject);
                                         } else {
                                             statement.error_response = { postgres_error: e };
                                             statement.status = .failed;
-                                            req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                            req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                                         }
                                         bun.assert(offset == 0);
                                         req.deref();
-                                        this.requests.discard(1);
+                                        _.requests.discard(1);
                                         debug("write query failed: {s}", .{@errorName(e)});
                                         continue;
                                     };
                                     const sync_val = protocol.Sync;
-                                    connection_writer.write(&sync_val) catch |e| {
-                                        if (err_ := this.globalObject.tryTakeException()) {
-                                            req.onJSError(err_, this.globalObject);
+                                    connection_writer.write(&sync_val) catch e => {
+                                        if (err_ := _.globalObject.tryTakeException()) {
+                                            req.onJSError(err_, _.globalObject);
                                         } else {
                                             statement.error_response = { postgres_error: e };
                                             statement.status = .failed;
-                                            req.onWriteFail(e, this.globalObject, this.getQueriesArray());
+                                            req.onWriteFail(e, _.globalObject, _.getQueriesArray());
                                         }
                                         bun.assert(offset == 0);
                                         req.deref();
-                                        this.requests.discard(1);
+                                        _.requests.discard(1);
                                         debug("write query (sync) failed: {s}", .{@errorName(e)});
                                         continue;
                                     };
-                                    this.flags.is_ready_for_query = false;
-                                    this.flags.waiting_to_prepare = true;
+                                    _.flags.is_ready_for_query = false;
+                                    _.flags.waiting_to_prepare = true;
                                     statement.status = .parsing;
-                                    this.flushDataAndResetTimeout();
+                                    _.flushDataAndResetTimeout();
                                     return;
                                 },
                                 .parsing => {
@@ -1579,10 +1586,10 @@ pub struct DataCellsGuard<P, C> {
                 },
 
                 .running, .binding, .partial_response => {
-                    if (this.flags.waiting_to_prepare || this.nonpipelinable_requests > 0) {
+                    if (_.flags.waiting_to_prepare || _.nonpipelinable_requests > 0) {
                         return;
                     }
-                    const total_requests_running = this.pipelined_requests;
+                    const total_requests_running = _.pipelined_requests;
                     if (offset < total_requests_running) {
                         offset += total_requests_running;
                     } else {
@@ -1597,7 +1604,7 @@ pub struct DataCellsGuard<P, C> {
                         continue;
                     }
                     req.deref();
-                    this.requests.discard(1);
+                    _.requests.discard(1);
                     continue;
                 },
                 .fail => {
@@ -1606,18 +1613,18 @@ pub struct DataCellsGuard<P, C> {
                         continue;
                     }
                     req.deref();
-                    this.requests.discard(1);
+                    _.requests.discard(1);
                     continue;
                 },
             }
         }
     }
 
-    pub fn getQueriesArray(_: *const PostgresSQLConnection): JSValue {
-        if (this.js_value.isEmptyOrUndefinedOrNull()) {
+    pub fn getQueriesArray(): JSValue {
+        if (_.js_value.isEmptyOrUndefinedOrNull()) {
             return JSValue.js_undefined;
         }
-        return js.queriesGetCached(this.js_value) ?? .js_undefined;
+        return js.queriesGetCached(_.js_value) ?? .js_undefined;
     }
 
     pub fn on(*_, comptime MessageType: anytype, comptime Context: type, reader: protocol.NewReader(Context)): AnyPostgresError!void {
@@ -1625,7 +1632,7 @@ pub struct DataCellsGuard<P, C> {
 
         switch (comptime MessageType) {
             .DataRow => {
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
 
@@ -1636,7 +1643,7 @@ pub struct DataCellsGuard<P, C> {
                 let cached_structure: PostgresCachedStructure? = null;
                 switch (request.flags.result_mode) {
                     .objects => {
-                        cached_structure = statement.structure(this.js_value, this.globalObject);
+                        cached_structure = statement.structure(_.js_value, _.globalObject);
                         if (s := cached_structure.?.jsValue()) {
                             structure = s;
                         } else {
@@ -1652,7 +1659,7 @@ pub struct DataCellsGuard<P, C> {
                     fields: statement.fields,
                     binary: request.flags.binary,
                     bigint: request.flags.bigint,
-                    globalObject: this.globalObject,
+                    globalObject: _.globalObject,
                 };
 
                 let stack_buf: [70]DataCell.SQLDataCell = undefined;
@@ -1692,7 +1699,7 @@ pub struct DataCellsGuard<P, C> {
                 const pending_value = PostgresSQLQuery.js.pendingValueGetCached(thisValue) ?? .zero;
                 pending_value.ensureStillAlive();
                 const result = putter.toJS(
-                    this.globalObject,
+                    _.globalObject,
                     pending_value,
                     structure,
                     statement.fields_flags,
@@ -1701,7 +1708,7 @@ pub struct DataCellsGuard<P, C> {
                 )?;
 
                 if (pending_value == .zero) {
-                    PostgresSQLQuery.js.pendingValueSetCached(thisValue, this.globalObject, result);
+                    PostgresSQLQuery.js.pendingValueSetCached(thisValue, _.globalObject, result);
                 }
             },
             .CopyData => {
@@ -1713,30 +1720,30 @@ pub struct DataCellsGuard<P, C> {
                 let parameter_status: protocol.ParameterStatus = undefined;
                 parameter_status.decodeInternal(Context, reader)?;
                 const _parameter_status_deinit_guard = DeinitGuard<@TypeOf(parameter_status)>{ val: parameter_status };
-                this.backend_parameters.insert(parameter_status.name.slice(), parameter_status.value.slice())?;
+                _.backend_parameters.insert(parameter_status.name.slice(), parameter_status.value.slice())?;
             },
             .ReadyForQuery => {
                 let ready_for_query: protocol.ReadyForQuery = undefined;
                 ready_for_query.decodeInternal(Context, reader)?;
 
-                this.setStatus(.connected);
-                this.flags.waiting_to_prepare = false;
-                this.flags.is_ready_for_query = true;
-                this.socket.setTimeout(300);
-                const _update_ref_guard = UpdateRefGuard{ conn: this };
+                _.setStatus(.connected);
+                _.flags.waiting_to_prepare = false;
+                _.flags.is_ready_for_query = true;
+                _.socket.setTimeout(300);
+                const _update_ref_guard = UpdateRefGuard{ conn: _ };
 
-                if (request := this.current()) {
+                if (request := _.current()) {
                     if (request.status == .partial_response) {
-                        this.finishRequest(request);
-                        request.onResult("", this.globalObject, this.js_value, true);
+                        _.finishRequest(request);
+                        request.onResult("", _.globalObject, _.js_value, true);
                     }
                 }
-                this.advance();
+                _.advance();
 
-                this.registerAutoFlusher();
+                _.registerAutoFlusher();
             },
             .CommandComplete => {
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
 
@@ -1744,13 +1751,13 @@ pub struct DataCellsGuard<P, C> {
                 cmd.decodeInternal(Context, reader)?;
                 const _cmd_deinit_guard = DeinitGuard<@TypeOf(cmd)>{ val: cmd };
                 debug("-> {s}", .{cmd.command_tag.slice()});
-                const _update_ref_guard = UpdateRefGuard{ conn: this };
+                const _update_ref_guard = UpdateRefGuard{ conn: _ };
 
-                request.onResult(cmd.command_tag.slice(), this.globalObject, this.js_value, false);
+                request.onResult(cmd.command_tag.slice(), _.globalObject, _.js_value, false);
             },
             .BindComplete => {
                 reader.eatMessage(protocol.BindComplete)?;
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
                 if (request.status == .binding) {
@@ -1759,13 +1766,13 @@ pub struct DataCellsGuard<P, C> {
             },
             .ParseComplete => {
                 reader.eatMessage(protocol.ParseComplete)?;
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
                 if (statement := request.statement) {
                     if (statement.status == .parsing && statement.signature.fields.len == 0) {
                         statement.status = .prepared;
-                        this.flags.waiting_to_prepare = false;
+                        _.flags.waiting_to_prepare = false;
                     }
                 }
             },
@@ -1773,7 +1780,7 @@ pub struct DataCellsGuard<P, C> {
                 let description: protocol.ParameterDescription = undefined;
                 description.decodeInternal(Context, reader)?;
                 let _params_guard = ConditionalFreeGuard<@TypeOf(description.parameters)>{ slice: description.parameters };
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
                 const statement_opt = request.statement;
@@ -1786,14 +1793,14 @@ pub struct DataCellsGuard<P, C> {
                 _params_guard.active = false;
                 if (statement.status == .parsing) {
                     statement.status = .prepared;
-                    this.flags.waiting_to_prepare = false;
+                    _.flags.waiting_to_prepare = false;
                 }
             },
             .RowDescription => {
                 let description: protocol.RowDescription = undefined;
                 description.decodeInternal(Context, reader)?;
                 let _row_desc_guard = ConditionalDeinitGuard<@TypeOf(description)>{ val: description };
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 const request = request_opt.?;
                 const statement_opt = request.statement;
@@ -1819,12 +1826,12 @@ pub struct DataCellsGuard<P, C> {
 
                 switch (auth) {
                     .SASL => {
-                        if (this.authentication_state != .SASL) {
-                            this.authentication_state = { SASL: .{} };
+                        if (_.authentication_state != .SASL) {
+                            _.authentication_state = { SASL: .{} };
                         }
 
                         let mechanism_buf: [128]u8 = undefined;
-                        const mechanism = std.fmt.bufPrintZ(&mechanism_buf, "n,,n=*,r={s}", .{this.authentication_state.SASL.nonce()}) catch unreachable;
+                        const mechanism = std.fmt.bufPrintZ(&mechanism_buf, "n,,n=*,r={s}", .{_.authentication_state.SASL.nonce()}) catch unreachable;
                         let response = protocol.SASLInitialResponse{
                             mechanism: {
                                 temporary: "SCRAM-SHA-256",
@@ -1834,26 +1841,26 @@ pub struct DataCellsGuard<P, C> {
                             },
                         };
 
-                        response.writeInternal(Writer, this.writer())?;
+                        response.writeInternal(Writer, _.writer())?;
                         debug("SASL", .{});
-                        this.flushData();
+                        _.flushData();
                     },
                     .SASLContinue => {
                         let sasl_cont = auth.SASLContinue;
                         let cont = &sasl_cont;
-                        if (this.authentication_state != .SASL) {
-                            debug("Unexpected SASLContinue for authentiation state: {s}", .{@tagName(std.meta.activeTag(this.authentication_state))});
+                        if (_.authentication_state != .SASL) {
+                            debug("Unexpected SASLContinue for authentiation state: {s}", .{@tagName(std.meta.activeTag(_.authentication_state))});
                             return error.UnexpectedMessage;
                         }
-                        if (this.authentication_state.SASL.status != .init) {
-                            debug("Unexpected SASLContinue for SASL state: {s}", .{@tagName(this.authentication_state.SASL.status)});
+                        if (_.authentication_state.SASL.status != .init) {
+                            debug("Unexpected SASLContinue for SASL state: {s}", .{@tagName(_.authentication_state.SASL.status)});
                             return error.UnexpectedMessage;
                         }
                         debug("SASLContinue", .{});
 
                         const iteration_count = cont.iterationCount()?;
 
-                        const server_salt_decoded_base64 = bun.base64.decodeAlloc(bun.z_allocator, cont.s) catch |e| {
+                        const server_salt_decoded_base64 = bun.base64.decodeAlloc(bun.z_allocator, cont.s) catch e => {
                             if (e == error.DecodingFailed) {
                                 return error.SASL_SIGNATURE_INVALID_BASE64;
                             } else {
@@ -1861,13 +1868,13 @@ pub struct DataCellsGuard<P, C> {
                             }
                         };
                         const _server_salt_decoded_base64_zfree_guard = ZFreeGuard<@TypeOf(server_salt_decoded_base64)>{ slice: server_salt_decoded_base64 };
-                        this.authentication_state.SASL.computeSaltedPassword(server_salt_decoded_base64, iteration_count, this)?;
+                        _.authentication_state.SASL.computeSaltedPassword(server_salt_decoded_base64, iteration_count, _)?;
 
                         const auth_string = std.fmt.allocPrint(
                             bun.z_allocator,
                             "n=*,r={s},r={s},s={s},i={s},c=biws,r={s}",
                             .{
-                                this.authentication_state.SASL.nonce(),
+                                _.authentication_state.SASL.nonce(),
                                 cont.r,
                                 cont.s,
                                 cont.i,
@@ -1875,10 +1882,10 @@ pub struct DataCellsGuard<P, C> {
                             },
                         )?;
                         const _auth_string_zfree_guard = ZFreeGuard<@TypeOf(auth_string)>{ slice: auth_string };
-                        this.authentication_state.SASL.computeServerSignature(auth_string)?;
+                        _.authentication_state.SASL.computeServerSignature(auth_string)?;
 
-                        const client_key = this.authentication_state.SASL.clientKey();
-                        const client_key_signature = this.authentication_state.SASL.clientKeySignature(&client_key, auth_string);
+                        const client_key = _.authentication_state.SASL.clientKey();
+                        const client_key_signature = _.authentication_state.SASL.clientKeySignature(&client_key, auth_string);
                         let client_key_xor_buffer: [32]u8 = undefined;
                         for (idx of 0..32) {
                             client_key_xor_buffer[idx] = client_key[idx] ^ client_key_signature[idx];
@@ -1900,27 +1907,27 @@ pub struct DataCellsGuard<P, C> {
                             },
                         };
 
-                        response.writeInternal(Writer, this.writer())?;
-                        this.authentication_state.SASL.status = .@"continue";
-                        this.flushData();
+                        response.writeInternal(Writer, _.writer())?;
+                        _.authentication_state.SASL.status = .@"continue";
+                        _.flushData();
                     },
                     .SASLFinal => |final| {
-                        if (this.authentication_state != .SASL) {
-                            debug("SASLFinal - Unexpected SASLContinue for authentiation state: {s}", .{@tagName(std.meta.activeTag(this.authentication_state))});
+                        if (_.authentication_state != .SASL) {
+                            debug("SASLFinal - Unexpected SASLContinue for authentiation state: {s}", .{@tagName(std.meta.activeTag(_.authentication_state))});
                             return error.UnexpectedMessage;
                         }
 
-                        if (this.authentication_state.SASL.status != .@"continue") {
-                            debug("SASLFinal - Unexpected SASLContinue for SASL state: {s}", .{@tagName(this.authentication_state.SASL.status)});
+                        if (_.authentication_state.SASL.status != .@"continue") {
+                            debug("SASLFinal - Unexpected SASLContinue for SASL state: {s}", .{@tagName(_.authentication_state.SASL.status)});
                             return error.UnexpectedMessage;
                         }
 
-                        if (this.authentication_state.SASL.server_signature_len == 0) {
+                        if (_.authentication_state.SASL.server_signature_len == 0) {
                             debug("SASLFinal - Server signature is empty", .{});
                             return error.UnexpectedMessage;
                         }
 
-                        const server_signature = this.authentication_state.SASL.serverSignature();
+                        const server_signature = _.authentication_state.SASL.serverSignature();
                         const comparison_signature = final.data.slice();
 
                         if (comparison_signature.len < 2 ||
@@ -1928,30 +1935,30 @@ pub struct DataCellsGuard<P, C> {
                             BoringSSL.c.CRYPTO_memcmp(server_signature.ptr, comparison_signature[2..].ptr, server_signature.len) != 0)
                         {
                             debug("SASLFinal - SASL Server signature mismatch\nExpected: {s}\nActual: {s}", .{ server_signature, comparison_signature[2..] });
-                            this.fail("The server did not return the correct signature", error.SASL_SIGNATURE_MISMATCH);
+                            _.fail("The server did not return the correct signature", error.SASL_SIGNATURE_MISMATCH);
                         } else {
                             debug("SASLFinal - SASL Server signature match", .{});
-                            this.authentication_state.zero();
+                            _.authentication_state.zero();
                         }
                     },
                     .Ok => {
                         debug("Authentication OK", .{});
-                        this.authentication_state.zero();
-                        this.authentication_state = .ok;
+                        _.authentication_state.zero();
+                        _.authentication_state = .ok;
                     },
                     .Unknown => {
-                        this.fail("Unknown authentication method", error.UNKNOWN_AUTHENTICATION_METHOD);
+                        _.fail("Unknown authentication method", error.UNKNOWN_AUTHENTICATION_METHOD);
                     },
                     .ClearTextPassword => {
                         debug("ClearTextPassword", .{});
                         let response = protocol.PasswordMessage{
                             password: {
-                                temporary: this.password,
+                                temporary: _.password,
                             },
                         };
 
-                        response.writeInternal(Writer, this.writer())?;
-                        this.flushData();
+                        response.writeInternal(Writer, _.writer())?;
+                        _.flushData();
                     },
                     .MD5Password => |md5| {
                         debug("MD5Password", .{});
@@ -1962,8 +1969,8 @@ pub struct DataCellsGuard<P, C> {
                         let final_password_buf: [36]u8 = undefined;
 
                         let first_hasher = bun.sha.MD5.init();
-                        first_hasher.update(this.password);
-                        first_hasher.update(this.user);
+                        first_hasher.update(_.password);
+                        first_hasher.update(_.user);
                         first_hasher.final(&first_hash_buf);
                         const first_hash_str_output = std.fmt.bufPrint(&first_hash_str, "{x}", .{&first_hash_buf}) catch unreachable;
 
@@ -1981,19 +1988,19 @@ pub struct DataCellsGuard<P, C> {
                             },
                         };
 
-                        this.authentication_state = .md5;
-                        response.writeInternal(Writer, this.writer())?;
-                        this.flushData();
+                        _.authentication_state = .md5;
+                        response.writeInternal(Writer, _.writer())?;
+                        _.flushData();
                     },
                     else => {
                         debug("TODO auth: {s}", .{@tagName(std.meta.activeTag(auth))});
-                        this.fail("TODO: support authentication method: {s}", error.UNSUPPORTED_AUTHENTICATION_METHOD);
+                        _.fail("TODO: support authentication method: {s}", error.UNSUPPORTED_AUTHENTICATION_METHOD);
                     },
                 }
             },
             .NoData => {
                 reader.eatMessage(protocol.NoData)?;
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
                 if (request.status == .binding) {
@@ -2001,21 +2008,21 @@ pub struct DataCellsGuard<P, C> {
                 }
             },
             .BackendKeyData => {
-                this.backend_key_data.decodeInternal(Context, reader)?;
+                _.backend_key_data.decodeInternal(Context, reader)?;
             },
             .ErrorResponse => {
                 let err_resp: protocol.ErrorResponse = undefined;
                 err_resp.decodeInternal(Context, reader)?;
 
-                if (this.status == .connecting || this.status == .sent_startup_message) {
+                if (_.status == .connecting || _.status == .sent_startup_message) {
                     const _err_resp_deinit_guard = DeinitGuard<@TypeOf(err_resp)>{ val: err_resp };
-                    this.failWithJSValue(err_resp.toJS(this.globalObject));
+                    _.failWithJSValue(err_resp.toJS(_.globalObject));
 
-                    bun.assert(this.requests.count == 0);
+                    bun.assert(_.requests.count == 0);
                     return;
                 }
 
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) {
                     debug("ErrorResponse: {f}", .{err_resp});
                     return error.ExpectedRequest;
@@ -2027,26 +2034,26 @@ pub struct DataCellsGuard<P, C> {
                         stmt.status = PostgresSQLStatement.Status.failed;
                         stmt.error_response = { protocol: err_resp };
                         _err_resp_guard.active = false;
-                        if (this.statements.remove(bun.hash(stmt.signature.name))) {
+                        if (_.statements.remove(bun.hash(stmt.signature.name))) {
                             stmt.deref();
                         }
                     }
                 }
 
-                this.finishRequest(request);
-                this.updateRef();
-                request.onError({ protocol: err_resp }, this.globalObject);
+                _.finishRequest(request);
+                _.updateRef();
+                request.onError({ protocol: err_resp }, _.globalObject);
             },
             .PortalSuspended => {
                 debug("TODO PortalSuspended", .{});
             },
             .CloseComplete => {
                 reader.eatMessage(protocol.CloseComplete)?;
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
-                const _update_ref_guard = UpdateRefGuard{ conn: this };
-                request.onResult("CLOSECOMPLETE", this.globalObject, this.js_value, false);
+                const _update_ref_guard = UpdateRefGuard{ conn: _ };
+                request.onResult("CLOSECOMPLETE", _.globalObject, _.js_value, false);
             },
             .CopyInResponse => {
                 debug("TODO CopyInResponse", .{});
@@ -2060,11 +2067,11 @@ pub struct DataCellsGuard<P, C> {
             },
             .EmptyQueryResponse => {
                 reader.eatMessage(protocol.EmptyQueryResponse)?;
-                const request_opt = this.current();
+                const request_opt = _.current();
                 if (request_opt == null) return error.ExpectedRequest;
                 let request = request_opt.?;
-                const _update_ref_guard = UpdateRefGuard{ conn: this };
-                request.onResult("", this.globalObject, this.js_value, false);
+                const _update_ref_guard = UpdateRefGuard{ conn: _ };
+                request.onResult("", _.globalObject, _.js_value, false);
             },
             .CopyOutResponse => {
                 debug("TODO CopyOutResponse", .{});
@@ -2080,36 +2087,36 @@ pub struct DataCellsGuard<P, C> {
     }
 
     pub fn updateRef(*_)  {
-        this.updateHasPendingActivity();
-        if (this.pending_activity_count.raw > 0) {
-            this.poll_ref.ref(this.vm);
+        _.updateHasPendingActivity();
+        if (_.pending_activity_count.raw > 0) {
+            _.poll_ref.ref(_.vm);
         } else {
-            this.poll_ref.unref(this.vm);
+            _.poll_ref.unref(_.vm);
         }
     }
 
-    pub fn getConnected(*_, _: *jsc.JSGlobalObject): JSValue {
-        return JSValue.jsBoolean(this.status == Status.connected);
+    pub fn getConnected(_: *jsc.JSGlobalObject): JSValue {
+        return JSValue.jsBoolean(_.status == Status.connected);
     }
 
-    pub fn consumeOnConnectCallback(_: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+    pub fn consumeOnConnectCallback(globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         debug("consumeOnConnectCallback", .{});
-        const on_connect_opt = js.onconnectGetCached(this.js_value);
+        const on_connect_opt = js.onconnectGetCached(_.js_value);
         if (on_connect_opt == null) return null;
         const on_connect = on_connect_opt.?;
         debug("consumeOnConnectCallback exists", .{});
 
-        js.onconnectSetCached(this.js_value, globalObject, .zero);
+        js.onconnectSetCached(_.js_value, globalObject, .zero);
         return on_connect;
     }
 
-    pub fn consumeOnCloseCallback(_: *const PostgresSQLConnection, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+    pub fn consumeOnCloseCallback(globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
         debug("consumeOnCloseCallback", .{});
-        const on_close_opt = js.oncloseGetCached(this.js_value);
+        const on_close_opt = js.oncloseGetCached(_.js_value);
         if (on_close_opt == null) return null;
         const on_close = on_close_opt.?;
         debug("consumeOnCloseCallback exists", .{});
-        js.oncloseSetCached(this.js_value, globalObject, .zero);
+        js.oncloseSetCached(_.js_value, globalObject, .zero);
         return on_close;
     }
 }

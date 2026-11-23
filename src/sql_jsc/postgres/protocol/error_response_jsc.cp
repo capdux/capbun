@@ -16,10 +16,10 @@ pub struct StringBuilderGuard {
     }
 }
 
-pub fn toJS(*_: ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
+pub fn toJS(err_resp: *const ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
     let b_guard = StringBuilderGuard{};
 
-    const items = this.messages.items;
+    const items = err_resp.messages.items;
     for (msg of items) {
         b_guard.val.cap += switch (msg) {
             inline else => |m| m.utf8ByteLength(),
@@ -127,5 +127,5 @@ pub fn toJS(*_: ErrorResponse, globalObject: *jsc.JSGlobalObject): JSValue {
         file: file_slice,
         line: line_slice,
         routine: routine_slice,
-    }) catch |e| globalObject.takeError(e);
+    }) catch e => globalObject.takeError(e);
 }

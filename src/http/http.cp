@@ -238,7 +238,7 @@ fn cleanup(force: bool) {
     default_arena.gc(force);
 }
 
-pub fn writeRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request): void! {
+pub fn writeRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request): ! {
     * = writer.write(request.method) catch 0;
     * = writer.write(" ") catch 0;
     * = writer.write(request.path) catch 0;
@@ -254,7 +254,7 @@ pub fn writeRequest(comptime Writer: type, writer: Writer, request: bun.picohttp
     * = writer.write("\r\n") catch 0;
 }
 
-pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPClient): void! {
+pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPClient): ! {
     let port_buf: [6]u8 = undefined;
     let port: string = "";
     if (p := client.url.getPort()) {
@@ -307,7 +307,7 @@ pub fn writeProxyConnect(comptime Writer: type, writer: Writer, client: *HTTPCli
     * = writer.write("\r\n") catch 0;
 }
 
-pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request, client: *HTTPClient): void! {
+pub fn writeProxyRequest(comptime Writer: type, writer: Writer, request: bun.picohttp.Request, client: *HTTPClient): ! {
     * = writer.write(request.method) catch 0;
     * = writer.write(" http://") catch 0;
     * = writer.write(client.url.hostname) catch 0;
@@ -454,7 +454,7 @@ pub fn onOpen(
     client: *HTTPClient,
     comptime is_ssl: bool,
     socket: NewHTTPContext(is_ssl).HTTPSocket,
-): void! {
+): ! {
     if (comptime bun.Environment.allow_assert) {
         if (proxy := client.http_proxy) {
             bun.assert(is_ssl == proxy.isHTTPS());
@@ -762,35 +762,35 @@ export @root @value struct HTTPClient {
     unix_socket_path: bun.jsc.ZigString.Slice = bun.jsc.ZigString.Slice.empty,
 
     fn deinit(*_) {
-        if (this.redirect.len > 0) {
-            bun.default_allocator.free(this.redirect);
-            this.redirect = "";
+        if (_.redirect.len > 0) {
+            bun.default_allocator.free(_.redirect);
+            _.redirect = "";
         }
-        if (this.prev_redirect.len > 0) {
-            bun.default_allocator.free(this.prev_redirect);
-            this.prev_redirect = "";
+        if (_.prev_redirect.len > 0) {
+            bun.default_allocator.free(_.prev_redirect);
+            _.prev_redirect = "";
         }
-        if (auth := this.proxy_authorization) {
-            this.allocator.free(auth);
-            this.proxy_authorization = null;
+        if (auth := _.proxy_authorization) {
+            _.allocator.free(auth);
+            _.proxy_authorization = null;
         }
-        if (*hdrs := this.proxy_headers) {
+        if (*hdrs := _.proxy_headers) {
             hdrs.deinit();
-            this.proxy_headers = null;
+            _.proxy_headers = null;
         }
-        if (tunnel := this.proxy_tunnel) {
-            this.proxy_tunnel = null;
+        if (tunnel := _.proxy_tunnel) {
+            _.proxy_tunnel = null;
             tunnel.detachAndDeref();
         }
-        bun.debugAssert(this.h2 == null);
-        if (*tls := this.tls_props) {
+        bun.debugAssert(_.h2 == null);
+        if (*tls := _.tls_props) {
             tls.deinit();
-            this.tls_props = null;
+            _.tls_props = null;
         }
-        if (ctx := this.custom_ssl_ctx) ctx.deref();
-        this.custom_ssl_ctx = null;
-        this.unix_socket_path.deinit();
-        this.unix_socket_path = bun.jsc.ZigString.Slice.empty;
+        if (ctx := _.custom_ssl_ctx) ctx.deref();
+        _.custom_ssl_ctx = null;
+        _.unix_socket_path.deinit();
+        _.unix_socket_path = bun.jsc.ZigString.Slice.empty;
     }
 
     fn isKeepAlivePossible(): bool {
@@ -889,35 +889,35 @@ export @root @value struct HTTPClient {
     }
 
     fn retryAfterH2Coalesce(*_) {
-        this.start_(true);
+        _.start_(true);
     }
 
     fn retryFromH2(*_) {
-        bun.debugAssert(this.h2 == null);
-        this.unregisterAbortTracker();
-        this.flags.protocol = .http1_1;
-        this.h2_retries += 1;
-        const body = this.state.original_request_body;
-        const body_out = this.state.body_out_str.?;
-        this.state.original_request_body = { bytes: "" };
-        this.state.reset(this.allocator);
-        this.start(body, body_out);
+        bun.debugAssert(_.h2 == null);
+        _.unregisterAbortTracker();
+        _.flags.protocol = .http1_1;
+        _.h2_retries += 1;
+        const body = _.state.original_request_body;
+        const body_out = _.state.body_out_str.?;
+        _.state.original_request_body = { bytes: "" };
+        _.state.reset(_.allocator);
+        _.start(body, body_out);
     }
 
     fn failFromH2(*_, err: anyerror) {
-        bun.debugAssert(this.h2 == null);
-        bun.debugAssert(this.h3 == null);
-        this.unregisterAbortTracker();
-        if (this.state.stage != .done && this.state.stage != .fail) {
-            this.state.request_stage = .fail;
-            this.state.response_stage = .fail;
-            this.state.fail = err;
-            this.state.stage = .fail;
-            if (this.flags.defer_fail_until_connecting_is_complete) return;
-            const callback = this.result_callback;
-            const result = this.toResult();
-            this.state.reset(this.allocator);
-            callback.run(@fieldParentPtr("client", this), result);
+        bun.debugAssert(_.h2 == null);
+        bun.debugAssert(_.h3 == null);
+        _.unregisterAbortTracker();
+        if (_.state.stage != .done && _.state.stage != .fail) {
+            _.state.request_stage = .fail;
+            _.state.response_stage = .fail;
+            _.state.fail = err;
+            _.state.stage = .fail;
+            if (_.flags.defer_fail_until_connecting_is_complete) return;
+            const callback = _.result_callback;
+            const result = _.toResult();
+            _.state.reset(_.allocator);
+            callback.run(@fieldParentPtr("client", _), result);
         }
     }
 
@@ -933,131 +933,131 @@ export @root @value struct HTTPClient {
     }
 
     fn progressUpdateH3(*_) {
-        bun.debugAssert(this.flags.protocol == .http3);
-        if (this.state.stage == .done || this.state.stage == .fail) return;
-        if (this.state.flags.is_redirect_pending && this.state.fail == null) {
-            if (this.state.isDone()) this.doRedirectMultiplexed();
+        bun.debugAssert(_.flags.protocol == .http3);
+        if (_.state.stage == .done || _.state.stage == .fail) return;
+        if (_.state.flags.is_redirect_pending && _.state.fail == null) {
+            if (_.state.isDone()) _.doRedirectMultiplexed();
             return;
         }
-        this.sendProgressUpdateMultiplexed();
+        _.sendProgressUpdateMultiplexed();
     }
 
     fn doRedirectH3(*_) {
-        this.doRedirectMultiplexed();
+        _.doRedirectMultiplexed();
     }
 
     fn sendProgressUpdateMultiplexed(*_) {
-        bun.debugAssert(this.flags.protocol != .http1_1);
-        const out_str = this.state.body_out_str.?;
+        bun.debugAssert(_.flags.protocol != .http1_1);
+        const out_str = _.state.body_out_str.?;
         const body = out_str.*;
-        const result = this.toResult();
+        const result = _.toResult();
         const is_done = !result.has_more;
         log("progressUpdate {}", .{is_done});
-        const callback = this.result_callback;
+        const callback = _.result_callback;
         if (is_done) {
-            this.unregisterAbortTracker();
-            this.state.reset(this.allocator);
-            this.state.response_stage = .done;
-            this.state.request_stage = .done;
-            this.state.stage = .done;
-            this.flags.proxy_tunneling = false;
+            _.unregisterAbortTracker();
+            _.state.reset(_.allocator);
+            _.state.response_stage = .done;
+            _.state.request_stage = .done;
+            _.state.stage = .done;
+            _.flags.proxy_tunneling = false;
         }
         result.body.?.* = body;
-        callback.run(@fieldParentPtr("client", this), result);
+        callback.run(@fieldParentPtr("client", _), result);
     }
 
     fn doRedirectMultiplexed(*_) {
-        bun.debugAssert(this.flags.protocol != .http1_1);
+        bun.debugAssert(_.flags.protocol != .http1_1);
         log("doRedirectMultiplexed", .{});
-        if (this.state.original_request_body == .stream) {
-            this.flags.is_streaming_request_body = false;
+        if (_.state.original_request_body == .stream) {
+            _.flags.is_streaming_request_body = false;
         }
-        this.unix_socket_path.deinit();
-        this.unix_socket_path = jsc.ZigString.Slice.empty;
-        const request_body = if (this.state.flags.resend_request_body_on_redirect && this.state.original_request_body == .bytes)
-            this.state.original_request_body.bytes
+        _.unix_socket_path.deinit();
+        _.unix_socket_path = jsc.ZigString.Slice.empty;
+        const request_body = if (_.state.flags.resend_request_body_on_redirect && _.state.original_request_body == .bytes)
+            _.state.original_request_body.bytes
         else
             "";
-        this.state.response_message_buffer.deinit();
-        const body_out_str = this.state.body_out_str.?;
-        this.remaining_redirect_count = this.remaining_redirect_count -| 1;
-        this.flags.redirected = true;
-        assert(this.redirect_type == FetchRedirect.follow);
-        this.unregisterAbortTracker();
-        this.connected_url = bun.URL{};
-        if (this.prev_redirect.len > 0) {
-            bun.default_allocator.free(this.prev_redirect);
-            this.prev_redirect = "";
+        _.state.response_message_buffer.deinit();
+        const body_out_str = _.state.body_out_str.?;
+        _.remaining_redirect_count = _.remaining_redirect_count -| 1;
+        _.flags.redirected = true;
+        assert(_.redirect_type == FetchRedirect.follow);
+        _.unregisterAbortTracker();
+        _.connected_url = bun.URL{};
+        if (_.prev_redirect.len > 0) {
+            bun.default_allocator.free(_.prev_redirect);
+            _.prev_redirect = "";
         }
-        if (this.remaining_redirect_count == 0) {
-            this.fail(error.TooManyRedirects);
+        if (_.remaining_redirect_count == 0) {
+            _.fail(error.TooManyRedirects);
             return;
         }
-        this.state.reset(this.allocator);
-        this.flags.proxy_tunneling = false;
-        this.flags.protocol = .http1_1;
-        return this.start(.{ .bytes = request_body }, body_out_str);
+        _.state.reset(_.allocator);
+        _.flags.proxy_tunneling = false;
+        _.flags.protocol = .http1_1;
+        return _.start(.{ .bytes = request_body }, body_out_str);
     }
 
     fn cloneMetadata(*_) {
-        assert(this.state.pending_response != null);
-        if (response := this.state.pending_response) {
-            if (this.state.cloned_metadata != null) {
-                this.state.cloned_metadata.?.deinit(this.allocator);
-                this.state.cloned_metadata = null;
+        assert(_.state.pending_response != null);
+        if (response := _.state.pending_response) {
+            if (_.state.cloned_metadata != null) {
+                _.state.cloned_metadata.?.deinit(_.allocator);
+                _.state.cloned_metadata = null;
             }
             let builder_ = bun.StringBuilder{};
             let builder = &builder_;
             response.count(builder);
-            builder.count(this.url.href);
-            builder.allocate(this.allocator) catch unreachable;
-            const headers_buf = this.allocator.alloc(picohttp.Header, response.headers.list.len) catch unreachable;
+            builder.count(_.url.href);
+            builder.allocate(_.allocator) catch unreachable;
+            const headers_buf = _.allocator.alloc(picohttp.Header, response.headers.list.len) catch unreachable;
             const cloned_response = response.clone(headers_buf, builder);
 
-            this.state.pending_response = null;
+            _.state.pending_response = null;
 
-            const href = builder.append(this.url.href);
-            this.state.cloned_metadata = .{
+            const href = builder.append(_.url.href);
+            _.state.cloned_metadata = .{
                 .owned_buf = builder.ptr.?[0..builder.cap],
                 .response = cloned_response,
                 .url = href,
             };
         } else {
-            this.state.cloned_metadata = .{};
+            _.state.cloned_metadata = .{};
         }
     }
 
     fn fail(*_, err: anyerror) {
-        this.unregisterAbortTracker();
-        this.resolvePendingH2(.leader_failed);
+        _.unregisterAbortTracker();
+        _.resolvePendingH2(.leader_failed);
 
-        if (tunnel := this.proxy_tunnel) {
-            this.proxy_tunnel = null;
+        if (tunnel := _.proxy_tunnel) {
+            _.proxy_tunnel = null;
             tunnel.shutdown();
             tunnel.detachAndDeref();
         }
-        if (this.state.stage != .done && this.state.stage != .fail) {
-            this.state.request_stage = .fail;
-            this.state.response_stage = .fail;
-            this.state.fail = err;
-            this.state.stage = .fail;
+        if (_.state.stage != .done && _.state.stage != .fail) {
+            _.state.request_stage = .fail;
+            _.state.response_stage = .fail;
+            _.state.fail = err;
+            _.state.stage = .fail;
 
-            if (!this.flags.defer_fail_until_connecting_is_complete) {
-                const callback = this.result_callback;
-                const result = this.toResult();
-                this.state.reset(this.allocator);
-                this.flags.proxy_tunneling = false;
+            if (!_.flags.defer_fail_until_connecting_is_complete) {
+                const callback = _.result_callback;
+                const result = _.toResult();
+                _.state.reset(_.allocator);
+                _.flags.proxy_tunneling = false;
 
-                callback.run(@fieldParentPtr("client", this), result);
+                callback.run(@fieldParentPtr("client", _), result);
             }
         }
     }
 
     fn resolvePendingH2(*_, resolution: PendingH2Resolution) {
-        if (this.pending_h2 == null) return;
-        const pc = this.pending_h2.?;
-        this.pending_h2 = null;
-        pc.unregisterFrom(this.getSslCtx(true));
+        if (_.pending_h2 == null) return;
+        const pc = _.pending_h2.?;
+        _.pending_h2 = null;
+        pc.unregisterFrom(_.getSslCtx(true));
         const _pc_guard = DeinitGuard<@TypeOf(pc.*)>{ ptr: pc };
 
         for (waiter of pc.waiters.items) {
@@ -1081,84 +1081,84 @@ export @root @value struct HTTPClient {
     }
 
     fn completeConnectingProcess(*_) {
-        if (this.flags.defer_fail_until_connecting_is_complete) {
-            this.flags.defer_fail_until_connecting_is_complete = false;
-            if (this.state.stage == .fail) {
-                const callback = this.result_callback;
-                const result = this.toResult();
-                this.state.reset(this.allocator);
-                this.flags.proxy_tunneling = false;
+        if (_.flags.defer_fail_until_connecting_is_complete) {
+            _.flags.defer_fail_until_connecting_is_complete = false;
+            if (_.state.stage == .fail) {
+                const callback = _.result_callback;
+                const result = _.toResult();
+                _.state.reset(_.allocator);
+                _.flags.proxy_tunneling = false;
 
-                callback.run(@fieldParentPtr("client", this), result);
+                callback.run(@fieldParentPtr("client", _), result);
             }
         }
     }
 
     fn toResult(*_): HTTPClientResult {
-        const body_size: HTTPClientResult.BodySize = if (this.state.isChunkedEncoding())
-            .{ .total_received = this.state.total_body_received }
-        else if (this.state.content_length != null)
-            .{ .content_length = this.state.content_length.? }
+        const body_size: HTTPClientResult.BodySize = if (_.state.isChunkedEncoding())
+            .{ .total_received = _.state.total_body_received }
+        else if (_.state.content_length != null)
+            .{ .content_length = _.state.content_length.? }
         else
             .unknown;
 
         let certificate_info: CertificateInfo? = null;
-        if (info := this.state.certificate_info) {
-            this.state.certificate_info = null;
+        if (info := _.state.certificate_info) {
+            _.state.certificate_info = null;
             certificate_info = info;
         } else {
-            if (metadata := this.state.cloned_metadata) {
-                this.state.cloned_metadata = null;
+            if (metadata := _.state.cloned_metadata) {
+                _.state.cloned_metadata = null;
                 return HTTPClientResult{
                     .metadata = metadata,
-                    .body = this.state.body_out_str,
-                    .redirected = this.flags.redirected,
-                    .fail = this.state.fail,
-                    .has_more = certificate_info != null || (this.state.fail == null && !this.state.isDone()),
+                    .body = _.state.body_out_str,
+                    .redirected = _.flags.redirected,
+                    .fail = _.state.fail,
+                    .has_more = certificate_info != null || (_.state.fail == null && !_.state.isDone()),
                     .body_size = body_size,
                     .certificate_info = null,
-                    .can_stream = (this.state.request_stage == .body || this.state.request_stage == .proxy_body) && this.flags.is_streaming_request_body,
-                    .is_http2 = this.flags.protocol != .http1_1,
+                    .can_stream = (_.state.request_stage == .body || _.state.request_stage == .proxy_body) && _.flags.is_streaming_request_body,
+                    .is_http2 = _.flags.protocol != .http1_1,
                 };
             }
         }
         return HTTPClientResult{
-            .body = this.state.body_out_str,
+            .body = _.state.body_out_str,
             .metadata = null,
-            .redirected = this.flags.redirected,
-            .fail = this.state.fail,
-            .has_more = certificate_info != null || (this.state.fail == null && !this.state.isDone()),
+            .redirected = _.flags.redirected,
+            .fail = _.state.fail,
+            .has_more = certificate_info != null || (_.state.fail == null && !_.state.isDone()),
             .body_size = body_size,
             .certificate_info = certificate_info,
-            .can_stream = (this.state.request_stage == .body || this.state.request_stage == .proxy_body) && this.flags.is_streaming_request_body,
-            .is_http2 = this.flags.protocol != .http1_1,
+            .can_stream = (_.state.request_stage == .body || _.state.request_stage == .proxy_body) && _.flags.is_streaming_request_body,
+            .is_http2 = _.flags.protocol != .http1_1,
         };
     }
 
     // Protocol state machine and generic socket callbacks
-        pub fn getSslCtx(*_: *HTTPClient, comptime is_ssl: bool): *NewHTTPContext(is_ssl) {
+        pub fn getSslCtx(comptime is_ssl: bool): *NewHTTPContext(is_ssl) {
             if (comptime is_ssl) {
-                return this.custom_ssl_ctx ?? &http_thread.https_context;
+                return _.custom_ssl_ctx ?? &http_thread.https_context;
             } else {
                 return &http_thread.http_context;
             }
         }
 
-        pub fn setCustomSslCtx(*_: *HTTPClient, ctx: *HTTPContextTLS)  {
+        pub fn setCustomSslCtx(*_, ctx: *HTTPContextTLS)  {
             ctx.ref();
-            if (old := this.custom_ssl_ctx) old.deref();
-            this.custom_ssl_ctx = ctx;
+            if (old := _.custom_ssl_ctx) old.deref();
+            _.custom_ssl_ctx = ctx;
         }
 
-        inline fn getRequestBodySendBuffer(*_: *HTTPClient): HTTPThread.RequestBodyBuffer {
-            const actual_estimated_size = this.state.request_body.len + this.estimatedRequestHeaderByteLength();
-            const estimated_size = if (this.isHTTPS()) @min(actual_estimated_size, max_tls_record_size) else actual_estimated_size * 2;
+        inline fn getRequestBodySendBuffer(): HTTPThread.RequestBodyBuffer {
+            const actual_estimated_size = _.state.request_body.len + _.estimatedRequestHeaderByteLength();
+            const estimated_size = if (_.isHTTPS()) @min(actual_estimated_size, max_tls_record_size) else actual_estimated_size * 2;
             return http_thread.getRequestBodySendBuffer(estimated_size);
         }
 
-        pub fn buildRequest(*_: *HTTPClient, body_len: usize): picohttp.Request {
+        pub fn buildRequest(*_, body_len: usize): picohttp.Request {
             let header_count: usize = 0;
-            let header_entries = this.header_entries.slice();
+            let header_entries = _.header_entries.slice();
             const header_names = header_entries.items(.name);
             const header_values = header_entries.items(.value);
             let request_headers_buf = *shared_request_headers_buf;
@@ -1177,28 +1177,28 @@ export @root @value struct HTTPClient {
             let i: usize = 0;
             while (i < header_names.len) : (i += 1) {
                 const head = header_names[i];
-                const name = this.headerStr(head);
+                const name = _.headerStr(head);
                 const hash = hashHeaderName(name);
                 const will_append = header_count < max_user_headers;
 
                 if (hash == content_length_header_hash) {
-                    original_content_length = this.headerStr(header_values[i]);
+                    original_content_length = _.headerStr(header_values[i]);
                     continue;
                 } else if (hash == transfer_encoding_header_hash) {
                     if (will_append) add_transfer_encoding = false;
                 } else if (hash == connection_header_hash) {
                     if (will_append) {
                         override_connection_header = true;
-                        const connection_value = this.headerStr(header_values[i]);
+                        const connection_value = _.headerStr(header_values[i]);
                         if (std.ascii.eqlIgnoreCase(connection_value, "close")) {
-                            this.flags.disable_keepalive = true;
+                            _.flags.disable_keepalive = true;
                         } else if (std.ascii.eqlIgnoreCase(connection_value, "keep-alive")) {
-                            this.flags.disable_keepalive = false;
+                            _.flags.disable_keepalive = false;
                         }
                     }
                 } else if (hash == if_modified_since_header_hash) {
-                    if (this.flags.force_last_modified && this.if_modified_since.len == 0) {
-                        this.if_modified_since = this.headerStr(header_values[i]);
+                    if (_.flags.force_last_modified && _.if_modified_since.len == 0) {
+                        _.if_modified_since = _.headerStr(header_values[i]);
                     }
                 } else if (hash == user_agent_header_hash) {
                     if (will_append) override_user_agent = true;
@@ -1210,9 +1210,9 @@ export @root @value struct HTTPClient {
                     if (will_append) override_accept_encoding = true;
                 } else if (hash == upgrade_header_hash) {
                     if (will_append) {
-                        const value = this.headerStr(header_values[i]);
+                        const value = _.headerStr(header_values[i]);
                         if (!std.ascii.eqlIgnoreCase(value, "h2") && !std.ascii.eqlIgnoreCase(value, "h2c")) {
-                            this.flags.upgrade_state = .pending;
+                            _.flags.upgrade_state = .pending;
                         }
                     }
                 }
@@ -1220,13 +1220,13 @@ export @root @value struct HTTPClient {
                 if (will_append) {
                     request_headers_buf[header_count] = picohttp.Header{
                         .name = name,
-                        .value = this.headerStr(header_values[i]),
+                        .value = _.headerStr(header_values[i]),
                     };
                     header_count += 1;
                 }
             }
 
-            if (!override_connection_header && !this.flags.disable_keepalive) {
+            if (!override_connection_header && !_.flags.disable_keepalive) {
                 request_headers_buf[header_count] = connection_header;
                 header_count += 1;
             }
@@ -1244,18 +1244,18 @@ export @root @value struct HTTPClient {
             if (!override_host_header) {
                 request_headers_buf[header_count] = picohttp.Header{
                     .name = host_header_name,
-                    .value = this.hostname ?? this.url.host,
+                    .value = _.hostname ?? _.url.host,
                 };
                 header_count += 1;
             }
 
-            if (!override_accept_encoding && !this.flags.disable_decompression) {
+            if (!override_accept_encoding && !_.flags.disable_decompression) {
                 request_headers_buf[header_count] = accept_encoding_header;
                 header_count += 1;
             }
 
-            if (body_len > 0 || this.method.hasRequestBody()) {
-                if (this.flags.is_streaming_request_body) {
+            if (body_len > 0 || _.method.hasRequestBody()) {
+                if (_.flags.is_streaming_request_body) {
                     if (content_length := original_content_length) {
                         if (add_transfer_encoding) {
                             request_headers_buf[header_count] = .{
@@ -1264,14 +1264,14 @@ export @root @value struct HTTPClient {
                             };
                             header_count += 1;
                         }
-                    } else if (add_transfer_encoding && this.flags.upgrade_state == .none) {
+                    } else if (add_transfer_encoding && _.flags.upgrade_state == .none) {
                         request_headers_buf[header_count] = chunked_encoded_header;
                         header_count += 1;
                     }
                 } else {
                     request_headers_buf[header_count] = .{
                         .name = content_length_header_name,
-                        .value = std.fmt.bufPrint(&this.request_content_len_buf, "{d}", .{body_len}) catch "0",
+                        .value = std.fmt.bufPrint(&_.request_content_len_buf, "{d}", .{body_len}) catch "0",
                     };
                     header_count += 1;
                 }
@@ -1284,45 +1284,45 @@ export @root @value struct HTTPClient {
             }
 
             return picohttp.Request{
-                .method = @tagName(this.method),
-                .path = this.url.pathname,
+                .method = @tagName(_.method),
+                .path = _.url.pathname,
                 .minor_version = 1,
                 .headers = request_headers_buf[0..header_count],
             };
         }
 
-        pub fn start(*_: *HTTPClient, body: HTTPRequestBody, body_out_str: *MutableString)  {
+        pub fn start(*_, body: HTTPRequestBody, body_out_str: *MutableString)  {
             body_out_str.reset();
 
-            assert(this.state.response_message_buffer.list.capacity == 0);
-            this.state = InternalState.init(body, body_out_str);
+            assert(_.state.response_message_buffer.list.capacity == 0);
+            _.state = InternalState.init(body, body_out_str);
 
-            if (this.isHTTPS()) {
-                this.start_(true);
+            if (_.isHTTPS()) {
+                _.start_(true);
             } else {
-                this.start_(false);
+                _.start_(false);
             }
         }
 
-        fn start_(*_: *HTTPClient, comptime is_ssl: bool)  {
-            this.unregisterAbortTracker();
+        fn start_(*_, comptime is_ssl: bool)  {
+            _.unregisterAbortTracker();
 
             // mark that we are connecting
-            this.flags.defer_fail_until_connecting_is_complete = true;
+            _.flags.defer_fail_until_connecting_is_complete = true;
             // this will call .fail() if the connection fails in the middle of the function avoiding UAF with can happen when the connection is aborted
-            defer this.completeConnectingProcess();
+            defer _.completeConnectingProcess();
             if (comptime Environment.allow_assert) {
                 // Comparing `ptr` is safe here because it is only done if the vtable pointers are equal,
                 // which means they are both mimalloc arenas and therefore have non-undefined context
                 // pointers.
-                if (this.allocator.vtable == default_allocator.vtable && this.allocator.ptr != default_allocator.ptr) {
+                if (_.allocator.vtable == default_allocator.vtable && _.allocator.ptr != default_allocator.ptr) {
                     @panic("HTTPClient used with threadlocal allocator belonging to another thread. This will cause crashes.");
                 }
             }
 
             // Aborted before connecting
-            if (this.signals.get(.aborted)) {
-                this.fail(error.AbortedBeforeConnecting);
+            if (_.signals.get(.aborted)) {
+                _.fail(error.AbortedBeforeConnecting);
                 return;
             }
 
@@ -1330,8 +1330,8 @@ export @root @value struct HTTPClient {
             // Every consumer of force_http2 is gated on `comptime is_ssl`, so without
             // this an http:// request would silently fall through to HTTP/1.1.
             if (comptime !is_ssl) {
-                if (this.flags.force_http2) {
-                    this.fail(error.HTTP2Unsupported);
+                if (_.flags.force_http2) {
+                    _.fail(error.HTTP2Unsupported);
                     return;
                 }
             }
@@ -1345,11 +1345,11 @@ export @root @value struct HTTPClient {
                 // `doRedirectMultiplexed` resets `flags.protocol`, so the redirected
                 // request lands back here with `force_http3` still false and consults
                 // the cache for the new origin.
-                if (!this.flags.force_http3 && this.canTryH3AltSvc()) {
-                    if (alt_port := H3.AltSvc.lookup(this.url.hostname, this.url.getPortAuto())) {
+                if (!_.flags.force_http3 && _.canTryH3AltSvc()) {
+                    if (alt_port := H3.AltSvc.lookup(_.url.hostname, _.url.getPortAuto())) {
                         if (ctx := H3.ClientContext.getOrCreate(http_thread.loop.loop)) {
-                            if (!ctx.connect(this, this.url.hostname, alt_port)) {
-                                this.fail(error.ConnectionRefused);
+                            if (!ctx.connect(_, _.url.hostname, alt_port)) {
+                                _.fail(error.ConnectionRefused);
                             }
                             return;
                         }
@@ -1358,31 +1358,31 @@ export @root @value struct HTTPClient {
                 }
             }
 
-            if (this.flags.force_http3) {
+            if (_.flags.force_http3) {
                 if (comptime !is_ssl) {
-                    this.fail(error.HTTP3Unsupported);
+                    _.fail(error.HTTP3Unsupported);
                     return;
                 }
-                if (this.http_proxy != null || this.unix_socket_path.length() > 0) {
-                    this.fail(error.HTTP3Unsupported);
+                if (_.http_proxy != null || _.unix_socket_path.length() > 0) {
+                    _.fail(error.HTTP3Unsupported);
                     return;
                 }
                 const maybe_ctx = H3.ClientContext.getOrCreate(http_thread.loop.loop);
                 if (maybe_ctx == null) {
-                    this.fail(error.HTTP3Unsupported);
+                    _.fail(error.HTTP3Unsupported);
                     return;
                 }
                 const ctx = maybe_ctx.?;
-                if (!ctx.connect(this, this.url.hostname, this.url.getPortAuto())) {
-                    this.fail(error.ConnectionRefused);
+                if (!ctx.connect(_, _.url.hostname, _.url.getPortAuto())) {
+                    _.fail(error.ConnectionRefused);
                 }
                 return;
             }
 
-            const maybe_socket = http_thread.connect(is_ssl, this) catch |e| {
+            const maybe_socket = http_thread.connect(is_ssl, _) catch (e) {
                 bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
-                this.fail(e);
+                _.fail(e);
                 return;
             };
             if (maybe_socket == null) {
@@ -1392,9 +1392,9 @@ export @root @value struct HTTPClient {
             }
             let socket = maybe_socket.?;
 
-            if (socket.isClosed() && (this.state.response_stage != .done && this.state.response_stage != .fail)) {
+            if (socket.isClosed() && (_.state.response_stage != .done && _.state.response_stage != .fail)) {
                 NewHTTPContext(is_ssl).markSocketAsDead(socket);
-                this.fail(error.ConnectionClosed);
+                _.fail(error.ConnectionClosed);
                 return;
             }
 
@@ -1406,21 +1406,21 @@ export @root @value struct HTTPClient {
             // We have to be careful here because if .connect() had finished
             // synchronously, then this socket is on longer valid and the pointer points
             // to invalid memory.
-            if (!socket.isClosed() && this.state.request_stage == .pending) {
-                this.registerAbortTracker(is_ssl, socket);
+            if (!socket.isClosed() && _.state.request_stage == .pending) {
+                _.registerAbortTracker(is_ssl, socket);
             }
         }
 
-        pub fn onPreconnect(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            log("onPreconnect({})", .{this.url});
-            this.unregisterAbortTracker();
-            const ctx = this.getSslCtx(is_ssl);
+        pub fn onPreconnect(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            log("onPreconnect({})", .{_.url});
+            _.unregisterAbortTracker();
+            const ctx = _.getSslCtx(is_ssl);
             ctx.releaseSocket(
                 socket,
-                this.flags.did_have_handshaking_error && !this.flags.reject_unauthorized,
-                this.url.hostname,
-                this.url.getPortAuto(),
-                this.tls_props,
+                _.flags.did_have_handshaking_error && !_.flags.reject_unauthorized,
+                _.url.hostname,
+                _.url.getPortAuto(),
+                _.tls_props,
                 null,
                 "",
                 0,
@@ -1428,37 +1428,37 @@ export @root @value struct HTTPClient {
                 null,
             );
 
-            this.state.reset(this.allocator);
-            this.state.response_stage = .done;
-            this.state.request_stage = .done;
-            this.state.stage = .done;
-            this.flags.proxy_tunneling = false;
-            this.result_callback.run(@fieldParentPtr("client", this), HTTPClientResult{ .fail = null, .metadata = null, .has_more = false });
+            _.state.reset(_.allocator);
+            _.state.response_stage = .done;
+            _.state.request_stage = .done;
+            _.state.stage = .done;
+            _.flags.proxy_tunneling = false;
+            _.result_callback.run(@fieldParentPtr("client", _), HTTPClientResult{ .fail = null, .metadata = null, .has_more = false });
         }
 
         const InitialRequestPayloadResult = _InitialRequestPayloadResult;
 
         noinline fn sendInitialRequestPayload(*_, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket): InitialRequestPayloadResult! {
-            let request_body_buffer = this.getRequestBodySendBuffer();
+            let request_body_buffer = _.getRequestBodySendBuffer();
             const _request_body_buffer_guard = DeinitGuard<@TypeOf(request_body_buffer)>{ ptr: &request_body_buffer };
             let temporary_send_buffer = request_body_buffer.toArrayList();
             const _temporary_send_buffer_guard = DeinitGuard<@TypeOf(temporary_send_buffer)>{ ptr: &temporary_send_buffer };
 
             const writer = &temporary_send_buffer.writer();
-            const request = this.buildRequest(this.state.original_request_body.len());
+            const request = _.buildRequest(_.state.original_request_body.len());
 
-            if (_ := this.http_proxy) {
-                if (this.url.isHTTPS()) {
+            if (_ := _.http_proxy) {
+                if (_.url.isHTTPS()) {
                     log("start proxy tunneling (https proxy)", .{});
-                    this.flags.proxy_tunneling = true;
-                    writeProxyConnect(@TypeOf(writer), writer, this)?;
+                    _.flags.proxy_tunneling = true;
+                    writeProxyConnect(@TypeOf(writer), writer, _)?;
                 } else {
                     log("start proxy request (http proxy)", .{});
                     writeProxyRequest(
                         @TypeOf(writer),
                         writer,
                         request,
-                        this,
+                        _,
                     )?;
                 }
             } else {
@@ -1472,15 +1472,15 @@ export @root @value struct HTTPClient {
 
             const headers_len = temporary_send_buffer.items.len;
             assert(temporary_send_buffer.items.len == writer.context.items.len);
-            if (this.state.request_body.len > 0 && temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0 && !this.flags.proxy_tunneling) {
+            if (_.state.request_body.len > 0 && temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0 && !_.flags.proxy_tunneling) {
                 let remain = temporary_send_buffer.items.ptr[temporary_send_buffer.items.len..temporary_send_buffer.capacity];
-                const wrote = @min(remain.len, this.state.request_body.len);
+                const wrote = @min(remain.len, _.state.request_body.len);
                 assert(wrote > 0);
-                @memcpy(remain[0..wrote], this.state.request_body[0..wrote]);
+                @memcpy(remain[0..wrote], _.state.request_body[0..wrote]);
                 temporary_send_buffer.items.len += wrote;
             }
 
-            const to_send = temporary_send_buffer.items[this.state.request_sent_len..];
+            const to_send = temporary_send_buffer.items[_.state.request_sent_len..];
             if (comptime Environment.allow_assert) {
                 assert(!socket.isShutdown());
                 assert(!socket.isClosed());
@@ -1489,26 +1489,26 @@ export @root @value struct HTTPClient {
             if (comptime is_first_call) {
                 if (amount == 0) {
                     return .{
-                        .has_sent_headers = this.state.request_sent_len >= headers_len,
+                        .has_sent_headers = _.state.request_sent_len >= headers_len,
                         .has_sent_body = false,
                         .try_sending_more_data = false,
                     };
                 }
             }
 
-            this.state.request_sent_len += amount;
-            const has_sent_headers = this.state.request_sent_len >= headers_len;
+            _.state.request_sent_len += amount;
+            const has_sent_headers = _.state.request_sent_len >= headers_len;
 
-            if (has_sent_headers && this.verbose != .none) {
-                printRequest(.http1_1, request, this.url.href, !this.flags.reject_unauthorized, this.state.request_body, this.verbose == .curl);
+            if (has_sent_headers && _.verbose != .none) {
+                printRequest(.http1_1, request, _.url.href, !_.flags.reject_unauthorized, _.state.request_body, _.verbose == .curl);
             }
 
-            if (has_sent_headers && this.state.request_body.len > 0) {
-                this.state.request_body = this.state.request_body[this.state.request_sent_len - headers_len ..];
+            if (has_sent_headers && _.state.request_body.len > 0) {
+                _.state.request_body = _.state.request_body[_.state.request_sent_len - headers_len ..];
             }
 
-            const has_sent_body = if (this.state.original_request_body == .bytes)
-                this.state.request_body.len == 0
+            const has_sent_body = if (_.state.original_request_body == .bytes)
+                _.state.request_body.len == 0
             else
                 false;
 
@@ -1519,8 +1519,8 @@ export @root @value struct HTTPClient {
             };
         }
 
-        pub fn flushStream(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            this.writeToStream(is_ssl, socket, "");
+        pub fn flushStream(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            _.writeToStream(is_ssl, socket, "");
         }
 
         fn writeToSocket(comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, data: []const u8) !usize {
@@ -1547,11 +1547,11 @@ export @root @value struct HTTPClient {
             return amount;
         }
 
-        fn writeToStreamUsingBuffer(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !bool {
+        fn writeToStreamUsingBuffer(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, buffer: *bun.io.StreamBuffer, data: []const u8) !bool {
             const to_send = buffer.slice();
             if (to_send.len > 0) {
                 const amount = writeToSocket(is_ssl, socket, to_send)?;
-                this.state.request_sent_len += amount;
+                _.state.request_sent_len += amount;
                 buffer.cursor += amount;
                 if (amount < to_send.len) {
                     if (data.len > 0) {
@@ -1566,48 +1566,48 @@ export @root @value struct HTTPClient {
 
             if (data.len > 0) {
                 const sent = writeToSocketWithBufferFallback(is_ssl, socket, buffer, data)?;
-                this.state.request_sent_len += sent;
+                _.state.request_sent_len += sent;
                 return sent < data.len;
             }
             return false;
         }
 
-        pub fn writeToStream(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, data: []const u8)  {
+        pub fn writeToStream(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, data: []const u8)  {
             log("flushStream", .{});
-            if (this.state.original_request_body != .stream) {
+            if (_.state.original_request_body != .stream) {
                 return;
             }
-            if (this.state.original_request_body.stream.buffer == null) return;
-            const stream_buffer = this.state.original_request_body.stream.buffer.?;
-            if (this.flags.upgrade_state == .pending) {
+            if (_.state.original_request_body.stream.buffer == null) return;
+            const stream_buffer = _.state.original_request_body.stream.buffer.?;
+            if (_.flags.upgrade_state == .pending) {
                 return;
             }
             const buffer = stream_buffer.acquire();
             const wasEmpty = buffer.isEmpty() && data.len == 0;
-            if (wasEmpty && this.state.original_request_body.stream.ended) {
+            if (wasEmpty && _.state.original_request_body.stream.ended) {
                 stream_buffer.release();
-                this.state.original_request_body.stream.detach();
-                if (this.flags.upgrade_state == .upgraded) {
+                _.state.original_request_body.stream.detach();
+                if (_.flags.upgrade_state == .upgraded) {
                     socket.shutdown();
                 }
                 return;
             }
 
-            const has_backpressure = this.writeToStreamUsingBuffer(is_ssl, socket, buffer, data) catch |e| {
+            const has_backpressure = _.writeToStreamUsingBuffer(is_ssl, socket, buffer, data) catch (e) {
                 stream_buffer.release();
-                this.state.original_request_body.stream.detach();
-                this.closeAndFail(e, is_ssl, socket);
+                _.state.original_request_body.stream.detach();
+                _.closeAndFail(e, is_ssl, socket);
                 return;
             };
 
             if (has_backpressure) {
                 stream_buffer.release();
             } else {
-                if (this.state.original_request_body.stream.ended) {
-                    this.state.request_stage = .done;
+                if (_.state.original_request_body.stream.ended) {
+                    _.state.request_stage = .done;
                     stream_buffer.release();
-                    this.state.original_request_body.stream.detach();
-                    if (this.flags.upgrade_state == .upgraded) {
+                    _.state.original_request_body.stream.detach();
+                    if (_.flags.upgrade_state == .upgraded) {
                         socket.shutdown();
                     }
                 } else {
@@ -1619,29 +1619,29 @@ export @root @value struct HTTPClient {
             }
         }
 
-        pub fn onWritable(*_: *HTTPClient, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            if (this.signals.get(.aborted)) {
-                this.closeAndAbort(is_ssl, socket);
+        pub fn onWritable(*_, comptime is_first_call: bool, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            if (_.signals.get(.aborted)) {
+                _.closeAndAbort(is_ssl, socket);
                 return;
             }
 
             if (comptime FeatureFlags.is_fetch_preconnect_supported) {
-                if (this.flags.is_preconnect_only) {
-                    this.onPreconnect(is_ssl, socket);
+                if (_.flags.is_preconnect_only) {
+                    _.onPreconnect(is_ssl, socket);
                     return;
                 }
             }
 
-            if (proxy := this.proxy_tunnel) {
+            if (proxy := _.proxy_tunnel) {
                 proxy.onWritable(is_ssl, socket);
             }
 
-            switch (this.state.request_stage) {
+            switch (_.state.request_stage) {
                 .pending, .headers, .opened => {
                     log("sendInitialRequestPayload", .{});
-                    this.setTimeout(socket);
-                    const result = this.sendInitialRequestPayload(is_first_call, is_ssl, socket) catch |e| {
-                        this.closeAndFail(e, is_ssl, socket);
+                    _.setTimeout(socket);
+                    const result = _.sendInitialRequestPayload(is_first_call, is_ssl, socket) catch (e) {
+                        _.closeAndFail(e, is_ssl, socket);
                         return;
                     };
                     const has_sent_headers = result.has_sent_headers;
@@ -1649,62 +1649,62 @@ export @root @value struct HTTPClient {
                     const try_sending_more_data = result.try_sending_more_data;
 
                     if (has_sent_headers && has_sent_body) {
-                        if (this.flags.proxy_tunneling) {
-                            this.state.request_stage = .proxy_handshake;
+                        if (_.flags.proxy_tunneling) {
+                            _.state.request_stage = .proxy_handshake;
                         } else {
-                            this.state.request_stage = .body;
-                            if (this.flags.is_streaming_request_body) {
-                                this.progressUpdate(is_ssl, this.getSslCtx(is_ssl), socket);
+                            _.state.request_stage = .body;
+                            if (_.flags.is_streaming_request_body) {
+                                _.progressUpdate(is_ssl, _.getSslCtx(is_ssl), socket);
                             }
                         }
                         return;
                     }
 
                     if (has_sent_headers) {
-                        if (this.flags.proxy_tunneling) {
-                            this.state.request_stage = .proxy_handshake;
+                        if (_.flags.proxy_tunneling) {
+                            _.state.request_stage = .proxy_handshake;
                         } else {
-                            this.state.request_stage = .body;
-                            if (this.flags.is_streaming_request_body) {
-                                this.progressUpdate(is_ssl, this.getSslCtx(is_ssl), socket);
+                            _.state.request_stage = .body;
+                            if (_.flags.is_streaming_request_body) {
+                                _.progressUpdate(is_ssl, _.getSslCtx(is_ssl), socket);
                             }
                         }
                         assert(
-                            (this.state.original_request_body == .bytes && this.state.request_body.len > 0) ||
-                                this.state.original_request_body == .sendfile || this.state.original_request_body == .stream,
+                            (_.state.original_request_body == .bytes && _.state.request_body.len > 0) ||
+                                _.state.original_request_body == .sendfile || _.state.original_request_body == .stream,
                         );
 
                         if (try_sending_more_data) {
-                            this.onWritable(false, is_ssl, socket);
+                            _.onWritable(false, is_ssl, socket);
                         }
                     } else {
-                        this.state.request_stage = .headers;
+                        _.state.request_stage = .headers;
                     }
                 },
                 .body => {
                     log("send body", .{});
-                    this.setTimeout(socket);
+                    _.setTimeout(socket);
 
-                    switch (this.state.original_request_body) {
+                    switch (_.state.original_request_body) {
                         .bytes => {
-                            const to_send = this.state.request_body;
+                            const to_send = _.state.request_body;
                             if (to_send.len > 0) {
-                                const sent = writeToSocket(is_ssl, socket, to_send) catch |e| {
-                                    this.closeAndFail(e, is_ssl, socket);
+                                const sent = writeToSocket(is_ssl, socket, to_send) catch (e) {
+                                    _.closeAndFail(e, is_ssl, socket);
                                     return;
                                 };
 
-                                this.state.request_sent_len += sent;
-                                this.state.request_body = this.state.request_body[sent..];
+                                _.state.request_sent_len += sent;
+                                _.state.request_body = _.state.request_body[sent..];
                             }
 
-                            if (this.state.request_body.len == 0) {
-                                this.state.request_stage = .done;
+                            if (_.state.request_body.len == 0) {
+                                _.state.request_stage = .done;
                                 return;
                             }
                         },
                         .stream => {
-                            this.flushStream(is_ssl, socket);
+                            _.flushStream(is_ssl, socket);
                         },
                         .sendfile => |*sendfile| {
                             if (comptime is_ssl) {
@@ -1713,11 +1713,11 @@ export @root @value struct HTTPClient {
 
                             switch (sendfile.write(socket)) {
                                 .done => {
-                                    this.state.request_stage = .done;
+                                    _.state.request_stage = .done;
                                     return;
                                 },
                                 .err => |err| {
-                                    this.closeAndFail(err, false, socket);
+                                    _.closeAndFail(err, false, socket);
                                     return;
                                 },
                                 .again => {
@@ -1729,24 +1729,24 @@ export @root @value struct HTTPClient {
                 },
                 .proxy_body => {
                     log("send proxy body", .{});
-                    if (proxy := this.proxy_tunnel) {
-                        switch (this.state.original_request_body) {
+                    if (proxy := _.proxy_tunnel) {
+                        switch (_.state.original_request_body) {
                             .bytes => {
-                                this.setTimeout(socket);
+                                _.setTimeout(socket);
 
-                                const to_send = this.state.request_body;
+                                const to_send = _.state.request_body;
                                 const sent = proxy.write(to_send) catch return;
 
-                                this.state.request_sent_len += sent;
-                                this.state.request_body = this.state.request_body[sent..];
+                                _.state.request_sent_len += sent;
+                                _.state.request_body = _.state.request_body[sent..];
 
-                                if (this.state.request_body.len == 0) {
-                                    this.state.request_stage = .done;
+                                if (_.state.request_body.len == 0) {
+                                    _.state.request_stage = .done;
                                     return;
                                 }
                             },
                             .stream => {
-                                this.flushStream(is_ssl, socket);
+                                _.flushStream(is_ssl, socket);
                             },
                             .sendfile => {
                                 @panic("sendfile is only supported without SSL. This code should never have been reached!");
@@ -1756,8 +1756,8 @@ export @root @value struct HTTPClient {
                 },
                 .proxy_headers => {
                     log("send proxy headers", .{});
-                    if (proxy := this.proxy_tunnel) {
-                        this.setTimeout(socket);
+                    if (proxy := _.proxy_tunnel) {
+                        _.setTimeout(socket);
                         let stack_buffer = std.heap.stackFallback(1024 * 16, bun.default_allocator);
                         const stack_allocator = stack_buffer.get();
                         let temporary_send_buffer = std.array_list.Managed(u8).fromOwnedSlice(stack_allocator, &stack_buffer.buffer);
@@ -1765,27 +1765,27 @@ export @root @value struct HTTPClient {
                         const _temporary_send_buffer_guard = DeinitGuard<@TypeOf(temporary_send_buffer)>{ ptr: &temporary_send_buffer };
                         const writer = &temporary_send_buffer.writer();
 
-                        const request = this.buildRequest(this.state.request_body.len);
+                        const request = _.buildRequest(_.state.request_body.len);
                         writeRequest(
                             @TypeOf(writer),
                             writer,
                             request,
                         ) catch {
-                            this.closeAndFail(error.OutOfMemory, is_ssl, socket);
+                            _.closeAndFail(error.OutOfMemory, is_ssl, socket);
                             return;
                         };
 
                         const headers_len = temporary_send_buffer.items.len;
                         assert(temporary_send_buffer.items.len == writer.context.items.len);
-                        if (this.state.request_body.len > 0 && temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0) {
+                        if (_.state.request_body.len > 0 && temporary_send_buffer.capacity - temporary_send_buffer.items.len > 0) {
                             let remain = temporary_send_buffer.items.ptr[temporary_send_buffer.items.len..temporary_send_buffer.capacity];
-                            const wrote = @min(remain.len, this.state.request_body.len);
+                            const wrote = @min(remain.len, _.state.request_body.len);
                             assert(wrote > 0);
-                            @memcpy(remain[0..wrote], this.state.request_body[0..wrote]);
+                            @memcpy(remain[0..wrote], _.state.request_body[0..wrote]);
                             temporary_send_buffer.items.len += wrote;
                         }
 
-                        const to_send = temporary_send_buffer.items[this.state.request_sent_len..];
+                        const to_send = temporary_send_buffer.items[_.state.request_sent_len..];
                         if (comptime Environment.allow_assert) {
                             assert(!socket.isShutdown());
                             assert(!socket.isClosed());
@@ -1799,32 +1799,32 @@ export @root @value struct HTTPClient {
                             }
                         }
 
-                        this.state.request_sent_len += @as(usize, @intCast(amount));
-                        const has_sent_headers = this.state.request_sent_len >= headers_len;
+                        _.state.request_sent_len += @as(usize, @intCast(amount));
+                        const has_sent_headers = _.state.request_sent_len >= headers_len;
 
-                        if (has_sent_headers && this.state.request_body.len > 0) {
-                            this.state.request_body = this.state.request_body[this.state.request_sent_len - headers_len ..];
+                        if (has_sent_headers && _.state.request_body.len > 0) {
+                            _.state.request_body = _.state.request_body[_.state.request_sent_len - headers_len ..];
                         }
 
-                        const has_sent_body = this.state.request_body.len == 0;
+                        const has_sent_body = _.state.request_body.len == 0;
 
                         if (has_sent_headers && has_sent_body) {
-                            this.state.request_stage = .done;
+                            _.state.request_stage = .done;
                             return;
                         }
 
                         if (has_sent_headers) {
-                            this.state.request_stage = .proxy_body;
-                            if (this.flags.is_streaming_request_body) {
-                                this.progressUpdate(is_ssl, this.getSslCtx(is_ssl), socket);
+                            _.state.request_stage = .proxy_body;
+                            if (_.flags.is_streaming_request_body) {
+                                _.progressUpdate(is_ssl, _.getSslCtx(is_ssl), socket);
                             }
-                            assert(this.state.request_body.len > 0);
+                            assert(_.state.request_body.len > 0);
 
                             if (amount == to_send.len) {
-                                this.onWritable(false, is_ssl, socket);
+                                _.onWritable(false, is_ssl, socket);
                             }
                         } else {
-                            this.state.request_stage = .proxy_headers;
+                            _.state.request_stage = .proxy_headers;
                         }
                     }
                 },
@@ -1835,20 +1835,20 @@ export @root @value struct HTTPClient {
             }
         }
 
-        pub fn closeAndFail(*_: *HTTPClient, err: anyerror, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+        pub fn closeAndFail(*_, err: anyerror, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
             log("closeAndFail: {s}", .{@errorName(err)});
             NewHTTPContext(is_ssl).terminateSocket(socket);
-            this.fail(err);
+            _.fail(err);
         }
 
-        fn startProxyHandshake(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, start_payload: []const u8)  {
+        fn startProxyHandshake(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket, start_payload: []const u8)  {
             log("startProxyHandshake", .{});
-            const ssl_options = if (this.tls_props != null) this.tls_props.?.get().* else jsc.API.ServerConfig.SSLConfig.zero;
-            ProxyTunnel.start(this, is_ssl, socket, ssl_options, start_payload);
+            const ssl_options = if (_.tls_props != null) _.tls_props.?.get().* else jsc.API.ServerConfig.SSLConfig.zero;
+            ProxyTunnel.start(_, is_ssl, socket, ssl_options, start_payload);
         }
 
         inline fn handleShortRead(
-            *_: *HTTPClient,
+            *_,
             comptime is_ssl: bool,
             incoming_data: []const u8,
             socket: NewHTTPContext(is_ssl).HTTPSocket,
@@ -1857,14 +1857,14 @@ export @root @value struct HTTPClient {
             if (needs_move) {
                 const to_copy = incoming_data;
                 if (to_copy.len > 0) {
-                    bun.handleOom(this.state.response_message_buffer.append(to_copy));
+                    bun.handleOom(_.state.response_message_buffer.append(to_copy));
                 }
             }
-            this.setTimeout(socket);
+            _.setTimeout(socket);
         }
 
         pub fn handleOnDataHeaders(
-            *_: *HTTPClient,
+            *_,
             comptime is_ssl: bool,
             incoming_data: []const u8,
             ctx: *NewHTTPContext(is_ssl),
@@ -1873,19 +1873,19 @@ export @root @value struct HTTPClient {
             log("handleOnDataHeader data: {s}", .{incoming_data});
             let to_read = incoming_data;
             let needs_move = true;
-            if (this.state.response_message_buffer.list.items.len > 0) {
-                bun.handleOom(this.state.response_message_buffer.appendSliceExact(incoming_data));
-                to_read = this.state.response_message_buffer.list.items;
+            if (_.state.response_message_buffer.list.items.len > 0) {
+                bun.handleOom(_.state.response_message_buffer.appendSliceExact(incoming_data));
+                to_read = _.state.response_message_buffer.list.items;
                 needs_move = false;
             }
 
             while (true) {
                 let amount_read: usize = 0;
-                this.state.pending_response = picohttp.Response{};
+                _.state.pending_response = picohttp.Response{};
 
                 if (to_read.len < 16) {
                     log("handleShortRead", .{});
-                    this.handleShortRead(is_ssl, incoming_data, socket, needs_move);
+                    _.handleShortRead(is_ssl, incoming_data, socket, needs_move);
                     return;
                 }
 
@@ -1893,34 +1893,34 @@ export @root @value struct HTTPClient {
                     to_read,
                     &shared_response_headers_buf,
                     &amount_read,
-                ) catch |e| {
+                ) catch (e) {
                     if (e == error.ShortRead) {
-                        this.handleShortRead(is_ssl, incoming_data, socket, needs_move);
+                        _.handleShortRead(is_ssl, incoming_data, socket, needs_move);
                     } else {
-                        this.closeAndFail(e, is_ssl, socket);
+                        _.closeAndFail(e, is_ssl, socket);
                     }
                     return;
                 };
 
-                this.state.pending_response = response;
+                _.state.pending_response = response;
                 to_read = to_read[@min(@as(usize, @intCast(response.bytes_read)), to_read.len)..];
 
                 if (response.status_code == 101) {
-                    if (this.flags.upgrade_state == .none) {
-                        this.closeAndFail(error.UnrequestedUpgrade, is_ssl, socket);
+                    if (_.flags.upgrade_state == .none) {
+                        _.closeAndFail(error.UnrequestedUpgrade, is_ssl, socket);
                         return;
                     }
-                    this.flags.upgrade_state = .upgraded;
-                    if (upgraded := this.signals.upgraded) {
+                    _.flags.upgrade_state = .upgraded;
+                    if (upgraded := _.signals.upgraded) {
                         upgraded.store(true, .monotonic);
                     }
-                    this.flushStream(is_ssl, socket);
+                    _.flushStream(is_ssl, socket);
                     break;
                 }
 
                 if (response.status_code >= 100 && response.status_code < 200) {
                     log("information headers", .{});
-                    this.state.pending_response = null;
+                    _.state.pending_response = null;
                     if (to_read.len == 0) {
                         return;
                     }
@@ -1930,230 +1930,230 @@ export @root @value struct HTTPClient {
                 break;
             }
 
-            let response = this.state.pending_response.?;
-            const should_continue = this.handleResponseMetadata(
+            let response = _.state.pending_response.?;
+            const should_continue = _.handleResponseMetadata(
                 &response,
-            ) catch |e| {
-                this.closeAndFail(e, is_ssl, socket);
+            ) catch (e) {
+                _.closeAndFail(e, is_ssl, socket);
                 return;
             };
 
-            if (this.state.content_encoding_i < response.headers.list.len && !this.state.flags.did_set_content_encoding) {
+            if (_.state.content_encoding_i < response.headers.list.len && !_.state.flags.did_set_content_encoding) {
                 const mutable_headers: std.ArrayListUnmanaged(picohttp.Header) = .{ .items = response.headers.list, .capacity = response.headers.list.len };
-                this.state.flags.did_set_content_encoding = true;
+                _.state.flags.did_set_content_encoding = true;
                 response.headers = .{ .list = mutable_headers.items };
-                this.state.content_encoding_i = std.math.maxInt(@TypeOf(this.state.content_encoding_i));
-                this.state.pending_response = response;
+                _.state.content_encoding_i = std.math.maxInt(@TypeOf(_.state.content_encoding_i));
+                _.state.pending_response = response;
             }
 
             if (should_continue == .finished) {
-                if (this.state.flags.is_redirect_pending) {
-                    this.doRedirect(is_ssl, ctx, socket);
+                if (_.state.flags.is_redirect_pending) {
+                    _.doRedirect(is_ssl, ctx, socket);
                     return;
                 }
-                this.cloneMetadata();
-                this.state.flags.received_last_chunk = true;
-                this.state.content_length = 0;
-                this.progressUpdate(is_ssl, ctx, socket);
+                _.cloneMetadata();
+                _.state.flags.received_last_chunk = true;
+                _.state.content_length = 0;
+                _.progressUpdate(is_ssl, ctx, socket);
                 return;
             }
 
-            if (this.flags.proxy_tunneling && this.proxy_tunnel == null) {
-                this.startProxyHandshake(is_ssl, socket, to_read);
+            if (_.flags.proxy_tunneling && _.proxy_tunnel == null) {
+                _.startProxyHandshake(is_ssl, socket, to_read);
                 return;
             }
 
-            this.cloneMetadata();
+            _.cloneMetadata();
 
             if (to_read.len == 0) {
-                if (this.signals.get(.header_progress)) {
-                    this.progressUpdate(is_ssl, ctx, socket);
+                if (_.signals.get(.header_progress)) {
+                    _.progressUpdate(is_ssl, ctx, socket);
                 }
                 return;
             }
 
-            if (this.state.response_stage == .body) {
-                const report_progress = this.handleResponseBody(to_read, true) catch |e| {
-                    this.closeAndFail(e, is_ssl, socket);
+            if (_.state.response_stage == .body) {
+                const report_progress = _.handleResponseBody(to_read, true) catch (e) {
+                    _.closeAndFail(e, is_ssl, socket);
                     return;
                 };
 
                 if (report_progress) {
-                    this.progressUpdate(is_ssl, ctx, socket);
+                    _.progressUpdate(is_ssl, ctx, socket);
                     return;
                 }
-            } else if (this.state.response_stage == .body_chunk) {
-                this.setTimeout(socket);
-                const report_progress = this.handleResponseBodyChunkedEncoding(to_read) catch |e| {
-                    this.closeAndFail(e, is_ssl, socket);
+            } else if (_.state.response_stage == .body_chunk) {
+                _.setTimeout(socket);
+                const report_progress = _.handleResponseBodyChunkedEncoding(to_read) catch (e) {
+                    _.closeAndFail(e, is_ssl, socket);
                     return;
                 };
 
                 if (report_progress) {
-                    this.progressUpdate(is_ssl, ctx, socket);
+                    _.progressUpdate(is_ssl, ctx, socket);
                     return;
                 }
             }
 
-            if (this.signals.get(.header_progress)) {
-                this.progressUpdate(is_ssl, ctx, socket);
+            if (_.signals.get(.header_progress)) {
+                _.progressUpdate(is_ssl, ctx, socket);
                 return;
             }
         }
 
         pub fn onData(
-            *_: *HTTPClient,
+            *_,
             comptime is_ssl: bool,
             incoming_data: []const u8,
             ctx: *NewHTTPContext(is_ssl),
             socket: NewHTTPContext(is_ssl).HTTPSocket,
         )  {
             log("onData {}", .{incoming_data.len});
-            if (this.signals.get(.aborted)) {
-                this.closeAndAbort(is_ssl, socket);
+            if (_.signals.get(.aborted)) {
+                _.closeAndAbort(is_ssl, socket);
                 return;
             }
 
-            if (proxy := this.proxy_tunnel) {
-                this.setTimeout(socket);
+            if (proxy := _.proxy_tunnel) {
+                _.setTimeout(socket);
                 proxy.receive(incoming_data);
                 return;
             }
 
-            switch (this.state.response_stage) {
+            switch (_.state.response_stage) {
                 .pending, .headers => {
-                    this.handleOnDataHeaders(is_ssl, incoming_data, ctx, socket);
+                    _.handleOnDataHeaders(is_ssl, incoming_data, ctx, socket);
                 },
                 .body => {
-                    this.setTimeout(socket);
+                    _.setTimeout(socket);
 
-                    const report_progress = this.handleResponseBody(incoming_data, false) catch |e| {
-                        this.closeAndFail(e, is_ssl, socket);
+                    const report_progress = _.handleResponseBody(incoming_data, false) catch (e) {
+                        _.closeAndFail(e, is_ssl, socket);
                         return;
                     };
 
                     if (report_progress) {
-                        this.progressUpdate(is_ssl, ctx, socket);
+                        _.progressUpdate(is_ssl, ctx, socket);
                         return;
                     }
                 },
 
                 .body_chunk => {
-                    this.setTimeout(socket);
+                    _.setTimeout(socket);
 
-                    const report_progress = this.handleResponseBodyChunkedEncoding(incoming_data) catch |e| {
-                        this.closeAndFail(e, is_ssl, socket);
+                    const report_progress = _.handleResponseBodyChunkedEncoding(incoming_data) catch (e) {
+                        _.closeAndFail(e, is_ssl, socket);
                         return;
                     };
 
                     if (report_progress) {
-                        this.progressUpdate(is_ssl, ctx, socket);
+                        _.progressUpdate(is_ssl, ctx, socket);
                         return;
                     }
                 },
 
                 .fail => {},
                 else => {
-                    this.state.pending_response = null;
-                    this.closeAndFail(error.UnexpectedData, is_ssl, socket);
+                    _.state.pending_response = null;
+                    _.closeAndFail(error.UnexpectedData, is_ssl, socket);
                     return;
                 },
             }
         }
 
-        pub fn closeAndAbort(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            this.closeAndFail(error.Aborted, is_ssl, socket);
+        pub fn closeAndAbort(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            _.closeAndFail(error.Aborted, is_ssl, socket);
         }
 
-        pub fn setTimeout(*_: *HTTPClient, socket: anytype)  {
-            if (this.flags.disable_timeout) return;
+        pub fn setTimeout(socket: anytype)  {
+            if (_.flags.disable_timeout) return;
             socket.setTimeout(idle_timeout_seconds);
         }
 
-        pub fn drainResponseBody(*_: *HTTPClient, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            switch (this.state.stage) {
+        pub fn drainResponseBody(*_, comptime is_ssl: bool, socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            switch (_.state.stage) {
                 .done, .fail => return;
                 else => {},
             }
 
-            if (this.state.fail != null) {
+            if (_.state.fail != null) {
                 return;
             }
 
-            if (this.state.flags.is_redirect_pending) {
+            if (_.state.flags.is_redirect_pending) {
                 return;
             }
 
-            if (this.state.body_out_str == null) return;
-            const body_out_str = this.state.body_out_str.?;
+            if (_.state.body_out_str == null) return;
+            const body_out_str = _.state.body_out_str.?;
             if (body_out_str.list.items.len == 0) {
                 return;
             }
 
-            this.sendProgressUpdateWithoutStageCheck(is_ssl, this.getSslCtx(is_ssl), socket);
+            _.sendProgressUpdateWithoutStageCheck(is_ssl, _.getSslCtx(is_ssl), socket);
         }
 
-        fn sendProgressUpdateWithoutStageCheck(*_: *HTTPClient, comptime is_ssl: bool, ctx: *NewHTTPContext(is_ssl), socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            if (this.flags.protocol != .http1_1) return this.sendProgressUpdateMultiplexed();
-            const out_str = this.state.body_out_str.?;
+        fn sendProgressUpdateWithoutStageCheck(*_, comptime is_ssl: bool, ctx: *NewHTTPContext(is_ssl), socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            if (_.flags.protocol != .http1_1) return _.sendProgressUpdateMultiplexed();
+            const out_str = _.state.body_out_str.?;
             const body = out_str.*;
-            const result = this.toResult();
+            const result = _.toResult();
             const is_done = !result.has_more;
 
             log("progressUpdate {}", .{is_done});
 
-            const callback = this.result_callback;
+            const callback = _.result_callback;
 
             if (is_done) {
-                this.unregisterAbortTracker();
+                _.unregisterAbortTracker();
                 let tunnel_poolable = true;
-                if (t := this.proxy_tunnel) {
+                if (t := _.proxy_tunnel) {
                     let wrapper_ok = false;
                     if (*w := t.wrapper) {
                         wrapper_ok = !w.isShutdown();
                     }
-                    tunnel_poolable = this.state.request_stage == .done &&
+                    tunnel_poolable = _.state.request_stage == .done &&
                         t.write_buffer.isEmpty() &&
                         wrapper_ok;
                 }
 
-                if (this.isKeepAlivePossible() && !socket.isClosedOrHasError() && tunnel_poolable) {
+                if (_.isKeepAlivePossible() && !socket.isClosedOrHasError() && tunnel_poolable) {
                     log("release socket", .{});
-                    const tunnel = this.proxy_tunnel;
-                    this.proxy_tunnel = null;
-                    if (t := tunnel) t.detachOwner(this);
+                    const tunnel = _.proxy_tunnel;
+                    _.proxy_tunnel = null;
+                    if (t := tunnel) t.detachOwner(_);
                     ctx.releaseSocket(
                         socket,
-                        this.flags.did_have_handshaking_error && !this.flags.reject_unauthorized,
-                        this.connected_url.hostname,
-                        this.connected_url.getPortAuto(),
-                        this.tls_props,
+                        _.flags.did_have_handshaking_error && !_.flags.reject_unauthorized,
+                        _.connected_url.hostname,
+                        _.connected_url.getPortAuto(),
+                        _.tls_props,
                         tunnel,
-                        if (tunnel != null) this.url.hostname else "",
-                        if (tunnel != null) this.url.getPortAuto() else 0,
-                        if (tunnel != null) this.proxyAuthHash() else 0,
+                        if (tunnel != null) _.url.hostname else "",
+                        if (tunnel != null) _.url.getPortAuto() else 0,
+                        if (tunnel != null) _.proxyAuthHash() else 0,
                         null,
                     );
                 } else {
-                    if (tunnel := this.proxy_tunnel) {
+                    if (tunnel := _.proxy_tunnel) {
                         log("close the tunnel", .{});
-                        this.proxy_tunnel = null;
+                        _.proxy_tunnel = null;
                         tunnel.shutdown();
                         tunnel.detachAndDeref();
                     }
                     NewHTTPContext(is_ssl).closeSocket(socket);
                 }
 
-                this.state.reset(this.allocator);
-                this.state.response_stage = .done;
-                this.state.request_stage = .done;
-                this.state.stage = .done;
-                this.flags.proxy_tunneling = false;
+                _.state.reset(_.allocator);
+                _.state.response_stage = .done;
+                _.state.request_stage = .done;
+                _.state.stage = .done;
+                _.flags.proxy_tunneling = false;
                 log("done", .{});
             }
 
             result.body.?.* = body;
-            callback.run(@fieldParentPtr("client", this), result);
+            callback.run(@fieldParentPtr("client", _), result);
 
             if (comptime print_every > 0) {
                 print_every_i += 1;
@@ -2166,61 +2166,61 @@ export @root @value struct HTTPClient {
             }
         }
 
-        pub fn progressUpdate(*_: *HTTPClient, comptime is_ssl: bool, ctx: *NewHTTPContext(is_ssl), socket: NewHTTPContext(is_ssl).HTTPSocket)  {
-            if (this.state.stage != .done && this.state.stage != .fail) {
-                if (this.state.flags.is_redirect_pending && this.state.fail == null) {
-                    if (this.state.isDone()) {
-                        this.doRedirect(is_ssl, ctx, socket);
+        pub fn progressUpdate(*_, comptime is_ssl: bool, ctx: *NewHTTPContext(is_ssl), socket: NewHTTPContext(is_ssl).HTTPSocket)  {
+            if (_.state.stage != .done && _.state.stage != .fail) {
+                if (_.state.flags.is_redirect_pending && _.state.fail == null) {
+                    if (_.state.isDone()) {
+                        _.doRedirect(is_ssl, ctx, socket);
                     }
                     return;
                 }
 
-                this.sendProgressUpdateWithoutStageCheck(is_ssl, ctx, socket);
+                _.sendProgressUpdateWithoutStageCheck(is_ssl, ctx, socket);
             }
         }
 
         pub fn doRedirect(
-            *_: *HTTPClient,
+            *_,
             comptime is_ssl: bool,
             ctx: *NewHTTPContext(is_ssl),
             socket: NewHTTPContext(is_ssl).HTTPSocket,
         )  {
-            if (this.flags.protocol != .http1_1) return this.doRedirectMultiplexed();
+            if (_.flags.protocol != .http1_1) return _.doRedirectMultiplexed();
             log("doRedirect", .{});
-            if (this.state.original_request_body == .stream) {
-                this.flags.is_streaming_request_body = false;
+            if (_.state.original_request_body == .stream) {
+                _.flags.is_streaming_request_body = false;
             }
 
-            this.unix_socket_path.deinit();
-            this.unix_socket_path = jsc.ZigString.Slice.empty;
-            const request_body = if (this.state.flags.resend_request_body_on_redirect && this.state.original_request_body == .bytes)
-                this.state.original_request_body.bytes
+            _.unix_socket_path.deinit();
+            _.unix_socket_path = jsc.ZigString.Slice.empty;
+            const request_body = if (_.state.flags.resend_request_body_on_redirect && _.state.original_request_body == .bytes)
+                _.state.original_request_body.bytes
             else
                 "";
 
-            this.state.response_message_buffer.deinit();
+            _.state.response_message_buffer.deinit();
 
-            const body_out_str = this.state.body_out_str.?;
-            this.remaining_redirect_count = this.remaining_redirect_count -| 1;
-            this.flags.redirected = true;
-            assert(this.redirect_type == FetchRedirect.follow);
-            this.unregisterAbortTracker();
+            const body_out_str = _.state.body_out_str.?;
+            _.remaining_redirect_count = _.remaining_redirect_count -| 1;
+            _.flags.redirected = true;
+            assert(_.redirect_type == FetchRedirect.follow);
+            _.unregisterAbortTracker();
 
-            if (tunnel := this.proxy_tunnel) {
+            if (tunnel := _.proxy_tunnel) {
                 log("close the tunnel in redirect", .{});
-                this.proxy_tunnel = null;
+                _.proxy_tunnel = null;
                 tunnel.shutdown();
                 tunnel.detachAndDeref();
                 NewHTTPContext(is_ssl).closeSocket(socket);
-            } else if (this.state.request_stage == .done && this.isKeepAlivePossible() && !socket.isClosedOrHasError()) {
+            } else if (_.state.request_stage == .done && _.isKeepAlivePossible() && !socket.isClosedOrHasError()) {
                 log("Keep-Alive release in redirect", .{});
-                assert(this.connected_url.hostname.len > 0);
+                assert(_.connected_url.hostname.len > 0);
                 ctx.releaseSocket(
                     socket,
-                    this.flags.did_have_handshaking_error && !this.flags.reject_unauthorized,
-                    this.connected_url.hostname,
-                    this.connected_url.getPortAuto(),
-                    this.tls_props,
+                    _.flags.did_have_handshaking_error && !_.flags.reject_unauthorized,
+                    _.connected_url.hostname,
+                    _.connected_url.getPortAuto(),
+                    _.tls_props,
                     null,
                     "",
                     0,
@@ -2230,86 +2230,86 @@ export @root @value struct HTTPClient {
             } else {
                 NewHTTPContext(is_ssl).closeSocket(socket);
             }
-            this.connected_url = bun.URL{};
-            if (this.prev_redirect.len > 0) {
-                bun.default_allocator.free(this.prev_redirect);
-                this.prev_redirect = "";
+            _.connected_url = bun.URL{};
+            if (_.prev_redirect.len > 0) {
+                bun.default_allocator.free(_.prev_redirect);
+                _.prev_redirect = "";
             }
 
-            if (this.remaining_redirect_count == 0) {
-                this.fail(error.TooManyRedirects);
+            if (_.remaining_redirect_count == 0) {
+                _.fail(error.TooManyRedirects);
                 return;
             }
-            this.state.reset(this.allocator);
+            _.state.reset(_.allocator);
             log("doRedirect state reset", .{});
-            this.flags.proxy_tunneling = false;
-            if (tunnel := this.proxy_tunnel) {
-                this.proxy_tunnel = null;
+            _.flags.proxy_tunneling = false;
+            if (tunnel := _.proxy_tunnel) {
+                _.proxy_tunnel = null;
                 tunnel.detachAndDeref();
             }
-            this.flags.protocol = .http1_1;
+            _.flags.protocol = .http1_1;
 
-            return this.start(.{ .bytes = request_body }, body_out_str);
+            return _.start(.{ .bytes = request_body }, body_out_str);
         }
 
-        pub fn handleResponseBody(*_: *HTTPClient, incoming_data: []const u8, is_only_buffer: bool) !bool {
-            assert(this.state.transfer_encoding == .identity);
-            const content_length = this.state.content_length;
+        pub fn handleResponseBody(*_, incoming_data: []const u8, is_only_buffer: bool) !bool {
+            assert(_.state.transfer_encoding == .identity);
+            const content_length = _.state.content_length;
             // is it exactly as much as we need?
             if (is_only_buffer && content_length != null && incoming_data.len >= content_length.?) {
-                this.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?])?;
+                _.handleResponseBodyFromSinglePacket(incoming_data[0..content_length.?])?;
                 return true;
             } else {
-                return this.handleResponseBodyFromMultiplePackets(incoming_data);
+                return _.handleResponseBodyFromMultiplePackets(incoming_data);
             }
         }
 
-        fn handleResponseBodyFromSinglePacket(*_: *HTTPClient, incoming_data: []const u8) !void {
-            if (!this.state.isChunkedEncoding()) {
-                this.state.total_body_received += incoming_data.len;
-                log("handleResponseBodyFromSinglePacket {d}", .{this.state.total_body_received});
+        fn handleResponseBodyFromSinglePacket(*_, incoming_data: []const u8) !void {
+            if (!_.state.isChunkedEncoding()) {
+                _.state.total_body_received += incoming_data.len;
+                log("handleResponseBodyFromSinglePacket {d}", .{_.state.total_body_received});
             }
             defer {
-                if (progress := this.progress_node) {
+                if (progress := _.progress_node) {
                     progress.activate();
                     progress.setCompletedItems(incoming_data.len);
                     progress.context.maybeRefresh();
                 }
             }
             // we can ignore the body data in redirects
-            if (this.state.flags.is_redirect_pending) return;
+            if (_.state.flags.is_redirect_pending) return;
 
-            if (this.state.encoding.isCompressed()) {
-                this.state.decompressBytes(incoming_data, this.state.body_out_str.?, true)?;
+            if (_.state.encoding.isCompressed()) {
+                _.state.decompressBytes(incoming_data, _.state.body_out_str.?, true)?;
             } else {
-                this.state.getBodyBuffer().appendSliceExact(incoming_data)?;
+                _.state.getBodyBuffer().appendSliceExact(incoming_data)?;
             }
 
-            if (this.state.response_message_buffer.owns(incoming_data)) {
+            if (_.state.response_message_buffer.owns(incoming_data)) {
                 if (comptime Environment.allow_assert) {
                     // i'm not sure why this would happen and i haven't seen it happen
                     // but we should check
-                    assert(this.state.getBodyBuffer().list.items.ptr != this.state.response_message_buffer.list.items.ptr);
+                    assert(_.state.getBodyBuffer().list.items.ptr != _.state.response_message_buffer.list.items.ptr);
                 }
 
-                this.state.response_message_buffer.deinit();
+                _.state.response_message_buffer.deinit();
             }
         }
 
-        fn handleResponseBodyFromMultiplePackets(*_: *HTTPClient, incoming_data: []const u8) !bool {
-            let buffer = this.state.getBodyBuffer();
-            const content_length = this.state.content_length;
+        fn handleResponseBodyFromMultiplePackets(*_, incoming_data: []const u8) !bool {
+            let buffer = _.state.getBodyBuffer();
+            const content_length = _.state.content_length;
 
             let remainder: []const u8 = undefined;
             if (content_length != null) {
-                const remaining_content_length = content_length.? -| this.state.total_body_received;
+                const remaining_content_length = content_length.? -| _.state.total_body_received;
                 remainder = incoming_data[0..@min(incoming_data.len, remaining_content_length)];
             } else {
                 remainder = incoming_data;
             }
 
             // we can ignore the body data in redirects
-            if (!this.state.flags.is_redirect_pending) {
+            if (!_.state.flags.is_redirect_pending) {
                 if (buffer.list.items.len == 0 && incoming_data.len < preallocate_max) {
                     buffer.list.ensureTotalCapacityPrecise(buffer.allocator, incoming_data.len) catch {};
                 }
@@ -2317,27 +2317,27 @@ export @root @value struct HTTPClient {
                 * = buffer.write(remainder)?;
             }
 
-            this.state.total_body_received += remainder.len;
-            log("handleResponseBodyFromMultiplePackets {d}", .{this.state.total_body_received});
-            if (progress := this.progress_node) {
+            _.state.total_body_received += remainder.len;
+            log("handleResponseBodyFromMultiplePackets {d}", .{_.state.total_body_received});
+            if (progress := _.progress_node) {
                 progress.activate();
-                progress.setCompletedItems(this.state.total_body_received);
+                progress.setCompletedItems(_.state.total_body_received);
                 progress.context.maybeRefresh();
             }
 
             // done or streaming
-            const is_done = content_length != null && this.state.total_body_received >= content_length.?;
-            if (is_done || this.signals.get(.response_body_streaming) || content_length == null) {
+            const is_done = content_length != null && _.state.total_body_received >= content_length.?;
+            if (is_done || _.signals.get(.response_body_streaming) || content_length == null) {
                 const is_final_chunk = is_done;
-                const processed = this.state.processBodyBuffer(buffer.*, is_final_chunk)?;
+                const processed = _.state.processBodyBuffer(buffer.*, is_final_chunk)?;
 
                 // We can only use the libdeflate fast path when we are not streaming
                 // If we ever call processBodyBuffer again, it cannot go through the fast path.
-                this.state.flags.is_libdeflate_fast_path_disabled = true;
+                _.state.flags.is_libdeflate_fast_path_disabled = true;
 
-                if (progress := this.progress_node) {
+                if (progress := _.progress_node) {
                     progress.activate();
-                    progress.setCompletedItems(this.state.total_body_received);
+                    progress.setCompletedItems(_.state.total_body_received);
                     progress.context.maybeRefresh();
                 }
                 return is_done || processed;
@@ -2346,22 +2346,22 @@ export @root @value struct HTTPClient {
         }
 
         pub fn handleResponseBodyChunkedEncoding(
-            *_: *HTTPClient,
+            *_,
             incoming_data: []const u8,
         ) !bool {
-            if (incoming_data.len <= single_packet_small_buffer.len && this.state.getBodyBuffer().list.items.len == 0) {
-                return this.handleResponseBodyChunkedEncodingFromSinglePacket(incoming_data)?;
+            if (incoming_data.len <= single_packet_small_buffer.len && _.state.getBodyBuffer().list.items.len == 0) {
+                return _.handleResponseBodyChunkedEncodingFromSinglePacket(incoming_data)?;
             } else {
-                return this.handleResponseBodyChunkedEncodingFromMultiplePackets(incoming_data)?;
+                return _.handleResponseBodyChunkedEncodingFromMultiplePackets(incoming_data)?;
             }
         }
 
         fn handleResponseBodyChunkedEncodingFromMultiplePackets(
-            *_: *HTTPClient,
+            *_,
             incoming_data: []const u8,
         ) !bool {
-            let decoder = *this.state.chunked_decoder;
-            let buffer_ptr = this.state.getBodyBuffer();
+            let decoder = *_.state.chunked_decoder;
+            let buffer_ptr = _.state.getBodyBuffer();
             let buffer = buffer_ptr.*;
             buffer.appendSlice(incoming_data)?;
 
@@ -2377,8 +2377,8 @@ export @root @value struct HTTPClient {
                 &bytes_decoded,
             );
             buffer.list.items.len = buffer.list.items.len -| (incoming_data.len - bytes_decoded);
-            this.state.total_body_received += bytes_decoded;
-            log("handleResponseBodyChunkedEncodingFromMultiplePackets {d}", .{this.state.total_body_received});
+            _.state.total_body_received += bytes_decoded;
+            log("handleResponseBodyChunkedEncodingFromMultiplePackets {d}", .{_.state.total_body_received});
 
             buffer_ptr.* = buffer;
 
@@ -2387,29 +2387,29 @@ export @root @value struct HTTPClient {
                 -1 => return error.InvalidHTTPResponse,
                 // Needs more data
                 -2 => {
-                    if (progress := this.progress_node) {
+                    if (progress := _.progress_node) {
                         progress.activate();
                         progress.setCompletedItems(buffer.list.items.len);
                         progress.context.maybeRefresh();
                     }
                     // streaming chunks
-                    if (this.signals.get(.response_body_streaming)) {
+                    if (_.signals.get(.response_body_streaming)) {
                         // If we're streaming, we cannot use the libdeflate fast path
-                        this.state.flags.is_libdeflate_fast_path_disabled = true;
-                        return this.state.processBodyBuffer(buffer, false)?;
+                        _.state.flags.is_libdeflate_fast_path_disabled = true;
+                        return _.state.processBodyBuffer(buffer, false)?;
                     }
 
                     return false;
                 },
                 // Done
                 else => {
-                    this.state.flags.received_last_chunk = true;
-                    * = this.state.processBodyBuffer(
+                    _.state.flags.received_last_chunk = true;
+                    * = _.state.processBodyBuffer(
                         buffer,
                         true,
                     )?;
 
-                    if (progress := this.progress_node) {
+                    if (progress := _.progress_node) {
                         progress.activate();
                         progress.setCompletedItems(buffer.list.items.len);
                         progress.context.maybeRefresh();
@@ -2423,10 +2423,10 @@ export @root @value struct HTTPClient {
         }
 
         fn handleResponseBodyChunkedEncodingFromSinglePacket(
-            *_: *HTTPClient,
+            *_,
             incoming_data: []const u8,
         ) !bool {
-            let decoder = *this.state.chunked_decoder;
+            let decoder = *_.state.chunked_decoder;
             assert(incoming_data.len <= single_packet_small_buffer.len);
 
             // set consume_trailer to 1 to discard the trailing header
@@ -2437,7 +2437,7 @@ export @root @value struct HTTPClient {
 
             if (
                 // if we've already copied the buffer once, we can avoid copying it again.
-                this.state.response_message_buffer.owns(incoming_data)
+                _.state.response_message_buffer.owns(incoming_data)
             ) {
                 buffer = unsafe { @constCast(incoming_data) };
             } else {
@@ -2453,8 +2453,8 @@ export @root @value struct HTTPClient {
                 &bytes_decoded,
             );
             buffer.len = buffer.len -| (incoming_data.len - bytes_decoded);
-            this.state.total_body_received += bytes_decoded;
-            log("handleResponseBodyChunkedEncodingFromSinglePacket {d}", .{this.state.total_body_received});
+            _.state.total_body_received += bytes_decoded;
+            log("handleResponseBodyChunkedEncodingFromSinglePacket {d}", .{_.state.total_body_received});
             switch (pret) {
                 // Invalid HTTP response body
                 -1 => {
@@ -2462,30 +2462,30 @@ export @root @value struct HTTPClient {
                 },
                 // Needs more data
                 -2 => {
-                    if (progress := this.progress_node) {
+                    if (progress := _.progress_node) {
                         progress.activate();
                         progress.setCompletedItems(buffer.len);
                         progress.context.maybeRefresh();
                     }
-                    const body_buffer = this.state.getBodyBuffer();
+                    const body_buffer = _.state.getBodyBuffer();
                     body_buffer.appendSliceExact(buffer)?;
 
                     // streaming chunks
-                    if (this.signals.get(.response_body_streaming)) {
+                    if (_.signals.get(.response_body_streaming)) {
                         // If we're streaming, we cannot use the libdeflate fast path
-                        this.state.flags.is_libdeflate_fast_path_disabled = true;
+                        _.state.flags.is_libdeflate_fast_path_disabled = true;
 
-                        return this.state.processBodyBuffer(body_buffer.*, true)?;
+                        return _.state.processBodyBuffer(body_buffer.*, true)?;
                     }
 
                     return false;
                 },
                 // Done
                 else => {
-                    this.state.flags.received_last_chunk = true;
-                    this.handleResponseBodyFromSinglePacket(buffer)?;
-                    assert(this.state.body_out_str.?.list.items.ptr != buffer.ptr);
-                    if (progress := this.progress_node) {
+                    _.state.flags.received_last_chunk = true;
+                    _.handleResponseBodyFromSinglePacket(buffer)?;
+                    assert(_.state.body_out_str.?.list.items.ptr != buffer.ptr);
+                    if (progress := _.progress_node) {
                         progress.activate();
                         progress.setCompletedItems(buffer.len);
                         progress.context.maybeRefresh();
@@ -2499,7 +2499,7 @@ export @root @value struct HTTPClient {
         }
 
         pub fn handleResponseMetadata(
-            *_: *HTTPClient,
+            *_,
             response: *picohttp.Response,
         ): ShouldContinue! {
             let location: string = "";
@@ -2511,53 +2511,53 @@ export @root @value struct HTTPClient {
                 const header_hash = hashHeaderName(header.name);
                 if (header_hash == content_length_header_hash) {
                     const content_length = std.fmt.parseInt(usize, header.value, 10) catch 0;
-                    if (this.method.hasBody()) {
-                        this.state.content_length = content_length;
+                    if (_.method.hasBody()) {
+                        _.state.content_length = content_length;
                     } else {
                         // ignore body size for HEAD requests
-                        this.state.content_length = 0;
+                        _.state.content_length = 0;
                     }
                 } else if (header_hash == content_type_header_hash) {
                     if (strings.contains(header.value, "text/event-stream")) {
                         is_server_sent_events = true;
                     }
                 } else if (header_hash == content_encoding_header_hash) {
-                    if (!this.flags.disable_decompression) {
+                    if (!_.flags.disable_decompression) {
                         if (strings.eqlComptime(header.value, "gzip")) {
-                            this.state.encoding = Encoding.gzip;
-                            this.state.content_encoding_i = @as(u8, @truncate(header_i));
+                            _.state.encoding = Encoding.gzip;
+                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
                         } else if (strings.eqlComptime(header.value, "deflate")) {
-                            this.state.encoding = Encoding.deflate;
-                            this.state.content_encoding_i = @as(u8, @truncate(header_i));
+                            _.state.encoding = Encoding.deflate;
+                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
                         } else if (strings.eqlComptime(header.value, "br")) {
-                            this.state.encoding = Encoding.brotli;
-                            this.state.content_encoding_i = @as(u8, @truncate(header_i));
+                            _.state.encoding = Encoding.brotli;
+                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
                         } else if (strings.eqlComptime(header.value, "zstd")) {
-                            this.state.encoding = Encoding.zstd;
-                            this.state.content_encoding_i = @as(u8, @truncate(header_i));
+                            _.state.encoding = Encoding.zstd;
+                            _.state.content_encoding_i = @as(u8, @truncate(header_i));
                         }
                     }
                 } else if (header_hash == transfer_encoding_header_hash) {
                     if (strings.eqlComptime(header.value, "gzip")) {
-                        if (!this.flags.disable_decompression) {
-                            this.state.transfer_encoding = Encoding.gzip;
+                        if (!_.flags.disable_decompression) {
+                            _.state.transfer_encoding = Encoding.gzip;
                         }
                     } else if (strings.eqlComptime(header.value, "deflate")) {
-                        if (!this.flags.disable_decompression) {
-                            this.state.transfer_encoding = Encoding.deflate;
+                        if (!_.flags.disable_decompression) {
+                            _.state.transfer_encoding = Encoding.deflate;
                         }
                     } else if (strings.eqlComptime(header.value, "br")) {
-                        if (!this.flags.disable_decompression) {
-                            this.state.transfer_encoding = .brotli;
+                        if (!_.flags.disable_decompression) {
+                            _.state.transfer_encoding = .brotli;
                         }
                     } else if (strings.eqlComptime(header.value, "zstd")) {
-                        if (!this.flags.disable_decompression) {
-                            this.state.transfer_encoding = .zstd;
+                        if (!_.flags.disable_decompression) {
+                            _.state.transfer_encoding = .zstd;
                         }
                     } else if (strings.eqlComptime(header.value, "identity")) {
-                        this.state.transfer_encoding = Encoding.identity;
+                        _.state.transfer_encoding = Encoding.identity;
                     } else if (strings.eqlComptime(header.value, "chunked")) {
-                        this.state.transfer_encoding = Encoding.chunked;
+                        _.state.transfer_encoding = Encoding.chunked;
                     } else {
                         return error.UnsupportedTransferEncoding;
                     }
@@ -2567,24 +2567,24 @@ export @root @value struct HTTPClient {
                     if (response.status_code >= 200 && response.status_code <= 299) {
                         // HTTP headers are case-insensitive (RFC 7230)
                         if (std.ascii.eqlIgnoreCase(header.value, "close")) {
-                            this.state.flags.allow_keepalive = false;
+                            _.state.flags.allow_keepalive = false;
                         } else if (std.ascii.eqlIgnoreCase(header.value, "keep-alive")) {
-                            this.state.flags.allow_keepalive = true;
+                            _.state.flags.allow_keepalive = true;
                         }
                     }
                 } else if (header_hash == last_modified_header_hash) {
-                    pretend_304 = this.flags.force_last_modified && response.status_code > 199 && response.status_code < 300 && this.if_modified_since.len > 0 && strings.eql(this.if_modified_since, header.value);
+                    pretend_304 = _.flags.force_last_modified && response.status_code > 199 && response.status_code < 300 && _.if_modified_since.len > 0 && strings.eql(_.if_modified_since, header.value);
                 } else if (header_hash == alt_svc_header_hash) {
                     // Record regardless of *this* request's shape — a future
                     // request to the same origin may be h3-eligible even if this
                     // one was pinned/proxied/sendfile.
-                    if (this.isHTTPS() && this.unix_socket_path.length() == 0 && h3AltSvcEnabled()) {
-                        H3.AltSvc.record(this.url.hostname, this.url.getPortAuto(), header.value);
+                    if (_.isHTTPS() && _.unix_socket_path.length() == 0 && h3AltSvcEnabled()) {
+                        H3.AltSvc.record(_.url.hostname, _.url.getPortAuto(), header.value);
                     }
                 }
             }
 
-            if (this.verbose != .none) {
+            if (_.verbose != .none) {
                 printResponse(response.*);
             }
 
@@ -2601,11 +2601,11 @@ export @root @value struct HTTPClient {
             // This applies regardless of whether we're using a proxy tunnel or not,
             // since these status codes NEVER have a body per the HTTP spec.
             if ((response.status_code >= 100 && response.status_code < 200) || response.status_code == 204 || response.status_code == 304) {
-                this.state.content_length = 0;
+                _.state.content_length = 0;
             }
 
             // Don't do this for proxies because those connections will be open for awhile.
-            if (!this.flags.proxy_tunneling) {
+            if (!_.flags.proxy_tunneling) {
                 //
                 // according to RFC 7230 section 6.3:
                 //   In order to remain persistent, all messages on a connection need to
@@ -2615,33 +2615,33 @@ export @root @value struct HTTPClient {
                 // the keep-alive behavior (keep-alive being the default behavior for HTTP/1.1 and not for HTTP/1.0)
                 //
                 // but, we must only do this IF the status code allows it to contain a body.
-                if (this.state.content_length == null && this.state.transfer_encoding != .chunked) {
-                    this.state.flags.allow_keepalive = false;
+                if (_.state.content_length == null && _.state.transfer_encoding != .chunked) {
+                    _.state.flags.allow_keepalive = false;
                 }
             }
 
-            if (this.flags.proxy_tunneling && this.proxy_tunnel == null) {
+            if (_.flags.proxy_tunneling && _.proxy_tunnel == null) {
                 if (response.status_code == 200) {
                     // signal to continue the proxing
                     return ShouldContinue.continue_streaming;
                 }
 
                 // proxy denied connection so return proxy result (407, 403 etc)
-                this.flags.proxy_tunneling = false;
-                this.flags.disable_keepalive = true;
+                _.flags.proxy_tunneling = false;
+                _.flags.disable_keepalive = true;
             }
 
             const status_code = response.status_code;
 
             if (status_code == 407) {
                 // If the request is being proxied and passes through the 407 status code, then let's also not do HTTP Keep-Alive.
-                this.flags.disable_keepalive = true;
+                _.flags.disable_keepalive = true;
             }
 
             // if is no redirect or if is redirect == "manual" just proceed
             const is_redirect = status_code >= 300 && status_code <= 399;
             if (is_redirect) {
-                if (this.redirect_type == FetchRedirect.follow && location.len > 0 && this.remaining_redirect_count > 0) {
+                if (_.redirect_type == FetchRedirect.follow && location.len > 0 && _.remaining_redirect_count > 0) {
                     switch (status_code) {
                         302, 301, 307, 308, 303 => {
                             // https://fetch.spec.whatwg.org/#http-redirect-fetch step 11:
@@ -2650,7 +2650,7 @@ export @root @value struct HTTPClient {
                             // return a network error." A ReadableStream body has no
                             // source to replay from, so only 303 (which drops the body
                             // and switches to GET) may be followed.
-                            if (status_code != 303 && this.state.original_request_body == .stream) {
+                            if (status_code != 303 && _.state.original_request_body == .stream) {
                                 return error.RequestBodyNotReusable;
                             }
                             let is_same_origin = true;
@@ -2664,7 +2664,7 @@ export @root @value struct HTTPClient {
                                     let string_builder = bun.StringBuilder{};
 
                                     const is_protocol_relative = i == 0;
-                                    const protocol_name = if (is_protocol_relative) this.url.displayProtocol() else location[0..i];
+                                    const protocol_name = if (is_protocol_relative) _.url.displayProtocol() else location[0..i];
                                     const is_http = strings.eqlComptime(protocol_name, "http");
                                     if (is_http || strings.eqlComptime(protocol_name, "https")) {} else {
                                         return error.UnsupportedRedirectProtocol;
@@ -2708,18 +2708,18 @@ export @root @value struct HTTPClient {
                                     const normalized_url_str = normalized_url.toOwnedSlice(bun.default_allocator)?;
 
                                     const new_url = URL.parse(normalized_url_str);
-                                    is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(new_url.origin), strings.withoutTrailingSlash(this.url.origin), true);
-                                    this.url = new_url;
+                                    is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(new_url.origin), strings.withoutTrailingSlash(_.url.origin), true);
+                                    _.url = new_url;
                                     // connected_url still borrows from the previous hop's buffer
                                     // until doRedirect releases the socket, so park it in
                                     // prev_redirect for doRedirect to free instead of leaking it.
-                                    bun.debugAssert(this.prev_redirect.len == 0);
-                                    this.prev_redirect = this.redirect;
-                                    this.redirect = normalized_url_str;
+                                    bun.debugAssert(_.prev_redirect.len == 0);
+                                    _.prev_redirect = _.redirect;
+                                    _.redirect = normalized_url_str;
                                 } else if (strings.hasPrefixComptime(location, "//")) {
                                     let string_builder = bun.StringBuilder{};
 
-                                    const protocol_name = this.url.displayProtocol();
+                                    const protocol_name = _.url.displayProtocol();
 
                                     if (protocol_name.len + 1 + location.len > MAX_REDIRECT_URL_LENGTH) {
                                         return error.RedirectURLTooLong;
@@ -2753,13 +2753,13 @@ export @root @value struct HTTPClient {
                                     const normalized_url_str = normalized_url.toOwnedSlice(bun.default_allocator)?;
 
                                     const new_url = URL.parse(normalized_url_str);
-                                    is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(new_url.origin), strings.withoutTrailingSlash(this.url.origin), true);
-                                    this.url = new_url;
-                                    bun.debugAssert(this.prev_redirect.len == 0);
-                                    this.prev_redirect = this.redirect;
-                                    this.redirect = normalized_url_str;
+                                    is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(new_url.origin), strings.withoutTrailingSlash(_.url.origin), true);
+                                    _.url = new_url;
+                                    bun.debugAssert(_.prev_redirect.len == 0);
+                                    _.prev_redirect = _.redirect;
+                                    _.redirect = normalized_url_str;
                                 } else {
-                                    const original_url = this.url;
+                                    const original_url = _.url;
 
                                     const new_url_ = bun.jsc.URL.join(
                                         bun.String.fromBytes(original_url.href),
@@ -2774,11 +2774,11 @@ export @root @value struct HTTPClient {
                                     const new_url = new_url_.toOwnedSlice(bun.default_allocator) catch {
                                         return error.RedirectURLTooLong;
                                     };
-                                    this.url = URL.parse(new_url);
-                                    is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(this.url.origin), strings.withoutTrailingSlash(original_url.origin), true);
-                                    bun.debugAssert(this.prev_redirect.len == 0);
-                                    this.prev_redirect = this.redirect;
-                                    this.redirect = new_url;
+                                    _.url = URL.parse(new_url);
+                                    is_same_origin = strings.eqlCaseInsensitiveASCII(strings.withoutTrailingSlash(_.url.origin), strings.withoutTrailingSlash(original_url.origin), true);
+                                    bun.debugAssert(_.prev_redirect.len == 0);
+                                    _.prev_redirect = _.redirect;
+                                    _.redirect = new_url;
                                 }
                             }
 
@@ -2786,14 +2786,14 @@ export @root @value struct HTTPClient {
                             // - internalResponse’s status is 301 or 302 and request’s method is `POST`
                             // - internalResponse’s status is 303 and request’s method is not `GET` or `HEAD`
                             // then:
-                            if (((status_code == 301 || status_code == 302) && this.method == .POST) ||
-                                (status_code == 303 && this.method != .GET && this.method != .HEAD))
+                            if (((status_code == 301 || status_code == 302) && _.method == .POST) ||
+                                (status_code == 303 && _.method != .GET && _.method != .HEAD))
                             {
                                 // - Set request’s method to `GET` and request’s body to null.
-                                this.method = .GET;
+                                _.method = .GET;
 
                                 // https://github.com/oven-sh/bun/issues/6053
-                                if (this.header_entries.len > 0) {
+                                if (_.header_entries.len > 0) {
                                     // A request-body-header name is a header name that is a byte-case-insensitive match for one of:
                                     // - `Content-Encoding`
                                     // - `Content-Language`
@@ -2807,23 +2807,23 @@ export @root @value struct HTTPClient {
                                     let i: usize = 0;
 
                                     // - For each headerName of request-body-header name, delete headerName from request’s header list.
-                                    const names = this.header_entries.items(.name);
+                                    const names = _.header_entries.items(.name);
                                     let len = names.len;
                                     outer: while (i < len) {
-                                        const name = this.headerStr(names[i]);
+                                        const name = _.headerStr(names[i]);
                                         if (name.len == 12) {
                                             const hash = hashHeaderName(name);
                                             if (hash == content_type_header_hash) {
-                                                * = this.header_entries.orderedRemove(i);
-                                                len = this.header_entries.len;
+                                                * = _.header_entries.orderedRemove(i);
+                                                len = _.header_entries.len;
                                                 continue :outer;
                                             }
                                         } else if (name.len == 16) {
                                             const hash = hashHeaderName(name);
                                             inline for (hash_value of request_body_headers) {
                                                 if (hash == hashHeaderConst(hash_value)) {
-                                                    * = this.header_entries.orderedRemove(i);
-                                                    len = this.header_entries.len;
+                                                    * = _.header_entries.orderedRemove(i);
+                                                    len = _.header_entries.len;
                                                     continue :outer;
                                                 }
                                             }
@@ -2838,54 +2838,54 @@ export @root @value struct HTTPClient {
                             // locationURL’s origin, then for each headerName of CORS
                             // non-wildcard request-header name, delete headerName from
                             // request’s header list.
-                            if (!is_same_origin && this.header_entries.len > 0) {
+                            if (!is_same_origin && _.header_entries.len > 0) {
                                 const hashes_to_remove: [3]u64 = [
                                     authorization_header_hash,
                                     proxy_authorization_header_hash,
                                     cookie_header_hash,
                                 ];
                                 inline for (target_hash of hashes_to_remove) {
-                                    const names = this.header_entries.items(.name);
+                                    const names = _.header_entries.items(.name);
 
                                     let i: usize = 0;
                                     while (i < names.len) : (i += 1) {
                                         const name_ptr = names[i];
-                                        const name = this.headerStr(name_ptr);
+                                        const name = _.headerStr(name_ptr);
                                         const hash = hashHeaderName(name);
                                         if (hash == target_hash) {
-                                            this.header_entries.orderedRemove(i);
+                                            _.header_entries.orderedRemove(i);
                                             break;
                                         }
                                     }
                                 }
                             }
-                            this.state.flags.is_redirect_pending = true;
-                            if (this.method.hasRequestBody()) {
-                                this.state.flags.resend_request_body_on_redirect = true;
+                            _.state.flags.is_redirect_pending = true;
+                            if (_.method.hasRequestBody()) {
+                                _.state.flags.resend_request_body_on_redirect = true;
                             }
                         },
                         else => {},
                     }
-                } else if (this.redirect_type == FetchRedirect.@"error") {
+                } else if (_.redirect_type == FetchRedirect.@"error") {
                     // error out if redirect is not allowed
                     return error.UnexpectedRedirect;
                 }
             }
 
-            this.state.response_stage = if (this.state.transfer_encoding == .chunked) .body_chunk else .body;
-            const content_length = this.state.content_length;
+            _.state.response_stage = if (_.state.transfer_encoding == .chunked) .body_chunk else .body;
+            const content_length = _.state.content_length;
             if (length := content_length) {
-                log("handleResponseMetadata: content_length is {} and transfer_encoding {}", .{ length, this.state.transfer_encoding });
+                log("handleResponseMetadata: content_length is {} and transfer_encoding {}", .{ length, _.state.transfer_encoding });
             } else {
-                log("handleResponseMetadata: content_length is null and transfer_encoding {}", .{ this.state.transfer_encoding });
+                log("handleResponseMetadata: content_length is null and transfer_encoding {}", .{ _.state.transfer_encoding });
             }
-            if (this.flags.upgrade_state == .upgraded) {
-                this.state.content_length = null;
-                this.state.flags.allow_keepalive = false;
+            if (_.flags.upgrade_state == .upgraded) {
+                _.state.content_length = null;
+                _.state.flags.allow_keepalive = false;
                 return ShouldContinue.continue_streaming;
             }
 
-            if (this.method.hasBody() && (content_length == null || content_length.? > 0 || !this.state.flags.allow_keepalive || this.state.transfer_encoding == .chunked || is_server_sent_events)) {
+            if (_.method.hasBody() && (content_length == null || content_length.? > 0 || !_.state.flags.allow_keepalive || _.state.transfer_encoding == .chunked || is_server_sent_events)) {
                 return ShouldContinue.continue_streaming;
             } else {
                 return ShouldContinue.finished;
@@ -2899,12 +2899,12 @@ export @value struct HTTPResponseMetadata {
     response: bun.picohttp.Response = {},
 
     fn deinit(*_, allocator: std.mem.Allocator) {
-        if (this.owned_buf.len > 0) allocator.free(this.owned_buf);
-        if (this.response.headers.list.len > 0) allocator.free(this.response.headers.list);
-        this.owned_buf = "";
-        this.url = "";
-        this.response.headers = {};
-        this.response.status = "";
+        if (_.owned_buf.len > 0) allocator.free(_.owned_buf);
+        if (_.response.headers.list.len > 0) allocator.free(_.response.headers.list);
+        _.owned_buf = "";
+        _.url = "";
+        _.response.headers = {};
+        _.response.status = "";
     }
 }
 

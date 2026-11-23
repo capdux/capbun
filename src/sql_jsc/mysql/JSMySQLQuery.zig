@@ -146,8 +146,7 @@ __ref_count: RefCount = RefCount.init(),
 #query: MySQLQuery,
 
 pub fn estimatedSize(self: *JSMySQLQuery) usize {
-        const __unused_self = self;
-        _ = &__unused_self;
+    _ = self;
         return @sizeOf(@This());
 }
 
@@ -278,16 +277,14 @@ pub fn doRun(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: 
 }
 
 pub fn doCancel(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+    _ = self;
         _ = &globalObject;
         _ = &callframe;
         return JSValue.js_undefined;
 }
 
 pub fn doDone(self: *JSMySQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+    _ = self;
         _ = &globalObject;
         _ = &callframe;
         return JSValue.js_undefined;
@@ -457,35 +454,35 @@ pub fn run(self: *JSMySQLQuery, connection: *MySQLConnection) AnyMySQLError.Erro
         return error.JSError; }); });
 }
 
-pub inline fn isCompleted(self: *JSMySQLQuery) bool {
+pub inline fn isCompleted(self: JSMySQLQuery) bool {
         return self.#query.isCompleted();
 }
 
-pub inline fn isRunning(self: *JSMySQLQuery) bool {
+pub inline fn isRunning(self: JSMySQLQuery) bool {
         return self.#query.isRunning();
 }
 
-pub inline fn isPending(self: *JSMySQLQuery) bool {
+pub inline fn isPending(self: JSMySQLQuery) bool {
         return self.#query.isPending();
 }
 
-pub inline fn isBeingPrepared(self: *JSMySQLQuery) bool {
+pub inline fn isBeingPrepared(self: JSMySQLQuery) bool {
         return self.#query.isBeingPrepared();
 }
 
-pub inline fn isPipelined(self: *JSMySQLQuery) bool {
+pub inline fn isPipelined(self: JSMySQLQuery) bool {
         return self.#query.isPipelined();
 }
 
-pub inline fn isSimple(self: *JSMySQLQuery) bool {
+pub inline fn isSimple(self: JSMySQLQuery) bool {
         return self.#query.isSimple();
 }
 
-pub inline fn isBigintSupported(self: *JSMySQLQuery) bool {
+pub inline fn isBigintSupported(self: JSMySQLQuery) bool {
         return self.#query.isBigintSupported();
 }
 
-pub inline fn getResultMode(self: *JSMySQLQuery) SQLQueryResultMode {
+pub inline fn getResultMode(self: JSMySQLQuery) SQLQueryResultMode {
         return self.#query.getResultMode();
 }
 
@@ -507,7 +504,7 @@ pub inline fn setPendingValue(self: *JSMySQLQuery, result: JSValue) void {
         }
 }
 
-pub inline fn getPendingValue(self: *JSMySQLQuery) ?JSValue {
+pub inline fn getPendingValue(self: JSMySQLQuery) ?JSValue {
         if (self.#vm.isShuttingDown()) {
             return null;
         }
@@ -528,7 +525,7 @@ pub inline fn setTarget(self: *JSMySQLQuery, result: JSValue) void {
         }
 }
 
-pub inline fn getTarget(self: *JSMySQLQuery) ?JSValue {
+pub inline fn getTarget(self: JSMySQLQuery) ?JSValue {
         if (self.#vm.isShuttingDown()) {
             return null;
         }
@@ -549,7 +546,7 @@ pub inline fn setColumns(self: *JSMySQLQuery, result: JSValue) void {
         }
 }
 
-pub inline fn getColumns(self: *JSMySQLQuery) ?JSValue {
+pub inline fn getColumns(self: JSMySQLQuery) ?JSValue {
         if (self.#vm.isShuttingDown()) {
             return null;
         }
@@ -570,7 +567,7 @@ pub inline fn setBinding(self: *JSMySQLQuery, result: JSValue) void {
         }
 }
 
-pub inline fn getBinding(self: *JSMySQLQuery) ?JSValue {
+pub inline fn getBinding(self: JSMySQLQuery) ?JSValue {
         if (self.#vm.isShuttingDown()) {
             return null;
         }

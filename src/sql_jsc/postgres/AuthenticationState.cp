@@ -8,12 +8,12 @@ pub union(enum) AuthenticationState {
     md5: void,
 
     pub fn zero(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .SASL => |*sasl| {
                 sasl.deinit();
             },
             else => {},
         }
-        unsafe { this.* = .none; }
+        unsafe { _.* = .none; }
     }
 }

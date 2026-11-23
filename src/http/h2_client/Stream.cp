@@ -51,36 +51,36 @@ export @root struct Stream {
     }
 
     pub fn rst(*_, code: H2FrameParser.ErrorCode) {
-        if (this.rst_done || this.state == .closed) return;
-        this.rst_done = true;
-        this.state = .closed;
+        if (_.rst_done || _.state == .closed) return;
+        _.rst_done = true;
+        _.state = .closed;
         const value: u32 = @byteSwap(@intFromEnum(code));
-        this.session.writeFrame(.HTTP_FRAME_RST_STREAM, 0, this.id, std.mem.asBytes(&value));
+        _.session.writeFrame(.HTTP_FRAME_RST_STREAM, 0, _.id, std.mem.asBytes(&value));
     }
 
     pub fn sentEndStream(*_) {
-        this.state = switch (this.state) {
+        _.state = switch (_.state) {
             .open => .half_closed_local,
             .half_closed_remote => .closed,
-            * => this.state,
+            * => _.state,
         };
     }
 
     pub fn recvEndStream(*_) {
-        this.state = switch (this.state) {
+        _.state = switch (_.state) {
             .open => .half_closed_remote,
             .half_closed_local => .closed,
-            * => this.state,
+            * => _.state,
         };
     }
 
     @inline
-    pub fn localClosed(&_): bool {
-        return this.state == .half_closed_local || this.state == .closed;
+    pub fn localClosed(): bool {
+        return _.state == .half_closed_local || _.state == .closed;
     }
 
     @inline
-    pub fn remoteClosed(&_): bool {
-        return this.state == .half_closed_remote || this.state == .closed;
+    pub fn remoteClosed(): bool {
+        return _.state == .half_closed_remote || _.state == .closed;
     }
 }

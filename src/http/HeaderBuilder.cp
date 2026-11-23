@@ -11,54 +11,54 @@ export @root struct HeaderBuilder {
     entries: Headers.Entry.List = .empty,
 
     fn count(*_, name: string, value: string) {
-        this.header_count += 1;
-        this.content.count(name);
-        this.content.count(value);
+        _.header_count += 1;
+        _.content.count(name);
+        _.content.count(value);
     }
 
     fn allocate(*_, allocator: std.mem.Allocator): !void {
-        this.content.allocate(allocator)?;
-        this.entries.ensureTotalCapacity(allocator, this.header_count)?;
+        _.content.allocate(allocator)?;
+        _.entries.ensureTotalCapacity(allocator, _.header_count)?;
     }
 
     fn append(*_, name: string, value: string) {
         const name_ptr: bun.schema.api.StringPointer = {
-            offset: this.content.len as u32,
+            offset: _.content.len as u32,
             length: name.len as u32,
         };
 
-        this.content.append(name);
+        _.content.append(name);
 
         const value_ptr: bun.schema.api.StringPointer = {
-            offset: this.content.len as u32,
+            offset: _.content.len as u32,
             length: value.len as u32,
         };
-        this.content.append(value);
-        this.entries.appendAssumeCapacity({ name: name_ptr, value: value_ptr });
+        _.content.append(value);
+        _.entries.appendAssumeCapacity({ name: name_ptr, value: value_ptr });
     }
 
     fn appendFmt(*_, name: string, comptime fmt: string, args: auto) {
         const name_ptr: bun.schema.api.StringPointer = {
-            offset: this.content.len as u32,
+            offset: _.content.len as u32,
             length: name.len as u32,
         };
 
-        this.content.append(name);
+        _.content.append(name);
 
-        const value = this.content.fmt(fmt, args);
+        const value = _.content.fmt(fmt, args);
 
         const value_ptr: bun.schema.api.StringPointer = {
-            offset: (this.content.len - value.len) as u32,
+            offset: (_.content.len - value.len) as u32,
             length: value.len as u32,
         };
 
-        this.entries.appendAssumeCapacity({ name: name_ptr, value: value_ptr });
+        _.entries.appendAssumeCapacity({ name: name_ptr, value: value_ptr });
     }
 
     fn apply(*_, client: *auto) {
-        client.header_entries = this.entries;
-        if (ptr := this.content.ptr) {
-            client.header_buf = ptr[0..this.content.len];
+        client.header_entries = _.entries;
+        if (ptr := _.content.ptr) {
+            client.header_buf = ptr[0.._.content.len];
         } else {
             client.header_buf = "";
         }

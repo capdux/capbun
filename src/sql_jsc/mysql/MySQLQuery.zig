@@ -387,38 +387,38 @@ pub fn cleanup(self: *MySQLQuery) void {
         self.#query = bun.String.empty;
 }
 
-pub inline fn isCompleted(self: *const MySQLQuery) bool {
+pub inline fn isCompleted(self: MySQLQuery) bool {
         return ((self.#status == .success) or (self.#status == .fail));
 }
 
-pub inline fn isRunning(self: *const MySQLQuery) bool {
+pub inline fn isRunning(self: MySQLQuery) bool {
         return (switch (self.#status) {
 .running, .binding, .partial_response => true,
 .success, .fail, .pending => false,
 });
 }
 
-pub inline fn isPending(self: *const MySQLQuery) bool {
+pub inline fn isPending(self: MySQLQuery) bool {
         return (self.#status == .pending);
 }
 
-pub inline fn isBeingPrepared(self: *MySQLQuery) bool {
+pub inline fn isBeingPrepared(self: MySQLQuery) bool {
         return (((self.#status == .pending) and (self.#statement != null)) and (self.#statement.?.status == .parsing));
 }
 
-pub inline fn isPipelined(self: *const MySQLQuery) bool {
+pub inline fn isPipelined(self: MySQLQuery) bool {
         return self.#flags.pipelined;
 }
 
-pub inline fn isSimple(self: *const MySQLQuery) bool {
+pub inline fn isSimple(self: MySQLQuery) bool {
         return self.#flags.simple;
 }
 
-pub inline fn isBigintSupported(self: *const MySQLQuery) bool {
+pub inline fn isBigintSupported(self: MySQLQuery) bool {
         return self.#flags.bigint;
 }
 
-pub inline fn getResultMode(self: *const MySQLQuery) SQLQueryResultMode {
+pub inline fn getResultMode(self: MySQLQuery) SQLQueryResultMode {
         return self.#flags.result_mode;
 }
 

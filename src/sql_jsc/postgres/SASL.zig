@@ -57,11 +57,11 @@ pub fn computeServerSignature(self: *SASL, auth_string: []const u8) !void {
         self.server_signature_len = @intCast(bun.base64.encode((&self.server_signature_base64_bytes), (&server_signature_bytes)));
 }
 
-pub fn clientKey(self: *const SASL) [32]u8 {
+pub fn clientKey(self: SASL) [32]u8 {
         return (hmac(self.saltedPassword(), "Client Key")).?;
 }
 
-pub fn clientKeySignature(self: *SASL, client_key: []const u8, auth_string: []const u8) [32]u8 {
+pub fn clientKeySignature(self: SASL, client_key: []const u8, auth_string: []const u8) [32]u8 {
         const __unused_self = self;
         _ = &__unused_self;
         var sha_digest = std.mem.zeroes(bun.sha.SHA256.Digest);

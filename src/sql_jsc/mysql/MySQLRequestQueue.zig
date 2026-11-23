@@ -106,11 +106,11 @@ pub const MySQLRequestQueue = @This();
 #waiting_to_prepare: bool = false,
 #is_ready_for_query: bool = true,
 
-pub inline fn canExecuteQuery(self: *const MySQLRequestQueue, connection: *const MySQLConnection) bool {
+pub inline fn canExecuteQuery(self: MySQLRequestQueue, connection: *const MySQLConnection) bool {
         return (((connection.isAbleToWrite() and self.#is_ready_for_query) and (self.#nonpipelinable_requests == 0)) and (self.#pipelined_requests == 0));
 }
 
-pub inline fn canPrepareQuery(self: *const MySQLRequestQueue, connection: *const MySQLConnection) bool {
+pub inline fn canPrepareQuery(self: MySQLRequestQueue, connection: *const MySQLConnection) bool {
         return (((connection.isAbleToWrite() and self.#is_ready_for_query) and (!self.#waiting_to_prepare)) and (self.#pipelined_requests == 0));
 }
 
@@ -127,7 +127,7 @@ pub inline fn markAsPrepared(self: *MySQLRequestQueue) void {
         }
 }
 
-pub inline fn canPipeline(self: *MySQLRequestQueue, connection: *MySQLConnection) bool {
+pub inline fn canPipeline(self: MySQLRequestQueue, connection: *MySQLConnection) bool {
         if (bun.feature_flag.BUN_FEATURE_FLAG_DISABLE_SQL_AUTO_PIPELINING.get()) {
             @branchHint(.unlikely);
             return false;
@@ -229,7 +229,7 @@ pub fn init() @This() {
         return MySQLRequestQueue{ .#requests = Queue.init(bun.default_allocator) };
 }
 
-pub fn isEmpty(self: *MySQLRequestQueue) bool {
+pub fn isEmpty(self: MySQLRequestQueue) bool {
         return (self.#requests.readableLength() == 0);
 }
 
@@ -301,5 +301,11 @@ pub fn deinit(self: *MySQLRequestQueue) void {
 }
 const jsc = bun.jsc;
 const JSValue = jsc.JSValue;
-const Queue = bun.LinearFifo(*JSMySQLQuery, .Dynamic);
+const Queue = bun.LinearFifo(MutPtr(JSMySQLQuery), .Dynamic);
 const debug = bun.Output.scoped(.MySQLRequestQueue, .visible);
+
+pub fn MutPtr(comptime T: type) type {
+        var x: T = undefined;
+        _ = &x;
+        return @TypeOf((&x));
+}

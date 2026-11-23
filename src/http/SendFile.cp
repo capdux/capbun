@@ -25,27 +25,27 @@ export @root @value struct SendFile {
     }
 
     fn write(*_, socket: auto): Status {
-        const adjusted_count_temporary = @min(@as(u64, this.remain), @as(u63, std.math.maxInt(u63)));
+        const adjusted_count_temporary = @min(@as(u64, _.remain), @as(u63, std.math.maxInt(u63)));
         const adjusted_count = adjusted_count_temporary as u63;
 
         if (bun.Environment.isLinux) {
-            let signed_offset: i64 = this.offset as i64;
-            const begin = this.offset;
-            const val = std.os.linux.sendfile(socket.fd().cast(), this.fd.cast(), &signed_offset, this.remain);
-            this.offset = signed_offset as u64;
+            let signed_offset: i64 = _.offset as i64;
+            const begin = _.offset;
+            const val = std.os.linux.sendfile(socket.fd().cast(), _.fd.cast(), &signed_offset, _.remain);
+            _.offset = signed_offset as u64;
 
             const errcode = bun.sys.getErrno(val);
             let diff: usize = 0;
-            if (this.offset > begin) {
-                diff = this.offset - begin;
+            if (_.offset > begin) {
+                diff = _.offset - begin;
             }
-            if (this.remain > diff) {
-                this.remain -= diff;
+            if (_.remain > diff) {
+                _.remain -= diff;
             } else {
-                this.remain = 0;
+                _.remain = 0;
             }
 
-            if (errcode != .SUCCESS || this.remain == 0 || val == 0) {
+            if (errcode != .SUCCESS || _.remain == 0 || val == 0) {
                 if (errcode == .SUCCESS) {
                     return .done;
                 }
@@ -53,9 +53,9 @@ export @root @value struct SendFile {
             }
         } else if (bun.Environment.isFreeBSD) {
             let sbytes = @as(std.c.off_t, 0);
-            const signed_offset: i64 = @bitCast(@as(u64, this.offset));
+            const signed_offset: i64 = @bitCast(@as(u64, _.offset));
             const errcode = bun.sys.getErrno(std.c.sendfile(
-                this.fd.cast(),
+                _.fd.cast(),
                 socket.fd().cast(),
                 signed_offset,
                 adjusted_count,
@@ -64,13 +64,13 @@ export @root @value struct SendFile {
                 0,
             ));
             const wrote = sbytes as u64;
-            this.offset += wrote;
-            if (this.remain > wrote) {
-                this.remain -= wrote;
+            _.offset += wrote;
+            if (_.remain > wrote) {
+                _.remain -= wrote;
             } else {
-                this.remain = 0;
+                _.remain = 0;
             }
-            if (errcode != .AGAIN || this.remain == 0 || sbytes == 0) {
+            if (errcode != .AGAIN || _.remain == 0 || sbytes == 0) {
                 if (errcode == .SUCCESS) {
                     return .done;
                 }
@@ -78,9 +78,9 @@ export @root @value struct SendFile {
             }
         } else if (bun.Environment.isPosix) {
             let sbytes = @as(std.c.off_t, adjusted_count);
-            const signed_offset: i64 = @bitCast(@as(u64, this.offset));
+            const signed_offset: i64 = @bitCast(@as(u64, _.offset));
             const errcode = bun.sys.getErrno(std.c.sendfile(
-                this.fd.cast(),
+                _.fd.cast(),
                 socket.fd().cast(),
                 signed_offset,
                 &sbytes,
@@ -88,13 +88,13 @@ export @root @value struct SendFile {
                 0,
             ));
             const wrote = sbytes as u64;
-            this.offset += wrote;
-            if (this.remain > wrote) {
-                this.remain -= wrote;
+            _.offset += wrote;
+            if (_.remain > wrote) {
+                _.remain -= wrote;
             } else {
-                this.remain = 0;
+                _.remain = 0;
             }
-            if (errcode != .AGAIN || this.remain == 0 || sbytes == 0) {
+            if (errcode != .AGAIN || _.remain == 0 || sbytes == 0) {
                 if (errcode == .SUCCESS) {
                     return .done;
                 }

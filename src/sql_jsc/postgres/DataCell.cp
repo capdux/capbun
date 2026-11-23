@@ -508,7 +508,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
                         ptr: null,
                         len: 0,
                         byte_len: 0,
-                        type: tag.toJSTypedArrayType() catch |e| return @errorCast(e),
+                        type: tag.toJSTypedArrayType() catch e => return @errorCast(e),
                     },
                 },
             };
@@ -539,7 +539,7 @@ fn fromTypedArrayBytes(comptime tag: PgTag, binary: bool, bigint: bool, bytes: [
                     ptr: if (elements.len > 0) unsafe { @ptrCast(elements.ptr) } else null,
                     len: @truncate(elements.len),
                     byte_len: @truncate(bytes.len),
-                    type: tag.toJSTypedArrayType() catch |e| return @errorCast(e),
+                    type: tag.toJSTypedArrayType() catch e => return @errorCast(e),
                 },
             },
         };
@@ -735,7 +735,7 @@ union(enum) PGNummericString {
     dynamic: []const u8,
 
     pub fn slice(): []const u8 {
-        return switch (this) {
+        return switch (_) {
             .static value => value,
             .dynamic value => value,
         };
@@ -897,36 +897,36 @@ export struct Putter {
             globalObject,
             array,
             structure,
-            this.list.ptr,
-            @truncate(this.fields.len),
+            _.list.ptr,
+            @truncate(_.fields.len),
             flags,
             @intFromEnum(result_mode),
             names,
             names_count,
-        ) catch |e| return @errorCast(e);
+        ) catch e => return @errorCast(e);
     }
 
     fn putImpl(*_, index: u32, optional_bytes: (*Data)?, comptime is_raw: bool): AnyPostgresError!bool {
-        if (index >= this.fields.len) {
-            debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, this.fields.len });
+        if (index >= _.fields.len) {
+            debug("putImpl: index {d} >= fields.len {d}, ignoring extra field", .{ index, _.fields.len });
             return false;
         }
-        if (index >= this.list.len) {
-            debug("putImpl: index {d} >= list.len {d}, ignoring extra field", .{ index, this.list.len });
+        if (index >= _.list.len) {
+            debug("putImpl: index {d} >= list.len {d}, ignoring extra field", .{ index, _.list.len });
             return false;
         }
 
-        const field = &this.fields[index];
+        const field = &_.fields[index];
         const oid = field.type_oid;
         debug("index: {d}, oid: {d}", .{ index, oid });
-        let cell = &this.list[index];
+        let cell = &_.list[index];
         unsafe {
             if (is_raw) {
                 cell.* = SQLDataCell.raw(optional_bytes);
             } else {
                 const tag: PgTag = if (std.math.maxInt(short) < oid) .text else @enumFromInt(@as(short, @intCast(oid)));
                 if (data := optional_bytes) {
-                    cell.* = fromBytes((field.binary || this.binary) && tag.isBinaryFormatSupported(), this.bigint, tag, data.slice(), this.globalObject)?;
+                    cell.* = fromBytes((field.binary || _.binary) && tag.isBinaryFormatSupported(), _.bigint, tag, data.slice(), _.globalObject)?;
                 } else {
                     cell.* = SQLDataCell{
                         tag: .@"null",
@@ -937,7 +937,7 @@ export struct Putter {
                 }
             }
         }
-        this.count += 1;
+        _.count += 1;
         cell.index = switch (field.name_or_index) {
             .index i => i,
             else => @intCast(index),
@@ -952,10 +952,10 @@ export struct Putter {
     }
 
     pub fn putRaw(*_, index: u32, optional_bytes: (*Data)?): AnyPostgresError!bool {
-        return this.putImpl(index, optional_bytes, true);
+        return _.putImpl(index, optional_bytes, true);
     }
 
     pub fn put(*_, index: u32, optional_bytes: (*Data)?): AnyPostgresError!bool {
-        return this.putImpl(index, optional_bytes, false);
+        return _.putImpl(index, optional_bytes, false);
     }
 }

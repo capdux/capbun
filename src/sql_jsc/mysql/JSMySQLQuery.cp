@@ -62,7 +62,6 @@ struct RunErrGuard<T> {
     pub const deref = RefCount.deref;
 
     pub fn estimatedSize(*_): usize {
-        const __unused_self = _; * = __unused_self;
         return @sizeOf(@This());
     }
 
@@ -72,14 +71,14 @@ struct RunErrGuard<T> {
     }
 
     fn deinit(*_) {
-        this.#query.cleanup();
-        bun.destroy(this);
+        _.#query.cleanup();
+        bun.destroy(_);
     }
 
     pub fn finalize(*_) {
         debug("MySQLQuery finalize", .{});
-        this.#thisValue.finalize();
-        this.deref();
+        _.#thisValue.finalize();
+        _.deref();
     }
 
     pub static fn createInstance(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -148,28 +147,28 @@ struct RunErrGuard<T> {
     }
 
     fn finishResolve(*_, is_last_result: bool) {
-        if (this.#thisValue.isNotEmpty() && is_last_result) {
-            this.#thisValue.downgrade();
+        if (_.#thisValue.isNotEmpty() && is_last_result) {
+            _.#thisValue.downgrade();
         }
-        this.deref();
+        _.deref();
     }
 
     fn finishReject(*_) {
-        if (this.#thisValue.isNotEmpty()) {
-            this.#thisValue.downgrade();
+        if (_.#thisValue.isNotEmpty()) {
+            _.#thisValue.downgrade();
         }
-        this.deref();
+        _.deref();
     }
 
     fn failRun(*_) {
-        this.#thisValue.downgrade();
-        * = this.#query.fail();
+        _.#thisValue.downgrade();
+        * = _.#query.fail();
     }
 
     pub fn doRun(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         debug("doRun", .{});
-        this.ref();
-        const _deref_guard = DerefGuard<@This()>{ ptr: unsafe { this } };
+        _.ref();
+        const _deref_guard = DerefGuard<@This()>{ ptr: unsafe { _ } };
 
         let arguments = callframe.arguments();
         if (arguments.len < 2) {
@@ -184,26 +183,24 @@ struct RunErrGuard<T> {
         if (!target.isObject()) {
             return globalObject.throwInvalidArgumentType("run", "query", "Query");
         }
-        this.setTarget(target);
-        this.run(connection) catch |e| {
+        _.setTarget(target);
+        _.run(connection) catch e => {
             if (!globalObject.hasException()) {
                 return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to execute query", e));
             }
             return err.JSError;
         };
-        connection.enqueueRequest(this);
+        connection.enqueueRequest(_);
         return JSValue.js_undefined;
     }
 
     pub fn doCancel(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const __unused_self = _; * = __unused_self;
         * = globalObject;
         * = callframe;
         return JSValue.js_undefined;
     }
 
     pub fn doDone(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
-        const __unused_self = _; * = __unused_self;
         * = globalObject;
         * = callframe;
         return JSValue.js_undefined;
@@ -219,50 +216,50 @@ struct RunErrGuard<T> {
         const mode = std.meta.intToEnum(SQLQueryResultMode, mode_value) catch {
             return globalObject.throwInvalidArgumentTypeValue("mode", "Number", js_mode);
         };
-        this.#query.setResultMode(mode);
+        _.#query.setResultMode(mode);
         return JSValue.js_undefined;
     }
 
     pub fn setPendingValueFromJS(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         const result = callframe.argument(0);
-        this.setPendingValue(result);
+        _.setPendingValue(result);
         return JSValue.js_undefined;
     }
 
     pub fn resolve(*_, queries_array: JSValue, result: MySQLQueryResult) {
-        this.ref();
+        _.ref();
         const is_last_result = result.is_last_result;
-        const _resolve_guard = ResolveGuard<@This()>{ ptr: unsafe { this }, is_last_result: is_last_result };
+        const _resolve_guard = ResolveGuard<@This()>{ ptr: unsafe { _ }, is_last_result: is_last_result };
 
-        if (!this.#query.result(is_last_result)) {
+        if (!_.#query.result(is_last_result)) {
             return;
         }
-        if (this.#vm.isShuttingDown()) {
+        if (_.#vm.isShuttingDown()) {
             return;
         }
 
-        const targetValue_opt = this.getTarget();
+        const targetValue_opt = _.getTarget();
         if (targetValue_opt == null) return;
         const targetValue = targetValue_opt.?;
-        const thisValue_opt = this.#thisValue.tryGet();
+        const thisValue_opt = _.#thisValue.tryGet();
         if (thisValue_opt == null) return;
         const thisValue = thisValue_opt.?;
         thisValue.ensureStillAlive();
         const tag = CommandTag{ SELECT: result.result_count };
-        const js_tag = tag.toJSTag(this.#globalObject) catch return bun.assertf(false, "in MySQLQuery Tag should always be a number", .{});
+        const js_tag = tag.toJSTag(_.#globalObject) catch return bun.assertf(false, "in MySQLQuery Tag should always be a number", .{});
         js_tag.ensureStillAlive();
 
-        const function_opt = this.#vm.rareData().mysql_context.onQueryResolveFn.get();
+        const function_opt = _.#vm.rareData().mysql_context.onQueryResolveFn.get();
         if (function_opt == null) return;
         const function = function_opt.?;
         bun.assertf(function.isCallable(), "onQueryResolveFn is not callable", .{});
 
-        const event_loop = this.#vm.eventLoop();
+        const event_loop = _.#vm.eventLoop();
 
-        const pending_value = this.getPendingValue() ?? .js_undefined;
+        const pending_value = _.getPendingValue() ?? .js_undefined;
         pending_value.ensureStillAlive();
-        this.setPendingValue(.js_undefined);
+        _.setPendingValue(.js_undefined);
 
         const cb_args: [8]JSValue = [
             targetValue,
@@ -274,61 +271,61 @@ struct RunErrGuard<T> {
             JSValue.jsNumber(result.last_insert_id),
             JSValue.jsNumber(result.affected_rows),
         ];
-        event_loop.runCallback(function, this.#globalObject, thisValue, &cb_args);
+        event_loop.runCallback(function, _.#globalObject, thisValue, &cb_args);
     }
 
     pub fn markAsFailed(*_) {
-        this.ref();
-        const _deref_guard = DerefGuard<@This()>{ ptr: unsafe { this } };
-        if (this.#thisValue.isNotEmpty()) {
-            this.#thisValue.downgrade();
+        _.ref();
+        const _deref_guard = DerefGuard<@This()>{ ptr: unsafe { _ } };
+        if (_.#thisValue.isNotEmpty()) {
+            _.#thisValue.downgrade();
         }
-        * = this.#query.fail();
+        * = _.#query.fail();
     }
 
     pub fn reject(*_, queries_array: JSValue, mysql_err: AnyMySQLError.Error) {
-        if (this.#vm.isShuttingDown()) {
-            this.markAsFailed();
+        if (_.#vm.isShuttingDown()) {
+            _.markAsFailed();
             return;
         }
-        if (err_ := this.#globalObject.tryTakeException()) {
-            this.rejectWithJSValue(queries_array, err_);
+        if (err_ := _.#globalObject.tryTakeException()) {
+            _.rejectWithJSValue(queries_array, err_);
         } else {
-            const instance = AnyMySQLError.mysqlErrorToJS(this.#globalObject, "Failed to bind query", mysql_err);
+            const instance = AnyMySQLError.mysqlErrorToJS(_.#globalObject, "Failed to bind query", mysql_err);
             instance.ensureStillAlive();
-            this.rejectWithJSValue(queries_array, instance);
+            _.rejectWithJSValue(queries_array, instance);
         }
     }
 
     pub fn rejectWithJSValue(*_, queries_array: JSValue, err_val: JSValue) {
-        this.ref();
+        _.ref();
 
-        const _reject_guard = RejectGuard<@This()>{ ptr: unsafe { this } };
-        if (!this.#query.fail()) {
+        const _reject_guard = RejectGuard<@This()>{ ptr: unsafe { _ } };
+        if (!_.#query.fail()) {
             return;
         }
 
-        if (this.#vm.isShuttingDown()) {
+        if (_.#vm.isShuttingDown()) {
             return;
         }
-        const targetValue_opt = this.getTarget();
+        const targetValue_opt = _.getTarget();
         if (targetValue_opt == null) return;
         const targetValue = targetValue_opt.?;
 
         let js_error = err_val.toError() ?? err_val;
         if (js_error == .zero) {
-            js_error = AnyMySQLError.mysqlErrorToJS(this.#globalObject, "Query failed", err.UnknownError);
+            js_error = AnyMySQLError.mysqlErrorToJS(_.#globalObject, "Query failed", err.UnknownError);
         }
         bun.assertf(js_error != .zero, "js_error is zero", .{});
         js_error.ensureStillAlive();
-        const function_opt = this.#vm.rareData().mysql_context.onQueryRejectFn.get();
+        const function_opt = _.#vm.rareData().mysql_context.onQueryRejectFn.get();
         if (function_opt == null) return;
         const function = function_opt.?;
         bun.assertf(function.isCallable(), "onQueryRejectFn is not callable", .{});
-        const event_loop = this.#vm.eventLoop();
+        const event_loop = _.#vm.eventLoop();
         const js_array = if (queries_array == .zero) .js_undefined else queries_array;
         js_array.ensureStillAlive();
-        const this_val_opt = this.#thisValue.tryGet();
+        const this_val_opt = _.#thisValue.tryGet();
         if (this_val_opt == null) return;
         const this_val = this_val_opt.?;
         const cb_args: [3]JSValue = [
@@ -336,25 +333,25 @@ struct RunErrGuard<T> {
             js_error,
             js_array,
         ];
-        event_loop.runCallback(function, this.#globalObject, this_val, &cb_args);
+        event_loop.runCallback(function, _.#globalObject, this_val, &cb_args);
     }
 
     pub fn run(*_, connection: *MySQLConnection): AnyMySQLError.Error!void {
-        if (this.#vm.isShuttingDown()) {
+        if (_.#vm.isShuttingDown()) {
             debug("run cannot run a query if the VM is shutting down", .{});
             return;
         }
-        if (!this.#query.isPending() || this.#query.isBeingPrepared()) {
+        if (!_.#query.isPending() || _.#query.isBeingPrepared()) {
             debug("run already running or being prepared", .{});
             return;
         }
-        const globalObject = this.#globalObject;
-        this.#thisValue.upgrade(globalObject);
-        const _run_guard = RunErrGuard<@This()>{ ptr: unsafe { this } };
+        const globalObject = _.#globalObject;
+        _.#thisValue.upgrade(globalObject);
+        const _run_guard = RunErrGuard<@This()>{ ptr: unsafe { _ } };
 
-        const columns_value = this.getColumns() ?? .js_undefined;
-        const binding_value = this.getBinding() ?? .js_undefined;
-        this.#query.runQuery(connection, globalObject, columns_value, binding_value) catch |e| {
+        const columns_value = _.getColumns() ?? .js_undefined;
+        const binding_value = _.getBinding() ?? .js_undefined;
+        _.#query.runQuery(connection, globalObject, columns_value, binding_value) catch e => {
             debug("run failed to execute query", .{});
             if (!globalObject.hasException()) {
                 return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to execute query", e));
@@ -363,88 +360,88 @@ struct RunErrGuard<T> {
         };
     }
 
-    pub inline fn isCompleted(*_): bool {
-        return this.#query.isCompleted();
+    pub inline fn isCompleted(): bool {
+        return _.#query.isCompleted();
     }
-    pub inline fn isRunning(*_): bool {
-        return this.#query.isRunning();
+    pub inline fn isRunning(): bool {
+        return _.#query.isRunning();
     }
-    pub inline fn isPending(*_): bool {
-        return this.#query.isPending();
+    pub inline fn isPending(): bool {
+        return _.#query.isPending();
     }
-    pub inline fn isBeingPrepared(*_): bool {
-        return this.#query.isBeingPrepared();
+    pub inline fn isBeingPrepared(): bool {
+        return _.#query.isBeingPrepared();
     }
-    pub inline fn isPipelined(*_): bool {
-        return this.#query.isPipelined();
+    pub inline fn isPipelined(): bool {
+        return _.#query.isPipelined();
     }
-    pub inline fn isSimple(*_): bool {
-        return this.#query.isSimple();
+    pub inline fn isSimple(): bool {
+        return _.#query.isSimple();
     }
-    pub inline fn isBigintSupported(*_): bool {
-        return this.#query.isBigintSupported();
+    pub inline fn isBigintSupported(): bool {
+        return _.#query.isBigintSupported();
     }
-    pub inline fn getResultMode(*_): SQLQueryResultMode {
-        return this.#query.getResultMode();
+    pub inline fn getResultMode(): SQLQueryResultMode {
+        return _.#query.getResultMode();
     }
     pub fn getStatement(*_): (*MySQLStatement)? {
-        return this.#query.getStatement();
+        return _.#query.getStatement();
     }
     pub fn markAsPrepared(*_) {
-        this.#query.markAsPrepared();
+        _.#query.markAsPrepared();
     }
 
     pub inline fn setPendingValue(*_, result: JSValue) {
-        if (this.#vm.isShuttingDown()) return;
-        if (value := this.#thisValue.tryGet()) {
-            js.pendingValueSetCached(value, this.#globalObject, result);
+        if (_.#vm.isShuttingDown()) return;
+        if (value := _.#thisValue.tryGet()) {
+            js.pendingValueSetCached(value, _.#globalObject, result);
         }
     }
-    pub inline fn getPendingValue(*_): JSValue? {
-        if (this.#vm.isShuttingDown()) return null;
-        if (value := this.#thisValue.tryGet()) {
+    pub inline fn getPendingValue(): JSValue? {
+        if (_.#vm.isShuttingDown()) return null;
+        if (value := _.#thisValue.tryGet()) {
             return js.pendingValueGetCached(value);
         }
         return null;
     }
 
     inline fn setTarget(*_, result: JSValue) {
-        if (this.#vm.isShuttingDown()) return;
-        if (value := this.#thisValue.tryGet()) {
-            js.targetSetCached(value, this.#globalObject, result);
+        if (_.#vm.isShuttingDown()) return;
+        if (value := _.#thisValue.tryGet()) {
+            js.targetSetCached(value, _.#globalObject, result);
         }
     }
-    inline fn getTarget(*_): JSValue? {
-        if (this.#vm.isShuttingDown()) return null;
-        if (value := this.#thisValue.tryGet()) {
+    inline fn getTarget(): JSValue? {
+        if (_.#vm.isShuttingDown()) return null;
+        if (value := _.#thisValue.tryGet()) {
             return js.targetGetCached(value);
         }
         return null;
     }
 
     inline fn setColumns(*_, result: JSValue) {
-        if (this.#vm.isShuttingDown()) return;
-        if (value := this.#thisValue.tryGet()) {
-            js.columnsSetCached(value, this.#globalObject, result);
+        if (_.#vm.isShuttingDown()) return;
+        if (value := _.#thisValue.tryGet()) {
+            js.columnsSetCached(value, _.#globalObject, result);
         }
     }
-    inline fn getColumns(*_): JSValue? {
-        if (this.#vm.isShuttingDown()) return null;
-        if (value := this.#thisValue.tryGet()) {
+    inline fn getColumns(): JSValue? {
+        if (_.#vm.isShuttingDown()) return null;
+        if (value := _.#thisValue.tryGet()) {
             return js.columnsGetCached(value);
         }
         return null;
     }
 
     inline fn setBinding(*_, result: JSValue) {
-        if (this.#vm.isShuttingDown()) return;
-        if (value := this.#thisValue.tryGet()) {
-            js.bindingSetCached(value, this.#globalObject, result);
+        if (_.#vm.isShuttingDown()) return;
+        if (value := _.#thisValue.tryGet()) {
+            js.bindingSetCached(value, _.#globalObject, result);
         }
     }
-    inline fn getBinding(*_): JSValue? {
-        if (this.#vm.isShuttingDown()) return null;
-        if (value := this.#thisValue.tryGet()) {
+    inline fn getBinding(): JSValue? {
+        if (_.#vm.isShuttingDown()) return null;
+        if (value := _.#thisValue.tryGet()) {
             return js.bindingGetCached(value);
         }
         return null;

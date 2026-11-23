@@ -5,10 +5,10 @@ export @root struct CertificateInfo {
     cert_error: HTTPCertError,
     hostname: string,
 
-    pub fn deinit(&_, allocator: std.mem.Allocator) {
-        allocator.free(this.cert);
-        allocator.free(this.cert_error.code);
-        allocator.free(this.cert_error.reason);
-        allocator.free(this.hostname);
+    pub fn deinit(allocator: std.mem.Allocator) {
+        allocator.free(_.cert);
+        allocator.free(_.cert_error.code);
+        allocator.free(_.cert_error.reason);
+        allocator.free(_.hostname);
     }
 }

@@ -136,7 +136,7 @@ else => bun.Output.panic("Invalid datetime length: {d}", .{ val.len }),
 });
     }
 
-pub fn toBinary(self: *const ValueDateTime, field_type: FieldType, buffer: []u8) u8 {
+pub fn toBinary(self: ValueDateTime, field_type: FieldType, buffer: []u8) u8 {
             switch (field_type) {
 .MYSQL_TYPE_YEAR => {
 buffer[cp_cast_int(usize, 0)] = 2;
@@ -171,7 +171,7 @@ return 0;
 }
     }
 
-pub fn toJSTimestamp(self: *const ValueDateTime, globalObject: *JSC.JSGlobalObject) bun.JSError!f64 {
+pub fn toJSTimestamp(self: ValueDateTime, globalObject: *JSC.JSGlobalObject) bun.JSError!f64 {
             return globalObject.gregorianDateTimeToMS(self.year, self.month, self.day, self.hour, self.minute, self.second, (if ((self.microsecond > 0)) @intCast(@divFloor(self.microsecond, 1000)) else 0));
     }
 
@@ -247,7 +247,7 @@ pub fn fromUnixTimestamp(timestamp: i64, microseconds: u32) @This() {
             return ValueTime{ .negative = (timestamp < 0), .days = @intCast(days), .hours = @intCast(hours), .minutes = @intCast(minutes), .seconds = @intCast(seconds), .microseconds = microseconds };
     }
 
-pub fn toUnixTimestamp(self: *const ValueTime) i64 {
+pub fn toUnixTimestamp(self: ValueTime) i64 {
             var total_ms: i64 = 0;
             _ = &total_ms;
             total_ms = (total_ms +| ((if (comptime @typeInfo(@TypeOf(self.days)) == .@"enum") cp_cast_int(i64, @intFromEnum(self.days)) else cp_cast_int(i64, self.days)) * 86400000));
@@ -280,7 +280,7 @@ pub fn fromBinary(val: []const u8) @This() {
             return time;
     }
 
-pub fn toJSTimestamp(self: *const ValueTime) f64 {
+pub fn toJSTimestamp(self: ValueTime) f64 {
             var total_ms: i64 = 0;
             _ = &total_ms;
             total_ms = (total_ms +| ((if (comptime @typeInfo(@TypeOf(self.days)) == .@"enum") cp_cast_int(i64, @intFromEnum(self.days)) else cp_cast_int(i64, self.days)) * 86400000));
@@ -289,18 +289,18 @@ pub fn toJSTimestamp(self: *const ValueTime) f64 {
             total_ms = (total_ms +| ((if (comptime @typeInfo(@TypeOf(self.seconds)) == .@"enum") cp_cast_int(i64, @intFromEnum(self.seconds)) else cp_cast_int(i64, self.seconds)) * 1000));
             total_ms = (total_ms +| @divFloor(self.microseconds, 1000));
             if (self.negative) {
-                total_ms = (0 - total_ms);
+                total_ms = (-total_ms);
             }
             const total_f: f64 = @floatFromInt(total_ms);
             return total_f;
     }
 
-pub fn toJS(self: *ValueTime, globalObject: *JSC.JSGlobalObject) JSValue {
+pub fn toJS(self: ValueTime, globalObject: *JSC.JSGlobalObject) JSValue {
             _ = &globalObject;
             return JSValue.jsDoubleNumber(self.toJSTimestamp());
     }
 
-pub fn toBinary(self: *const ValueTime, field_type: FieldType, buffer: []u8) u8 {
+pub fn toBinary(self: ValueTime, field_type: FieldType, buffer: []u8) u8 {
             switch (field_type) {
 .MYSQL_TYPE_TIME, .MYSQL_TYPE_TIME2 => {
 buffer[cp_cast_int(usize, 1)] = (if (self.negative) (if (comptime @typeInfo(@TypeOf(1)) == .@"enum") cp_cast_int(u8, @intFromEnum(1)) else cp_cast_int(u8, 1)) else (if (comptime @typeInfo(@TypeOf(0)) == .@"enum") cp_cast_int(u8, @intFromEnum(0)) else cp_cast_int(u8, 0)));
@@ -363,9 +363,8 @@ pub fn toJS(self: ValueDecimal, globalObject: *JSC.JSGlobalObject) JSValue {
             return (blk_catch_3: { break :blk_catch_3 ((bun.String.createUTF8ForJS(globalObject, str.items)) catch |__ce_3| { _ = &__ce_3; break :blk_catch_3 .zero; }); });
     }
 
-pub fn toBinary(self: *ValueDecimal, field_type: FieldType) !Data {
-            const __unused_self = self;
-            _ = &__unused_self;
+pub fn toBinary(self: ValueDecimal, field_type: FieldType) !Data {
+        _ = self;
             _ = &field_type;
             _ = bun.todoPanic(@src(), "Decimal.toBinary not implemented", .{});
     }
@@ -410,17 +409,14 @@ else => {
 }
     }
 
-pub fn toData(self: *const Value, field_type: FieldType) AnyMySQLError.Error!Data {
+pub fn toData(self: Value, field_type: FieldType) AnyMySQLError.Error!Data {
             var buffer: [15]u8 = undefined;
             _ = &buffer;
             var stream = std.io.fixedBufferStream((&buffer));
             _ = &stream;
             var writer = stream.writer();
             _ = &writer;
-            switch ((blk: {
-            break :blk self.*;
-
-})) {
+            switch (self) {
 .@"null" => {
 return Data{ .empty = undefined };
 },

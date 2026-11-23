@@ -69,10 +69,10 @@ export @value struct HeapRequestBodyBuffer {
 
     fn put(*_) {
         if (bun.http.http_thread.lazy_request_body_buffer == null) {
-            this.fixed_buffer_allocator.reset();
-            bun.http.http_thread.lazy_request_body_buffer = this;
+            _.fixed_buffer_allocator.reset();
+            bun.http.http_thread.lazy_request_body_buffer = _;
         } else {
-            this.deinit();
+            _.deinit();
         }
     }
 }
@@ -84,12 +84,12 @@ export @value struct LibdeflateState {
     shared_buffer: [u8; 524288] = undefined,
 
     fn release(*_) {
-        this.decompressor.deinit();
-        bun.TrivialDeinit(LibdeflateState)(this);
+        _.decompressor.deinit();
+        bun.TrivialDeinit(LibdeflateState)(_);
     }
 
     fn deinit(*_) {
-        this.release();
+        _.release();
     }
 }
 
@@ -98,14 +98,14 @@ export enum RequestBodyBuffer {
     stack: StackFallback,
 
     pub fn release(*_) {
-        switch (this.*) {
+        switch (_.*) {
             .heap(heap) => heap.put(),
             .stack => {},
         }
     }
 
     pub fn deinit(*_) {
-        this.release();
+        _.release();
     }
 
     pub fn allocatedSlice(*_): []u8 {
@@ -123,7 +123,7 @@ export enum RequestBodyBuffer {
     }
 
     pub fn toArrayList(*_): std.array_list.Managed(u8) {
-        let list = std.array_list.Managed(u8).fromOwnedSlice(this.allocator(), this.allocatedSlice());
+        let list = std.array_list.Managed(u8).fromOwnedSlice(_.allocator(), _.allocatedSlice());
         list.items.len = 0;
         return list;
     }
@@ -173,18 +173,18 @@ export @root @value struct HTTPThread {
     lazy_request_body_buffer: *HeapRequestBodyBuffer? = null,
 
     fn deflater(*_): *LibdeflateState {
-        if (this.lazy_libdeflater == null) {
-            this.lazy_libdeflater = LibdeflateState.new({
+        if (_.lazy_libdeflater == null) {
+            _.lazy_libdeflater = LibdeflateState.new({
                 decompressor: bun.libdeflate.Decompressor.alloc() ?? bun.outOfMemory(),
             });
         }
-        return this.lazy_libdeflater.?;
+        return _.lazy_libdeflater.?;
     }
 
     @inline
     pub fn getRequestBodySendBuffer(*_, estimated_size: usize): RequestBodyBuffer {
         if (estimated_size >= request_body_send_stack_buffer_size) {
-            if (this.lazy_request_body_buffer == null) {
+            if (_.lazy_request_body_buffer == null) {
                 return .{
                     .heap = HeapRequestBodyBuffer.init(),
                 };
@@ -280,23 +280,23 @@ export @root @value struct HTTPThread {
     }
 
     pub fn context(*_, comptime is_ssl: bool): @if (is_ssl) *HTTPContextTLS else *HTTPContextTCP {
-        if (is_ssl) return &this.https_context;
-        return &this.http_context;
+        if (is_ssl) return &_.https_context;
+        return &_.http_context;
     }
 
     pub fn connect(*_, comptime is_ssl: bool, client: *bun.http.HTTPClient): (NewHTTPContext(is_ssl).HTTPSocket?)! {
         if (client.unix_socket_path.length() > 0) {
-            return this.context(is_ssl).connectSocket(client, client.unix_socket_path.slice())?;
+            return _.context(is_ssl).connectSocket(client, client.unix_socket_path.slice())?;
         }
 
         if (is_ssl) {
             if (tls := client.tls_props) {
                 if (tls.get().requires_custom_request_ctx) {
                     const requested_config = tls.get();
-                    this.evictStaleSslContexts();
+                    _.evictStaleSslContexts();
 
                     if (entry := custom_ssl_context_map.getPtr(requested_config)) {
-                        entry.last_used_ns = this.timer.read();
+                        entry.last_used_ns = _.timer.read();
                         client.setCustomSslCtx(entry.ctx);
                         if (url := client.http_proxy) {
                             return entry.ctx.connect(client, url.hostname, url.getPortAuto())?;
@@ -315,7 +315,7 @@ export @root @value struct HTTPThread {
                         return error.FailedToOpenSocket;
                     };
 
-                    const now = this.timer.read();
+                    const now = _.timer.read();
                     bun.handleOom(custom_ssl_context_map.put(requested_config, .{
                         .ctx = custom_context,
                         .last_used_ns = now,
@@ -341,16 +341,16 @@ export @root @value struct HTTPThread {
         if (url := client.http_proxy) {
             if (url.href.len > 0) {
                 if (url.protocol.len == 0 || bun.strings.eqlComptime(url.protocol, "https") || bun.strings.eqlComptime(url.protocol, "http")) {
-                    return this.context(is_ssl).connect(client, url.hostname, url.getPortAuto())?;
+                    return _.context(is_ssl).connect(client, url.hostname, url.getPortAuto())?;
                 }
                 return error.UnsupportedProxyProtocol;
             }
         }
-        return this.context(is_ssl).connect(client, client.url.hostname, client.url.getPortAuto())?;
+        return _.context(is_ssl).connect(client, client.url.hostname, client.url.getPortAuto())?;
     }
 
     pub fn evictStaleSslContexts(*_) {
-        const now = this.timer.read();
+        const now = _.timer.read();
         let i: usize = 0;
         while (i < custom_ssl_context_map.count()) {
             let entry = custom_ssl_context_map.values()[i];
@@ -383,7 +383,7 @@ export @root @value struct HTTPThread {
     }
 
     fn abortPendingH2Waiter(*_, async_http_id: u32): bool {
-        if (this.https_context.abortPendingH2Waiter(async_http_id)) return true;
+        if (_.https_context.abortPendingH2Waiter(async_http_id)) return true;
         for (entry of custom_ssl_context_map.values()) {
             if (entry.ctx.abortPendingH2Waiter(async_http_id)) return true;
         }
@@ -392,10 +392,10 @@ export @root @value struct HTTPThread {
 
     fn drainQueuedShutdowns(*_) {
         while (true) {
-            this.queued_shutdowns_lock.lock();
-            let queued_shutdowns = this.queued_shutdowns;
-            this.queued_shutdowns = {};
-            this.queued_shutdowns_lock.unlock();
+            _.queued_shutdowns_lock.lock();
+            let queued_shutdowns = _.queued_shutdowns;
+            _.queued_shutdowns = {};
+            _.queued_shutdowns_lock.unlock();
             const _qs_guard = DeinitWithAllocGuard<@TypeOf(queued_shutdowns)>{ ptr: &queued_shutdowns, alloc: bun.default_allocator };
 
             for (http of queued_shutdowns.items) {
@@ -429,9 +429,9 @@ export @root @value struct HTTPThread {
                         },
                     }
                 } else {
-                    if (this.abortPendingH2Waiter(http.async_http_id)) continue;
+                    if (_.abortPendingH2Waiter(http.async_http_id)) continue;
                     if (bun.http.H3.ClientContext.abortByHttpId(http.async_http_id)) continue;
-                    this.has_pending_queued_abort = true;
+                    _.has_pending_queued_abort = true;
                 }
             }
             if (queued_shutdowns.items.len == 0) {
@@ -442,10 +442,10 @@ export @root @value struct HTTPThread {
 
     fn drainQueuedWrites(*_) {
         while (true) {
-            this.queued_writes_lock.lock();
-            let queued_writes = this.queued_writes;
-            this.queued_writes = {};
-            this.queued_writes_lock.unlock();
+            _.queued_writes_lock.lock();
+            let queued_writes = _.queued_writes;
+            _.queued_writes = {};
+            _.queued_writes_lock.unlock();
             const _qw_guard = DeinitWithAllocGuard<@TypeOf(queued_writes)>{ ptr: &queued_writes, alloc: bun.default_allocator };
 
             for (write of queued_writes.items) {
@@ -493,10 +493,10 @@ export @root @value struct HTTPThread {
 
     fn drainQueuedHTTPResponseBodyDrains(*_) {
         while (true) {
-            this.queued_response_body_drains_lock.lock();
-            let queued_response_body_drains = this.queued_response_body_drains;
-            this.queued_response_body_drains = {};
-            this.queued_response_body_drains_lock.unlock();
+            _.queued_response_body_drains_lock.lock();
+            let queued_response_body_drains = _.queued_response_body_drains;
+            _.queued_response_body_drains = {};
+            _.queued_response_body_drains_lock.unlock();
             const _qrbd_guard = DeinitWithAllocGuard<@TypeOf(queued_response_body_drains)>{ ptr: &queued_response_body_drains, alloc: bun.default_allocator };
 
             for (drain of queued_response_body_drains.items) {
@@ -532,39 +532,39 @@ export @root @value struct HTTPThread {
     }
 
     fn drainEvents(*_) {
-        this.drainQueuedHTTPResponseBodyDrains();
-        this.drainQueuedWrites();
-        this.drainQueuedShutdowns();
+        _.drainQueuedHTTPResponseBodyDrains();
+        _.drainQueuedWrites();
+        _.drainQueuedShutdowns();
         bun.http.H3.PendingConnect.drainResolved();
 
-        for (http of this.queued_threadlocal_proxy_derefs.items) {
+        for (http of _.queued_threadlocal_proxy_derefs.items) {
             http.deref();
         }
-        this.queued_threadlocal_proxy_derefs.clearRetainingCapacity();
+        _.queued_threadlocal_proxy_derefs.clearRetainingCapacity();
 
         let active = bun.http.AsyncHTTP.active_requests_count.load(.monotonic);
         const max = bun.http.AsyncHTTP.max_simultaneous_requests.load(.monotonic);
 
-        if (active >= max && !this.has_pending_queued_abort) return;
+        if (active >= max && !_.has_pending_queued_abort) return;
 
-        this.has_pending_queued_abort = false;
+        _.has_pending_queued_abort = false;
         {
-            let pending = this.deferred_tasks;
-            this.deferred_tasks = {};
+            let pending = _.deferred_tasks;
+            _.deferred_tasks = {};
             const _pending_guard = DeinitWithAllocGuard<@TypeOf(pending)>{ ptr: &pending, alloc: bun.default_allocator };
             for (http of pending.items) {
                 if (http.client.signals.get(.aborted) || active < max) {
                     HTTPThread.startQueuedTask(http);
                     active = bun.http.AsyncHTTP.active_requests_count.load(.monotonic);
                 } else {
-                    bun.handleOom(this.deferred_tasks.append(bun.default_allocator, http));
+                    bun.handleOom(_.deferred_tasks.append(bun.default_allocator, http));
                 }
             }
         }
 
-        while (http := this.queued_tasks.pop()) {
+        while (http := _.queued_tasks.pop()) {
             if (!http.client.signals.get(.aborted) && active >= max) {
-                bun.handleOom(this.deferred_tasks.append(bun.default_allocator, http));
+                bun.handleOom(_.deferred_tasks.append(bun.default_allocator, http));
                 continue;
             }
             HTTPThread.startQueuedTask(http);
@@ -584,70 +584,70 @@ export @root @value struct HTTPThread {
 
     fn processEvents(*_): noreturn {
         if (bun.Environment.isPosix) {
-            this.loop.loop.num_polls = @max(2, this.loop.loop.num_polls);
+            _.loop.loop.num_polls = @max(2, _.loop.loop.num_polls);
         } else if (bun.Environment.isWindows) {
-            this.loop.loop.inc();
+            _.loop.loop.inc();
         }
 
         while (true) {
-            this.drainEvents();
+            _.drainEvents();
 
-            this.loop.loop.inc();
-            this.loop.loop.tick();
-            this.loop.loop.dec();
+            _.loop.loop.inc();
+            _.loop.loop.tick();
+            _.loop.loop.dec();
         }
     }
 
     fn scheduleResponseBodyDrain(*_, async_http_id: u32) {
         {
-            this.queued_response_body_drains_lock.lock();
-            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &this.queued_response_body_drains_lock } };
-            bun.handleOom(this.queued_response_body_drains.append(bun.default_allocator, {
+            _.queued_response_body_drains_lock.lock();
+            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &_.queued_response_body_drains_lock } };
+            bun.handleOom(_.queued_response_body_drains.append(bun.default_allocator, {
                 async_http_id: async_http_id,
             }));
         }
-        if (this.has_awoken.load(.monotonic)) {
-            this.loop.loop.wakeup();
+        if (_.has_awoken.load(.monotonic)) {
+            _.loop.loop.wakeup();
         }
     }
 
     fn scheduleShutdown(*_, http: *AsyncHTTP) {
         {
-            this.queued_shutdowns_lock.lock();
-            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &this.queued_shutdowns_lock } };
-            bun.handleOom(this.queued_shutdowns.append(bun.default_allocator, {
+            _.queued_shutdowns_lock.lock();
+            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &_.queued_shutdowns_lock } };
+            bun.handleOom(_.queued_shutdowns.append(bun.default_allocator, {
                 async_http_id: http.async_http_id,
             }));
         }
-        if (this.has_awoken.load(.monotonic)) {
-            this.loop.loop.wakeup();
+        if (_.has_awoken.load(.monotonic)) {
+            _.loop.loop.wakeup();
         }
     }
 
     fn scheduleRequestWrite(*_, http: *AsyncHTTP, messageType: WriteMessageType) {
         {
-            this.queued_writes_lock.lock();
-            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &this.queued_writes_lock } };
-            bun.handleOom(this.queued_writes.append(bun.default_allocator, {
+            _.queued_writes_lock.lock();
+            const _lock_guard = MutexUnlockGuard<bun.Mutex>{ lock: unsafe { &_.queued_writes_lock } };
+            bun.handleOom(_.queued_writes.append(bun.default_allocator, {
                 async_http_id: http.async_http_id,
                 message_type: messageType,
             }));
         }
-        if (this.has_awoken.load(.monotonic)) {
-            this.loop.loop.wakeup();
+        if (_.has_awoken.load(.monotonic)) {
+            _.loop.loop.wakeup();
         }
     }
 
     fn scheduleProxyDeref(*_, proxy: *ProxyTunnel) {
-        bun.handleOom(this.queued_threadlocal_proxy_derefs.append(bun.default_allocator, proxy));
-        if (this.has_awoken.load(.monotonic)) {
-            this.loop.loop.wakeup();
+        bun.handleOom(_.queued_threadlocal_proxy_derefs.append(bun.default_allocator, proxy));
+        if (_.has_awoken.load(.monotonic)) {
+            _.loop.loop.wakeup();
         }
     }
 
     fn wakeup(*_) {
-        if (this.has_awoken.load(.monotonic)) {
-            this.loop.loop.wakeup();
+        if (_.has_awoken.load(.monotonic)) {
+            _.loop.loop.wakeup();
         }
     }
 
@@ -657,11 +657,11 @@ export @root @value struct HTTPThread {
 
         while (task := b.pop()) {
             const http: *AsyncHTTP = @fieldParentPtr("task", task);
-            this.queued_tasks.push(http);
+            _.queued_tasks.push(http);
         }
 
-        if (this.has_awoken.load(.monotonic)) {
-            this.loop.loop.wakeup();
+        if (_.has_awoken.load(.monotonic)) {
+            _.loop.loop.wakeup();
         }
     }
 }

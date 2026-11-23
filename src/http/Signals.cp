@@ -10,11 +10,11 @@ export @value struct Store {
 
     pub fn to(*_): Signals {
         return {
-            header_progress: &this.header_progress,
-            response_body_streaming: &this.response_body_streaming,
-            aborted: &this.aborted,
-            cert_errors: &this.cert_errors,
-            upgraded: &this.upgraded,
+            header_progress: &_.header_progress,
+            response_body_streaming: &_.response_body_streaming,
+            aborted: &_.aborted,
+            cert_errors: &_.cert_errors,
+            upgraded: &_.upgraded,
         };
     }
 }
@@ -26,12 +26,12 @@ export @root struct Signals {
     cert_errors: *std.atomic.Value(bool)? = null,
     upgraded: *std.atomic.Value(bool)? = null,
 
-    pub fn isEmpty(&_): bool {
-        return this.aborted == null && this.response_body_streaming == null && this.header_progress == null && this.cert_errors == null && this.upgraded == null;
+    pub fn isEmpty(): bool {
+        return _.aborted == null && _.response_body_streaming == null && _.header_progress == null && _.cert_errors == null && _.upgraded == null;
     }
 
-    pub fn get(@comptime field: std.meta.FieldEnum(Signals)): bool {
-        let ptr: *std.atomic.Value(bool) = @field(this, @tagName(field)) ?? return false;
+    pub fn get(comptime field: std.meta.FieldEnum(Signals)): bool {
+        let ptr: *std.atomic.Value(bool) = @field(_, @tagName(field)) ?? return false;
         return ptr.load(.monotonic);
     }
 }

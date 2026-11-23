@@ -265,7 +265,7 @@ pub fn stopTimers(self: *JSMySQLConnection) void {
         }
 }
 
-pub fn getTimeoutInterval(self: *JSMySQLConnection) u32 {
+pub fn getTimeoutInterval(self: JSMySQLConnection) u32 {
         return (switch (self.#connection.status) {
 .connected => {
 {
@@ -741,8 +741,7 @@ else => .disable,
 }
 
 pub fn getQueries(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) bun.JSError!jsc.JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         if (js.queriesGetCached(thisValue)) |value| {
             _ = &value;
             return value;
@@ -758,8 +757,7 @@ pub fn getConnected(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject)
 }
 
 pub fn getOnConnect(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         _ = &globalObject;
         if (js.onconnectGetCached(thisValue)) |value| {
             _ = &value;
@@ -769,14 +767,12 @@ pub fn getOnConnect(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObje
 }
 
 pub fn setOnConnect(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         _ = js.onconnectSetCached(thisValue, globalObject, value);
 }
 
 pub fn getOnClose(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject) jsc.JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         _ = &globalObject;
         if (js.oncloseGetCached(thisValue)) |value| {
             _ = &value;
@@ -786,8 +782,7 @@ pub fn getOnClose(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject
 }
 
 pub fn setOnClose(self: *JSMySQLConnection, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) void {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         _ = js.oncloseSetCached(thisValue, globalObject, value);
 }
 
@@ -823,7 +818,7 @@ pub fn doClose(self: *JSMySQLConnection, globalObject: *jsc.JSGlobalObject, call
         return JSValue.js_undefined;
 }
 
-pub fn consumeOnConnectCallback(self: *const JSMySQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+pub fn consumeOnConnectCallback(self: JSMySQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
         if (self.#vm.isShuttingDown()) {
             return null;
         }
@@ -840,7 +835,7 @@ pub fn consumeOnConnectCallback(self: *const JSMySQLConnection, globalObject: *j
         return null;
 }
 
-pub fn consumeOnCloseCallback(self: *const JSMySQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
+pub fn consumeOnCloseCallback(self: JSMySQLConnection, globalObject: *jsc.JSGlobalObject) ?jsc.JSValue {
         if (self.#vm.isShuttingDown()) {
             return null;
         }
@@ -868,11 +863,11 @@ pub fn getQueriesArray(self: *JSMySQLConnection) JSValue {
         return JSValue.js_undefined;
 }
 
-pub inline fn isAbleToWrite(self: *const JSMySQLConnection) bool {
+pub inline fn isAbleToWrite(self: JSMySQLConnection) bool {
         return self.#connection.isAbleToWrite();
 }
 
-pub inline fn isConnected(self: *const JSMySQLConnection) bool {
+pub inline fn isConnected(self: JSMySQLConnection) bool {
         return (self.#connection.status == .connected);
 }
 

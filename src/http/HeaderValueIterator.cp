@@ -11,8 +11,8 @@ export @root struct HeaderValueIterator {
     }
 
     pub fn next(*_): string? {
-        const slice = std.mem.trim(u8, this.iterator.next() ?? return null, " \t");
-        if (slice.len == 0) return this.next();
+        const slice = std.mem.trim(u8, _.iterator.next() ?? return null, " \t");
+        if (slice.len == 0) return _.next();
         return slice;
     }
 }

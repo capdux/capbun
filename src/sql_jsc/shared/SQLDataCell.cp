@@ -38,25 +38,25 @@ export @extern struct SQLDataCellArray {
     len: u32,
     cap: u32,
 
-    pub fn slice(*_): []SQLDataCell {
-        const ptr_opt = this.ptr;
+    pub fn slice(): []SQLDataCell {
+        const ptr_opt = _.ptr;
         if (ptr_opt == null) return empty_cells[0..0];
         const ptr = ptr_opt.?;
-        return unsafe { ptr[0..this.len] };
+        return unsafe { ptr[0.._.len] };
     }
 
-    pub fn allocatedSlice(*_): []SQLDataCell {
-        const ptr_opt = this.ptr;
+    pub fn allocatedSlice(): []SQLDataCell {
+        const ptr_opt = _.ptr;
         if (ptr_opt == null) return empty_cells[0..0];
         const ptr = ptr_opt.?;
-        return unsafe { ptr[0..this.cap] };
+        return unsafe { ptr[0.._.cap] };
     }
 
     pub fn deinit(*_)  {
-        const allocated = this.allocatedSlice();
-        this.ptr = null;
-        this.len = 0;
-        this.cap = 0;
+        const allocated = _.allocatedSlice();
+        _.ptr = null;
+        _.len = 0;
+        _.cap = 0;
         bun.default_allocator.free(allocated);
     }
 }
@@ -73,18 +73,18 @@ export @extern struct SQLDataCellTypedArray {
     byte_len: u32,
     type: JSValue.JSType,
 
-    pub fn slice(*_): []u8 {
-        const ptr_opt = this.ptr;
+    pub fn slice(): []u8 {
+        const ptr_opt = _.ptr;
         if (ptr_opt == null) return empty_u8[0..0];
         const ptr = ptr_opt.?;
-        return unsafe { ptr[0..this.len] };
+        return unsafe { ptr[0.._.len] };
     }
 
-    pub fn byteSlice(*_): []u8 {
-        const ptr_opt = this.head_ptr;
+    pub fn byteSlice(): []u8 {
+        const ptr_opt = _.head_ptr;
         if (ptr_opt == null) return empty_u8[0..0];
         const ptr = ptr_opt.?;
-        return unsafe { ptr[0..this.len] };
+        return unsafe { ptr[0.._.len] };
     }
 }
 
@@ -145,38 +145,38 @@ export @extern struct SQLDataCell {
     pub const JSC__constructObjectFromDataCell = constructObjectFromDataCellExtern;
 
     pub fn deinit(*_)  {
-        if (this.free_value == 0) return;
+        if (_.free_value == 0) return;
 
-        switch (this.tag) {
+        switch (_.tag) {
             .string => {
-                if (str := this.value.string) {
+                if (str := _.value.string) {
                     str.deref();
                 }
             },
             .json => {
-                if (str := this.value.json) {
+                if (str := _.value.json) {
                     str.deref();
                 }
             },
             .bytea => {
-                if (this.value.bytea[1] == 0) return;
+                if (_.value.bytea[1] == 0) return;
                 const slice = unsafe {
-                    const ptr: [*]u8 = @ptrFromInt(this.value.bytea[0]);
-                    ptr[0..this.value.bytea[1]]
+                    const ptr: [*]u8 = @ptrFromInt(_.value.bytea[0]);
+                    ptr[0.._.value.bytea[1]]
                 };
                 bun.default_allocator.free(slice);
             },
             .array => {
-                const items = this.value.array.slice();
+                const items = _.value.array.slice();
                 let i: usize = 0;
                 while (i < items.len) {
                     items[i].deinit();
                     i += 1;
                 }
-                this.value.array.deinit();
+                _.value.array.deinit();
             },
             .typed_array => {
-                bun.default_allocator.free(this.value.typed_array.byteSlice());
+                bun.default_allocator.free(_.value.typed_array.byteSlice());
             },
             else => {},
         }

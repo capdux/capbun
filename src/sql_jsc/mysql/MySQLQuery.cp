@@ -74,7 +74,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         columns_value: JSValue,
         result: AnyMySQLError.Error!void,
 
-        pub fn run(ctx: *@This(), roots: *bun.jsc.MarkedArgumentBuffer) callconv(.c) {
+        pub static fn run(ctx: *@This(), roots: *bun.jsc.MarkedArgumentBuffer) callconv(.c) {
             ctx.result = ctx.query_ptr.bindAndExecuteImpl(ctx.writer, ctx.statement, ctx.globalObject, ctx.binding_value, ctx.columns_value, roots);
         }
     };
@@ -116,7 +116,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             return err.WrongNumberOfParametersProvided;
         }
 
-        this.#status = .binding;
+        _.#status = .binding;
         execute.params = params;
     }
 
@@ -128,7 +128,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
 
         const Ctx = BindAndExecuteCtx(@TypeOf(writer));
         let ctx = Ctx{
-            query_ptr: this,
+            query_ptr: _,
             writer: writer,
             statement: statement,
             globalObject: globalObject,
@@ -148,32 +148,32 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
             iteration_count: 1,
         };
         const _exec_guard = DeinitGuard<PreparedStatement.Execute>{ ptr: unsafe { &execute } };
-        this.bind(&execute, globalObject, binding_value, columns_value, roots)?;
+        _.bind(&execute, globalObject, binding_value, columns_value, roots)?;
         let packet = writer.start(0)?;
         execute.write(writer)?;
         packet.end()?;
         statement.execution_flags.need_to_send_params = false;
-        this.#status = .running;
+        _.#status = .running;
     }
 
     fn runSimpleQuery(*_, connection: *MySQLConnection): void! {
-        if (this.#status != .pending || !connection.canExecuteQuery()) {
+        if (_.#status != .pending || !connection.canExecuteQuery()) {
             debug("cannot execute query", .{});
             return;
         }
-        let query_str = this.#query.toUTF8(bun.default_allocator);
+        let query_str = _.#query.toUTF8(bun.default_allocator);
         const _query_guard = DeinitGuard<bun.ZigString.Slice>{ ptr: unsafe { &query_str } };
         const writer = connection.getWriter();
-        if (this.#statement == null) {
+        if (_.#statement == null) {
             const stmt = bun.new(MySQLStatement, {
                 signature: Signature.empty(),
                 status: .parsing,
                 ref_count: .initExactRefs(1),
             });
-            this.#statement = stmt;
+            _.#statement = stmt;
         }
         MySQLRequest.executeQuery(query_str.slice(), MySQLConnection.Writer, writer)?;
-        this.#status = .running;
+        _.#status = .running;
     }
 
     fn runPreparedQuery(
@@ -185,17 +185,17 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
     ): void! {
         let _query_guard = OptDeinitGuard<bun.ZigString.Slice>{};
 
-        if (this.#statement == null) {
-            const query = this.#query.toUTF8(bun.default_allocator);
+        if (_.#statement == null) {
+            const query = _.#query.toUTF8(bun.default_allocator);
             _query_guard.val = query;
-            let signature = Signature.generate(globalObject, query.slice(), binding_value, columns_value) catch |e| {
+            let signature = Signature.generate(globalObject, query.slice(), binding_value, columns_value) catch e => {
                 if (!globalObject.hasException()) {
                     return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to generate signature", @errorCast(e)));
                 }
                 return err.JSError;
             };
             const _sig_guard = ErrDeinitGuard<Signature>{ ptr: unsafe { &signature } };
-            const entry = connection.getStatementFromSignatureHash(bun.hash(signature.name)) catch |e| {
+            const entry = connection.getStatementFromSignatureHash(bun.hash(signature.name)) catch e => {
                 return globalObject.throwError(e, "failed to allocate statement");
             };
 
@@ -205,7 +205,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                     const error_response = existing_stmt.error_response.toJS(globalObject);
                     return globalObject.throwValue(error_response);
                 }
-                this.#statement = existing_stmt;
+                _.#statement = existing_stmt;
                 existing_stmt.ref();
                 signature.deinit();
                 signature = Signature{};
@@ -216,11 +216,11 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                     status: .pending,
                     statement_id: 0,
                 });
-                this.#statement = new_stmt;
+                _.#statement = new_stmt;
                 unsafe { entry.value_ptr.* = new_stmt; }
             }
         }
-        const stmt = this.#statement.?;
+        const stmt = _.#statement.?;
         switch (stmt.status) {
             .failed => {
                 debug("failed", .{});
@@ -231,13 +231,13 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                 if (connection.canPipeline()) {
                     debug("bindAndExecute", .{});
                     const writer = connection.getWriter();
-                    this.bindAndExecute(writer, stmt, globalObject, binding_value, columns_value) catch |e| {
+                    _.bindAndExecute(writer, stmt, globalObject, binding_value, columns_value) catch e => {
                         if (!globalObject.hasException()) {
                             return globalObject.throwValue(AnyMySQLError.mysqlErrorToJS(globalObject, "failed to bind and execute query", e));
                         }
                         return err.JSError;
                     };
-                    this.#flags.pipelined = true;
+                    _.#flags.pipelined = true;
                 }
             },
             .parsing => {
@@ -247,8 +247,8 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
                 if (connection.canPrepareQuery()) {
                     debug("prepareRequest", .{});
                     const writer = connection.getWriter();
-                    const query = _query_guard.val ?? this.#query.toUTF8(bun.default_allocator);
-                    MySQLRequest.prepareRequest(query.slice(), MySQLConnection.Writer, writer) catch |e| {
+                    const query = _query_guard.val ?? _.#query.toUTF8(bun.default_allocator);
+                    MySQLRequest.prepareRequest(query.slice(), MySQLConnection.Writer, writer) catch e => {
                         return globalObject.throwError(e, "failed to prepare query");
                     };
                     stmt.status = .parsing;
@@ -269,12 +269,12 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
     }
 
     pub fn runQuery(*_, connection: *MySQLConnection, globalObject: *JSGlobalObject, columns_value: JSValue, binding_value: JSValue): void! {
-        if (this.#flags.simple) {
+        if (_.#flags.simple) {
             debug("runSimpleQuery", .{});
-            return this.runSimpleQuery(connection)?;
+            return _.runSimpleQuery(connection)?;
         }
         debug("runPreparedQuery", .{});
-        return this.runPreparedQuery(
+        return _.runPreparedQuery(
             connection,
             globalObject,
             if (columns_value == .zero) .js_undefined else columns_value,
@@ -283,69 +283,69 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
     }
 
     pub inline fn setResultMode(*_, result_mode: SQLQueryResultMode) {
-        this.#flags.result_mode = result_mode;
+        _.#flags.result_mode = result_mode;
     }
 
     pub inline fn result(*_, is_last_result: bool): bool {
-        if (this.#status == .success || this.#status == .fail) return false;
-        this.#status = if (is_last_result) .success else .partial_response;
+        if (_.#status == .success || _.#status == .fail) return false;
+        _.#status = if (is_last_result) .success else .partial_response;
         return true;
     }
 
     pub fn fail(*_): bool {
-        if (this.#status == .fail || this.#status == .success) return false;
-        this.#status = .fail;
+        if (_.#status == .fail || _.#status == .success) return false;
+        _.#status = .fail;
         return true;
     }
 
     pub fn cleanup(*_) {
-        if (statement := this.#statement) {
+        if (statement := _.#statement) {
             statement.deref();
-            this.#statement = null;
+            _.#statement = null;
         }
-        let query = this.#query;
+        let query = _.#query;
         const _query_deref_guard = DerefGuard<bun.String>{ ptr: unsafe { &query } };
-        this.#query = bun.String.empty;
+        _.#query = bun.String.empty;
     }
 
-    pub inline fn isCompleted(_: *const @This()): bool {
-        return this.#status == .success || this.#status == .fail;
+    pub inline fn isCompleted(): bool {
+        return _.#status == .success || _.#status == .fail;
     }
 
-    pub inline fn isRunning(_: *const @This()): bool {
-        return switch (this.#status) {
+    pub inline fn isRunning(): bool {
+        return switch (_.#status) {
             .running, .binding, .partial_response => true,
             .success, .fail, .pending => false,
         };
     }
 
-    pub inline fn isPending(_: *const @This()): bool {
-        return this.#status == .pending;
+    pub inline fn isPending(): bool {
+        return _.#status == .pending;
     }
 
-    pub inline fn isBeingPrepared(*_): bool {
-        return this.#status == .pending && this.#statement != null && this.#statement.?.status == .parsing;
+    pub inline fn isBeingPrepared(): bool {
+        return _.#status == .pending && _.#statement != null && _.#statement.?.status == .parsing;
     }
 
-    pub inline fn isPipelined(_: *const @This()): bool {
-        return this.#flags.pipelined;
+    pub inline fn isPipelined(): bool {
+        return _.#flags.pipelined;
     }
 
-    pub inline fn isSimple(_: *const @This()): bool {
-        return this.#flags.simple;
+    pub inline fn isSimple(): bool {
+        return _.#flags.simple;
     }
 
-    pub inline fn isBigintSupported(_: *const @This()): bool {
-        return this.#flags.bigint;
+    pub inline fn isBigintSupported(): bool {
+        return _.#flags.bigint;
     }
 
-    pub inline fn getResultMode(_: *const @This()): SQLQueryResultMode {
-        return this.#flags.result_mode;
+    pub inline fn getResultMode(): SQLQueryResultMode {
+        return _.#flags.result_mode;
     }
 
     pub inline fn markAsPrepared(*_) {
-        if (this.#status == .pending) {
-            if (statement := this.#statement) {
+        if (_.#status == .pending) {
+            if (statement := _.#statement) {
                 if (statement.status == .parsing &&
                     statement.params.len == statement.params_received &&
                     statement.statement_id > 0)
@@ -356,7 +356,7 @@ fn BindAndExecuteCtx(comptime WriterType: type): type {
         }
     }
 
-    pub inline fn getStatement(_: *const @This()): (*MySQLStatement)? {
-        return this.#statement;
+    pub inline fn getStatement(): (*MySQLStatement)? {
+        return _.#statement;
     }
 }

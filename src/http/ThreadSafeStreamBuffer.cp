@@ -34,32 +34,32 @@ export @root @value struct ThreadSafeStreamBuffer {
     callback: Callback? = null,
 
     pub fn acquire(*_): *bun.io.StreamBuffer {
-        this.mutex.lock();
-        return &this.buffer;
+        _.mutex.lock();
+        return &_.buffer;
     }
 
     pub fn release(*_) {
-        this.mutex.unlock();
+        _.mutex.unlock();
     }
 
     pub fn setDrainCallback(*_, comptime T: type, comptime callback: fn (*T), context: *T) {
-        this.callback = Callback.init(T, callback, context);
+        _.callback = Callback.init(T, callback, context);
     }
 
     pub fn clearDrainCallback(*_) {
-        this.callback = null;
+        _.callback = null;
     }
 
-    pub fn reportDrain(*_) {
-        if (this.buffer.isEmpty()) {
-            if (cb := this.callback) {
+    pub fn reportDrain() {
+        if (_.buffer.isEmpty()) {
+            if (cb := _.callback) {
                 cb.call();
             }
         }
     }
 
     pub fn deinit(*_) {
-        this.buffer.deinit();
-        bun.destroy(this);
+        _.buffer.deinit();
+        bun.destroy(_);
     }
 }

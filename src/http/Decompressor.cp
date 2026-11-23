@@ -10,25 +10,25 @@ export enum Decompressor {
     none,
 
     pub fn release(*_) {
-        switch (this.*) {
+        switch (_.*) {
             .brotli(that) => {
                 that.deinit();
-                this.* = .none;
+                _.* = .none;
             },
             .zlib(that) => {
                 that.deinit();
-                this.* = .none;
+                _.* = .none;
             },
             .zstd(that) => {
                 that.deinit();
-                this.* = .none;
+                _.* = .none;
             },
             .none => {},
         }
     }
 
     pub fn deinit(*_) {
-        this.release();
+        _.release();
     }
 
     pub fn updateBuffers(*_, encoding: Encoding, buffer: string, body_out_str: *bun.MutableString): !void {
@@ -36,7 +36,7 @@ export enum Decompressor {
             return;
         }
 
-        if (this.* == .none) {
+        if (_.* == .none) {
             switch (encoding) {
                 .gzip, .deflate => {
                     let windowBits: i32 = 0 - bun.zlib.MAX_WBITS;
@@ -54,7 +54,7 @@ export enum Decompressor {
                             .windowBits = windowBits,
                         },
                     )?;
-                    this.* = .{ .zlib = reader };
+                    _.* = .{ .zlib = reader };
                     return;
                 },
                 .brotli => {
@@ -64,7 +64,7 @@ export enum Decompressor {
                         body_out_str.allocator,
                         .{},
                     )?;
-                    this.* = .{ .brotli = reader };
+                    _.* = .{ .brotli = reader };
                     return;
                 },
                 .zstd => {
@@ -74,14 +74,14 @@ export enum Decompressor {
                         body_out_str.allocator,
                         bun.http.default_allocator,
                     )?;
-                    this.* = .{ .zstd = reader };
+                    _.* = .{ .zstd = reader };
                     return;
                 },
                 else => @panic("Invalid encoding. This code should not be reachable"),
             }
         }
 
-        switch (this.*) {
+        switch (_.*) {
             .zlib(reader) => {
                 bun.assert(reader.zlib.avail_in == 0);
                 reader.zlib.next_in = buffer.ptr;
@@ -119,7 +119,7 @@ export enum Decompressor {
     }
 
     pub fn readAll(*_, is_done: bool): !void {
-        switch (this.*) {
+        switch (_.*) {
             .zlib(zlib) => zlib.readAll(is_done)?,
             .brotli(brotli) => brotli.readAll(is_done)?,
             .zstd(reader) => reader.readAll(is_done)?,

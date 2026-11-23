@@ -45,7 +45,7 @@ pub fn clearDrainCallback(self: *ThreadSafeStreamBuffer) void {
         self.callback = null;
 }
 
-pub fn reportDrain(self: *ThreadSafeStreamBuffer) void {
+pub fn reportDrain(self: ThreadSafeStreamBuffer) void {
         if (self.buffer.isEmpty()) {
             if (self.callback) |cb| {
                 _ = &cb;

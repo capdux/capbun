@@ -135,108 +135,108 @@ struct TlsSetupGuard {
 
     pub fn onAutoFlush(*_): bool {
         debug("onAutoFlush", .{});
-        if (this.#connection.hasBackpressure()) {
-            this.auto_flusher.registered = false;
+        if (_.#connection.hasBackpressure()) {
+            _.auto_flusher.registered = false;
             return false;
         }
 
-        this.drainInternal();
+        _.drainInternal();
 
-        const keep_flusher_registered = this.#connection.canFlush();
-        this.auto_flusher.registered = keep_flusher_registered;
+        const keep_flusher_registered = _.#connection.canFlush();
+        _.auto_flusher.registered = keep_flusher_registered;
         return keep_flusher_registered;
     }
 
     pub fn registerAutoFlusher(*_) {
-        if (!this.auto_flusher.registered && this.#connection.canFlush()) {
-            AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), this, this.#vm);
-            this.auto_flusher.registered = true;
+        if (!_.auto_flusher.registered && _.#connection.canFlush()) {
+            AutoFlusher.registerDeferredMicrotaskWithTypeUnchecked(@This(), _, _.#vm);
+            _.auto_flusher.registered = true;
         }
     }
 
     fn unregisterAutoFlusher(*_) {
-        if (this.auto_flusher.registered) {
-            AutoFlusher.unregisterDeferredMicrotaskWithType(@This(), this, this.#vm);
-            this.auto_flusher.registered = false;
+        if (_.auto_flusher.registered) {
+            AutoFlusher.unregisterDeferredMicrotaskWithType(@This(), _, _.#vm);
+            _.auto_flusher.registered = false;
         }
     }
 
     fn stopTimers(*_) {
         debug("stopTimers", .{});
-        if (this.timer.state == .ACTIVE) {
-            this.#vm.timer.remove(&this.timer);
+        if (_.timer.state == .ACTIVE) {
+            _.#vm.timer.remove(&_.timer);
         }
-        if (this.max_lifetime_timer.state == .ACTIVE) {
-            this.#vm.timer.remove(&this.max_lifetime_timer);
+        if (_.max_lifetime_timer.state == .ACTIVE) {
+            _.#vm.timer.remove(&_.max_lifetime_timer);
         }
     }
 
-    fn getTimeoutInterval(*_): u32 {
-        return switch (this.#connection.status) {
+    fn getTimeoutInterval(): u32 {
+        return switch (_.#connection.status) {
             .connected => {
-                if (this.#connection.isIdle()) {
-                    return this.idle_timeout_interval_ms;
+                if (_.#connection.isIdle()) {
+                    return _.idle_timeout_interval_ms;
                 }
                 return 0;
             },
             .failed => 0,
-            else => this.connection_timeout_ms,
+            else => _.connection_timeout_ms,
         };
     }
 
     pub fn resetConnectionTimeout(*_) {
-        const interval = this.getTimeoutInterval();
+        const interval = _.getTimeoutInterval();
         debug("resetConnectionTimeout {d}", .{interval});
-        if (this.timer.state == .ACTIVE) {
-            this.#vm.timer.remove(&this.timer);
+        if (_.timer.state == .ACTIVE) {
+            _.#vm.timer.remove(&_.timer);
         }
-        if (this.#connection.status == .failed ||
-            this.#connection.isProcessingData() ||
+        if (_.#connection.status == .failed ||
+            _.#connection.isProcessingData() ||
             interval == 0) return;
 
-        this.timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(interval));
-        this.#vm.timer.insert(&this.timer);
+        _.timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(interval));
+        _.#vm.timer.insert(&_.timer);
     }
 
     pub fn onConnectionTimeout(*_) {
-        this.timer.state = .FIRED;
+        _.timer.state = .FIRED;
 
-        if (this.#connection.isProcessingData()) {
+        if (_.#connection.isProcessingData()) {
             return;
         }
-        if (this.#connection.status == .failed) return;
+        if (_.#connection.status == .failed) return;
 
-        if (this.getTimeoutInterval() == 0) {
-            this.resetConnectionTimeout();
+        if (_.getTimeoutInterval() == 0) {
+            _.resetConnectionTimeout();
             return;
         }
 
-        switch (this.#connection.status) {
+        switch (_.#connection.status) {
             .connected => {
-                this.failFmt(err.IdleTimeout, "Idle timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.idle_timeout_interval_ms) * std.time.ns_per_ms)});
+                _.failFmt(err.IdleTimeout, "Idle timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.idle_timeout_interval_ms) * std.time.ns_per_ms)});
             },
             .connecting => {
-                this.failFmt(err.ConnectionTimedOut, "Connection timeout after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.connection_timeout_ms) * std.time.ns_per_ms)});
+                _.failFmt(err.ConnectionTimedOut, "Connection timeout after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.connection_timeout_ms) * std.time.ns_per_ms)});
             },
             .handshaking, .authenticating, .authentication_awaiting_pk => {
-                this.failFmt(err.ConnectionTimedOut, "Connection timeout after {f} (during authentication)", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.connection_timeout_ms) * std.time.ns_per_ms)});
+                _.failFmt(err.ConnectionTimedOut, "Connection timeout after {f} (during authentication)", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.connection_timeout_ms) * std.time.ns_per_ms)});
             },
             .disconnected, .failed => {},
         }
     }
 
     pub fn onMaxLifetimeTimeout(*_) {
-        this.max_lifetime_timer.state = .FIRED;
-        if (this.#connection.status == .failed) return;
-        this.failFmt(err.LifetimeTimeout, "Max lifetime timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, this.max_lifetime_interval_ms) * std.time.ns_per_ms)});
+        _.max_lifetime_timer.state = .FIRED;
+        if (_.#connection.status == .failed) return;
+        _.failFmt(err.LifetimeTimeout, "Max lifetime timeout reached after {f}", .{bun.fmt.fmtDurationOneDecimal(@as(u64, _.max_lifetime_interval_ms) * std.time.ns_per_ms)});
     }
 
     pub fn setupMaxLifetimeTimerIfNecessary(*_) {
-        if (this.max_lifetime_interval_ms == 0) return;
-        if (this.max_lifetime_timer.state == .ACTIVE) return;
+        if (_.max_lifetime_interval_ms == 0) return;
+        if (_.max_lifetime_timer.state == .ACTIVE) return;
 
-        this.max_lifetime_timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(this.max_lifetime_interval_ms));
-        this.#vm.timer.insert(&this.max_lifetime_timer);
+        _.max_lifetime_timer.next = bun.timespec.msFromNow(.allow_mocked_time, @intCast(_.max_lifetime_interval_ms));
+        _.#vm.timer.insert(&_.max_lifetime_timer);
     }
 
     pub static fn constructor(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!*@This() {
@@ -246,60 +246,60 @@ struct TlsSetupGuard {
 
     pub fn enqueueRequest(*_, item: *JSMySQLQuery) {
         debug("enqueueRequest", .{});
-        this.#connection.enqueueRequest(item);
-        this.resetConnectionTimeout();
-        this.registerAutoFlusher();
+        _.#connection.enqueueRequest(item);
+        _.resetConnectionTimeout();
+        _.registerAutoFlusher();
     }
 
     pub fn close(*_) {
-        this.ref();
-        this.stopTimers();
-        this.unregisterAutoFlusher();
+        _.ref();
+        _.stopTimers();
+        _.unregisterAutoFlusher();
         const _guard_close = ConnectionCloseGuard{ conn: _ };
         * = &_guard_close;
-        if (this.#vm.isShuttingDown()) {
-            this.#connection.close();
+        if (_.#vm.isShuttingDown()) {
+            _.#connection.close();
         } else {
-            this.#connection.cleanQueueAndClose(null, this.getQueriesArray());
+            _.#connection.cleanQueueAndClose(null, _.getQueriesArray());
         }
     }
 
     pub fn drainInternal(*_) {
         debug("drainInternal", .{});
-        if (this.#vm.isShuttingDown()) return this.close();
-        this.ref();
+        if (_.#vm.isShuttingDown()) return _.close();
+        _.ref();
         const _guard_deref = DerefGuard<JSMySQLConnection>{ ptr: _ };
         * = &_guard_deref;
-        const event_loop = this.#vm.eventLoop();
+        const event_loop = _.#vm.eventLoop();
         event_loop.enter();
         const _guard_loop = EventLoopExitGuard{ loop: event_loop };
         * = &_guard_loop;
-        this.ensureJSValueIsAlive();
-        this.#connection.flushQueue() catch |e| {
+        _.ensureJSValueIsAlive();
+        _.#connection.flushQueue() catch e => {
             bun.assert_eql(e, err.AuthenticationFailed);
-            this.fail("Authentication failed", e);
+            _.fail("Authentication failed", e);
             return;
         };
     }
 
     pub fn deinit(*_) {
-        this.stopTimers();
-        this.#poll_ref.unref(this.#vm);
-        this.unregisterAutoFlusher();
-        this.#connection.cleanup();
-        bun.destroy(this);
+        _.stopTimers();
+        _.#poll_ref.unref(_.#vm);
+        _.unregisterAutoFlusher();
+        _.#connection.cleanup();
+        bun.destroy(_);
     }
 
     pub fn ensureJSValueIsAlive(*_) {
-        if (value := this.#js_value.tryGet()) {
+        if (value := _.#js_value.tryGet()) {
             value.ensureStillAlive();
         }
     }
 
     pub fn finalize(*_) {
         debug("finalize", .{});
-        this.#js_value.finalize();
-        this.deref();
+        _.#js_value.finalize();
+        _.deref();
     }
 
     pub static fn SocketHandler(comptime ssl: bool): type {
@@ -402,23 +402,23 @@ struct TlsSetupGuard {
     }
 
     pub fn updateReferenceType(*_) {
-        if (this.#connection.isActive()) {
+        if (_.#connection.isActive()) {
             debug("connection is active", .{});
-            if (this.#js_value.isNotEmpty() && this.#js_value == .weak) {
+            if (_.#js_value.isNotEmpty() && _.#js_value == .weak) {
                 debug("strong ref until connection is closed", .{});
-                this.#js_value.upgrade(this.#globalObject);
+                _.#js_value.upgrade(_.#globalObject);
             }
-            if (this.#connection.status == .connected && this.#connection.isIdle()) {
-                this.#poll_ref.unref(this.#vm);
+            if (_.#connection.status == .connected && _.#connection.isIdle()) {
+                _.#poll_ref.unref(_.#vm);
             } else {
-                this.#poll_ref.ref(this.#vm);
+                _.#poll_ref.ref(_.#vm);
             }
             return;
         }
-        if (this.#js_value.isNotEmpty() && this.#js_value == .strong) {
-            this.#js_value.downgrade();
+        if (_.#js_value.isNotEmpty() && _.#js_value == .strong) {
+            _.#js_value.downgrade();
         }
-        this.#poll_ref.unref(this.#vm);
+        _.#poll_ref.unref(_.#vm);
     }
 
     pub static fn createInstance(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
@@ -578,7 +578,7 @@ struct TlsSetupGuard {
                 uws.SocketTCP.connectUnixGroup(group, .mysql, null, path, ptr, false)
             else
                 uws.SocketTCP.connectGroup(group, .mysql, null, hostname.slice(), port, ptr, false);
-            const tcp_sock = result catch |e| {
+            const tcp_sock = result catch e => {
                 ptr.deref();
                 return globalObject.throwError(e, "failed to connect to mysql");
             };
@@ -597,7 +597,7 @@ struct TlsSetupGuard {
     }
 
     pub fn getQueries(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         if (value := js.queriesGetCached(thisValue)) {
             return value;
         }
@@ -609,11 +609,11 @@ struct TlsSetupGuard {
 
     pub fn getConnected(*_, globalObject: *jsc.JSGlobalObject): JSValue {
         * = globalObject;
-        return JSValue.jsBoolean(this.#connection.status == .connected);
+        return JSValue.jsBoolean(_.#connection.status == .connected);
     }
 
     pub fn getOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         * = globalObject;
         if (value := js.onconnectGetCached(thisValue)) {
             return value;
@@ -622,12 +622,12 @@ struct TlsSetupGuard {
     }
 
     pub fn setOnConnect(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         js.onconnectSetCached(thisValue, globalObject, value);
     }
 
     pub fn getOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject): jsc.JSValue {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         * = globalObject;
         if (value := js.oncloseGetCached(thisValue)) {
             return value;
@@ -636,44 +636,44 @@ struct TlsSetupGuard {
     }
 
     pub fn setOnClose(*_, thisValue: jsc.JSValue, globalObject: *jsc.JSGlobalObject, value: jsc.JSValue) {
-        const __unused_self = _; * = __unused_self;
+        * = _;
         js.oncloseSetCached(thisValue, globalObject, value);
     }
 
     pub fn doRef(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         * = callframe;
-        this.#poll_ref.ref(this.#vm);
+        _.#poll_ref.ref(_.#vm);
         return JSValue.js_undefined;
     }
 
     pub fn doUnref(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         * = callframe;
-        this.#poll_ref.unref(this.#vm);
+        _.#poll_ref.unref(_.#vm);
         return JSValue.js_undefined;
     }
 
     pub fn doFlush(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         * = callframe;
-        this.registerAutoFlusher();
+        _.registerAutoFlusher();
         return JSValue.js_undefined;
     }
 
     pub fn doClose(*_, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!JSValue {
         * = globalObject;
         * = callframe;
-        this.stopTimers();
+        _.stopTimers();
 
-        defer this.updateReferenceType();
-        this.#connection.cleanQueueAndClose(null, this.getQueriesArray());
+        defer _.updateReferenceType();
+        _.#connection.cleanQueueAndClose(null, _.getQueriesArray());
         return JSValue.js_undefined;
     }
 
-    fn consumeOnConnectCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
-        if (this.#vm.isShuttingDown()) return null;
-        if (value := this.#js_value.tryGet()) {
+    fn consumeOnConnectCallback(globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+        if (_.#vm.isShuttingDown()) return null;
+        if (value := _.#js_value.tryGet()) {
             const on_connect_opt = js.onconnectGetCached(value);
             if (on_connect_opt == null) return null;
             const on_connect = on_connect_opt.?;
@@ -683,9 +683,9 @@ struct TlsSetupGuard {
         return null;
     }
 
-    fn consumeOnCloseCallback(_: *const @This(), globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
-        if (this.#vm.isShuttingDown()) return null;
-        if (value := this.#js_value.tryGet()) {
+    fn consumeOnCloseCallback(globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+        if (_.#vm.isShuttingDown()) return null;
+        if (value := _.#js_value.tryGet()) {
             const on_close_opt = js.oncloseGetCached(value);
             if (on_close_opt == null) return null;
             const on_close = on_close_opt.?;
@@ -696,30 +696,30 @@ struct TlsSetupGuard {
     }
 
     pub fn getQueriesArray(*_): JSValue {
-        if (this.#vm.isShuttingDown()) return .js_undefined;
-        if (value := this.#js_value.tryGet()) {
+        if (_.#vm.isShuttingDown()) return .js_undefined;
+        if (value := _.#js_value.tryGet()) {
             return js.queriesGetCached(value) ?? .js_undefined;
         }
         return JSValue.js_undefined;
     }
 
-    pub inline fn isAbleToWrite(_: *const @This()): bool {
-        return this.#connection.isAbleToWrite();
+    pub inline fn isAbleToWrite(): bool {
+        return _.#connection.isAbleToWrite();
     }
-    pub inline fn isConnected(_: *const @This()): bool {
-        return this.#connection.status == .connected;
+    pub inline fn isConnected(): bool {
+        return _.#connection.status == .connected;
     }
     pub inline fn canPipeline(*_): bool {
-        return this.#connection.canPipeline();
+        return _.#connection.canPipeline();
     }
     pub inline fn canPrepareQuery(*_): bool {
-        return this.#connection.canPrepareQuery();
+        return _.#connection.canPrepareQuery();
     }
     pub inline fn canExecuteQuery(*_): bool {
-        return this.#connection.canExecuteQuery();
+        return _.#connection.canExecuteQuery();
     }
     pub inline fn getWriter(*_): NewWriter(MySQLConnection.Writer) {
-        return this.#connection.writer();
+        return _.#connection.writer();
     }
 
     pub fn failFmt(*_, error_code: AnyMySQLError.Error, comptime fmt: [:0]const u8, args: anytype) {
@@ -727,69 +727,69 @@ struct TlsSetupGuard {
         const _guard_msg = FreeGuard<[]u8>{ alloc: bun.default_allocator, slice: message };
         * = &_guard_msg;
 
-        const e = AnyMySQLError.mysqlErrorToJS(this.#globalObject, message, error_code);
-        this.failWithJSValue(e);
+        const e = AnyMySQLError.mysqlErrorToJS(_.#globalObject, message, error_code);
+        _.failWithJSValue(e);
     }
 
     fn finishFailClose(*_, value: JSValue) {
-        if (this.#vm.isShuttingDown()) {
-            this.#connection.close();
+        if (_.#vm.isShuttingDown()) {
+            _.#connection.close();
         } else {
-            this.#connection.cleanQueueAndClose(value, this.getQueriesArray());
+            _.#connection.cleanQueueAndClose(value, _.getQueriesArray());
         }
-        this.updateReferenceType();
-        this.deref();
+        _.updateReferenceType();
+        _.deref();
     }
 
     pub fn failWithJSValue(*_, value: JSValue) {
-        this.ref();
+        _.ref();
 
         const _guard_fail = FailCloseGuard{ conn: _, value: value };
         * = &_guard_fail;
-        this.stopTimers();
+        _.stopTimers();
 
-        if (this.#connection.status == .failed) return;
+        if (_.#connection.status == .failed) return;
 
-        this.#connection.status = .failed;
-        if (this.#vm.isShuttingDown()) return;
+        _.#connection.status = .failed;
+        if (_.#vm.isShuttingDown()) return;
 
-        const on_close_opt = this.consumeOnCloseCallback(this.#globalObject);
+        const on_close_opt = _.consumeOnCloseCallback(_.#globalObject);
         if (on_close_opt == null) return;
         const on_close = on_close_opt.?;
         on_close.ensureStillAlive();
-        const loop = this.#vm.eventLoop();
-        this.ensureJSValueIsAlive();
+        const loop = _.#vm.eventLoop();
+        _.ensureJSValueIsAlive();
         let js_error = value.toError() ?? value;
         if (js_error == .zero) {
-            js_error = AnyMySQLError.mysqlErrorToJS(this.#globalObject, "Connection closed", err.ConnectionClosed);
+            js_error = AnyMySQLError.mysqlErrorToJS(_.#globalObject, "Connection closed", err.ConnectionClosed);
         }
         js_error.ensureStillAlive();
 
-        const queries_array = this.getQueriesArray();
+        const queries_array = _.getQueriesArray();
         queries_array.ensureStillAlive();
         const cb_args: [2]JSValue = [js_error, queries_array];
-        loop.runCallback(on_close, this.#globalObject, .js_undefined, &cb_args);
+        loop.runCallback(on_close, _.#globalObject, .js_undefined, &cb_args);
     }
 
     pub fn fail(*_, message: []const u8, mysql_err: AnyMySQLError.Error) {
-        const instance = AnyMySQLError.mysqlErrorToJS(this.#globalObject, message, mysql_err);
-        this.failWithJSValue(instance);
+        const instance = AnyMySQLError.mysqlErrorToJS(_.#globalObject, message, mysql_err);
+        _.failWithJSValue(instance);
     }
 
     pub fn onConnectionEstabilished(*_) {
-        if (this.#vm.isShuttingDown()) return;
-        const on_connect_opt = this.consumeOnConnectCallback(this.#globalObject);
+        if (_.#vm.isShuttingDown()) return;
+        const on_connect_opt = _.consumeOnConnectCallback(_.#globalObject);
         if (on_connect_opt == null) return;
         const on_connect = on_connect_opt.?;
         on_connect.ensureStillAlive();
-        let js_value = this.#js_value.tryGet() ?? .js_undefined;
+        let js_value = _.#js_value.tryGet() ?? .js_undefined;
         js_value.ensureStillAlive();
         const cb_args: [2]JSValue = [JSValue.jsNull(), js_value];
-        this.#globalObject.queueMicrotask(on_connect, &cb_args);
+        _.#globalObject.queueMicrotask(on_connect, &cb_args);
     }
 
     pub fn onQueryResult(*_, request: *JSMySQLQuery, result: MySQLQueryResult) {
-        request.resolve(this.getQueriesArray(), result);
+        request.resolve(_.getQueriesArray(), result);
     }
 
     pub fn onResultRow(*_, request: *JSMySQLQuery, statement: *MySQLStatement, comptime Context: type, reader: NewReader(Context)): RowError!void {
@@ -797,7 +797,7 @@ struct TlsSetupGuard {
         let stack_fallback = std.heap.stackFallback(4096, bun.default_allocator);
         const allocator = stack_fallback.get();
         let row = ResultSet.Row{
-            globalObject: this.#globalObject,
+            globalObject: _.#globalObject,
             columns: statement.columns,
             binary: !request.isSimple(),
             raw: result_mode == .raw,
@@ -807,8 +807,8 @@ struct TlsSetupGuard {
         let cached_structure: CachedStructure? = null;
         switch (result_mode) {
             .objects => {
-                if (value := this.#js_value.tryGet()) {
-                    cached_structure = statement.structure(value, this.#globalObject);
+                if (value := _.#js_value.tryGet()) {
+                    cached_structure = statement.structure(value, _.#globalObject);
                 }
                 if (cs := cached_structure) {
                     if (v := cs.jsValue()) {
@@ -824,26 +824,26 @@ struct TlsSetupGuard {
         }
         const _guard_row = DeinitWithAllocGuard<ResultSet.Row>{ ptr: unsafe { &row }, alloc: allocator };
         * = &_guard_row;
-        row.decode(allocator, reader) catch |e| {
+        row.decode(allocator, reader) catch e => {
             if (e == err.ShortRead) {
                 return err.ShortRead;
             }
-            this.#connection.queue.markCurrentRequestAsFinished(request);
-            request.reject(this.getQueriesArray(), @errorCast(e));
+            _.#connection.queue.markCurrentRequestAsFinished(request);
+            request.reject(_.getQueriesArray(), @errorCast(e));
             return;
         };
         const pending_value = request.getPendingValue() ?? .js_undefined;
         const row_value = row.toJS(
-            this.#globalObject,
+            _.#globalObject,
             pending_value,
             structure,
             statement.fields_flags,
             result_mode,
             cached_structure,
-        ) catch |e| return @errorCast(e);
-        if (e := this.#globalObject.tryTakeException()) {
-            this.#connection.queue.markCurrentRequestAsFinished(request);
-            request.rejectWithJSValue(this.getQueriesArray(), e);
+        ) catch e => return @errorCast(e);
+        if (e := _.#globalObject.tryTakeException()) {
+            _.#connection.queue.markCurrentRequestAsFinished(request);
+            request.rejectWithJSValue(_.getQueriesArray(), e);
             return;
         }
         statement.result_count += 1;
@@ -855,54 +855,54 @@ struct TlsSetupGuard {
 
     pub fn onError(*_, request: (*JSMySQLQuery)?, mysql_err: AnyMySQLError.Error) {
         if (_request := request) {
-            if (this.#vm.isShuttingDown()) {
+            if (_.#vm.isShuttingDown()) {
                 _request.markAsFailed();
                 return;
             }
-            if (err_ := this.#globalObject.tryTakeException()) {
-                _request.rejectWithJSValue(this.getQueriesArray(), err_);
+            if (err_ := _.#globalObject.tryTakeException()) {
+                _request.rejectWithJSValue(_.getQueriesArray(), err_);
             } else {
-                _request.reject(this.getQueriesArray(), mysql_err);
+                _request.reject(_.getQueriesArray(), mysql_err);
             }
         } else {
-            if (this.#vm.isShuttingDown()) {
-                this.close();
+            if (_.#vm.isShuttingDown()) {
+                _.close();
                 return;
             }
-            if (err_ := this.#globalObject.tryTakeException()) {
-                this.failWithJSValue(err_);
+            if (err_ := _.#globalObject.tryTakeException()) {
+                _.failWithJSValue(err_);
             } else {
-                this.fail("Connection closed", mysql_err);
+                _.fail("Connection closed", mysql_err);
             }
         }
     }
 
     pub fn onErrorPacket(*_, request: (*JSMySQLQuery)?, pkt: ErrorPacket) {
         if (_request := request) {
-            if (this.#vm.isShuttingDown()) {
+            if (_.#vm.isShuttingDown()) {
                 _request.markAsFailed();
             } else {
-                if (err_ := this.#globalObject.tryTakeException()) {
-                    _request.rejectWithJSValue(this.getQueriesArray(), err_);
+                if (err_ := _.#globalObject.tryTakeException()) {
+                    _request.rejectWithJSValue(_.getQueriesArray(), err_);
                 } else {
-                    _request.rejectWithJSValue(this.getQueriesArray(), pkt.toJS(this.#globalObject));
+                    _request.rejectWithJSValue(_.getQueriesArray(), pkt.toJS(_.#globalObject));
                 }
             }
         } else {
-            if (this.#vm.isShuttingDown()) {
-                this.close();
+            if (_.#vm.isShuttingDown()) {
+                _.close();
                 return;
             }
-            if (err_ := this.#globalObject.tryTakeException()) {
-                this.failWithJSValue(err_);
+            if (err_ := _.#globalObject.tryTakeException()) {
+                _.failWithJSValue(err_);
             } else {
-                this.failWithJSValue(pkt.toJS(this.#globalObject));
+                _.failWithJSValue(pkt.toJS(_.#globalObject));
             }
         }
     }
 
     pub fn getStatementFromSignatureHash(*_, signature_hash: u64): MySQLConnection.PreparedStatementsMapGetOrPutResult! {
-        return this.#connection.statements.getOrPut(bun.default_allocator, signature_hash)?;
+        return _.#connection.statements.getOrPut(bun.default_allocator, signature_hash)?;
     }
 
     pub const js = jsc.Codegen.JSMySQLConnection;

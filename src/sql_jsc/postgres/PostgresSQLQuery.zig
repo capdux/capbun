@@ -336,8 +336,7 @@ pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
 }
 
 pub fn estimatedSize(self: *PostgresSQLQuery) usize {
-        const __unused_self = self;
-        _ = &__unused_self;
+    _ = self;
         return @sizeOf(@This());
 }
 
@@ -406,8 +405,7 @@ pub fn doDone(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callfr
 }
 
 pub fn setPendingValueFromJS(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
-        const __unused_self = self;
-        _ = &__unused_self;
+        _ = self;
         const result = callframe.argument(0);
         const thisValue = callframe.this();
         _ = js.pendingValueSetCached(thisValue, globalObject, result);
@@ -637,10 +635,9 @@ if (((!connection.hasQueryRunning()) or connection.canPipeline())) {
 }
 
 pub fn doCancel(self: *PostgresSQLQuery, globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.JSError!JSValue {
+    _ = self;
         _ = &callframe;
         _ = &globalObject;
-        const __unused_self = self;
-        _ = &__unused_self;
         return JSValue.js_undefined;
 }
 const RefCount = bun.ptr.RefCount(@This(), "ref_count", deinit, .{});
