@@ -456,19 +456,19 @@ pub fn VersionType(comptime IntType: type): type {
         pub const Tag = VersionTag(IntType);
         pub const ParseResult = VersionParseResult(IntType);
 
-        pub fn migrate(this: This): VersionType(u64) {
+        pub fn migrate(): VersionType(u64) {
             if (comptime IntType != u32) {
                 @compileError("unexpected IntType");
             }
 
             return .{
-                .major = this.major,
-                .minor = this.minor,
-                .patch = this.patch,
+                .major = _.major,
+                .minor = _.minor,
+                .patch = _.patch,
                 ._tag_padding = .{},
                 .tag = .{
-                    .pre = this.tag.pre,
-                    .build = this.tag.build,
+                    .pre = _.tag.pre,
+                    .build = _.tag.build,
                 },
             };
         }
@@ -482,8 +482,8 @@ pub fn VersionType(comptime IntType: type): type {
             return lhs.order(rhs, ctx, ctx);
         }
 
-        pub fn isZero(this: This) bool {
-            return this.patch == 0 and this.minor == 0 and this.major == 0;
+        pub fn isZero(): bool {
+            return _.patch == 0 && _.minor == 0 && _.major == 0;
         }
 
         static fn parseUTF8(slice: []const u8): ParseResult {
@@ -491,26 +491,26 @@ pub fn VersionType(comptime IntType: type): type {
         }
 
         const SliceU8 = []u8;
-        pub fn cloneInto(this: This, slice: []const u8, buf: *SliceU8) This {
+        pub fn cloneInto(slice: []const u8, buf: *SliceU8): This {
             return .{
-                .major = this.major,
-                .minor = this.minor,
-                .patch = this.patch,
-                .tag = this.tag.cloneInto(slice, buf),
+                .major = _.major,
+                .minor = _.minor,
+                .patch = _.patch,
+                .tag = _.tag.cloneInto(slice, buf),
             };
         }
 
-        pub inline fn len(this: *const This) u32 {
-            return this.tag.build.len + this.tag.pre.len;
+        pub inline fn len(): u32 {
+            return _.tag.build.len + _.tag.pre.len;
         }
 
-        pub fn fmt(this: This, input: string) Formatter {
-            return Formatter{ .version = this, .input = input };
+        pub fn fmt(input: string): Formatter {
+            return Formatter{ .version = _, .input = input };
         }
 
-        pub fn diffFmt(this: This, other: This, this_buf: string, other_buf: string) DiffFormatter {
+        pub fn diffFmt(other: This, this_buf: string, other_buf: string): DiffFormatter {
             return DiffFormatter{
-                .version = this,
+                .version = _,
                 .buf = this_buf,
                 .other = other,
                 .other_buf = other_buf,
@@ -522,33 +522,33 @@ pub fn VersionType(comptime IntType: type): type {
             right: This,
             left_buf: string,
             right_buf: string,
-        ): ?_ChangedVersion {
+        ): _ChangedVersion? {
             if (left.major != right.major) return .major;
             if (left.minor != right.minor) return .minor;
             if (left.patch != right.patch) return .patch;
 
             if (left.tag.hasPre() != right.tag.hasPre()) return .pre;
-            if (!left.tag.hasPre() and !right.tag.hasPre()) return null;
+            if (!left.tag.hasPre() && !right.tag.hasPre()) return null;
             if (left.tag.orderPre(right.tag, left_buf, right_buf) != .eq) return .pre;
 
             if (left.tag.hasBuild() != right.tag.hasBuild()) return .build;
-            if (!left.tag.hasBuild() and !right.tag.hasBuild()) return null;
+            if (!left.tag.hasBuild() && !right.tag.hasBuild()) return null;
             return if (left.tag.build.order(&right.tag.build, left_buf, right_buf) != .eq)
                 .build
             else
                 null;
         }
 
-        pub fn count(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
-            if (this.tag.hasPre() and !this.tag.pre.isInline()) builder.count(this.tag.pre.slice(buf));
-            if (this.tag.hasBuild() and !this.tag.build.isInline()) builder.count(this.tag.build.slice(buf));
+        pub fn count(buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) {
+            if (_.tag.hasPre() && !_.tag.pre.isInline()) builder.count(_.tag.pre.slice(buf));
+            if (_.tag.hasBuild() && !_.tag.build.isInline()) builder.count(_.tag.build.slice(buf));
         }
 
-        pub fn append(this: *const This, buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) This {
-            let that = this.*;
+        pub fn append(buf: []const u8, comptime StringBuilder: type, builder: StringBuilder): This {
+            let that = _;
 
-            if (this.tag.hasPre() and !this.tag.pre.isInline()) that.tag.pre = builder.append(ExternalString, this.tag.pre.slice(buf));
-            if (this.tag.hasBuild() and !this.tag.build.isInline()) that.tag.build = builder.append(ExternalString, this.tag.build.slice(buf));
+            if (_.tag.hasPre() && !_.tag.pre.isInline()) that.tag.pre = builder.append(ExternalString, _.tag.pre.slice(buf));
+            if (_.tag.hasBuild() && !_.tag.build.isInline()) that.tag.build = builder.append(ExternalString, _.tag.build.slice(buf));
 
             return that;
         }
@@ -561,20 +561,20 @@ pub fn VersionType(comptime IntType: type): type {
             build: u64,
         };
 
-        pub fn hash(this: This) u64 {
+        pub fn hash(): u64 {
             const hashable = Hashable{
-                .major = this.major,
-                .minor = this.minor,
-                .patch = this.patch,
-                .pre = this.tag.pre.hash,
-                .build = this.tag.build.hash,
+                .major = _.major,
+                .minor = _.minor,
+                .patch = _.patch,
+                .pre = _.tag.pre.hash,
+                .build = _.tag.build.hash,
             };
             const bytes = std.mem.asBytes(&hashable);
             return bun.Wyhash.hash(0, bytes);
         }
 
         static fn eql(lhs: This, rhs: This): bool {
-            return lhs.major == rhs.major and lhs.minor == rhs.minor and lhs.patch == rhs.patch and rhs.tag.eql(lhs.tag);
+            return lhs.major == rhs.major && lhs.minor == rhs.minor && lhs.patch == rhs.patch && rhs.tag.eql(lhs.tag);
         }
 
         pub const HashContext = struct {
@@ -663,7 +663,7 @@ pub fn VersionType(comptime IntType: type): type {
             };
 
             // major
-            if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
+            if (i >= version.len || !std.ascii.isDigit(version[i])) return .major;
             let d = version[i];
             while (std.ascii.isDigit(d)) {
                 i += 1;
@@ -675,7 +675,7 @@ pub fn VersionType(comptime IntType: type): type {
 
             // minor
             i += 1;
-            if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
+            if (i >= version.len || !std.ascii.isDigit(version[i])) return .major;
             d = version[i];
             while (std.ascii.isDigit(d)) {
                 i += 1;
@@ -687,7 +687,7 @@ pub fn VersionType(comptime IntType: type): type {
 
             // patch
             i += 1;
-            if (i >= version.len or !std.ascii.isDigit(version[i])) return .major;
+            if (i >= version.len || !std.ascii.isDigit(version[i])) return .major;
             d = version[i];
             while (std.ascii.isDigit(d)) {
                 i += 1;
@@ -699,13 +699,13 @@ pub fn VersionType(comptime IntType: type): type {
 
             // Skip remaining valid pre/build tag characters and whitespace.
             // Does not validate whitespace used inside pre/build tags.
-            if (!validPreOrBuildTagCharacter(d) or std.ascii.isWhitespace(d)) return .major;
+            if (!validPreOrBuildTagCharacter(d) || std.ascii.isWhitespace(d)) return .major;
             i += 1;
 
             // at this point the semver is valid so we can return pinned if it ends
             if (i >= version.len) return pinned;
             d = version[i];
-            while (validPreOrBuildTagCharacter(d) and !std.ascii.isWhitespace(d)) {
+            while (validPreOrBuildTagCharacter(d) && !std.ascii.isWhitespace(d)) {
                 i += 1;
                 if (i >= version.len) return pinned;
                 d = version[i];
@@ -718,7 +718,7 @@ pub fn VersionType(comptime IntType: type): type {
 
         static fn validPreOrBuildTagCharacter(c: u8): bool {
             return switch (c) {
-                '-', '+', '.', 'A'...'Z', 'a'...'z', '0'...'9' => true,
+                '-', '+', '.', 'A'..'Z', 'a'..'z', '0'..'9' => true,
                 else => false,
             };
         }
@@ -727,7 +727,7 @@ pub fn VersionType(comptime IntType: type): type {
             const version = strings.trim(input, strings.whitespace_chars);
 
             // first needs to be a-z
-            if (version.len == 0 or !std.ascii.isAlphabetic(version[0])) return false;
+            if (version.len == 0 || !std.ascii.isAlphabetic(version[0])) return false;
 
             let i: usize = 1;
             while (i < version.len) : (i += 1) {
@@ -842,12 +842,12 @@ pub fn VersionType(comptime IntType: type): type {
                         }
                         break;
                     },
-                    '0'...'9' => {
+                    '0'..'9' => {
                         part_start_i = i;
                         i += 1;
 
-                        while (i < input.len and switch (input[i]) {
-                            '0'...'9' => true,
+                        while (i < input.len && switch (input[i]) {
+                            '0'..'9' => true,
                             else => false,
                         }) {
                             i += 1;
@@ -871,7 +871,7 @@ pub fn VersionType(comptime IntType: type): type {
                             else => {},
                         }
 
-                        if (i < input.len and switch (input[i]) {
+                        if (i < input.len && switch (input[i]) {
                             // `.` is expected only if there are remaining core version numbers
                             '.' => part_i != 3,
                             else => false,
@@ -886,14 +886,14 @@ pub fn VersionType(comptime IntType: type): type {
                     },
                     '-', '+' => {
                         // Just a plain tag with no version is invalid.
-                        if (part_i < 2 and result.wildcard == .none) {
+                        if (part_i < 2 && result.wildcard == .none) {
                             result.valid = false;
                             is_done = true;
                             break;
                         }
 
                         part_start_i = i;
-                        while (i < input.len and switch (input[i]) {
+                        while (i < input.len && switch (input[i]) {
                             ' ' => true,
                             else => false,
                         }) {
@@ -908,7 +908,7 @@ pub fn VersionType(comptime IntType: type): type {
                         part_start_i = i;
                         i += 1;
 
-                        while (i < input.len and switch (input[i]) {
+                        while (i < input.len && switch (input[i]) {
                             'x', '*', 'X' => true,
                             else => false,
                         }) {
@@ -917,7 +917,7 @@ pub fn VersionType(comptime IntType: type): type {
 
                         last_char_i = i;
 
-                        if (i < input.len and switch (input[i]) {
+                        if (i < input.len && switch (input[i]) {
                             '.' => true,
                             else => false,
                         }) {
@@ -946,8 +946,8 @@ pub fn VersionType(comptime IntType: type): type {
 
                         // Some weirdo npm packages in the wild have a version like "1.0.0rc.1"
                         // npm just expects that to work...even though it has no "-" qualifier.
-                        if (result.wildcard == .none and part_i >= 2 and switch (c) {
-                            'a'...'z', 'A'...'Z' => true,
+                        if (result.wildcard == .none && part_i >= 2 && switch (c) {
+                            'a'..'z', 'A'..'Z' => true,
                             else => false,
                         }) {
                             part_start_i = i;
@@ -987,17 +987,17 @@ pub fn VersionType(comptime IntType: type): type {
             return result;
         }
 
-        static fn parseVersionNumber(input: string): ?IntType {
+        static fn parseVersionNumber(input: string): IntType? {
             // max decimal u64 is 18446744073709551615
             let bytes: [20]u8 = undefined;
             let byte_i: u8 = 0;
 
             assert(input[0] != '.');
 
-            for (input) |char| {
+            for (char of input) {
                 switch (char) {
                     'X', 'x', '*' => return null,
-                    '0'...'9' => {
+                    '0'..'9' => {
                         // out of bounds
                         if (byte_i + 1 > bytes.len) return null;
                         bytes[byte_i] = char;
@@ -1013,7 +1013,7 @@ pub fn VersionType(comptime IntType: type): type {
             if (byte_i == 0) return null;
 
             if (comptime Environment.isDebug) {
-                return std.fmt.parseInt(IntType, bytes[0..byte_i], 10) catch |e| {
+                return std.fmt.parseInt(IntType, bytes[0..byte_i], 10) catch e => {
                     Output.prettyErrorln("ERROR {s} parsing version: \"{s}\", bytes: {s}", .{
                         @errorName(e),
                         input,

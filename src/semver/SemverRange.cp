@@ -47,8 +47,8 @@ export struct Comparator {
 
     export const Formatter = ComparatorFormatter;
 
-    export fn fmt(_: *const Comparator, buf: []const u8): @This().Formatter {
-        return .{ .buffer = buf, .comparator = this };
+    export fn fmt(buf: []const u8): @This().Formatter {
+        return .{ .buffer = buf, .comparator = &_ };
     }
 
     export static fn satisfies(
@@ -97,20 +97,20 @@ export @root struct Range {
     left: Comparator = .{},
     right: Comparator = .{},
 
-    export fn format(_: Range, writer: *std.Io.Writer): !void {
-        if (this.left.op == .unset && this.right.op == .unset) {
+    export fn format(writer: *std.Io.Writer)! {
+        if (_.left.op == .unset && _.right.op == .unset) {
             return;
         }
 
-        if (this.right.op == .unset) {
-            writer.print("{}", .{this.left})?;
+        if (_.right.op == .unset) {
+            writer.print("{}", .{_.left})?;
         } else {
-            writer.print("{} {}", .{ this.left, this.right })?;
+            writer.print("{} {}", .{ _.left, _.right })?;
         }
     }
 
-    export fn anyRangeSatisfies(_: *const Range): bool {
-        return this.left.op == .gte && this.left.version.eql(.{});
+    export fn anyRangeSatisfies(): bool {
+        return _.left.op == .gte && _.left.version.eql(.{});
     }
 
     export static fn initWildcard(version: Version, wildcard: Query.Token.Wildcard): Range {
@@ -172,12 +172,12 @@ export @root struct Range {
         }
     }
 
-    export fn hasLeft(_: Range): bool {
-        return this.left.op != Op.unset;
+    export fn hasLeft(): bool {
+        return _.left.op != Op.unset;
     }
 
-    export fn hasRight(_: Range): bool {
-        return this.right.op != Op.unset;
+    export fn hasRight(): bool {
+        return _.right.op != Op.unset;
     }
 
     export static fn eql(lhs: Range, rhs: Range): bool {
@@ -186,8 +186,8 @@ export @root struct Range {
 
     export const Formatter = RangeFormatter;
 
-    export fn fmt(_: *const Range, buf: []const u8): @This().Formatter {
-        return .{ .buffer = buf, .range = this };
+    export fn fmt(buf: []const u8): @This().Formatter {
+        return .{ .buffer = buf, .range = &_ };
     }
 
     export static fn satisfies(range: Range, version: Version, range_buf: string, version_buf: string): bool {

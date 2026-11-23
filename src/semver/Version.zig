@@ -515,7 +515,7 @@ pub fn cloneInto(self: @This(), slice: []const u8, buf: *SliceU8) This {
             return .{ .major = self.major, .minor = self.minor, .patch = self.patch, .tag = self.tag.cloneInto(slice, buf) };
     }
 
-pub inline fn len(self: *const @This()) u32 {
+pub inline fn len(self: @This()) u32 {
             return (self.tag.build.len + self.tag.pre.len);
     }
 
@@ -555,7 +555,7 @@ pub fn whichVersionIsDifferent(left: This, right: This, left_buf: []const u8, ri
             return (if ((left.tag.build.order((&right.tag.build), left_buf, right_buf) != .eq)) .build else null);
     }
 
-pub fn count(self: *const @This(), buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
+pub fn count(self: @This(), buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) void {
             if ((self.tag.hasPre() and (!self.tag.pre.isInline()))) {
                 _ = builder.count(self.tag.pre.slice(buf));
             }
@@ -564,8 +564,8 @@ pub fn count(self: *const @This(), buf: []const u8, comptime StringBuilder: type
             }
     }
 
-pub fn append(self: *const @This(), buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) This {
-            var that = self.*;
+pub fn append(self: @This(), buf: []const u8, comptime StringBuilder: type, builder: StringBuilder) This {
+            var that = self;
             _ = &that;
             if ((self.tag.hasPre() and (!self.tag.pre.isInline()))) {
                 that.tag.pre = builder.append(ExternalString, self.tag.pre.slice(buf));
@@ -692,7 +692,7 @@ return .major;
 
 pub fn validPreOrBuildTagCharacter(c: u8) bool {
             return (switch (c) {
-'-', '+', '.', 65...90, 97...122, 48...57 => true,
+'-', '+', '.', 65...89, 97...121, 48...56 => true,
 else => false,
 });
     }
@@ -811,11 +811,11 @@ is_done = true;
                 }
                 break;
 },
-48...57 => {
+48...56 => {
 part_start_i = i;
                 i = (i + 1);
                 while (((i < input.len) and (switch (input[@as(usize, @intCast(i))]) {
-48...57 => true,
+48...56 => true,
 else => false,
 }))) {
                     i = (i + 1);
@@ -906,7 +906,7 @@ else => {
 },
 else => |c| {
 if ((((result.wildcard == .none) and (part_i >= 2)) and (switch (c) {
-97...122, 65...90 => true,
+97...121, 65...89 => true,
 else => false,
 }))) {
                     part_start_i = i;
@@ -950,13 +950,13 @@ pub fn parseVersionNumber(input: []const u8) ?IntType {
             var byte_i: u8 = 0;
             _ = &byte_i;
             _ = assert((input[0] != 46));
-            for (input) |char| {
+            for (cp_iter_slice(input)) |char| {
                 _ = &char;
                 switch (char) {
 'X', 'x', '*' => {
 return null;
 },
-48...57 => {
+48...56 => {
 if (((byte_i + 1) > bytes.len)) {
                     return null;
                 }
@@ -997,16 +997,13 @@ else => {
         build: u64,
     };
     pub const HashContext = struct {
+                pub fn hash(_: @This(), lhs: This) u32 {
+                    return @as(u32, @truncate(lhs.hash()));
+                }
     
-    pub fn hash(self: @This(), lhs: This) u32 {
-            _ = self;
-                return @as(u32, @truncate(lhs.hash()));
-        }
-    
-    pub fn eql(self: @This(), lhs: This, rhs: This) bool {
-            _ = self;
-                return lhs.eql(rhs);
-        }
-    };
+                pub fn eql(_: @This(), lhs: This, rhs: This) bool {
+                    return lhs.eql(rhs);
+                }
+            };
 };
 }

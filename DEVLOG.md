@@ -1769,3 +1769,5 @@
 - [Wave #94] 清零 `src/test_runner/` 剩余 4 文件（`expect.cp`, `jest.cp`, `pretty_format.cp`, `snapshot.cp` -> 12/12 全清）与 `src/analytics/schema.cp` 的 `--strict` 违规；修复 `pretty_format.cp` 两处 `bun.cast(*Self, ctx.?)` 为显式 `*Self` 类型注解，避免 `(&Self)` 生成错误；`zig:check` 5/5 通过。
 
 - [Wave #95] 清零 `src/runtime/valkey_jsc/` 剩余 3 文件（`ValkeyCommand.cp`, `js_valkey_functions.cp`, `js_valkey.cp` -> 7/7 全清）与 `src/collections/bit_set.cp` 的 `--strict` 违规；修复 `js_valkey.cp:832` `callframe.this()` 及 `SocketHandler` 11 处 `static fn`；`zig:check` 5/5 通过。
+
+- [Wave #96] 清零 `src/options_types/schema.cp` 与 `src/semver/` 剩余 2 文件（`SemverRange.cp`, `Version.cp` -> 5/5 全清）的 `--strict` 违规；`zig:check` 5/5 通过。

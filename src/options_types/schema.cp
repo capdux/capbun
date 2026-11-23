@@ -34,13 +34,13 @@ pub struct Reader {
     }
 
     pub fn read(*_, count: usize): ([]u8)! {
-        const read_count = @min(count, this.remain.len);
+        const read_count = @min(count, _.remain.len);
         if (read_count < count) {
             return err.EOF;
         }
 
-        const slice = this.remain[0..read_count];
-        this.remain = this.remain[read_count..];
+        const slice = _.remain[0..read_count];
+        _.remain = _.remain[read_count..];
         return slice;
     }
 
@@ -49,17 +49,17 @@ pub struct Reader {
             @compileError(std.fmt.comptimePrint("{s} must have unique representation.", [@typeName(T)]));
         }
 
-        return std.mem.bytesAsValue(T, this.read(@sizeOf(T))?);
+        return std.mem.bytesAsValue(T, _.read(@sizeOf(T))?);
     }
 
     @inline pub fn readByte(*_): u8! {
-        const slice = this.read(1)?;
+        const slice = _.read(1)?;
         return slice[0];
     }
 
     pub fn readEnum(*_, comptime Enum: type): Enum! {
         const type_info = @typeInfo(Enum).Enum;
-        const tag = this.readInt(type_info.tag_type)?;
+        const tag = _.readInt(type_info.tag_type)?;
 
         inline for (field of std.meta.fields(Enum)) {
             if (tag == @field(field, "value")) {
@@ -71,22 +71,22 @@ pub struct Reader {
     }
 
     pub fn readArray(*_, comptime T: type): ([]const T)! {
-        const length = this.readInt(u32)?;
+        const length = _.readInt(u32)?;
         if (length == 0) {
             return &[];
         }
 
         switch (T) {
             u8 => {
-                return this.read(length)?;
+                return _.read(length)?;
             },
             u16 | u32 | i8 | i16 | i32 => {
-                return std.mem.readIntSliceNative(T, this.read(length * @sizeOf(T)));
+                return std.mem.readIntSliceNative(T, _.read(length * @sizeOf(T)));
             },
             ConstSentinelBytes | ConstBytes => {
-                let array = this.allocator.alloc(T, length)?;
+                let array = _.allocator.alloc(T, length)?;
                 for (i of 0..array.len) {
-                    array[i] = this.readArray(u8)?;
+                    array[i] = _.readArray(u8)?;
                 }
                 return array;
             },
@@ -96,14 +96,14 @@ pub struct Reader {
                         switch (Struct.layout) {
                             .Packed => {
                                 const sizeof = @sizeOf(T);
-                                const slice = this.read(sizeof * length)?;
+                                const slice = _.read(sizeof * length)?;
                                 return std.mem.bytesAsSlice(T, slice);
                             },
                             else => {},
                         }
                     },
                     .Enum type_info => {
-                        const enum_values = this.read(length * @sizeOf(type_info.tag_type))?;
+                        const enum_values = _.read(length * @sizeOf(type_info.tag_type))?;
                         unsafe {
                             return (enum_values.ptr as [*]T!)[0..length];
                         }
@@ -111,9 +111,9 @@ pub struct Reader {
                     else => {},
                 }
 
-                let array = this.allocator.alloc(T, length)?;
+                let array = _.allocator.alloc(T, length)?;
                 for (i of 0..array.len) {
-                    array[i] = this.readValue(T)?;
+                    array[i] = _.readValue(T)?;
                 }
                 return array;
             },
@@ -121,42 +121,42 @@ pub struct Reader {
     }
 
     @inline pub fn readByteArray(*_): ([]u8)! {
-        const length = this.readInt(u32)?;
+        const length = _.readInt(u32)?;
         if (length == 0) {
             return &[];
         }
 
-        return this.read(usize(length))?;
+        return _.read(usize(length))?;
     }
 
     @inline pub fn readInt(*_, comptime T: type): T! {
-        const slice = this.read(@sizeOf(T))?;
+        const slice = _.read(@sizeOf(T))?;
         return std.mem.readIntSliceNative(T, slice);
     }
 
     @inline pub fn readBool(*_): bool! {
-        return (this.readByte()?) > 0;
+        return (_.readByte()?) > 0;
     }
 
     @inline pub fn readValue(*_, comptime T: type): T! {
         switch (T) {
             bool => {
-                return this.readBool()?;
+                return _.readBool()?;
             },
             u8 => {
-                return this.readByte()?;
+                return _.readByte()?;
             },
             CStrConst | ConstSentinelBytes | ConstBytes => {
-                return this.readArray(u8)?;
+                return _.readArray(u8)?;
             },
             []const ConstSentinelBytes | []const CStrConst | []const ConstBytes => {
-                return this.readArray(ConstBytes)?;
+                return _.readArray(ConstBytes)?;
             },
             MutBytes | SentinelBytes | CStrMut => {
-                return this.readArray(MutBytes)?;
+                return _.readArray(MutBytes)?;
             },
             u16 | u32 | i8 | i16 | i32 => {
-                return std.mem.readIntSliceNative(T, this.read(@sizeOf(T))?);
+                return std.mem.readIntSliceNative(T, _.read(@sizeOf(T))?);
             },
             else => {
                 switch (@typeInfo(T)) {
@@ -164,19 +164,19 @@ pub struct Reader {
                         switch (Struct.layout) {
                             .Packed => {
                                 const sizeof = @sizeOf(T);
-                                const slice = this.read(sizeof)?;
+                                const slice = _.read(sizeof)?;
                                 return std.mem.bytesToValue(T, slice[0..sizeof]);
                             },
                             else => {},
                         }
                     },
                     .Enum => {
-                        return this.readEnum(T)?;
+                        return _.readEnum(T)?;
                     },
                     else => {},
                 }
 
-                return T.decode(this)?;
+                return T.decode(_)?;
             },
         }
 
@@ -193,72 +193,72 @@ pub fn Writer(comptime WritableStream: type): type {
             return Self{ writable: writable };
         }
 
-        @inline pub fn write(*this, bytes: auto)! {
-            * = this.writable.write(bytes)?;
+        @inline pub fn write(*_, bytes: auto)! {
+            * = _.writable.write(bytes)?;
         }
 
-        @inline pub fn writeByte(*this, byte: u8)! {
+        @inline pub fn writeByte(*_, byte: u8)! {
             const buf: [1]u8 = [byte];
-            * = this.writable.write(&buf)?;
+            * = _.writable.write(&buf)?;
         }
 
-        @inline pub fn writeInt(*this, int: auto)! {
-            this.write(std.mem.asBytes(&int))?;
+        @inline pub fn writeInt(*_, int: auto)! {
+            _.write(std.mem.asBytes(&int))?;
         }
 
-        @inline pub fn writeFieldID(*this, comptime id: comptime_int)! {
-            this.writeByte(id)?;
+        @inline pub fn writeFieldID(*_, comptime id: comptime_int)! {
+            _.writeByte(id)?;
         }
 
-        @inline pub fn writeEnum(*this, val: auto)! {
-            this.writeInt(@intFromEnum(val))?;
+        @inline pub fn writeEnum(*_, val: auto)! {
+            _.writeInt(@intFromEnum(val))?;
         }
 
-        pub fn writeValue(*this, comptime SliceType: type, slice: SliceType)! {
+        pub fn writeValue(*_, comptime SliceType: type, slice: SliceType)! {
             switch (SliceType) {
                 []u16 | []u32 | []i16 | []i32 | []i8 | []const u16 | []const u32 | []const i16 | []const i32 | []const i8 | [:0]u16 | [:0]u32 | [:0]i16 | [:0]i32 | [:0]i8 | [:0]const u16 | [:0]const u32 | [:0]const i16 | [:0]const i32 | [:0]const i8 | [*:0]u16! | [*:0]u32! | [*:0]i16! | [*:0]i32! | [*:0]i8! | [*:0]const u16! | [*:0]const u32! | [*:0]const i16! | [*:0]const i32! | [*:0]const i8! => {
-                    this.writeArray(SliceType, slice)?;
+                    _.writeArray(SliceType, slice)?;
                 },
                 MutBytes | ConstBytes | SentinelBytes | ConstSentinelBytes | CStrMut | CStrConst => {
-                    this.writeArray(u8, slice)?;
+                    _.writeArray(u8, slice)?;
                 },
                 u8 => {
-                    this.write(slice)?;
+                    _.write(slice)?;
                 },
                 u16 | u32 | i16 | i32 | i8 => {
-                    this.write(std.mem.asBytes(slice))?;
+                    _.write(std.mem.asBytes(slice))?;
                 },
                 else => {
-                    slice.encode(this)?;
+                    slice.encode(_)?;
                 },
             }
         }
 
-        pub fn writeArray(*this, comptime T: type, slice: auto)! {
-            this.writeInt(slice.len as u32)?;
+        pub fn writeArray(*_, comptime T: type, slice: auto)! {
+            _.writeInt(slice.len as u32)?;
 
             switch (T) {
                 u8 => {
-                    this.write(slice)?;
+                    _.write(slice)?;
                 },
                 u16 | u32 | i16 | i32 | i8 => {
-                    this.write(std.mem.asBytes(slice))?;
+                    _.write(std.mem.asBytes(slice))?;
                 },
                 SentinelBytes | MutBytes | []u16 | []u32 | []i16 | []i32 | []i8 | ConstBytes | ConstSentinelBytes | []const u16 | []const u32 | []const i16 | []const i32 | []const i8 | [:0]u16 | [:0]u32 | [:0]i16 | [:0]i32 | [:0]i8 | [:0]const u16 | [:0]const u32 | [:0]const i16 | [:0]const i32 | [:0]const i8 | [*:0]u16! | [*:0]u32! | [*:0]i16! | [*:0]i32! | [*:0]i8! | [*:0]const u16! | [*:0]const u32! | [*:0]const i16! | [*:0]const i32! | [*:0]const i8! => {
                     for (num_slice of slice) {
-                        this.writeArray(std.meta.Child(@typeOf(num_slice)), num_slice)?;
+                        _.writeArray(std.meta.Child(@typeOf(num_slice)), num_slice)?;
                     }
                 },
                 else => {
                     for (val of slice) {
-                        val.encode(this)?;
+                        val.encode(_)?;
                     }
                 },
             }
         }
 
-        @inline pub fn endMessage(*this)! {
-            this.writeByte(0)?;
+        @inline pub fn endMessage(*_)! {
+            _.writeByte(0)?;
         }
     };
 }
@@ -293,7 +293,7 @@ pub enum Loader: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -305,7 +305,7 @@ pub enum FrameworkEntryPointType: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -320,7 +320,7 @@ pub enum StackFrameScope: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -340,10 +340,10 @@ pub struct StackFrame {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.function_name), this.function_name)?;
-        writer.writeValue(@typeOf(this.file), this.file)?;
-        writer.writeValue(@typeOf(this.position), this.position)?;
-        writer.writeEnum(this.scope)?;
+        writer.writeValue(@typeOf(_.function_name), _.function_name)?;
+        writer.writeValue(@typeOf(_.file), _.file)?;
+        writer.writeValue(@typeOf(_.position), _.position)?;
+        writer.writeEnum(_.scope)?;
     }
 }
 
@@ -359,8 +359,8 @@ pub struct SourceLine {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.line)?;
-        writer.writeValue(@typeOf(this.text), this.text)?;
+        writer.writeInt(_.line)?;
+        writer.writeValue(@typeOf(_.text), _.text)?;
     }
 }
 
@@ -376,8 +376,8 @@ pub struct StackTrace {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(SourceLine, this.source_lines)?;
-        writer.writeArray(StackFrame, this.frames)?;
+        writer.writeArray(SourceLine, _.source_lines)?;
+        writer.writeArray(StackFrame, _.frames)?;
     }
 }
 
@@ -405,23 +405,23 @@ pub struct JsException {
     }
 
     pub fn encode(writer: auto)! {
-        if (name := this.name) {
+        if (name := _.name) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(name), name)?;
         }
-        if (message := this.message) {
+        if (message := _.message) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(message), message)?;
         }
-        if (runtime_type := this.runtime_type) {
+        if (runtime_type := _.runtime_type) {
             writer.writeFieldID(3)?;
             writer.writeInt(runtime_type)?;
         }
-        if (code := this.code) {
+        if (code := _.code) {
             writer.writeFieldID(4)?;
             writer.writeInt(code)?;
         }
-        if (stack := this.stack) {
+        if (stack := _.stack) {
             writer.writeFieldID(5)?;
             writer.writeValue(@typeOf(stack), stack)?;
         }
@@ -442,7 +442,7 @@ pub enum FallbackStep: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -462,10 +462,10 @@ pub struct Problems {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.code)?;
-        writer.writeValue(@typeOf(this.name), this.name)?;
-        writer.writeArray(JsException, this.exceptions)?;
-        writer.writeValue(@typeOf(this.build), this.build)?;
+        writer.writeInt(_.code)?;
+        writer.writeValue(@typeOf(_.name), _.name)?;
+        writer.writeArray(JsException, _.exceptions)?;
+        writer.writeValue(@typeOf(_.build), _.build)?;
     }
 }
 
@@ -483,9 +483,9 @@ pub struct Router {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.routes), this.routes)?;
-        writer.writeInt(this.route)?;
-        writer.writeValue(@typeOf(this.params), this.params)?;
+        writer.writeValue(@typeOf(_.routes), _.routes)?;
+        writer.writeInt(_.route)?;
+        writer.writeValue(@typeOf(_.params), _.params)?;
     }
 }
 
@@ -513,23 +513,23 @@ pub struct FallbackMessageContainer {
     }
 
     pub fn encode(writer: auto)! {
-        if (message := this.message) {
+        if (message := _.message) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(message), message)?;
         }
-        if (router := this.router) {
+        if (router := _.router) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(router), router)?;
         }
-        if (reason := this.reason) {
+        if (reason := _.reason) {
             writer.writeFieldID(3)?;
             writer.writeEnum(reason)?;
         }
-        if (problems := this.problems) {
+        if (problems := _.problems) {
             writer.writeFieldID(4)?;
             writer.writeValue(@typeOf(problems), problems)?;
         }
-        if (cwd := this.cwd) {
+        if (cwd := _.cwd) {
             writer.writeFieldID(5)?;
             writer.writeValue(@typeOf(cwd), cwd)?;
         }
@@ -546,7 +546,7 @@ pub enum ResolveMode: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -559,7 +559,7 @@ pub enum Target: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -571,7 +571,7 @@ pub enum CssInJsBehavior: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -583,7 +583,7 @@ pub enum JsxRuntime: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -607,12 +607,12 @@ pub struct Jsx {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.factory), this.factory)?;
-        writer.writeEnum(this.runtime)?;
-        writer.writeValue(@typeOf(this.fragment), this.fragment)?;
-        writer.writeInt(@as(u8, @intFromBool(this.development)))?;
-        writer.writeValue(@typeOf(this.import_source), this.import_source)?;
-        writer.writeInt(@as(u8, @intFromBool(this.side_effects)))?;
+        writer.writeValue(@typeOf(_.factory), _.factory)?;
+        writer.writeEnum(_.runtime)?;
+        writer.writeValue(@typeOf(_.fragment), _.fragment)?;
+        writer.writeInt(@as(u8, @intFromBool(_.development)))?;
+        writer.writeValue(@typeOf(_.import_source), _.import_source)?;
+        writer.writeInt(@as(u8, @intFromBool(_.side_effects)))?;
     }
 }
 
@@ -628,12 +628,12 @@ pub struct Jsx {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.offset)?;
-        writer.writeInt(this.length)?;
+        writer.writeInt(_.offset)?;
+        writer.writeInt(_.length)?;
     }
 
     pub fn slice(bytes: []const u8): []const u8 {
-        return bytes[this.offset .. this.offset + this.length];
+        return bytes[_.offset .. _.offset + _.length];
     }
 }
 
@@ -660,11 +660,11 @@ pub struct JavascriptBundledModule {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeValue(@typeOf(this.code), this.code)?;
-        writer.writeInt(this.package_id)?;
-        writer.writeInt(this.id)?;
-        writer.writeInt(this.path_extname_length)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeValue(@typeOf(_.code), _.code)?;
+        writer.writeInt(_.package_id)?;
+        writer.writeInt(_.id)?;
+        writer.writeInt(_.path_extname_length)?;
     }
 }
 
@@ -686,11 +686,11 @@ pub struct JavascriptBundledPackage {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.name), this.name)?;
-        writer.writeValue(@typeOf(this.version), this.version)?;
-        writer.writeInt(this.hash)?;
-        writer.writeInt(this.modules_offset)?;
-        writer.writeInt(this.modules_length)?;
+        writer.writeValue(@typeOf(_.name), _.name)?;
+        writer.writeValue(@typeOf(_.version), _.version)?;
+        writer.writeInt(_.hash)?;
+        writer.writeInt(_.modules_offset)?;
+        writer.writeInt(_.modules_length)?;
     }
 }
 
@@ -716,13 +716,13 @@ pub struct JavascriptBundle {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(JavascriptBundledModule, this.modules)?;
-        writer.writeArray(JavascriptBundledPackage, this.packages)?;
-        writer.writeArray(u8, this.etag)?;
-        writer.writeInt(this.generated_at)?;
-        writer.writeArray(u8, this.app_package_json_dependencies_hash)?;
-        writer.writeArray(u8, this.import_from_name)?;
-        writer.writeArray(u8, this.manifest_string)?;
+        writer.writeArray(JavascriptBundledModule, _.modules)?;
+        writer.writeArray(JavascriptBundledPackage, _.packages)?;
+        writer.writeArray(u8, _.etag)?;
+        writer.writeInt(_.generated_at)?;
+        writer.writeArray(u8, _.app_package_json_dependencies_hash)?;
+        writer.writeArray(u8, _.import_from_name)?;
+        writer.writeArray(u8, _.manifest_string)?;
     }
 }
 
@@ -750,23 +750,23 @@ pub struct JavascriptBundleContainer {
     }
 
     pub fn encode(writer: auto)! {
-        if (bundle_format_version := this.bundle_format_version) {
+        if (bundle_format_version := _.bundle_format_version) {
             writer.writeFieldID(1)?;
             writer.writeInt(bundle_format_version)?;
         }
-        if (routes := this.routes) {
+        if (routes := _.routes) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(routes), routes)?;
         }
-        if (framework := this.framework) {
+        if (framework := _.framework) {
             writer.writeFieldID(3)?;
             writer.writeValue(@typeOf(framework), framework)?;
         }
-        if (bundle := this.bundle) {
+        if (bundle := _.bundle) {
             writer.writeFieldID(4)?;
             writer.writeValue(@typeOf(bundle), bundle)?;
         }
-        if (code_length := this.code_length) {
+        if (code_length := _.code_length) {
             writer.writeFieldID(5)?;
             writer.writeInt(code_length)?;
         }
@@ -781,7 +781,7 @@ pub enum ScanDependencyMode: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -792,7 +792,7 @@ pub enum ModuleImportType: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -810,9 +810,9 @@ pub struct ModuleImportRecord {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeEnum(this.kind)?;
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeInt(@as(u8, @intFromBool(this.dynamic)))?;
+        writer.writeEnum(_.kind)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeInt(@as(u8, @intFromBool(_.dynamic)))?;
     }
 }
 
@@ -828,8 +828,8 @@ pub struct Module {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeArray(ModuleImportRecord, this.imports)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeArray(ModuleImportRecord, _.imports)?;
     }
 }
 
@@ -845,8 +845,8 @@ pub struct StringMap {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(ConstBytes, this.keys)?;
-        writer.writeArray(ConstBytes, this.values)?;
+        writer.writeArray(ConstBytes, _.keys)?;
+        writer.writeArray(ConstBytes, _.values)?;
     }
 }
 
@@ -862,8 +862,8 @@ pub struct LoaderMap {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(ConstBytes, this.extensions)?;
-        writer.writeArray(Loader, this.loaders)?;
+        writer.writeArray(ConstBytes, _.extensions)?;
+        writer.writeArray(Loader, _.loaders)?;
     }
 }
 
@@ -876,7 +876,7 @@ pub enum DotEnvBehavior: u32 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -898,11 +898,11 @@ pub struct EnvConfig {
     }
 
     pub fn encode(writer: auto)! {
-        if (prefix := this.prefix) {
+        if (prefix := _.prefix) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(prefix), prefix)?;
         }
-        if (defaults := this.defaults) {
+        if (defaults := _.defaults) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(defaults), defaults)?;
         }
@@ -924,9 +924,9 @@ pub struct LoadedEnvConfig {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeEnum(this.dotenv)?;
-        writer.writeValue(@typeOf(this.defaults), this.defaults)?;
-        writer.writeValue(@typeOf(this.prefix), this.prefix)?;
+        writer.writeEnum(_.dotenv)?;
+        writer.writeValue(@typeOf(_.defaults), _.defaults)?;
+        writer.writeValue(@typeOf(_.prefix), _.prefix)?;
     }
 }
 
@@ -960,35 +960,35 @@ pub struct FrameworkConfig {
     }
 
     pub fn encode(writer: auto)! {
-        if (package := this.package) {
+        if (package := _.package) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(package), package)?;
         }
-        if (client := this.client) {
+        if (client := _.client) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(client), client)?;
         }
-        if (server := this.server) {
+        if (server := _.server) {
             writer.writeFieldID(3)?;
             writer.writeValue(@typeOf(server), server)?;
         }
-        if (fallback := this.fallback) {
+        if (fallback := _.fallback) {
             writer.writeFieldID(4)?;
             writer.writeValue(@typeOf(fallback), fallback)?;
         }
-        if (development := this.development) {
+        if (development := _.development) {
             writer.writeFieldID(5)?;
             writer.writeInt(@as(u8, @intFromBool(development)))?;
         }
-        if (client_css_in_js := this.client_css_in_js) {
+        if (client_css_in_js := _.client_css_in_js) {
             writer.writeFieldID(6)?;
             writer.writeEnum(client_css_in_js)?;
         }
-        if (display_name := this.display_name) {
+        if (display_name := _.display_name) {
             writer.writeFieldID(7)?;
             writer.writeValue(@typeOf(display_name), display_name)?;
         }
-        if (override_modules := this.override_modules) {
+        if (override_modules := _.override_modules) {
             writer.writeFieldID(8)?;
             writer.writeValue(@typeOf(override_modules), override_modules)?;
         }
@@ -1010,9 +1010,9 @@ pub struct FrameworkEntryPoint {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeEnum(this.kind)?;
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeValue(@typeOf(this.env), this.env)?;
+        writer.writeEnum(_.kind)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeValue(@typeOf(_.env), _.env)?;
     }
 }
 
@@ -1036,15 +1036,15 @@ pub struct FrameworkEntryPointMap {
     }
 
     pub fn encode(writer: auto)! {
-        if (client := this.client) {
+        if (client := _.client) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(client), client)?;
         }
-        if (server := this.server) {
+        if (server := _.server) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(server), server)?;
         }
-        if (fallback := this.fallback) {
+        if (fallback := _.fallback) {
             writer.writeFieldID(3)?;
             writer.writeValue(@typeOf(fallback), fallback)?;
         }
@@ -1070,11 +1070,11 @@ pub struct FrameworkEntryPointMessage {
     }
 
     pub fn encode(writer: auto)! {
-        if (path := this.path) {
+        if (path := _.path) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(path), path)?;
         }
-        if (env := this.env) {
+        if (env := _.env) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(env), env)?;
         }
@@ -1102,12 +1102,12 @@ pub struct LoadedFramework {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.package), this.package)?;
-        writer.writeValue(@typeOf(this.display_name), this.display_name)?;
-        writer.writeInt(@as(u8, @intFromBool(this.development)))?;
-        writer.writeValue(@typeOf(this.entry_points), this.entry_points)?;
-        writer.writeEnum(this.client_css_in_js)?;
-        writer.writeValue(@typeOf(this.override_modules), this.override_modules)?;
+        writer.writeValue(@typeOf(_.package), _.package)?;
+        writer.writeValue(@typeOf(_.display_name), _.display_name)?;
+        writer.writeInt(@as(u8, @intFromBool(_.development)))?;
+        writer.writeValue(@typeOf(_.entry_points), _.entry_points)?;
+        writer.writeEnum(_.client_css_in_js)?;
+        writer.writeValue(@typeOf(_.override_modules), _.override_modules)?;
     }
 }
 
@@ -1127,10 +1127,10 @@ pub struct LoadedRouteConfig {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.dir), this.dir)?;
-        writer.writeArray(ConstBytes, this.extensions)?;
-        writer.writeValue(@typeOf(this.static_dir), this.static_dir)?;
-        writer.writeValue(@typeOf(this.asset_prefix), this.asset_prefix)?;
+        writer.writeValue(@typeOf(_.dir), _.dir)?;
+        writer.writeArray(ConstBytes, _.extensions)?;
+        writer.writeValue(@typeOf(_.static_dir), _.static_dir)?;
+        writer.writeValue(@typeOf(_.asset_prefix), _.asset_prefix)?;
     }
 }
 
@@ -1156,19 +1156,19 @@ pub struct RouteConfig {
     }
 
     pub fn encode(writer: auto)! {
-        if (dir := this.dir) {
+        if (dir := _.dir) {
             writer.writeFieldID(1)?;
             writer.writeArray(ConstBytes, dir)?;
         }
-        if (extensions := this.extensions) {
+        if (extensions := _.extensions) {
             writer.writeFieldID(2)?;
             writer.writeArray(ConstBytes, extensions)?;
         }
-        if (static_dir := this.static_dir) {
+        if (static_dir := _.static_dir) {
             writer.writeFieldID(3)?;
             writer.writeValue(@typeOf(static_dir), static_dir)?;
         }
-        if (asset_prefix := this.asset_prefix) {
+        if (asset_prefix := _.asset_prefix) {
             writer.writeFieldID(4)?;
             writer.writeValue(@typeOf(asset_prefix), asset_prefix)?;
         }
@@ -1279,117 +1279,117 @@ pub struct TransformOptions {
     }
 
     pub fn encode(writer: auto)! {
-        if (jsx := this.jsx) {
+        if (jsx := _.jsx) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(jsx), jsx)?;
         }
-        if (tsconfig_override := this.tsconfig_override) {
+        if (tsconfig_override := _.tsconfig_override) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(tsconfig_override), tsconfig_override)?;
         }
-        if (resolve := this.resolve) {
+        if (resolve := _.resolve) {
             writer.writeFieldID(3)?;
             writer.writeEnum(resolve)?;
         }
-        if (origin := this.origin) {
+        if (origin := _.origin) {
             writer.writeFieldID(4)?;
             writer.writeValue(@typeOf(origin), origin)?;
         }
-        if (absolute_working_dir := this.absolute_working_dir) {
+        if (absolute_working_dir := _.absolute_working_dir) {
             writer.writeFieldID(5)?;
             writer.writeValue(@typeOf(absolute_working_dir), absolute_working_dir)?;
         }
-        if (define := this.define) {
+        if (define := _.define) {
             writer.writeFieldID(6)?;
             writer.writeValue(@typeOf(define), define)?;
         }
-        if (preserve_symlinks := this.preserve_symlinks) {
+        if (preserve_symlinks := _.preserve_symlinks) {
             writer.writeFieldID(7)?;
             writer.writeInt(@as(u8, @intFromBool(preserve_symlinks)))?;
         }
-        if (entry_points := this.entry_points) {
+        if (entry_points := _.entry_points) {
             writer.writeFieldID(8)?;
             writer.writeArray(ConstBytes, entry_points)?;
         }
-        if (write := this.write) {
+        if (write := _.write) {
             writer.writeFieldID(9)?;
             writer.writeInt(@as(u8, @intFromBool(write)))?;
         }
-        if (inject := this.inject) {
+        if (inject := _.inject) {
             writer.writeFieldID(10)?;
             writer.writeArray(ConstBytes, inject)?;
         }
-        if (output_dir := this.output_dir) {
+        if (output_dir := _.output_dir) {
             writer.writeFieldID(11)?;
             writer.writeValue(@typeOf(output_dir), output_dir)?;
         }
-        if (external := this.external) {
+        if (external := _.external) {
             writer.writeFieldID(12)?;
             writer.writeArray(ConstBytes, external)?;
         }
-        if (loaders := this.loaders) {
+        if (loaders := _.loaders) {
             writer.writeFieldID(13)?;
             writer.writeValue(@typeOf(loaders), loaders)?;
         }
-        if (main_fields := this.main_fields) {
+        if (main_fields := _.main_fields) {
             writer.writeFieldID(14)?;
             writer.writeArray(ConstBytes, main_fields)?;
         }
-        if (target := this.target) {
+        if (target := _.target) {
             writer.writeFieldID(15)?;
             writer.writeEnum(target)?;
         }
-        if (serve := this.serve) {
+        if (serve := _.serve) {
             writer.writeFieldID(16)?;
             writer.writeInt(@as(u8, @intFromBool(serve)))?;
         }
-        if (env_files := this.env_files) {
+        if (env_files := _.env_files) {
             writer.writeFieldID(17)?;
             writer.writeArray(ConstBytes, env_files)?;
         }
-        if (extension_order := this.extension_order) {
+        if (extension_order := _.extension_order) {
             writer.writeFieldID(18)?;
             writer.writeArray(ConstBytes, extension_order)?;
         }
-        if (framework := this.framework) {
+        if (framework := _.framework) {
             writer.writeFieldID(19)?;
             writer.writeValue(@typeOf(framework), framework)?;
         }
-        if (router := this.router) {
+        if (router := _.router) {
             writer.writeFieldID(20)?;
             writer.writeValue(@typeOf(router), router)?;
         }
-        if (no_summary := this.no_summary) {
+        if (no_summary := _.no_summary) {
             writer.writeFieldID(21)?;
             writer.writeInt(@as(u8, @intFromBool(no_summary)))?;
         }
-        if (disable_hmr := this.disable_hmr) {
+        if (disable_hmr := _.disable_hmr) {
             writer.writeFieldID(22)?;
             writer.writeInt(@as(u8, @intFromBool(disable_hmr)))?;
         }
-        if (port := this.port) {
+        if (port := _.port) {
             writer.writeFieldID(23)?;
             writer.writeInt(port)?;
         }
-        if (log_level := this.log_level) {
+        if (log_level := _.log_level) {
             writer.writeFieldID(24)?;
             writer.writeEnum(log_level)?;
         }
-        if (source_map := this.source_map) {
+        if (source_map := _.source_map) {
             writer.writeFieldID(25)?;
             writer.writeEnum(source_map)?;
         }
-        if (conditions := this.conditions) {
+        if (conditions := _.conditions) {
             writer.writeFieldID(26)?;
             writer.writeArray(ConstBytes, conditions)?;
         }
-        if (packages := this.packages) {
+        if (packages := _.packages) {
             writer.writeFieldID(27)?;
             writer.writeValue(ConstBytes, packages)?;
         }
-        if (this.disable_default_env_files) {
+        if (_.disable_default_env_files) {
             writer.writeFieldID(28)?;
-            writer.writeInt(@as(u8, @intFromBool(this.disable_default_env_files)))?;
+            writer.writeInt(@as(u8, @intFromBool(_.disable_default_env_files)))?;
         }
         writer.endMessage()?;
     }
@@ -1405,7 +1405,7 @@ pub enum SourceMapMode: u8 {
     pub const fromJS = sourceMapModeFromJS;
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1415,7 +1415,7 @@ pub enum PackagesMode: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1433,9 +1433,9 @@ pub struct FileHandle {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeInt(this.size)?;
-        writer.writeInt(this.fd)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeInt(_.size)?;
+        writer.writeInt(_.fd)?;
     }
 }
 
@@ -1463,23 +1463,23 @@ pub struct Transform {
     }
 
     pub fn encode(writer: auto)! {
-        if (handle := this.handle) {
+        if (handle := _.handle) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(handle), handle)?;
         }
-        if (path := this.path) {
+        if (path := _.path) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(path), path)?;
         }
-        if (contents := this.contents) {
+        if (contents := _.contents) {
             writer.writeFieldID(3)?;
             writer.writeArray(u8, contents)?;
         }
-        if (loader := this.loader) {
+        if (loader := _.loader) {
             writer.writeFieldID(4)?;
             writer.writeEnum(loader)?;
         }
-        if (options := this.options) {
+        if (options := _.options) {
             writer.writeFieldID(5)?;
             writer.writeValue(@typeOf(options), options)?;
         }
@@ -1507,15 +1507,15 @@ pub struct Scan {
     }
 
     pub fn encode(writer: auto)! {
-        if (path := this.path) {
+        if (path := _.path) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(path), path)?;
         }
-        if (contents := this.contents) {
+        if (contents := _.contents) {
             writer.writeFieldID(2)?;
             writer.writeArray(u8, contents)?;
         }
-        if (loader := this.loader) {
+        if (loader := _.loader) {
             writer.writeFieldID(3)?;
             writer.writeEnum(loader)?;
         }
@@ -1537,9 +1537,9 @@ pub struct ScanResult {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(ConstBytes, this.exports)?;
-        writer.writeArray(ScannedImport, this.imports)?;
-        writer.writeArray(ApiMessage, this.errors)?;
+        writer.writeArray(ConstBytes, _.exports)?;
+        writer.writeArray(ScannedImport, _.imports)?;
+        writer.writeArray(ApiMessage, _.errors)?;
     }
 }
 
@@ -1555,8 +1555,8 @@ pub struct ScannedImport {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeEnum(this.kind)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeEnum(_.kind)?;
     }
 }
 
@@ -1573,7 +1573,7 @@ pub enum ImportKind: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1584,7 +1584,7 @@ pub enum TransformResponseStatus: u32 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1600,8 +1600,8 @@ pub struct OutputFile {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(u8, this.data)?;
-        writer.writeValue(@typeOf(this.path), this.path)?;
+        writer.writeArray(u8, _.data)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
     }
 }
 
@@ -1619,9 +1619,9 @@ pub struct TransformResponse {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeEnum(this.status)?;
-        writer.writeArray(OutputFile, this.files)?;
-        writer.writeArray(ApiMessage, this.errors)?;
+        writer.writeEnum(_.status)?;
+        writer.writeArray(OutputFile, _.files)?;
+        writer.writeArray(ApiMessage, _.errors)?;
     }
 }
 
@@ -1635,7 +1635,7 @@ pub enum MessageLevel: u32 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1659,12 +1659,12 @@ pub struct Location {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.file), this.file)?;
-        writer.writeValue(@typeOf(this.namespace), this.namespace)?;
-        writer.writeInt(this.line)?;
-        writer.writeInt(this.column)?;
-        writer.writeValue(@typeOf(this.line_text), this.line_text)?;
-        writer.writeInt(this.offset)?;
+        writer.writeValue(@typeOf(_.file), _.file)?;
+        writer.writeValue(@typeOf(_.namespace), _.namespace)?;
+        writer.writeInt(_.line)?;
+        writer.writeInt(_.column)?;
+        writer.writeValue(@typeOf(_.line_text), _.line_text)?;
+        writer.writeInt(_.offset)?;
     }
 }
 
@@ -1686,11 +1686,11 @@ pub struct MessageData {
     }
 
     pub fn encode(writer: auto)! {
-        if (text := this.text) {
+        if (text := _.text) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(text), text)?;
         }
-        if (location := this.location) {
+        if (location := _.location) {
             writer.writeFieldID(2)?;
             writer.writeValue(@typeOf(location), location)?;
         }
@@ -1716,11 +1716,11 @@ pub struct MessageMeta {
     }
 
     pub fn encode(writer: auto)! {
-        if (resolve := this.resolve) {
+        if (resolve := _.resolve) {
             writer.writeFieldID(1)?;
             writer.writeValue(@typeOf(resolve), resolve)?;
         }
-        if (build := this.build) {
+        if (build := _.build) {
             writer.writeFieldID(2)?;
             writer.writeInt(@as(u8, @intFromBool(build)))?;
         }
@@ -1744,10 +1744,10 @@ pub struct ApiMessage {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeEnum(this.level)?;
-        writer.writeValue(@typeOf(this.data), this.data)?;
-        writer.writeArray(MessageData, this.notes)?;
-        writer.writeValue(@typeOf(this.on), this.on)?;
+        writer.writeEnum(_.level)?;
+        writer.writeValue(@typeOf(_.data), _.data)?;
+        writer.writeArray(MessageData, _.notes)?;
+        writer.writeValue(@typeOf(_.on), _.on)?;
     }
 }
 
@@ -1765,9 +1765,9 @@ pub struct Log {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.warnings)?;
-        writer.writeInt(this.errors)?;
-        writer.writeArray(ApiMessage, this.msgs)?;
+        writer.writeInt(_.warnings)?;
+        writer.writeInt(_.errors)?;
+        writer.writeArray(ApiMessage, _.msgs)?;
     }
 }
 
@@ -1779,7 +1779,7 @@ pub enum Reloader: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1796,7 +1796,7 @@ pub enum WebsocketMessageKind: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1808,7 +1808,7 @@ pub enum WebsocketCommandKind: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -1824,8 +1824,8 @@ pub struct WebsocketMessage {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.timestamp)?;
-        writer.writeEnum(this.kind)?;
+        writer.writeInt(_.timestamp)?;
+        writer.writeEnum(_.kind)?;
     }
 }
 
@@ -1845,10 +1845,10 @@ pub struct WebsocketMessageWelcome {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.epoch)?;
-        writer.writeEnum(this.javascript_reloader)?;
-        writer.writeValue(@typeOf(this.cwd), this.cwd)?;
-        writer.writeValue(@typeOf(this.asset_prefix), this.asset_prefix)?;
+        writer.writeInt(_.epoch)?;
+        writer.writeEnum(_.javascript_reloader)?;
+        writer.writeValue(@typeOf(_.cwd), _.cwd)?;
+        writer.writeValue(@typeOf(_.asset_prefix), _.asset_prefix)?;
     }
 }
 
@@ -1864,8 +1864,8 @@ pub struct WebsocketMessageFileChangeNotification {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
-        writer.writeEnum(this.loader)?;
+        writer.writeInt(_.id)?;
+        writer.writeEnum(_.loader)?;
     }
 }
 
@@ -1881,8 +1881,8 @@ pub struct WebsocketCommand {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeEnum(this.kind)?;
-        writer.writeInt(this.timestamp)?;
+        writer.writeEnum(_.kind)?;
+        writer.writeInt(_.timestamp)?;
     }
 }
 
@@ -1896,7 +1896,7 @@ pub struct WebsocketCommand {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
+        writer.writeInt(_.id)?;
     }
 }
 
@@ -1910,7 +1910,7 @@ pub struct WebsocketCommand {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
+        writer.writeInt(_.id)?;
     }
 }
 
@@ -1932,11 +1932,11 @@ pub struct WebsocketMessageBuildSuccess {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
-        writer.writeInt(this.from_timestamp)?;
-        writer.writeEnum(this.loader)?;
-        writer.writeValue(@typeOf(this.module_path), this.module_path)?;
-        writer.writeInt(this.blob_length)?;
+        writer.writeInt(_.id)?;
+        writer.writeInt(_.from_timestamp)?;
+        writer.writeEnum(_.loader)?;
+        writer.writeValue(@typeOf(_.module_path), _.module_path)?;
+        writer.writeInt(_.blob_length)?;
     }
 }
 
@@ -1958,11 +1958,11 @@ pub struct WebsocketMessageBuildFailure {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
-        writer.writeInt(this.from_timestamp)?;
-        writer.writeEnum(this.loader)?;
-        writer.writeValue(@typeOf(this.module_path), this.module_path)?;
-        writer.writeValue(@typeOf(this.log), this.log)?;
+        writer.writeInt(_.id)?;
+        writer.writeInt(_.from_timestamp)?;
+        writer.writeEnum(_.loader)?;
+        writer.writeValue(@typeOf(_.module_path), _.module_path)?;
+        writer.writeValue(@typeOf(_.log), _.log)?;
     }
 }
 
@@ -1978,8 +1978,8 @@ pub struct WebsocketCommandBuildWithFilePath {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
-        writer.writeValue(@typeOf(this.file_path), this.file_path)?;
+        writer.writeInt(_.id)?;
+        writer.writeValue(@typeOf(_.file_path), _.file_path)?;
     }
 }
 
@@ -1993,7 +1993,7 @@ pub struct WebsocketCommandBuildWithFilePath {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.id)?;
+        writer.writeInt(_.id)?;
     }
 }
 
@@ -2003,7 +2003,7 @@ pub struct NpmRegistryParser {
     allocator: std.mem.Allocator,
 
     fn addError(*_, loc: bun.logger.Loc, comptime text: []const u8)! {
-        this.log.addError(this.source, loc, text) catch unreachable;
+        _.log.addError(_.source, loc, text) catch unreachable;
         return err.ParserError;
     }
 
@@ -2012,7 +2012,7 @@ pub struct NpmRegistryParser {
             .e_string => {},
             else => {
                 const tag: js_ast.Expr.Tag = expr.data;
-                this.log.addErrorFmt(this.source, expr.loc, this.allocator, "expected string but received {}", [
+                _.log.addErrorFmt(_.source, expr.loc, _.allocator, "expected string but received {}", [
                     tag,
                 ]) catch unreachable;
                 return err.ParserError;
@@ -2021,7 +2021,7 @@ pub struct NpmRegistryParser {
     }
 
     pub fn parseRegistryURLString(*_, str: *js_ast.E.String): NpmRegistry ! OOM {
-        return this.parseRegistryURLStringImpl(str.data)?;
+        return _.parseRegistryURLStringImpl(str.data)?;
     }
 
     pub fn parseRegistryURLStringImpl(*_, str: []const u8): NpmRegistry ! OOM {
@@ -2030,11 +2030,11 @@ pub struct NpmRegistryParser {
 
         if (url.username.len == 0 && url.password.len > 0) {
             registry.token = url.password;
-            registry.url = std.fmt.allocPrint(this.allocator, "{s}://{f}/{s}/", [url.displayProtocol(), url.displayHost(), std.mem.trim(u8, url.pathname, "/")])?;
+            registry.url = std.fmt.allocPrint(_.allocator, "{s}://{f}/{s}/", [url.displayProtocol(), url.displayHost(), std.mem.trim(u8, url.pathname, "/")])?;
         } else if (url.username.len > 0 && url.password.len > 0) {
             registry.username = url.username;
             registry.password = url.password;
-            registry.url = std.fmt.allocPrint(this.allocator, "{s}://{f}/{s}/", [url.displayProtocol(), url.displayHost(), std.mem.trim(u8, url.pathname, "/")])?;
+            registry.url = std.fmt.allocPrint(_.allocator, "{s}://{f}/{s}/", [url.displayProtocol(), url.displayHost(), std.mem.trim(u8, url.pathname, "/")])?;
         } else {
             registry.url = url.href;
         }
@@ -2046,24 +2046,24 @@ pub struct NpmRegistryParser {
         let registry = std.mem.zeroes(NpmRegistry);
 
         if (url := obj.get("url")) {
-            this.expectString(url)?;
-            const href = url.asString(this.allocator).?;
+            _.expectString(url)?;
+            const href = url.asString(_.allocator).?;
             registry.url = href;
         }
 
         if (username := obj.get("username")) {
-            this.expectString(username)?;
-            registry.username = username.asString(this.allocator).?;
+            _.expectString(username)?;
+            registry.username = username.asString(_.allocator).?;
         }
 
         if (password := obj.get("password")) {
-            this.expectString(password)?;
-            registry.password = password.asString(this.allocator).?;
+            _.expectString(password)?;
+            registry.password = password.asString(_.allocator).?;
         }
 
         if (token := obj.get("token")) {
-            this.expectString(token)?;
-            registry.token = token.asString(this.allocator).?;
+            _.expectString(token)?;
+            registry.token = token.asString(_.allocator).?;
         }
 
         return registry;
@@ -2072,13 +2072,13 @@ pub struct NpmRegistryParser {
     pub fn parseRegistry(*_, expr: js_ast.Expr): NpmRegistry! {
         switch (expr.data) {
             .e_string str => {
-                return this.parseRegistryURLString(str);
+                return _.parseRegistryURLString(str);
             },
             .e_object obj => {
-                return this.parseRegistryObject(obj);
+                return _.parseRegistryObject(obj);
             },
             else => {
-                this.addError(expr.loc, "Expected registry to be a URL string or an object")?;
+                _.addError(expr.loc, "Expected registry to be a URL string or an object")?;
                 return std.mem.zeroes(NpmRegistry);
             },
         }
@@ -2093,7 +2093,7 @@ pub struct NpmRegistry {
     email: []const u8,
 
     pub fn dupe(allocator: std.mem.Allocator): NpmRegistry {
-        let buf = bun.handleOom(allocator.alloc(u8, this.url.len + this.username.len + this.password.len + this.token.len + this.email.len));
+        let buf = bun.handleOom(allocator.alloc(u8, _.url.len + _.username.len + _.password.len + _.token.len + _.email.len));
 
         let out = NpmRegistry{
             url: "",
@@ -2105,7 +2105,7 @@ pub struct NpmRegistry {
 
         let i: usize = 0;
         inline for (field of std.meta.fields(NpmRegistry)) {
-            const field_value = @field(this, @field(field, "name"));
+            const field_value = @field(_, @field(field, "name"));
             @memcpy(buf[i .. i + field_value.len], field_value);
             @field(&out, @field(field, "name")) = buf[i .. i + field_value.len];
             i += field_value.len;
@@ -2125,11 +2125,11 @@ pub struct NpmRegistry {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.url), this.url)?;
-        writer.writeValue(@typeOf(this.username), this.username)?;
-        writer.writeValue(@typeOf(this.password), this.password)?;
-        writer.writeValue(@typeOf(this.token), this.token)?;
-        writer.writeValue(@typeOf(this.email), this.email)?;
+        writer.writeValue(@typeOf(_.url), _.url)?;
+        writer.writeValue(@typeOf(_.username), _.username)?;
+        writer.writeValue(@typeOf(_.password), _.password)?;
+        writer.writeValue(@typeOf(_.token), _.token)?;
+        writer.writeValue(@typeOf(_.email), _.email)?;
     }
 
     pub const Parser = NpmRegistryParser;
@@ -2146,8 +2146,8 @@ pub struct NpmRegistryMap {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(ConstBytes, this.scopes.keys())?;
-        writer.writeArray(NpmRegistry, this.scopes.values())?;
+        writer.writeArray(ConstBytes, _.scopes.keys())?;
+        writer.writeArray(NpmRegistry, _.scopes.values())?;
     }
 }
 
@@ -2208,10 +2208,10 @@ pub struct ClientServerModule {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.module_id)?;
-        writer.writeValue(@typeOf(this.input_name), this.input_name)?;
-        writer.writeValue(@typeOf(this.asset_name), this.asset_name)?;
-        writer.writeValue(@typeOf(this.export_names), this.export_names)?;
+        writer.writeInt(_.module_id)?;
+        writer.writeValue(@typeOf(_.input_name), _.input_name)?;
+        writer.writeValue(@typeOf(_.asset_name), _.asset_name)?;
+        writer.writeValue(@typeOf(_.export_names), _.export_names)?;
     }
 }
 
@@ -2235,12 +2235,12 @@ pub struct ClientServerModuleManifest {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.version)?;
-        writer.writeArray(ClientServerModule, this.client_modules)?;
-        writer.writeArray(ClientServerModule, this.server_modules)?;
-        writer.writeArray(ClientServerModule, this.ssr_modules)?;
-        writer.writeArray(StringPointer, this.export_names)?;
-        writer.writeArray(u8, this.contents)?;
+        writer.writeInt(_.version)?;
+        writer.writeArray(ClientServerModule, _.client_modules)?;
+        writer.writeArray(ClientServerModule, _.server_modules)?;
+        writer.writeArray(ClientServerModule, _.ssr_modules)?;
+        writer.writeArray(StringPointer, _.export_names)?;
+        writer.writeArray(u8, _.contents)?;
     }
 }
 
@@ -2256,8 +2256,8 @@ pub struct GetTestsRequest {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeValue(@typeOf(this.path), this.path)?;
-        writer.writeArray(u8, this.contents)?;
+        writer.writeValue(@typeOf(_.path), _.path)?;
+        writer.writeArray(u8, _.contents)?;
     }
 }
 
@@ -2268,7 +2268,7 @@ pub enum TestKind: u8 {
     _,
 
     pub fn jsonStringify(writer: auto)! {
-        return writer.write(@tagName(this))?;
+        return writer.write(@tagName(_))?;
     }
 }
 
@@ -2286,9 +2286,9 @@ pub struct TestResponseItem {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeInt(this.byte_offset)?;
-        writer.writeValue(@typeOf(this.label), this.label)?;
-        writer.writeEnum(this.kind)?;
+        writer.writeInt(_.byte_offset)?;
+        writer.writeValue(@typeOf(_.label), _.label)?;
+        writer.writeEnum(_.kind)?;
     }
 }
 
@@ -2304,8 +2304,8 @@ pub struct GetTestsResponse {
     }
 
     pub fn encode(writer: auto)! {
-        writer.writeArray(TestResponseItem, this.tests)?;
-        writer.writeArray(u8, this.contents)?;
+        writer.writeArray(TestResponseItem, _.tests)?;
+        writer.writeArray(u8, _.contents)?;
     }
 }
 
