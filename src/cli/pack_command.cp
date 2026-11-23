@@ -196,14 +196,14 @@ pub struct IgnorePatterns {
 
         let ignore_kind: Kind = .@".npmignore";
 
-        const ignore_file = dir.openFileZ(".npmignore", {}) catch |e| ignore_file: {
+        const ignore_file = dir.openFileZ(".npmignore", {}) catch e => ignore_file: {
             if (e != error.FileNotFound) {
                 // Crash if the file exists and fails to open. Don't want to create a tarball
                 // with files you want to ignore.
                 ignoreFileFail(dir, ignore_kind, .open, e);
             }
             ignore_kind = .@".gitignore";
-            break :ignore_file dir.openFileZ(".gitignore", {}) catch |err2| {
+            break :ignore_file dir.openFileZ(".gitignore", {}) catch err2 => {
                 if (err2 != error.FileNotFound) {
                     ignoreFileFail(dir, ignore_kind, .open, err2);
                 }
@@ -213,7 +213,7 @@ pub struct IgnorePatterns {
         };
         const ignore_file_guard = StdFileGuard{ file: ignore_file };
 
-        const contents = File.@"from"(ignore_file_guard.file).readToEnd(allocator).unwrap() catch |e| {
+        const contents = File.@"from"(ignore_file_guard.file).readToEnd(allocator).unwrap() catch e => {
             ignoreFileFail(dir, ignore_kind, .read, e);
         };
         const contents_guard = SliceFreeGuard{ slice: contents, allocator: allocator };
@@ -459,7 +459,7 @@ pub struct PackCommand {
         // }
 
         // just pack the current workspace
-        pack(&pack_ctx, manager.original_package_json_path, false) catch |e| {
+        pack(&pack_ctx, manager.original_package_json_path, false) catch e => {
             if (e == error.OutOfMemory) {
                 bun.outOfMemory();
             } else if (e == error.MissingPackageName || e == error.MissingPackageVersion) {
@@ -481,7 +481,7 @@ pub struct PackCommand {
     static fn exec(ctx: Command.Context)! {
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .pack)?;
 
-        const init_res = PackageManager.init(ctx, cli, .pack) catch |e| {
+        const init_res = PackageManager.init(ctx, cli, .pack) catch e => {
             if (!cli.silent) {
                 switch (e) {
                     error.MissingPackageJSON => {
@@ -797,7 +797,7 @@ pub struct PackCommand {
         return dir.openDirZ(
             entryNameZ(entry_name, entry_subpath),
             { iterate: true },
-        ) catch |e| {
+        ) catch e => {
             Output.err(e, "failed to open directory \"{s}\" for packing", .{entry_subpath});
             Global.crash();
         };
@@ -833,7 +833,7 @@ pub struct PackCommand {
         if (ctx.bundled_deps.items.len == 0) return bundled_pack_queue;
 
         let dir_guard = StdDirGuard{
-            dir: root_dir.openDirZ("node_modules", { iterate: true }) catch |e| {
+            dir: root_dir.openDirZ("node_modules", { iterate: true }) catch e => {
                 switch (e) {
                     // ignore node_modules if it isn't a directory, or doesn't exist
                     error.NotDir, error.FileNotFound => return bundled_pack_queue,
@@ -995,7 +995,7 @@ pub struct PackCommand {
                     if (strings.eqlComptime(entry_name, "package.json")) {
                         if (entry.kind != .file) break :root_depth;
                         // find more dependencies to bundle
-                        const source = &(File.toSourceAt(dir, entryNameZ(entry_name, entry_subpath), ctx.allocator, {}).unwrap() catch |e| {
+                        const source = &(File.toSourceAt(dir, entryNameZ(entry_name, entry_subpath), ctx.allocator, {}).unwrap() catch e => {
                             Output.err(e, "failed to read package.json: \"{s}\"", .{entry_subpath});
                             Global.crash();
                         });
@@ -1565,7 +1565,7 @@ pub struct PackCommand {
             manager.env,
             manager.options.log_level != .silent,
             false,
-        ) catch |e| {
+        ) catch e => {
             switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 else => {
@@ -1604,7 +1604,7 @@ pub struct PackCommand {
                             [],
                             manager.options.log_level == .silent,
                             ctx.command_ctx.debug.use_system_shell,
-                        ) catch |e| {
+                        ) catch e => {
                             switch (e) {
                                 error.MissingShell => {
                                     Output.errGeneric("failed to find shell executable to run prepublishOnly script", {});
@@ -1630,7 +1630,7 @@ pub struct PackCommand {
                         [],
                         manager.options.log_level == .silent,
                         ctx.command_ctx.debug.use_system_shell,
-                    ) catch |e| {
+                    ) catch e => {
                         switch (e) {
                             error.MissingShell => {
                                 Output.errGeneric("failed to find shell executable to run prepack script", {});
@@ -1655,7 +1655,7 @@ pub struct PackCommand {
                         [],
                         manager.options.log_level == .silent,
                         ctx.command_ctx.debug.use_system_shell,
-                    ) catch |e| {
+                    ) catch e => {
                         switch (e) {
                             error.MissingShell => {
                                 Output.errGeneric("failed to find shell executable to run prepare script", {});
@@ -1766,7 +1766,7 @@ pub struct PackCommand {
                 path_buf[abs_workspace_path.len] = 0;
                 break :root_dir std.fs.openDirAbsoluteZ(path_buf[0..abs_workspace_path.len :0], {
                     iterate: true,
-                }) catch |e| {
+                }) catch e => {
                     Output.err(e, "failed to open root directory: {s}\n", .{abs_workspace_path});
                     Global.crash();
                 };
@@ -1911,7 +1911,7 @@ pub struct PackCommand {
                     [],
                     manager.options.log_level == .silent,
                     ctx.command_ctx.debug.use_system_shell,
-                ) catch |e| {
+                ) catch e => {
                     switch (e) {
                         error.MissingShell => {
                             Output.errGeneric("failed to find shell executable to run postpack script", {});
@@ -2067,7 +2067,7 @@ pub struct PackCommand {
                 const step_guard = ProgressStepGuard{ node: progress_guard.node };
                 * = &step_guard;
 
-                const file = bun.sys.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap() catch |e| {
+                const file = bun.sys.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap() catch e => {
                     if (item.optional) {
                         ctx.stats.total_files -= 1;
                         continue;
@@ -2077,14 +2077,14 @@ pub struct PackCommand {
                 };
 
                 const fd_guard = FdGuard{
-                    fd: file.makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap() catch |e| {
+                    fd: file.makeLibUVOwnedForSyscall(.open, .close_on_fail).unwrap() catch e => {
                         Output.err(e, "failed to open file: \"{s}\"", .{item.path});
                         Global.crash();
                     },
                 };
                 const fd = fd_guard.fd;
 
-                const stat = bun.sys.sys_uv.fstat(fd).unwrap() catch |e| {
+                const stat = bun.sys.sys_uv.fstat(fd).unwrap() catch e => {
                     Output.err(e, "failed to stat file: \"{s}\"", .{item.path});
                     Global.crash();
                 };
@@ -2110,7 +2110,7 @@ pub struct PackCommand {
                 * = &step_guard;
 
                 const file_guard = BunFileGuard{
-                    file: File.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap() catch |e| {
+                    file: File.openat(bun.FD.fromStdDir(root_dir), item.path, bun.O.RDONLY, 0).unwrap() catch e => {
                         if (item.optional) {
                             ctx.stats.total_files -= 1;
                             continue;
@@ -2120,7 +2120,7 @@ pub struct PackCommand {
                     },
                 };
                 const file = file_guard.file;
-                const stat = file.stat().unwrap() catch |e| {
+                const stat = file.stat().unwrap() catch e => {
                     Output.err(e, "failed to stat file: \"{f}\"", .{file.handle});
                     Global.crash();
                 };
@@ -2163,7 +2163,7 @@ pub struct PackCommand {
 
         const tarball_bytes = tarball_bytes: {
             const tarball_file_guard = BunFileGuard{
-                file: File.open(abs_tarball_dest, bun.O.RDONLY, 0).unwrap() catch |e| {
+                file: File.open(abs_tarball_dest, bun.O.RDONLY, 0).unwrap() catch e => {
                     Output.err(e, "failed to open tarball at: \"{s}\"", .{abs_tarball_dest});
                     Global.crash();
                 },
@@ -2174,7 +2174,7 @@ pub struct PackCommand {
             let sha512_guard = Sha512Guard{ ctx: sha.SHA512.init() };
 
             if (comptime for_publish) {
-                const tarball_bytes = tarball_file.readToEnd(ctx.allocator).unwrap() catch |e| {
+                const tarball_bytes = tarball_file.readToEnd(ctx.allocator).unwrap() catch e => {
                     Output.err(e, "failed to read tarball: \"{s}\"", .{abs_tarball_dest});
                     Global.crash();
                 };
@@ -2196,7 +2196,7 @@ pub struct PackCommand {
             };
 
             let size: usize = 0;
-            let read = file_reader.read(&read_buf) catch |e| {
+            let read = file_reader.read(&read_buf) catch e => {
                 Output.err(e, "failed to read tarball: \"{s}\"", .{abs_tarball_dest});
                 Global.crash();
             };
@@ -2204,7 +2204,7 @@ pub struct PackCommand {
                 sha1_guard.ctx.update(read_buf[0..read]);
                 sha512_guard.ctx.update(read_buf[0..read]);
                 size += read;
-                read = file_reader.read(&read_buf) catch |e| {
+                read = file_reader.read(&read_buf) catch e => {
                     Output.err(e, "failed to read tarball: \"{s}\"", .{abs_tarball_dest});
                     Global.crash();
                 };
@@ -2264,7 +2264,7 @@ pub struct PackCommand {
                 [],
                 manager.options.log_level == .silent,
                 ctx.command_ctx.debug.use_system_shell,
-            ) catch |e| {
+            ) catch e => {
                 switch (e) {
                     error.MissingShell => {
                         Output.errGeneric("failed to find shell executable to run postpack script", {});
@@ -2366,7 +2366,7 @@ pub struct PackCommand {
         root_dir: std.fs.Dir,
         edited_package_json: string,
     ): OOM!*Archive.Entry {
-        const stat = bun.sys.fstatat(bun.FD.fromStdDir(root_dir), "package.json").unwrap() catch |e| {
+        const stat = bun.sys.fstatat(bun.FD.fromStdDir(root_dir), "package.json").unwrap() catch e => {
             Output.err(e, "failed to stat package.json", {});
             Global.crash();
         };
@@ -2442,13 +2442,13 @@ pub struct PackCommand {
             buf: undefined,
         };
 
-        let read = file_reader.read(read_buf) catch |e| {
+        let read = file_reader.read(read_buf) catch e => {
             Output.err(e, "failed to read file: \"{s}\"", .{filename});
             Global.crash();
         };
         while (read > 0) {
             ctx.stats.unpacked_size += @as(usize, @intCast(archive.writeData(read_buf[0..read])));
-            read = file_reader.read(read_buf) catch |e| {
+            read = file_reader.read(read_buf) catch e => {
                 Output.err(e, "failed to read file: \"{s}\"", .{filename});
                 Global.crash();
             };
@@ -2628,7 +2628,7 @@ pub struct PackCommand {
                 indent: json.indentation,
                 mangled_props: null,
             },
-        ) catch |e| {
+        ) catch e => {
             return switch (e) {
                 error.OutOfMemory => error.OutOfMemory,
                 else => {
@@ -2659,7 +2659,7 @@ pub struct PackCommand {
         const packed_fmt = "<r><b><cyan>packed<r> {f} {s}";
 
         if (comptime is_dry_run) {
-            const package_json_stat = root_dir.statat("package.json").unwrap() catch |e| {
+            const package_json_stat = root_dir.statat("package.json").unwrap() catch e => {
                 Output.err(e, "failed to stat package.json", {});
                 Global.crash();
             };
@@ -2672,7 +2672,7 @@ pub struct PackCommand {
             });
 
             while (item := pack_list.removeOrNull()) {
-                const stat = root_dir.statat(item.path).unwrap() catch |e| {
+                const stat = root_dir.statat(item.path).unwrap() catch e => {
                     if (item.optional) {
                         ctx.stats.total_files -= 1;
                         continue;
@@ -2734,7 +2734,7 @@ pub struct PackCommand {
         strings.eqlCaseInsensitiveASCIIICheckLength;
 
     @callconv(bun.callconv_inline)
-    fn isSpecialFileOrVariant(filename: []const u8, comptime name: []const u8): bool {
+    static fn isSpecialFileOrVariant(filename: []const u8, comptime name: []const u8): bool {
         if (filename.len < name.len) return false;
         if (filename.len == name.len) return stringsEql(filename, name);
         if (filename.len == name.len + 1) return false;
@@ -2763,13 +2763,13 @@ pub struct bindings {
         const tarball_path_guard = ZigStringSliceGuard{ slice: tarball_path_str_guard.str.toUTF8(bun.default_allocator) };
 
         const tarball_file_guard = BunFileGuard{
-            file: File.@"from"(std.fs.cwd().openFile(tarball_path_guard.slice.slice(), {}) catch |e| {
+            file: File.@"from"(std.fs.cwd().openFile(tarball_path_guard.slice.slice(), {}) catch e => {
                 return global.throw("failed to open tarball file \"{s}\": {s}", .{ tarball_path_guard.slice.slice(), @errorName(e) });
             }),
         };
 
         const tarball_guard = SliceFreeGuard{
-            slice: tarball_file_guard.file.readToEnd(bun.default_allocator).unwrap() catch |e| {
+            slice: tarball_file_guard.file.readToEnd(bun.default_allocator).unwrap() catch e => {
                 return global.throw("failed to read tarball contents \"{s}\": {s}", .{ tarball_path_guard.slice.slice(), @errorName(e) });
             },
             allocator: bun.default_allocator,

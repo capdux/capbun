@@ -1999,7 +1999,7 @@ pub fn addArchiveEntry(ctx: *Context, file: FD, stat: bun.Stat, filename: string
             var perm: bun.Mode = @intCast(stat.mode);
             _ = &perm;
             if (isPackageBin(bins, filename)) {
-                perm = (perm | (if (comptime @typeInfo(bun.Mode) == .@"enum") @as(bun.Mode, @enumFromInt(73)) else @as(bun.Mode, 73)));
+                perm = (perm | (if (comptime @typeInfo(bun.Mode) == .@"enum" and (@typeInfo(@TypeOf(73)) == .int or @typeInfo(@TypeOf(73)) == .comptime_int)) @as(bun.Mode, @enumFromInt(73)) else @as(bun.Mode, 73)));
             }
             _ = entry.setPerm(@intCast(perm));
             _ = entry.setMtime(499162500, 0);

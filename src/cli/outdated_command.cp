@@ -488,7 +488,7 @@ fn printOutdatedInfoTable(
                     workspace_pkg_id: workspace_pkg_id,
                     is_catalog: dep.version.tag == .catalog,
                 },
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
         }
     }
 
@@ -750,7 +750,7 @@ fn outdatedWithColor(manager: *PackageManager, original_cwd: string, comptime en
             original_cwd,
             manager,
             filters,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         const _ws_guard = FreeGuard<PackageID>{ allocator: bun.default_allocator, slice: workspace_pkg_ids };
 
         manager.populateManifestCache({ ids: workspace_pkg_ids })?;
@@ -779,7 +779,7 @@ pub struct OutdatedCommand {
 
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .outdated)?;
 
-        const init_res = PackageManager.init(ctx, cli, .outdated) catch |e| {
+        const init_res = PackageManager.init(ctx, cli, .outdated) catch e => {
             if (!cli.silent) {
                 if (e == error.MissingPackageJSON) {
                     Output.errGeneric("missing package.json, nothing outdated", .{});

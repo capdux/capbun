@@ -153,7 +153,7 @@ struct ReplRunner {
             }
         } else {
             // Interactive: run the REPL loop
-            _.repl.runWithVM(vm) catch |e| {
+            _.repl.runWithVM(vm) catch e => {
                 Output.prettyErrorln("<r><red>REPL error: {s}<r>", .{@errorName(e)});
             };
         }

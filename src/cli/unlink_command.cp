@@ -21,7 +21,7 @@ pub struct UnlinkCommand {
 
 fn unlink(ctx: Command.Context)! {
     const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .unlink)?;
-    const res = PackageManager.init(ctx, cli, .unlink) catch |e| brk: {
+    const res = PackageManager.init(ctx, cli, .unlink) catch e => brk: {
         if (e == error.MissingPackageJSON) {
             attemptToCreatePackageJSON()?;
             break :brk PackageManager.init(ctx, cli, .unlink)?;
@@ -47,7 +47,7 @@ fn unlink(ctx: Command.Context)! {
 
         // Step 1. parse the nearest package.json file
         {
-            const package_json_source = &(bun.sys.File.toSource(manager.original_package_json_path, ctx.allocator, .{}).unwrap() catch |e| {
+            const package_json_source = &(bun.sys.File.toSource(manager.original_package_json_path, ctx.allocator, .{}).unwrap() catch e => {
                 Output.errGeneric("failed to read \"{s}\" for unlinking: {s}", .{ manager.original_package_json_path, @errorName(e) });
                 Global.crash();
             });
@@ -98,7 +98,7 @@ fn unlink(ctx: Command.Context)! {
 
             manager.setupGlobalDir(ctx)?;
 
-            break :brk manager.global_dir.?.makeOpenPath("node_modules", .{}) catch |e| {
+            break :brk manager.global_dir.?.makeOpenPath("node_modules", .{}) catch e => {
                 if (manager.options.log_level != .silent)
                     Output.prettyErrorln("<r><red>error:<r> failed to create node_modules in global dir due to error {s}", .{ @errorName(e) });
                 Global.crash();
@@ -111,7 +111,7 @@ fn unlink(ctx: Command.Context)! {
             let link_dest_buf: bun.PathBuffer = undefined;
             let link_rel_buf: bun.PathBuffer = undefined;
 
-            let node_modules_path_raw = bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch |e| {
+            let node_modules_path_raw = bun.AbsPath(.{}).initFdPath(.fromStdDir(node_modules)) catch e => {
                 if (manager.options.log_level != .silent) {
                     Output.err(e, "failed to link binary", .{});
                 }
@@ -137,7 +137,7 @@ fn unlink(ctx: Command.Context)! {
         }
 
         // delete it if it exists
-        node_modules.deleteTree(name) catch |e| {
+        node_modules.deleteTree(name) catch e => {
             if (manager.options.log_level != .silent)
                 Output.prettyErrorln("<r><red>error:<r> failed to unlink package in global dir due to error {s}", .{ @errorName(e) });
             Global.crash();

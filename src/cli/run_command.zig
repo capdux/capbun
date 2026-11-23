@@ -612,20 +612,20 @@ pub fn createFakeTemporaryNodeExecutable(PATH: *std.array_list.Managed(u8), init
                 return out_bun_path;
             }
             if (Environment.isPosix) {
-                var argv0 = @as([*:0]const u8, (blk: {
-                break :blk @ptrCast(out_bun_path.ptr);
+                var argv0 = (blk: {
+                break :blk @as([*:0]const u8, @alignCast(@ptrCast(out_bun_path.ptr)));
 
-}));
+});
                 _ = &argv0;
                 if ((bun.argv[0][0] == 47)) {
                     out_bun_path = bun.argv[0];
                     argv0 = bun.argv[0];
                 } else {
                     if ((out_bun_path.len == 0)) {
-                        const self = try bun.selfExePath();
-                        if ((self.len > 0)) {
-                            argv0 = self.ptr;
-                            out_bun_path = self;
+                        const self_exe_path = try bun.selfExePath();
+                        if ((self_exe_path.len > 0)) {
+                            argv0 = self_exe_path.ptr;
+                            out_bun_path = self_exe_path;
                         }
                     }
                 }

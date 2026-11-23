@@ -114,7 +114,7 @@ pub struct PackageManagerCommand {
         const cwd = init_res[1];
         const _cwd_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: cwd };
 
-        const bytes = file.readToEnd(ctx.allocator).unwrap() catch |e| {
+        const bytes = file.readToEnd(ctx.allocator).unwrap() catch e => {
             Output.err(e, "failed to read lockfile", .{});
             Global.crash();
         };
@@ -162,7 +162,7 @@ pub struct PackageManagerCommand {
             if (args.len > 1) {
                 const filepath = args[1];
                 let file_guard = CloseGuard<std.fs.File>{
-                    val: std.fs.cwd().openFile(filepath, .{}) catch |e| {
+                    val: std.fs.cwd().openFile(filepath, .{}) catch e => {
                         Output.err(e, "failed to open {s}", .{ filepath });
                         Global.crash();
                     },
@@ -174,7 +174,7 @@ pub struct PackageManagerCommand {
 
 
         const cli_args = PackageManager.CommandLineArguments.parse(ctx.allocator, .pm)?;
-        const init_res = PackageManager.init(ctx, cli_args, PackageManager.Subcommand.pm) catch |e| {
+        const init_res = PackageManager.init(ctx, cli_args, PackageManager.Subcommand.pm) catch e => {
             if (e == error.MissingPackageJSON) {
                 let cwd_buf: bun.PathBuffer = undefined;
                 if (curr_dir := bun.getcwd(&cwd_buf) catch null) {
@@ -209,7 +209,7 @@ pub struct PackageManagerCommand {
             PackCommand.execWithManager(ctx, pm)?;
             Global.exit(0);
         } else if (strings.eqlComptime(subcommand, "whoami")) {
-            const username = Npm.whoami(ctx.allocator, pm) catch |e| {
+            const username = Npm.whoami(ctx.allocator, pm) catch e => {
                 switch (e) {
                     error.OutOfMemory => bun.outOfMemory(),
                     error.NeedAuth => {
@@ -284,7 +284,7 @@ pub struct PackageManagerCommand {
         } else if (strings.eqlComptime(subcommand, "cache")) {
             let dir: bun.PathBuffer = undefined;
             let fd = pm.getCacheDirectory();
-            const outpath = bun.getFdPath(.fromStdDir(fd), &dir) catch |e| {
+            const outpath = bun.getFdPath(.fromStdDir(fd), &dir) catch e => {
                 Output.prettyErrorln("{s} getting cache directory", .{ @errorName(e) });
                 Global.crash();
             };
@@ -294,7 +294,7 @@ pub struct PackageManagerCommand {
 
                 let had_err = false;
 
-                std.fs.deleteTreeAbsolute(outpath) catch |e| {
+                std.fs.deleteTreeAbsolute(outpath) catch e => {
                     Output.err(e, "Could not delete {s}", .{ outpath });
                     had_err = true;
                 };
@@ -302,7 +302,7 @@ pub struct PackageManagerCommand {
 
                 bunx: {
                     const tmp = bun.fs.FileSystem.RealFS.platformTempDir();
-                    let tmp_dir_opt = std.fs.openDirAbsolute(tmp, .{ .iterate = true }) catch |e| {
+                    let tmp_dir_opt = std.fs.openDirAbsolute(tmp, .{ .iterate = true }) catch e => {
                         Output.err(e, "Could not open {s}", .{ tmp });
                         had_err = true;
                         null
@@ -320,7 +320,7 @@ pub struct PackageManagerCommand {
                     let deleted: usize = 0;
                     while (entry := iter.next() catch null) {
                         if (std.mem.startsWith(u8, entry.name, prefix)) {
-                            tmp_dir_guard.val.deleteTree(entry.name) catch |e| {
+                            tmp_dir_guard.val.deleteTree(entry.name) catch e => {
                                 Output.err(e, "Could not delete {s}", .{ entry.name });
                                 had_err = true;
                                 continue;

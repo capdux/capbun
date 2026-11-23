@@ -104,7 +104,7 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
     );
     req.client.flags.reject_unauthorized = manager.tlsRejectUnauthorized();
 
-    const res = req.sendSync() catch |e| {
+    const res = req.sendSync() catch e => {
         Output.err(e, "view request failed to send", .{});
         Global.crash();
     };
@@ -115,7 +115,7 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
 
     let log = logger.Log.init(allocator);
     const source = &logger.Source.initPathString(url.href, response_buf_guard.val.list.items);
-    const json = bun.json.parse(source, &log, allocator, false) catch |e| {
+    const json = bun.json.parse(source, &log, allocator, false) catch e => {
         Output.err(e, "failed to parse package manifest", .{});
         Global.exit(1);
     };
@@ -130,7 +130,7 @@ pub fn view(allocator: std.mem.Allocator, manager: *PackageManager, spec_: strin
         "", // etag (not needed for view)
         0, // public_max_age (not needed for view)
         true, // is_extended_manifest (view uses application/json Accept header)
-    ) catch |e| {
+    ) catch e => {
         Output.err(e, "failed to parse package manifest", .{});
         Global.exit(1);
     };

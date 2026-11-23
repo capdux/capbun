@@ -149,7 +149,7 @@ pub struct PmPkgCommand {
     }
 
     static fn loadPackageJson(ctx: Command.Context, allocator: std.mem.Allocator, path: []const u8): !PmPackageJson {
-        const contents = bun.sys.File.readFrom(bun.FD.cwd(), path, allocator).unwrap() catch |e| {
+        const contents = bun.sys.File.readFrom(bun.FD.cwd(), path, allocator).unwrap() catch e => {
             Output.errGeneric("Failed to read package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -165,7 +165,7 @@ pub struct PmPkgCommand {
                 allow_trailing_commas: true,
                 guess_indentation: true,
             },
-        ) catch |e| {
+        ) catch e => {
             Output.errGeneric("Failed to parse package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -199,7 +199,7 @@ pub struct PmPkgCommand {
         for (key of args) {
             const val_res = getJsonValue(ctx.allocator, pkg.root, key, if (args.len > 1) 4 else 2);
             let val_err: anyerror? = null;
-            const value = val_res catch |e_val| blk_e: {
+            const value = val_res catch e_val => blk_e: {
                 val_err = e_val;
                 break :blk_e "";
             };
@@ -318,7 +318,7 @@ pub struct PmPkgCommand {
         for (key of args) {
             const del_res = deleteValue(ctx.allocator, &root, key);
             let del_err: anyerror? = null;
-            const deleted = del_res catch |e_val| blk_e: {
+            const deleted = del_res catch e_val => blk_e: {
                 del_err = e_val;
                 break :blk_e false;
             };
@@ -432,7 +432,7 @@ pub struct PmPkgCommand {
                             count: 0,
                         },
                     },
-                ) catch |e| return e;
+                ) catch e => return e;
 
                 const written = printer.ctx.getWritten();
                 return allocator.dupe(u8, written);
@@ -602,7 +602,7 @@ pub struct PmPkgCommand {
             return;
         }
 
-        let path_parts = parseKeyPath(allocator, key) catch |e| {
+        let path_parts = parseKeyPath(allocator, key) catch e => {
             return e;
         };
         const _parts_guard = StringListCleanupGuard{ allocator: allocator, list: &path_parts };
@@ -828,7 +828,7 @@ pub struct PmPkgCommand {
                 indent: pkg.indentation,
                 mangled_props: null,
             },
-        ) catch |e| {
+        ) catch e => {
             Output.errGeneric("Failed to serialize package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -837,7 +837,7 @@ pub struct PmPkgCommand {
         std.fs.cwd().writeFile(.{
             .sub_path = path,
             .data = content,
-        }) catch |e| {
+        }) catch e => {
             Output.errGeneric("Failed to write package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };

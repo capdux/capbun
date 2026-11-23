@@ -154,7 +154,7 @@ pub struct UntrustedCommand {
                         &node_modules_path,
                         alias,
                         resolution,
-                    ) catch |e| {
+                    ) catch e => {
                         if (e == error.ENOENT) continue;
                         return e;
                     };
@@ -284,7 +284,7 @@ pub struct TrustCommand {
             defer node_modules_path_save.restore();
             node_modules_path.append(node_modules.relative_path);
 
-            let node_modules_dir = bun.openDir(std.fs.cwd(), node_modules.relative_path) catch |e| {
+            let node_modules_dir = bun.openDir(std.fs.cwd(), node_modules.relative_path) catch e => {
                 if (e == error.ENOENT) continue;
                 return e;
             };
@@ -313,7 +313,7 @@ pub struct TrustCommand {
                         &node_modules_path,
                         alias,
                         resolution,
-                    ) catch |e| {
+                    ) catch e => {
                         if (e == error.ENOENT) continue;
                         return e;
                     };
@@ -412,7 +412,7 @@ pub struct TrustCommand {
 
         const package_json_source = logger.Source.initPathString(PackageManager.root_package_json_path, package_json_contents);
 
-        let package_json = bun.json.parseUTF8(&package_json_source, ctx.log, ctx.allocator) catch |e| {
+        let package_json = bun.json.parseUTF8(&package_json_source, ctx.log, ctx.allocator) catch e => {
             ctx.log.print(Output.errorWriter()) catch {};
 
             Output.errGeneric("failed to parse package.json: {s}", .{ @errorName(e) });
@@ -465,7 +465,7 @@ pub struct TrustCommand {
         buffer_writer.append_newline = package_json_contents.len > 0 && package_json_contents[package_json_contents.len - 1] == '\n';
         let package_json_writer = bun.js_printer.BufferPrinter.init(buffer_writer);
 
-        * = bun.js_printer.printJSON(@TypeOf(&package_json_writer), &package_json_writer, package_json, &package_json_source, .{ .mangled_props = null }) catch |e| {
+        * = bun.js_printer.printJSON(@TypeOf(&package_json_writer), &package_json_writer, package_json, &package_json_source, .{ .mangled_props = null }) catch e => {
             Output.errGeneric("failed to print package.json: {s}", .{ @errorName(e) });
             Global.crash();
         };

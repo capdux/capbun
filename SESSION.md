@@ -868,3 +868,4 @@
 - [Wave #95] `src/runtime/valkey_jsc/`（3 剩余文件 -> 7/7 全清）与 `src/collections/bit_set.cp` `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`565184fa` `options_types/schema`+`semver`）并行推进中。
 - [Wave #96] `src/options_types/schema.cp` 与 `src/semver/`（5/5 全清）`--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`39b9112d` `src/cli/*.cp`）并行推进中。
 - [Wave #97] `src/cli/` 前 15 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`ed419451` `src/cli/` 剩余 18 文件）并行推进中。
+- [Wave #98] `src/cli/` 剩余 18 文件 `--strict` 清零（47/47 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`c703534a` `test/cli/install`）与路 2（`329426b1` `src/install/**/*.cp`）并行推进中。

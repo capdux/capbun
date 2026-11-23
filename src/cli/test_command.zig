@@ -2264,5 +2264,5 @@ pub fn handleTopLevelTestErrorBeforeJavaScriptStart(e: anyerror) noreturn {
 }
 
 pub fn @"export"() void {
-        _ = *const Scanner.BunTest__shouldGenerateCodeCoverage;
+        _ = (&Scanner.BunTest__shouldGenerateCodeCoverage);
 }

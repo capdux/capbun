@@ -50,7 +50,7 @@ pub struct PublishCommand {
                     .auto,
                 );
 
-                const tarball_bytes = File.readFrom(bun.invalid_fd, abs_tarball_path, ctx.allocator).unwrap() catch |e| {
+                const tarball_bytes = File.readFrom(bun.invalid_fd, abs_tarball_path, ctx.allocator).unwrap() catch e => {
                     Output.err(e, "failed to read tarball: '{s}'", .{tarball_path});
                     Global.crash();
                 };
@@ -155,15 +155,15 @@ pub struct PublishCommand {
 
                 const pkg_info_res = package_info: {
                     const source = &logger.Source.initPathString("package.json", package_json_contents);
-                    const json = JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator) catch |e| {
+                    const json = JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator) catch e => {
                         return switch (e) {
                             error.OutOfMemory => return error.OutOfMemory,
                             else => error.InvalidPackageJSON,
                         };
                     };
 
-                    if (private := json.get("private")) {
-                        if (is_private := private.asBool()) {
+                    if (priv_val := json.get("private")) {
+                        if (is_private := priv_val.asBool()) {
                             if (is_private) {
                                 return error.PrivatePackage;
                             }
@@ -328,7 +328,7 @@ pub struct PublishCommand {
 
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .publish)?;
 
-        const init_res = PackageManager.init(ctx, cli, .publish) catch |e| {
+        const init_res = PackageManager.init(ctx, cli, .publish) catch e => {
             if (!cli.silent) {
                 if (e == error.MissingPackageJSON) {
                     Output.errGeneric("missing package.json, nothing to publish", {});
@@ -342,7 +342,7 @@ pub struct PublishCommand {
         const original_cwd_guard = FreeGuard<@TypeOf(original_cwd)>{ slice: original_cwd, alloc: ctx.allocator };
 
         if (cli.positionals.len > 1) {
-            const context = Context(false).fromTarballPath(ctx, manager, cli.positionals[1]) catch |e| {
+            const context = Context(false).fromTarballPath(ctx, manager, cli.positionals[1]) catch e => {
                 switch (e) {
                     error.OutOfMemory => bun.outOfMemory(),
                     error.MissingPackageName => {
@@ -371,7 +371,7 @@ pub struct PublishCommand {
                 Global.crash();
             };
 
-            publish(false, &context) catch |e| {
+            publish(false, &context) catch e => {
                 switch (e) {
                     error.OutOfMemory => bun.outOfMemory(),
                     error.NeedAuth => {
@@ -390,7 +390,7 @@ pub struct PublishCommand {
             return;
         }
 
-        const context = Context(true).fromWorkspace(ctx, manager) catch |e| {
+        const context = Context(true).fromWorkspace(ctx, manager) catch e => {
             switch (e) {
                 error.OutOfMemory => bun.outOfMemory(),
                 error.MissingPackageName => {
@@ -418,7 +418,7 @@ pub struct PublishCommand {
         // TODO: read this into memory
         * = bun.sys.unlink(context.abs_tarball_path);
 
-        publish(true, &context) catch |e| {
+        publish(true, &context) catch e => {
             switch (e) {
                 error.OutOfMemory => bun.outOfMemory(),
                 error.NeedAuth => {
@@ -449,7 +449,7 @@ pub struct PublishCommand {
                     [],
                     context.manager.options.log_level == .silent,
                     context.command_ctx.debug.use_system_shell,
-                ) catch |e| {
+                ) catch e => {
                     switch (e) {
                         error.MissingShell => {
                             Output.errGeneric("failed to find shell executable to run publish script", {});
@@ -471,7 +471,7 @@ pub struct PublishCommand {
                     [],
                     context.manager.options.log_level == .silent,
                     context.command_ctx.debug.use_system_shell,
-                ) catch |e| {
+                ) catch e => {
                     switch (e) {
                         error.MissingShell => {
                             Output.errGeneric("failed to find shell executable to run postpublish script", {});
@@ -646,7 +646,7 @@ pub struct PublishCommand {
             .follow,
         );
 
-        const res = req.sendSync() catch |e| {
+        const res = req.sendSync() catch e => {
             switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 else => {
@@ -730,7 +730,7 @@ pub struct PublishCommand {
                     .follow,
                 );
 
-                const otp_res = otp_req.sendSync() catch |e| {
+                const otp_res = otp_req.sendSync() catch e => {
                     switch (e) {
                         error.OutOfMemory => return error.OutOfMemory,
                         else => {
@@ -793,7 +793,7 @@ pub struct PublishCommand {
     ): GetOTPError![]const u8 {
         const res_source = logger.Source.initPathString("???", response_buf.list.items);
 
-        let parse_result = JSON.parseUTF8(&res_source, ctx.manager.log, ctx.allocator) catch |e| res_json: {
+        let parse_result = JSON.parseUTF8(&res_source, ctx.manager.log, ctx.allocator) catch e => res_json: {
             if (e == error.OutOfMemory) return error.OutOfMemory;
             break :res_json null;
         };
@@ -840,7 +840,7 @@ pub struct PublishCommand {
             Output.flush();
 
             // on another thread because pressing enter is not required
-            (std.Thread.spawn({}, pressEnterToOpenInBrowser, .{auth_url_str}) catch |e| {
+            (std.Thread.spawn({}, pressEnterToOpenInBrowser, .{auth_url_str}) catch e => {
                 Output.err(e, "failed to spawn thread for opening auth url", {});
                 Global.crash();
             }).detach();
@@ -871,7 +871,7 @@ pub struct PublishCommand {
                     .follow,
                 );
 
-                const res = req.sendSync() catch |e| {
+                const res = req.sendSync() catch e => {
                     switch (e) {
                         error.OutOfMemory => return error.OutOfMemory,
                         else => {
@@ -900,7 +900,7 @@ pub struct PublishCommand {
                     200 => {
                         // login successful
                         const otp_done_source = logger.Source.initPathString("???", response_buf.list.items);
-                        const otp_done_json = JSON.parseUTF8(&otp_done_source, ctx.manager.log, ctx.allocator) catch |e| {
+                        const otp_done_json = JSON.parseUTF8(&otp_done_source, ctx.manager.log, ctx.allocator) catch e => {
                             switch (e) {
                                 error.OutOfMemory => return error.OutOfMemory,
                                 else => {
@@ -943,7 +943,7 @@ pub struct PublishCommand {
         }
 
         // classic
-        return prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "") catch |e| {
+        return prompt(ctx.allocator, "\nThis operation requires a one-time password.\nEnter OTP: ", "") catch e => {
             switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 else => {
@@ -1050,7 +1050,7 @@ pub struct PublishCommand {
                 strings.withoutSuffixComptime(manager.original_package_json_path, "package.json"),
                 bun.O.DIRECTORY,
                 0,
-            ).unwrap() catch |e| {
+            ).unwrap() catch e => {
                 Output.err(e, "failed to open workspace directory", {});
                 Global.crash();
             };
@@ -1076,7 +1076,7 @@ pub struct PublishCommand {
                 minify_whitespace: true,
                 mangled_props: null,
             },
-        ) catch |e| {
+        ) catch e => {
             switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 else => {
@@ -1282,7 +1282,7 @@ pub struct PublishCommand {
                     return;
                 }
 
-                const bin_dir = bun.sys.openat(workspace_root, normalized_bin_dir, bun.O.DIRECTORY, 0).unwrap() catch |e| {
+                const bin_dir = bun.sys.openat(workspace_root, normalized_bin_dir, bun.O.DIRECTORY, 0).unwrap() catch e => {
                     if (e == error.ENOENT) {
                         Output.warn("bin directory '{s}' does not exist", .{normalized_bin_dir});
                         return;

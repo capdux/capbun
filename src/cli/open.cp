@@ -380,7 +380,7 @@ pub struct EditorContext {
     path: string = "",
 
     fn openInEditor(*_, editor_: Editor, blob: []const u8, id: string, tmpdir: std.fs.Dir, line: string, column: string) {
-        _openInEditor(_.path, editor_, blob, id, tmpdir, line, column) catch |e| {
+        _openInEditor(_.path, editor_, blob, id, tmpdir, line, column) catch e => {
             if (editor_ != .other) {
                 Output.prettyErrorln("Error {s} opening in {s}", .{ @errorName(e), @tagName(editor_) });
             }

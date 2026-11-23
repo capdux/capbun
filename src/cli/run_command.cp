@@ -175,7 +175,7 @@ pub struct RunCommand {
     // - npm run
     // Replace them with "bun run"
 
-    pub inline fn replacePackageManagerRun(
+    static inline fn replacePackageManagerRun(
         copy_script: *std.array_list.Managed(u8),
         script: string,
     ): OOM!void {
@@ -341,7 +341,7 @@ pub struct RunCommand {
 
         if (!use_system_shell) {
             const mini = bun.jsc.MiniEventLoop.initGlobal(env, cwd);
-            const code = bun.shell.Interpreter.initAndRunFromSource(ctx, mini, name, copy_script.items, cwd) catch |e| {
+            const code = bun.shell.Interpreter.initAndRunFromSource(ctx, mini, name, copy_script.items, cwd) catch e => {
                 if (!silent) {
                     Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{ name, @errorName(e) });
                 }
@@ -391,7 +391,7 @@ pub struct RunCommand {
             windows: if (Environment.isWindows) .{
                 .loop = jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
             } else void_val,
-        }) catch |e| {
+        }) catch e => {
             if (!silent) {
                 Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{ name, @errorName(e) });
             }
@@ -564,7 +564,7 @@ pub struct RunCommand {
             windows: if (Environment.isWindows) .{
                 .loop = jsc.EventLoopHandle.init(jsc.MiniEventLoop.initGlobal(env, null)),
             } else @as(void, undefined),
-        }) catch |e| {
+        }) catch e => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
             // an error occurred before the process was spawned
@@ -743,7 +743,7 @@ pub struct RunCommand {
         if (CLI.pretend_to_be_node) return out_bun_path;
 
         if (Environment.isPosix) {
-            let argv0 = @as([*:0]const u8, unsafe { @ptrCast(out_bun_path.ptr) });
+            let argv0 = unsafe { @as([*:0]const u8, @ptrCast(out_bun_path.ptr)) };
 
             // if we are already an absolute path, use that
             // if the user started the application via a shebang, it's likely that the path is absolute already
@@ -752,10 +752,10 @@ pub struct RunCommand {
                 argv0 = bun.argv[0];
             } else if (out_bun_path.len == 0) {
                 // otherwise, ask the OS for the absolute path
-                const self = bun.selfExePath()?;
-                if (self.len > 0) {
-                    argv0 = self.ptr;
-                    out_bun_path = self;
+                const self_exe_path = bun.selfExePath()?;
+                if (self_exe_path.len > 0) {
+                    argv0 = self_exe_path.ptr;
+                    out_bun_path = self_exe_path;
                 }
             }
 
@@ -771,7 +771,7 @@ pub struct RunCommand {
                 let retried = false;
                 while (true) {
                     inner: {
-                        std.posix.symlinkZ(argv0, path) catch |e| {
+                        std.posix.symlinkZ(argv0, path) catch e => {
                             if (e == error.PathAlreadyExists) break :inner;
                             if (retried)
                                 return out_bun_path;
@@ -886,7 +886,7 @@ pub struct RunCommand {
 
         this_transpiler.configureLinker();
 
-        const root_dir_info_opt = this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch |e| {
+        const root_dir_info_opt = this_transpiler.resolver.readDirInfo(this_transpiler.fs.top_level_dir) catch e => {
             if (!log_errors) return error.CouldntReadCurrentDirectory;
             ctx.log.print(Output.errorWriter()) catch {};
             Output.prettyErrorln("<r><red>error<r><d>:<r> <b>{s}<r> loading directory {f}", .{ @errorName(e), bun.fmt.QuotedFormatter{ text: this_transpiler.fs.top_level_dir } });
@@ -1028,7 +1028,7 @@ pub struct RunCommand {
             optional_bun_self_path = createFakeTemporaryNodeExecutable(
                 &new_path,
                 optional_bun_self_path,
-            ) catch |e| {
+            ) catch e => {
                 if (e == error.OutOfMemory) {
                     bun.outOfMemory();
                 } else {
@@ -1606,7 +1606,7 @@ pub struct RunCommand {
             bun.default_allocator,
             md_opts,
             theme,
-        ) catch |e| switch (e) {
+        ) catch e => switch (e) {
             error.OutOfMemory => bun.outOfMemory(),
             error.StackOverflow => {
                 Output.prettyErrorln("<r><red>error<r>: markdown rendering exceeded the stack — input is too deeply nested", {});
@@ -1639,7 +1639,7 @@ pub struct RunCommand {
             if (l == .md) renderMarkdownFileAndExit(path);
         }
         Global.configureAllocator({ long_running: true });
-        Run.boot(ctx, ctx.allocator.dupe(u8, path) catch return false, loader) catch |e| {
+        Run.boot(ctx, ctx.allocator.dupe(u8, path) catch return false, loader) catch e => {
             ctx.log.print(Output.errorWriter()) catch {};
 
             Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> due to error <b>{s}<r>", .{
@@ -1814,7 +1814,7 @@ pub struct RunCommand {
             passthrough_list.appendSliceAssumeCapacity(ctx.passthrough);
             ctx.passthrough = passthrough_list.items;
 
-            Run.boot(ctx, ctx.allocator.dupe(u8, entry_path) catch return false, null) catch |e| {
+            Run.boot(ctx, ctx.allocator.dupe(u8, entry_path) catch return false, null) catch e => {
                 ctx.log.print(Output.errorWriter()) catch {};
 
                 Output.prettyErrorln("<r><red>error<r>: Failed to run <b>{s}<r> due to error <b>{s}<r>", .{
@@ -2066,7 +2066,7 @@ pub struct RunCommand {
             );
         };
 
-        Run.boot(ctx, normalized_filename, null) catch |e| {
+        Run.boot(ctx, normalized_filename, null) catch e => {
             ctx.log.print(Output.errorWriter()) catch {};
 
             Output.err(e, "Failed to run script \"<b>{s}<r>\"", .{std.fs.path.basename(normalized_filename)});
@@ -2074,7 +2074,7 @@ pub struct RunCommand {
         };
     }
 
-    fn @"bun feedback"(ctx: Command.Context): !noreturn {
+    static fn @"bun feedback"(ctx: Command.Context): !noreturn {
         const trigger = bun.pathLiteral("/[eval]");
         const entry_point_buf_len3 = bun.MAX_PATH_BYTES + trigger.len;
         let entry_point_buf: [entry_point_buf_len3]u8 = undefined;
@@ -2208,7 +2208,7 @@ pub struct BunXFastPath {
                 disposition: windows.FILE_OPEN,
                 options: windows.FILE_NON_DIRECTORY_FILE | windows.FILE_SYNCHRONOUS_IO_NONALERT,
             },
-        ).unwrap() catch |e| {
+        ).unwrap() catch e => {
             debug("Failed to open bunx file: '{}'", .{e});
             return;
         }).cast();
@@ -2255,7 +2255,7 @@ pub struct BunXFastPath {
             bun.reinterpretSlice(u8, &direct_launch_buffer),
             wpath,
         ) catch return;
-        Run.boot(ctx, utf8, null) catch |e| {
+        Run.boot(ctx, utf8, null) catch e => {
             ctx.log.print(Output.errorWriter()) catch {};
             Output.err(e, "Failed to run bin \"<b>{s}<r>\"", .{std.fs.path.basename(utf8)});
             Global.exit(1);

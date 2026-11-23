@@ -81,7 +81,7 @@ pub struct PmVersionCommand {
         let path_buf: bun.PathBuffer = undefined;
         const package_json_path = bun.path.joinAbsStringBufZ(package_json_dir, &path_buf, &[ "package.json" ], .auto);
 
-        const package_json_contents = bun.sys.File.readFrom(bun.FD.cwd(), package_json_path, ctx.allocator).unwrap() catch |e| {
+        const package_json_contents = bun.sys.File.readFrom(bun.FD.cwd(), package_json_path, ctx.allocator).unwrap() catch e => {
             Output.errGeneric("Failed to read package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -98,7 +98,7 @@ pub struct PmVersionCommand {
                 .allow_trailing_commas = true,
                 .guess_indentation = true,
             },
-        ) catch |e| {
+        ) catch e => {
             Output.errGeneric("Failed to parse package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -174,7 +174,7 @@ pub struct PmVersionCommand {
                     .indent = json_result.indentation,
                     .mangled_props = null,
                 },
-            ) catch |e| {
+            ) catch e => {
                 Output.errGeneric("Failed to save package.json: {s}", .{ @errorName(e) });
                 Global.exit(1);
             };
@@ -182,7 +182,7 @@ pub struct PmVersionCommand {
             std.fs.cwd().writeFile(.{
                 .sub_path = package_json_path,
                 .data = package_json_writer.ctx.writtenWithoutTrailingZero(),
-            }) catch |e| {
+            }) catch e => {
                 Output.errGeneric("Failed to write package.json: {s}", .{ @errorName(e) });
                 Global.exit(1);
             };
@@ -486,7 +486,7 @@ pub struct PmVersionCommand {
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
             } else @as(void, undefined),
-        }) catch |e| {
+        }) catch e => {
             Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -521,7 +521,7 @@ pub struct PmVersionCommand {
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
             } else @as(void, undefined),
-        }) catch |e| {
+        }) catch e => {
             Output.errGeneric("Failed to spawn git process: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -570,7 +570,7 @@ pub struct PmVersionCommand {
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
             } else @as(void, undefined),
-        }) catch |e| {
+        }) catch e => {
             Output.errGeneric("Failed to stage package.json: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -622,7 +622,7 @@ pub struct PmVersionCommand {
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
             } else @as(void, undefined),
-        }) catch |e| {
+        }) catch e => {
             Output.errGeneric("Git commit failed: {s}", .{ @errorName(e) });
             Global.exit(1);
         };
@@ -653,7 +653,7 @@ pub struct PmVersionCommand {
             .windows = if (Environment.isWindows) .{
                 .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
             } else @as(void, undefined),
-        }) catch |e| {
+        }) catch e => {
             Output.errGeneric("Git tag failed: {s}", .{ @errorName(e) });
             Global.exit(1);
         };

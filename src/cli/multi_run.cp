@@ -374,14 +374,14 @@ pub struct AbortHandler {
     pub const should_abort = &abort_should_abort;
 
     @callconv("c")
-    fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: *!?) {
+    static fn posixSignalHandler(sig: i32, info: *const std.posix.siginfo_t, _: *!?) {
         * = sig;
         * = info;
         abort_should_abort = true;
     }
 
     @callconv("winapi")
-    fn windowsCtrlHandler(dwCtrlType: std.os.windows.DWORD): std.os.windows.BOOL {
+    static fn windowsCtrlHandler(dwCtrlType: std.os.windows.DWORD): std.os.windows.BOOL {
         if (dwCtrlType == std.os.windows.CTRL_C_EVENT) {
             abort_should_abort = true;
             return std.os.windows.TRUE;
@@ -389,7 +389,7 @@ pub struct AbortHandler {
         return std.os.windows.FALSE;
     }
 
-    pub fn install() {
+    static fn install() {
         if (Environment.isPosix) {
             const action = bun.sys.Sigaction{
                 handler: .{ .sigaction = AbortHandler.posixSignalHandler },
@@ -407,7 +407,7 @@ pub struct AbortHandler {
         }
     }
 
-    pub fn uninstall() {
+    static fn uninstall() {
         if (Environment.isWindows) {
             * = bun.c.SetConsoleCtrlHandler(null, std.os.windows.FALSE);
         }

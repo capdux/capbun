@@ -79,7 +79,7 @@ pub struct Version {
                             ),
                         ),
                     },
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
             }
             return _.tag;
         }
@@ -241,7 +241,7 @@ pub struct UpgradeCommand {
         };
         const source = &logger.Source.initPathString("releases.json", metadata_body.list.items);
         initializeStore();
-        let expr = JSON.parseUTF8(source, &log, allocator) catch |e| {
+        let expr = JSON.parseUTF8(source, &log, allocator) catch e => {
             if (!silent) {
                 progress.?.end();
                 refresher.?.refresh();
@@ -398,7 +398,7 @@ pub struct UpgradeCommand {
             }
         }
 
-        _exec(ctx) catch |e| {
+        _exec(ctx) catch e => {
             Output.prettyErrorln("<r>Bun upgrade failed with error: <red><b>{s}<r>\n\n<cyan>Please upgrade manually<r>:\n  <b>{s}<r>\n\n", .{ @errorName(e), manual_upgrade_command });
             Global.exit(1);
         };
@@ -531,17 +531,17 @@ pub struct UpgradeCommand {
 
             const version_name = version.name().?;
 
-            let save_dir_ = filesystem.tmpdir() catch |e| {
+            let save_dir_ = filesystem.tmpdir() catch e => {
                 Output.errGeneric("Failed to open temporary directory: {s}", .{@errorName(e)});
                 Global.exit(1);
             };
 
-            const save_dir_it = save_dir_.makeOpenPath(version_name, {}) catch |e| {
+            const save_dir_it = save_dir_.makeOpenPath(version_name, {}) catch e => {
                 Output.errGeneric("Failed to open temporary directory: {s}", .{@errorName(e)});
                 Global.exit(1);
             };
             const save_dir = save_dir_it;
-            const tmpdir_path = bun.FD.fromStdDir(save_dir).getFdPath(&tmpdir_path_buf) catch |e| {
+            const tmpdir_path = bun.FD.fromStdDir(save_dir).getFdPath(&tmpdir_path_buf) catch e => {
                 Output.errGeneric("Failed to read temporary directory: {s}", .{@errorName(e)});
                 Global.exit(1);
             };
@@ -554,13 +554,13 @@ pub struct UpgradeCommand {
             const exe =
                 if (use_profile) profile_exe_subpath else exe_subpath;
 
-            let zip_file = save_dir.createFileZ(tmpname, { truncate: true }) catch |e| {
+            let zip_file = save_dir.createFileZ(tmpname, { truncate: true }) catch e => {
                 Output.prettyErrorln("<r><red>error:<r> Failed to open temp file {s}", .{@errorName(e)});
                 Global.exit(1);
             };
 
             {
-                * = zip_file.writeAll(bytes) catch |e| {
+                * = zip_file.writeAll(bytes) catch e => {
                     save_dir.deleteFileZ(tmpname) catch {};
                     Output.prettyErrorln("<r><red>error:<r> Failed to write to temp file {s}", .{@errorName(e)});
                     Global.exit(1);
@@ -597,7 +597,7 @@ pub struct UpgradeCommand {
                     unzip_process.stdout_behavior = .Inherit;
                     unzip_process.stderr_behavior = .Inherit;
 
-                    const unzip_result = unzip_process.spawnAndWait() catch |e| {
+                    const unzip_result = unzip_process.spawnAndWait() catch e => {
                         save_dir.deleteFileZ(tmpname) catch {};
                         Output.prettyErrorln("<r><red>error:<r> Failed to spawn unzip due to {s}.", .{@errorName(e)});
                         Global.exit(1);
@@ -654,10 +654,10 @@ pub struct UpgradeCommand {
                         windows: if (Environment.isWindows) .{
                             .loop = bun.jsc.EventLoopHandle.init(bun.jsc.MiniEventLoop.initGlobal(null, null)),
                         } else @as(void, undefined),
-                    }) catch |e| {
+                    }) catch e => {
                         Output.prettyErrorln("<r><red>error:<r> Failed to spawn Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
                         Global.exit(1);
-                    }).unwrap() catch |e| {
+                    }).unwrap() catch e => {
                         Output.prettyErrorln("<r><red>error:<r> Failed to run Expand-Archive on {s} due to error {s}", .{ tmpname, @errorName(e) });
                         Global.exit(1);
                     };
@@ -674,7 +674,7 @@ pub struct UpgradeCommand {
                     argv: &verify_argv,
                     cwd: tmpdir_path,
                     max_output_bytes: 512,
-                }) catch |e| {
+                }) catch e => {
                     const _guard_tree = DeleteTreeGuard{ dir: save_dir_, name: version_name };
 
                     if (e == error.FileNotFound) {
@@ -744,7 +744,7 @@ pub struct UpgradeCommand {
             // safe because the slash will no longer be in use
             current_executable_buf[target_dir_.len] = 0;
             const target_dirname = current_executable_buf[0..target_dir_.len :0];
-            const target_dir_it = std.fs.openDirAbsoluteZ(target_dirname, {}) catch |e| {
+            const target_dir_it = std.fs.openDirAbsoluteZ(target_dirname, {}) catch e => {
                 save_dir_.deleteTree(version_name) catch {};
                 Output.prettyErrorln("<r><red>error:<r> Failed to open Bun's install directory {s}", .{@errorName(e)});
                 Global.exit(1);
@@ -754,13 +754,13 @@ pub struct UpgradeCommand {
             if (use_canary) {
 
                 // Check if the versions are the same
-                const target_stat = target_dir.statFile(target_filename) catch |e| {
+                const target_stat = target_dir.statFile(target_filename) catch e => {
                     save_dir_.deleteTree(version_name) catch {};
                     Output.prettyErrorln("<r><red>error:<r> {s} while trying to stat target {s} ", .{ @errorName(e), target_filename });
                     Global.exit(1);
                 };
 
-                const dest_stat = save_dir.statFile(exe) catch |e| {
+                const dest_stat = save_dir.statFile(exe) catch e => {
                     save_dir_.deleteTree(version_name) catch {};
                     Output.prettyErrorln("<r><red>error:<r> {s} while trying to stat source {s}", .{ @errorName(e), exe });
                     Global.exit(1);
@@ -769,13 +769,13 @@ pub struct UpgradeCommand {
                 if (target_stat.size == dest_stat.size && target_stat.size > 0) {
                     const input_buf = ctx.allocator.alloc(u8, target_stat.size)?;
 
-                    const target_hash = bun.hash(target_dir.readFile(target_filename, input_buf) catch |e| {
+                    const target_hash = bun.hash(target_dir.readFile(target_filename, input_buf) catch e => {
                         save_dir_.deleteTree(version_name) catch {};
                         Output.prettyErrorln("<r><red>error:<r> Failed to read target bun {s}", .{@errorName(e)});
                         Global.exit(1);
                     });
 
-                    const source_hash = bun.hash(save_dir.readFile(exe, input_buf) catch |e| {
+                    const source_hash = bun.hash(save_dir.readFile(exe, input_buf) catch e => {
                         save_dir_.deleteTree(version_name) catch {};
                         Output.prettyErrorln("<r><red>error:<r> Failed to read source bun {s}", .{@errorName(e)});
                         Global.exit(1);
@@ -801,7 +801,7 @@ pub struct UpgradeCommand {
                         target_dirname,
                         target_filename,
                     }, 0)?;
-                    std.posix.rename(destination_executable, outdated_filename.?) catch |e| {
+                    std.posix.rename(destination_executable, outdated_filename.?) catch e => {
                         save_dir_.deleteTree(version_name) catch {};
                         Output.prettyErrorln("<r><red>error:<r> Failed to rename current executable {s}", .{@errorName(e)});
                         Global.exit(1);
@@ -809,7 +809,7 @@ pub struct UpgradeCommand {
                     current_executable_buf[target_dir_.len] = 0;
                 }
 
-                bun.sys.moveFileZ(.fromStdDir(save_dir), exe, .fromStdDir(target_dir), target_filename) catch |e| {
+                bun.sys.moveFileZ(.fromStdDir(save_dir), exe, .fromStdDir(target_dir), target_filename) catch e => {
                     const _guard_tree = DeleteTreeGuard{ dir: save_dir_, name: version_name };
 
                     if (comptime Environment.isWindows) {

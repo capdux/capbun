@@ -270,7 +270,7 @@ pub struct UpdateInteractiveCommand {
                 indent: package_json.*.indentation,
                 mangled_props: null,
             },
-        ) catch |e| {
+        ) catch e => {
             Output.errGeneric("Failed to serialize package.json: {s}", .{@errorName(e)});
             return e;
         };
@@ -278,14 +278,14 @@ pub struct UpdateInteractiveCommand {
         const new_package_json_source = manager.allocator.dupe(u8, package_json_writer.ctx.writtenWithoutTrailingZero())?;
 
         // Write the updated package.json
-        let write_file = std.fs.cwd().createFile(package_json_path, {}) catch |e| {
+        let write_file = std.fs.cwd().createFile(package_json_path, {}) catch e => {
             manager.allocator.free(new_package_json_source);
             Output.errGeneric("Failed to write package.json at {s}: {s}", .{ package_json_path, @errorName(e) });
             return e;
         };
         const _write_file_guard = CloseGuard<@TypeOf(write_file)>{ ptr: unsafe { &write_file } };
 
-        write_file.writeAll(new_package_json_source) catch |e| {
+        write_file.writeAll(new_package_json_source) catch e => {
             manager.allocator.free(new_package_json_source);
             Output.errGeneric("Failed to write package.json at {s}: {s}", .{ package_json_path, @errorName(e) });
             return e;
@@ -302,7 +302,7 @@ pub struct UpdateInteractiveCommand {
 
         const cli = PackageManager.CommandLineArguments.parse(ctx.allocator, .update)?;
 
-        const init_res = PackageManager.init(ctx, cli, .update) catch |e| {
+        const init_res = PackageManager.init(ctx, cli, .update) catch e => {
             if (!cli.silent) {
                 if (e == error.MissingPackageJSON) {
                     Output.errGeneric("missing package.json, nothing outdated", {});
@@ -529,7 +529,7 @@ pub struct UpdateInteractiveCommand {
                 original_cwd,
                 manager,
                 filters,
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
         } else if (manager.options.do.recursive) blk: {
             break :blk bun.handleOom(getAllWorkspaces(bun.default_allocator, manager));
         } else blk: {
@@ -1166,7 +1166,7 @@ pub struct UpdateInteractiveCommand {
 
         const _raw_mode_guard = RawModeGuard<@TypeOf(original_mode)>{ original_mode: original_mode };
 
-        const result = processMultiSelect(&state, terminal_size) catch |e| {
+        const result = processMultiSelect(&state, terminal_size) catch e => {
             if (e == error.EndOfStream) {
                 Output.flush();
                 Output.prettyln("\n<r><red>x<r> Cancelled", {});

@@ -27,7 +27,7 @@ pub struct ScanCommand {
     static fn exec(ctx: Command.Context)! {
         const cli_args = PackageManager.CommandLineArguments.parse(ctx.allocator, .scan)?;
 
-        const res = PackageManager.init(ctx, cli_args, .scan) catch |e| {
+        const res = PackageManager.init(ctx, cli_args, .scan) catch e => {
             if (e == error.MissingPackageJSON) {
                 Output.errGeneric("No package.json found. 'bun pm scan' requires a lockfile to analyze dependencies.", .{});
                 Output.note("Run \"bun install\" first to generate a lockfile", .{});
@@ -61,7 +61,7 @@ pub struct ScanCommand {
             Global.exit(1);
         }
 
-        const security_scan_results = security_scanner.performSecurityScanForAll(manager, ctx, original_cwd) catch |e| {
+        const security_scan_results = security_scanner.performSecurityScanForAll(manager, ctx, original_cwd) catch e => {
             Output.errGeneric("Could not perform security scan (<d>{s}<r>)", .{ @errorName(e) });
             Global.exit(1);
         };

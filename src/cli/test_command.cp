@@ -154,7 +154,7 @@ struct RunAllTestsContext {
                 TestCommand.run(reporter, vm, file_name.slice(), {
                     first: isolate || i == 0,
                     last: isolate,
-                }) catch |e| handleTopLevelTestErrorBeforeJavaScriptStart(e);
+                }) catch e => handleTopLevelTestErrorBeforeJavaScriptStart(e);
                 reporter.jest.default_timeout_override = std.math.maxInt(u32);
                 Global.mimalloc_cleanup(false);
                 if (isolate) {
@@ -167,7 +167,7 @@ struct RunAllTestsContext {
         TestCommand.run(reporter, vm, files[files.len - 1].slice(), {
             first: isolate || files.len == 1,
             last: true,
-        }) catch |e| handleTopLevelTestErrorBeforeJavaScriptStart(e);
+        }) catch e => handleTopLevelTestErrorBeforeJavaScriptStart(e);
     }
 }
 
@@ -1502,7 +1502,7 @@ pub struct CommandLineReporter {
                     &.{ opts.reports_directory, "lcov.info" },
                     .auto,
                 ),
-            ) catch |e| {
+            ) catch e => {
                 Output.err(e, "Failed to save lcov.info file", {});
                 Global.exit(1);
             };
@@ -1748,7 +1748,7 @@ pub struct TestCommand {
             // arguments as filters, treat them as filepaths
             const file_or_dirnames = ctx.positionals[1..];
             for (arg of file_or_dirnames) {
-                scanner.scan(arg) catch |e| switch (e) {
+                scanner.scan(arg) catch e => switch (e) {
                     error.OutOfMemory => bun.outOfMemory(),
                     // don't error if multiple are passed; one might fail
                     // but the others may not
@@ -1791,7 +1791,7 @@ pub struct TestCommand {
                 break :brk scanner.fs.top_level_dir;
             };
 
-            scanner.scan(dir_to_scan) catch |e| switch (e) {
+            scanner.scan(dir_to_scan) catch e => switch (e) {
                 error.OutOfMemory => bun.outOfMemory(),
                 error.DoesNotExist => {
                     if (Output.isAIAgent()) {
@@ -1823,7 +1823,7 @@ pub struct TestCommand {
             // "no tests found" error path rather than treating it as a
             // --changed success.
             if (all_test_files.len > 0) {
-                const result = ChangedFilesFilter.filter(ctx, vm, all_test_files, changed_since) catch |e| {
+                const result = ChangedFilesFilter.filter(ctx, vm, all_test_files, changed_since) catch e => {
                     Output.err(e, "--changed: unable to determine affected tests", {});
                     Global.exit(1);
                 };

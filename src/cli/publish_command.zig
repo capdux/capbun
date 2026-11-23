@@ -194,6 +194,15 @@ _ = Output.errGeneric("{s}: {s}", .{ e.message, e.archive.errorString() });
             const pkg_info_res = package_info: {
             const source = (&logger.Source.initPathString("package.json", package_json_contents));
             const json = (blk_catch_1: { break :blk_catch_1 ((JSON.parsePackageJSONUTF8(source, manager.log, ctx.allocator)) catch |e| { _ = &e; return (__sw_blk_0: { const __disc_0 = e; _ = &__disc_0; if ((!cp_has_ok_val(__disc_0) and !cp_is_null_val(__disc_0))) { const __err_v_0 = cp_unwrap_err_val(__disc_0); _ = &__err_v_0; if (cp_match_tag(__err_v_0, .OutOfMemory)) {  return error.OutOfMemory; } } {  break :__sw_blk_0 cp_val(error.InvalidPackageJSON); }  unreachable; }); }); });
+            if (json.get("private")) |priv_val| {
+                _ = &priv_val;
+                if (priv_val.asBool()) |is_private| {
+                    _ = &is_private;
+                    if (is_private) {
+                        return error.PrivatePackage;
+                    }
+                }
+            }
             if (json.get("publishConfig")) |config| {
                 _ = &config;
                 if ((manager.options.publish_config.tag.len == 0)) {

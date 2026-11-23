@@ -596,7 +596,7 @@ fn cmdCopy(repl: *Repl, args: []const u8): ReplResult {
 
     if (code.len == 0) {
         // .copy with no args - copy _ (last result) to clipboard
-        repl.copyValueToClipboard(repl.last_result) catch |e| {
+        repl.copyValueToClipboard(repl.last_result) catch e => {
             if (global := repl.global) {
                 const exc = global.takeException(e);
                 repl.setLastError(exc);
@@ -1207,7 +1207,7 @@ fn evaluateAndPrint(*_, code: []const u8) {
     if (resolved_result.isObject()) {
         // Wrapper is REPL-built { __proto__: null, value: ... } so getOwn shouldn't throw,
         // but if it does, propagate as a REPL error.
-        const maybe_value = resolved_result.getOwn(global, "value") catch |e| {
+        const maybe_value = resolved_result.getOwn(global, "value") catch e => {
             const exc = global.takeException(e);
             _.setLastError(exc);
             _.printJSError(exc);
@@ -1316,7 +1316,7 @@ fn evalScript(*_, code: []const u8, print_result: bool): bool {
 
     // Unwrap the { value: expr } wrapper produced by transformForRepl
     if (resolved_result.isObject()) {
-        const maybe_value = resolved_result.getOwn(global, "value") catch |e| {
+        const maybe_value = resolved_result.getOwn(global, "value") catch e => {
             const exc = global.takeException(e);
             _.printJSErrorTo(exc, Output.errorWriter(), stderr_colors);
             return true;
@@ -1445,7 +1445,7 @@ fn evaluateAndCopy(*_, code: []const u8) {
     }
 
     if (resolved_result.isObject()) {
-        const maybe_value = resolved_result.getOwn(global, "value") catch |e| {
+        const maybe_value = resolved_result.getOwn(global, "value") catch e => {
             const exc = global.takeException(e);
             _.setLastError(exc);
             _.printJSError(exc);
@@ -1463,7 +1463,7 @@ fn evaluateAndCopy(*_, code: []const u8) {
         global_this.put(global, "_", resolved_result);
     }
 
-    _.copyValueToClipboard(resolved_result) catch |e| {
+    _.copyValueToClipboard(resolved_result) catch e => {
         const exc = global.takeException(e);
         _.setLastError(exc);
         _.printJSError(exc);
@@ -1714,7 +1714,7 @@ fn printFormattedValue(*_, value: jsc.JSValue) {
         quote_strings: true,
         ordered_properties: false,
         max_depth: 4,
-    }) catch |e| {
+    }) catch e => {
         // A getter on the value threw during inspection — show that error.
         const exc = global.takeException(e);
         _.setLastError(exc);
