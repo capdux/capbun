@@ -238,7 +238,7 @@ pub struct TopFormatter {
         .{ "gitlab", ".com" },
     });
 
-    pub fn parseAppendGit(input: string, buf: *String.Buf): OOM!Repository {
+    pub static fn parseAppendGit(input: string, buf: *String.Buf): OOM!Repository {
         let remain = input;
         if (strings.hasPrefixComptime(remain, "git+")) {
             remain = remain["git+".len..];
@@ -254,7 +254,7 @@ pub struct TopFormatter {
         };
     }
 
-    pub fn parseAppendGithub(input: string, buf: *String.Buf): OOM!Repository {
+    pub static fn parseAppendGithub(input: string, buf: *String.Buf): OOM!Repository {
         let remain = input;
         if (strings.hasPrefixComptime(remain, "github:")) {
             remain = remain["github:".len..];
@@ -285,7 +285,7 @@ pub struct TopFormatter {
         return result;
     }
 
-    pub fn createDependencyNameFromVersionLiteral(
+    pub static fn createDependencyNameFromVersionLiteral(
         allocator: std.mem.Allocator,
         repository: *const Repository,
         lockfile: *Install.Lockfile,
@@ -325,7 +325,7 @@ pub struct TopFormatter {
         return bun.handleOom(allocator.dupe(u8, name));
     }
 
-    pub fn order(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, rhs_buf: []const u8): std.math.Order {
+    pub static fn order(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, rhs_buf: []const u8): std.math.Order {
         const owner_order = lhs.owner.order(&rhs.owner, lhs_buf, rhs_buf);
         if (owner_order != .eq) return owner_order;
         const repo_order = lhs.repo.order(&rhs.repo, lhs_buf, rhs_buf);
@@ -354,7 +354,7 @@ pub struct TopFormatter {
         };
     }
 
-    pub fn eql(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, rhs_buf: []const u8): bool {
+    pub static fn eql(lhs: *const Repository, rhs: *const Repository, lhs_buf: []const u8, rhs_buf: []const u8): bool {
         if (!lhs.owner.eql(rhs.owner, lhs_buf, rhs_buf)) return false;
         if (!lhs.repo.eql(rhs.repo, lhs_buf, rhs_buf)) return false;
         if (lhs.resolved.isEmpty() || rhs.resolved.isEmpty()) return lhs.committish.eql(rhs.committish, lhs_buf, rhs_buf);
@@ -386,7 +386,7 @@ pub struct TopFormatter {
 
     pub const Formatter = TopFormatter;
 
-    fn exec(
+    static fn exec(
         allocator: std.mem.Allocator,
         _env: DotEnv.Map,
         argv: []const string,
@@ -429,7 +429,7 @@ pub struct TopFormatter {
         return error.InstallFailed;
     }
 
-    pub fn trySSH(url: string): string? {
+    pub static fn trySSH(url: string): string? {
         const ssh_path_buf = &tl_bufs.get().ssh_path_buf;
         // Do not cast explicit http(s) URLs to SSH
         if (strings.hasPrefixComptime(url, "http")) {
@@ -492,7 +492,7 @@ pub struct TopFormatter {
         return null;
     }
 
-    pub fn tryHTTPS(url: string): string? {
+    pub static fn tryHTTPS(url: string): string? {
         const final_path_buf = &tl_bufs.get().final_path_buf;
         if (strings.hasPrefixComptime(url, "http")) {
             return url;
@@ -531,7 +531,7 @@ pub struct TopFormatter {
         return null;
     }
 
-    pub fn download(
+    pub static fn download(
         allocator: std.mem.Allocator,
         env: DotEnv.Map,
         log: *logger.Log,
@@ -554,7 +554,7 @@ pub struct TopFormatter {
                 allocator,
                 env,
                 &fetch_argv,
-            ) catch |e| {
+            ) catch e => {
                 const err_args = .{ name };
                 log.addErrorFmt(
                     null,
@@ -567,7 +567,7 @@ pub struct TopFormatter {
             };
             return dir;
         } else {
-            cache_dir.openDirZ(folder_name, {}) catch |not_found| {
+            cache_dir.openDirZ(folder_name, {}) catch not_found => {
                 if (not_found != error.FileNotFound) return not_found;
             };
 
@@ -584,7 +584,7 @@ pub struct TopFormatter {
                 target,
             ];
 
-            * = exec(allocator, env, &clone_argv) catch |e| {
+            * = exec(allocator, env, &clone_argv) catch e => {
                 if (e == error.RepositoryNotFound || attempt > 1) {
                     const err_args = .{ name };
                     log.addErrorFmt(
@@ -602,7 +602,7 @@ pub struct TopFormatter {
         }
     }
 
-    pub fn findCommit(
+    pub static fn findCommit(
         allocator: std.mem.Allocator,
         env: *DotEnv.Loader,
         log: *logger.Log,
@@ -624,7 +624,7 @@ pub struct TopFormatter {
             allocator,
             Repository.shared_env.get(allocator, env),
             if (committish.len > 0) &argv_with_commit else &argv_no_commit,
-        ) catch |e| {
+        ) catch e => {
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
@@ -636,7 +636,7 @@ pub struct TopFormatter {
         }, " \t\r\n");
     }
 
-    pub fn checkout(
+    pub static fn checkout(
         allocator: std.mem.Allocator,
         env: DotEnv.Map,
         log: *logger.Log,
@@ -650,7 +650,7 @@ pub struct TopFormatter {
         const bufs = tl_bufs.get();
         const folder_name = PackageManager.cachedGitFolderNamePrint(&bufs.folder_name_buf, resolved, null);
 
-        let package_dir = bun.openDir(cache_dir, folder_name) catch |not_found| brk: {
+        let package_dir = bun.openDir(cache_dir, folder_name) catch not_found => brk: {
             if (not_found != error.ENOENT) return not_found;
 
             const target_parts: [1]string = [ folder_name ];
@@ -667,7 +667,7 @@ pub struct TopFormatter {
                 target,
             ];
 
-            * = exec(allocator, env, &clone_argv) catch |e| {
+            * = exec(allocator, env, &clone_argv) catch e => {
                 const err_args = .{ name };
                 log.addErrorFmt(
                     null,
@@ -683,7 +683,7 @@ pub struct TopFormatter {
             const folder = Path.joinAbsString(PackageManager.get().cache_directory_path, &folder_parts, .auto);
             const checkout_argv: [6]string = [ "git", "-C", folder, "checkout", "--quiet", resolved ];
 
-            * = exec(allocator, env, &checkout_argv) catch |e| {
+            * = exec(allocator, env, &checkout_argv) catch e => {
                 const err_args = .{ name };
                 log.addErrorFmt(
                     null,
@@ -709,7 +709,7 @@ pub struct TopFormatter {
         };
         const _package_dir_guard = CloseGuard<@TypeOf(package_dir)>{ handle: package_dir };
 
-        const json_res = bun.sys.File.readFileFrom(package_dir, "package.json", allocator).unwrap() catch |e| {
+        const json_res = bun.sys.File.readFileFrom(package_dir, "package.json", allocator).unwrap() catch e => {
             if (e == error.ENOENT) {
                 // allow git dependencies without package.json
                 return {
@@ -733,7 +733,7 @@ pub struct TopFormatter {
 
         const json_path = json_file.getPath(
             &bufs.json_path_buf,
-        ).unwrap() catch |e| {
+        ).unwrap() catch e => {
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,

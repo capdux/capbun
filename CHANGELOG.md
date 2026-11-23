@@ -2223,3 +2223,5 @@
 - [Wave #98] 修改 .cp/.zig：`src/cli/{multi_run,open,outdated_command,pack_command,package_manager_command,pm_pkg_command,pm_trusted_command,pm_version_command,pm_view_command,publish_command,repl,repl_command,run_command,scan_command,test_command,unlink_command,update_interactive_command,upgrade_command}.{cp,zig}`（`src/cli/` 47/47 全清，`zig:check` 5/5）。
 
 - [Wave #99] 修改 .cp/.zig：`src/install/{NetworkTask,PackageInstall,PackageInstaller,PackageManager,PackageManagerTask,TarballStream,bin}.{cp,zig}` 及 `src/install/PackageManager/{CommandLineArguments,PackageManagerDirectories,PackageManagerEnqueue,PackageManagerResolution,UpdateRequest,processDependencyList,runTasks,updatePackageJSONAndInstall}.{cp,zig}`。
+
+- [Wave #100] 修改 .cp/.zig：`src/install/{extract_tarball,isolated_install,lifecycle_script_runner,lockfile,migration,npm,patch_install,pnpm,repository}.{cp,zig}`、`src/install/isolated_install/{FileCopier,Store}.{cp,zig}`、`src/install/lockfile/{Package,Package/WorkspaceMap,bun.lock}.{cp,zig}`、`src/install/resolvers/folder_resolver.{cp,zig}`、`src/install/windows-shim/{BinLinkingShim,bun_shim_impl}.{cp,zig}`（`src/install/` 69/69 全清，`zig:check` 5/5）。

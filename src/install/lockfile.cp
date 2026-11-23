@@ -530,7 +530,7 @@ pub struct Printer {
         }
 
         const writer = Output.writerBuffered();
-        printWithLockfile(allocator, lockfile, format, @TypeOf(writer), writer) catch |e| {
+        printWithLockfile(allocator, lockfile, format, @TypeOf(writer), writer) catch e => {
             if (e == error.OutOfMemory) {
                 bun.outOfMemory();
             } else if (e == error.BrokenPipe || e == error.WriteFailed) {
@@ -830,7 +830,7 @@ pub const Stream = std.io.FixedBufferStream(StreamByteSlice);
 pub const default_filename = "bun.lockb";
 
 
-pub fn isEmpty(client: *const Lockfile): bool {
+pub static fn isEmpty(client: *const Lockfile): bool {
     return client.packages.len == 0 || (client.packages.len == 1 && client.packages.get(0).resolutions.len == 0);
 }
 
@@ -855,7 +855,7 @@ pub fn loadFromDir(
     if (comptime Environment.allow_assert) assert(FileSystem.instance_loaded);
 
     let lockfile_format: LoadResult.LockfileFormat = .text;
-    const file = File.openat(dir, "bun.lock", bun.O.RDONLY, 0).unwrap() catch |text_open_err| file: {
+    const file = File.openat(dir, "bun.lock", bun.O.RDONLY, 0).unwrap() catch text_open_err => file: {
         if (text_open_err != error.ENOENT) {
             return { err: {
                 step: .open_file,
@@ -867,7 +867,7 @@ pub fn loadFromDir(
 
         lockfile_format = .binary;
 
-        break :file File.openat(dir, "bun.lockb", bun.O.RDONLY, 0).unwrap() catch |binary_open_err| {
+        break :file File.openat(dir, "bun.lockb", bun.O.RDONLY, 0).unwrap() catch binary_open_err => {
             if (binary_open_err != error.ENOENT) {
                 return { err: {
                     step: .open_file,
@@ -899,7 +899,7 @@ pub fn loadFromDir(
         };
     };
 
-    const buf = file.readToEnd(allocator).unwrap() catch |e| {
+    const buf = file.readToEnd(allocator).unwrap() catch e => {
         return { err: {
             step: .read_file,
             value: e,
@@ -911,7 +911,7 @@ pub fn loadFromDir(
     if (lockfile_format == .text) {
         const source = &logger.Source.initPathString("bun.lock", buf);
         initializeStore();
-        const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch |e| {
+        const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch e => {
             return {
                 @"err": {
                     step: .parse_file,
@@ -922,7 +922,7 @@ pub fn loadFromDir(
             };
         };
 
-        TextLockfile.parseIntoBinaryLockfile(_, allocator, json, source, log, manager) catch |e| {
+        TextLockfile.parseIntoBinaryLockfile(_, allocator, json, source, log, manager) catch e => {
             if (e == error.OutOfMemory) {
                 bun.outOfMemory();
             } else {
@@ -962,7 +962,7 @@ pub fn loadFromDir(
                 const _writer_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &writer_allocating };
                 const writer = &writer_allocating.writer;
 
-                TextLockfile.Stringifier.saveFromBinary(allocator, result.ok.lockfile, &result, &manager.?.options, writer) catch |e| {
+                TextLockfile.Stringifier.saveFromBinary(allocator, result.ok.lockfile, &result, &manager.?.options, writer) catch e => {
                     Output.panic("failed to convert binary lockfile to text lockfile: {s}", .{@errorName(e)});
                 };
 
@@ -970,11 +970,11 @@ pub fn loadFromDir(
 
                 const source = &logger.Source.initPathString("bun.lock", text_lockfile_bytes);
                 initializeStore();
-                const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch |e| {
+                const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch e => {
                     Output.panic("failed to print valid json from binary lockfile: {s}", .{@errorName(e)});
                 };
 
-                TextLockfile.parseIntoBinaryLockfile(_, allocator, json, source, log, manager) catch |e| {
+                TextLockfile.parseIntoBinaryLockfile(_, allocator, json, source, log, manager) catch e => {
                     Output.panic("failed to parse text lockfile converted from binary lockfile: {s}", .{@errorName(e)});
                 };
 
@@ -987,7 +987,7 @@ pub fn loadFromDir(
     return result;
 }
 
-pub fn loadFromBytes(client: *Lockfile, pm: (*PackageManager)?, buf: []u8, allocator: Allocator, log: *logger.Log): LoadResult {
+pub static fn loadFromBytes(client: *Lockfile, pm: (*PackageManager)?, buf: []u8, allocator: Allocator, log: *logger.Log): LoadResult {
     let stream = Stream{ buffer: buf, pos: 0 };
 
     client.format = FormatVersion.current;
@@ -999,7 +999,7 @@ pub fn loadFromBytes(client: *Lockfile, pm: (*PackageManager)?, buf: []u8, alloc
     client.catalogs = {};
     client.patched_dependencies = {};
 
-    const load_result = Lockfile.Serializer.load(client, &stream, allocator, log, pm) catch |e| {
+    const load_result = Lockfile.Serializer.load(client, &stream, allocator, log, pm) catch e => {
         return LoadResult{ @"err": { step: .parse_file, value: e, lockfile_path: "bun.lockb", format: .binary } };
     };
 
@@ -1018,7 +1018,7 @@ pub fn loadFromBytes(client: *Lockfile, pm: (*PackageManager)?, buf: []u8, alloc
 }
 
 
-pub fn isResolvedDependencyDisabled(
+pub static fn isResolvedDependencyDisabled(
     lockfile: *const Lockfile,
     dep_id: DependencyID,
     features: Features,
@@ -1043,7 +1043,7 @@ pub fn isResolvedDependencyDisabled(
 /// Warning: This potentially modifies the existing lockfile in-place. That is
 /// safe to do because at this stage, the lockfile has already been saved to disk.
 /// Our in-memory representation is all that's left.
-pub fn maybeCloneFilteringRootPackages(
+pub static fn maybeCloneFilteringRootPackages(
     old: *Lockfile,
     manager: *PackageManager,
     features: Features,
@@ -1083,7 +1083,7 @@ pub fn maybeCloneFilteringRootPackages(
     return clean(old, manager, [], exact_versions, log_level)?;
 }
 
-fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, updates: []PackageManager.UpdateRequest, exact_versions: bool)! {
+static fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, updates: []PackageManager.UpdateRequest, exact_versions: bool)! {
     const workspace_package_id = manager.root_package_id.get(old, manager.workspace_name_hash);
     const root_deps_list: Lockfile.DependencySlice = old.packages.items(.dependencies)[workspace_package_id];
 
@@ -1177,7 +1177,7 @@ fn preprocessUpdateRequests(old: *Lockfile, manager: *PackageManager, updates: [
         }
     }
 }
-pub fn clean(
+pub static fn clean(
     old: *Lockfile,
     manager: *PackageManager,
     updates: []PackageManager.UpdateRequest,
@@ -1188,10 +1188,10 @@ pub fn clean(
     let log = logger.Log.init(bun.default_allocator);
     const _log_guard = LogDeinitGuard{ ptr: &log };
 
-    return cleanWithLogger(old, manager, updates, &log, exact_versions, log_level);
+    return old.cleanWithLogger(manager, updates, &log, exact_versions, log_level);
 }
 
-pub fn resolveCatalogDependency(client: *Lockfile, dep: *const Dependency): Dependency.Version? {
+pub static fn resolveCatalogDependency(client: *Lockfile, dep: *const Dependency): Dependency.Version? {
     if (dep.version.tag != .catalog) {
         return dep.version;
     }
@@ -1203,22 +1203,22 @@ pub fn resolveCatalogDependency(client: *Lockfile, dep: *const Dependency): Depe
 }
 
 /// Is this a direct dependency of the workspace root package.json?
-pub fn isWorkspaceRootDependency(client: *const Lockfile, id: DependencyID): bool {
+pub static fn isWorkspaceRootDependency(client: *const Lockfile, id: DependencyID): bool {
     return client.packages.items(.dependencies)[0].contains(id);
 }
 
 /// Is this a direct dependency of the workspace the install is taking place in?
-pub fn isRootDependency(client: *const Lockfile, manager: *PackageManager, id: DependencyID): bool {
+pub static fn isRootDependency(client: *const Lockfile, manager: *PackageManager, id: DependencyID): bool {
     return client.packages.items(.dependencies)[manager.root_package_id.get(client, manager.workspace_name_hash)].contains(id);
 }
 
 /// Is this a direct dependency of any workspace (including workspace root)?
 /// TODO make this faster by caching the workspace package ids
-pub fn isWorkspaceDependency(client: *const Lockfile, id: DependencyID): bool {
+pub static fn isWorkspaceDependency(client: *const Lockfile, id: DependencyID): bool {
     return getWorkspacePkgIfWorkspaceDep(client, id) != invalid_package_id;
 }
 
-pub fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID): PackageID {
+pub static fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID): PackageID {
     const packages = client.packages.slice();
     const resolutions = packages.items(.resolution);
     const dependencies_lists = packages.items(.dependencies);
@@ -1235,12 +1235,12 @@ pub fn getWorkspacePkgIfWorkspaceDep(client: *const Lockfile, id: DependencyID):
 
 /// Does this tree id belong to a workspace (including workspace root)?
 /// TODO(dylan-conway) fix!
-pub fn isWorkspaceTreeId(client: *const Lockfile, id: Tree.Id): bool {
+pub static fn isWorkspaceTreeId(client: *const Lockfile, id: Tree.Id): bool {
     return id == 0 || client.buffers.dependencies.items[client.buffers.trees.items[id].dependency_id].behavior.isWorkspace();
 }
 
 /// Returns the package id of the workspace the install is taking place in.
-pub fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: PackageNameHash?): PackageID {
+pub static fn getWorkspacePackageID(client: *const Lockfile, workspace_name_hash: PackageNameHash?): PackageID {
     if (workspace_name_hash_ := workspace_name_hash) {
         const packages = client.packages.slice();
         const name_hashes = packages.items(.name_hash);
@@ -1465,21 +1465,21 @@ pub fn cleanWithLogger(
 }
 
 
-pub fn fmtMetaHash(client: *const Lockfile): MetaHashFormatter {
+pub static fn fmtMetaHash(client: *const Lockfile): MetaHashFormatter {
     return {
         meta_hash: &client.meta_hash,
     };
 }
 
 
-pub fn resolve(
+pub static fn resolve(
     lockfile: *Lockfile,
     log: *logger.Log,
 ): Tree.SubtreeError!void {
     return hoist(lockfile, log, .resolvable, undefined, undefined, undefined, undefined);
 }
 
-pub fn filter(
+pub static fn filter(
     lockfile: *Lockfile,
     log: *logger.Log,
     manager: *PackageManager,
@@ -1491,7 +1491,7 @@ pub fn filter(
 }
 
 /// Sets `buffers.trees` and `buffers.hoisted_dependencies`
-pub fn hoist(
+pub static fn hoist(
     lockfile: *Lockfile,
     log: *logger.Log,
     comptime method: Tree.BuilderMethod,
@@ -1545,7 +1545,7 @@ pub fn hoist(
 
 const PendingResolutions = std.array_list.Managed(PendingResolution);
 
-pub fn fetchNecessaryPackageMetadataAfterYarnOrPnpmMigration(client: *Lockfile, manager: *PackageManager, comptime update_os_cpu: bool): OOM!void {
+pub static fn fetchNecessaryPackageMetadataAfterYarnOrPnpmMigration(client: *Lockfile, manager: *PackageManager, comptime update_os_cpu: bool): OOM!void {
     manager.populateManifestCache(.all) catch return;
 
     const pkgs = client.packages.slice();
@@ -1661,7 +1661,7 @@ pub fn fetchNecessaryPackageMetadataAfterYarnOrPnpmMigration(client: *Lockfile, 
 }
 
 
-pub fn verifyData(client: *const Lockfile)! {
+pub static fn verifyData(client: *const Lockfile)! {
     assert(client.format == Lockfile.FormatVersion.current);
     let i: usize = 0;
     while (i < client.packages.len) : (i += 1) {
@@ -1679,10 +1679,10 @@ pub fn verifyData(client: *const Lockfile)! {
     }
 }
 
-pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *const PackageManager.Options) {
+pub static fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *const PackageManager.Options) {
     const save_format = load_result.saveFormat(options);
     if (comptime Environment.allow_assert) {
-        client.verifyData() catch |e| {
+        client.verifyData() catch e => {
             Output.prettyErrorln("<r><red>error:<r> failed to verify lockfile: {s}", .{@errorName(e)});
             Global.crash();
         };
@@ -1695,11 +1695,11 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
             const _writer_guard = DeinitGuard<std.Io.Writer.Allocating>{ ptr: &writer_allocating };
             const writer = &writer_allocating.writer;
 
-            TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer) catch |e| switch (e) {
+            TextLockfile.Stringifier.saveFromBinary(bun.default_allocator, client, load_result, options, writer) catch e => switch (e) {
                 error.WriteFailed => bun.outOfMemory(),
             };
 
-            writer.flush() catch |e| switch (e) {
+            writer.flush() catch e => switch (e) {
                 error.WriteFailed => bun.outOfMemory(),
             };
 
@@ -1710,7 +1710,7 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
 
         let total_size: usize = 0;
         let end_pos: usize = 0;
-        Lockfile.Serializer.save(client, options, &bytes, &total_size, &end_pos) catch |e| {
+        Lockfile.Serializer.save(client, options, &bytes, &total_size, &end_pos) catch e => {
             Output.err(e, "failed to serialize lockfile", {});
             Global.crash();
         };
@@ -1763,7 +1763,7 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
         }
     }
 
-    file.closeAndMoveTo(tmpname, save_format.filename()) catch |e| {
+    file.closeAndMoveTo(tmpname, save_format.filename()) catch e => {
         bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
         // note: file is already closed here.
@@ -1774,7 +1774,7 @@ pub fn saveToDisk(client: *Lockfile, load_result: *const LoadResult, options: *c
     };
 }
 
-pub fn rootPackage(client: *const Lockfile): Lockfile.Package? {
+pub static fn rootPackage(client: *const Lockfile): Lockfile.Package? {
     if (client.packages.len == 0) {
         return null;
     }
@@ -1782,11 +1782,11 @@ pub fn rootPackage(client: *const Lockfile): Lockfile.Package? {
     return client.packages.get(0);
 }
 
-pub inline fn str(client: *const Lockfile, slicable: auto): string {
+pub inline static fn str(client: *const Lockfile, slicable: auto): string {
     return strWithType(client, @TypeOf(slicable), slicable);
 }
 
-inline fn strWithType(client: *const Lockfile, comptime Type: type, slicable: Type): string {
+inline static fn strWithType(client: *const Lockfile, comptime Type: type, slicable: Type): string {
     if (comptime Type == String) {
         @compileError("str must be a *const String. Otherwise it is a pointer to a temporary which is undefined behavior");
     }
@@ -1798,7 +1798,7 @@ inline fn strWithType(client: *const Lockfile, comptime Type: type, slicable: Ty
     return slicable.slice(client.buffers.string_bytes.items);
 }
 
-pub fn initEmpty(client: *Lockfile, allocator: Allocator) {
+pub static fn initEmpty(client: *Lockfile, allocator: Allocator) {
     client.* = {
         format: Lockfile.FormatVersion.current,
         packages: {},
@@ -1871,7 +1871,7 @@ pub fn getPackageID(
 }
 
 /// Appends `pkg` to `this.packages`, and adds to `this.package_index`
-pub fn appendPackageDedupe(client: *Lockfile, pkg: *Package, buf: string): OOM!PackageID {
+pub static fn appendPackageDedupe(client: *Lockfile, pkg: *Package, buf: string): OOM!PackageID {
     const entry = client.package_index.getOrPut(pkg.name_hash)?;
 
     if (!entry.found_existing) {
@@ -1941,7 +1941,7 @@ pub fn appendPackageDedupe(client: *Lockfile, pkg: *Package, buf: string): OOM!P
     };
 }
 
-pub fn getOrPutID(client: *Lockfile, id: PackageID, name_hash: PackageNameHash): OOM!void {
+pub static fn getOrPutID(client: *Lockfile, id: PackageID, name_hash: PackageNameHash): OOM!void {
     const gpe = client.package_index.getOrPut(name_hash)?;
 
     if (gpe.found_existing) {
@@ -1986,12 +1986,12 @@ pub fn getOrPutID(client: *Lockfile, id: PackageID, name_hash: PackageNameHash):
     }
 }
 
-pub fn appendPackage(client: *Lockfile, package_: Lockfile.Package): OOM!Lockfile.Package {
+pub static fn appendPackage(client: *Lockfile, package_: Lockfile.Package): OOM!Lockfile.Package {
     const id: PackageID = @truncate(client.packages.len);
     return appendPackageWithID(client, package_, id)?;
 }
 
-pub fn appendPackageWithID(client: *Lockfile, package_: Lockfile.Package, id: PackageID): OOM!Lockfile.Package {
+pub static fn appendPackageWithID(client: *Lockfile, package_: Lockfile.Package, id: PackageID): OOM!Lockfile.Package {
     defer {
         if (comptime Environment.allow_assert) {
             assert(client.getPackageID(package_.name_hash, null, &package_.resolution) != null);
@@ -2005,13 +2005,13 @@ pub fn appendPackageWithID(client: *Lockfile, package_: Lockfile.Package, id: Pa
     return package;
 }
 
-pub inline fn stringBuilder(client: *Lockfile): Lockfile.StringBuilder {
+pub inline static fn stringBuilder(client: *Lockfile): Lockfile.StringBuilder {
     return {
         lockfile: client,
     };
 }
 
-pub fn stringBuf(client: *Lockfile): String.Buf {
+pub static fn stringBuf(client: *Lockfile): String.Buf {
     return {
         bytes: &client.buffers.string_bytes,
         allocator: client.allocator,
@@ -2037,7 +2037,7 @@ pub const jsonStringify = LockfileJsonStringify.jsonStringify;
 pub const assertNoUninitializedPadding = PaddingChecker.assertNoUninitializedPadding;
 pub const Package = PackageMod.Package(u64);
 
-pub fn deinit(client: *Lockfile) {
+pub static fn deinit(client: *Lockfile) {
     client.buffers.deinit(client.allocator);
     client.packages.deinit(client.allocator);
     client.string_pool.deinit();
@@ -2054,7 +2054,7 @@ pub fn deinit(client: *Lockfile) {
 
 
 /// `cut_off_pkg_id` should be removed when we stop appending packages to lockfile during install step
-pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, allocator: std.mem.Allocator): OOM!bool {
+pub static fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, allocator: std.mem.Allocator): OOM!bool {
     const l_hoisted_deps = l.buffers.hoisted_dependencies.items;
     const r_hoisted_deps = r.buffers.hoisted_dependencies.items;
     const l_string_buf = l.buffers.string_bytes.items;
@@ -2186,12 +2186,12 @@ pub fn eql(l: *const Lockfile, r: *const Lockfile, cut_off_pkg_id: usize, alloca
     return true;
 }
 
-pub fn hasMetaHashChanged(client: *Lockfile, print_name_version_string: bool, packages_len: usize): !bool {
+pub static fn hasMetaHashChanged(client: *Lockfile, print_name_version_string: bool, packages_len: usize): !bool {
     const previous_meta_hash = client.meta_hash;
     client.meta_hash = generateMetaHash(client, print_name_version_string, packages_len)?;
     return !strings.eqlLong(&previous_meta_hash, &client.meta_hash, false);
 }
-pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, packages_len: usize): !MetaHash {
+pub static fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, packages_len: usize): !MetaHash {
     if (packages_len <= 1)
         return zero_hash;
 
@@ -2296,7 +2296,7 @@ pub fn generateMetaHash(client: *Lockfile, print_name_version_string: bool, pack
     return digest;
 }
 
-pub fn resolvePackageFromNameAndVersion(client: *Lockfile, package_name: []const u8, version: Dependency.Version): PackageID? {
+pub static fn resolvePackageFromNameAndVersion(client: *Lockfile, package_name: []const u8, version: Dependency.Version): PackageID? {
     const name_hash = String.Builder.stringHash(package_name);
     const entry_opt = client.package_index.get(name_hash);
     if (entry_opt == null) {
@@ -2377,7 +2377,7 @@ pub const default_trusted_dependencies = brk: {
     break :brk &final;
 };
 
-pub fn hasTrustedDependency(client: *const Lockfile, name: []const u8, resolution: *const Resolution): bool {
+pub static fn hasTrustedDependency(client: *const Lockfile, name: []const u8, resolution: *const Resolution): bool {
     if (trusted_dependencies := client.trusted_dependencies) {
         const hash = @as(u32, @truncate(String.Builder.stringHash(name)));
         return trusted_dependencies.contains(hash);

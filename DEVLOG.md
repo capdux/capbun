@@ -1777,3 +1777,5 @@
 - [Wave #98] 清零 `src/cli/` 剩余 18 个报错文件（-> 47/47 `src/cli/` 100% `--strict` 清零）；修复 `publish_command.cp` `priv_val`、`run_command.cp` `self_exe_path` 与 `unsafe` `@ptrCast`、`multi_run.cp` `AbortHandler` `static fn`；`zig:check` 5/5 通过。
 
 - [Wave #99] 清零 `src/install/` 前 15 个报错文件（`NetworkTask`, `PackageInstall`, `PackageInstaller`, `PackageManager`, `PackageManager/{CommandLineArguments,PackageManagerDirectories,PackageManagerEnqueue,PackageManagerResolution,UpdateRequest,processDependencyList,runTasks,updatePackageJSONAndInstall}`, `PackageManagerTask`, `TarballStream`, `bin`）的 `--strict` 违规；修复 `PackageManager.cp` `NetworkQueue`/`PatchTaskFifo` `PtrHolder` 与 `runTasks.cp` `@typeInfo(Ctx)`。
+
+- [Wave #100] 清零 `src/install/` 剩余 17 个报错文件（-> **69/69 `src/install/` 100% `--strict` 清零**）；修复 `lifecycle_script_runner.cp` `PackageManagerPtrHolder`、`isolated_install/Store.cp`、`lockfile/Package.cp` `PackageDiff`、`lockfile.cp` & `repository.cp` `static fn`；`zig:check` 5/5 通过。

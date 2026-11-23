@@ -25,7 +25,7 @@ struct Ids {
 fn NewId(comptime T: type): type {
     return enum(u32) {
         comptime {
-            _ = T;
+            if (T == void) {}
         }
 
         root = 0,
@@ -34,21 +34,21 @@ fn NewId(comptime T: type): type {
 
         const max = std.math.maxInt(u32);
 
-        pub fn from(id: u32) @This() {
+        pub static fn from(id: u32): @This() {
             bun.debugAssert(id != max);
             return @enumFromInt(id);
         }
 
-        pub fn get(id: @This()) u32 {
+        pub static fn get(id: @This()): u32 {
             bun.debugAssert(id != .invalid);
             return @intFromEnum(id);
         }
 
-        pub fn tryGet(id: @This()) ?u32 {
+        pub static fn tryGet(id: @This()): u32? {
             return if (id == .invalid) null else @intFromEnum(id);
         }
 
-        pub fn getOr(id: @This(), default: u32) u32 {
+        pub static fn getOr(id: @This(), default: u32): u32 {
             return if (id == .invalid) default else @intFromEnum(id);
         }
     };
@@ -60,30 +60,30 @@ pub fn OrderedArraySet(comptime T: type, comptime Ctx: type): type {
 
         pub const empty: @This() = .{};
 
-        pub fn initCapacity(allocator: std.mem.Allocator, n: usize) OOM!@This() {
-            const list: std.ArrayListUnmanaged(T) = try .initCapacity(allocator, n);
+        pub static fn initCapacity(allocator: std.mem.Allocator, n: usize): OOM!@This() {
+            const list: std.ArrayListUnmanaged(T) = .initCapacity(allocator, n)?;
             return .{ .list = list };
         }
 
-        pub fn deinit(this: *@This(), allocator: std.mem.Allocator) void {
-            this.list.deinit(allocator);
+        pub fn deinit(*_, allocator: std.mem.Allocator) {
+            _.list.deinit(allocator);
         }
 
-        pub fn slice(this: *const @This()) []const T {
-            return this.list.items;
+        pub fn slice(): []const T {
+            return _.list.items;
         }
 
-        pub fn len(this: *const @This()) usize {
-            return this.list.items.len;
+        pub fn len(): usize {
+            return _.list.items.len;
         }
 
-        pub fn eql(l: *const @This(), r: *const @This(), ctx: *const Ctx) bool {
+        pub static fn eql(l: *const @This(), r: *const @This(), ctx: *const Ctx): bool {
             if (l.list.items.len != r.list.items.len) {
                 return false;
             }
 
-            for (l.list.items, r.list.items) |l_item, r_item| {
-                if (!ctx.eql(l_item, r_item)) {
+            for (i of 0..l.list.items.len) {
+                if (!ctx.eql(l.list.items[i], r.list.items[i])) {
                     return false;
                 }
             }
@@ -91,9 +91,9 @@ pub fn OrderedArraySet(comptime T: type, comptime Ctx: type): type {
             return true;
         }
 
-        pub fn insert(self: *@This(), allocator: std.mem.Allocator, new: T, ctx: *const Ctx) OOM!void {
-            for (0..self.list.items.len) |i| {
-                const existing = self.list.items[i];
+        pub fn insert(*_, allocator: std.mem.Allocator, new: T, ctx: *const Ctx): OOM!void {
+            for (i of 0.._.list.items.len) {
+                const existing = _.list.items[i];
                 if (ctx.eql(new, existing)) {
                     return;
                 }
@@ -105,17 +105,17 @@ pub fn OrderedArraySet(comptime T: type, comptime Ctx: type): type {
                 }
 
                 if (order == .lt) {
-                    try self.list.insert(allocator, i, new);
+                    _.list.insert(allocator, i, new)?;
                     return;
                 }
             }
 
-            try self.list.append(allocator, new);
+            _.list.append(allocator, new)?;
         }
 
-        pub fn insertAssumeCapacity(self: *@This(), new: T, ctx: *const Ctx) void {
-            for (0..self.list.items.len) |i| {
-                const existing = self.list.items[i];
+        pub fn insertAssumeCapacity(*_, new: T, ctx: *const Ctx) {
+            for (i of 0.._.list.items.len) {
+                const existing = _.list.items[i];
                 if (ctx.eql(new, existing)) {
                     return;
                 }
@@ -127,12 +127,12 @@ pub fn OrderedArraySet(comptime T: type, comptime Ctx: type): type {
                 }
 
                 if (order == .lt) {
-                    self.list.insertAssumeCapacity(i, new);
+                    _.list.insertAssumeCapacity(i, new);
                     return;
                 }
             }
 
-            self.list.appendAssumeCapacity(new);
+            _.list.appendAssumeCapacity(new);
         }
     };
 }

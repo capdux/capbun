@@ -72,6 +72,10 @@ pub fn cp_string_from(__cp_val: anytype) []const u8 { const __cp_T = @TypeOf(__c
 pub const Lockfile = @import("./lockfile.zig");
 pub const install_mod = @import("./install.zig");
 pub const bun = @import("bun");
+pub const PackageManagerPtrHolder = struct {
+    p: *PackageManager,
+};
+
 pub const TopInstallCtx = struct {
     entry_id: Store.Entry.Id,
     installer: *Store.Installer,
@@ -547,7 +551,7 @@ pub fn decrementPendingScriptTasks(self: *LifecycleScriptSubprocess) void {
             _ = self.manager.pending_lifecycle_script_tasks.fetchSub(1, .monotonic);
     }
     pub const InstallCtx = TopInstallCtx;
-    pub const List = bun.io.heap.Intrusive(LifecycleScriptSubprocess, *PackageManager, sortByStartedAt);
+    pub const List = bun.io.heap.Intrusive(LifecycleScriptSubprocess, @TypeOf(@as(PackageManagerPtrHolder, undefined).p), sortByStartedAt);
     pub const new = bun.TrivialNew(@This());
     pub const min_milliseconds_to_log = 500;
     const uv = bun.windows.libuv;

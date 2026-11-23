@@ -115,7 +115,7 @@ pub struct Shebang {
     }
 
     /// std.fs.path.basename but utf16
-    fn basenameW(path: []const u16): []const u16 {
+    static fn basenameW(path: []const u16): []const u16 {
         if (path.len == 0)
             return path[0..0];
 

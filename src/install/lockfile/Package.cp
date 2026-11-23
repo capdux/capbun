@@ -292,6 +292,444 @@ pub struct PackageSerializer<PackageType, List> {
     }
 }
 
+pub struct PackageDiff<PackageType> {
+    pub const Op = PackageDiffOp;
+
+    pub const Summary = DiffSummary;
+
+    pub static fn generate(
+        pm: *PackageManager,
+        allocator: Allocator,
+        log: *logger.Log,
+        from_lockfile: *Lockfile,
+        to_lockfile: *Lockfile,
+        from_package: *PackageType,
+        to: *PackageType,
+        update_requests: UpdateRequestsSliceOpt,
+        id_mapping: PackageIDSliceOpt,
+    ): !Summary {
+        let summary = Summary{};
+        const is_root = id_mapping != null;
+        let to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
+        const from_deps = from_package.dependencies.get(from_lockfile.buffers.dependencies.items);
+        const from_resolutions = from_package.resolutions.get(from_lockfile.buffers.resolutions.items);
+        let to_i: usize = 0;
+
+        if (from_lockfile.overrides.map.count() != to_lockfile.overrides.map.count()) {
+            summary.overrides_changed = true;
+
+            if (PackageManager.verbose_install) {
+                Output.prettyErrorln("Overrides changed since last install", {});
+            }
+        } else {
+            from_lockfile.overrides.sort(from_lockfile);
+            to_lockfile.overrides.sort(to_lockfile);
+            const from_ov_keys = from_lockfile.overrides.map.keys();
+            const from_ov_vals = from_lockfile.overrides.map.values();
+            const to_ov_keys = to_lockfile.overrides.map.keys();
+            const to_ov_vals = to_lockfile.overrides.map.values();
+            let ov_i: usize = 0;
+            while (ov_i < from_ov_keys.len) : (ov_i += 1) {
+                const from_k = from_ov_keys[ov_i];
+                const from_override = &from_ov_vals[ov_i];
+                const to_k = to_ov_keys[ov_i];
+                const to_override = &to_ov_vals[ov_i];
+                if ((from_k != to_k) || (!from_override.eql(to_override, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
+                    summary.overrides_changed = true;
+                    if (PackageManager.verbose_install) {
+                        Output.prettyErrorln("Overrides changed since last install", {});
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (is_root) catalogs: {
+
+            // don't sort if lengths are different
+            if (from_lockfile.catalogs.default.count() != to_lockfile.catalogs.default.count()) {
+                summary.catalogs_changed = true;
+                break :catalogs;
+            }
+
+            if (from_lockfile.catalogs.groups.count() != to_lockfile.catalogs.groups.count()) {
+                summary.catalogs_changed = true;
+                break :catalogs;
+            }
+
+            from_lockfile.catalogs.sort(from_lockfile);
+            to_lockfile.catalogs.sort(to_lockfile);
+
+            const from_def_keys = from_lockfile.catalogs.default.keys();
+            const from_def_vals = from_lockfile.catalogs.default.values();
+            const to_def_keys = to_lockfile.catalogs.default.keys();
+            const to_def_vals = to_lockfile.catalogs.default.values();
+            let def_i: usize = 0;
+            while (def_i < from_def_keys.len) : (def_i += 1) {
+                const from_dep_name = from_def_keys[def_i];
+                const from_dep = &from_def_vals[def_i];
+                const to_dep_name = to_def_keys[def_i];
+                const to_dep = &to_def_vals[def_i];
+                if (!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
+                    summary.catalogs_changed = true;
+                    break :catalogs;
+                }
+
+                if (!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
+                    summary.catalogs_changed = true;
+                    break :catalogs;
+                }
+            }
+
+            const from_cat_keys = from_lockfile.catalogs.groups.keys();
+            const from_cat_vals = from_lockfile.catalogs.groups.values();
+            const to_cat_keys = to_lockfile.catalogs.groups.keys();
+            const to_cat_vals = to_lockfile.catalogs.groups.values();
+            let cat_i: usize = 0;
+            while (cat_i < from_cat_keys.len) : (cat_i += 1) {
+                const from_catalog_name = from_cat_keys[cat_i];
+                const from_catalog_deps = from_cat_vals[cat_i];
+                const to_catalog_name = to_cat_keys[cat_i];
+                const to_catalog_deps = to_cat_vals[cat_i];
+                if (!from_catalog_name.eql(to_catalog_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
+                    summary.catalogs_changed = true;
+                    break :catalogs;
+                }
+
+                if (from_catalog_deps.count() != to_catalog_deps.count()) {
+                    summary.catalogs_changed = true;
+                    break :catalogs;
+                }
+
+                const from_dep_keys = from_catalog_deps.keys();
+                const from_dep_vals = from_catalog_deps.values();
+                const to_dep_keys = to_catalog_deps.keys();
+                const to_dep_vals = to_catalog_deps.values();
+                let dep_i: usize = 0;
+                while (dep_i < from_dep_keys.len) : (dep_i += 1) {
+                    const from_dep_name = from_dep_keys[dep_i];
+                    const from_dep = &from_dep_vals[dep_i];
+                    const to_dep_name = to_dep_keys[dep_i];
+                    const to_dep = &to_dep_vals[dep_i];
+                    if (!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
+                        summary.catalogs_changed = true;
+                        break :catalogs;
+                    }
+
+                    if (!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
+                        summary.catalogs_changed = true;
+                        break :catalogs;
+                    }
+                }
+            }
+        }
+
+        trusted_dependencies: {
+            // trusted dependency diff
+            //
+            // situations:
+            // 1 - Both old lockfile and new lockfile use default trusted dependencies, no diffs
+            // 2 - Both exist, only diffs are from additions and removals
+            //
+            // 3 - Old lockfile has trusted dependencies, new lockfile does not. Added are dependencies
+            //     from default list that didn't exist previously. We need to be careful not to add these
+            //     to the new lockfile. Removed are dependencies from old list that
+            //     don't exist in the default list.
+            //
+            // 4 - Old lockfile used the default list, new lockfile has trusted dependencies. Added
+            //     are dependencies are all from the new lockfile. Removed is empty because the default
+            //     list isn't appended to the lockfile.
+
+            // 1
+            if (from_lockfile.trusted_dependencies == null) {
+                if (to_lockfile.trusted_dependencies == null) break :trusted_dependencies;
+            }
+
+            // 2
+            if (from_lockfile.trusted_dependencies != null) {
+                if (to_lockfile.trusted_dependencies != null) {
+                    const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
+                    const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
+
+                {
+                    // added
+                    let to_trusted_iter = to_trusted_dependencies.iterator();
+                    while (entry := to_trusted_iter.next()) {
+                        const to_trusted = entry.key_ptr.*;
+                        if (!from_trusted_dependencies.contains(to_trusted)) {
+                            summary.added_trusted_dependencies.put(allocator, to_trusted, true)?;
+                        }
+                    }
+                }
+
+                {
+                    // removed
+                    let from_trusted_iter = from_trusted_dependencies.iterator();
+                    while (entry := from_trusted_iter.next()) {
+                        const from_trusted = entry.key_ptr.*;
+                        if (!to_trusted_dependencies.contains(from_trusted)) {
+                            const void_val: void = undefined;
+                            summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val)?;
+                        }
+                    }
+                }
+
+                break :trusted_dependencies;
+                }
+            }
+
+            // 3
+            if (from_lockfile.trusted_dependencies != null) {
+                if (to_lockfile.trusted_dependencies == null) {
+                    const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
+
+                {
+                    // added
+                    for (entry of default_trusted_dependencies.entries) {
+                        if (!from_trusted_dependencies.contains(@truncate(entry.hash))) {
+                            // although this is a new trusted dependency, it is from the default
+                            // list so it shouldn't be added to the lockfile
+                            summary.added_trusted_dependencies.put(allocator, @truncate(entry.hash), false)?;
+                        }
+                    }
+                }
+
+                {
+                    // removed
+                    let from_trusted_iter = from_trusted_dependencies.iterator();
+                    while (entry := from_trusted_iter.next()) {
+                        const from_trusted = entry.key_ptr.*;
+                        if (!default_trusted_dependencies.hasWithHash(@intCast(from_trusted))) {
+                            const void_val: void = undefined;
+                            summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val)?;
+                        }
+                    }
+                }
+
+                break :trusted_dependencies;
+                }
+            }
+
+            // 4
+            if (from_lockfile.trusted_dependencies == null) {
+                if (to_lockfile.trusted_dependencies != null) {
+                    const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
+
+                {
+                    // add all to trusted dependencies, even if they exist in default because they weren't in the
+                    // lockfile originally
+                    let to_trusted_iter = to_trusted_dependencies.iterator();
+                    while (entry := to_trusted_iter.next()) {
+                        const to_trusted = entry.key_ptr.*;
+                        summary.added_trusted_dependencies.put(allocator, to_trusted, true)?;
+                    }
+                    // removed: none
+                }
+
+                break :trusted_dependencies;
+                }
+            }
+        }
+
+        summary.patched_dependencies_changed = patched_dependencies_changed: {
+            if (from_lockfile.patched_dependencies.entries.len != to_lockfile.patched_dependencies.entries.len) break :patched_dependencies_changed true;
+            let iter = to_lockfile.patched_dependencies.iterator();
+            while (entry := iter.next()) {
+                if (val := from_lockfile.patched_dependencies.get(entry.key_ptr.*)) {
+                    if (!std.mem.eql(
+                        u8,
+                        val.path.slice(from_lockfile.buffers.string_bytes.items),
+                        entry.value_ptr.path.slice(to_lockfile.buffers.string_bytes.items),
+                    )) break :patched_dependencies_changed true;
+                } else break :patched_dependencies_changed true;
+            }
+            iter = from_lockfile.patched_dependencies.iterator();
+            while (entry := iter.next()) {
+                if (!to_lockfile.patched_dependencies.contains(entry.key_ptr.*)) break :patched_dependencies_changed true;
+            }
+            break :patched_dependencies_changed false;
+        };
+
+        let i: usize = 0;
+        for (*from_dep of from_deps) {
+            defer i += 1;
+            found: {
+                const prev_i = to_i;
+
+                // common case, dependency is present in both versions:
+                // - in the same position
+                // - shifted by a constant offset
+                while (to_i < to_deps.len) {
+                    if (from_dep.name_hash == to_deps[to_i].name_hash) {
+                        const from_behavior = from_dep.behavior;
+                        const to_behavior = to_deps[to_i].behavior;
+
+                        if (from_behavior != to_behavior) {
+                            to_i += 1;
+                            continue;
+                        }
+
+                        break :found;
+                    }
+                    to_i += 1;
+                }
+
+                // less common, o(n^2) case
+                to_i = 0;
+                while (to_i < prev_i) {
+                    if (from_dep.name_hash == to_deps[to_i].name_hash) {
+                        const from_behavior = from_dep.behavior;
+                        const to_behavior = to_deps[to_i].behavior;
+
+                        if (from_behavior != to_behavior) {
+                            to_i += 1;
+                            continue;
+                        }
+
+                        break :found;
+                    }
+                    to_i += 1;
+                }
+
+                // We found a removed dependency!
+                // We don't need to remove it
+                // It will be cleaned up later
+                summary.remove += 1;
+                continue;
+            }
+            defer to_i += 1;
+
+            if (to_deps[to_i].eql(&from_dep, to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
+                if (updates := update_requests) {
+                    const should_update = if (updates.len == 0) true else brk: {
+                        for (request of updates) {
+                            if (from_dep.name_hash == request.name_hash) break :brk true;
+                        }
+                        break :brk false;
+                    };
+                    if (should_update) {
+                        // Listed as to be updated
+                        summary.update += 1;
+                        continue;
+                    }
+                }
+
+                if (mapping_val := id_mapping) {
+                    let mapping = mapping_val;
+                    const update_mapping = update_mapping: {
+                        if (!is_root) {
+                            break :update_mapping true;
+                        }
+                        if (!from_dep.behavior.isWorkspace()) {
+                            break :update_mapping true;
+                        }
+
+                        const workspace_path_opt = to_lockfile.workspace_paths.getPtr(from_dep.name_hash);
+                        if (workspace_path_opt == null) {
+                            break :update_mapping false;
+                        }
+                        const workspace_path = workspace_path_opt.?;
+
+                        let package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
+                        const package_json_path_guard = DeinitGuard<@TypeOf(package_json_path)>{ ptr: &package_json_path };
+
+                        package_json_path.append(workspace_path.slice(to_lockfile.buffers.string_bytes.items));
+                        package_json_path.append("package.json");
+
+                        let source_file: bun.logger.Source = undefined;
+                        if (src_opt := bun.sys.File.toSource(package_json_path.sliceZ(), allocator, {}).unwrap() catch null) {
+                            source_file = src_opt;
+                        } else {
+                            break :update_mapping false;
+                        }
+                        const source = &source_file;
+
+                        let workspace_pkg: PackageType = {};
+
+                        let json_root: bun.ast.Expr = undefined;
+                        if (json_opt := pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, {}).unwrap() catch null) {
+                            json_root = json_opt.root;
+                        } else {
+                            break :update_mapping false;
+                        }
+
+                        let resolver: void = undefined;
+                        workspace_pkg.parseWithJSON(
+                            to_lockfile,
+                            pm,
+                            allocator,
+                            log,
+                            source,
+                            json_root,
+                            void,
+                            &resolver,
+                            Features.workspace,
+                        )?;
+
+                        to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
+
+                        let from_pkg = from_lockfile.packages.get(from_resolutions[i]);
+                        const diff = generate(
+                            pm,
+                            allocator,
+                            log,
+                            from_lockfile,
+                            to_lockfile,
+                            &from_pkg,
+                            &workspace_pkg,
+                            update_requests,
+                            null,
+                        )?;
+
+                        if (pm.options.log_level.isVerbose()) {
+                            if ((diff.add + diff.remove + diff.update) > 0) {
+                                Output.prettyErrorln("Workspace package \"{s}\" has added <green>{d}<r> dependencies, removed <red>{d}<r> dependencies, and updated <cyan>{d}<r> dependencies", .{
+                                    workspace_path.slice(to_lockfile.buffers.string_bytes.items),
+                                    diff.add,
+                                    diff.remove,
+                                    diff.update,
+                                });
+                            }
+                        }
+
+                        break :update_mapping !diff.hasDiffs();
+                    };
+
+                    if (update_mapping) {
+                        mapping[to_i] = @truncate(i);
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            }
+
+            // We found a changed dependency!
+            summary.update += 1;
+        }
+
+        // Use saturating arithmetic here because a migrated
+        // package-lock.json could be out of sync with the package.json, so the
+        // number of from_deps could be greater than to_deps.
+        summary.add = @truncate((to_deps.len) -| (from_deps.len -| summary.remove));
+
+        if (from_package.resolution.tag != .root) {
+            inline for (hook of Lockfile.Scripts.names) {
+                if (!@field(to.scripts, hook).eql(
+                    @field(from_package.scripts, hook),
+                    to_lockfile.buffers.string_bytes.items,
+                    from_lockfile.buffers.string_bytes.items,
+                )) {
+                    // We found a changed life-cycle script
+                    summary.update += 1;
+                }
+            }
+        }
+
+        return summary;
+    }
+}
+
 pub fn Package(comptime SemverIntType: type): type {
     return struct {
         name: String = {},
@@ -487,7 +925,7 @@ pub fn Package(comptime SemverIntType: type): type {
             return new_package.@"meta".id;
         }
 
-        pub fn fromPackageJSON(
+        pub static fn fromPackageJSON(
             lockfile: *Lockfile,
             pm: *PackageManager,
             package_json: *PackageJSON,
@@ -579,7 +1017,7 @@ pub fn Package(comptime SemverIntType: type): type {
             }
         }
 
-        pub fn fromNPM(
+        pub static fn fromNPM(
             pm: *PackageManager,
             allocator: Allocator,
             lockfile: *Lockfile,
@@ -634,7 +1072,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 string_builder.count(manifest.name());
                 version.count(manifest.string_buf, @TypeOf(&string_builder), &string_builder);
 
-                inline for (dependency_groups) |group| {
+                inline for (group of dependency_groups) {
                     const map: ExternalStringMap = @field(package_version, group.field);
                     const keys = map.name.get(manifest.external_strings);
                     const version_strings = map.value.get(manifest.external_strings_for_versions);
@@ -693,7 +1131,7 @@ pub fn Package(comptime SemverIntType: type): type {
                 @memset(dependencies, {});
 
                 total_dependencies_count = 0;
-                inline for (dependency_groups) |group| {
+                inline for (group of dependency_groups) {
                     const map: ExternalStringMap = @field(package_version, group.field);
                     const keys = map.name.get(manifest.external_strings);
                     const version_strings = map.value.get(manifest.external_strings_for_versions);
@@ -806,421 +1244,16 @@ pub fn Package(comptime SemverIntType: type): type {
             }
         }
 
-        pub const Diff = struct {
-            pub const Op = PackageDiffOp;
+        pub const Diff = PackageDiff(PackageType);
 
-            pub const Summary = DiffSummary;
-
-            pub fn generate(
-                pm: *PackageManager,
-                allocator: Allocator,
-                log: *logger.Log,
-                from_lockfile: *Lockfile,
-                to_lockfile: *Lockfile,
-                from_package: *PackageType,
-                to: *PackageType,
-                update_requests: ([]PackageManager.UpdateRequest)?,
-                id_mapping: ([]PackageID)?,
-            ): !Summary {
-                let summary = Summary{};
-                const is_root = id_mapping != null;
-                let to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
-                const from_deps = from_package.dependencies.get(from_lockfile.buffers.dependencies.items);
-                const from_resolutions = from_package.resolutions.get(from_lockfile.buffers.resolutions.items);
-                let to_i: usize = 0;
-
-                if (from_lockfile.overrides.map.count() != to_lockfile.overrides.map.count()) {
-                    summary.overrides_changed = true;
-
-                    if (PackageManager.verbose_install) {
-                        Output.prettyErrorln("Overrides changed since last install", {});
-                    }
-                } else {
-                    from_lockfile.overrides.sort(from_lockfile);
-                    to_lockfile.overrides.sort(to_lockfile);
-                    for (
-                        from_lockfile.overrides.map.keys(),
-                        from_lockfile.overrides.map.values(),
-                        to_lockfile.overrides.map.keys(),
-                        to_lockfile.overrides.map.values(),
-                    ) |from_k, *from_override, to_k, *to_override| {
-                        if ((from_k != to_k) || (!from_override.eql(to_override, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
-                            summary.overrides_changed = true;
-                            if (PackageManager.verbose_install) {
-                                Output.prettyErrorln("Overrides changed since last install", {});
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                if (is_root) catalogs: {
-
-                    // don't sort if lengths are different
-                    if (from_lockfile.catalogs.default.count() != to_lockfile.catalogs.default.count()) {
-                        summary.catalogs_changed = true;
-                        break :catalogs;
-                    }
-
-                    if (from_lockfile.catalogs.groups.count() != to_lockfile.catalogs.groups.count()) {
-                        summary.catalogs_changed = true;
-                        break :catalogs;
-                    }
-
-                    from_lockfile.catalogs.sort(from_lockfile);
-                    to_lockfile.catalogs.sort(to_lockfile);
-
-                    for (
-                        from_lockfile.catalogs.default.keys(),
-                        from_lockfile.catalogs.default.values(),
-                        to_lockfile.catalogs.default.keys(),
-                        to_lockfile.catalogs.default.values(),
-                    ) |from_dep_name, *from_dep, to_dep_name, *to_dep| {
-                        if (!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-
-                        if (!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-                    }
-
-                    for (
-                        from_lockfile.catalogs.groups.keys(),
-                        from_lockfile.catalogs.groups.values(),
-                        to_lockfile.catalogs.groups.keys(),
-                        to_lockfile.catalogs.groups.values(),
-                    ) |from_catalog_name, from_catalog_deps, to_catalog_name, to_catalog_deps| {
-                        if (!from_catalog_name.eql(to_catalog_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-
-                        if (from_catalog_deps.count() != to_catalog_deps.count()) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-
-                        for (
-                            from_catalog_deps.keys(),
-                            from_catalog_deps.values(),
-                            to_catalog_deps.keys(),
-                            to_catalog_deps.values(),
-                        ) |from_dep_name, *from_dep, to_dep_name, *to_dep| {
-                            if (!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
-                                summary.catalogs_changed = true;
-                                break :catalogs;
-                            }
-
-                            if (!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)) {
-                                summary.catalogs_changed = true;
-                                break :catalogs;
-                            }
-                        }
-                    }
-                }
-
-                trusted_dependencies: {
-                    // trusted dependency diff
-                    //
-                    // situations:
-                    // 1 - Both old lockfile and new lockfile use default trusted dependencies, no diffs
-                    // 2 - Both exist, only diffs are from additions and removals
-                    //
-                    // 3 - Old lockfile has trusted dependencies, new lockfile does not. Added are dependencies
-                    //     from default list that didn't exist previously. We need to be careful not to add these
-                    //     to the new lockfile. Removed are dependencies from old list that
-                    //     don't exist in the default list.
-                    //
-                    // 4 - Old lockfile used the default list, new lockfile has trusted dependencies. Added
-                    //     are dependencies are all from the new lockfile. Removed is empty because the default
-                    //     list isn't appended to the lockfile.
-
-                    // 1
-                    if (from_lockfile.trusted_dependencies == null && to_lockfile.trusted_dependencies == null) break :trusted_dependencies;
-
-                    // 2
-                    if (from_lockfile.trusted_dependencies != null && to_lockfile.trusted_dependencies != null) {
-                        const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
-                        const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
-
-                        {
-                            // added
-                            let to_trusted_iter = to_trusted_dependencies.iterator();
-                            while (entry := to_trusted_iter.next()) {
-                                const to_trusted = entry.key_ptr.*;
-                                if (!from_trusted_dependencies.contains(to_trusted)) {
-                                    summary.added_trusted_dependencies.put(allocator, to_trusted, true)?;
-                                }
-                            }
-                        }
-
-                        {
-                            // removed
-                            let from_trusted_iter = from_trusted_dependencies.iterator();
-                            while (entry := from_trusted_iter.next()) {
-                                const from_trusted = entry.key_ptr.*;
-                                if (!to_trusted_dependencies.contains(from_trusted)) {
-                                    const void_val: void = undefined;
-                                    summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val)?;
-                                }
-                            }
-                        }
-
-                        break :trusted_dependencies;
-                    }
-
-                    // 3
-                    if (from_lockfile.trusted_dependencies != null && to_lockfile.trusted_dependencies == null) {
-                        const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
-
-                        {
-                            // added
-                            for (entry of default_trusted_dependencies.entries) {
-                                if (!from_trusted_dependencies.contains(@truncate(entry.hash))) {
-                                    // although this is a new trusted dependency, it is from the default
-                                    // list so it shouldn't be added to the lockfile
-                                    summary.added_trusted_dependencies.put(allocator, @truncate(entry.hash), false)?;
-                                }
-                            }
-                        }
-
-                        {
-                            // removed
-                            let from_trusted_iter = from_trusted_dependencies.iterator();
-                            while (entry := from_trusted_iter.next()) {
-                                const from_trusted = entry.key_ptr.*;
-                                if (!default_trusted_dependencies.hasWithHash(@intCast(from_trusted))) {
-                                    const void_val: void = undefined;
-                                    summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val)?;
-                                }
-                            }
-                        }
-
-                        break :trusted_dependencies;
-                    }
-
-                    // 4
-                    if (from_lockfile.trusted_dependencies == null && to_lockfile.trusted_dependencies != null) {
-                        const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
-
-                        {
-                            // add all to trusted dependencies, even if they exist in default because they weren't in the
-                            // lockfile originally
-                            let to_trusted_iter = to_trusted_dependencies.iterator();
-                            while (entry := to_trusted_iter.next()) {
-                                const to_trusted = entry.key_ptr.*;
-                                summary.added_trusted_dependencies.put(allocator, to_trusted, true)?;
-                            }
-                            // removed: none
-                        }
-
-                        break :trusted_dependencies;
-                    }
-                }
-
-                summary.patched_dependencies_changed = patched_dependencies_changed: {
-                    if (from_lockfile.patched_dependencies.entries.len != to_lockfile.patched_dependencies.entries.len) break :patched_dependencies_changed true;
-                    let iter = to_lockfile.patched_dependencies.iterator();
-                    while (entry := iter.next()) {
-                        if (val := from_lockfile.patched_dependencies.get(entry.key_ptr.*)) {
-                            if (!std.mem.eql(
-                                u8,
-                                val.path.slice(from_lockfile.buffers.string_bytes.items),
-                                entry.value_ptr.path.slice(to_lockfile.buffers.string_bytes.items),
-                            )) break :patched_dependencies_changed true;
-                        } else break :patched_dependencies_changed true;
-                    }
-                    iter = from_lockfile.patched_dependencies.iterator();
-                    while (entry := iter.next()) {
-                        if (!to_lockfile.patched_dependencies.contains(entry.key_ptr.*)) break :patched_dependencies_changed true;
-                    }
-                    break :patched_dependencies_changed false;
-                };
-
-                let i: usize = 0;
-                for (*from_dep of from_deps) {
-                    defer i += 1;
-                    found: {
-                        const prev_i = to_i;
-
-                        // common case, dependency is present in both versions:
-                        // - in the same position
-                        // - shifted by a constant offset
-                        while (to_i < to_deps.len) {
-                            if (from_dep.name_hash == to_deps[to_i].name_hash) {
-                                const from_behavior = from_dep.behavior;
-                                const to_behavior = to_deps[to_i].behavior;
-
-                                if (from_behavior != to_behavior) {
-                                    to_i += 1;
-                                    continue;
-                                }
-
-                                break :found;
-                            }
-                            to_i += 1;
-                        }
-
-                        // less common, o(n^2) case
-                        to_i = 0;
-                        while (to_i < prev_i) {
-                            if (from_dep.name_hash == to_deps[to_i].name_hash) {
-                                const from_behavior = from_dep.behavior;
-                                const to_behavior = to_deps[to_i].behavior;
-
-                                if (from_behavior != to_behavior) {
-                                    to_i += 1;
-                                    continue;
-                                }
-
-                                break :found;
-                            }
-                            to_i += 1;
-                        }
-
-                        // We found a removed dependency!
-                        // We don't need to remove it
-                        // It will be cleaned up later
-                        summary.remove += 1;
-                        continue;
-                    }
-                    defer to_i += 1;
-
-                    if (to_deps[to_i].eql(&from_dep, to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
-                        if (updates := update_requests) {
-                            if (updates.len == 0 || brk: {
-                                for (request of updates) {
-                                    if (from_dep.name_hash == request.name_hash) break :brk true;
-                                }
-                                break :brk false;
-                            }) {
-                                // Listed as to be updated
-                                summary.update += 1;
-                                continue;
-                            }
-                        }
-
-                        if (mapping := id_mapping) {
-                            const update_mapping = update_mapping: {
-                                if (!is_root || !from_dep.behavior.isWorkspace()) {
-                                    break :update_mapping true;
-                                }
-
-                                const workspace_path_opt = to_lockfile.workspace_paths.getPtr(from_dep.name_hash);
-                                if (workspace_path_opt == null) {
-                                    break :update_mapping false;
-                                }
-                                const workspace_path = workspace_path_opt.?;
-
-                                let package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-                                const package_json_path_guard = DeinitGuard<@TypeOf(package_json_path)>{ ptr: &package_json_path };
-
-                                package_json_path.append(workspace_path.slice(to_lockfile.buffers.string_bytes.items));
-                                package_json_path.append("package.json");
-
-                                let source_file: bun.logger.Source = undefined;
-                                if (src_opt := bun.sys.File.toSource(package_json_path.sliceZ(), allocator, {}).unwrap() catch null) {
-                                    source_file = src_opt;
-                                } else {
-                                    break :update_mapping false;
-                                }
-                                const source = &source_file;
-
-                                let workspace_pkg: PackageType = {};
-
-                                let json_root: bun.ast.Expr = undefined;
-                                if (json_opt := pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, {}).unwrap() catch null) {
-                                    json_root = json_opt.root;
-                                } else {
-                                    break :update_mapping false;
-                                }
-
-                                let resolver: void = undefined;
-                                workspace_pkg.parseWithJSON(
-                                    to_lockfile,
-                                    pm,
-                                    allocator,
-                                    log,
-                                    source,
-                                    json_root,
-                                    void,
-                                    &resolver,
-                                    Features.workspace,
-                                )?;
-
-                                to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
-
-                                let from_pkg = from_lockfile.packages.get(from_resolutions[i]);
-                                const diff = generate(
-                                    pm,
-                                    allocator,
-                                    log,
-                                    from_lockfile,
-                                    to_lockfile,
-                                    &from_pkg,
-                                    &workspace_pkg,
-                                    update_requests,
-                                    null,
-                                )?;
-
-                                if (pm.options.log_level.isVerbose() && (diff.add + diff.remove + diff.update) > 0) {
-                                    Output.prettyErrorln("Workspace package \"{s}\" has added <green>{d}<r> dependencies, removed <red>{d}<r> dependencies, and updated <cyan>{d}<r> dependencies", .{
-                                        workspace_path.slice(to_lockfile.buffers.string_bytes.items),
-                                        diff.add,
-                                        diff.remove,
-                                        diff.update,
-                                    });
-                                }
-
-                                break :update_mapping !diff.hasDiffs();
-                            };
-
-                            if (update_mapping) {
-                                mapping[to_i] = @truncate(i);
-                                continue;
-                            }
-                        } else {
-                            continue;
-                        }
-                    }
-
-                    // We found a changed dependency!
-                    summary.update += 1;
-                }
-
-                // Use saturating arithmetic here because a migrated
-                // package-lock.json could be out of sync with the package.json, so the
-                // number of from_deps could be greater than to_deps.
-                summary.add = @truncate((to_deps.len) -| (from_deps.len -| summary.remove));
-
-                if (from_package.resolution.tag != .root) {
-                    inline for (Lockfile.Scripts.names) |hook| {
-                        if (!@field(to.scripts, hook).eql(
-                            @field(from_package.scripts, hook),
-                            to_lockfile.buffers.string_bytes.items,
-                            from_lockfile.buffers.string_bytes.items,
-                        )) {
-                            // We found a changed life-cycle script
-                            summary.update += 1;
-                        }
-                    }
-                }
-
-                return summary;
-            }
-        };
-
-        pub fn hash(name: string, version: Semver.Version): u64 {
+        pub static fn hash(name: string, version: Semver.Version): u64 {
             let hasher = bun.Wyhash.init(0);
             hasher.update(name);
             hasher.update(std.mem.asBytes(&version));
             return hasher.final();
         }
 
-        pub fn parse(
+        pub static fn parse(
             package: *@This(),
             lockfile: *Lockfile,
             pm: *PackageManager,
@@ -1232,7 +1265,7 @@ pub fn Package(comptime SemverIntType: type): type {
             comptime features: Features,
         )! {
             initializeStore();
-            const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch |e| {
+            const json = JSON.parsePackageJSONUTF8(source, log, allocator) catch e => {
                 log.print(Output.errorWriter()) catch {};
                 Output.prettyErrorln("<r><red>{s}<r> parsing package.json in <b>\"{s}\"<r>", .{ @errorName(e), source.path.prettyDir() });
                 Global.crash();
@@ -1251,7 +1284,7 @@ pub fn Package(comptime SemverIntType: type): type {
             )?;
         }
 
-        fn parseDependency(
+        static fn parseDependency(
             lockfile: *Lockfile,
             pm: *PackageManager,
             allocator: Allocator,
@@ -1314,14 +1347,14 @@ pub fn Package(comptime SemverIntType: type): type {
                     if (trimmed.len != 1 || (trimmed[0] != '*' && trimmed[0] != '^' && trimmed[0] != '~')) {
                         const at = strings.lastIndexOfChar(input, '@') ?? 0;
                         if (at > 0) {
-                            workspace_range = Semver.Query.parse(allocator, input[at + 1 ..], sliced) catch |e| {
+                            workspace_range = Semver.Query.parse(allocator, input[at + 1 ..], sliced) catch e => {
                                 switch (e) {
                                     error.OutOfMemory => bun.outOfMemory(),
                                 }
                             };
                             break :brk String.Builder.stringHash(input[0..at]);
                         }
-                        workspace_range = Semver.Query.parse(allocator, input, sliced) catch |e| {
+                        workspace_range = Semver.Query.parse(allocator, input, sliced) catch e => {
                             switch (e) {
                                 error.OutOfMemory => bun.outOfMemory(),
                             }
@@ -1364,7 +1397,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     if (workspace_version != null) {
                         if (pm.options.link_workspace_packages && npm.version.satisfies(workspace_version.?, buf, buf)) {
                             const path = workspace_path.?.sliced(buf);
-                            if (Dependency.parseWithTag(
+                            if (dep := Dependency.parseWithTag(
                                 allocator,
                                 external_alias.value,
                                 external_alias.hash,
@@ -1373,7 +1406,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                 &path,
                                 log,
                                 pm,
-                            )) |dep| {
+                            )) {
                                 dependency_version.tag = dep.tag;
                                 dependency_version.value = dep.value;
                             }
@@ -1539,7 +1572,7 @@ pub fn Package(comptime SemverIntType: type): type {
             return this_dep;
         }
 
-        pub fn parseWithJSON(
+        pub static fn parseWithJSON(
             package: *@This(),
             lockfile: *Lockfile,
             pm: *PackageManager,
@@ -1719,7 +1752,7 @@ pub fn Package(comptime SemverIntType: type): type {
             }
         }
 
-        inline for (dependency_groups) |group| {
+        inline for (group of dependency_groups) {
                 if (dependencies_q := json.asProperty(group.prop)) brk: {
                     switch (dependencies_q.expr.data) {
                         .e_array => |arr| {
@@ -2035,7 +2068,7 @@ pub fn Package(comptime SemverIntType: type): type {
 
             total_dependencies_count = 0;
 
-            inline for (dependency_groups) |group| {
+            inline for (group of dependency_groups) {
                 if (group.behavior.isWorkspace()) {
                     let seen_workspace_names = TrustedDependenciesSet{};
                     const seen_ws_guard = DeinitWithAllocGuard<TrustedDependenciesSet>{ ptr: &seen_workspace_names, alloc: allocator };
@@ -2118,7 +2151,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             break :brk null;
                         };
 
-                        if (parseDependency(
+                        if (_dep := parseDependency(
                             lockfile,
                             pm,
                             allocator,
@@ -2135,7 +2168,7 @@ pub fn Package(comptime SemverIntType: type): type {
                             path,
                             logger.Loc.Empty,
                             logger.Loc.Empty,
-                        )?) |_dep| {
+                        )?) {
                             let dep = _dep;
                             if (group.behavior.isPeer() && optional_peer_dependencies.swapRemove(external_name.hash)) {
                                 dep.behavior = dep.behavior.add(.optional);
@@ -2160,7 +2193,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                     const external_name = string_builder.append(ExternalString, key.asString(allocator).?);
                                     const version = value.asString(allocator) ?? "";
 
-                                    if (parseDependency(
+                                    if (_dep := parseDependency(
                                         lockfile,
                                         pm,
                                         allocator,
@@ -2177,7 +2210,7 @@ pub fn Package(comptime SemverIntType: type): type {
                                         version,
                                         key.loc,
                                         value.loc,
-                                    )?) |_dep| {
+                                    )?) {
                                         let dep = _dep;
                                         // swapRemove (not contains): drain names that
                                         // have a real `peerDependencies` entry so the
@@ -2212,7 +2245,7 @@ pub fn Package(comptime SemverIntType: type): type {
             let meta_only = optional_peer_dependencies.iterator();
             while (entry := meta_only.next()) {
                 const external_name = string_builder.append(ExternalString, entry.value_ptr.*);
-                if (parseDependency(
+                if (_dep := parseDependency(
                     lockfile,
                     pm,
                     allocator,
@@ -2229,7 +2262,7 @@ pub fn Package(comptime SemverIntType: type): type {
                     "*",
                     logger.Loc.Empty,
                     logger.Loc.Empty,
-                )?) |_dep| {
+                )?) {
                     let dep = _dep;
                     dep.behavior.optional = true;
                     package_dependencies[total_dependencies_count] = dep;
@@ -2368,6 +2401,8 @@ const Features = install.Features;
 const Npm = install.Npm;
 const PackageID = bun.install.PackageID;
 const PackageManager = install.PackageManager;
+type UpdateRequestsSliceOpt = ([]PackageManager.UpdateRequest)?;
+type PackageIDSliceOpt = ([]PackageID)?;
 const PackageNameHash = install.PackageNameHash;
 const Repository = install.Repository;
 const TruncatedPackageNameHash = install.TruncatedPackageNameHash;

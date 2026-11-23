@@ -434,34 +434,34 @@ const _OrderedArraySet = OrderedArraySet;
 
 pub fn NewId(comptime T: type) type {
         return enum(u32) {
-        comptime {
-            _ = T;
-        }
+    root = 0,
+    invalid = max,
+    _,
 
-        root = 0,
-        invalid = max,
-        _,
-
-        const max = std.math.maxInt(u32);
-
-        pub fn from(id: u32) @This() {
-            bun.debugAssert(id != max);
+pub fn from(id: u32) @This() {
+            _ = bun.debugAssert((id != max));
             return @enumFromInt(id);
-        }
+    }
 
-        pub fn get(id: @This()) u32 {
-            bun.debugAssert(id != .invalid);
+pub fn get(id: @This()) u32 {
+            _ = bun.debugAssert((id != .invalid));
             return @intFromEnum(id);
-        }
+    }
 
-        pub fn tryGet(id: @This()) ?u32 {
-            return if (id == .invalid) null else @intFromEnum(id);
-        }
+pub fn tryGet(id: @This()) ?u32 {
+            return (if ((id == .invalid)) null else @intFromEnum(id));
+    }
 
-        pub fn getOr(id: @This(), default: u32) u32 {
-            return if (id == .invalid) default else @intFromEnum(id);
-        }
-    };
+pub fn getOr(id: @This(), default: u32) u32 {
+            return (if ((id == .invalid)) default else @intFromEnum(id));
+    }
+    
+    comptime {
+                if (T == void) {}
+            }
+    
+    pub const max = std.math.maxInt(u32);
+};
 }
 
 pub fn OrderedArraySet(comptime T: type, comptime Ctx: type) type {
@@ -481,7 +481,7 @@ pub fn slice(self: *const @This()) []const T {
             return self.list.items;
     }
 
-pub fn len(self: *const @This()) usize {
+pub fn len(self: @This()) usize {
             return self.list.items.len;
     }
 
@@ -489,49 +489,60 @@ pub fn eql(l: *const @This(), r: *const @This(), ctx: *const Ctx) bool {
             if ((l.list.items.len != r.list.items.len)) {
                 return false;
             }
-            for (l.list.items, r.list.items) |l_item, r_item| {
-                _ = &l_item;
-                _ = &r_item;
-                if ((!ctx.eql(l_item, r_item))) {
-                    return false;
+            {
+                var i: i32 = 0;
+                _ = &i;
+                const __end_0 = l.list.items.len;
+                while (i < __end_0) : (i += 1) {
+                    if ((!ctx.eql(l.list.items[@as(usize, @intCast(i))], r.list.items[@as(usize, @intCast(i))]))) {
+                        return false;
+                    }
                 }
             }
             return true;
     }
 
 pub fn insert(self: *@This(), allocator: std.mem.Allocator, new: T, ctx: *const Ctx) OOM!void {
-            for (0..self.list.items.len) |i| {
+            {
+                var i: i32 = 0;
                 _ = &i;
-                const existing = self.list.items[@as(usize, @intCast(i))];
-                if (ctx.eql(new, existing)) {
-                    return;
-                }
-                const order = ctx.order(new, existing);
-                if ((order == .eq)) {
-                    return;
-                }
-                if ((order == .lt)) {
-                    _ = try self.list.insert(allocator, i, new);
-                    return;
+                const __end_1 = self.list.items.len;
+                while (i < __end_1) : (i += 1) {
+                    const existing = self.list.items[@as(usize, @intCast(i))];
+                    if (ctx.eql(new, existing)) {
+                        return;
+                    }
+                    const order = ctx.order(new, existing);
+                    if ((order == .eq)) {
+                        return;
+                    }
+                    if ((order == .lt)) {
+                        _ = try self.list.insert(allocator, i, new);
+                        return;
+                    }
                 }
             }
             _ = try self.list.append(allocator, new);
     }
 
 pub fn insertAssumeCapacity(self: *@This(), new: T, ctx: *const Ctx) void {
-            for (0..self.list.items.len) |i| {
+            {
+                var i: i32 = 0;
                 _ = &i;
-                const existing = self.list.items[@as(usize, @intCast(i))];
-                if (ctx.eql(new, existing)) {
-                    return;
-                }
-                const order = ctx.order(new, existing);
-                if ((order == .eq)) {
-                    return;
-                }
-                if ((order == .lt)) {
-                    _ = self.list.insertAssumeCapacity(i, new);
-                    return;
+                const __end_2 = self.list.items.len;
+                while (i < __end_2) : (i += 1) {
+                    const existing = self.list.items[@as(usize, @intCast(i))];
+                    if (ctx.eql(new, existing)) {
+                        return;
+                    }
+                    const order = ctx.order(new, existing);
+                    if ((order == .eq)) {
+                        return;
+                    }
+                    if ((order == .lt)) {
+                        _ = self.list.insertAssumeCapacity(i, new);
+                        return;
+                    }
                 }
             }
             _ = self.list.appendAssumeCapacity(new);

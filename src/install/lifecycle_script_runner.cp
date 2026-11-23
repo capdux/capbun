@@ -1,6 +1,7 @@
 const log = Output.scoped(.Script, .visible);
 const ConstEnvStr = @TypeOf(@as([:0]const u8, "").ptr);
 type OptionalEnvStr = ConstEnvStr?;
+struct PackageManagerPtrHolder { p: *PackageManager }
 
 pub struct TopInstallCtx {
     entry_id: Store.Entry.Id,
@@ -59,7 +60,7 @@ pub struct LifecycleScriptSubprocess {
 
     pub const InstallCtx = TopInstallCtx;
 
-    pub const List = bun.io.heap.Intrusive(LifecycleScriptSubprocess, *PackageManager, sortByStartedAt);
+    pub const List = bun.io.heap.Intrusive(LifecycleScriptSubprocess, @TypeOf(@as(PackageManagerPtrHolder, undefined).p), sortByStartedAt);
 
     static fn sortByStartedAt(_: *PackageManager, a: *LifecycleScriptSubprocess, b: *LifecycleScriptSubprocess): bool {
         return a.started_at < b.started_at;
@@ -429,7 +430,7 @@ pub struct LifecycleScriptSubprocess {
                 for (new_script_index of _.current_script_index + 1..Lockfile.Scripts.names.len) {
                     if (_.scripts.items[new_script_index] != null) {
                         _.resetPolls();
-                        _.spawnNextScript(@intCast(new_script_index)) catch |e| {
+                        _.spawnNextScript(@intCast(new_script_index)) catch e => {
                             const s_name: []const u8 = Lockfile.Scripts.names[new_script_index];
                             const e_name: []const u8 = @errorName(e);
                             const err_args = .{ s_name, e_name };
@@ -585,7 +586,7 @@ pub struct LifecycleScriptSubprocess {
 
         lifecycle_subprocess.incrementPendingScriptTasks();
 
-        lifecycle_subprocess.spawnNextScript(list.first_index) catch |e| {
+        lifecycle_subprocess.spawnNextScript(list.first_index) catch e => {
             Output.prettyErrorln("<r><red>error<r>: Failed to run script <b>{s}<r> due to error <b>{s}<r>", .{
                 Lockfile.Scripts.names[list.first_index],
                 @errorName(e),

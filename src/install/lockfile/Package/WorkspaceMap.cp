@@ -224,7 +224,7 @@ pub fn processNamesArray(
             json_cache,
             abs_package_json_path,
             log,
-        ) catch |e| {
+        ) catch e => {
             bun.handleErrorReturnTrace(e, @errorReturnTrace());
             switch (e) {
                 error.EISNOTDIR, error.EISDIR, error.EACCESS, error.EPERM, error.ENOENT, error.FileNotFound => {
@@ -378,7 +378,7 @@ pub fn processNamesArray(
                     json_cache,
                     abs_package_json_path,
                     log,
-                ) catch |e| {
+                ) catch e => {
                     bun.handleErrorReturnTrace(e, @errorReturnTrace());
 
                     const entry_base: []const u8 = Path.basename(matched_path);

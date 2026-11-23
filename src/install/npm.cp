@@ -178,7 +178,7 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
         .follow,
     );
 
-    const res = req.sendSync() catch |e| {
+    const res = req.sendSync() catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
         Output.err(e, "whoami request failed to send", {});
         Global.crash();
@@ -204,7 +204,7 @@ pub fn whoami(allocator: std.mem.Allocator, manager: *PackageManager): WhoamiErr
 
     let log = logger.Log.init(allocator);
     const source = &logger.Source.initPathString("???", response_buf.list.items);
-    const json = BunJSON.parseUTF8(source, &log, allocator) catch |e| {
+    const json = BunJSON.parseUTF8(source, &log, allocator) catch e => {
         if (e == error.OutOfMemory) return error.OutOfMemory;
         Output.err(e, "failed to parse '/-/whoami' response body as JSON", {});
         Global.crash();
@@ -1104,7 +1104,7 @@ pub struct SerializerSaveTask {
         const save_task: *@This() = @fieldParentPtr("task", task);
         const _guard_save_task = DestroyGuard<@TypeOf(save_task)>{ ptr: save_task };
 
-        PackageManifestSerializer.save(&save_task.manifest, save_task.scope, save_task.tmpdir, save_task.cache_dir) catch |e| {
+        PackageManifestSerializer.save(&save_task.manifest, save_task.scope, save_task.tmpdir, save_task.cache_dir) catch e => {
             if (PackageManager.verbose_install) {
                 Output.warn("Error caching manifest for {s}: {s}", .{ save_task.manifest.name(), @errorName(e) });
                 Output.flush();

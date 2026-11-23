@@ -1486,7 +1486,7 @@ fn updatePackageJsonAfterMigration(allocator: Allocator, manager: *PackageManage
             const yaml_source = logger.Source.initPathString("pnpm-workspace.yaml", contents);
             let root_expr: Expr = undefined;
             let root_ok = true;
-            root_expr = YAML.parse(&yaml_source, log, allocator) catch |e| {
+            root_expr = YAML.parse(&yaml_source, log, allocator) catch e => {
                 root_ok = false;
                 undefined
             };

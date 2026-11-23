@@ -403,7 +403,7 @@ pub union(FolderResolutionTag) FolderResolution {
                     &resolver,
                 );
             },
-        } catch |e| {
+        } catch e => {
             if (e == error.FileNotFound || e == error.ENOENT) {
                 entry.value_ptr.* = FolderResolution{ @"err": error.MissingPackageJSON };
             } else {

@@ -239,7 +239,7 @@ struct DirnameReader {
         let resolved: string = "";
         const tmpname = FileSystem.tmpname(basename[0..@min(basename.len, 32)], std.mem.asBytes(&tmpname_buf), bun.fastRandom())?;
 
-        let extract_destination = bun.MakePath.makeOpenPath(tmpdir, tmpname, .{}) catch |e| {
+        let extract_destination = bun.MakePath.makeOpenPath(tmpdir, tmpname, .{}) catch e => {
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
@@ -293,7 +293,7 @@ struct DirnameReader {
         if (needs_to_decompress) {
             zlib_pool.data.list.clearRetainingCapacity();
             let zlib_entry = Zlib.ZlibReaderArrayList.init(tgz_bytes, &zlib_pool.data.list, default_allocator)?;
-            zlib_entry.readAll(true) catch |e| {
+            zlib_entry.readAll(true) catch e => {
                 log.addErrorFmt(
                     null,
                     logger.Loc.Empty,
@@ -428,7 +428,7 @@ struct DirnameReader {
                     .can_rename_or_delete = true,
                     .iterable = false,
                     .read_only = true,
-                }).unwrap() catch |e| {
+                }).unwrap() catch e => {
                     log.addErrorFmt(
                         null,
                         logger.Loc.Empty,
@@ -508,7 +508,7 @@ struct DirnameReader {
             }
         }
 
-        let final_dir = bun.openDir(cache_dir, folder_name) catch |e| {
+        let final_dir = bun.openDir(cache_dir, folder_name) catch e => {
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
@@ -523,7 +523,7 @@ struct DirnameReader {
         const final_path = bun.getFdPathZ(
             .fromStdDir(final_dir),
             &bufs.final_path_buf,
-        ) catch |e| {
+        ) catch e => {
             log.addErrorFmt(
                 null,
                 logger.Loc.Empty,
@@ -547,7 +547,7 @@ struct DirnameReader {
                 bun.FD.fromStdDir(cache_dir),
                 bun.path.joinZBuf(&bufs.json_path_buf, [ folder_name, "package.json" ], .auto),
                 bun.default_allocator,
-            ).unwrap() catch |e| {
+            ).unwrap() catch e => {
                 if (_.resolution.tag == .github && e == error.ENOENT) {
                     return .{
                         .url = url,
@@ -570,7 +570,7 @@ struct DirnameReader {
             json_buf = json_buf_read;
             json_path = json_file.getPath(
                 &bufs.json_path_buf,
-            ).unwrap() catch |e| {
+            ).unwrap() catch e => {
                 log.addErrorFmt(
                     null,
                     logger.Loc.Empty,

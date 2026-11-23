@@ -255,7 +255,7 @@ noinline fn failAndExitWithReason(reason: FailReason): noreturn {
             .ProcessEnvironmentBlock
             .ProcessParameters
             .hStdError,
-    }) catch |e| {
+    }) catch e => {
         if (builtin.mode == .Debug) {
             std.debug.panic("Failed to write to stderr: {s}", .{@errorName(e)});
         }

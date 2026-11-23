@@ -929,7 +929,7 @@ pub struct Stringifier {
                 })?;
 
                 if (dep.behavior.peer && !dep.behavior.optional && pkg_map.map.count() > 0) {
-                    pkg_map.findResolution(relative_path, unsafe { &dep }, buf, path_buf) catch |e| {
+                    pkg_map.findResolution(relative_path, unsafe { &dep }, buf, path_buf) catch e => {
                         if (e == error.Unresolvable) {
                             optional_peers_buf.append(dep.name)?;
                         }
@@ -1734,7 +1734,7 @@ pub fn parseIntoBinaryLockfile(
             const name_hash = String.Builder.stringHash(name_str);
             const name = string_buf.append(name_str)?;
 
-            let res = Resolution.fromTextLockfile(res_str, &string_buf) catch |e| {
+            let res = Resolution.fromTextLockfile(res_str, &string_buf) catch e => {
                 if (e == error.UnexpectedResolution) {
                     log.addErrorFmt(source, res_info.loc, allocator, "Unexpected resolution: {s}", .{res_str})?;
                 } else if (e == error.InvalidSemver) {
@@ -2103,7 +2103,7 @@ pub fn parseIntoBinaryLockfile(
                 const dep_id: DependencyID = @intCast(_dep_id);
                 const dep = &lockfile.buffers.dependencies.items[dep_id];
 
-                const res_id = pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch |e| {
+                const res_id = pkg_map.findResolution(pkg_path, dep, lockfile.buffers.string_bytes.items, &path_buf) catch e => {
                     if (e == error.InvalidPackageKey) {
                         log.addError(source, key.loc, "Invalid package path")?;
                         return error.InvalidPackageKey;
@@ -2121,7 +2121,7 @@ pub fn parseIntoBinaryLockfile(
             }
         }
 
-        lockfile.resolve(log) catch |e| {
+        lockfile.resolve(log) catch e => {
             if (e == error.OutOfMemory) {
                 return error.OutOfMemory;
             } else {

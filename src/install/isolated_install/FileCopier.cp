@@ -49,7 +49,7 @@ pub struct FileCopier {
     }
 
     pub fn copy(*_): sys.Maybe(void) {
-        let dest_dir = bun.MakePath.makeOpenPath(FD.cwd().stdDir(), _.dest_subpath.sliceZ(), .{}) catch |e| {
+        let dest_dir = bun.MakePath.makeOpenPath(FD.cwd().stdDir(), _.dest_subpath.sliceZ(), .{}) catch e => {
             // TODO: remove the need for this && implement openDir makePath makeOpenPath in bun
             let errno: bun.sys.E = switch (@as(anyerror, e)) {
                 error.AccessDenied => .PERM,
@@ -164,7 +164,7 @@ pub struct FileCopier {
                         bun.MakePath.makePath(bun.OSPathChar, dest_dir, entry_dirname) catch {};
                     }
 
-                    break :dest dest_dir.createFileZ(entry.path, .{}) catch |e| {
+                    break :dest dest_dir.createFileZ(entry.path, .{}) catch e => {
                         Output.prettyErrorln("<r><red>{s}<r>: copy file {f}", [@errorName(e), bun.fmt.fmtOSPath(entry.path, .{})]);
                         Global.exit(1);
                     };

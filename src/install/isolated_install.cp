@@ -1341,12 +1341,12 @@ pub fn installIsolatedPackages(
                 }
 
                 // 2
-                sys.mkdirat(FD.cwd(), node_modules_path, 0o755).unwrap() catch |e| {
+                sys.mkdirat(FD.cwd(), node_modules_path, 0o755).unwrap() catch e => {
                     Output.err(e, "failed to create './node_modules'", {});
                     Global.exit(1);
                 };
 
-                sys.mkdirat(FD.cwd(), bun_modules_path, 0o755).unwrap() catch |e| {
+                sys.mkdirat(FD.cwd(), bun_modules_path, 0o755).unwrap() catch e => {
                     Output.err(e, "failed to create './node_modules/.bun'", {});
                     Global.exit(1);
                 };
@@ -1394,7 +1394,7 @@ pub fn installIsolatedPackages(
             break :is_new_bun_modules true;
         }
 
-        sys.mkdirat(FD.cwd(), bun_modules_path, 0o755).unwrap() catch |e| {
+        sys.mkdirat(FD.cwd(), bun_modules_path, 0o755).unwrap() catch e => {
             Output.err(e, "failed to create './node_modules/.bun'", {});
             Global.exit(1);
         };
@@ -1714,7 +1714,7 @@ pub fn installIsolatedPackages(
                                 pkg_res.value.npm.url.slice(string_buf),
                                 ctx,
                                 patch_info.nameAndVersionHash(),
-                            ) catch |e| {
+                            ) catch e => {
                                 if (e == error.OutOfMemory) {
                                     return error.OutOfMemory;
                                 } else if (e == error.InvalidURL) {
@@ -1752,7 +1752,7 @@ pub fn installIsolatedPackages(
                                 url,
                                 ctx,
                                 patch_info.nameAndVersionHash(),
-                            ) catch |e| {
+                            ) catch e => {
                                 if (e == error.OutOfMemory) {
                                     bun.outOfMemory();
                                 } else if (e == error.InvalidURL) {
@@ -1788,7 +1788,7 @@ pub fn installIsolatedPackages(
                                 pkg_res.value.remote_tarball.slice(string_buf),
                                 ctx,
                                 patch_info.nameAndVersionHash(),
-                            ) catch |e| {
+                            ) catch e => {
                                 if (e == error.OutOfMemory) {
                                     bun.outOfMemory();
                                 } else if (e == error.InvalidURL) {
@@ -1941,7 +1941,7 @@ pub struct IsolatedWait_ {
             },
             true,
             pkg_manager.options.log_level,
-        ) catch |e| {
+        ) catch e => {
             _.err_val = e;
             return true;
         };

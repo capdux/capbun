@@ -354,7 +354,361 @@ pub fn loadFields(stream: *Stream, end_at: u64, comptime ListType: type, list: *
     };
 }
 
+pub fn PackageDiff(comptime PackageType: type) type {
+    return struct {
+
+pub fn generate(pm: *PackageManager, allocator: Allocator, log: *logger.Log, from_lockfile: *Lockfile, to_lockfile: *Lockfile, from_package: *PackageType, to: *PackageType, update_requests: UpdateRequestsSliceOpt, id_mapping: PackageIDSliceOpt) !Summary {
+                var summary = Summary{  };
+                _ = &summary;
+                const is_root = (id_mapping != null);
+                var to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
+                _ = &to_deps;
+                const from_deps = from_package.dependencies.get(from_lockfile.buffers.dependencies.items);
+                const from_resolutions = from_package.resolutions.get(from_lockfile.buffers.resolutions.items);
+                var to_i: usize = 0;
+                _ = &to_i;
+                if ((from_lockfile.overrides.map.count() != to_lockfile.overrides.map.count())) {
+                    summary.overrides_changed = true;
+                    if (PackageManager.verbose_install) {
+                        _ = Output.prettyErrorln("Overrides changed since last install", .{});
+                    }
+                } else {
+                    _ = from_lockfile.overrides.sort(from_lockfile);
+                    _ = to_lockfile.overrides.sort(to_lockfile);
+                    const from_ov_keys = from_lockfile.overrides.map.keys();
+                    const from_ov_vals = from_lockfile.overrides.map.values();
+                    const to_ov_keys = to_lockfile.overrides.map.keys();
+                    const to_ov_vals = to_lockfile.overrides.map.values();
+                    var ov_i: usize = 0;
+                    _ = &ov_i;
+                    while ((ov_i < from_ov_keys.len)) : (ov_i = (ov_i + 1)) {
+                        const from_k = from_ov_keys[@as(usize, @intCast(ov_i))];
+                        const from_override = (&from_ov_vals[@as(usize, @intCast(ov_i))]);
+                        const to_k = to_ov_keys[@as(usize, @intCast(ov_i))];
+                        const to_override = (&to_ov_vals[@as(usize, @intCast(ov_i))]);
+                        if (((from_k != to_k) or (!from_override.eql(to_override, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)))) {
+                            summary.overrides_changed = true;
+                            if (PackageManager.verbose_install) {
+                                _ = Output.prettyErrorln("Overrides changed since last install", .{});
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (is_root) {
+                    _ = catalogs: {
+                    if ((from_lockfile.catalogs.default.count() != to_lockfile.catalogs.default.count())) {
+                        summary.catalogs_changed = true;
+                        break :catalogs;
+                    }
+                    if ((from_lockfile.catalogs.groups.count() != to_lockfile.catalogs.groups.count())) {
+                        summary.catalogs_changed = true;
+                        break :catalogs;
+                    }
+                    _ = from_lockfile.catalogs.sort(from_lockfile);
+                    _ = to_lockfile.catalogs.sort(to_lockfile);
+                    const from_def_keys = from_lockfile.catalogs.default.keys();
+                    const from_def_vals = from_lockfile.catalogs.default.values();
+                    const to_def_keys = to_lockfile.catalogs.default.keys();
+                    const to_def_vals = to_lockfile.catalogs.default.values();
+                    var def_i: usize = 0;
+                    _ = &def_i;
+                    while ((def_i < from_def_keys.len)) : (def_i = (def_i + 1)) {
+                        const from_dep_name = from_def_keys[@as(usize, @intCast(def_i))];
+                        const from_dep = (&from_def_vals[@as(usize, @intCast(def_i))]);
+                        const to_dep_name = to_def_keys[@as(usize, @intCast(def_i))];
+                        const to_dep = (&to_def_vals[@as(usize, @intCast(def_i))]);
+                        if ((!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
+                            summary.catalogs_changed = true;
+                            break :catalogs;
+                        }
+                        if ((!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
+                            summary.catalogs_changed = true;
+                            break :catalogs;
+                        }
+                    }
+                    const from_cat_keys = from_lockfile.catalogs.groups.keys();
+                    const from_cat_vals = from_lockfile.catalogs.groups.values();
+                    const to_cat_keys = to_lockfile.catalogs.groups.keys();
+                    const to_cat_vals = to_lockfile.catalogs.groups.values();
+                    var cat_i: usize = 0;
+                    _ = &cat_i;
+                    while ((cat_i < from_cat_keys.len)) : (cat_i = (cat_i + 1)) {
+                        const from_catalog_name = from_cat_keys[@as(usize, @intCast(cat_i))];
+                        const from_catalog_deps = from_cat_vals[@as(usize, @intCast(cat_i))];
+                        const to_catalog_name = to_cat_keys[@as(usize, @intCast(cat_i))];
+                        const to_catalog_deps = to_cat_vals[@as(usize, @intCast(cat_i))];
+                        if ((!from_catalog_name.eql(to_catalog_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
+                            summary.catalogs_changed = true;
+                            break :catalogs;
+                        }
+                        if ((from_catalog_deps.count() != to_catalog_deps.count())) {
+                            summary.catalogs_changed = true;
+                            break :catalogs;
+                        }
+                        const from_dep_keys = from_catalog_deps.keys();
+                        const from_dep_vals = from_catalog_deps.values();
+                        const to_dep_keys = to_catalog_deps.keys();
+                        const to_dep_vals = to_catalog_deps.values();
+                        var dep_i: usize = 0;
+                        _ = &dep_i;
+                        while ((dep_i < from_dep_keys.len)) : (dep_i = (dep_i + 1)) {
+                            const from_dep_name = from_dep_keys[@as(usize, @intCast(dep_i))];
+                            const from_dep = (&from_dep_vals[@as(usize, @intCast(dep_i))]);
+                            const to_dep_name = to_dep_keys[@as(usize, @intCast(dep_i))];
+                            const to_dep = (&to_dep_vals[@as(usize, @intCast(dep_i))]);
+                            if ((!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
+                                summary.catalogs_changed = true;
+                                break :catalogs;
+                            }
+                            if ((!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
+                                summary.catalogs_changed = true;
+                                break :catalogs;
+                            }
+                        }
+                    }
+};
+                }
+                _ = trusted_dependencies: {
+                if ((from_lockfile.trusted_dependencies == null)) {
+                    if ((to_lockfile.trusted_dependencies == null)) {
+                        break :trusted_dependencies;
+                    }
+                }
+                if ((from_lockfile.trusted_dependencies != null)) {
+                    if ((to_lockfile.trusted_dependencies != null)) {
+                        const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
+                        const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
+                        {
+                            var to_trusted_iter = to_trusted_dependencies.iterator();
+                            _ = &to_trusted_iter;
+                            while (to_trusted_iter.next()) |entry| {
+                                const to_trusted = entry.key_ptr.*;
+                                if ((!from_trusted_dependencies.contains(to_trusted))) {
+                                    _ = try summary.added_trusted_dependencies.put(allocator, to_trusted, true);
+                                }
+                            }
+                        }
+                        {
+                            var from_trusted_iter = from_trusted_dependencies.iterator();
+                            _ = &from_trusted_iter;
+                            while (from_trusted_iter.next()) |entry| {
+                                const from_trusted = entry.key_ptr.*;
+                                if ((!to_trusted_dependencies.contains(from_trusted))) {
+                                    const void_val: void = undefined;
+                                    _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val);
+                                }
+                            }
+                        }
+                        break :trusted_dependencies;
+                    }
+                }
+                if ((from_lockfile.trusted_dependencies != null)) {
+                    if ((to_lockfile.trusted_dependencies == null)) {
+                        const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
+                        {
+                            for (cp_iter_slice(default_trusted_dependencies.entries)) |entry| {
+                                _ = &entry;
+                                if ((!from_trusted_dependencies.contains(@truncate(entry.hash)))) {
+                                    _ = try summary.added_trusted_dependencies.put(allocator, @truncate(entry.hash), false);
+                                }
+                            }
+                        }
+                        {
+                            var from_trusted_iter = from_trusted_dependencies.iterator();
+                            _ = &from_trusted_iter;
+                            while (from_trusted_iter.next()) |entry| {
+                                const from_trusted = entry.key_ptr.*;
+                                if ((!default_trusted_dependencies.hasWithHash(@intCast(from_trusted)))) {
+                                    const void_val: void = undefined;
+                                    _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val);
+                                }
+                            }
+                        }
+                        break :trusted_dependencies;
+                    }
+                }
+                if ((from_lockfile.trusted_dependencies == null)) {
+                    if ((to_lockfile.trusted_dependencies != null)) {
+                        const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
+                        {
+                            var to_trusted_iter = to_trusted_dependencies.iterator();
+                            _ = &to_trusted_iter;
+                            while (to_trusted_iter.next()) |entry| {
+                                const to_trusted = entry.key_ptr.*;
+                                _ = try summary.added_trusted_dependencies.put(allocator, to_trusted, true);
+                            }
+                        }
+                        break :trusted_dependencies;
+                    }
+                }
+};
+                summary.patched_dependencies_changed = patched_dependencies_changed: {
+                if ((from_lockfile.patched_dependencies.entries.len != to_lockfile.patched_dependencies.entries.len)) {
+                    break :patched_dependencies_changed true;
+                }
+                var iter = to_lockfile.patched_dependencies.iterator();
+                _ = &iter;
+                while (iter.next()) |entry| {
+                    if (from_lockfile.patched_dependencies.get(entry.key_ptr.*)) |val| {
+                        _ = &val;
+                        if ((!std.mem.eql(u8, val.path.slice(from_lockfile.buffers.string_bytes.items), entry.value_ptr.path.slice(to_lockfile.buffers.string_bytes.items)))) {
+                            break :patched_dependencies_changed true;
+                        }
+                    } else {
+                        break :patched_dependencies_changed true;
+                    }
+                }
+                iter = from_lockfile.patched_dependencies.iterator();
+                while (iter.next()) |entry| {
+                    if ((!to_lockfile.patched_dependencies.contains(entry.key_ptr.*))) {
+                        break :patched_dependencies_changed true;
+                    }
+                }
+                break :patched_dependencies_changed false;
+};
+                var i: usize = 0;
+                _ = &i;
+                for (cp_mut_slice(&from_deps)) |*from_dep| {
+                    _ = &from_dep;
+                    defer {
+                    i = (i + 1);
+                    }
+                    _ = found: {
+                    const prev_i = to_i;
+                    while ((to_i < to_deps.len)) {
+                        if (((from_dep.*).name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
+                            const from_behavior = (from_dep.*).behavior;
+                            const to_behavior = to_deps[@as(usize, @intCast(to_i))].behavior;
+                            if ((from_behavior != to_behavior)) {
+                                to_i = (to_i + 1);
+                                continue;
+                            }
+                            break :found;
+                        }
+                        to_i = (to_i + 1);
+                    }
+                    to_i = 0;
+                    while ((to_i < prev_i)) {
+                        if (((from_dep.*).name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
+                            const from_behavior = (from_dep.*).behavior;
+                            const to_behavior = to_deps[@as(usize, @intCast(to_i))].behavior;
+                            if ((from_behavior != to_behavior)) {
+                                to_i = (to_i + 1);
+                                continue;
+                            }
+                            break :found;
+                        }
+                        to_i = (to_i + 1);
+                    }
+                    summary.remove = (summary.remove + 1);
+                    continue;
+};
+                    defer {
+                    to_i = (to_i + 1);
+                    }
+                    if (to_deps[@as(usize, @intCast(to_i))].eql((&(from_dep.*)), to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
+                        if (update_requests) |updates| {
+                            _ = &updates;
+                            const should_update = (if ((updates.len == 0)) true else brk: {
+                            for (cp_iter_slice(updates)) |request| {
+                                _ = &request;
+                                if (((from_dep.*).name_hash == request.name_hash)) {
+                                    break :brk true;
+                                }
+                            }
+                            break :brk false;
+});
+                            if (should_update) {
+                                summary.update = (summary.update + 1);
+                                continue;
+                            }
+                        }
+                        if (id_mapping) |mapping_val| {
+                            _ = &mapping_val;
+                            var mapping = mapping_val;
+                            _ = &mapping;
+                            const update_mapping = update_mapping: {
+                            if ((!is_root)) {
+                                break :update_mapping true;
+                            }
+                            if ((!(from_dep.*).behavior.isWorkspace())) {
+                                break :update_mapping true;
+                            }
+                            const workspace_path_opt = to_lockfile.workspace_paths.getPtr((from_dep.*).name_hash);
+                            if ((workspace_path_opt == null)) {
+                                break :update_mapping false;
+                            }
+                            const workspace_path = workspace_path_opt.?;
+                            var package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
+                            _ = &package_json_path;
+                            var package_json_path_guard = DeinitGuard(@TypeOf(package_json_path)){ .ptr = (&package_json_path) };
+                            _ = &package_json_path_guard;
+                            var __package_json_path_guard_moved = false; _ = &__package_json_path_guard_moved;
+                            defer if (!__package_json_path_guard_moved) { __package_json_path_guard_moved = true; const __T = @TypeOf(package_json_path_guard); if (@typeInfo(__T) == .optional) { if (package_json_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { package_json_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = package_json_path_guard; _drop_val.__cp_deinit(); } };
+                            _ = package_json_path.append(workspace_path.slice(to_lockfile.buffers.string_bytes.items));
+                            _ = package_json_path.append("package.json");
+                            var source_file: bun.logger.Source = undefined;
+                            _ = &source_file;
+                            if ((blk_catch_0: { break :blk_catch_0 ((bun.sys.File.toSource(package_json_path.sliceZ(), allocator, .{}).unwrap()) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |src_opt| {
+                                _ = &src_opt;
+                                source_file = src_opt;
+                            } else {
+                                break :update_mapping false;
+                            }
+                            const source = (&source_file);
+                            var workspace_pkg: PackageType = .{};
+                            _ = &workspace_pkg;
+                            var json_root: bun.ast.Expr = undefined;
+                            _ = &json_root;
+                            if ((blk_catch_1: { break :blk_catch_1 ((pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, .{}).unwrap()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |json_opt| {
+                                _ = &json_opt;
+                                json_root = json_opt.root;
+                            } else {
+                                break :update_mapping false;
+                            }
+                            var resolver: void = undefined;
+                            _ = &resolver;
+                            _ = try workspace_pkg.parseWithJSON(to_lockfile, pm, allocator, log, source, json_root, void, (&resolver), Features.workspace);
+                            to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
+                            var from_pkg = from_lockfile.packages.get(from_resolutions[@as(usize, @intCast(i))]);
+                            _ = &from_pkg;
+                            const diff = try generate(pm, allocator, log, from_lockfile, to_lockfile, (&from_pkg), (&workspace_pkg), update_requests, null);
+                            if (pm.options.log_level.isVerbose()) {
+                                if ((((diff.add + diff.remove) + diff.update) > 0)) {
+                                    _ = Output.prettyErrorln("Workspace package \"{s}\" has added <green>{d}<r> dependencies, removed <red>{d}<r> dependencies, and updated <cyan>{d}<r> dependencies", .{ workspace_path.slice(to_lockfile.buffers.string_bytes.items), diff.add, diff.remove, diff.update });
+                                }
+                            }
+                            break :update_mapping (!diff.hasDiffs());
+};
+                            if (update_mapping) {
+                                mapping[cp_cast_int(usize, to_i)] = @truncate(i);
+                                continue;
+                            }
+                        } else {
+                            continue;
+                        }
+                    }
+                    summary.update = (summary.update + 1);
+                }
+                summary.add = @truncate((to_deps.len -| (from_deps.len -| summary.remove)));
+                if ((from_package.resolution.tag != .root)) {
+                    inline for (Lockfile.Scripts.names) |hook| {
+                        if ((!@field(to.scripts, hook).eql(@field(from_package.scripts, hook), to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items))) {
+                            summary.update = (summary.update + 1);
+                        }
+                    }
+                }
+                return summary;
+        }
+        pub const Op = PackageDiffOp;
+        pub const Summary = DiffSummary;
+    };
+}
+
 const string = []const u8;
+const UpdateRequestsSliceOpt = ?[]PackageManager.UpdateRequest;
+const PackageIDSliceOpt = ?[]PackageID;
 const Allocator = std.mem.Allocator;
 const ArrayIdentityContext = bun.ArrayIdentityContext;
 const Environment = bun.Environment;
@@ -607,7 +961,6 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                 _ = string_builder.count(manifest.name());
                 _ = version.count(manifest.string_buf, @TypeOf((&string_builder)), (&string_builder));
                 inline for (dependency_groups) |group| {
-                    _ = &group;
                     const map: ExternalStringMap = @field(package_version, group.field);
                     const keys = (if (@typeInfo(@TypeOf(map)) == .@"enum" or @typeInfo(@TypeOf(map)) == .@"union") @tagName(map) else map.name).get(manifest.external_strings);
                     const version_strings = (if (@typeInfo(@TypeOf(map)) == .@"enum") @intFromEnum(map) else map.value).get(manifest.external_strings_for_versions);
@@ -657,7 +1010,6 @@ pub fn fromNPM(pm: *PackageManager, allocator: Allocator, lockfile: *Lockfile, l
                 _ = @memset(dependencies, .{});
                 total_dependencies_count = 0;
                 inline for (dependency_groups) |group| {
-                    _ = &group;
                     const map: ExternalStringMap = @field(package_version, group.field);
                     const keys = (if (@typeInfo(@TypeOf(map)) == .@"enum" or @typeInfo(@TypeOf(map)) == .@"union") @tagName(map) else map.name).get(manifest.external_strings);
                     const version_strings = (if (@typeInfo(@TypeOf(map)) == .@"enum") @intFromEnum(map) else map.value).get(manifest.external_strings_for_versions);
@@ -1105,7 +1457,6 @@ else => {
                 }
             }
             inline for (dependency_groups) |group| {
-                _ = &group;
                 if (json.asProperty(group.prop)) |dependencies_q| {
                     _ = &dependencies_q;
                     _ = brk: {
@@ -1373,7 +1724,6 @@ else => {
             }
             total_dependencies_count = 0;
             inline for (dependency_groups) |group| {
-                _ = &group;
                 if (group.behavior.isWorkspace()) {
                     var seen_workspace_names = TrustedDependenciesSet{  };
                     _ = &seen_workspace_names;
@@ -1579,328 +1929,7 @@ else => .init(.uninitialized),
     pub const DependencyGroup = PackageDependencyGroup;
     pub const Alphabetizer = PackageAlphabetizer(Resolution);
     const debug = Output.scoped(.Lockfile, .hidden);
-    pub const Diff = struct {
-    
-    pub fn generate(pm: *PackageManager, allocator: Allocator, log: *logger.Log, from_lockfile: *Lockfile, to_lockfile: *Lockfile, from_package: *PackageType, to: *PackageType, update_requests: ?[]PackageManager.UpdateRequest, id_mapping: ?[]PackageID) !Summary {
-                var summary = Summary{  };
-                _ = &summary;
-                const is_root = (id_mapping != null);
-                var to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
-                _ = &to_deps;
-                const from_deps = from_package.dependencies.get(from_lockfile.buffers.dependencies.items);
-                const from_resolutions = from_package.resolutions.get(from_lockfile.buffers.resolutions.items);
-                var to_i: usize = 0;
-                _ = &to_i;
-                if ((from_lockfile.overrides.map.count() != to_lockfile.overrides.map.count())) {
-                    summary.overrides_changed = true;
-                    if (PackageManager.verbose_install) {
-                        _ = Output.prettyErrorln("Overrides changed since last install", .{});
-                    }
-                } else {
-                    _ = from_lockfile.overrides.sort(from_lockfile);
-                    _ = to_lockfile.overrides.sort(to_lockfile);
-                    for (from_lockfile.overrides.map.keys(),
-                            from_lockfile.overrides.map.values(),
-                            to_lockfile.overrides.map.keys(),
-                            to_lockfile.overrides.map.values(),) |from_k, *from_override, to_k, *to_override| {
-                        _ = &from_k;
-                        _ = &from_override;
-                        _ = &to_k;
-                        _ = &to_override;
-                        if (((from_k != to_k) or (!from_override.eql(to_override, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items)))) {
-                            summary.overrides_changed = true;
-                            if (PackageManager.verbose_install) {
-                                _ = Output.prettyErrorln("Overrides changed since last install", .{});
-                            }
-                            break;
-                        }
-                    }
-                }
-                if (is_root) {
-                    _ = catalogs: {
-                    if ((from_lockfile.catalogs.default.count() != to_lockfile.catalogs.default.count())) {
-                        summary.catalogs_changed = true;
-                        break :catalogs;
-                    }
-                    if ((from_lockfile.catalogs.groups.count() != to_lockfile.catalogs.groups.count())) {
-                        summary.catalogs_changed = true;
-                        break :catalogs;
-                    }
-                    _ = from_lockfile.catalogs.sort(from_lockfile);
-                    _ = to_lockfile.catalogs.sort(to_lockfile);
-                    for (from_lockfile.catalogs.default.keys(),
-                            from_lockfile.catalogs.default.values(),
-                            to_lockfile.catalogs.default.keys(),
-                            to_lockfile.catalogs.default.values(),) |from_dep_name, *from_dep, to_dep_name, *to_dep| {
-                        _ = &from_dep_name;
-                        _ = &from_dep;
-                        _ = &to_dep_name;
-                        _ = &to_dep;
-                        if ((!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-                        if ((!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-                    }
-                    for (from_lockfile.catalogs.groups.keys(),
-                            from_lockfile.catalogs.groups.values(),
-                            to_lockfile.catalogs.groups.keys(),
-                            to_lockfile.catalogs.groups.values(),) |from_catalog_name, from_catalog_deps, to_catalog_name, to_catalog_deps| {
-                        _ = &from_catalog_name;
-                        _ = &from_catalog_deps;
-                        _ = &to_catalog_name;
-                        _ = &to_catalog_deps;
-                        if ((!from_catalog_name.eql(to_catalog_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-                        if ((from_catalog_deps.count() != to_catalog_deps.count())) {
-                            summary.catalogs_changed = true;
-                            break :catalogs;
-                        }
-                        for (from_catalog_deps.keys(),
-                                from_catalog_deps.values(),
-                                to_catalog_deps.keys(),
-                                to_catalog_deps.values(),) |from_dep_name, *from_dep, to_dep_name, *to_dep| {
-                            _ = &from_dep_name;
-                            _ = &from_dep;
-                            _ = &to_dep_name;
-                            _ = &to_dep;
-                            if ((!from_dep_name.eql(to_dep_name, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
-                                summary.catalogs_changed = true;
-                                break :catalogs;
-                            }
-                            if ((!from_dep.eql(to_dep, from_lockfile.buffers.string_bytes.items, to_lockfile.buffers.string_bytes.items))) {
-                                summary.catalogs_changed = true;
-                                break :catalogs;
-                            }
-                        }
-                    }
-    };
-                }
-                _ = trusted_dependencies: {
-                if (((from_lockfile.trusted_dependencies == null) and (to_lockfile.trusted_dependencies == null))) {
-                    break :trusted_dependencies;
-                }
-                if (((from_lockfile.trusted_dependencies != null) and (to_lockfile.trusted_dependencies != null))) {
-                    const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
-                    const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
-                    {
-                        var to_trusted_iter = to_trusted_dependencies.iterator();
-                        _ = &to_trusted_iter;
-                        while (to_trusted_iter.next()) |entry| {
-                            const to_trusted = entry.key_ptr.*;
-                            if ((!from_trusted_dependencies.contains(to_trusted))) {
-                                _ = try summary.added_trusted_dependencies.put(allocator, to_trusted, true);
-                            }
-                        }
-                    }
-                    {
-                        var from_trusted_iter = from_trusted_dependencies.iterator();
-                        _ = &from_trusted_iter;
-                        while (from_trusted_iter.next()) |entry| {
-                            const from_trusted = entry.key_ptr.*;
-                            if ((!to_trusted_dependencies.contains(from_trusted))) {
-                                const void_val: void = undefined;
-                                _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val);
-                            }
-                        }
-                    }
-                    break :trusted_dependencies;
-                }
-                if (((from_lockfile.trusted_dependencies != null) and (to_lockfile.trusted_dependencies == null))) {
-                    const from_trusted_dependencies = from_lockfile.trusted_dependencies.?;
-                    {
-                        for (cp_iter_slice(default_trusted_dependencies.entries)) |entry| {
-                            _ = &entry;
-                            if ((!from_trusted_dependencies.contains(@truncate(entry.hash)))) {
-                                _ = try summary.added_trusted_dependencies.put(allocator, @truncate(entry.hash), false);
-                            }
-                        }
-                    }
-                    {
-                        var from_trusted_iter = from_trusted_dependencies.iterator();
-                        _ = &from_trusted_iter;
-                        while (from_trusted_iter.next()) |entry| {
-                            const from_trusted = entry.key_ptr.*;
-                            if ((!default_trusted_dependencies.hasWithHash(@intCast(from_trusted)))) {
-                                const void_val: void = undefined;
-                                _ = try summary.removed_trusted_dependencies.put(allocator, from_trusted, void_val);
-                            }
-                        }
-                    }
-                    break :trusted_dependencies;
-                }
-                if (((from_lockfile.trusted_dependencies == null) and (to_lockfile.trusted_dependencies != null))) {
-                    const to_trusted_dependencies = to_lockfile.trusted_dependencies.?;
-                    {
-                        var to_trusted_iter = to_trusted_dependencies.iterator();
-                        _ = &to_trusted_iter;
-                        while (to_trusted_iter.next()) |entry| {
-                            const to_trusted = entry.key_ptr.*;
-                            _ = try summary.added_trusted_dependencies.put(allocator, to_trusted, true);
-                        }
-                    }
-                    break :trusted_dependencies;
-                }
-    };
-                summary.patched_dependencies_changed = patched_dependencies_changed: {
-                if ((from_lockfile.patched_dependencies.entries.len != to_lockfile.patched_dependencies.entries.len)) {
-                    break :patched_dependencies_changed true;
-                }
-                var iter = to_lockfile.patched_dependencies.iterator();
-                _ = &iter;
-                while (iter.next()) |entry| {
-                    if (from_lockfile.patched_dependencies.get(entry.key_ptr.*)) |val| {
-                        _ = &val;
-                        if ((!std.mem.eql(u8, val.path.slice(from_lockfile.buffers.string_bytes.items), entry.value_ptr.path.slice(to_lockfile.buffers.string_bytes.items)))) {
-                            break :patched_dependencies_changed true;
-                        }
-                    } else {
-                        break :patched_dependencies_changed true;
-                    }
-                }
-                iter = from_lockfile.patched_dependencies.iterator();
-                while (iter.next()) |entry| {
-                    if ((!to_lockfile.patched_dependencies.contains(entry.key_ptr.*))) {
-                        break :patched_dependencies_changed true;
-                    }
-                }
-                break :patched_dependencies_changed false;
-    };
-                var i: usize = 0;
-                _ = &i;
-                for (cp_mut_slice(&from_deps)) |*from_dep| {
-                    _ = &from_dep;
-                    defer {
-                    i = (i + 1);
-                    }
-                    _ = found: {
-                    const prev_i = to_i;
-                    while ((to_i < to_deps.len)) {
-                        if (((from_dep.*).name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
-                            const from_behavior = (from_dep.*).behavior;
-                            const to_behavior = to_deps[@as(usize, @intCast(to_i))].behavior;
-                            if ((from_behavior != to_behavior)) {
-                                to_i = (to_i + 1);
-                                continue;
-                            }
-                            break :found;
-                        }
-                        to_i = (to_i + 1);
-                    }
-                    to_i = 0;
-                    while ((to_i < prev_i)) {
-                        if (((from_dep.*).name_hash == to_deps[@as(usize, @intCast(to_i))].name_hash)) {
-                            const from_behavior = (from_dep.*).behavior;
-                            const to_behavior = to_deps[@as(usize, @intCast(to_i))].behavior;
-                            if ((from_behavior != to_behavior)) {
-                                to_i = (to_i + 1);
-                                continue;
-                            }
-                            break :found;
-                        }
-                        to_i = (to_i + 1);
-                    }
-                    summary.remove = (summary.remove + 1);
-                    continue;
-    };
-                    defer {
-                    to_i = (to_i + 1);
-                    }
-                    if (to_deps[@as(usize, @intCast(to_i))].eql((&(from_dep.*)), to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items)) {
-                        if (update_requests) |updates| {
-                            _ = &updates;
-                            if (((updates.len == 0) or brk: {
-                            for (cp_iter_slice(updates)) |request| {
-                                _ = &request;
-                                if (((from_dep.*).name_hash == request.name_hash)) {
-                                    break :brk true;
-                                }
-                            }
-                            break :brk false;
-    })) {
-                                summary.update = (summary.update + 1);
-                                continue;
-                            }
-                        }
-                        if (id_mapping) |mapping| {
-                            _ = &mapping;
-                            const update_mapping = update_mapping: {
-                            if (((!is_root) or (!(from_dep.*).behavior.isWorkspace()))) {
-                                break :update_mapping true;
-                            }
-                            const workspace_path_opt = to_lockfile.workspace_paths.getPtr((from_dep.*).name_hash);
-                            if ((workspace_path_opt == null)) {
-                                break :update_mapping false;
-                            }
-                            const workspace_path = workspace_path_opt.?;
-                            var package_json_path: bun.AbsPath(.{ .sep = .auto }) = .initTopLevelDir();
-                            _ = &package_json_path;
-                            var package_json_path_guard = DeinitGuard(@TypeOf(package_json_path)){ .ptr = (&package_json_path) };
-                            _ = &package_json_path_guard;
-                            var __package_json_path_guard_moved = false; _ = &__package_json_path_guard_moved;
-                            defer if (!__package_json_path_guard_moved) { __package_json_path_guard_moved = true; const __T = @TypeOf(package_json_path_guard); if (@typeInfo(__T) == .optional) { if (package_json_path_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { package_json_path_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = package_json_path_guard; _drop_val.__cp_deinit(); } };
-                            _ = package_json_path.append(workspace_path.slice(to_lockfile.buffers.string_bytes.items));
-                            _ = package_json_path.append("package.json");
-                            var source_file: bun.logger.Source = undefined;
-                            _ = &source_file;
-                            if ((blk_catch_0: { break :blk_catch_0 ((bun.sys.File.toSource(package_json_path.sliceZ(), allocator, .{}).unwrap()) catch |__ce_0| { _ = &__ce_0; break :blk_catch_0 null; }); })) |src_opt| {
-                                _ = &src_opt;
-                                source_file = src_opt;
-                            } else {
-                                break :update_mapping false;
-                            }
-                            const source = (&source_file);
-                            var workspace_pkg: PackageType = .{};
-                            _ = &workspace_pkg;
-                            var json_root: bun.ast.Expr = undefined;
-                            _ = &json_root;
-                            if ((blk_catch_1: { break :blk_catch_1 ((pm.workspace_package_json_cache.getWithSource(bun.default_allocator, log, source, .{}).unwrap()) catch |__ce_1| { _ = &__ce_1; break :blk_catch_1 null; }); })) |json_opt| {
-                                _ = &json_opt;
-                                json_root = json_opt.root;
-                            } else {
-                                break :update_mapping false;
-                            }
-                            var resolver: void = undefined;
-                            _ = &resolver;
-                            _ = try workspace_pkg.parseWithJSON(to_lockfile, pm, allocator, log, source, json_root, void, (&resolver), Features.workspace);
-                            to_deps = to.dependencies.get(to_lockfile.buffers.dependencies.items);
-                            var from_pkg = from_lockfile.packages.get(from_resolutions[@as(usize, @intCast(i))]);
-                            _ = &from_pkg;
-                            const diff = try generate(pm, allocator, log, from_lockfile, to_lockfile, (&from_pkg), (&workspace_pkg), update_requests, null);
-                            if ((pm.options.log_level.isVerbose() and (((diff.add + diff.remove) + diff.update) > 0))) {
-                                _ = Output.prettyErrorln("Workspace package \"{s}\" has added <green>{d}<r> dependencies, removed <red>{d}<r> dependencies, and updated <cyan>{d}<r> dependencies", .{ workspace_path.slice(to_lockfile.buffers.string_bytes.items), diff.add, diff.remove, diff.update });
-                            }
-                            break :update_mapping (!diff.hasDiffs());
-    };
-                            if (update_mapping) {
-                                mapping[cp_cast_int(usize, to_i)] = @truncate(i);
-                                continue;
-                            }
-                        } else {
-                            continue;
-                        }
-                    }
-                    summary.update = (summary.update + 1);
-                }
-                summary.add = @truncate((to_deps.len -| (from_deps.len -| summary.remove)));
-                if ((from_package.resolution.tag != .root)) {
-                    inline for (Lockfile.Scripts.names) |hook| {
-                        _ = &hook;
-                        if ((!@field(to.scripts, hook).eql(@field(from_package.scripts, hook), to_lockfile.buffers.string_bytes.items, from_lockfile.buffers.string_bytes.items))) {
-                            summary.update = (summary.update + 1);
-                        }
-                    }
-                }
-                return summary;
-        }
-        pub const Op = PackageDiffOp;
-        pub const Summary = DiffSummary;
-    };
+    pub const Diff = PackageDiff(PackageType);
     pub const List = bun.MultiArrayList(PackageType);
     pub const Serializer = PackageSerializer(PackageType, List);
 };

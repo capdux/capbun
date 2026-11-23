@@ -287,7 +287,7 @@ pub struct PatchTask {
             },
         };
         const _patchfile_txt_guard = FreeGuard<u8>{ alloc: _.manager.allocator, slice: patchfile_txt };
-        let patchfile = bun.patch.parsePatchFile(patchfile_txt) catch |e| {
+        let patchfile = bun.patch.parsePatchFile(patchfile_txt) catch e => {
             log.addErrorFmtOpts(
                 _.manager.allocator,
                 "failed to parse patchfile: {s}",
@@ -459,7 +459,7 @@ pub struct PatchTask {
                 _.manager.allocator,
                 "patchfile <b>{s}<r> is empty, please restore or delete it.",
                 [absolute_patchfile_path],
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
             return null;
         }
 

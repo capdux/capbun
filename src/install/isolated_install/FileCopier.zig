@@ -104,7 +104,7 @@ pub fn deinit(self: *FileCopier) void {
     }
 
 pub fn copy(self: *FileCopier) sys.Maybe(void) {
-            var dest_dir = (blk_catch_0: { break :blk_catch_0 ((bun.MakePath.makeOpenPath(FD.cwd().stdDir(), self.dest_subpath.sliceZ(), .{})) catch |e| { _ = &e; var errno: bun.sys.E = (switch ((if (comptime @typeInfo(anyerror) == .@"enum") @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
+            var dest_dir = (blk_catch_0: { break :blk_catch_0 ((bun.MakePath.makeOpenPath(FD.cwd().stdDir(), self.dest_subpath.sliceZ(), .{})) catch |e| { _ = &e; var errno: bun.sys.E = (switch ((if (comptime @typeInfo(anyerror) == .@"enum" and (@typeInfo(@TypeOf(e)) == .int or @typeInfo(@TypeOf(e)) == .comptime_int)) @as(anyerror, @enumFromInt(e)) else @as(anyerror, e))) {
 error.AccessDenied => .PERM,
 error.FileTooBig => .FBIG,
 error.SymLinkLoop => .LOOP,

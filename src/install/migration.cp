@@ -101,7 +101,7 @@ pub fn detectAndLoadOtherLockfile(
         let lockfile_path_buf: bun.PathBuffer = undefined;
         const lockfile_path = bun.getFdPathZ(lockfile_file.handle, &lockfile_path_buf) catch break :npm;
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :npm;
-        const migrate_result = migrateNPMLockfile(lockfile, manager, allocator, log, data, lockfile_path) catch |e| {
+        const migrate_result = migrateNPMLockfile(lockfile, manager, allocator, log, data, lockfile_path) catch e => {
             if (e == error.NPMLockfileVersionMismatch) {
                 Output.prettyErrorln(
                     "<red><b>error<r><d>:<r> Please upgrade package-lock.json to lockfileVersion 2 or 3\n\nRun 'npm i --lockfile-version 3 --frozen-lockfile' to upgrade your lockfile without changing dependencies.",
@@ -132,7 +132,7 @@ pub fn detectAndLoadOtherLockfile(
         const lockfile_file = File.openat(dir, "yarn.lock", bun.O.RDONLY, 0).unwrap() catch break :yarn;
         const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :yarn;
-        const migrate_result = yarn_mod.migrateYarnLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
+        const migrate_result = yarn_mod.migrateYarnLockfile(lockfile, manager, allocator, log, data, dir) catch e => {
             return LoadResult{ err: .{
                 step: .migrating,
                 value: e,
@@ -156,7 +156,7 @@ pub fn detectAndLoadOtherLockfile(
         const lockfile_file = File.openat(dir, "pnpm-lock.yaml", bun.O.RDONLY, 0).unwrap() catch break :pnpm;
         const lockfile_file_guard = CloseGuard<File>{ val: lockfile_file };
         const data = lockfile_file.readToEnd(allocator).unwrap() catch break :pnpm;
-        const migrate_result = pnpm_mod.migratePnpmLockfile(lockfile, manager, allocator, log, data, dir) catch |e| {
+        const migrate_result = pnpm_mod.migratePnpmLockfile(lockfile, manager, allocator, log, data, dir) catch e => {
             if (e == error.PnpmLockfileTooOld) {
                 Output.prettyErrorln(
                     "<red><b>warning<r><d>:<r> pnpm-lock.yaml version is too old (\\< v7)\n\nPlease upgrade using 'pnpm install --lockfile-only' first, then try again.",

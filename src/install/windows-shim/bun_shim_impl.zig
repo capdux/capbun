@@ -264,7 +264,7 @@ pub fn writeToHandle(handle: w.HANDLE, data: []const u8) EmptyError!usize {
 pub noinline fn failAndExitWithReason(reason: FailReason) noreturn {
         @branchHint(.cold);
         const console_handle = w.teb().ProcessEnvironmentBlock.ProcessParameters.hStdError;
-        var mode: w.DWORD = (if (comptime @typeInfo(w.DWORD) == .@"enum") @as(w.DWORD, @enumFromInt(0)) else @as(w.DWORD, 0));
+        var mode: w.DWORD = (if (comptime @typeInfo(w.DWORD) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(w.DWORD, @enumFromInt(0)) else @as(w.DWORD, 0));
         _ = &mode;
         if ((k32.GetConsoleMode(console_handle, (&mode)) != 0)) {
             mode = (mode | w.ENABLE_VIRTUAL_TERMINAL_PROCESSING);
@@ -328,7 +328,7 @@ pub fn launcher(comptime mode: LauncherMode, bun_ctx: anytype) mode.RetType() {
         if (is_standalone) {
             const bunx_chars: [4]u16 = .{ 98, 117, 110, 120 };
             _ = std.mem.writeInt(u64, buf1_u8[(image_path_b_len + (2 * (nt_object_prefix.len - "exe".len)))..][0..8], @as(u64, @bitCast(bunx_chars)), .little);
-            const path_len_bytes: c_ushort = (image_path_b_len + (if (comptime @typeInfo(c_ushort) == .@"enum") @as(c_ushort, @enumFromInt((2 * ((nt_object_prefix.len - "exe".len) + "bunx".len)))) else @as(c_ushort, (2 * ((nt_object_prefix.len - "exe".len) + "bunx".len)))));
+            const path_len_bytes: c_ushort = (image_path_b_len + (if (comptime @typeInfo(@TypeOf((2 * ((nt_object_prefix.len - "exe".len) + "bunx".len)))) == .@"enum") cp_cast_int(c_ushort, @intFromEnum((2 * ((nt_object_prefix.len - "exe".len) + "bunx".len)))) else cp_cast_int(c_ushort, (2 * ((nt_object_prefix.len - "exe".len) + "bunx".len)))));
             var nt_name = w.UNICODE_STRING{ .Length = path_len_bytes, .MaximumLength = path_len_bytes, .Buffer = buf1_u16 };
             _ = &nt_name;
             if (dbg) {
@@ -618,7 +618,7 @@ return mode.fail(.CreateProcessFailed);
 }
             }
             _ = k32.WaitForSingleObject(process.hProcess, w.INFINITE);
-            var exit_code: w.DWORD = (if (comptime @typeInfo(w.DWORD) == .@"enum") @as(w.DWORD, @enumFromInt(255)) else @as(w.DWORD, 255));
+            var exit_code: w.DWORD = (if (comptime @typeInfo(w.DWORD) == .@"enum" and (@typeInfo(@TypeOf(255)) == .int or @typeInfo(@TypeOf(255)) == .comptime_int)) @as(w.DWORD, @enumFromInt(255)) else @as(w.DWORD, 255));
             _ = &exit_code;
             _ = k32.GetExitCodeProcess(process.hProcess, (&exit_code));
             if (dbg) {
