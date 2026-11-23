@@ -173,10 +173,12 @@ pub fn CssRuleList(comptime AtRule: type): type {
                 const rule = &_.v.items[rule_idx];
                 // NOTE Anytime you append to `rules` with this `rule`, you must set `moved_rule` to true.
                 let moved_rule = false;
-                defer if (moved_rule) {
-                    // PERF calling deinit here might allow mimalloc to reuse the freed memory
-                    rule.* = .ignored;
-                };
+                defer {
+                    if (moved_rule) {
+                        // PERF calling deinit here might allow mimalloc to reuse the freed memory
+                        rule.* = .ignored;
+                    }
+                }
 
                 switch (rule.*) {
                     .keyframes => {
@@ -623,13 +625,13 @@ fn mergeStyleRules(
         last_style_rule.declarations.declarations.appendSlice(
             context.allocator,
             sty.declarations.declarations.items,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         sty.declarations.declarations.clearRetainingCapacity();
 
         last_style_rule.declarations.important_declarations.appendSlice(
             context.allocator,
             sty.declarations.important_declarations.items,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
         sty.declarations.important_declarations.clearRetainingCapacity();
 
         last_style_rule.declarations.minify(

@@ -1501,8 +1501,8 @@ pub fn Matrix(comptime T: type) type {
     e: T,
     f: T,
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {

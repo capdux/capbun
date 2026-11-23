@@ -917,8 +917,8 @@ pub fn parseLch(
             return _.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{_});
         }
 
-        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
-            * = this.parser;
+        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, closure: *@This()): Result(CssColor) {
+            * = closure.parser;
             if (*@"from" := p.@"from") {
                 // Relative angles should be normalized.
                 // https://www.w3.org/TR/css-color-5/#relative-LCH
@@ -993,8 +993,8 @@ pub fn parseHslHwb(
             return _.parser.parseRelative(i, T, CssColor, @This().parseRelativeFn, .{_});
         }
 
-        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, this: *@This()): Result(CssColor) {
-            const _t3 = switch (parseHslHwbComponents(T, i, p, this.allows_legacy)) {
+        pub static fn parseRelativeFn(i: *css.Parser, p: *ComponentParser, closure: *@This()): Result(CssColor) {
+            const _t3 = switch (parseHslHwbComponents(T, i, p, closure.allows_legacy)) {
                 .result => |vv| vv,
                 .err => |e| return { err: e },
             }; const h = _t3[0]; const a = _t3[1]; const b = _t3[2]; const is_legacy = _t3[3];
@@ -3210,7 +3210,7 @@ pub fn ColorspaceConversions(comptime T: type): type {
             };
         }
 
-        pub fn tryFromCssColor(color: *const CssColor): T? {
+        pub static fn tryFromCssColor(color: *const CssColor): T? {
             return switch (color.*) {
                 .rgba => |*rgba| rgba.into(convert_type),
                 .lab => |lab| fromLABColor(lab),
@@ -3279,7 +3279,7 @@ pub fn DefineColorspace(comptime T: type, comptime ChannelTypeMap: auto): type {
             return result;
         }
 
-        pub fn resolve(color_val: *const T): T {
+        pub static fn resolve(color_val: *const T): T {
             let resolved = resolveMissing(color_val);
             if (!resolved.inGamut()) {
                 resolved = mapGamut(T, resolved);

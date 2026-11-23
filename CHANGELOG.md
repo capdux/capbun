@@ -2243,3 +2243,5 @@
 - [Wave #110] 修改 .cp/.zig：Wave #110 15 文件（`cli/test/*`, `collections/*`, `crash_handler/*`, `csrf/csrf`, `css/context`）（`zig:check` 5/5）。
 
 - [Wave #111] 修改 .cp/.zig：15 个 `src/css/` 文件（`css_modules`, `css_parser`, `declaration`, `error`, `generics`, `media_query`, `printer`, `properties/{align,animation,background,border,border_radius,flex,font,margin_padding}`）（`zig:check` 5/5）。
+
+- [Wave #112] 修改 .cp/.zig：15 个 `src/css/` 文件（`properties/{prefix_handler,size,transform,transition,ui}`, `rules/{font_face,page,rules,style,supports}`, `selectors/parser`, `small_list`, `values/{calc,color,gradient}`）（`zig:check` 5/5）。

@@ -49,7 +49,7 @@ pub struct FallbackHandler {
                                 else
                                     fallback,
                             ),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
                     if (comptime has_vendor_prefix) {
                         if (has_fallbacks && @field(property, field.name[1]).contains(VendorPrefix{ .none = true })) {
@@ -72,7 +72,7 @@ pub struct FallbackHandler {
                             else
                                 val,
                         ),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else if (@field(_, field.name) != null) {
                     const index = @field(_, field.name).?;
                     dest.items[index] = @unionInit(

@@ -318,7 +318,7 @@ pub union(enum) FontStyle {
     /// Oblique font style, with a custom angle.
     oblique: Size2D(css.css_values.angle.Angle),
 
-    pub fn parse(input: *css.Parser): Result(FontStyle) {
+    pub static fn parse(input: *css.Parser): Result(FontStyle) {
         const property = switch (FontStyleProperty.parse(input)) {
             .result => |vv| vv,
             .err => |e| return { err: e },
@@ -390,7 +390,7 @@ pub union(enum) FontFormat {
     /// An unknown format.
     string: []const u8,
 
-    pub fn parse(input: *css.Parser): Result(FontFormat) {
+    pub static fn parse(input: *css.Parser): Result(FontFormat) {
         const s = switch (input.expectIdentOrString()) {
             .result => |vv| vv,
             .err => |e| return { err: e },

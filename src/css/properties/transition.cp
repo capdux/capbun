@@ -170,7 +170,7 @@ pub struct TransitionHandler {
                     dest.append(
                         context.allocator,
                         { unparsed: x.getPrefixed(context.allocator, context.targets, Feature.transition) },
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else {
                     return false;
                 }
@@ -271,7 +271,7 @@ pub struct TransitionHandler {
                     dest.append(
                         context.allocator,
                         Property{ .transition = .{ transitions.deepClone(context.allocator), intersection } },
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
 
                 bun.bits.remove(VendorPrefix, property_prefixes, intersection);
@@ -333,7 +333,7 @@ pub struct TransitionHandler {
         idx.* = (idx.* + 1) % len;
     }
 
-    inline fn getTransitions(
+    static inline fn getTransitions(
         context: *const css.PropertyHandlerContext,
         properties: *SmallList(PropertyId, 1),
         durations: *SmallList(Time, 1),

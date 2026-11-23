@@ -60,7 +60,7 @@ pub fn StyleRule(comptime R: type): type {
                 _.toCssBase(dest)?;
             } else {
                 let first_rule = true;
-                inline for (css.VendorPrefix.FIELDS) |field| {
+                inline for (field of css.VendorPrefix.FIELDS) {
                     if (@field(_.vendor_prefix, field)) {
                         if (first_rule) {
                             first_rule = false;
@@ -103,7 +103,7 @@ pub fn StyleRule(comptime R: type): type {
 
                 let i: usize = 0;
                 const DECLS = .{ "declarations", "important_declarations" };
-                inline for (DECLS) |decl_field_name| {
+                inline for (decl_field_name of DECLS) {
                     const important = comptime std.mem.eql(u8, decl_field_name, "important_declarations");
                     const decls: *const ArrayList(css.Property) = &@field(_.declarations, decl_field_name);
 
@@ -117,12 +117,12 @@ pub fn StyleRule(comptime R: type): type {
                             }
 
                             if (*css_module := dest.css_module) {
-                                if (css_module.handleComposes(
+                                if (error_kind := css_module.handleComposes(
                                     dest,
                                     &_.selectors,
                                     composes,
                                     _.loc.source_index,
-                                ).asErr()) |error_kind| {
+                                ).asErr()) {
                                     return dest.newError(error_kind, composes.cssparser_loc);
                                 }
                                 continue;
@@ -167,7 +167,7 @@ pub fn StyleRule(comptime R: type): type {
                     dest.newline()?;
                 }
                 dest.withContext(&_.selectors, _, struct {
-                    pub fn toCssFn(ctx: *const This, d: *Printer): PrintErr!void {
+                    pub static fn toCssFn(ctx: *const This, d: *Printer): PrintErr!void {
                         return ctx.rules.toCss(d);
                     }
                 }.toCssFn)?;

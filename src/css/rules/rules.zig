@@ -155,102 +155,98 @@ pub fn IncompatibleRuleEntry(comptime AtRule: type) type {
 pub fn CssRule(comptime Rule: type) type {
         _ = &Rule;
         return union(enum) {
-        /// A `@media` rule.
-        media: media.MediaRule(Rule),
-        /// An `@import` rule.
-        @"import": import_rule.ImportRule,
-        /// A style rule.
-        style: style.StyleRule(Rule),
-        /// A `@keyframes` rule.
-        keyframes: keyframes.KeyframesRule,
-        /// A `@font-face` rule.
-        font_face: font_face.FontFaceRule,
-        /// A `@font-palette-values` rule.
-        font_palette_values: font_palette_values.FontPaletteValuesRule,
-        /// A `@page` rule.
-        page: page.PageRule,
-        /// A `@supports` rule.
-        supports: supports.SupportsRule(Rule),
-        /// A `@counter-style` rule.
-        counter_style: counter_style.CounterStyleRule,
-        /// A `@namespace` rule.
-        namespace: namespace.NamespaceRule,
-        /// A `@-moz-document` rule.
-        moz_document: document.MozDocumentRule(Rule),
-        /// A `@nest` rule.
-        nesting: nesting.NestingRule(Rule),
-        /// A `@viewport` rule.
-        viewport: viewport.ViewportRule,
-        /// A `@custom-media` rule.
-        custom_media: CustomMedia,
-        /// A `@layer` statement rule.
-        layer_statement: layer.LayerStatementRule,
-        /// A `@layer` block rule.
-        layer_block: layer.LayerBlockRule(Rule),
-        /// A `@property` rule.
-        property: property.PropertyRule,
-        /// A `@container` rule.
-        container: container.ContainerRule(Rule),
-        /// A `@scope` rule.
-        scope: scope.ScopeRule(Rule),
-        /// A `@starting-style` rule.
-        starting_style: starting_style.StartingStyleRule(Rule),
-        /// A placeholder for a rule that was removed.
-        ignored,
-        /// An unknown at-rule.
-        unknown: unknown.UnknownAtRule,
-        /// A custom at-rule.
-        custom: Rule,
+    media: media.MediaRule(Rule),
+    @"import": import_rule.ImportRule,
+    style: style.StyleRule(Rule),
+    keyframes: keyframes.KeyframesRule,
+    font_face: font_face.FontFaceRule,
+    font_palette_values: font_palette_values.FontPaletteValuesRule,
+    page: page.PageRule,
+    supports: supports.SupportsRule(Rule),
+    counter_style: counter_style.CounterStyleRule,
+    namespace: namespace.NamespaceRule,
+    moz_document: document.MozDocumentRule(Rule),
+    nesting: nesting.NestingRule(Rule),
+    viewport: viewport.ViewportRule,
+    custom_media: CustomMedia,
+    layer_statement: layer.LayerStatementRule,
+    layer_block: layer.LayerBlockRule(Rule),
+    property: property.PropertyRule,
+    container: container.ContainerRule(Rule),
+    scope: scope.ScopeRule(Rule),
+    starting_style: starting_style.StartingStyleRule(Rule),
+    ignored: void,
+    unknown: unknown.UnknownAtRule,
+    custom: Rule,
 
-        const This = @This();
+pub fn toCss(self: @This(), rule_self: *const @This(), dest: *Printer) PrintErr!void {
+        _ = self;
+            return (switch (rule_self.*) {
+.media => |x| {
+{
+                var m = x;
+                _ = &m;
+                return m.toCss(dest);
+            }
+},
+.@"import" => |x| x.toCss(dest),
+.style => |x| {
+{
+                var s = x;
+                _ = &s;
+                return s.toCss(dest);
+            }
+},
+.keyframes => |x| x.toCss(dest),
+.font_face => |x| x.toCss(dest),
+.font_palette_values => |x| x.toCss(dest),
+.page => |x| x.toCss(dest),
+.supports => |x| x.toCss(dest),
+.counter_style => |x| x.toCss(dest),
+.namespace => |x| x.toCss(dest),
+.moz_document => |x| x.toCss(dest),
+.nesting => |x| {
+{
+                var n = x;
+                _ = &n;
+                return n.toCss(dest);
+            }
+},
+.viewport => |x| x.toCss(dest),
+.custom_media => |x| x.toCss(dest),
+.layer_statement => |x| x.toCss(dest),
+.layer_block => |x| {
+{
+                var lb = x;
+                _ = &lb;
+                return lb.toCss(dest);
+            }
+},
+.property => |x| x.toCss(dest),
+.starting_style => |x| {
+{
+                var ss = x;
+                _ = &ss;
+                return ss.toCss(dest);
+            }
+},
+.container => |x| x.toCss(dest),
+.scope => |x| x.toCss(dest),
+.unknown => |x| x.toCss(dest),
+.custom => |x| (blk_catch_0: { break :blk_catch_0 ((x.toCss(dest)) catch |__ce_0| { _ = &__ce_0; return dest.addFmtError(); }); }),
+.ignored => {
+{
+            }
+},
+});
+    }
 
-        pub fn toCss(rule_self: *const @This(), dest: *Printer) PrintErr!void {
-            return switch (rule_self.*) {
-                .media => |x| {
-                    var m = x;
-                    return m.toCss(dest);
-                },
-                .@"import" => |x| x.toCss(dest),
-                .style => |x| {
-                    var s = x;
-                    return s.toCss(dest);
-                },
-                .keyframes => |x| x.toCss(dest),
-                .font_face => |x| x.toCss(dest),
-                .font_palette_values => |x| x.toCss(dest),
-                .page => |x| x.toCss(dest),
-                .supports => |x| x.toCss(dest),
-                .counter_style => |x| x.toCss(dest),
-                .namespace => |x| x.toCss(dest),
-                .moz_document => |x| x.toCss(dest),
-                .nesting => |x| {
-                    var n = x;
-                    return n.toCss(dest);
-                },
-                .viewport => |x| x.toCss(dest),
-                .custom_media => |x| x.toCss(dest),
-                .layer_statement => |x| x.toCss(dest),
-                .layer_block => |x| {
-                    var lb = x;
-                    return lb.toCss(dest);
-                },
-                .property => |x| x.toCss(dest),
-                .starting_style => |x| {
-                    var ss = x;
-                    return ss.toCss(dest);
-                },
-                .container => |x| x.toCss(dest),
-                .scope => |x| x.toCss(dest),
-                .unknown => |x| x.toCss(dest),
-                .custom => |x| x.toCss(dest) catch return dest.addFmtError(),
-                .ignored => {},
-            };
-        }
-
-        pub fn deepClone(rule_self: *const @This(), allocator: std.mem.Allocator) This {
+pub fn deepClone(self: @This(), rule_self: *const @This(), allocator: std.mem.Allocator) This {
+        _ = self;
             return css.implementDeepClone(@This(), rule_self, allocator);
-        }
-    };
+    }
+    const This = @This();
+};
 }
 
 pub fn CssRuleList(comptime AtRule: type) type {
@@ -270,8 +266,10 @@ pub fn minify(self: *@This(), context: *MinifyContext, parent_is_unused: bool) c
                 var moved_rule = false;
                 _ = &moved_rule;
                 defer {
-                if (moved_rule) {
-                    rule.* = .ignored;
+                {
+                    if (moved_rule) {
+                        rule.* = .ignored;
+                    }
                 }
                 }
                 switch (rule.*) {
@@ -581,7 +579,8 @@ pub fn new(list: *const ArrayList(CssRule(R)), index: usize) This {
             return This{ .list = list, .index = index, .hash = rule.hashKey() };
     }
 
-pub fn eql(key_self: *const @This(), other: *const This) bool {
+pub fn eql(self: @This(), key_self: *const @This(), other: *const This) bool {
+        _ = self;
             if ((!((key_self.index < key_self.list.items.len) and (key_self.list.items[@as(usize, @intCast(key_self.index))] == .style)))) {
                 return false;
             }

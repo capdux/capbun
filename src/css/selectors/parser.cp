@@ -177,12 +177,12 @@ pub struct attrs {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn deepClone(this: *const @This(), allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), this, allocator);
+            pub fn deepClone(allocator: Allocator): @This() {
+                return css.implementDeepClone(@This(), _, allocator);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-                return css.implementHash(@This(), this, hasher);
+            pub fn hash(hasher: *std.hash.Wyhash) {
+                return css.implementHash(@This(), _, hasher);
             }
         };
     }
@@ -196,31 +196,31 @@ pub struct attrs {
             operation: ParsedAttrSelectorOperation(Impl.SelectorImpl.AttrValue),
             never_matches: bool,
 
-            pub fn toCss(this: *const @This(), dest: *Printer): PrintErr!void {
-                try dest.writeChar('[');
-                if (nsp := this.namespace) switch (nsp) {
+            pub fn toCss(dest: *Printer): PrintErr!void {
+                dest.writeChar('['?);
+                if (nsp := _.namespace) switch (nsp) {
                     .specific => |v| {
-                        try css.IdentFns.toCss(v.prefix, dest);
-                        try dest.writeChar('|');
+                        css.IdentFns.toCss(v.prefix?, dest);
+                        dest.writeChar('|'?);
                     },
                     .any => {
-                        try dest.writeStr("*|");
+                        dest.writeStr("*|"?);
                     },
                 };
-                try css.IdentFns.toCss(this.local_name, dest);
-                switch (this.operation) {
+                css.IdentFns.toCss(_.local_name?, dest);
+                switch (_.operation) {
                     .exists => {},
                     .with_value => |v| {
-                        try v.operator.toCss(dest);
-                        // try v.expected_value.toCss(dest);
-                        try CSSStringFns.toCss(&v.expected_value, dest);
+                        v.operator.toCss(dest?);
+                        // v.expected_value.toCss(dest?);
+                        CSSStringFns.toCss(&v.expected_value?, dest);
                         switch (v.case_sensitivity) {
                             .case_sensitive, .ascii_case_insensitive_if_in_html_element_in_html_document => {},
                             .ascii_case_insensitive => {
-                                try dest.writeStr(" i");
+                                dest.writeStr(" i"?);
                             },
                             .explicit_case_sensitive => {
-                                try dest.writeStr(" s");
+                                dest.writeStr(" s"?);
                             },
                         }
                     },
@@ -232,12 +232,12 @@ pub struct attrs {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn deepClone(this: *const @This(), allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), this, allocator);
+            pub fn deepClone(allocator: Allocator): @This() {
+                return css.implementDeepClone(@This(), _, allocator);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-                return css.implementHash(@This(), this, hasher);
+            pub fn hash(hasher: *std.hash.Wyhash) {
+                return css.implementHash(@This(), _, hasher);
             }
         };
     }
@@ -253,12 +253,12 @@ pub struct attrs {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-                return css.implementHash(@This(), this, hasher);
+            pub fn hash(hasher: *std.hash.Wyhash) {
+                return css.implementHash(@This(), _, hasher);
             }
 
-            pub fn deepClone(this: *const @This(), allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), this, allocator);
+            pub fn deepClone(allocator: Allocator): @This() {
+                return css.implementDeepClone(@This(), _, allocator);
             }
         };
     }
@@ -281,16 +281,16 @@ pub struct attrs {
             exists,
             with_value: ParsedAttrSelectorWithValue(AttrValue),
 
-            pub fn deepClone(this: *const @This(), allocator: Allocator): @This() {
-                return css.implementDeepClone(@This(), this, allocator);
+            pub fn deepClone(allocator: Allocator): @This() {
+                return css.implementDeepClone(@This(), _, allocator);
             }
 
             pub fn eql(lhs: *const @This(), rhs: *const @This()): bool {
                 return css.implementEql(@This(), lhs, rhs);
             }
 
-            pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-                return css.implementHash(@This(), this, hasher);
+            pub fn hash(hasher: *std.hash.Wyhash) {
+                return css.implementHash(@This(), _, hasher);
             }
         };
     }
@@ -503,7 +503,7 @@ fn parse_selector(
                     switch (d) {
                         '>' => {
                             if (parser.deepCombinatorEnabled() && input.tryParse(struct {
-                                pub fn parseFn(i: *css.Parser) Result(void) {
+                                pub fn parseFn(i: *css.Parser): Result(void) {
                                     if (e := i.expectDelim('>').asErr()) return .{ .err = e };
                                     return i.expectDelim('>');
                                 }
@@ -525,7 +525,7 @@ fn parse_selector(
                         '/' => {
                             if (parser.deepCombinatorEnabled()) {
                                 if (input.tryParse(struct {
-                                    pub fn parseFn(i: *css.Parser) Result(void) {
+                                    pub fn parseFn(i: *css.Parser): Result(void) {
                                         if (e := i.expectIdentMatching("deep").asErr()) return .{ .err = e };
                                         return i.expectDelim('/');
                                     }
@@ -1530,12 +1530,12 @@ pub fn GenericSelectorList(comptime Impl: type): type {
 
         const This = @This();
 
-        pub fn debug(this: *const @This()): SelectorListDebugFmt<This> {
-            return SelectorListDebugFmt<This>{ .this = this };
+        pub fn debug(): SelectorListDebugFmt<This> {
+            return SelectorListDebugFmt<This>{ .this = &_ };
         }
 
-        pub fn anyHasPseudoElement(this: *const This): bool {
-            const slice = this.v.slice();
+        pub fn anyHasPseudoElement(): bool {
+            const slice = _.v.slice();
             let i: usize = 0;
             while (i < slice.len) {
                 if (slice[i].hasPseudoElement()) return true;
@@ -1544,12 +1544,12 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             return false;
         }
 
-        pub fn specifitiesAllEqual(this: *const This): bool {
-            if (this.v.len() == 0) return true;
-            if (this.v.len() == 1) return true;
+        pub fn specifitiesAllEqual(): bool {
+            if (_.v.len() == 0) return true;
+            if (_.v.len() == 1) return true;
 
-            const value = this.v.at(0).specificity();
-            const slice = this.v.slice();
+            const value = _.v.at(0).specificity();
+            const slice = _.v.slice();
             let i: usize = 1;
             while (i < slice.len) {
                 if (slice[i].specificity() != value) return false;
@@ -1559,7 +1559,7 @@ pub fn GenericSelectorList(comptime Impl: type): type {
         }
 
         pub fn toCss(_: *const This, _: *Printer): PrintErr!void {
-            @compileError("Do not call this! Use `serializer.serializeSelectorList()` or `tocss_servo.toCss_SelectorList()` instead.");
+            @compileError("Do not call _! Use `serializer.serializeSelectorList()` || `tocss_servo.toCss_SelectorList()` instead.");
         }
 
         static fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions): Result(This) {
@@ -1685,16 +1685,16 @@ pub fn GenericSelectorList(comptime Impl: type): type {
             return result;
         }
 
-        pub fn deepClone(this: *const @This(), allocator: Allocator): This {
-            return .{ .v = this.v.deepClone(allocator) };
+        pub fn deepClone(allocator: Allocator): This {
+            return .{ .v = _.v.deepClone(allocator) };
         }
 
         pub fn eql(lhs: *const This, rhs: *const This): bool {
             return lhs.v.eql(&rhs.v);
         }
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), this, hasher);
+        pub fn hash(hasher: *std.hash.Wyhash) {
+            return css.implementHash(@This(), _, hasher);
         }
     };
 }
@@ -1722,7 +1722,7 @@ fn selectorDebugFormat(this_val: anytype, writer: *std.Io.Writer): !void {
     css.Printer.in_debug_fmt = true;
     defer css.Printer.in_debug_fmt = false;
 
-    css.selector.tocss_servo.toCss_Selector(this_val.this, unsafe { &_guard_printer.val }) catch |e| return writer.print("<error writing selector: {s}>\n", .{@errorName(e)})?;
+    css.selector.tocss_servo.toCss_Selector(this_val.this, unsafe { &_guard_printer.val }) catch e => return writer.print("<error writing selector: {s}>\n", .{@errorName(e)})?;
     return writer.writeAll(_guard_arraylist.val.written());
 }
 
@@ -1826,8 +1826,8 @@ pub fn GenericSelector(comptime Impl: type): type {
 
         const This = @This();
 
-        pub fn debug(this: *const This): SelectorDebugFmt<This> {
-            return SelectorDebugFmt<This>{ .this = this };
+        pub fn debug(): SelectorDebugFmt<This> {
+            return SelectorDebugFmt<This>{ .this = &_ };
         }
 
         /// Parse a selector, without any pseudo-element.
@@ -1837,50 +1837,50 @@ pub fn GenericSelector(comptime Impl: type): type {
         }
 
         pub fn toCss(_: *const This, _: *Printer): PrintErr!void {
-            @compileError("Do not call this! Use `serializer.serializeSelector()` or `tocss_servo.toCss_Selector()` instead.");
+            @compileError("Do not call _! Use `serializer.serializeSelector()` || `tocss_servo.toCss_Selector()` instead.");
         }
 
-        pub fn append(this: *This, allocator: Allocator, component: GenericComponent(Impl)) {
+        pub fn append(*_, allocator: Allocator, component: GenericComponent(Impl)) {
             const index = index: {
                 let i: usize = 0;
-                while (i < this.components.items.len) {
-                    const comp = &this.components.items[i];
+                while (i < _.components.items.len) {
+                    const comp = &_.components.items[i];
                     switch (comp.*) {
                         .combinator, .pseudo_element => break :index i,
                         else => {},
                     }
                     i += 1;
                 }
-                break :index this.components.items.len;
+                break :index _.components.items.len;
             };
-            bun.handleOom(this.components.insert(allocator, index, component));
+            bun.handleOom(_.components.insert(allocator, index, component));
         }
 
-        pub fn deepClone(this: *const @This(), allocator: Allocator): This {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: Allocator): This {
+            return css.implementDeepClone(@This(), _, allocator);
         }
 
-        pub fn eql(this: *const This, other: *const This): bool {
-            return css.implementEql(This, this, other);
+        pub fn eql(other: *const This): bool {
+            return css.implementEql(This, _, other);
         }
 
-        pub fn hasCombinator(this: *const This): bool {
+        pub fn hasCombinator(): bool {
             let i: usize = 0;
-            while (i < this.components.items.len) {
-                const c = &this.components.items[i];
+            while (i < _.components.items.len) {
+                const c = &_.components.items[i];
                 if (c.* == .combinator && c.combinator.isTreeCombinator()) return true;
                 i += 1;
             }
             return false;
         }
 
-        pub fn hasPseudoElement(this: *const This): bool {
-            return this.specificity_and_flags.hasPseudoElement();
+        pub fn hasPseudoElement(): bool {
+            return _.specificity_and_flags.hasPseudoElement();
         }
 
         /// Returns count of simple selectors && combinators in the Selector.
-        pub fn len(this: *const This): usize {
-            return this.components.items.len;
+        pub fn len(): usize {
+            return _.components.items.len;
         }
 
         pub fn fromComponent(allocator: Allocator, component: GenericComponent(Impl)): This {
@@ -1897,11 +1897,11 @@ pub fn GenericSelector(comptime Impl: type): type {
             };
         }
 
-        pub fn specificity(this: *const This): u32 {
-            return this.specificity_and_flags.specificity;
+        pub fn specificity(): u32 {
+            return _.specificity_and_flags.specificity;
         }
 
-        pub fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions): Result(This) {
+        pub static fn parseWithOptions(input: *css.Parser, options: *const css.ParserOptions): Result(This) {
             let selector_parser = SelectorParser{
                 .is_nesting_allowed = true,
                 .options = options,
@@ -1909,31 +1909,78 @@ pub fn GenericSelector(comptime Impl: type): type {
             return parse(&selector_parser, input);
         }
 
-        pub fn iterRawMatchOrder(this: *const This): RawMatchOrderIterator<Impl> {
+        pub fn iterRawMatchOrder(): RawMatchOrderIterator<Impl> {
             return RawMatchOrderIterator<Impl>{
-                .slice = this.components.items,
+                .slice = _.components.items,
             };
         }
 
         /// Returns an iterator over the sequence of simple selectors &&
         /// combinators, in parse order (from left to right), starting from
         /// `offset`.
-        pub fn iterRawParseOrderFrom(this: *const This, offset: usize): RawParseOrderFromIter<Impl> {
+        pub fn iterRawParseOrderFrom(offset: usize): RawParseOrderFromIter<Impl> {
             return RawParseOrderFromIter<Impl>{
-                .slice = this.components.items[0 .. this.components.items.len - offset],
+                .slice = _.components.items[0 .. _.components.items.len - offset],
             };
         }
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), this, hasher);
+        pub fn hash(hasher: *std.hash.Wyhash) {
+            return css.implementHash(@This(), _, hasher);
         }
+    };
+}
+
+fn GenericComponentNamespace(comptime Impl: type): type {
+    return struct {
+        prefix: Impl.SelectorImpl.NamespacePrefix,
+        url: Impl.SelectorImpl.NamespaceUrl,
+
+        pub static fn __generateEql() {}
+        pub static fn __generateDeepClone() {}
+        pub static fn __generateHash() {}
+    };
+}
+
+fn GenericComponentAttrNoNsExists(comptime Impl: type): type {
+    return struct {
+        local_name: Impl.SelectorImpl.LocalName,
+        local_name_lower: Impl.SelectorImpl.LocalName,
+
+        pub static fn __generateEql() {}
+        pub static fn __generateDeepClone() {}
+        pub static fn __generateHash() {}
+    };
+}
+
+fn GenericComponentAttrNoNs(comptime Impl: type): type {
+    return struct {
+        local_name: Impl.SelectorImpl.LocalName,
+        operator: attrs.AttrSelectorOperator,
+        value: Impl.SelectorImpl.AttrValue,
+        case_sensitivity: attrs.ParsedCaseSensitivity,
+        never_matches: bool,
+
+        pub static fn __generateEql() {}
+        pub static fn __generateDeepClone() {}
+        pub static fn __generateHash() {}
+    };
+}
+
+fn GenericComponentAny(comptime Impl: type): type {
+    return struct {
+        vendor_prefix: Impl.SelectorImpl.VendorPrefix,
+        selectors: []GenericSelector(Impl),
+
+        pub static fn __generateEql() {}
+        pub static fn __generateDeepClone() {}
+        pub static fn __generateHash() {}
     };
 }
 
 /// A CSS simple selector || combinator. We store both in the same enum for
 /// optimal packing && cache performance, see [1].
 ///
-/// [1] https://bugzilla.mozilla.org/show_bug.cgi?id=1357973
+/// [1] https://bugzilla.mozilla.org/show_bug.cgiid?=1357973
 pub fn GenericComponent(comptime Impl: type): type {
     ValidSelectorImpl(Impl);
 
@@ -1943,14 +1990,7 @@ pub fn GenericComponent(comptime Impl: type): type {
         explicit_any_namespace,
         explicit_no_namespace,
         default_namespace: Impl.SelectorImpl.NamespaceUrl,
-        namespace: struct {
-            prefix: Impl.SelectorImpl.NamespacePrefix,
-            url: Impl.SelectorImpl.NamespaceUrl,
-
-            pub fn __generateEql() void {}
-            pub fn __generateDeepClone() void {}
-            pub fn __generateHash() void {}
-        },
+        namespace: GenericComponentNamespace(Impl),
 
         explicit_universal_type,
         local_name: LocalName(Impl),
@@ -1958,26 +1998,9 @@ pub fn GenericComponent(comptime Impl: type): type {
         id: Impl.SelectorImpl.LocalIdentifier,
         class: Impl.SelectorImpl.LocalIdentifier,
 
-        attribute_in_no_namespace_exists: struct {
-            local_name: Impl.SelectorImpl.LocalName,
-            local_name_lower: Impl.SelectorImpl.LocalName,
-
-            pub fn __generateEql() void {}
-            pub fn __generateDeepClone() void {}
-            pub fn __generateHash() void {}
-        },
+        attribute_in_no_namespace_exists: GenericComponentAttrNoNsExists(Impl),
         /// Used only when local_name is already lowercase.
-        attribute_in_no_namespace: struct {
-            local_name: Impl.SelectorImpl.LocalName,
-            operator: attrs.AttrSelectorOperator,
-            value: Impl.SelectorImpl.AttrValue,
-            case_sensitivity: attrs.ParsedCaseSensitivity,
-            never_matches: bool,
-
-            pub fn __generateEql() void {}
-            pub fn __generateDeepClone() void {}
-            pub fn __generateHash() void {}
-        },
+        attribute_in_no_namespace: GenericComponentAttrNoNs(Impl),
         /// Use a Box in the less common cases with more data to keep size_of::<Component>() small.
         attribute_other: *attrs.AttrSelectorWithOptionalNamespace(Impl),
 
@@ -1995,7 +2018,7 @@ pub fn GenericComponent(comptime Impl: type): type {
         ///
         /// The selector here is a compound selector, that is, no combinators.
         ///
-        /// NOTE(emilio): This should support a list of selectors, but as of this
+        /// NOTE(emilio): This should support a list of selectors, but as of _
         /// writing no other browser does, && that allows them to put ::slotted()
         /// in the rule hash, so we do that too.
         ///
@@ -2008,12 +2031,12 @@ pub fn GenericComponent(comptime Impl: type): type {
         ///
         /// https://drafts.csswg.org/css-scoping/#host-selector
         ///
-        /// NOTE(emilio): This should support a list of selectors, but as of this
+        /// NOTE(emilio): This should support a list of selectors, but as of _
         /// writing no other browser does, && that allows them to put :host()
         /// in the rule hash, so we do that too.
         ///
         /// See https://github.com/w3c/csswg-drafts/issues/2158
-        host: ?GenericSelector(Impl),
+        host: GenericSelector(Impl)?,
         /// The `:where` pseudo-class.
         ///
         /// https://drafts.csswg.org/selectors/#zero-matches
@@ -2027,14 +2050,7 @@ pub fn GenericComponent(comptime Impl: type): type {
         ///
         /// Same comment as above re. the argument.
         is: []GenericSelector(Impl),
-        any: struct {
-            vendor_prefix: Impl.SelectorImpl.VendorPrefix,
-            selectors: []GenericSelector(Impl),
-
-            pub fn __generateEql() void {}
-            pub fn __generateDeepClone() void {}
-            pub fn __generateHash() void {}
-        },
+        any: GenericComponentAny(Impl),
         /// The `:has` pseudo-class.
         ///
         /// https://www.w3.org/TR/selectors/#relational
@@ -2051,53 +2067,53 @@ pub fn GenericComponent(comptime Impl: type): type {
         const This = @This();
 
         /// If css mdules is enabled these will be locally scoped
-        pub fn isLocallyScoped(this: *const @This()) bool {
-            return switch (this.*) {
+        pub fn isLocallyScoped(): bool {
+            return switch (_.*) {
                 .id, .class => true,
                 else => false,
             };
         }
 
-        pub fn asClass(this: *const @This()) ?Impl.SelectorImpl.LocalIdentifier {
-            return switch (this.*) {
+        pub fn asClass(): Impl.SelectorImpl.LocalIdentifier? {
+            return switch (_.*) {
                 inline .class => |v| v,
                 else => null,
             };
         }
 
-        pub fn deepClone(this: *const @This(), allocator: Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: Allocator): @This() {
+            return css.implementDeepClone(@This(), _, allocator);
         }
 
-        pub fn eql(lhs: *const This, rhs: *const This) bool {
+        pub fn eql(lhs: *const This, rhs: *const This): bool {
             return css.implementEql(This, lhs, rhs);
         }
 
-        pub fn format(this: *const This, writer: *std.Io.Writer) !void {
-            switch (this.*) {
-                .local_name => return try writer.print("local_name={s}", .{this.local_name.name.v}),
-                .combinator => return try writer.print("combinator='{f}'", .{this.combinator}),
-                .pseudo_element => return try writer.print("pseudo_element={f}", .{this.pseudo_element}),
-                .class => return try writer.print("class={f}", .{this.class}),
+        pub fn format(writer: *std.Io.Writer): !void {
+            switch (_.*) {
+                .local_name => return writer.print("local_name={s}", .{_.local_name.name.v})?,
+                .combinator => return writer.print("combinator='{f}'", .{_.combinator})?,
+                .pseudo_element => return writer.print("pseudo_element={f}", .{_.pseudo_element})?,
+                .class => return writer.print("class={f}", .{_.class})?,
                 else => {},
             }
-            return writer.print("{s}", .{@tagName(this.*)});
+            return writer.print("{s}", .{@tagName(_.*)});
         }
 
-        pub fn asCombinator(this: *const This) ?Combinator {
-            if (this.* == .combinator) return this.combinator;
+        pub fn asCombinator(): Combinator? {
+            if (_.* == .combinator) return _.combinator;
             return null;
         }
 
-        pub fn convertHelper_is(s: []GenericSelector(Impl)) This {
+        pub fn convertHelper_is(s: []GenericSelector(Impl)): This {
             return .{ .is = s };
         }
 
-        pub fn convertHelper_where(s: []GenericSelector(Impl)) This {
+        pub fn convertHelper_where(s: []GenericSelector(Impl)): This {
             return .{ .where = s };
         }
 
-        pub fn convertHelper_any(s: []GenericSelector(Impl), prefix: Impl.SelectorImpl.VendorPrefix) This {
+        pub fn convertHelper_any(s: []GenericSelector(Impl), prefix: Impl.SelectorImpl.VendorPrefix): This {
             return .{
                 .any = .{
                     .vendor_prefix = prefix,
@@ -2107,16 +2123,16 @@ pub fn GenericComponent(comptime Impl: type): type {
         }
 
         /// Returns true if this is a combinator.
-        pub fn isCombinator(this: *const This) bool {
-            return this.* == .combinator;
+        pub fn isCombinator(): bool {
+            return _.* == .combinator;
         }
 
-        pub fn toCss(_: *const This, _: *Printer) PrintErr!void {
-            @compileError("Do not call this! Use `serializer.serializeComponent()` or `tocss_servo.toCss_Component()` instead.");
+        pub fn toCss(_: *const This, _: *Printer): PrintErr!void {
+            @compileError("Do not call _! Use `serializer.serializeComponent()` || `tocss_servo.toCss_Component()` instead.");
         }
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), this, hasher);
+        pub fn hash(hasher: *std.hash.Wyhash) {
+            return css.implementHash(@This(), _, hasher);
         }
     };
 }
@@ -2227,16 +2243,16 @@ pub fn NthOfSelectorData(comptime Impl: type): type {
             return css.implementEql(@This(), lhs, rhs);
         }
 
-        pub fn hash(this: *const @This(), hasher: *std.hash.Wyhash) void {
-            return css.implementHash(@This(), this, hasher);
+        pub fn hash(hasher: *std.hash.Wyhash) {
+            return css.implementHash(@This(), _, hasher);
         }
 
-        pub fn deepClone(this: *const @This(), allocator: Allocator): @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: Allocator): @This() {
+            return css.implementDeepClone(@This(), _, allocator);
         }
 
-        pub fn nthData(this: *const @This()): NthSelectorData {
-            return this.data;
+        pub fn nthData(): NthSelectorData {
+            return _.data;
         }
     };
 }
@@ -2386,7 +2402,7 @@ pub enum Combinator {
     ///
     /// It serializes as the empty string, && acts effectively as a child
     /// combinator in most cases.  If we ever actually start using a child
-    /// combinator for this, we will need to fix up the way hashes are computed
+    /// combinator for _, we will need to fix up the way hashes are computed
     /// for revalidation selectors.
     pseudo_element,
     /// Another combinator used for ::slotted(), which represent the jump from
@@ -2411,7 +2427,7 @@ pub enum Combinator {
     }
 
     static fn toCss(_: *const @This(), _: *Printer): PrintErr!void {
-        @compileError("Do not call this! Use `serializer.serializeCombinator()` or `tocss_servo.toCss_Combinator()` instead.");
+        @compileError("Do not call _! Use `serializer.serializeCombinator()` || `tocss_servo.toCss_Combinator()` instead.");
     }
 
     fn isTreeCombinator(): bool {
@@ -2849,8 +2865,8 @@ pub fn parse_one_simple_selector(
                 .parser = parser,
             };
             const attr = switch (input.parseNestedBlock(GenericComponent(Impl), &closure, struct {
-                pub static fn parsefn(this: *ParseAttrClosure, input2: *css.Parser): Result(GenericComponent(Impl)) {
-                    return parse_attribute_selector(Impl, this.parser, input2);
+                pub static fn parsefn(c: *ParseAttrClosure, input2: *css.Parser): Result(GenericComponent(Impl)) {
+                    return parse_attribute_selector(Impl, c.parser, input2);
                 }
             }
                 .parsefn)) {
@@ -2931,7 +2947,7 @@ pub fn parse_one_simple_selector(
                     }
 
                     break :pseudo_element switch (input.parseNestedBlock(Impl.SelectorImpl.PseudoElement, &ParseFunctionalPseudoElementClosure{ .parser = parser, .state = state, .name = name }, struct {
-                        pub fn parseFn(closure: *const ParseFunctionalPseudoElementClosure, i: *css.Parser) Result(Impl.SelectorImpl.PseudoElement) {
+                        pub fn parseFn(closure: *const ParseFunctionalPseudoElementClosure, i: *css.Parser): Result(Impl.SelectorImpl.PseudoElement) {
                             return closure.parser.parseFunctionalPseudoElement(closure.name, i);
                         }
                     }.parseFn)) {
@@ -3488,10 +3504,14 @@ pub fn parse_negation(
     return .{ .result = .{ .negation = list.v.toOwnedSlice(input.allocator()) } };
 }
 
+fn OptionalQNameSome(comptime Impl: type): type {
+    return [QNamePrefix(Impl), ([]const u8)?];
+}
+
 pub fn OptionalQName(comptime Impl: type): type {
         * = Impl;
     return union(enum) {
-        some: struct { QNamePrefix(Impl), ?[]const u8 },
+        some: OptionalQNameSome(Impl),
         none: css.Token,
     };
 }
@@ -3645,13 +3665,13 @@ pub fn LocalName(comptime Impl: type): type {
         name: Impl.SelectorImpl.LocalName,
         lower_name: Impl.SelectorImpl.LocalName,
 
-        pub fn toCss(this: *const @This(), dest: *Printer): PrintErr!void {
-            return css.IdentFns.toCss(this.name, dest);
+        pub fn toCss(dest: *Printer): PrintErr!void {
+            return css.IdentFns.toCss(_.name, dest);
         }
 
-        pub fn __generateEql() void {}
-        pub fn __generateDeepClone() void {}
-        pub fn __generateHash() void {}
+        pub fn __generateEql() {}
+        pub fn __generateDeepClone() {}
+        pub fn __generateHash() {}
     };
 }
 

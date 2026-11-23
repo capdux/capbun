@@ -1797,3 +1797,5 @@
 - [Wave #110] 清零第 3 批 15 个 `--strict` 报错文件（`cli/test/{ChangedFilesFilter,parallel/Channel,parallel/runner}`, `collections/{StaticHashMap,array_list,baby_list,bounded_array,hive_array,identity_context,linear_fifo,multi_array_list}` -> 100% 全清, `crash_handler/{CPUFeatures,handle_oom}` -> 100% 全清, `csrf/csrf` -> 100% 全清, `css/context`）；`zig:check` 5/5 通过。
 
 - [Wave #111] 清零第 4 批 15 个 `src/css/` `--strict` 报错文件（`css_modules`, `css_parser`, `declaration`, `error`, `generics`, `media_query`, `printer`, `properties/{align,animation,background,border,border_radius,flex,font,margin_padding}`）；`zig:check` 5/5 通过。
+
+- [Wave #112] 清零第 5 批 15 个 `src/css/` `--strict` 报错文件（`properties/{prefix_handler,size,transform,transition,ui}`, `rules/{font_face,page,rules,style,supports}`, `selectors/parser`, `small_list`, `values/{calc,color,gradient}`）；`zig:check` 5/5 通过。

@@ -88,7 +88,7 @@ pub union(enum) Gradient {
             .err => |e| return .{ .err = e },
         };
         return input.parseNestedBlock(Gradient, GradientParseClosure{ location: location, func: func }, struct {
-            fn parse(
+            static fn parse(
                 closure: GradientParseClosure,
                 input_: *css.Parser,
             ): Result(Gradient) {
@@ -461,7 +461,7 @@ pub struct LinearGradient {
             let flipped_items = ArrayList(GradientItem(LengthPercentage)).initCapacity(
                 dest.allocator,
                 _.items.items.len,
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
             const flipped_guard = DeinitAllocGuard<@TypeOf(flipped_items)>{ ptr: unsafe { &flipped_items }, allocator: dest.allocator };
             * = flipped_guard;
 
@@ -488,7 +488,7 @@ pub struct LinearGradient {
                                 color: cs.color,
                                 position: pos,
                             },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                     },
                 }
             }
@@ -645,7 +645,7 @@ pub struct ConicGradient {
 
     static fn parse(input: *css.Parser): Result(ConicGradient) {
         const angle = input.tryParse(struct {
-            inline fn parse(i: *css.Parser): Result(Angle) {
+            static inline fn parse(i: *css.Parser): Result(Angle) {
                 if (e := i.expectIdentMatching("from").asErr()) return .{ .err = e };
                 // Spec allows unitless zero angles for gradients.
                 // https://w3c.github.io/csswg-drafts/css-images-4/#valdef-conic-gradient-angle
@@ -654,7 +654,7 @@ pub struct ConicGradient {
         }.parse, {});
 
         const position = input.tryParse(struct {
-            inline fn parse(i: *css.Parser): Result(Position) {
+            static inline fn parse(i: *css.Parser): Result(Position) {
                 if (e := i.expectIdentMatching("at").asErr()) return .{ .err = e };
                 return Position.parse(i);
             }
@@ -1115,31 +1115,31 @@ pub fn GradientItem(comptime D: type): type {
         /// A color interpolation hint.
         hint: D,
 
-        pub fn toCss(this: *const @This(), dest: *Printer): PrintErr!void {
-            return switch (this.*) {
-                .color_stop => |*c| try c.toCss(dest),
-                .hint => |*h| try css.generic.toCss(D, h, dest),
+        pub fn toCss(dest: *Printer): PrintErr!void {
+            return switch (_) {
+                .color_stop => |*c| c.toCss(dest)?,
+                .hint => |*h| css.generic.toCss(D, h, dest)?,
             };
         }
 
-        pub fn eql(this: *const GradientItem(D), other: *const GradientItem(D)): bool {
-            return css.implementEql(@This(), this, other);
+        pub fn eql(other: *const GradientItem(D)): bool {
+            return css.implementEql(@This(), &_, other);
         }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): @This() {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
-        pub fn isCompatible(this: *const @This(), browsers: css.targets.Browsers): bool {
-            return switch (this.*) {
+        pub fn isCompatible(browsers: css.targets.Browsers): bool {
+            return switch (_) {
                 .color_stop => |*c| c.color.isCompatible(browsers),
                 .hint => css.compat.Feature.isCompatible(.gradient_interpolation_hints, browsers),
             };
         }
 
         /// Returns a fallback gradient item for the given color fallback type.
-        pub fn getFallback(this: *const @This(), allocator: Allocator, kind: css.ColorFallbackKind) GradientItem(D) {
-            return switch (this.*) {
+        pub fn getFallback(allocator: Allocator, kind: css.ColorFallbackKind): GradientItem(D) {
+            return switch (_) {
                 .color_stop => |*stop| blk: {
                     let cs: GradientItem(D) = .{
                         .color_stop = .{
@@ -1152,13 +1152,13 @@ pub fn GradientItem(comptime D: type): type {
                     }
                     break :blk cs;
                 },
-                .hint => this.deepClone(allocator),
+                .hint => _.deepClone(allocator),
             };
         }
 
         /// Returns the color fallback types needed for the given browser targets.
-        pub fn getNecessaryFallbacks(this: *const @This(), targets: css.targets.Targets): css.ColorFallbackKind {
-            return switch (this.*) {
+        pub fn getNecessaryFallbacks(targets: css.targets.Targets): css.ColorFallbackKind {
+            return switch (_) {
                 .color_stop => |*stop| stop.color.getNecessaryFallbacks(targets),
                 .hint => css.ColorFallbackKind{},
             };
@@ -1237,12 +1237,12 @@ pub fn WebKitGradientPointComponent(comptime S: type): type {
 
         const This = @This();
 
-        pub fn parse(input: *css.Parser) Result(This) {
+        pub static fn parse(input: *css.Parser): Result(This) {
             if (input.tryParse(css.Parser.expectIdentMatching, .{"center"}).isOk()) {
                 return .{ .result = .center };
             }
 
-            if (input.tryParse(NumberOrPercentage.parse, .{}).asValue()) |number| {
+            if (number := input.tryParse(NumberOrPercentage.parse, .{}).asValue()) {
                 return .{ .result = .{ .number = number } };
             }
 
@@ -1253,42 +1253,45 @@ pub fn WebKitGradientPointComponent(comptime S: type): type {
             return .{ .result = .{ .side = keyword } };
         }
 
-        pub fn toCss(this: *const This, dest: *Printer) PrintErr!void {
-            switch (this.*) {
+        pub fn toCss(dest: *Printer): PrintErr!void {
+            switch (_) {
                 .center => {
                     if (dest.minify) {
-                        try dest.writeStr("50%");
+                        dest.writeStr("50%")?;
                     } else {
-                        try dest.writeStr("center");
+                        dest.writeStr("center")?;
                     }
                 },
                 .number => |*lp| {
-                    if (lp.* == .percentage and lp.percentage.v == 0.0) {
-                        try dest.writeChar('0');
+                    if (lp.* == .percentage && lp.percentage.v == 0.0) {
+                        dest.writeChar('0')?;
                     } else {
-                        try lp.toCss(dest);
+                        lp.toCss(dest)?;
                     }
                 },
                 .side => |*s| {
                     if (dest.minify) {
                         const lp: LengthPercentage = s.intoLengthPercentage();
-                        try lp.toCss(dest);
+                        lp.toCss(dest)?;
                     } else {
-                        try s.toCss(dest);
+                        s.toCss(dest)?;
                     }
                 },
             }
         }
 
         /// Attempts to convert a standard position to a webkit gradient point.
-        pub fn fromPosition(this: *const css.css_values.position.PositionComponent(S), allocator: Allocator) ?WebKitGradientPointComponent(S) {
-            return switch (this.*) {
+        pub static fn fromPosition(pos: *const css.css_values.position.PositionComponent(S), allocator: Allocator): WebKitGradientPointComponent(S)? {
+            return switch (pos.*) {
                 .center => .center,
                 .length => |len| .{
                     .number = switch (len) {
                         .percentage => |p| .{ .percentage = p },
                         // Webkit gradient points can only be specified in pixels.
-                        .dimension => |*d| if (d.toPx()) |px| .{ .number = px } else return null,
+                        .dimension => |*d| blk: {
+                            if (px := d.toPx()) break :blk .{ .number = px };
+                            return null;
+                        },
                         else => return null,
                     },
                 },
@@ -1301,8 +1304,8 @@ pub fn WebKitGradientPointComponent(comptime S: type): type {
             };
         }
 
-        pub fn eql(this: *const This, other: *const This) bool {
-            return css.implementEql(@This(), this, other);
+        pub fn eql(other: *const This): bool {
+            return css.implementEql(@This(), &_, other);
         }
     };
 }
@@ -1398,7 +1401,7 @@ pub fn ColorStop(comptime D: type): type {
 
         const This = @This();
 
-        pub fn parse(input: *css.Parser): Result(ColorStop(D)) {
+        pub static fn parse(input: *css.Parser): Result(ColorStop(D)) {
             const color = switch (CssColor.parse(input)) {
                 .result => |vv| vv,
                 .err => |e| return .{ .err = e },
@@ -1419,8 +1422,8 @@ pub fn ColorStop(comptime D: type): type {
             return;
         }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): @This() {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
         pub fn eql(other: *const This): bool {
@@ -1608,7 +1611,7 @@ pub fn parseItems(comptime D: type, input: *css.Parser): Result(ArrayList(Gradie
             void,
             ParseItemsClosure<D>{ .items = &items, .seen_stop = &seen_stop },
             struct {
-                fn parse(closure: ParseItemsClosure<D>, i: *css.Parser): Result(void) {
+                static fn parse(closure: ParseItemsClosure<D>, i: *css.Parser): Result(void) {
                     if (closure.seen_stop.*) {
                         if (hint := i.tryParse(comptime css.generic.parseFor(D), {}).asValue()) {
                             closure.seen_stop.* = false;
@@ -1628,7 +1631,7 @@ pub fn parseItems(comptime D: type, input: *css.Parser): Result(ArrayList(Gradie
                         closure.items.append(i.allocator(), { color_stop: {
                             color: color,
                             position: position,
-                        } }) catch |e| bun.handleOom(e);
+                        } }) catch e => bun.handleOom(e);
                     } else {
                         bun.handleOom(closure.items.append(i.allocator(), { color_stop: stop }));
                     }

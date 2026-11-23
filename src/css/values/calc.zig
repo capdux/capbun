@@ -185,7 +185,7 @@ pub fn intoF32(self: Constant) f32 {
 .e => std.math.e,
 .pi => std.math.pi,
 .infinity => std.math.inf(f32),
-.@"-infinity" => (0 - std.math.inf(f32)),
+.@"-infinity" => (-std.math.inf(f32)),
 .nan => std.math.nan(f32),
 });
     }
@@ -269,7 +269,7 @@ pub fn Calc(comptime V: type) type {
         },
     function: *MathFunction(V),
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) This {
+pub fn deepClone(self: @This(), allocator: Allocator) This {
             return (switch (self.*) {
 .value => |v| .{ .value = bun.create(allocator, V, (if (needs_deepclone) v.deepClone(allocator) else v.*)) },
 .number => self.*,
@@ -316,7 +316,7 @@ pub fn deinit(self: *@This(), allocator: Allocator) void {
 });
     }
 
-pub fn eql(self: *const @This(), other: *const @This()) bool {
+pub fn eql(self: @This(), other: *const @This()) bool {
             return (switch (self.*) {
 .value => |a| {
 return ((other.* == .value) and css.generic.eql(V, a, other.value));
@@ -546,7 +546,7 @@ return .{ .err = e };
             return .{ .result = This{ .function = bun.create(input.allocator(), MathFunction(V), MathFunction(V){ .max = reduced }) } };
 },
 .clamp => {
-const ClosureResult = struct { ?This, This, ?This };
+const ClosureResult = .{ try This, This, try This };
             const Closure = struct {
     ctx: @TypeOf(ctx),
 
@@ -658,11 +658,13 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
             return This.parseMathFn(i, @as(void, undefined), @This().rem, mathFunctionRem, self.ctx, parseIdent);
     }
 
-pub fn rem(_: void, a: f32, b: f32) f32 {
+pub fn rem(self: @This(), _: void, a: f32, b: f32) f32 {
+        _ = self;
             return @mod(a, b);
     }
 
-pub fn mathFunctionRem(_: void, a: This, b: This) MathFunction(V) {
+pub fn mathFunctionRem(self: @This(), _: void, a: This, b: This) MathFunction(V) {
+        _ = self;
             return MathFunction(V){ .rem = .{ .dividend = a, .divisor = b } };
     }
 };
@@ -678,11 +680,13 @@ pub fn parseNestedBlockFn(self: *@This(), i: *css.Parser) Result(This) {
             return This.parseMathFn(i, @as(void, undefined), @This().modulo, mathFunctionMod, self.ctx, parseIdent);
     }
 
-pub fn modulo(_: void, a: f32, b: f32) f32 {
+pub fn modulo(self: @This(), _: void, a: f32, b: f32) f32 {
+        _ = self;
             return @mod((@mod(a, b) + b), b);
     }
 
-pub fn mathFunctionMod(_: void, a: This, b: This) MathFunction(V) {
+pub fn mathFunctionMod(self: @This(), _: void, a: This, b: This) MathFunction(V) {
+        _ = self;
             return MathFunction(V){ .mod_ = .{ .dividend = a, .divisor = b } };
     }
 };
@@ -1116,7 +1120,8 @@ pub fn parseTrig(input: *css.Parser, comptime trig_fn_kind: enum {
             }, to_angle: bool, ctx: anytype, comptime parse_ident: *const fn (@TypeOf(ctx), []const u8) ?This) Result(This) {
             const trig_fn = struct {
 
-pub fn run(x: f32) f32 {
+pub fn run(self: @This(), x: f32) f32 {
+        _ = self;
             const mathfn = (comptime (switch (trig_fn_kind) {
 .sin => std.math.sin,
 .cos => std.math.cos,
@@ -1182,7 +1187,8 @@ pub fn parseIdentFn(self: *@This(), ident: []const u8) ?Calc(Angle) {
 pub fn ParseIdentNone(comptime Ctx: type, comptime Value: type) type {
             return struct {
 
-pub fn func(_: Ctx, _: []const u8) ?Calc(Value) {
+pub fn func(self: @This(), _: Ctx, _: []const u8) ?Calc(Value) {
+        _ = self;
             return null;
     }
 };
@@ -1305,12 +1311,15 @@ pub fn parseHypot(allocator: Allocator, args: *ArrayList(This)) Result(?This) {
             _ = &errored;
             var sum: This = first;
             _ = &sum;
-            for (args.items[i..]) |*arg| {
+            for (cp_mut_slice(&args.items[i..])) |*arg| {
                 _ = &arg;
-                sum = ((This.applyOp((&sum), arg, allocator, @as(void, undefined), calcHypotApplyOpFn)) orelse {
-                errored = true;
-                break;
-});
+                if (This.applyOp((&sum), (arg.*), allocator, @as(void, undefined), calcHypotApplyOpFn)) |sum_val| {
+                    _ = &sum_val;
+                    sum = sum_val;
+                } else {
+                    errored = true;
+                    break;
+                }
             }
             if (errored) {
                 return .{ .result = null };
@@ -1332,7 +1341,7 @@ pub fn applyOp(a: *const This, b: *const This, allocator: std.mem.Allocator, ctx
             return null;
     }
 
-pub fn applyMap(self: *const @This(), allocator: Allocator, comptime op: *const fn (f32) f32) ?This {
+pub fn applyMap(self: @This(), allocator: Allocator, comptime op: *const fn (f32) f32) ?This {
             switch (self.*) {
 .number => |n| {
 return This{ .number = op(n) };
@@ -1350,7 +1359,7 @@ else => {
             return null;
     }
 
-pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
+pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
             const was_in_calc = dest.in_calc;
             dest.in_calc = true;
             const res = toCssImpl(self, dest);
@@ -1358,7 +1367,7 @@ pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
             return res;
     }
 
-pub fn toCssImpl(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
+pub fn toCssImpl(self: @This(), dest: *css.Printer) css.PrintErr!void {
             return (switch (self.*) {
 .value => |v| v.toCss(dest),
 .number => |n| CSSNumberFns.toCss((&n), dest),
@@ -1388,11 +1397,11 @@ pub fn toCssImpl(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
                 if ((@abs(num) < 1.0)) {
                     const div = (1.0 / num);
                     _ = try calc.toCss(dest);
-                    _ = try dest.delim(47, true);
-                    _ = try CSSNumberFns.toCss((&div), dest);
+                    _ = dest.delim(try 47, true);
+                    _ = CSSNumberFns.toCss(try (&div), dest);
                 } else {
-                    _ = try CSSNumberFns.toCss((&num), dest);
-                    _ = try dest.delim(42, true);
+                    _ = CSSNumberFns.toCss(try (&num), dest);
+                    _ = dest.delim(try 42, true);
                     _ = try calc.toCss(dest);
                 }
             }
@@ -1403,7 +1412,7 @@ return f.toCss(dest);
 });
     }
 
-pub fn trySign(self: *const @This()) ?f32 {
+pub fn trySign(self: @This()) ?f32 {
             return (switch (self.*) {
 .value => |v| {
 return (if (V == f32) css.signfns.signF32(v) else v.trySign());
@@ -1413,7 +1422,7 @@ else => null,
 });
     }
 
-pub fn isSignNegative(self: *const @This()) bool {
+pub fn isSignNegative(self: @This()) bool {
             return css.signfns.isSignNegative(((self.trySign()) orelse { return false; }));
     }
 
@@ -1448,16 +1457,16 @@ pub fn reduceArgs(allocator: Allocator, args: *ArrayList(This), order: std.math.
                 _ = &arg;
                 var found: ??*This = null;
                 _ = &found;
-                switch (arg.*) {
+                switch ((arg.*).*) {
 .value => |val| {
 for (reduced.items) |*b| {
                     _ = &b;
-                    switch (b.*) {
+                    switch ((b.*).*) {
 .value => |v| {
 const result = css.generic.partialCmp(V, val, v);
                     if ((result != null)) {
                         if (((result.?) == order)) {
-                            found = b;
+                            found = (b.*);
                             break;
                         } else {
                             found = @as(?*This, null);
@@ -1479,23 +1488,23 @@ else => {
                     _ = &__r;
                     if (__r) |r| {
                         _ = &r;
-                        r.* = arg.*;
-                        arg.* = This{ .number = 420 };
+                        r.* = (arg.*).*;
+                        (arg.*).* = This{ .number = 420 };
                         continue;
                     }
                 } else {
-                    _ = bun.handleOom(reduced.append(allocator, arg.*));
-                    arg.* = This{ .number = 420 };
+                    _ = bun.handleOom(reduced.append(allocator, (arg.*).*));
+                    (arg.*).* = This{ .number = 420 };
                     continue;
                 }
-                _ = arg.deinit(allocator);
-                arg.* = This{ .number = 420 };
+                _ = (arg.*).deinit(allocator);
+                (arg.*).* = This{ .number = 420 };
             }
             _ = css.deepDeinit(This, allocator, args);
             args.* = reduced;
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
             return (switch (self.*) {
 .sum => |*args| {
 return (args.left.isCompatible(browsers) and args.right.isCompatible(browsers));
@@ -1540,7 +1549,7 @@ pub fn MathFunction(comptime V: type) type {
     sign: ThisCalc,
     hypot: ArrayList(ThisCalc),
 
-pub fn eql(self: *const @This(), other: *const @This()) bool {
+pub fn eql(self: @This(), other: *const @This()) bool {
             return (switch (self.*) {
 .calc => |a| {
 return ((other.* == .calc) and a.eql((&other.calc)));
@@ -1575,7 +1584,7 @@ return ((other.* == .hypot) and css.generic.eqlList(ThisCalc, a, (&other.hypot))
 });
     }
 
-pub fn deepClone(self: *const @This(), allocator: Allocator) @This() {
+pub fn deepClone(self: @This(), allocator: Allocator) @This() {
             return (switch (self.*) {
 .calc => |*calc| .{ .calc = calc.deepClone(allocator) },
 .min => |*min| .{ .min = css.deepClone(ThisCalc, allocator, min) },
@@ -1630,7 +1639,7 @@ _ = css.deepDeinit(ThisCalc, allocator, hyp);
 }
     }
 
-pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
+pub fn toCss(self: @This(), dest: *css.Printer) css.PrintErr!void {
             return (switch (self.*) {
 .calc => |*calc| {
 {
@@ -1651,7 +1660,7 @@ pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
                     } else {
                         _ = try dest.delim(44, false);
                     }
-                    _ = try arg.toCss(dest);
+                    _ = try (arg.*).toCss(dest);
                 }
                 _ = try dest.writeChar(41);
             }
@@ -1668,7 +1677,7 @@ pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
                     } else {
                         _ = try dest.delim(44, false);
                     }
-                    _ = try arg.toCss(dest);
+                    _ = try (arg.*).toCss(dest);
                 }
                 _ = try dest.writeChar(41);
             }
@@ -1741,7 +1750,7 @@ pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
                     } else {
                         _ = try dest.delim(44, false);
                     }
-                    _ = try arg.toCss(dest);
+                    _ = try (arg.*).toCss(dest);
                 }
                 _ = try dest.writeChar(41);
             }
@@ -1749,14 +1758,14 @@ pub fn toCss(self: *const @This(), dest: *css.Printer) css.PrintErr!void {
 });
     }
 
-pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
+pub fn isCompatible(self: @This(), browsers: css.targets.Browsers) bool {
             const F = css.compat.Feature;
             return (switch (self.*) {
 .calc => |*c| (F.isCompatible(F.calc_function, browsers) and c.isCompatible(browsers)),
 .min => |*m| (F.isCompatible(F.min_function, browsers) and brk: {
             for (m.items) |*arg| {
                 _ = &arg;
-                if ((!arg.isCompatible(browsers))) {
+                if ((!(arg.*).isCompatible(browsers))) {
                     break :brk false;
                 }
             }
@@ -1765,7 +1774,7 @@ pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
 .max => |*m| (F.isCompatible(F.max_function, browsers) and brk: {
             for (m.items) |*arg| {
                 _ = &arg;
-                if ((!arg.isCompatible(browsers))) {
+                if ((!(arg.*).isCompatible(browsers))) {
                     break :brk false;
                 }
             }
@@ -1780,7 +1789,7 @@ pub fn isCompatible(self: *const @This(), browsers: css.targets.Browsers) bool {
 .hypot => |*h| (F.isCompatible(F.hypot_function, browsers) and brk: {
             for (h.items) |*arg| {
                 _ = &arg;
-                if ((!arg.isCompatible(browsers))) {
+                if ((!(arg.*).isCompatible(browsers))) {
                     break :brk false;
                 }
             }

@@ -61,7 +61,7 @@ struct SeenDeclContext {
         return seenDeclKeyEql(a, b);
     }
 
-    inline fn seenDeclKeyEql(a: SeenDeclKey, that: SeenDeclKey): bool {
+    static inline fn seenDeclKeyEql(a: SeenDeclKey, that: SeenDeclKey): bool {
         return @intFromEnum(a[0]) == @intFromEnum(that[0]) && bun.strings.eql(a[1], that[1]);
     }
 }
@@ -220,7 +220,7 @@ pub union(enum) SupportsCondition {
                             seen_guard.val.put(
                                 .{ property_id.withPrefix(css.VendorPrefix{ .none = true }), value },
                                 0,
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                         }
                     }
 
@@ -241,13 +241,13 @@ pub union(enum) SupportsCondition {
                             conditions.append(input.allocator(), SupportsCondition{ .declaration = {
                                 property_id: property_id,
                                 value: value,
-                            } }) catch |e| bun.handleOom(e);
+                            } }) catch e => bun.handleOom(e);
                         }
                     } else {
                         conditions.append(
                             input.allocator(),
                             condition,
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
                 },
                 else => break,
@@ -303,7 +303,7 @@ pub union(enum) SupportsCondition {
             },
             .open_paren => {
                 const res = input.tryParse(struct {
-                    pub fn parseFn(i: *css.Parser): Result(SupportsCondition) {
+                    pub static fn parseFn(i: *css.Parser): Result(SupportsCondition) {
                         const vv: void = undefined;
                         return i.parseNestedBlock(SupportsCondition, vv, css.voidWrap(SupportsCondition, parse));
                     }

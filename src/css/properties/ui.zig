@@ -147,7 +147,12 @@ pub fn deepClone(self: ColorScheme, allocator: Allocator) @This() {
             const s = self;
             return css.implementDeepClone(@This(), (&s), allocator);
     }
-    const Map = bun.ComptimeEnumMap(enum { normal, only, light, dark });
+    const Map = bun.ComptimeEnumMap(enum {
+        normal,
+        only,
+        light,
+        dark,
+    });
 };
 
 pub const Cursor = struct {

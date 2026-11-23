@@ -482,7 +482,7 @@ pub struct SizeHandler {
                     context.allocator,
                     @unionInit(PropertyId, @tagName(physical), undefined),
                 ),
-            }) catch |e| bun.handleOom(e);
+            }) catch e => bun.handleOom(e);
             @field(_.flushed_properties, @tagName(physical)) = true;
         }
     }
@@ -555,7 +555,7 @@ pub struct SizeHandler {
                             @tagName(property),
                             @unionInit(SizeType, @tagName(feature), prefix),
                         ),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
             }
         }

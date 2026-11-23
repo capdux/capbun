@@ -160,11 +160,11 @@ pub struct ColorSchemeHandler {
                         dest.append(
                             context.allocator,
                             defineVar(context.allocator, "--buncss-light", { ident: "initial" }),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         dest.append(
                             context.allocator,
                             defineVar(context.allocator, "--buncss-dark", { whitespace: " " }),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
 
                         if (color_scheme.dark) {
                             context.addDarkRule(

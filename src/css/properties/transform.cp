@@ -121,7 +121,7 @@ fn parseTransform(input: *css.Parser): Result(Transform) {
         Transform,
         TransformParseClosure{ .function = function },
         struct {
-            fn parse(closure: TransformParseClosure, i: *css.Parser) css.Result(Transform) {
+            static fn parse(closure: TransformParseClosure, i: *css.Parser): css.Result(Transform) {
                 const location = i.currentSourceLocation();
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(closure.function, "matrix")) {
                     const a = switch (css.CSSNumberFns.parse(i)) {
@@ -258,7 +258,7 @@ fn parseTransform(input: *css.Parser): Result(Transform) {
                         .err => |e| return { err: e },
                     };
                     if (i.tryParse(struct {
-                        fn parse(p: *css.Parser): css.Result(void) {
+                        static fn parse(p: *css.Parser): css.Result(void) {
                             return p.expectComma();
                         }
                     }.parse, {}).isOk()) {
@@ -310,7 +310,7 @@ fn parseTransform(input: *css.Parser): Result(Transform) {
                         .err => |e| return { err: e },
                     };
                     if (i.tryParse(struct {
-                        fn parse(p: *css.Parser): css.Result(void) {
+                        static fn parse(p: *css.Parser): css.Result(void) {
                             return p.expectComma();
                         }
                     }.parse, {}).isOk()) {
@@ -407,7 +407,7 @@ fn parseTransform(input: *css.Parser): Result(Transform) {
                         .err => |e| return { err: e },
                     };
                     if (i.tryParse(struct {
-                        fn parse(p: *css.Parser): css.Result(void) {
+                        static fn parse(p: *css.Parser): css.Result(void) {
                             return p.expectComma();
                         }
                     }.parse, {}).isOk()) {
@@ -846,11 +846,11 @@ pub fn Matrix(comptime T: type): type {
         e: T,
         f: T,
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): @This() {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
             return css.implementEql(@This(), lhs, rhs);
         }
     };
@@ -876,7 +876,7 @@ pub fn Matrix3d(comptime T: type): type {
         m43: T,
         m44: T,
 
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
             return css.implementEql(@This(), lhs, rhs);
         }
     };

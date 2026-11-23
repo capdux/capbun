@@ -120,7 +120,7 @@ pub struct PageSelector {
                 pseudo_classes.append(
                     input.allocator(),
                     parse_res.asValue().?,
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
             } else {
                 input.reset(&state);
                 break;
@@ -352,7 +352,7 @@ pub struct PageRuleAtRuleParser {
                 line: loc.line,
                 column: loc.column,
             },
-        }) catch |e| bun.handleOom(e);
+        }) catch e => bun.handleOom(e);
         return .success;
     }
 
