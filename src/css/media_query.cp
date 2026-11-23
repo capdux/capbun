@@ -1458,7 +1458,7 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
 
         const This = @This();
 
-        pub fn eql(lhs: *const This, rhs: *const This): bool {
+        pub static fn eql(lhs: *const This, rhs: *const This): bool {
             if (@intFromEnum(lhs.*) != @intFromEnum(rhs.*)) return false;
             return switch (lhs.*) {
                 .standard => |fid| fid == rhs.standard,
