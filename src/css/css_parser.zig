@@ -495,10 +495,9 @@ pub fn newCustomError(self: SourceLocation, e: anytype) ParseError(ParserError) 
 
 pub const enum_property_util = struct {
 
-pub fn asStr(comptime T: type, self: *const T) []const u8 {
-            const tag = @intFromEnum(self.*);
+pub fn asStr(comptime T: type, val: *const T) []const u8 {
+            const tag = @intFromEnum(val.*);
             inline for (bun.@"meta".EnumFields(T)) |field| {
-                _ = &field;
                 if ((tag == (if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value))) {
                     return (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name);
                 }
@@ -506,7 +505,8 @@ pub fn asStr(comptime T: type, self: *const T) []const u8 {
             _ = unreachable;
     }
 
-pub inline fn parse(comptime T: type, input: *Parser) Result(T) {
+pub inline fn parse(self: enum_property_util, comptime T: type, input: *Parser) Result(T) {
+        _ = self;
             const location = input.currentSourceLocation();
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
@@ -522,8 +522,8 @@ return .{ .err = e };
             return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub fn toCss(comptime T: type, self: *const T, dest: *Printer) PrintErr!void {
-            return dest.writeStr(asStr(T, self));
+pub fn toCss(comptime T: type, val: *const T, dest: *Printer) PrintErr!void {
+            return dest.writeStr(asStr(T, val));
     }
 };
 
@@ -3095,7 +3095,8 @@ pub const TokenPercentage = struct {
     unit_value: f32,
     int_value: ?i32,
 
-pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+pub fn eql(self: TokenPercentage, lhs: *const @This(), rhs: *const @This()) bool {
+        _ = self;
             return implementEql(@This(), lhs, rhs);
     }
 
@@ -3136,7 +3137,8 @@ pub const Token = union(TokenKind) {
     close_curly: void,
     comment: []const u8,
 
-pub fn eql(lhs: *const Token, rhs: *const Token) bool {
+pub fn eql(self: Token, lhs: *const Token, rhs: *const Token) bool {
+        _ = self;
             return implementEql(Token, lhs, rhs);
     }
 
@@ -3260,7 +3262,7 @@ pub fn raw(self: *const Token) []const u8 {
     }
 
 pub inline fn kind(self: Token) TokenKind {
-            return @as(TokenKind, @enumFromInt(self));
+            return @as(TokenKind, self);
     }
 
 pub inline fn kindString(self: *const Token) []const u8 {
@@ -3839,13 +3841,13 @@ _ = try val.toCss((&printer));
             return s.written();
     }
 
-pub fn fromList(comptime T: type, self: []const T, dest: *Printer) PrintErr!void {
-            const len = self.len;
+pub fn fromList(comptime T: type, val: []const T, dest: *Printer) PrintErr!void {
+            const len = val.len;
             var idx: usize = 0;
             _ = &idx;
-            for (cp_iter_slice(self)) |val| {
-                _ = &val;
-                _ = try val.toCss(dest);
+            for (cp_iter_slice(val)) |item| {
+                _ = &item;
+                _ = try item.toCss(dest);
                 if ((idx < (len - 1))) {
                     _ = try dest.delim(44, false);
                 }
@@ -3854,13 +3856,13 @@ pub fn fromList(comptime T: type, self: []const T, dest: *Printer) PrintErr!void
             return;
     }
 
-pub fn fromBabyList(comptime T: type, self: *const bun.BabyList(T), dest: *Printer) PrintErr!void {
-            const len = self.len;
+pub fn fromBabyList(comptime T: type, val: *const bun.BabyList(T), dest: *Printer) PrintErr!void {
+            const len = val.len;
             var idx: usize = 0;
             _ = &idx;
-            for (cp_iter_slice(self.sliceConst())) |val| {
-                _ = &val;
-                _ = try val.toCss(dest);
+            for (cp_iter_slice(val.sliceConst())) |item| {
+                _ = &item;
+                _ = try item.toCss(dest);
                 if ((idx < (len - 1))) {
                     _ = try dest.delim(44, false);
                 }
@@ -3869,12 +3871,12 @@ pub fn fromBabyList(comptime T: type, self: *const bun.BabyList(T), dest: *Print
             return;
     }
 
-pub fn integer(comptime T: type, self: T, dest: *Printer) PrintErr!void {
+pub fn integer(comptime T: type, val: T, dest: *Printer) PrintErr!void {
             const MAX_LEN = (comptime maxDigits(T));
             _ = &MAX_LEN;
             var buf: [MAX_LEN]u8 = undefined;
             _ = &buf;
-            const str = ((std.fmt.bufPrint(buf[0..], "{d}", .{ self })) catch unreachable);
+            const str = ((std.fmt.bufPrint(buf[0..], "{d}", .{ val })) catch unreachable);
             return dest.writeStr(str);
     }
 
@@ -3894,11 +3896,12 @@ pub fn maxDigits(comptime T: type) usize {
 
 pub const signfns = struct {
 
-pub inline fn isSignPositive(x: f32) bool {
-            return (!isSignNegative(x));
+pub inline fn isSignPositive(self: signfns, x: f32) bool {
+            return (!self.isSignNegative(x));
     }
 
-pub inline fn isSignNegative(x: f32) bool {
+pub inline fn isSignNegative(self: signfns, x: f32) bool {
+        _ = self;
             return ((@as(u32, @bitCast(x)) & 2147483648) != 0);
     }
 
@@ -4084,12 +4087,17 @@ pub fn DefineListShorthand(comptime T: type) type {
 };
 }
 
+pub fn MaybeShorthandTuple(comptime T: type) type {
+        const Tuple = std.@"meta".Tuple((&.{ T, bool }));
+        return try Tuple;
+}
+
 pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, comptime PropertyFieldMap: anytype) type {
         _ = &property_name;
         _ = &PropertyFieldMap;
         return struct {
 
-pub fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix) ?struct { T, bool } {
+pub fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix) MaybeShorthandTuple(T) {
             _ = &allocator;
             _ = &decls;
             _ = &vendor_prefix;
@@ -4101,15 +4109,15 @@ pub fn longhands(vendor_prefix: VendorPrefix) []const PropertyId {
             _ = @compileError(todo_stuff.depth);
     }
 
-pub fn longhand(self: *const @This(), allocator: Allocator, property_id: *const PropertyId) ?Property {
-            _ = self;
+pub fn longhand(self: @This(), allocator: Allocator, property_id: *const PropertyId) ?Property {
+        _ = self;
             _ = &allocator;
             _ = &property_id;
             _ = @compileError(todo_stuff.depth);
     }
 
 pub fn setLonghand(self: *@This(), allocator: Allocator, property: *const Property) bool {
-            _ = self;
+        _ = self;
             _ = &allocator;
             _ = &property;
             _ = @compileError(todo_stuff.depth);
@@ -4130,7 +4138,8 @@ return .{ .err = e };
             return .{ .result = .{ .top = rect.top, .right = rect.right, .bottom = rect.bottom, .left = rect.left } };
     }
 
-pub fn toCss(val: *const T, dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), val: *const T, dest: *Printer) PrintErr!void {
+        _ = self;
             const rect: css_values.rect.Rect(V) = .{ .top = val.top, .right = val.right, .bottom = val.bottom, .left = val.left };
             return rect.toCss(dest);
     }
@@ -4143,12 +4152,14 @@ pub fn DefineSizeShorthand(comptime T: type, comptime V: type) type {
         }
         return struct {
 
-pub fn toCss(val: *const T, dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), val: *const T, dest: *Printer) PrintErr!void {
+        _ = self;
             const size: css_values.size.Size2D(V) = .{ .a = @field(val, (if (@typeInfo(@TypeOf(std.@"meta".fields(T)[0])) == .@"enum" or @typeInfo(@TypeOf(std.@"meta".fields(T)[0])) == .@"union") @tagName(std.@"meta".fields(T)[0]) else std.@"meta".fields(T)[0].name)), .b = @field(val, (if (@typeInfo(@TypeOf(std.@"meta".fields(T)[1])) == .@"enum" or @typeInfo(@TypeOf(std.@"meta".fields(T)[1])) == .@"union") @tagName(std.@"meta".fields(T)[1]) else std.@"meta".fields(T)[1].name)) };
             return size.toCss(dest);
     }
 
-pub fn parse(input: *Parser) Result(T) {
+pub fn parse(self: @This(), input: *Parser) Result(T) {
+        _ = self;
             const size = (switch (css_values.size.Size2D(V).parse(input)) {
 .result => |v| v,
 .err => |e| {
@@ -4230,7 +4241,6 @@ return .{ .err = e };
             if (Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) |matched| {
                 _ = &matched;
                 inline for (bun.@"meta".EnumFields(enum_actual_type)) |field| {
-                    _ = &field;
                     if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(matched))) {
                         if (comptime is_union_enum) {
                             return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), void) };
@@ -4243,12 +4253,13 @@ return .{ .err = e };
             return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub inline fn generateCode(input: *Parser, comptime first_payload_index: usize, comptime maybe_first_void_index: ?usize, comptime void_count: usize, comptime payload_count: usize) Result(T) {
+pub inline fn generateCode(self: @This(), input: *Parser, comptime first_payload_index: usize, comptime maybe_first_void_index: ?usize, comptime void_count: usize, comptime payload_count: usize) Result(T) {
+        _ = self;
             const last_payload_index = ((first_payload_index + payload_count) - 1);
             if (comptime (maybe_first_void_index == null)) {
-                inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
-                    _ = &field;
-                    _ = &i;
+                inline for (0..payload_count) |idx| {
+                    const i = (first_payload_index + idx);
+                    const field = tyinfo.@"union".fields[@as(usize, @intCast(i))];
                     if (comptime (i == last_payload_index)) {
                         return .{ .result = (switch (generic.parseFor(field.@"type")(input)) {
 .result => |v| @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), v),
@@ -4275,9 +4286,9 @@ return .{ .err = e };
                         }
                         return .{ .result = @enumFromInt((if (@typeInfo(@TypeOf(void_field)) == .@"enum") @intFromEnum(void_field) else void_field.value)) };
                     }
-                    inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
-                        _ = &field;
-                        _ = &i;
+                    inline for (0..payload_count) |idx| {
+                        const i = (first_payload_index + idx);
+                        const field = tyinfo.@"union".fields[@as(usize, @intCast(i))];
                         if (comptime ((i == last_payload_index) and (last_payload_index > first_void_index))) {
                             return .{ .result = (switch (generic.parseFor(field.@"type")(input)) {
 .result => |v| @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), v),
@@ -4292,9 +4303,9 @@ return .{ .err = e };
                         }
                     }
                 } else {
-                    inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
-                        _ = &field;
-                        _ = &i;
+                    inline for (0..payload_count) |idx| {
+                        const i = (first_payload_index + idx);
+                        const field = tyinfo.@"union".fields[@as(usize, @intCast(i))];
                         if (comptime ((i == last_payload_index) and (last_payload_index > first_void_index))) {
                             return .{ .result = (switch (generic.parseFor(field.@"type")(input)) {
 .result => |v| @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), v),
@@ -4326,7 +4337,6 @@ return .{ .err = e };
                         if (Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) |matched| {
                             _ = &matched;
                             inline for (void_fields) |field| {
-                                _ = &field;
                                 if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(matched))) {
                                     if (comptime is_union_enum) {
                                         const ev: void = undefined;
@@ -4339,9 +4349,9 @@ return .{ .err = e };
                         }
                         _ = input.reset((&state));
                     }
-                    inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
-                        _ = &field;
-                        _ = &i;
+                    inline for (0..payload_count) |idx| {
+                        const i = (first_payload_index + idx);
+                        const field = tyinfo.@"union".fields[@as(usize, @intCast(i))];
                         if (comptime ((i == last_payload_index) and (last_payload_index > first_void_index))) {
                             return .{ .result = (switch (generic.parseFor(field.@"type")(input)) {
 .result => |v| @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), v),
@@ -4357,9 +4367,9 @@ return .{ .err = e };
                     }
                 } else {
                     if (comptime (first_void_index > first_payload_index)) {
-                        inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
-                            _ = &field;
-                            _ = &i;
+                        inline for (0..payload_count) |idx| {
+                            const i = (first_payload_index + idx);
+                            const field = tyinfo.@"union".fields[@as(usize, @intCast(i))];
                             if (comptime ((i == last_payload_index) and (last_payload_index > first_void_index))) {
                                 return .{ .result = (switch (generic.parseFor(field.@"type")(input)) {
 .result => |v| @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), v),
@@ -4383,7 +4393,6 @@ return .{ .err = e };
                         if (Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) |matched| {
                             _ = &matched;
                             inline for (void_fields) |field| {
-                                _ = &field;
                                 if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(matched))) {
                                     if (comptime is_union_enum) {
                                         return .{ .result = @unionInit(T, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name), undefined) };
@@ -4408,32 +4417,30 @@ pub fn DeriveToCss(comptime T: type) type {
         const is_enum_or_union_enum = ((tyinfo == .@"union") or (tyinfo == .@"enum"));
         return struct {
 
-pub fn toCss(self: *const T, dest: *Printer) PrintErr!void {
+pub fn toCss(val: *const T, dest: *Printer) PrintErr!void {
             if (comptime is_enum_or_union_enum) {
-                inline for (std.@"meta".fields(T), 0..) |field, i| {
-                    _ = &field;
-                    _ = &i;
-                    if ((@intFromEnum(self.*) == (if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].value))) {
+                inline for (0..std.@"meta".fields(T).len) |i| {
+                    const field = std.@"meta".fields(T)[@as(usize, @intCast(i))];
+                    if ((@intFromEnum(val.*) == (if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum") @intFromEnum(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].value))) {
                         if (comptime ((tyinfo == .@"enum") or (field.@"type" == void))) {
                             return dest.writeStr((if (@typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"enum" or @typeInfo(@TypeOf(enum_fields[@as(usize, @intCast(i))])) == .@"union") @tagName(enum_fields[@as(usize, @intCast(i))]) else enum_fields[@as(usize, @intCast(i))].name));
                         } else {
                             if (comptime generic.hasToCss(field.@"type")) {
-                                return generic.toCss(field.@"type", (&@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), dest);
+                                return generic.toCss(field.@"type", (&@field(val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))), dest);
                             } else {
                                 if ((@hasDecl(field.@"type", "__generateToCss") and (@typeInfo(field.@"type") == .@"struct"))) {
                                     const variant_fields = std.@"meta".fields(field.@"type");
                                     if ((variant_fields.len > 1)) {
                                         const last = (variant_fields.len - 1);
-                                        inline for (variant_fields, 0..) |variant_field, j| {
-                                            _ = &variant_field;
-                                            _ = &j;
+                                        inline for (0..variant_fields.len) |j| {
+                                            const variant_field = variant_fields[@as(usize, @intCast(j))];
                                             if ((@typeInfo(variant_field.@"type") == .optional)) {
-                                                if (@field(@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(variant_field)) == .@"enum" or @typeInfo(@TypeOf(variant_field)) == .@"union") @tagName(variant_field) else variant_field.name))) |*value| {
+                                                if (@field(@field(val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(variant_field)) == .@"enum" or @typeInfo(@TypeOf(variant_field)) == .@"union") @tagName(variant_field) else variant_field.name))) |*value| {
                                                     _ = &value;
                                                     _ = try (value.*).toCss(dest);
                                                 }
                                             } else {
-                                                _ = try @field(@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(variant_field)) == .@"enum" or @typeInfo(@TypeOf(variant_field)) == .@"union") @tagName(variant_field) else variant_field.name)).toCss(dest);
+                                                _ = try @field(@field(val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(variant_field)) == .@"enum" or @typeInfo(@TypeOf(variant_field)) == .@"union") @tagName(variant_field) else variant_field.name)).toCss(dest);
                                             }
                                             if (comptime (j != last)) {
                                                 _ = try dest.writeChar(32);
@@ -4441,7 +4448,7 @@ pub fn toCss(self: *const T, dest: *Printer) PrintErr!void {
                                         }
                                     } else {
                                         const variant_field = variant_fields[0];
-                                        _ = try @field(variant_field.@"type", "toCss")(@field(@field(self, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(variant_field)) == .@"enum" or @typeInfo(@TypeOf(variant_field)) == .@"union") @tagName(variant_field) else variant_field.name)), dest);
+                                        _ = try @field(variant_field.@"type", "toCss")(@field(@field(val, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name)), (if (@typeInfo(@TypeOf(variant_field)) == .@"enum" or @typeInfo(@TypeOf(variant_field)) == .@"union") @tagName(variant_field) else variant_field.name)), dest);
                                     }
                                 } else {
                                     _ = @compileError((((("Don't know how to serialize this variant: " ++ @typeName(field.@"type")) ++ ", on ") ++ @typeName(T)) ++ ".\n\nYou probably want to implement a `toCss` function for this type, or add a dummy `fn __generateToCss() void {}` to the type signal that it is okay for it to be auto-generated by this function.."));
@@ -4462,11 +4469,13 @@ pub fn DefineEnumProperty(comptime T: type) type {
         const fields: []const std.builtin.Type.EnumField = std.@"meta".fields(T);
         return struct {
 
-pub fn eql(lhs: *const T, rhs: *const T) bool {
+pub fn eql(self: @This(), lhs: *const T, rhs: *const T) bool {
+        _ = self;
             return (@intFromEnum(lhs.*) == @intFromEnum(rhs.*));
     }
 
-pub fn parse(input: *Parser) Result(T) {
+pub fn parse(self: @This(), input: *Parser) Result(T) {
+        _ = self;
             const location = input.currentSourceLocation();
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
@@ -4475,7 +4484,6 @@ return .{ .err = e };
 .result => |v| v,
 });
             inline for (fields) |field| {
-                _ = &field;
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, (if (@typeInfo(@TypeOf(field)) == .@"enum" or @typeInfo(@TypeOf(field)) == .@"union") @tagName(field) else field.name))) {
                     return .{ .result = @enumFromInt((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value)) };
                 }
@@ -4483,16 +4491,16 @@ return .{ .err = e };
             return .{ .err = location.newUnexpectedTokenError(.{ .ident = ident }) };
     }
 
-pub fn toCss(self: *const T, dest: *Printer) PrintErr!void {
-            return dest.writeStr(@tagName(self.*));
+pub fn toCss(val: *const T, dest: *Printer) PrintErr!void {
+            return dest.writeStr(@tagName(val.*));
     }
 
-pub inline fn deepClone(self: *const T, _: std.mem.Allocator) T {
-            return self.*;
+pub inline fn deepClone(val: *const T, _: std.mem.Allocator) T {
+            return val.*;
     }
 
-pub fn hash(self: *const T, hasher: *std.hash.Wyhash) void {
-            const tag = @intFromEnum(self.*);
+pub fn hash(val: *const T, hasher: *std.hash.Wyhash) void {
+            const tag = @intFromEnum(val.*);
             _ = hasher.update(std.mem.asBytes((&tag)));
     }
 };
@@ -4517,9 +4525,8 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: anytype) type {
         return struct {
 
 pub fn valueType(s: T) media_query.MediaFeatureType {
-            inline for (std.@"meta".fields(T), 0..) |field, i| {
-                _ = &field;
-                _ = &i;
+            inline for (0..std.@"meta".fields(T).len) |i| {
+                const field = std.@"meta".fields(T)[@as(usize, @intCast(i))];
                 if (((if (@typeInfo(@TypeOf(field)) == .@"enum") @intFromEnum(field) else field.value) == @intFromEnum(s))) {
                     return field_values[@as(usize, @intCast(i))];
                 }
@@ -4785,36 +4792,36 @@ pub fn ValidAtRuleParser(comptime T: type) void {
 
 pub fn AtRulePrelude(comptime T: type) type {
         return union(enum) {
-        font_face,
-        font_feature_values,
-        font_palette_values: DashedIdent,
-        counter_style: CustomIdent,
-        @"import": ImportPreludeTuple,
-        namespace: NamespacePreludeTuple,
-        charset,
-        custom_media: CustomMediaPreludeTuple,
-        property: PropertyPreludeTuple,
-        media: MediaList,
-        supports: SupportsCondition,
-        viewport: VendorPrefix,
-        keyframes: KeyframesPrelude,
-        page: ArrayList(css_rules.page.PageSelector),
-        moz_document,
-        layer: bun.css.SmallList(LayerName, 1),
-        container: ContainerPrelude,
-        starting_style,
-        nest: selector.parser.SelectorList,
-        scope: ScopePrelude,
-        unknown: UnknownPrelude,
-        custom: T,
+    font_face: void,
+    font_feature_values: void,
+    font_palette_values: DashedIdent,
+    counter_style: CustomIdent,
+    @"import": ImportPreludeTuple,
+    namespace: NamespacePreludeTuple,
+    charset: void,
+    custom_media: CustomMediaPreludeTuple,
+    property: PropertyPreludeTuple,
+    media: MediaList,
+    supports: SupportsCondition,
+    viewport: VendorPrefix,
+    keyframes: KeyframesPrelude,
+    page: ArrayList(css_rules.page.PageSelector),
+    moz_document: void,
+    layer: bun.css.SmallList(LayerName, 1),
+    container: ContainerPrelude,
+    starting_style: void,
+    nest: selector.parser.SelectorList,
+    scope: ScopePrelude,
+    unknown: UnknownPrelude,
+    custom: T,
 
-        pub fn allowedInStyleRule(this: *const @This()) bool {
-            return switch (this.*) {
-                .media, .supports, .container, .moz_document, .layer, .starting_style, .scope, .nest, .unknown, .custom => true,
-                .namespace, .font_face, .font_feature_values, .font_palette_values, .counter_style, .keyframes, .page, .property, .@"import", .custom_media, .viewport, .charset => false,
-            };
-        }
-    };
+pub fn allowedInStyleRule(self: @This()) bool {
+            return (switch (self.*) {
+.media, .supports, .container, .moz_document, .layer, .starting_style, .scope, .nest, .unknown, .custom => true,
+.namespace, .font_face, .font_feature_values, .font_palette_values, .counter_style, .keyframes, .page, .property, .@"import", .custom_media, .viewport, .charset => false,
+});
+    }
+};
 }
 
 pub fn ParseNestedResult(comptime RuleT: type) type {
@@ -4852,12 +4859,13 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
     pub fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
                 const PreludeEnum = _TopLevelPreludeEnum;
                 const Map = (comptime bun.ComptimeEnumMap(PreludeEnum));
-                if (Map.getASCIIICaseInsensitive(name)) |prelude| {
-                    _ = &prelude;
+                const maybe_prelude = Map.getASCIIICaseInsensitive(name);
+                if ((maybe_prelude != null)) {
+                    const prelude = maybe_prelude.?;
                     switch (prelude) {
     .@"import" => {
     if ((@intFromEnum(parser.state) > @intFromEnum(State.imports))) {
-                        return .{ .err = input.newCustomError((if (comptime @typeInfo(ParserError) == .@"enum") @as(ParserError, @enumFromInt(ParserError.unexpected_import_rule)) else @as(ParserError, ParserError.unexpected_import_rule))) };
+                        return .{ .err = input.newCustomError((if (comptime @typeInfo(ParserError) == .@"enum" and (@typeInfo(@TypeOf(ParserError.unexpected_import_rule)) == .int or @typeInfo(@TypeOf(ParserError.unexpected_import_rule)) == .comptime_int)) @as(ParserError, @enumFromInt(ParserError.unexpected_import_rule)) else @as(ParserError, ParserError.unexpected_import_rule))) };
                     }
                     const url_str = (switch (input.expectUrlOrString()) {
     .err => |e| {
@@ -4908,9 +4916,9 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                     return .{ .result = .{ .namespace = ns_val } };
     },
     .charset => {
-    if (input.expectString().asErr()) |e| {
-                        _ = &e;
-                        return .{ .err = e };
+    const maybe_e = input.expectString().asErr();
+                    if ((maybe_e != null)) {
+                        return .{ .err = maybe_e.? };
                     }
                     return .{ .result = .charset };
     },
@@ -4947,14 +4955,16 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                 return Nested.AtRuleParser.parsePrelude((&nested_rule_parser), name, input);
         }
     
-    pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+    pub fn parseBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+            _ = self;
                 parser.state = .body;
                 var nested_parser = parser.nested();
                 _ = &nested_parser;
                 return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock((&nested_parser), prelude, start, input);
         }
     
-    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
+    pub fn ruleWithoutBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
+            _ = self;
                 const loc_ = start.sourceLocation();
                 const loc = css_rules.Location{ .source_index = parser.options.source_index, .line = loc_.line, .column = loc_.column };
                 switch (prelude) {
@@ -4972,8 +4982,8 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                 const url = prelude.namespace.url;
                 var ns_rule = NamespaceRule{ .prefix = null, .url = url, .loc = loc };
                 _ = &ns_rule;
-                if (prefix) |p| {
-                    _ = &p;
+                if ((prefix != null)) {
+                    const p = prefix.?;
                     ns_rule.prefix = .{ .v = p };
                 }
                 _ = (blk_catch_1: { break :blk_catch_1 ((parser.rules.v.append(parser.allocator, .{ .namespace = ns_rule })) catch |err| { _ = &err; break :blk_catch_1 bun.handleOom(err); }); });
@@ -5022,7 +5032,8 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
     };
     pub const QualifiedRuleParser = struct {
     
-    pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
+    pub fn parsePrelude(self: @This(), parser: *This, input: *Parser) Result(Prelude) {
+            _ = self;
                 parser.state = .body;
                 var nested_parser = parser.nested();
                 _ = &nested_parser;
@@ -5030,7 +5041,8 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
                 return N.QualifiedRuleParser.parsePrelude((&nested_parser), input);
         }
     
-    pub fn parseBlock(parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
+    pub fn parseBlock(self: @This(), parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
+            _ = self;
                 var nested_parser = parser.nested();
                 _ = &nested_parser;
                 const N = @TypeOf(nested_parser);
@@ -5039,6 +5051,89 @@ pub fn nested(self: *@This()) NestedRuleParser(AtRuleParserT) {
         pub const Prelude = selector.parser.SelectorList;
         pub const QualifiedRule = void;
     };
+};
+}
+
+pub fn NestedQualifiedRuleParser(comptime T: type, comptime This: type) type {
+        return struct {
+
+pub fn parsePrelude(self: @This(), parser: *This, input: *Parser) Result(Prelude) {
+        _ = self;
+            var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
+            _ = &selector_parser;
+            if (parser.is_in_style_rule) {
+                return selector.parser.SelectorList.parseRelative((&selector_parser), input, .discard_list, .implicit);
+            } else {
+                return selector.parser.SelectorList.parse((&selector_parser), input, .discard_list, .none);
+            }
+    }
+
+pub fn parseBlock(self: @This(), parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
+        _ = self;
+            const loc = parser.getLoc(start);
+            defer {
+            _ = parser.composes_refs.clearRetainingCapacity();
+            }
+            if (input.flags.css_modules) {
+                _ = out: {
+                if (parser.is_in_style_rule) {
+                    parser.composes_state = .{ .disallow_nested = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
+                }
+                if ((selectors.v.len() != 1)) {
+                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
+                }
+                const sel = selectors.v.slice()[0];
+                if ((sel.components.items.len != 1)) {
+                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
+                }
+                const comp = (&sel.components.items[0]);
+                if (comp.asClass()) |r| {
+                    _ = &r;
+                    const comp_ref_val = (r.asRef()).?;
+                    _ = parser.composes_refs.append(input.allocator(), comp_ref_val);
+                    parser.composes_state = .{ .allow = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
+                }
+                parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                break :out;
+};
+            }
+            const location = input.position();
+            const result = (switch (parser.parseNested(input, true)) {
+.err => |e| {
+return .{ .err = e };
+},
+.result => |v| v,
+});
+            const declarations: DeclarationBlock = result[0];
+            const rules = result[1];
+            if ((parser.composes_state == .allow)) {
+                const len = (input.position() - location);
+                var usage = PropertyBitset.initEmpty();
+                _ = &usage;
+                var custom_properties: bun.BabyList(string) = .{};
+                _ = &custom_properties;
+                _ = fillPropertyBitSet(parser.allocator, (&usage), (&declarations), (&custom_properties));
+                const custom_properties_slice = custom_properties.slice();
+                for (cp_iter_slice(parser.composes_refs.slice())) |comp_ref| {
+                    _ = &comp_ref;
+                    const gop = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, comp_ref));
+                    const property_usage: *PropertyUsage = (if ((!gop.found_existing)) brk: {
+                    gop.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
+                    break :brk gop.value_ptr;
+} else gop.value_ptr);
+                    _ = property_usage.fill((&usage), custom_properties_slice);
+                }
+            }
+            const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
+            _ = (blk_catch_0: { break :blk_catch_0 ((parser.rules.v.append(parser.allocator, .{ .style = QualStyleRuleT{ .selectors = selectors, .vendor_prefix = VendorPrefix{  }, .declarations = declarations, .rules = rules, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
+            return .success;
+    }
+    pub const Prelude = selector.parser.SelectorList;
+    pub const QualifiedRule = void;
 };
 }
 
@@ -5140,9 +5235,9 @@ return .{ .err = e };
                 const result: Prelude = brk: {
                 const PreludeEnum = _NestedPreludeEnum;
                 const Map = (comptime bun.ComptimeEnumMap(PreludeEnum));
-                if (Map.getASCIIICaseInsensitive(name)) |kind| {
-                    _ = &kind;
-                    switch (kind) {
+                const maybe_kind = Map.getASCIIICaseInsensitive(name);
+                if ((maybe_kind != null)) {
+                    switch (maybe_kind.?) {
     .media => {
     const media = (switch (MediaList.parse(input)) {
     .err => |e| {
@@ -5211,13 +5306,13 @@ return .{ .err = e };
                     break :brk .{ .page = selectors };
     },
     .@"-moz-document" => {
-    if (input.expectFunctionMatching("url-prefix").asErr()) |e| {
-                        _ = &e;
-                        return .{ .err = e };
+    const maybe_e1 = input.expectFunctionMatching("url-prefix").asErr();
+                    if ((maybe_e1 != null)) {
+                        return .{ .err = maybe_e1.? };
                     }
-                    if (input.parseNestedBlock(void, @as(void, undefined), MozDocumentFn.parsefn).asErr()) |e| {
-                        _ = &e;
-                        return .{ .err = e };
+                    const maybe_e2 = input.parseNestedBlock(void, @as(void, undefined), MozDocumentFn.parsefn).asErr();
+                    if ((maybe_e2 != null)) {
+                        return .{ .err = maybe_e2.? };
                     }
                     break :brk .moz_document;
     },
@@ -5264,9 +5359,9 @@ return .{ .err = e };
     });
     } else null);
                     const scope_end = (if (input.tryParse(Parser.expectIdentMatching, .{ "to" }).isOk()) scope_end: {
-                    if (input.expectParenthesisBlock().asErr()) |e| {
-                        _ = &e;
-                        return .{ .err = e };
+                    const maybe_e = input.expectParenthesisBlock().asErr();
+                    if ((maybe_e != null)) {
+                        return .{ .err = maybe_e.? };
                     }
                     break :scope_end (switch (input.parseNestedBlock(selector.parser.SelectorList, (&closure), ScopeClosure.parsefn)) {
     .result => |v| v,
@@ -5307,7 +5402,8 @@ return .{ .err = e };
                 return .{ .result = result };
         }
     
-    pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+    pub fn parseBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+            _ = self;
                 const loc = parser.getLoc(start);
                 switch (prelude) {
     .font_face => {
@@ -5318,9 +5414,15 @@ return .{ .err = e };
                 const FontFaceProps = ArrayList(css_rules.font_face.FontFaceProperty);
                 var properties = FontFaceProps{  };
                 _ = &properties;
-                while (body_parser.next()) |result| {
-                    if (result.asValue()) |decl| {
-                        _ = &decl;
+                while (true) {
+                    const maybe_result = body_parser.next();
+                    if ((maybe_result == null)) {
+                        break;
+                    }
+                    const result = maybe_result.?;
+                    const maybe_decl = result.asValue();
+                    if ((maybe_decl != null)) {
+                        const decl = maybe_decl.?;
                         _ = (blk_catch_0: { break :blk_catch_0 ((properties.append(input.allocator(), decl)) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
                     }
                 }
@@ -5418,9 +5520,15 @@ return .{ .err = e };
                 _ = &iter;
                 var keyframes: ArrayList(css_rules.keyframes.Keyframe) = .{};
                 _ = &keyframes;
-                while (iter.next()) |result| {
-                    if (result.asValue()) |keyframe| {
-                        _ = &keyframe;
+                while (true) {
+                    const maybe_result = iter.next();
+                    if ((maybe_result == null)) {
+                        break;
+                    }
+                    const result = maybe_result.?;
+                    const maybe_kf = result.asValue();
+                    if ((maybe_kf != null)) {
+                        const keyframe = maybe_kf.?;
                         _ = (blk_catch_9: { break :blk_catch_9 ((keyframes.append(input.allocator(), keyframe)) catch |e| { _ = &e; break :blk_catch_9 bun.handleOom(e); }); });
                     }
                 }
@@ -5551,7 +5659,8 @@ return .{ .err = e };
     }
         }
     
-    pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
+    pub fn ruleWithoutBlock(self: @This(), parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
+            _ = self;
                 const loc = parser.getLoc(start);
                 switch (prelude) {
     .layer => {
@@ -5583,98 +5692,24 @@ return .{ .err = e };
         pub const Prelude = AtRulePrelude(T.CustomAtRuleParser.Prelude);
         pub const AtRule = void;
     };
-    pub const QualifiedRuleParser = struct {
-    
-    pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
-                var selector_parser = selector.parser.SelectorParser{ .is_nesting_allowed = true, .options = parser.options, .allocator = input.allocator() };
-                _ = &selector_parser;
-                if (parser.is_in_style_rule) {
-                    return selector.parser.SelectorList.parseRelative((&selector_parser), input, .discard_list, .implicit);
-                } else {
-                    return selector.parser.SelectorList.parse((&selector_parser), input, .discard_list, .none);
-                }
-        }
-    
-    pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
-                const loc = parser.getLoc(start);
-                defer {
-                _ = parser.composes_refs.clearRetainingCapacity();
-                }
-                if (input.flags.css_modules) {
-                    _ = out: {
-                    if (parser.is_in_style_rule) {
-                        parser.composes_state = .{ .disallow_nested = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-                    if ((selectors.v.len() != 1)) {
-                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-                    const sel = selectors.v.slice()[0];
-                    if ((sel.components.items.len != 1)) {
-                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-                    const comp = (&sel.components.items[0]);
-                    if (comp.asClass()) |r| {
-                        _ = &r;
-                        const ref = (r.asRef()).?;
-                        _ = &ref;
-                        parser.composes_state = .{ .allow = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                    break :out;
-    };
-                }
-                const location = input.position();
-                const result = (switch (parser.parseNested(input, true)) {
-    .err => |e| {
-    return .{ .err = e };
-    },
-    .result => |v| v,
-    });
-                const declarations: DeclarationBlock = result[0];
-                const rules = result[1];
-                if ((parser.composes_state == .allow)) {
-                    const len = (input.position() - location);
-                    var usage = PropertyBitset.initEmpty();
-                    _ = &usage;
-                    var custom_properties: bun.BabyList(string) = .{};
-                    _ = &custom_properties;
-                    _ = fillPropertyBitSet(parser.allocator, (&usage), (&declarations), (&custom_properties));
-                    const custom_properties_slice = custom_properties.slice();
-                    for (cp_iter_slice(parser.composes_refs.slice())) |comp_ref| {
-                        _ = &comp_ref;
-                        const gop = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, comp_ref));
-                        const property_usage: *PropertyUsage = (if ((!gop.found_existing)) brk: {
-                        gop.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
-                        break :brk gop.value_ptr;
-    } else gop.value_ptr);
-                        _ = property_usage.fill((&usage), custom_properties_slice);
-                    }
-                }
-                const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
-                _ = (blk_catch_0: { break :blk_catch_0 ((parser.rules.v.append(parser.allocator, .{ .style = QualStyleRuleT{ .selectors = selectors, .vendor_prefix = VendorPrefix{  }, .declarations = declarations, .rules = rules, .loc = loc } })) catch |e| { _ = &e; break :blk_catch_0 bun.handleOom(e); }); });
-                return .success;
-        }
-        pub const Prelude = selector.parser.SelectorList;
-        pub const QualifiedRule = void;
-    };
+    pub const QualifiedRuleParser = NestedQualifiedRuleParser(T, This);
     pub const RuleBodyItemParser = struct {
     
-    pub fn parseQualified(parser: *This) bool {
+    pub fn parseQualified(self: @This(), parser: *This) bool {
+            _ = self;
                 _ = &parser;
                 return true;
         }
     
-    pub fn parseDeclarations(parser: *This) bool {
+    pub fn parseDeclarations(self: @This(), parser: *This) bool {
+            _ = self;
                 return parser.allow_declarations;
         }
     };
     pub const DeclarationParser = struct {
     
-    pub fn parseValue(parser: *This, name: []const u8, input: *Parser) Result(Declaration) {
+    pub fn parseValue(self: @This(), parser: *This, name: []const u8, input: *Parser) Result(Declaration) {
+            _ = self;
                 return css_decls.parse_declaration_impl(name, input, (&parser.declarations), (&parser.important_declarations), parser.options, parser);
         }
         pub const Declaration = void;
@@ -5828,7 +5863,7 @@ pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extr
             return .success;
     }
 
-pub fn toCssWithWriter(self: *const @This(), allocator: Allocator, writer: *std.Io.Writer, options: css_printer.PrinterOptions, import_info: ?bun.css.ImportInfo, local_names: ?*const LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) PrintResult(ToCssResultInternal) {
+pub fn toCssWithWriter(self: @This(), allocator: Allocator, writer: *std.Io.Writer, options: css_printer.PrinterOptions, import_info: ?bun.css.ImportInfo, local_names: ?*const LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) PrintResult(ToCssResultInternal) {
             var printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
             _ = &printer;
             const result = (blk_catch_1: { break :blk_catch_1 ((self.toCssWithWriterImpl(allocator, (&printer), options)) catch |__ce_1| { _ = &__ce_1; _ = bun.assert((printer.error_kind != null));
@@ -5836,7 +5871,7 @@ pub fn toCssWithWriter(self: *const @This(), allocator: Allocator, writer: *std.
             return .{ .result = result };
     }
 
-pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: *Printer, options: css_printer.PrinterOptions) PrintErr!ToCssResultInternal {
+pub fn toCssWithWriterImpl(self: @This(), allocator: Allocator, printer: *Printer, options: css_printer.PrinterOptions) PrintErr!ToCssResultInternal {
             const project_root = options.project_root;
             for (self.license_comments.items) |comment| {
                 _ = &comment;
@@ -5864,7 +5899,7 @@ pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: 
             }
     }
 
-pub fn toCss(self: *const @This(), allocator: Allocator, options: css_printer.PrinterOptions, import_info: ?bun.css.ImportInfo, local_names: ?*const LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) PrintResult(ToCssResult) {
+pub fn toCss(self: @This(), allocator: Allocator, options: css_printer.PrinterOptions, import_info: ?bun.css.ImportInfo, local_names: ?*const LocalsResultsMap, symbols: *const bun.ast.Symbol.Map) PrintResult(ToCssResult) {
             var dest = ((std.Io.Writer.Allocating.initCapacity(allocator, 1)) catch unreachable);
             _ = &dest;
             const writer = (&dest.writer);
@@ -5950,7 +5985,7 @@ break;
             return .{ .result = .{ This{ .rules = rules, .sources = sources, .source_map_urls = source_map_urls, .license_comments = license_comments, .options = options, .layer_names = (if (comptime (P == BundlerAtRuleParser)) at_rule_parser.layer_names else .{}), .local_scope = parser_extra.local_scope, .local_properties = local_properties, .composes = composes }, StylesheetExtra{ .symbols = parser_extra.symbols } } };
     }
 
-pub fn debugLayerRuleSanityCheck(self: *const @This()) void {
+pub fn debugLayerRuleSanityCheck(self: @This()) void {
             if (comptime (!bun.Environment.isDebug)) {
                 return;
             }
@@ -5968,7 +6003,7 @@ actual_layer_rules_len = (actual_layer_rules_len + 1);
             }
     }
 
-pub fn containsTailwindDirectives(self: *const @This()) bool {
+pub fn containsTailwindDirectives(self: @This()) bool {
             if (comptime (AtRule != BundlerAtRule)) {
                 _ = @compileError("Expected BundlerAtRule for this function.");
             }
@@ -6003,7 +6038,7 @@ pub fn newFromTailwindImports(allocator: Allocator, options: ParserOptions, impo
             return stylesheet;
     }
 
-pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleList(AtRule), new_import_records: *bun.BabyList(ImportRecord)) void {
+pub fn pluckImports(self: @This(), allocator: Allocator, out: *CssRuleList(AtRule), new_import_records: *bun.BabyList(ImportRecord)) void {
             if (comptime (AtRule != BundlerAtRule)) {
                 _ = @compileError("Expected BundlerAtRule for this function.");
             }
@@ -6013,7 +6048,6 @@ pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleLis
             var count: u32 = 0;
             _ = &count;
             inline for (STATES[0..]) |state| {
-                _ = &state;
                 if (comptime (state == .exec)) {
                     _ = bun.handleOom(out.v.ensureUnusedCapacity(allocator, count));
                 }

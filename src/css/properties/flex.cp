@@ -786,7 +786,7 @@ pub struct FlexHandler {
                         wrap: wrapinner.*,
                     },
                     prefix,
-                } }) catch |e| bun.handleOom(e);
+                } }) catch e => bun.handleOom(e);
                 bun.bits.remove(css.VendorPrefix, dir_prefix, intersection);
                 bun.bits.remove(css.VendorPrefix, wrap_prefix, intersection);
             }
@@ -832,7 +832,7 @@ pub struct FlexHandler {
                         basis: b,
                     },
                     prefix,
-                } }) catch |e| bun.handleOom(e);
+                } }) catch e => bun.handleOom(e);
                 bun.bits.remove(css.VendorPrefix, g_prefix, intersection);
                 bun.bits.remove(css.VendorPrefix, s_prefix, intersection);
                 bun.bits.remove(css.VendorPrefix, b_prefix, intersection);
@@ -880,7 +880,7 @@ pub struct FlexHandler {
                                     dest.append(ctx.allocator, @unionInit(Property, p2009[1], .{
                                         v,
                                         prefixes_2009,
-                                    })) catch |e| bun.handleOom(e);
+                                    })) catch e => bun.handleOom(e);
                                 }
                             }
                         }
@@ -893,7 +893,7 @@ pub struct FlexHandler {
                         dest.append(ctx.allocator, @unionInit(Property, p2012, .{
                             val,
                             css.VendorPrefix.MS,
-                        })) catch |e| bun.handleOom(e);
+                        })) catch e => bun.handleOom(e);
                         ms = false;
                     }
 
@@ -907,7 +907,7 @@ pub struct FlexHandler {
                 dest.append(ctx.allocator, @unionInit(Property, prop, .{
                     val,
                     prefix,
-                })) catch |e| bun.handleOom(e);
+                })) catch e => bun.handleOom(e);
             }
         }
     }
@@ -920,7 +920,7 @@ pub struct FlexHandler {
                 dest.append(ctx.allocator, @unionInit(Property, field_name, .{
                     val,
                     prefix,
-                })) catch |e| bun.handleOom(e);
+                })) catch e => bun.handleOom(e);
             } else {
                 // css.generic.eql(comptime T: type, lhs: *const T, rhs: *const T)
                 // css.generic.deinit(@TypeOf(val), &val, ctx.allocator);

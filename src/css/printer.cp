@@ -32,9 +32,9 @@ struct PrinterWriteIdentClosure {
         _.printer.col += @as(u32, @intCast(s.len));
         if (_.first) {
             _.first = false;
-            return css.serializer.serializeIdentifier(s, _.printer) catch |e| css.OOM(e);
+            return css.serializer.serializeIdentifier(s, _.printer) catch e => css.OOM(e);
         } else {
-            return css.serializer.serializeName(s, _.printer) catch |e| css.OOM(e);
+            return css.serializer.serializeName(s, _.printer) catch e => css.OOM(e);
         }
     }
 }
@@ -47,7 +47,7 @@ fn _printerWriteDashedIdentFn(p: *Printer, s1: []const u8, replace_dots: bool) {
     };
     const s = _s_guard.slice;
     p.col += @as(u32, @intCast(s.len));
-    return css.serializer.serializeName(s, p) catch |e| css.OOM(e);
+    return css.serializer.serializeName(s, p) catch e => css.OOM(e);
 }
 
 /// Options that control how CSS is serialized to a string.
@@ -202,7 +202,7 @@ pub struct Printer {
         return _.lookupSymbol(ident.asRef().?);
     }
 
-    inline fn getWrittenAmt(writer: *std.Io.Writer): usize {
+    static inline fn getWrittenAmt(writer: *std.Io.Writer): usize {
         if (writer.vtable == std.Io.Writer.Allocating.init(undefined).writer.vtable) {
             const alloc_writer: *std.Io.Writer.Allocating = @fieldParentPtr("writer", writer);
             return alloc_writer.written().len;

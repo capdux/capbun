@@ -910,6 +910,7 @@ const Printer = css.Printer;
 const PrintErr = css.PrintErr;
 const Result = css.Result;
 pub const MediaFeature = QueryFeature(MediaFeatureId);
+pub const MaybeMediaFeatureComparison = ?MediaFeatureComparison;
 const ArrayList = std.ArrayListUnmanaged;
 const Allocator = std.mem.Allocator;
 
@@ -1143,7 +1144,7 @@ pub fn QueryFeature(comptime FeatureId: type) type {
             pub fn __generateHash() void {}
         },
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) This {
+pub fn deepClone(self: @This(), allocator: std.mem.Allocator) This {
             return (switch (self.*) {
 .plain => .{ .plain = .{ .name = (if (@typeInfo(@TypeOf(self.plain)) == .@"enum" or @typeInfo(@TypeOf(self.plain)) == .@"union") @tagName(self.plain) else self.plain.name), .value = (if (@typeInfo(@TypeOf(self.plain)) == .@"enum") @intFromEnum(self.plain) else self.plain.value).deepClone(allocator) } },
 .boolean => .{ .boolean = .{ .name = (if (@typeInfo(@TypeOf(self.boolean)) == .@"enum" or @typeInfo(@TypeOf(self.boolean)) == .@"union") @tagName(self.boolean) else self.boolean.name) } },
@@ -1156,15 +1157,15 @@ pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
             return css.implementEql(@This(), lhs, rhs);
     }
 
-pub fn hash(self: *const @This(), hasher: anytype) void {
-            return css.implementHash(@This(), self, hasher);
+pub fn hash(self: @This(), hasher: anytype) void {
+            return css.implementHash(@This(), (&self), hasher);
     }
 
-pub fn needsParens(self: *const @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {
+pub fn needsParens(self: @This(), parent_operator: ?Operator, targets: *const css.Targets) bool {
             return (((parent_operator != .@"and") and (self.* == .interval)) and targets.shouldCompileSame(.media_interval_syntax));
     }
 
-pub fn toCss(self: *const @This(), dest: *Printer) PrintErr!void {
+pub fn toCss(self: @This(), dest: *Printer) PrintErr!void {
             _ = try dest.writeChar(40);
             switch (self.*) {
 .boolean => {
@@ -1223,7 +1224,14 @@ return .{ .err = e };
 });
             const name: MediaFeatureName(FeatureId) = name_pair[0];
             const legacy_op: ?MediaFeatureComparison = name_pair[1];
-            const operator = (if (input.tryParse(consumeOperationOrColon, .{ true }).asValue()) |operator| operator else return .{ .result = .{ .boolean = .{ .name = name } } });
+            var operator: ?MediaFeatureComparison = null;
+            _ = &operator;
+            if (input.tryParse(consumeOperationOrColon, .{ true }).asValue()) |op_val| {
+                _ = &op_val;
+                operator = op_val;
+            } else {
+                return .{ .result = .{ .boolean = .{ .name = name } } };
+            }
             if (((operator != null) and (legacy_op != null))) {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
             }
@@ -1377,7 +1385,8 @@ pub fn MediaFeatureName(comptime FeatureId: type) type {
     custom: DashedIdent,
     unknown: Ident,
 
-pub fn eql(lhs: *const This, rhs: *const This) bool {
+pub fn eql(self: @This(), lhs: *const This, rhs: *const This) bool {
+        _ = self;
             if ((@intFromEnum(lhs.*) != @intFromEnum(rhs.*))) {
                 return false;
             }
@@ -1421,7 +1430,7 @@ pub fn toCssWithPrefix(self: @This(), prefix: []const u8, dest: *Printer) PrintE
 });
     }
 
-pub fn parse(input: *css.Parser) Result(struct { This, ?MediaFeatureComparison }) {
+pub fn parse(input: *css.Parser) Result(struct { This, MaybeMediaFeatureComparison }) {
             const ident = (switch (input.expectIdent()) {
 .err => |e| {
 return .{ .err = e };
@@ -1471,8 +1480,8 @@ return .{ .err = e };
             return .{ .result = .{ .{ .unknown = .{ .v = ident } }, null } };
     }
 
-pub fn hash(self: *const @This(), hasher: anytype) void {
-            return css.implementHash(@This(), self, hasher);
+pub fn hash(self: @This(), hasher: anytype) void {
+            return css.implementHash(@This(), (&self), hasher);
     }
     const This = @This();
 };

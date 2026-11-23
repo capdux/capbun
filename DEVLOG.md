@@ -1795,3 +1795,5 @@
 - [Wave #108–109] 清零 `bake/`（100% 全清）、`brotli/`、`bun.cp`、`bun.js.cp`、`bun_alloc/`、`bun_core/`、`bundler_jsc/`、`clap/`、`cli/create/SourceFileProjectGenerator.cp` 共 30 个文件的 `--strict` 违规（全仓剩余 `--strict` 报错降至 234 个）；修复 `WatcherAtomics.cp` `DbgEventPtrHolder`、`bun.cp` `Static` `static { let once }` 与 `SplitAtMutResult` `std.meta.Tuple`、`bun_core/output.cp` `ScopedLogger` `static fn`；`zig:check` 5/5 通过。
 
 - [Wave #110] 清零第 3 批 15 个 `--strict` 报错文件（`cli/test/{ChangedFilesFilter,parallel/Channel,parallel/runner}`, `collections/{StaticHashMap,array_list,baby_list,bounded_array,hive_array,identity_context,linear_fifo,multi_array_list}` -> 100% 全清, `crash_handler/{CPUFeatures,handle_oom}` -> 100% 全清, `csrf/csrf` -> 100% 全清, `css/context`）；`zig:check` 5/5 通过。
+
+- [Wave #111] 清零第 4 批 15 个 `src/css/` `--strict` 报错文件（`css_modules`, `css_parser`, `declaration`, `error`, `generics`, `media_query`, `printer`, `properties/{align,animation,background,border,border_radius,flex,font,margin_padding}`）；`zig:check` 5/5 通过。

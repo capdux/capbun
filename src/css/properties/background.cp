@@ -1023,7 +1023,7 @@ pub struct BackgroundHandler {
                 Property{
                     .@"background-clip" = .{ bg_clips.deepClone(allocator), prefixes },
                 },
-            ) catch |e| bun.handleOom(e);
+            ) catch e => bun.handleOom(e);
             _.flushed_properties.clip = true;
         }
 

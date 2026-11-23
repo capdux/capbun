@@ -353,7 +353,7 @@ fn toCssFontFamily(this_ff: *const FontFamily, dest: *Printer): PrintErr!void {
                     if (first) {
                         first = false;
                     } else {
-                        bun.handleOom(id.writer.writeByte(' ') catch |e| switch (e) {
+                        bun.handleOom(id.writer.writeByte(' ') catch e => switch (e) {
                             error.WriteFailed => error.OutOfMemory,
                         });
                     }

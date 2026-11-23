@@ -146,7 +146,6 @@ const import_record = try dest.importRecord(import_record_index);
                     gop.value_ptr.is_referenced = true;
                 } else {
                     const ByteList = ArrayList(u8);
-                    _ = &ByteList;
                     var res = ByteList{  };
                     _ = &res;
                     _ = bun.handleOom(res.appendSlice(dest.allocator, "--"));

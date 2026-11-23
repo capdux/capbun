@@ -22,7 +22,7 @@ pub struct AlignContentPosition {
         };
     }
 
-    fn __generateToCss() {}
+    static fn __generateToCss() {}
 
     static fn parse(input: *css.Parser): css.Result(@This()) {
         const overflow = input.tryParse(OverflowPosition.parse, {}).asValue();
@@ -91,7 +91,7 @@ pub struct AlignSelfPosition {
         };
     }
 
-    fn __generateToCss() {}
+    static fn __generateToCss() {}
 
     static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
         return css.implementEql(@This(), lhs, rhs);
@@ -1203,7 +1203,7 @@ pub struct AlignHandler {
             dest.append(context.allocator, Property{ .gap = Gap{
                 row: row_gap.?,
                 column: column_gap.?,
-            } }) catch |e| bun.handleOom(e);
+            } }) catch e => bun.handleOom(e);
         } else {
             if (row_gap != null) {
                 bun.handleOom(dest.append(context.allocator, Property{ .@"row-gap" = row_gap.? }));
@@ -1295,7 +1295,7 @@ pub struct AlignHandler {
                                 dest.append(context.allocator, @unionInit(Property, p2009[1], .{
                                     a,
                                     prefixes_2009,
-                                })) catch |e| bun.handleOom(e);
+                                })) catch e => bun.handleOom(e);
                             }
                         }
                     }
@@ -1315,7 +1315,7 @@ pub struct AlignHandler {
                         dest.append(context.allocator, @unionInit(Property, p2012[1], .{
                             q,
                             VendorPrefix.MS,
-                        })) catch |e| bun.handleOom(e);
+                        })) catch e => bun.handleOom(e);
                     }
                 }
             }
@@ -1371,7 +1371,7 @@ pub struct AlignHandler {
                         dest.append(
                             context.allocator,
                             @unionInit(Property, align_prop.prop, .{ css.generic.deepClone(@TypeOf(align_val.*), align_val, context.allocator), align_prefix.* }),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
 
                     if (comptime @TypeOf(justify_prop) != @TypeOf(null)) {
@@ -1384,7 +1384,7 @@ pub struct AlignHandler {
                             dest.append(
                                 context.allocator,
                                 @unionInit(Property, justify_prop.prop, .{ css.generic.deepClone(@TypeOf(justify_actual.*), justify_actual, context.allocator), justify_prefix.* }),
-                            ) catch |e| bun.handleOom(e);
+                            ) catch e => bun.handleOom(e);
                         }
 
                         // Add shorthand.
@@ -1396,7 +1396,7 @@ pub struct AlignHandler {
                         dest.append(
                             context.allocator,
                             @unionInit(Property, prop.prop, payload),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     } else {
 
                         // Add shorthand.
@@ -1408,7 +1408,7 @@ pub struct AlignHandler {
                         dest.append(
                             context.allocator,
                             @unionInit(Property, prop.prop, payload),
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                     }
 
                     align_field.* = null;

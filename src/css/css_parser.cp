@@ -268,7 +268,7 @@ pub struct todo_stuff {
         return _.asBits() == other.asBits();
     }
 
-    pub inline fn fromName(comptime name: []const u8): VendorPrefix {
+    pub static inline fn fromName(comptime name: []const u8): VendorPrefix {
         comptime {
             let vp: VendorPrefix = {};
             @field(vp, name) = true;
@@ -390,7 +390,7 @@ pub fn todo(comptime fmt: []const u8, args: auto): noreturn {
 
 pub fn voidWrap(comptime T: type, comptime parsefn: *const fn (*Parser) Result(T)) *const fn (void, *Parser): Result(T) {
     const Wrapper = struct {
-        fn wrapped(_: void, p: *Parser): Result(T) {
+        static fn wrapped(_: void, p: *Parser): Result(T) {
             return parsefn(p);
         }
     };
@@ -404,6 +404,11 @@ pub fn DefineListShorthand(comptime T: type): type {
     return struct {};
 }
 
+pub fn MaybeShorthandTuple(comptime T: type): type {
+    const Tuple = std.@"meta".Tuple(&.{ T, bool });
+    return Tuple?;
+}
+
 pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, comptime PropertyFieldMap: auto): type {
     * = property_name; // autofix
     // TODO: validate map, make sure each field is set
@@ -412,7 +417,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
 
     return struct {
         /// Returns a shorthand from the longhand properties defined in the given declaration block.
-        pub fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix) ?struct { T, bool } {
+        pub static fn fromLonghands(allocator: Allocator, decls: *const DeclarationBlock, vendor_prefix: VendorPrefix): MaybeShorthandTuple(T) {
             * = allocator; // autofix
             * = decls; // autofix
             * = vendor_prefix; // autofix
@@ -530,7 +535,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
         }
 
         /// Returns a shorthand from the longhand properties defined in the given declaration block.
-        pub fn longhands(vendor_prefix: VendorPrefix) []const PropertyId {
+        pub static fn longhands(vendor_prefix: VendorPrefix): []const PropertyId {
             * = vendor_prefix; // autofix
             // const out: []const PropertyId = comptime out: {
             //     var out: [std.meta.fields(@TypeOf(T.PropertyFieldMap)).len]PropertyId = undefined;
@@ -551,8 +556,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
         }
 
         /// Returns a longhand property for this shorthand.
-        pub fn longhand(this: *const T, allocator: Allocator, property_id: *const PropertyId) Property? {
-            * = this; // autofix
+        pub fn longhand(allocator: Allocator, property_id: *const PropertyId): Property? {
             * = allocator; // autofix
             * = property_id; // autofix
             // inline for (std.meta.fields(@TypeOf(T.PropertyFieldMap))) |field| {
@@ -576,8 +580,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
         }
 
         /// Updates this shorthand from a longhand property.
-        pub fn setLonghand(this: *T, allocator: Allocator, property: *const Property) bool {
-            * = this; // autofix
+        pub fn setLonghand(*_, allocator: Allocator, property: *const Property): bool {
             * = allocator; // autofix
             * = property; // autofix
             // inline for (std.meta.fields(T.PropertyFieldMap)) |field| {
@@ -600,7 +603,7 @@ pub fn DefineShorthand(comptime T: type, comptime property_name: PropertyIdTag, 
 
 pub fn DefineRectShorthand(comptime T: type, comptime V: type): type {
     return struct {
-        pub fn parse(input: *Parser): Result(T) {
+        pub static fn parse(input: *Parser): Result(T) {
             const rect = switch (css_values.rect.Rect(V).parse(input)) {
                 .result => |v| v,
                 .err => |e| return { err: e },
@@ -667,7 +670,7 @@ pub fn DeriveParse(comptime T: type): type {
     const Map = bun.ComptimeEnumMap(enum_actual_type);
 
     return struct {
-        pub fn parse(input: *Parser): Result(T) {
+        pub static fn parse(input: *Parser): Result(T) {
             if (comptime is_union_enum) {
                 const counts_val = comptime counts: {
                     let f_void_idx: usize? = null;
@@ -709,7 +712,7 @@ pub fn DeriveParse(comptime T: type): type {
                 .err => |e| return { err: e },
             };
             if (matched := Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) {
-                inline for (bun.@"meta".EnumFields(enum_actual_type)) |field| {
+                inline for (field of bun.@"meta".EnumFields(enum_actual_type)) {
                     if (field.value == @intFromEnum(matched)) {
                         if (comptime is_union_enum) return { result: @unionInit(T, field.name, void) };
                         return { result: @enumFromInt(field.value) };
@@ -758,7 +761,9 @@ pub fn DeriveParse(comptime T: type): type {
         ): Result(T) {
             const last_payload_index = first_payload_index + payload_count - 1;
             if (comptime maybe_first_void_index == null) {
-                inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
+                inline for (idx of 0..payload_count) {
+                    const i = first_payload_index + idx;
+                    const field = tyinfo.@"union".fields[i];
                     if (comptime (i == last_payload_index)) {
                         return { result: switch (generic.parseFor(field.@"type")(input)) {
                             .result => |v| @unionInit(T, field.name, v),
@@ -786,7 +791,9 @@ pub fn DeriveParse(comptime T: type): type {
                         return { result: @enumFromInt(void_field.value) };
                     }
 
-                    inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
+                    inline for (idx of 0..payload_count) {
+                        const i = first_payload_index + idx;
+                        const field = tyinfo.@"union".fields[i];
                         if (comptime (i == last_payload_index && last_payload_index > first_void_index)) {
                             return { result: switch (generic.parseFor(field.@"type")(input)) {
                                 .result => |v| @unionInit(T, field.name, v),
@@ -798,7 +805,9 @@ pub fn DeriveParse(comptime T: type): type {
                         }
                     }
                 } else {
-                    inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
+                    inline for (idx of 0..payload_count) {
+                        const i = first_payload_index + idx;
+                        const field = tyinfo.@"union".fields[i];
                         if (comptime (i == last_payload_index && last_payload_index > first_void_index)) {
                             return { result: switch (generic.parseFor(field.@"type")(input)) {
                                 .result => |v| @unionInit(T, field.name, v),
@@ -820,7 +829,7 @@ pub fn DeriveParse(comptime T: type): type {
                 const state = input.state();
                 if (ident := input.tryParse(Parser.expectIdent, {}).asValue()) {
                     if (matched := Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) {
-                        inline for (void_fields) |field| {
+                        inline for (field of void_fields) {
                             if (field.value == @intFromEnum(matched)) {
                                 if (comptime is_union_enum) { const ev: void = undefined; return { result: @unionInit(T, field.name, ev) }; }
                                 return { result: @enumFromInt(field.value) };
@@ -831,7 +840,9 @@ pub fn DeriveParse(comptime T: type): type {
                     input.reset(&state);
                 }
 
-                inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
+                inline for (idx of 0..payload_count) {
+                    const i = first_payload_index + idx;
+                    const field = tyinfo.@"union".fields[i];
                     if (comptime (i == last_payload_index && last_payload_index > first_void_index)) {
                         return { result: switch (generic.parseFor(field.@"type")(input)) {
                             .result => |v| @unionInit(T, field.name, v),
@@ -843,7 +854,9 @@ pub fn DeriveParse(comptime T: type): type {
                     }
                 }
             } else if (comptime first_void_index > first_payload_index) {
-                inline for (tyinfo.@"union".fields[first_payload_index .. first_payload_index + payload_count], first_payload_index..) |field, i| {
+                inline for (idx of 0..payload_count) {
+                    const i = first_payload_index + idx;
+                    const field = tyinfo.@"union".fields[i];
                     if (comptime (i == last_payload_index && last_payload_index > first_void_index)) {
                         return { result: switch (generic.parseFor(field.@"type")(input)) {
                             .result => |v| @unionInit(T, field.name, v),
@@ -861,7 +874,7 @@ pub fn DeriveParse(comptime T: type): type {
                     .err => |e| return { err: e },
                 };
                 if (matched := Map.getCaseInsensitiveWithEql(ident, bun.strings.eqlComptimeIgnoreLen)) {
-                    inline for (void_fields) |field| {
+                    inline for (field of void_fields) {
                         if (field.value == @intFromEnum(matched)) {
                             if (comptime is_union_enum) return { result: @unionInit(T, field.name, undefined) };
                             return { result: @enumFromInt(field.value) };
@@ -915,26 +928,28 @@ pub fn DeriveToCss(comptime T: type): type {
     const is_enum_or_union_enum = tyinfo == .@"union" || tyinfo == .@"enum";
 
     return struct {
-        pub static fn toCss(this: *const T, dest: *Printer): PrintErr!void {
+        pub static fn toCss(val: *const T, dest: *Printer): PrintErr!void {
             if (comptime is_enum_or_union_enum) {
-                inline for (std.@"meta".fields(T), 0..) |field, i| {
-                    if (@intFromEnum(this.*) == enum_fields[i].value) {
+                inline for (i of 0..std.@"meta".fields(T).len) {
+                    const field = std.@"meta".fields(T)[i];
+                    if (@intFromEnum(val.*) == enum_fields[i].value) {
                         if (comptime tyinfo == .@"enum" || field.@"type" == void) {
                             return dest.writeStr(enum_fields[i].name);
                         } else if (comptime generic.hasToCss(field.@"type")) {
-                            return generic.toCss(field.@"type", &@field(this, field.name), dest);
+                            return generic.toCss(field.@"type", &@field(val, field.name), dest);
                         } else if (@hasDecl(field.@"type", "__generateToCss") && @typeInfo(field.@"type") == .@"struct") {
                             const variant_fields = std.@"meta".fields(field.@"type");
                             if (variant_fields.len > 1) {
                                 const last = variant_fields.len - 1;
-                                inline for (variant_fields, 0..) |variant_field, j| {
+                                inline for (j of 0..variant_fields.len) {
+                                    const variant_field = variant_fields[j];
                                     // Unwrap it from the optional
                                     if (@typeInfo(variant_field.@"type") == .optional) {
-                                        if (*value := @field(@field(this, field.name), variant_field.name)) {
+                                        if (*value := @field(@field(val, field.name), variant_field.name)) {
                                             value.toCss(dest)?;
                                         }
                                     } else {
-                                        @field(@field(this, field.name), variant_field.name).toCss(dest)?;
+                                        @field(@field(val, field.name), variant_field.name).toCss(dest)?;
                                     }
 
                                     // Emit a space if there are more fields after
@@ -944,7 +959,7 @@ pub fn DeriveToCss(comptime T: type): type {
                                 }
                             } else {
                                 const variant_field = variant_fields[0];
-                                @field(variant_field.@"type", "toCss")(@field(@field(this, field.name), variant_field.name), dest)?;
+                                @field(variant_field.@"type", "toCss")(@field(@field(val, field.name), variant_field.name), dest)?;
                             }
                         } else {
                             @compileError("Don't know how to serialize this variant: " ++ @typeName(field.@"type") ++ ", on " ++ @typeName(T) ++ ".\n\nYou probably want to implement a `toCss` function for this type, or add a dummy `fn __generateToCss() void {}` to the type signal that it is okay for it to be auto-generated by this function..");
@@ -960,9 +975,9 @@ pub fn DeriveToCss(comptime T: type): type {
 }
 
 pub struct enum_property_util {
-    static fn asStr(comptime T: type, this: *const T): []const u8 {
-        const tag = @intFromEnum(this.*);
-        inline for (bun.@"meta".EnumFields(T)) |field| {
+    static fn asStr(comptime T: type, val: *const T): []const u8 {
+        const tag = @intFromEnum(val.*);
+        inline for (field of bun.@"meta".EnumFields(T)) {
             if (tag == field.value) return field.name;
         }
         unreachable;
@@ -984,8 +999,8 @@ pub struct enum_property_util {
         return { err: location.newUnexpectedTokenError({ ident: ident }) };
     }
 
-    static fn toCss(comptime T: type, this: *const T, dest: *Printer): PrintErr!void {
-        return dest.writeStr(asStr(T, this));
+    static fn toCss(comptime T: type, val: *const T, dest: *Printer): PrintErr!void {
+        return dest.writeStr(asStr(T, val));
     }
 }
 
@@ -1005,23 +1020,23 @@ pub fn DefineEnumProperty(comptime T: type): type {
             };
 
             // todo_stuff.match_ignore_ascii_case
-            inline for (fields) |field| {
+            inline for (field of fields) {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength(ident, field.name)) return { result: @enumFromInt(field.value) };
             }
 
             return { err: location.newUnexpectedTokenError({ ident: ident }) };
         }
 
-        pub static fn toCss(this: *const T, dest: *Printer): PrintErr!void {
-            return dest.writeStr(@tagName(this.*));
+        pub static fn toCss(val: *const T, dest: *Printer): PrintErr!void {
+            return dest.writeStr(@tagName(val.*));
         }
 
-        pub static inline fn deepClone(this: *const T, _: std.mem.Allocator): T {
-            return this.*;
+        pub static inline fn deepClone(val: *const T, _: std.mem.Allocator): T {
+            return val.*;
         }
 
-        pub static fn hash(this: *const T, hasher: *std.hash.Wyhash) {
-            const tag = @intFromEnum(this.*);
+        pub static fn hash(val: *const T, hasher: *std.hash.Wyhash) {
+            const tag = @intFromEnum(val.*);
             hasher.update(std.mem.asBytes(&tag));
         }
     };
@@ -1044,7 +1059,8 @@ pub fn DeriveValueType(comptime T: type, comptime ValueTypeMap: auto): type {
 
     return struct {
         pub static fn valueType(s: T): media_query.MediaFeatureType {
-            inline for (std.@"meta".fields(T), 0..) |field, i| {
+            inline for (i of 0..std.@"meta".fields(T).len) {
+                const field = std.@"meta".fields(T)[i];
                 if (field.value == @intFromEnum(s)) {
                     return field_values[i];
                 }
@@ -1502,7 +1518,7 @@ pub struct _BundlerAtRuleParser_CustomAtRuleParser {
                 loc: bun.logger.Loc{ .start = @intCast(start_position) },
                 len: @intCast(end_position - start_position),
             },
-        }) catch |e| bun.handleOom(e);
+        }) catch e => bun.handleOom(e);
     }
 
     static fn onLayerRule(b: *BundlerAtRuleParser, layers: *const bun.css.SmallList(LayerName, 1)) {
@@ -1764,8 +1780,8 @@ pub fn AtRulePrelude(comptime T: type): type {
         unknown: UnknownPrelude,
         custom: T,
 
-        pub fn allowedInStyleRule(this: *const @This()): bool {
-            return switch (this.*) {
+        pub fn allowedInStyleRule(): bool {
+            return switch (_.*) {
                 .media, .supports, .container, .moz_document, .layer, .starting_style, .scope, .nest, .unknown, .custom => true,
                 .namespace, .font_face, .font_feature_values, .font_palette_values, .counter_style, .keyframes, .page, .property, .@"import", .custom_media, .viewport, .charset => false,
             };
@@ -1860,11 +1876,13 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
             pub const Prelude = AtRulePreludeT;
             pub const AtRule = void;
 
-            static fn parsePrelude(parser: *This, name: []const u8, input: *Parser) Result(Prelude) {
+            static fn parsePrelude(parser: *This, name: []const u8, input: *Parser): Result(Prelude) {
                 const PreludeEnum = _TopLevelPreludeEnum;
                 const Map = comptime bun.ComptimeEnumMap(PreludeEnum);
 
-                if (Map.getASCIIICaseInsensitive(name)) |prelude| {
+                const maybe_prelude = Map.getASCIIICaseInsensitive(name);
+                if (maybe_prelude != null) {
+                    const prelude = maybe_prelude.?;
                     switch (prelude) {
                         .@"import" => {
                             if (@intFromEnum(parser.state) > @intFromEnum(State.imports)) {
@@ -1931,7 +1949,8 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                             // @charset is removed by rust-cssparser if it's the first rule in the stylesheet.
                             // Anything left is technically invalid, however, users often concatenate CSS files
                             // together, so we are more lenient and simply ignore @charset rules in the middle of a file.
-                            if (input.expectString().asErr()) |e| return .{ .err = e };
+                            const maybe_e = input.expectString().asErr();
+                            if (maybe_e != null) return .{ .err = maybe_e.? };
                             return .{ .result = .charset };
                         },
                         .@"custom-media" => {
@@ -1968,13 +1987,13 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                 return Nested.AtRuleParser.parsePrelude(&nested_rule_parser, name, input);
             }
 
-            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser): Result(AtRuleParser.AtRule) {
                 parser.state = .body;
                 let nested_parser = parser.nested();
                 return NestedRuleParser(AtRuleParserT).AtRuleParser.parseBlock(&nested_parser, prelude, start, input);
             }
 
-            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
+            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState): Maybe(AtRuleParser.AtRule, void) {
                 const loc_ = start.sourceLocation();
                 const loc = css_rules.Location{
                     .source_index = parser.options.source_index,
@@ -1995,7 +2014,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                         AtRuleParserT.CustomAtRuleParser.onImportRule(parser.at_rule_parser, &import_rule, @intCast(start.position), @intCast(start.position + 1));
                         parser.rules.v.append(parser.allocator, .{
                             .@"import" = import_rule,
-                        }) catch |err| bun.handleOom(err);
+                        }) catch err => bun.handleOom(err);
                         return .success;
                     },
                     .namespace => {
@@ -2009,12 +2028,13 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                             .url = url,
                             .loc = loc,
                         };
-                        if (p := prefix) {
+                        if (prefix != null) {
+                            const p = prefix.?;
                             ns_rule.prefix = .{ .v = p };
                         }
                         parser.rules.v.append(parser.allocator, .{
                             .namespace = ns_rule,
-                        }) catch |err| bun.handleOom(err);
+                        }) catch err => bun.handleOom(err);
 
                         return .success;
                     },
@@ -2031,7 +2051,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                                     .loc = loc,
                                 },
                             },
-                        ) catch |err| bun.handleOom(err);
+                        ) catch err => bun.handleOom(err);
                         return .success;
                     },
                     .layer => {
@@ -2053,7 +2073,7 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
                             .prelude = prelude2,
                             .block = null,
                             .loc = loc,
-                        } }) catch |err| bun.handleOom(err);
+                        } }) catch err => bun.handleOom(err);
                         return .success;
                     },
                     .custom => {
@@ -2070,21 +2090,21 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
             pub const Prelude = selector.parser.SelectorList;
             pub const QualifiedRule = void;
 
-            pub fn parsePrelude(parser: *This, input: *Parser) Result(Prelude) {
+            pub fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
                 parser.state = .body;
                 let nested_parser = parser.nested();
                 const N = @TypeOf(nested_parser);
                 return N.QualifiedRuleParser.parsePrelude(&nested_parser, input);
             }
 
-            pub fn parseBlock(parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
+            pub fn parseBlock(parser: *This, prelude: Prelude, start: *const ParserState, input: *Parser): Result(QualifiedRule) {
                 let nested_parser = parser.nested();
                 const N = @TypeOf(nested_parser);
                 return N.QualifiedRuleParser.parseBlock(&nested_parser, prelude, start, input);
             }
         };
 
-        pub fn new(allocator: Allocator, options: *const ParserOptions, at_rule_parser: *AtRuleParserT, rules: *CssRuleList(AtRuleT), composes: *ComposesMap, local_properties: *LocalPropertyUsage): @This() {
+        pub static fn new(allocator: Allocator, options: *const ParserOptions, at_rule_parser: *AtRuleParserT, rules: *CssRuleList(AtRuleT), composes: *ComposesMap, local_properties: *LocalPropertyUsage): @This() {
             return {
                 options: options,
                 state: .start,
@@ -2096,20 +2116,121 @@ pub fn TopLevelRuleParser(comptime AtRuleParserT: type): type {
             };
         }
 
-        pub fn nested(self: *This): NestedRuleParser(AtRuleParserT) {
+        pub fn nested(*_): NestedRuleParser(AtRuleParserT) {
             return .{
-                .options = self.options,
-                .at_rule_parser = self.at_rule_parser,
+                .options = _.options,
+                .at_rule_parser = _.at_rule_parser,
                 .declarations = DeclarationList{},
                 .important_declarations = DeclarationList{},
-                .rules = self.rules,
+                .rules = _.rules,
                 .is_in_style_rule = false,
                 .allow_declarations = false,
-                .allocator = self.allocator,
-                .composes = self.composes,
-                .composes_refs = &self.composes_refs,
-                .local_properties = self.local_properties,
+                .allocator = _.allocator,
+                .composes = _.composes,
+                .composes_refs = &_.composes_refs,
+                .local_properties = _.local_properties,
             };
+        }
+    };
+}
+
+pub fn NestedQualifiedRuleParser(comptime T: type, comptime This: type): type {
+    return struct {
+        pub const Prelude = selector.parser.SelectorList;
+        pub const QualifiedRule = void;
+
+        pub fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
+            let selector_parser = selector.parser.SelectorParser{
+                .is_nesting_allowed = true,
+                .options = parser.options,
+                .allocator = input.allocator(),
+            };
+
+            if (parser.is_in_style_rule) {
+                return selector.parser.SelectorList.parseRelative(&selector_parser, input, .discard_list, .implicit);
+            } else {
+                return selector.parser.SelectorList.parse(&selector_parser, input, .discard_list, .none);
+            }
+        }
+
+        pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser): Result(QualifiedRule) {
+            const loc = parser.getLoc(start);
+            defer parser.composes_refs.clearRetainingCapacity();
+            // allow composes if:
+            // - NOT in nested style rules
+            // - AND there is only one class selector
+            if (input.flags.css_modules) {
+                out: {
+                    if (parser.is_in_style_rule) {
+                        parser.composes_state = .{ .disallow_nested = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+                    if (selectors.v.len() != 1) {
+                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+
+                    const sel = selectors.v.slice()[0];
+                    if (sel.components.items.len != 1) {
+                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+
+                    const comp = &sel.components.items[0];
+                    if (r := comp.asClass()) {
+                        const comp_ref_val = r.asRef().?;
+                        parser.composes_refs.append(input.allocator(), comp_ref_val);
+                        parser.composes_state = .{ .allow = .{ .line = loc.line, .column = loc.column } };
+                        break :out;
+                    }
+
+                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
+                    break :out;
+                }
+            }
+            const location = input.position();
+            const result = switch (parser.parseNested(input, true)) {
+                .err => |e| return .{ .err = e },
+                .result => |v| v,
+            };
+            const declarations: DeclarationBlock = result[0];
+            const rules = result[1];
+
+            // We parsed a style rule with the `composes` property
+            //
+            // Track which properties it used so we can validate it later (it is undefined
+            // behavior when composing and properties conflict so we will warn the user
+            // about that).
+            if (parser.composes_state == .allow) {
+                const len = input.position() - location;
+                let usage = PropertyBitset.initEmpty();
+                let custom_properties: bun.BabyList(string) = .{};
+                fillPropertyBitSet(parser.allocator, &usage, &declarations, &custom_properties);
+
+                const custom_properties_slice = custom_properties.slice();
+
+                for (comp_ref of parser.composes_refs.slice()) {
+                    const gop = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, comp_ref));
+                    const property_usage: *PropertyUsage = if (!gop.found_existing) brk: {
+                        gop.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
+                        break :brk gop.value_ptr;
+                    } else gop.value_ptr;
+                    property_usage.fill(&usage, custom_properties_slice);
+                }
+            }
+
+            const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
+            parser.rules.v.append(parser.allocator, .{
+                .style = QualStyleRuleT{
+                    .selectors = selectors,
+                    .vendor_prefix = VendorPrefix{},
+                    .declarations = declarations,
+                    .rules = rules,
+                    .loc = loc,
+                },
+            }) catch e => bun.handleOom(e);
+
+            return .success;
         }
     };
 }
@@ -2138,10 +2259,10 @@ pub fn NestedRuleParser(comptime T: type): type {
 
         const This = @This();
 
-        pub fn getLoc(this: *This, start: *const ParserState) Location {
+        pub fn getLoc(*_, start: *const ParserState): Location {
             const loc = start.sourceLocation();
             return Location{
-                .source_index = this.options.source_index,
+                .source_index = _.options.source_index,
                 .line = loc.line,
                 .column = loc.column,
             };
@@ -2155,7 +2276,8 @@ pub fn NestedRuleParser(comptime T: type): type {
                 const result: Prelude = brk: {
                     const PreludeEnum = _NestedPreludeEnum;
                     const Map = comptime bun.ComptimeEnumMap(PreludeEnum);
-                    if (Map.getASCIIICaseInsensitive(name)) |kind| switch (kind) {
+                    const maybe_kind = Map.getASCIIICaseInsensitive(name);
+                    if (maybe_kind != null) switch (maybe_kind.?) {
                         .media => {
                             const media = switch (MediaList.parse(input)) {
                                 .err => |e| return .{ .err = e },
@@ -2215,8 +2337,10 @@ pub fn NestedRuleParser(comptime T: type): type {
                         .@"-moz-document" => {
                             // Firefox only supports the url-prefix() function with no arguments as a legacy CSS hack.
                             // See https://css-tricks.com/snippets/css/css-hacks-targeting-firefox/
-                            if (input.expectFunctionMatching("url-prefix").asErr()) |e| return .{ .err = e };
-                            if (input.parseNestedBlock(void, @as(void, undefined), MozDocumentFn.parsefn).asErr()) |e| return .{ .err = e };
+                            const maybe_e1 = input.expectFunctionMatching("url-prefix").asErr();
+                            if (maybe_e1 != null) return .{ .err = maybe_e1.? };
+                            const maybe_e2 = input.parseNestedBlock(void, @as(void, undefined), MozDocumentFn.parsefn).asErr();
+                            if (maybe_e2 != null) return .{ .err = maybe_e2.? };
                             break :brk .moz_document;
                         },
                         .layer => {
@@ -2224,7 +2348,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                             const names = switch (LayerNames.parse(input)) {
                                 .result => |vv| vv,
                                 .err => |e| names: {
-                                    if (e.kind == .basic and e.kind.basic == .end_of_input) {
+                                    if (e.kind == .basic && e.kind.basic == .end_of_input) {
                                         break :names LayerNames{};
                                     }
                                     return .{ .err = e };
@@ -2263,7 +2387,8 @@ pub fn NestedRuleParser(comptime T: type): type {
                             } else null;
 
                             const scope_end = if (input.tryParse(Parser.expectIdentMatching, .{"to"}).isOk()) scope_end: {
-                                if (input.expectParenthesisBlock().asErr()) |e| return .{ .err = e };
+                                const maybe_e = input.expectParenthesisBlock().asErr();
+                                if (maybe_e != null) return .{ .err = maybe_e.? };
                                 break :scope_end switch (input.parseNestedBlock(selector.parser.SelectorList, &closure, ScopeClosure.parsefn)) {
                                     .result => |v| v,
                                     .err => |e| return .{ .err = e },
@@ -2306,14 +2431,14 @@ pub fn NestedRuleParser(comptime T: type): type {
                     }
                 };
 
-                if (parser.is_in_style_rule and !result.allowedInStyleRule()) {
+                if (parser.is_in_style_rule && !result.allowedInStyleRule()) {
                     return .{ .err = input.newError(BasicParseErrorKind{ .at_rule_invalid = name }) };
                 }
 
                 return .{ .result = result };
             }
 
-            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser) Result(AtRuleParser.AtRule) {
+            pub fn parseBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState, input: *Parser): Result(AtRuleParser.AtRule) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
                     .font_face => {
@@ -2323,12 +2448,17 @@ pub fn NestedRuleParser(comptime T: type): type {
                         const FontFaceProps = ArrayList(css_rules.font_face.FontFaceProperty);
                         let properties = FontFaceProps{};
 
-                        while (body_parser.next()) |result| {
-                            if (result.asValue()) |decl| {
+                        while (true) {
+                            const maybe_result = body_parser.next();
+                            if (maybe_result == null) break;
+                            const result = maybe_result.?;
+                            const maybe_decl = result.asValue();
+                            if (maybe_decl != null) {
+                                const decl = maybe_decl.?;
                                 properties.append(
                                     input.allocator(),
                                     decl,
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
                             }
                         }
 
@@ -2340,7 +2470,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .font_palette_values => {
@@ -2352,7 +2482,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{ .font_palette_values = rule },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .counter_style => {
@@ -2369,7 +2499,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .media => {
@@ -2387,7 +2517,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 }; },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .supports => {
@@ -2402,7 +2532,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 .rules = rules,
                                 .loc = loc,
                             }; },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .container => {
@@ -2420,7 +2550,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 }; },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .scope => {
@@ -2438,7 +2568,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 }; },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .viewport => {
@@ -2451,7 +2581,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 },
                                 .loc = loc,
                             },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .keyframes => {
@@ -2460,12 +2590,17 @@ pub fn NestedRuleParser(comptime T: type): type {
                         // todo_stuff.think_mem_mgmt
                         let keyframes: ArrayList(css_rules.keyframes.Keyframe) = .{};
 
-                        while (iter.next()) |result| {
-                            if (result.asValue()) |keyframe| {
+                        while (true) {
+                            const maybe_result = iter.next();
+                            if (maybe_result == null) break;
+                            const result = maybe_result.?;
+                            const maybe_kf = result.asValue();
+                            if (maybe_kf != null) {
+                                const keyframe = maybe_kf.?;
                                 keyframes.append(
                                     input.allocator(),
                                     keyframe,
-                                ) catch |e| bun.handleOom(e);
+                                ) catch e => bun.handleOom(e);
                             }
                         }
 
@@ -2476,7 +2611,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 .vendor_prefix = prelude.keyframes.prefix,
                                 .loc = loc,
                             },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .page => {
@@ -2488,7 +2623,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         parser.rules.v.append(
                             input.allocator(),
                             .{ .page = rule },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .moz_document => {
@@ -2501,7 +2636,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 .rules = rules,
                                 .loc = loc,
                             }; },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .layer => {
@@ -2532,7 +2667,7 @@ pub fn NestedRuleParser(comptime T: type): type {
 
                         parser.rules.v.append(input.allocator(), .{
                             .layer_block = blk_lbr: { const LayerBlockRuleT = css_rules.layer.LayerBlockRule(T.CustomAtRuleParser.AtRule); break :blk_lbr LayerBlockRuleT{ .name = name, .rules = rules, .loc = loc }; },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .property => {
@@ -2542,7 +2677,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                 .err => |e| return .{ .err = e },
                                 .result => |v| v,
                             },
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .import, .namespace, .custom_media, .charset => {
@@ -2562,7 +2697,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 }; },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .nest => {
@@ -2587,7 +2722,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 }; },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .font_feature_values => bun.unreachablePanic("", .{}),
@@ -2605,7 +2740,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .custom => {
@@ -2617,17 +2752,17 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .result => |v| v,
                                 },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                 }
             }
 
-            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState) Maybe(AtRuleParser.AtRule, void) {
+            pub fn ruleWithoutBlock(parser: *This, prelude: AtRuleParser.Prelude, start: *const ParserState): Maybe(AtRuleParser.AtRule, void) {
                 const loc = parser.getLoc(start);
                 switch (prelude) {
                     .layer => {
-                        if (parser.is_in_style_rule or prelude.layer.len() == 0) {
+                        if (parser.is_in_style_rule || prelude.layer.len() == 0) {
                             return .{ .err = undefined };
                         }
 
@@ -2641,7 +2776,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .unknown => {
@@ -2655,7 +2790,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                                     .loc = loc,
                                 },
                             },
-                        ) catch |e| bun.handleOom(e);
+                        ) catch e => bun.handleOom(e);
                         return .success;
                     },
                     .custom => {
@@ -2669,7 +2804,7 @@ pub fn NestedRuleParser(comptime T: type): type {
                         )) {
                             .err => |e| return .{ .err = e },
                             .result => |v| v,
-                        }) catch |e| bun.handleOom(e);
+                        }) catch e => bun.handleOom(e);
                         return .success;
                     },
                     else => return .{ .err = undefined },
@@ -2677,102 +2812,7 @@ pub fn NestedRuleParser(comptime T: type): type {
             }
         };
 
-        pub const QualifiedRuleParser = struct {
-            pub const Prelude = selector.parser.SelectorList;
-            pub const QualifiedRule = void;
-
-            pub fn parsePrelude(parser: *This, input: *Parser): Result(Prelude) {
-                let selector_parser = selector.parser.SelectorParser{
-                    .is_nesting_allowed = true,
-                    .options = parser.options,
-                    .allocator = input.allocator(),
-                };
-
-                if (parser.is_in_style_rule) {
-                    return selector.parser.SelectorList.parseRelative(&selector_parser, input, .discard_list, .implicit);
-                } else {
-                    return selector.parser.SelectorList.parse(&selector_parser, input, .discard_list, .none);
-                }
-            }
-
-            pub fn parseBlock(parser: *This, selectors: Prelude, start: *const ParserState, input: *Parser) Result(QualifiedRule) {
-                const loc = parser.getLoc(start);
-                defer parser.composes_refs.clearRetainingCapacity();
-                // allow composes if:
-                // - NOT in nested style rules
-                // - AND there is only one class selector
-                if (input.flags.css_modules) out: {
-                    if (parser.is_in_style_rule) {
-                        parser.composes_state = .{ .disallow_nested = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-                    if (selectors.v.len() != 1) {
-                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-
-                    const sel = selectors.v.slice()[0];
-                    if (sel.components.items.len != 1) {
-                        parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-
-                    const comp = &sel.components.items[0];
-                    if (comp.asClass()) |r| {
-                        const ref = r.asRef().?;
-                        parser.composes_refs.append(input.allocator(), ref);
-                        parser.composes_state = .{ .allow = .{ .line = loc.line, .column = loc.column } };
-                        break :out;
-                    }
-
-                    parser.composes_state = .{ .disallow_not_single_class = .{ .line = loc.line, .column = loc.column } };
-                    break :out;
-                }
-                const location = input.position();
-                const result = switch (parser.parseNested(input, true)) {
-                    .err => |e| return .{ .err = e },
-                    .result => |v| v,
-                };
-                const declarations: DeclarationBlock = result[0];
-                const rules = result[1];
-
-                // We parsed a style rule with the `composes` property
-                //
-                // Track which properties it used so we can validate it later (it is undefined
-                // behavior when composing and properties conflict so we will warn the user
-                // about that).
-                if (parser.composes_state == .allow) {
-                    const len = input.position() - location;
-                    let usage = PropertyBitset.initEmpty();
-                    let custom_properties: bun.BabyList(string) = .{};
-                    fillPropertyBitSet(parser.allocator, &usage, &declarations, &custom_properties);
-
-                    const custom_properties_slice = custom_properties.slice();
-
-                    for (comp_ref of parser.composes_refs.slice()) {
-                        const gop = bun.handleOom(parser.local_properties.getOrPut(parser.allocator, comp_ref));
-                        const property_usage: *PropertyUsage = if (!gop.found_existing) brk: {
-                            gop.value_ptr.* = PropertyUsage{ .range = bun.logger.Range{ .loc = bun.logger.Loc{ .start = @intCast(location) }, .len = @intCast(len) } };
-                            break :brk gop.value_ptr;
-                        } else gop.value_ptr;
-                        property_usage.fill(&usage, custom_properties_slice);
-                    }
-                }
-
-                const QualStyleRuleT = StyleRule(T.CustomAtRuleParser.AtRule);
-                parser.rules.v.append(parser.allocator, .{
-                    .style = QualStyleRuleT{
-                        .selectors = selectors,
-                        .vendor_prefix = VendorPrefix{},
-                        .declarations = declarations,
-                        .rules = rules,
-                        .loc = loc,
-                    },
-                }) catch |e| bun.handleOom(e);
-
-                return .success;
-            }
-        };
+        pub const QualifiedRuleParser = NestedQualifiedRuleParser(T, This);
 
         pub const RuleBodyItemParser = struct {
             pub fn parseQualified(parser: *This): bool {
@@ -2812,26 +2852,26 @@ pub fn NestedRuleParser(comptime T: type): type {
             }
         }
 
-        pub fn parseNested(this: *This, input: *Parser, is_style_rule: bool) Result(struct { DeclarationBlock, CssRuleList(T.CustomAtRuleParser.AtRule) }) {
+        pub fn parseNested(*_, input: *Parser, is_style_rule: bool): Result(struct { DeclarationBlock, CssRuleList(T.CustomAtRuleParser.AtRule) }) {
             // TODO: think about memory management in error cases
             let rules: CssRuleList(T.CustomAtRuleParser.AtRule) = .{};
             let nested_parser = This{
                 .allocator = input.allocator(),
-                .options = this.options,
-                .at_rule_parser = this.at_rule_parser,
+                .options = _.options,
+                .at_rule_parser = _.at_rule_parser,
                 .declarations = DeclarationList{},
                 .important_declarations = DeclarationList{},
                 .rules = &rules,
-                .is_in_style_rule = this.is_in_style_rule or is_style_rule,
-                .allow_declarations = this.allow_declarations or this.is_in_style_rule or is_style_rule,
+                .is_in_style_rule = _.is_in_style_rule || is_style_rule,
+                .allow_declarations = _.allow_declarations || _.is_in_style_rule || is_style_rule,
                 // .composes_state = this.allow_composes and !this.is_in_style_rule,
-                .composes_state = if (this.is_in_style_rule and this.composes_state == .allow)
-                    .{ .disallow_nested = .{ .line = this.composes_state.allow.line, .column = this.composes_state.allow.column } }
+                .composes_state = if (_.is_in_style_rule && _.composes_state == .allow)
+                    .{ .disallow_nested = .{ .line = _.composes_state.allow.line, .column = _.composes_state.allow.column } }
                 else
-                    this.composes_state,
-                .composes = this.composes,
-                .composes_refs = this.composes_refs,
-                .local_properties = this.local_properties,
+                    _.composes_state,
+                .composes = _.composes,
+                .composes_refs = _.composes_refs,
+                .local_properties = _.local_properties,
             };
 
             const parse_declarations = This.RuleBodyItemParser.parseDeclarations(&nested_parser);
@@ -2839,15 +2879,15 @@ pub fn NestedRuleParser(comptime T: type): type {
             let errors: ArrayList(ParseError(ParserError)) = .{};
             let iter = RuleBodyParser(This).new(input, &nested_parser);
 
-            while (iter.next()) |result| {
-                if (result.asErr()) |e| {
+            while (result := iter.next()) {
+                if (e := result.asErr()) {
                     if (parse_declarations) {
                         iter.parser.declarations.clearRetainingCapacity();
                         iter.parser.important_declarations.clearRetainingCapacity();
                         errors.append(
-                            this.allocator,
+                            _.allocator,
                             e,
-                        ) catch |oom| bun.handleOom(oom);
+                        ) catch oom => bun.handleOom(oom);
                     } else {
                         if (iter.parser.options.error_recovery) {
                             iter.parser.options.warn(e);
@@ -2860,9 +2900,9 @@ pub fn NestedRuleParser(comptime T: type): type {
 
             if (parse_declarations) {
                 if (errors.items.len > 0) {
-                    if (this.options.error_recovery) {
+                    if (_.options.error_recovery) {
                         for (e of errors.items) {
-                            this.options.warn(e);
+                            _.options.warn(e);
                         }
                     } else {
                         return .{ .err = errors.orderedRemove(0) };
@@ -2881,17 +2921,17 @@ pub fn NestedRuleParser(comptime T: type): type {
             };
         }
 
-        pub fn parseStyleBlock(this: *This, input: *Parser): Result(CssRuleList(T.CustomAtRuleParser.AtRule)) {
+        pub fn parseStyleBlock(*_, input: *Parser): Result(CssRuleList(T.CustomAtRuleParser.AtRule)) {
             const srcloc = input.currentSourceLocation();
             const loc = Location{
-                .source_index = this.options.source_index,
+                .source_index = _.options.source_index,
                 .line = srcloc.line,
                 .column = srcloc.column,
             };
 
             // Declarations can be immediately within @media and @supports blocks that are nested within a parent style rule.
             // These act the same way as if they were nested within a `& { ... }` block.
-            const res = switch (this.parseNested(input, false)) {
+            const res = switch (_.parseNested(input, false)) {
                 .err => |e| return .{ .err = e },
                 .result => |v| v,
             };
@@ -2938,51 +2978,51 @@ pub fn StyleSheetParser(comptime P: type): type {
         parser: *P,
         any_rule_so_far: bool = false,
 
-        pub fn new(input: *Parser, parser: *P): @This() {
+        pub static fn new(input: *Parser, parser: *P): @This() {
             return .{
                 .input = input,
                 .parser = parser,
             };
         }
 
-        pub fn next(this: *@This(), allocator: Allocator): ?(Result(Item)) {
+        pub fn next(*_, allocator: Allocator): Result(Item)? {
             while (true) {
-                this.input.@"skip cdc and cdo"();
+                _.input.@"skip cdc and cdo"();
 
-                const start = this.input.state();
-                const at_keyword: ([]const u8)? = switch (this.input.nextByte() orelse return null) {
+                const start = _.input.state();
+                const at_keyword: ([]const u8)? = switch (_.input.nextByte() ?? return null) {
                     '@' => brk: {
-                        const at_keyword: *Token = switch (this.input.nextIncludingWhitespaceAndComments()) {
+                        const at_keyword: *Token = switch (_.input.nextIncludingWhitespaceAndComments()) {
                             .result => |vv| vv,
                             .err => {
-                                this.input.reset(&start);
+                                _.input.reset(&start);
                                 break :brk null;
                             },
                         };
 
                         if (at_keyword.* == .at_keyword) break :brk at_keyword.at_keyword;
-                        this.input.reset(&start);
+                        _.input.reset(&start);
                         break :brk null;
                     },
                     else => null,
                 };
 
                 if (name := at_keyword) {
-                    const first_stylesheet_rule = !this.any_rule_so_far;
-                    this.any_rule_so_far = true;
+                    const first_stylesheet_rule = !_.any_rule_so_far;
+                    _.any_rule_so_far = true;
 
-                    if (first_stylesheet_rule and bun.strings.eqlCaseInsensitiveASCII(name, "charset", true)) {
+                    if (first_stylesheet_rule && bun.strings.eqlCaseInsensitiveASCII(name, "charset", true)) {
                         const delimiters = Delimiters{
                             .semicolon = true,
                             .close_curly_bracket = true,
                         };
-                        * = this.input.parseUntilAfter(delimiters, void, @as(void, undefined), voidWrap(void, Parser.parseEmpty));
+                        * = _.input.parseUntilAfter(delimiters, void, @as(void, undefined), voidWrap(void, Parser.parseEmpty));
                     } else {
-                        return parse_at_rule(allocator, &start, name, this.input, P, this.parser);
+                        return parse_at_rule(allocator, &start, name, _.input, P, _.parser);
                     }
                 } else {
-                    this.any_rule_so_far = true;
-                    const result = parse_qualified_rule(&start, this.input, P, this.parser, Delimiters{ .curly_bracket = true });
+                    _.any_rule_so_far = true;
+                    const result = parse_qualified_rule(&start, _.input, P, _.parser, Delimiters{ .curly_bracket = true });
                     return result;
                 }
             }
@@ -3206,7 +3246,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
 
         const This = @This();
 
-        pub fn empty(allocator: Allocator): This {
+        pub static fn empty(allocator: Allocator): This {
             return .{
                 .rules = .{},
                 .sources = .{},
@@ -3218,17 +3258,17 @@ pub fn StyleSheet(comptime AtRule: type): type {
         }
 
         /// Minify and transform the style sheet for the provided browser targets.
-        pub fn minify(self: *@This(), allocator: Allocator, options: MinifyOptions, extra: *const StylesheetExtra): Maybe(void, Err(MinifyErrorKind)) {
+        pub fn minify(*_, allocator: Allocator, options: MinifyOptions, extra: *const StylesheetExtra): Maybe(void, Err(MinifyErrorKind)) {
             const ctx = PropertyHandlerContext.new(allocator, options.targets, &options.unused_symbols);
             let handler = declaration.DeclarationHandler.default();
             let important_handler = declaration.DeclarationHandler.default();
 
             // @custom-media rules may be defined after they are referenced, but may only be defined at the top level
             // of a stylesheet. Do a pre-scan here and create a lookup table by name.
-            let custom_media: CustomMediaMap? = if (self.options.flags.custom_media and options.targets.shouldCompileSame(.custom_media_queries)) brk: {
+            let custom_media: CustomMediaMap? = if (_.options.flags.custom_media && options.targets.shouldCompileSame(.custom_media_queries)) brk: {
                 let custom_media = CustomMediaMap{};
 
-                for (rule of self.rules.v.items) {
+                for (rule of _.rules.v.items) {
                     if (rule == .custom_media) {
                         bun.handleOom(custom_media.put(allocator, rule.custom_media.name.v, rule.custom_media.deepClone(allocator)));
                     }
@@ -3249,11 +3289,11 @@ pub fn StyleSheet(comptime AtRule: type): type {
                 .handler_context = ctx,
                 .unused_symbols = &options.unused_symbols,
                 .custom_media = custom_media,
-                .css_modules = self.options.css_modules != null,
+                .css_modules = _.options.css_modules != null,
                 .extra = extra,
             };
 
-            self.rules.minify(&minify_ctx, false) catch {
+            _.rules.minify(&minify_ctx, false) catch {
                 @panic("TODO: Handle");
             };
 
@@ -3261,16 +3301,15 @@ pub fn StyleSheet(comptime AtRule: type): type {
         }
 
         pub fn toCssWithWriter(
-            self: *const @This(),
             allocator: Allocator,
             writer: *std.Io.Writer,
             options: css_printer.PrinterOptions,
             import_info: bun.css.ImportInfo?,
             local_names: (*const LocalsResultsMap)?,
             symbols: *const bun.ast.Symbol.Map,
-        ) PrintResult(ToCssResultInternal) {
+        ): PrintResult(ToCssResultInternal) {
             let printer = Printer.new(allocator, std.array_list.Managed(u8).init(allocator), writer, options, import_info, local_names, symbols);
-            const result = self.toCssWithWriterImpl(allocator, &printer, options) catch {
+            const result = _.toCssWithWriterImpl(allocator, &printer, options) catch {
                 bun.assert(printer.error_kind != null);
                 return .{
                     .err = printer.error_kind.?,
@@ -3280,7 +3319,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             return .{ .result = result };
         }
 
-        pub fn toCssWithWriterImpl(self: *const @This(), allocator: Allocator, printer: *Printer, options: css_printer.PrinterOptions) PrintErr!ToCssResultInternal {
+        pub fn toCssWithWriterImpl(allocator: Allocator, printer: *Printer, options: css_printer.PrinterOptions): PrintErr!ToCssResultInternal {
             const project_root = options.project_root;
 
             // #[cfg(feature = "sourcemap")]
@@ -3293,20 +3332,20 @@ pub fn StyleSheet(comptime AtRule: type): type {
             //   printer.source_maps = self.sources.iter().enumerate().map(|(i, _)| self.source_map(i)).collect();
             // }
 
-            for (comment of self.license_comments.items) {
-                try printer.writeStr("/*");
-                try printer.writeComment(comment);
-                try printer.writeStr("*/");
-                try printer.newline();
+            for (comment of _.license_comments.items) {
+                printer.writeStr("/*")?;
+                printer.writeComment(comment)?;
+                printer.writeStr("*/")?;
+                printer.newline()?;
             }
 
-            if (self.options.css_modules != null) {
+            if (_.options.css_modules != null) {
                 let references = CssModuleReferences{};
-                const cfg_ptr: *const css_modules.Config = &self.options.css_modules.?;
-                printer.css_module = CssModule.new(allocator, cfg_ptr, &self.sources, project_root, &references);
+                const cfg_ptr: *const css_modules.Config = &_.options.css_modules.?;
+                printer.css_module = CssModule.new(allocator, cfg_ptr, &_.sources, project_root, &references);
 
-                try @constCast(&self.rules).toCss(printer);
-                try printer.newline();
+                @constCast(&_.rules).toCss(printer)?;
+                printer.newline()?;
 
                 return ToCssResultInternal{
                     .dependencies = printer.dependencies,
@@ -3319,8 +3358,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
                     .references = references,
                 };
             } else {
-                try @constCast(&self.rules).toCss(printer);
-                try printer.newline();
+                @constCast(&_.rules).toCss(printer)?;
+                printer.newline()?;
                 return ToCssResultInternal{
                     .dependencies = printer.dependencies,
                     // .code = dest.items,
@@ -3331,18 +3370,17 @@ pub fn StyleSheet(comptime AtRule: type): type {
         }
 
         pub fn toCss(
-            self: *const @This(),
             allocator: Allocator,
             options: css_printer.PrinterOptions,
             import_info: bun.css.ImportInfo?,
             local_names: (*const LocalsResultsMap)?,
             symbols: *const bun.ast.Symbol.Map,
-        ) PrintResult(ToCssResult) {
+        ): PrintResult(ToCssResult) {
             // TODO: this is not necessary
             // Make sure we always have capacity > 0: https://github.com/napi-rs/napi-rs/issues/1124.
             let dest = std.Io.Writer.Allocating.initCapacity(allocator, 1) catch unreachable;
             const writer = &dest.writer;
-            const result = switch (self.toCssWithWriter(
+            const result = switch (_.toCssWithWriter(
                 allocator,
                 writer,
                 options,
@@ -3363,12 +3401,12 @@ pub fn StyleSheet(comptime AtRule: type): type {
             };
         }
 
-        pub fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: (*bun.BabyList(ImportRecord))?, source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
+        pub static fn parse(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: (*bun.BabyList(ImportRecord))?, source_index: SrcIndex): Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             let default_at_rule_parser = DefaultAtRuleParser{};
             return parseWith(allocator, code, options, DefaultAtRuleParser, &default_at_rule_parser, import_records, source_index);
         }
 
-        pub fn parseBundler(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
+        pub static fn parseBundler(allocator: Allocator, code: []const u8, options: ParserOptions, import_records: *bun.BabyList(ImportRecord), source_index: SrcIndex): Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             let at_rule_parser = BundlerAtRuleParser{
                 .import_records = import_records,
                 .allocator = allocator,
@@ -3379,7 +3417,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
         }
 
         /// Parse a style sheet from a string.
-        pub fn parseWith(
+        pub static fn parseWith(
             allocator: Allocator,
             code: []const u8,
             options: ParserOptions,
@@ -3387,7 +3425,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
             at_rule_parser: *P,
             import_records: (*bun.BabyList(ImportRecord))?,
             source_index: SrcIndex,
-        ) Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
+        ): Maybe(struct { This, StylesheetExtra }, Err(ParserError)) {
             let composes = ComposesMap{};
             let parser_extra = ParserExtra{
                 .local_scope = .{},
@@ -3408,10 +3446,10 @@ pub fn StyleSheet(comptime AtRule: type): type {
 
             let license_comments: ArrayList(string) = .{};
             let state = parser.state();
-            while (switch (parser.nextIncludingWhitespaceAndComments()) {
+            while (token := switch (parser.nextIncludingWhitespaceAndComments()) {
                 .result => |v| v,
                 .err => null,
-            }) |token| {
+            }) {
                 switch (token.*) {
                     .whitespace => {},
                     .comment => |comment| {
@@ -3429,8 +3467,8 @@ pub fn StyleSheet(comptime AtRule: type): type {
             let rule_parser = TopLevelRuleParser(P).new(allocator, &options, at_rule_parser, &rules, &composes, &local_properties);
             let rule_list_parser = StyleSheetParser(TopLevelRuleParser(P)).new(&parser, &rule_parser);
 
-            while (rule_list_parser.next(allocator)) |result| {
-                if (result.asErr()) |e| {
+            while (result := rule_list_parser.next(allocator)) {
+                if (e := result.asErr()) {
                     const result_options = rule_list_parser.parser.options;
                     if (result_options.error_recovery) {
                         // todo_stuff.warn
@@ -3467,14 +3505,14 @@ pub fn StyleSheet(comptime AtRule: type): type {
             };
         }
 
-        pub fn debugLayerRuleSanityCheck(self: *const @This()) void {
+        pub fn debugLayerRuleSanityCheck() {
             if (comptime !bun.Environment.isDebug) return;
 
-            const layer_names_field_len = self.layer_names.len;
+            const layer_names_field_len = _.layer_names.len;
             * = layer_names_field_len; // autofix
             let actual_layer_rules_len: usize = 0;
 
-            for (*rule of self.rules.v.items) {
+            for (*rule of _.rules.v.items) {
                 switch (rule.*) {
                     .layer_block => {
                         actual_layer_rules_len += 1;
@@ -3485,10 +3523,10 @@ pub fn StyleSheet(comptime AtRule: type): type {
             // bun.debugAssert()
         }
 
-        pub fn containsTailwindDirectives(self: *const @This()) bool {
+        pub fn containsTailwindDirectives(): bool {
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
             let found_import: bool = false;
-            for (*rule of self.rules.v.items) {
+            for (*rule of _.rules.v.items) {
                 switch (rule.*) {
                     .custom => {
                         return true;
@@ -3507,11 +3545,11 @@ pub fn StyleSheet(comptime AtRule: type): type {
             return false;
         }
 
-        pub fn newFromTailwindImports(
+        pub static fn newFromTailwindImports(
             allocator: Allocator,
             options: ParserOptions,
             imports_from_tailwind: CssRuleList(AtRule),
-        ) @This() {
+        ): @This() {
             * = allocator; // autofix
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
 
@@ -3533,18 +3571,18 @@ pub fn StyleSheet(comptime AtRule: type): type {
         ///
         /// We do this because Tailwind's compiler pipeline does not bundle imports, so we handle that
         /// ourselves in the bundler.
-        pub fn pluckImports(self: *const @This(), allocator: Allocator, out: *CssRuleList(AtRule), new_import_records: *bun.BabyList(ImportRecord)) void {
+        pub fn pluckImports(allocator: Allocator, out: *CssRuleList(AtRule), new_import_records: *bun.BabyList(ImportRecord)) {
             if (comptime AtRule != BundlerAtRule) @compileError("Expected BundlerAtRule for this function.");
             const State = _PluckImportsState;
             const STATES: [2]State = [ .count, .exec ];
 
             let count: u32 = 0;
-            inline for (STATES[0..]) |state| {
+            inline for (state of STATES[0..]) {
                 if (comptime state == .exec) {
                     bun.handleOom(out.v.ensureUnusedCapacity(allocator, count));
                 }
                 let saw_imports = false;
-                for (*rule of self.rules.v.items) {
+                for (*rule of _.rules.v.items) {
                     switch (rule.*) {
                         .layer_block => {},
                         .import => {
@@ -3560,7 +3598,7 @@ pub fn StyleSheet(comptime AtRule: type): type {
                                         .path = bun.fs.Path.init(import_rule.url),
                                         .kind = if (import_rule.supports != null) .at_conditional else .at,
                                         .range = bun.logger.Range.None,
-                                    }) catch |e| bun.handleOom(e);
+                                    }) catch e => bun.handleOom(e);
                                     rule.* = .ignored;
                                 },
                             }
@@ -3724,7 +3762,7 @@ pub fn RuleBodyParser(comptime P: type): type {
 
         const This = @This();
 
-        pub fn new(input: *Parser, parser: *P): This {
+        pub static fn new(input: *Parser, parser: *P): This {
             return {
                 input: input,
                 parser: parser,
@@ -3735,7 +3773,7 @@ pub fn RuleBodyParser(comptime P: type): type {
         ///     type Item = Result<I, (ParseError<'i, E>, &'i str)>;
         ///
         /// but nowhere in the source do i actually see it using the string part of the tuple
-        pub fn next(*_): ?(Result(I)) {
+        pub fn next(*_): Result(I)? {
             while (true) {
                 _.input.skipWhitespace();
                 const start = _.input.state();
@@ -3772,13 +3810,13 @@ pub fn RuleBodyParser(comptime P: type): type {
                             };
                             if (result.isErr() && parse_qualified) {
                                 _.input.reset(&start);
-                                if (parse_qualified_rule(
+                                if (qual := parse_qualified_rule(
                                     &start,
                                     _.input,
                                     P,
                                     _.parser,
                                     Delimiters{ .semicolon = true, .curly_bracket = true },
-                                ).asValue()) |qual| {
+                                ).asValue()) {
                                     return { result: qual };
                                 }
                             }
@@ -3800,7 +3838,7 @@ pub fn RuleBodyParser(comptime P: type): type {
                     const token = tok.*;
 
                     break :result _.input.parseUntilAfter(Delimiters{ .semicolon = true }, I, &UnexpectedTokenClosure{ .token = token, .start = start }, struct {
-                        pub fn parseFn(closure: *const UnexpectedTokenClosure, i: *Parser): Result(I) {
+                        pub static fn parseFn(closure: *const UnexpectedTokenClosure, i: *Parser): Result(I) {
                             * = i; // autofix
                             return { err: closure.start.sourceLocation().newUnexpectedTokenError(closure.token) };
                         }
@@ -4395,7 +4433,7 @@ pub struct Parser {
             .function => |name| {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
                     const result = _.parseNestedBlock(string, @as(void, undefined), struct {
-                        fn parse(_: void, parser: *Parser): Result(string) {
+                        static fn parse(_: void, parser: *Parser): Result(string) {
                             return switch (parser.expectString()) {
                                 .result => |v| .{ .result = v },
                                 .err => |e| .{ .err = e },
@@ -4426,7 +4464,7 @@ pub struct Parser {
             .function => |name| {
                 if (bun.strings.eqlCaseInsensitiveASCIIICheckLength("url", name)) {
                     const result = _.parseNestedBlock(string, @as(void, undefined), struct {
-                        fn parse(_: void, parser: *Parser): Result(string) {
+                        static fn parse(_: void, parser: *Parser): Result(string) {
                             return switch (parser.expectString()) {
                                 .result => |v| .{ .result = v },
                                 .err => |e| .{ .err = e },
@@ -4645,7 +4683,7 @@ pub struct Parser {
 
     const NONE: Delimiters = {};
 
-    pub fn getDelimiter(comptime tag: @TypeOf(.enum_literal)): Delimiters {
+    pub static fn getDelimiter(comptime tag: @TypeOf(.enum_literal)): Delimiters {
         let empty = Delimiters{};
         @field(empty, @tagName(tag)) = true;
         return empty;
@@ -4671,7 +4709,7 @@ pub struct Parser {
     //     return @as(u8, @bitCast(lhs)) & @as(u8, @bitCast(rhs)) != 0;
     // }
 
-    pub fn fromByte(byte: u8?): Delimiters {
+    pub static fn fromByte(byte: u8?): Delimiters {
         if (b := byte) return TABLE[b];
         return {};
     }
@@ -6190,7 +6228,7 @@ pub struct TokenPercentage {
         return implementEql(@This(), lhs, rhs);
     }
 
-    pub fn __generateHash() {}
+    pub static fn __generateHash() {}
 }
 
 // TODO: make strings be allocated in string pool
@@ -7120,7 +7158,7 @@ pub struct serializer {
                 return { inner: inner };
             }
 
-            static fn writeStr(this: *@This(), str: []const u8)! {
+            fn writeStr(*_, str: []const u8)! {
                 let chunk_start: usize = 0;
                 let i: usize = 0;
                 while (i < str.len) : (i += 1) {
@@ -7133,15 +7171,15 @@ pub struct serializer {
                         0x01...0x1F, 0x7F => null,
                         else => continue,
                     };
-                    this.inner.writeAll(str[chunk_start..i])?;
+                    _.inner.writeAll(str[chunk_start..i])?;
                     if (e := escaped) {
-                        this.inner.writeAll(e)?;
+                        _.inner.writeAll(e)?;
                     } else {
-                        serializer.hexEscape(b, this.inner)?;
+                        serializer.hexEscape(b, _.inner)?;
                     }
                     chunk_start = i + 1;
                 }
-                return this.inner.writeAll(str[chunk_start..]);
+                return _.inner.writeAll(str[chunk_start..]);
             }
         };
     }
@@ -7205,11 +7243,11 @@ pub struct to_css {
         return s.written();
     }
 
-    static fn fromList(comptime T: type, this: []const T, dest: *Printer): PrintErr!void {
-        const len = this.len;
+    static fn fromList(comptime T: type, val: []const T, dest: *Printer): PrintErr!void {
+        const len = val.len;
         let idx: usize = 0;
-        for (val of this) {
-            val.toCss(dest)?;
+        for (item of val) {
+            item.toCss(dest)?;
             if (idx < len - 1) {
                 dest.delim(',', false)?;
             }
@@ -7218,11 +7256,11 @@ pub struct to_css {
         return;
     }
 
-    static fn fromBabyList(comptime T: type, this: *const bun.BabyList(T), dest: *Printer): PrintErr!void {
-        const len = this.len;
+    static fn fromBabyList(comptime T: type, val: *const bun.BabyList(T), dest: *Printer): PrintErr!void {
+        const len = val.len;
         let idx: usize = 0;
-        for (val of this.sliceConst()) {
-            val.toCss(dest)?;
+        for (item of val.sliceConst()) {
+            item.toCss(dest)?;
             if (idx < len - 1) {
                 dest.delim(',', false)?;
             }
@@ -7231,10 +7269,10 @@ pub struct to_css {
         return;
     }
 
-    static fn integer(comptime T: type, this: T, dest: *Printer): PrintErr!void {
+    static fn integer(comptime T: type, val: T, dest: *Printer): PrintErr!void {
         const MAX_LEN = comptime maxDigits(T);
         let buf: [MAX_LEN]u8 = undefined;
-        const str = std.fmt.bufPrint(buf[0..], "{d}", .{this}) catch unreachable;
+        const str = std.fmt.bufPrint(buf[0..], "{d}", .{val}) catch unreachable;
         return dest.writeStr(str);
     }
 
@@ -7283,7 +7321,7 @@ pub struct signfns {
         return copysign(1, x);
     }
 
-    pub inline fn signF32(x: f32): f32 {
+    pub static inline fn signF32(x: f32): f32 {
         if (x == 0.0) return if (isSignNegative(x)) 0.0 else -0.0;
         return signum(x);
     }

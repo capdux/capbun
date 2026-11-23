@@ -423,7 +423,7 @@ pub enum Scroller {
     /// Specifies to use the nearest ancestor scroll container.
     nearest,
     /// Specifies to use the element's own principal box as the scroll container.
-    self,
+    @"self",
 
     const css_impl = css.DefineEnumProperty(@This());
     pub const eql = css_impl.eql;

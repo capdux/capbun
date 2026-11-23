@@ -20,21 +20,20 @@ pub fn Err(comptime T: type): type {
         /// The type of error that occurred.
         kind: T,
         /// The location where the error occurred.
-        loc: ?ErrorLocation,
+        loc: ErrorLocation?,
 
         pub fn format(
-            this: @This(),
             writer: *std.Io.Writer,
-        ) !void {
+        )! {
             if (@hasDecl(T, "format")) {
-                return this.kind.format(writer);
+                return _.kind.format(writer);
             }
             @compileError("format not implemented for " ++ @typeName(T));
         }
 
         pub const toErrorInstance = error_jsc.toErrorInstance;
 
-        pub fn fromParseError(e: ParseError(ParserError), filename: []const u8): Err(ParserError) {
+        pub static fn fromParseError(e: ParseError(ParserError), filename: []const u8): @This() {
             if (T != ParserError) {
                 @compileError("Called .fromParseError() when T is not ParserError");
             }
@@ -60,18 +59,18 @@ pub fn Err(comptime T: type): type {
             };
         }
 
-        pub fn addToLogger(this: @This(), log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator) !void {
+        pub fn addToLogger(log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator)! {
             let msg_data: logger.Data = .{
                 .location = null,
-                .text = try std.fmt.allocPrint(allocator, "{f}", .{this.kind}),
+                .text = std.fmt.allocPrint(allocator, "{f}", .{_.kind})?,
             };
-            if (this.loc != null) {
-                msg_data.location = try this.loc.?.toLocation(source, allocator);
+            if (_.loc != null) {
+                msg_data.location = _.loc.?.toLocation(source, allocator)?;
             }
-            try log.addMsg(.{
+            log.addMsg(.{
                 .kind = .err,
                 .data = msg_data,
-            });
+            })?;
 
             log.errors += 1;
         }
@@ -86,11 +85,11 @@ pub fn ParseError(comptime T: type): type {
         /// Location where this error occurred
         location: css.SourceLocation,
 
-        pub fn basic(this: @This()) BasicParseError {
-            return switch (this.kind) {
+        pub fn basic(): BasicParseError {
+            return switch (_.kind) {
                 .basic => |kind| BasicParseError{
                     .kind = kind,
-                    .location = this.location,
+                    .location = _.location,
                 },
                 .custom => @panic("Not a basic parse error. This is a bug in Bun's css parser."),
             };
@@ -105,9 +104,9 @@ pub fn ParserErrorKind(comptime T: type): type {
         /// A parse error reported by downstream consumer code.
         custom: T,
 
-        pub fn format(this: @This(), writer: *std.Io.Writer) !void {
-            return switch (this) {
-                inline else => |kind| try kind.format(writer),
+        pub fn format(writer: *std.Io.Writer)! {
+            return switch (_) {
+                inline else => |kind| kind.format(writer)?,
             };
         }
     };
@@ -202,7 +201,7 @@ pub enum PrinterErrorKind {
     no_import_records,
 
     pub fn format(_: @This(), writer: *std.Io.Writer)! {
-        return switch (this) {
+        return switch (_) {
             .ambiguous_url_in_custom_property => |data| writer.print("Ambiguous relative URL '{s}' in custom property declaration", .{data.url}),
             .fmt_error => writer.writeAll("Formatting error occurred"),
             .invalid_composes_nesting => writer.writeAll("The 'composes' property cannot be used within nested rules"),
@@ -253,7 +252,7 @@ pub enum ParserError {
     },
 
     pub fn format(_: @This(), writer: *std.Io.Writer)! {
-        return switch (this) {
+        return switch (_) {
             .at_rule_body_invalid => writer.writeAll("Invalid at-rule body"),
             .at_rule_prelude_invalid => writer.writeAll("Invalid at-rule prelude"),
             .at_rule_invalid => |n| writer.print("Unknown at-rule @{s}", .{n}),
@@ -347,7 +346,7 @@ pub enum SelectorError {
     ambiguous_css_module_class: []const u8,
 
     pub fn format(_: @This(), writer: *std.Io.Writer)! {
-        return switch (this) {
+        return switch (_) {
             .dangling_combinator => writer.writeAll("Found a dangling combinator with no selector")?,
             .empty_selector => writer.writeAll("Empty selector is not allowed")?,
             .invalid_state => writer.writeAll("Token is not allowed in this state")?,
@@ -405,7 +404,7 @@ pub enum MinifyErrorKind {
     },
 
     fn format(_: @This(), writer: *std.Io.Writer)! {
-        return switch (this) {
+        return switch (_) {
             .circular_custom_media => |n| writer.print("Circular @custom-media rule: \"{s}\"", .{n.name})?,
             .custom_media_not_defined => |n| writer.print("Custom media rule \"{s}\" not defined", .{n.name})?,
             .unsupported_custom_media_boolean_logic => |custom_media_loc| writer.print(

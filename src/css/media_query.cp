@@ -202,7 +202,7 @@ pub struct MediaQuery {
 type OptQualifier = Qualifier?;
 type OptMediaType = MediaType?;
 
-fn _tryParseQualifierAndMediaType(i: *css.Parser): Result(struct { OptQualifier, OptMediaType }) {
+static fn _tryParseQualifierAndMediaType(i: *css.Parser): Result(struct { OptQualifier, OptMediaType }) {
     const qualifier = switch (i.tryParse(Qualifier.parse, {})) {
         .result => |vv| vv,
         .err => null,
@@ -875,78 +875,78 @@ pub fn QueryFeature(comptime FeatureId: type): type {
 
         const This = @This();
 
-        pub fn deepClone(this: *const This, allocator: std.mem.Allocator) This {
-            return switch (this.*) {
+        pub fn deepClone(allocator: std.mem.Allocator): This {
+            return switch (_.*) {
                 .plain => .{
                     .plain = .{
-                        .name = this.plain.name,
-                        .value = this.plain.value.deepClone(allocator),
+                        .name = _.plain.name,
+                        .value = _.plain.value.deepClone(allocator),
                     },
                 },
                 .boolean => .{
                     .boolean = .{
-                        .name = this.boolean.name,
+                        .name = _.boolean.name,
                     },
                 },
                 .range => .{
                     .range = .{
-                        .name = this.range.name,
-                        .operator = this.range.operator,
-                        .value = this.range.value.deepClone(allocator),
+                        .name = _.range.name,
+                        .operator = _.range.operator,
+                        .value = _.range.value.deepClone(allocator),
                     },
                 },
                 .interval => .{
                     .interval = .{
-                        .name = this.interval.name,
-                        .start = this.interval.start.deepClone(allocator),
-                        .start_operator = this.interval.start_operator,
-                        .end = this.interval.end.deepClone(allocator),
-                        .end_operator = this.interval.end_operator,
+                        .name = _.interval.name,
+                        .start = _.interval.start.deepClone(allocator),
+                        .start_operator = _.interval.start_operator,
+                        .end = _.interval.end.deepClone(allocator),
+                        .end_operator = _.interval.end_operator,
                     },
                 },
             };
         }
 
-        pub fn eql(lhs: *const @This(), rhs: *const @This()) bool {
+        pub static fn eql(lhs: *const @This(), rhs: *const @This()): bool {
             return css.implementEql(@This(), lhs, rhs);
         }
 
-        pub fn hash(this: *const @This(), hasher: anytype) void {
-            return css.implementHash(@This(), this, hasher);
+        pub fn hash(hasher: auto) {
+            return css.implementHash(@This(), &_, hasher);
         }
 
-        pub fn needsParens(this: *const This, parent_operator: Operator?, targets: *const css.Targets) bool {
-            return parent_operator != .@"and" and
-                this.* == .interval and
+        pub fn needsParens(parent_operator: Operator?, targets: *const css.Targets): bool {
+            return parent_operator != .@"and" &&
+                _.* == .interval &&
                 targets.shouldCompileSame(.media_interval_syntax);
         }
 
-        pub fn toCss(this: *const This, dest: *Printer) PrintErr!void {
+        pub fn toCss(dest: *Printer): PrintErr!void {
             dest.writeChar('(')?;
 
-            switch (this.*) {
+            switch (_.*) {
                 .boolean => {
-                    this.boolean.name.toCss(dest)?;
+                    _.boolean.name.toCss(dest)?;
                 },
                 .plain => {
-                    this.plain.name.toCss(dest)?;
+                    _.plain.name.toCss(dest)?;
                     dest.delim(':', false)?;
-                    this.plain.value.toCss(dest)?;
+                    _.plain.value.toCss(dest)?;
                 },
                 .range => {
                     // If range syntax is unsupported, use min/max prefix if possible.
                     if (dest.targets.shouldCompileSame(.media_range_syntax)) {
                         return writeMinMax(
-                            &this.range.operator,
+                            &_.range.operator,
                             FeatureId,
-                            &this.range.name,
-                            &this.range.value,
+                            &_.range.name,
+                            &_.range.value,
                             dest,
                         );
                     }
-                    this.range.name.toCss(dest)?;
-                    this.range.operator.toCss(dest)?;
-                    this.range.value.toCss(dest)?;
+                    _.range.name.toCss(dest)?;
+                    _.range.operator.toCss(dest)?;
+                    _.range.value.toCss(dest)?;
                 },
                 .interval => |interval| {
                     if (dest.targets.shouldCompileSame(.media_interval_syntax)) {
@@ -978,13 +978,13 @@ pub fn QueryFeature(comptime FeatureId: type): type {
             return dest.writeChar(')');
         }
 
-        pub fn parse(input: *css.Parser) Result(This) {
+        pub static fn parse(input: *css.Parser): Result(This) {
             switch (input.tryParse(parseNameFirst, .{})) {
                 .result => |res| {
                     return .{ .result = res };
                 },
                 .err => |e| {
-                    if (e.kind == .custom and e.kind.custom == .invalid_media_query) {
+                    if (e.kind == .custom && e.kind.custom == .invalid_media_query) {
                         return .{ .err = e };
                     }
                     return parseValueFirst(input);
@@ -993,7 +993,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
             return .success;
         }
 
-        pub fn parseNameFirst(input: *css.Parser) Result(This) {
+        pub static fn parseNameFirst(input: *css.Parser): Result(This) {
             const name_pair = switch (MediaFeatureName(FeatureId).parse(input)) {
                 .err => |e| return .{ .err = e },
                 .result => |v| v,
@@ -1001,13 +1001,18 @@ pub fn QueryFeature(comptime FeatureId: type): type {
             const name: MediaFeatureName(FeatureId) = name_pair[0];
             const legacy_op: MediaFeatureComparison? = name_pair[1];
 
-            const operator = if (input.tryParse(consumeOperationOrColon, .{true}).asValue()) |operator| operator else return .{
-                .result = .{
-                    .boolean = .{ .name = name },
-                },
-            };
+            let operator: MediaFeatureComparison? = null;
+            if (op_val := input.tryParse(consumeOperationOrColon, .{true}).asValue()) {
+                operator = op_val;
+            } else {
+                return .{
+                    .result = .{
+                        .boolean = .{ .name = name },
+                    },
+                };
+            }
 
-            if (operator != null and legacy_op != null) {
+            if (operator != null && legacy_op != null) {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
             }
 
@@ -1019,7 +1024,7 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
             }
 
-            if (operator orelse legacy_op) |op| {
+            if (op := operator ?? legacy_op) {
                 if (!name.valueType().allowsRanges()) {
                     return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
                 }
@@ -1041,12 +1046,12 @@ pub fn QueryFeature(comptime FeatureId: type): type {
             }
         }
 
-        pub fn parseValueFirst(input: *css.Parser) Result(This) {
+        pub static fn parseValueFirst(input: *css.Parser): Result(This) {
             // We need to find the feature name first so we know the type.
             const start = input.state();
             const name = name: {
                 while (true) {
-                    if (MediaFeatureName(FeatureId).parse(input).asValue()) |result| {
+                    if (result := MediaFeatureName(FeatureId).parse(input).asValue()) {
                         const name: MediaFeatureName(FeatureId) = result[0];
                         const legacy_op: MediaFeatureComparison? = result[1];
                         if (legacy_op != null) {
@@ -1084,11 +1089,11 @@ pub fn QueryFeature(comptime FeatureId: type): type {
                 bun.debugAssert(feature_name.eql(&name));
             }
 
-            if (!name.valueType().allowsRanges() or !value.checkType(name.valueType())) {
+            if (!name.valueType().allowsRanges() || !value.checkType(name.valueType())) {
                 return .{ .err = input.newCustomError(css.ParserError.invalid_media_query) };
             }
 
-            if (input.tryParse(consumeOperationOrColon, .{false}).asValue()) |end_operator_| {
+            if (end_operator_ := input.tryParse(consumeOperationOrColon, .{false}).asValue()) {
                 const start_operator = operator.?;
                 const end_operator = end_operator_.?;
                 // Start and end operators must be matching.
@@ -1215,8 +1220,8 @@ pub enum MediaFeatureComparison: u8 {
         }
     }
 
-    pub fn opposite(_: @This()): @This() {
-        return switch (self) {
+    pub fn opposite(): @This() {
+        return switch (_) {
             .@"greater-than" => .@"less-than",
             .@"greater-than-equal" => .@"less-than-equal",
             .@"less-than" => .@"greater-than",
@@ -1438,6 +1443,8 @@ pub enum MediaFeatureType {
     }
 }
 
+pub const MaybeMediaFeatureComparison = MediaFeatureComparison?;
+
 pub fn MediaFeatureName(comptime FeatureId: type): type {
     return union(enum) {
         /// A standard media query feature identifier.
@@ -1490,7 +1497,7 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
         }
 
         /// Parses a media feature name.
-        pub fn parse(input: *css.Parser) Result(struct { This, ?MediaFeatureComparison }) {
+        pub static fn parse(input: *css.Parser): Result(struct { This, MaybeMediaFeatureComparison }) {
             const ident = switch (input.expectIdent()) {
                 .err => |e| return { err: e },
                 .result => |v| v,
@@ -1542,12 +1549,12 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
             };
             const final_name = _name_guard.slice;
 
-            if (css.parse_utility.parseString(
+            if (standard := css.parse_utility.parseString(
                 input.allocator(),
                 FeatureId,
                 final_name,
                 FeatureId.parse,
-            ).asValue()) |standard| {
+            ).asValue()) {
                 return { result: .{
                     { standard: standard },
                     comparator,
@@ -1562,8 +1569,8 @@ pub fn MediaFeatureName(comptime FeatureId: type): type {
             } };
         }
 
-        pub fn hash(this: *const @This(), hasher: auto) {
-            return css.implementHash(@This(), this, hasher);
+        pub fn hash(hasher: auto) {
+            return css.implementHash(@This(), &_, hasher);
         }
     };
 }

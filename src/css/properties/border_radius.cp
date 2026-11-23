@@ -196,7 +196,7 @@ pub struct BorderRadiusHandler {
                         bottom_left: bottom_left.?[0].deepClone(context.allocator),
                     },
                     prefix,
-                } }) catch |e| bun.handleOom(e);
+                } }) catch e => bun.handleOom(e);
                 bun.bits.remove(VendorPrefix, &top_left.?[1], intersection);
                 bun.bits.remove(VendorPrefix, &top_right.?[1], intersection);
                 bun.bits.remove(VendorPrefix, &bottom_right.?[1], intersection);

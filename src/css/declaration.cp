@@ -56,7 +56,7 @@ struct _DeclarationBlockDebugFmt {
         const w = &_guard_arraylist.val.writer;
         let symbols = bun.ast.Symbol.Map{};
         let _guard_printer = DeinitGuard<css.Printer>{ val: css.Printer.new(bun.default_allocator, std.array_list.Managed(u8).init(bun.default_allocator), w, css.PrinterOptions.default(), null, null, &symbols) };
-        _.self.toCss(unsafe { &_guard_printer.val }) catch |e| return writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)})?;
+        _.self.toCss(unsafe { &_guard_printer.val }) catch e => return writer.print("<error writing declaration block: {s}>\n", .{@errorName(e)})?;
         writer.writeAll(_guard_arraylist.val.written())?;
     }
 }
@@ -338,7 +338,7 @@ pub fn parse_declaration_impl(
         .result => |v| v,
     };
     const important = input.tryParse(struct {
-        pub fn parsefn(i: *css.Parser): Result(void) {
+        pub static fn parsefn(i: *css.Parser): Result(void) {
             if (e := i.expectDelim('!').asErr()) return { err: e };
             return i.expectIdentMatching("important");
         }
@@ -376,7 +376,7 @@ pub fn parse_declaration_impl(
                         options.allocator.dupe(
                             bun.logger.Data,
                             &err_data,
-                        ) catch |e| bun.handleOom(e),
+                        ) catch e => bun.handleOom(e),
                     );
                 },
             }
@@ -417,7 +417,7 @@ pub struct DeclarationHandler {
         }
         // if (this.unicode_bidi) |unicode_bidi| {
         //     this.unicode_bidi = null;
-        //     this.decls.append(context.allocator, css.Property{ .unicode_bidi = unicode_bidi }) catch |err| bun.handleOom(err);
+        //     this.decls.append(context.allocator, css.Property{ .unicode_bidi = unicode_bidi }) catch err => bun.handleOom(err);
         // }
 
         _.background.finalize(&_.decls, context);

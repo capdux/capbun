@@ -122,7 +122,7 @@ pub struct CssModule {
             dest.allocator,
             bun.handleOom(std.fmt.allocPrint(dest.allocator, "--{s}", .{the_hash})),
             reference,
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
 
         return the_hash;
     }

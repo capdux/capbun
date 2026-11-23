@@ -286,65 +286,44 @@ pub fn fmtPrinterError() PrinterError {
 
 pub fn Err(comptime T: type) type {
         return struct {
-        /// The type of error that occurred.
-        kind: T,
-        /// The location where the error occurred.
-        loc: ?ErrorLocation,
+    kind: T,
+    loc: ?ErrorLocation,
 
-        pub fn format(
-            this: @This(),
-            writer: *std.Io.Writer,
-        ) !void {
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             if (@hasDecl(T, "format")) {
-                return this.kind.format(writer);
+                return self.kind.format(writer);
             }
-            @compileError("format not implemented for " ++ @typeName(T));
-        }
+            _ = @compileError(("format not implemented for " ++ @typeName(T)));
+    }
 
-        pub const toErrorInstance = error_jsc.toErrorInstance;
-
-        pub fn fromParseError(e: ParseError(ParserError), filename: []const u8) Err(ParserError) {
-            if (T != ParserError) {
-                @compileError("Called .fromParseError() when T is not ParserError");
+pub fn fromParseError(e: ParseError(ParserError), filename: []const u8) @This() {
+            if ((T != ParserError)) {
+                _ = @compileError("Called .fromParseError() when T is not ParserError");
             }
+            const kind = (switch (e.kind) {
+.basic => |b| (switch (b) {
+.unexpected_token => |t| ParserError{ .unexpected_token = t },
+.end_of_input => ParserError{ .end_of_input = {} },
+.at_rule_invalid => |a| ParserError{ .at_rule_invalid = a },
+.at_rule_body_invalid => ParserError{ .at_rule_body_invalid = {} },
+.qualified_rule_invalid => ParserError{ .qualified_rule_invalid = {} },
+}),
+.custom => |c| c,
+});
+            return .{ .kind = kind, .loc = ErrorLocation{ .filename = filename, .line = e.location.line, .column = e.location.column } };
+    }
 
-            const kind = switch (e.kind) {
-                .basic => |b| switch (b) {
-                    .unexpected_token => |t| ParserError{ .unexpected_token = t },
-                    .end_of_input => ParserError.end_of_input,
-                    .at_rule_invalid => |a| ParserError{ .at_rule_invalid = a },
-                    .at_rule_body_invalid => ParserError.at_rule_body_invalid,
-                    .qualified_rule_invalid => ParserError.qualified_rule_invalid,
-                },
-                .custom => |c| c,
-            };
-
-            return .{
-                .kind = kind,
-                .loc = ErrorLocation{
-                    .filename = filename,
-                    .line = e.location.line,
-                    .column = e.location.column,
-                },
-            };
-        }
-
-        pub fn addToLogger(this: @This(), log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator) !void {
-            var msg_data: logger.Data = .{
-                .location = null,
-                .text = try std.fmt.allocPrint(allocator, "{f}", .{this.kind}),
-            };
-            if (this.loc != null) {
-                msg_data.location = try this.loc.?.toLocation(source, allocator);
+pub fn addToLogger(self: @This(), log: *logger.Log, source: *const logger.Source, allocator: std.mem.Allocator) !void {
+            var msg_data: logger.Data = .{ .location = null, .text = try std.fmt.allocPrint(allocator, "{f}", .{ self.kind }) };
+            _ = &msg_data;
+            if ((self.loc != null)) {
+                msg_data.location = try self.loc.?.toLocation(source, allocator);
             }
-            try log.addMsg(.{
-                .kind = .err,
-                .data = msg_data,
-            });
-
-            log.errors += 1;
-        }
-    };
+            _ = try log.addMsg(.{ .kind = .err, .data = msg_data });
+            log.errors = (log.errors + 1);
+    }
+    pub const toErrorInstance = error_jsc.toErrorInstance;
+};
 }
 
 pub fn ParseError(comptime T: type) type {

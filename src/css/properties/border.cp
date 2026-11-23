@@ -57,7 +57,7 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
 
         const This = @This();
 
-        pub fn parse(input: *css.Parser): css.Result(@This()) {
+        pub static fn parse(input: *css.Parser): css.Result(@This()) {
             // Order doesn't matter
             let color: CssColor? = null;
             let style: S? = null;
@@ -132,8 +132,8 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
             return;
         }
 
-        fn getFallbacks(this: *@This(), allocator: Allocator, targets: css.targets.Targets): css.SmallList(@This(), 2) {
-            let fallbacks = this.color.getFallbacks(allocator, targets);
+        fn getFallbacks(*_, allocator: Allocator, targets: css.targets.Targets): css.SmallList(@This(), 2) {
+            let fallbacks = _.color.getFallbacks(allocator, targets);
             const fallbacks_guard = DeinitAllocGuard<@TypeOf(fallbacks)>{ ptr: unsafe { &fallbacks }, allocator: allocator };
             * = fallbacks_guard;
             let out = css.SmallList(@This(), 2).initCapacity(allocator, fallbacks.len());
@@ -145,23 +145,23 @@ pub fn GenericBorder(comptime S: type, comptime P: u8): type {
             while (i < fb_slice.len) : (i += 1) {
                 out_slice[i] = {
                     color: fb_slice[i],
-                    width: this.width.deepClone(allocator),
-                    style: css.generic.deepClone(S, &this.style, allocator),
+                    width: _.width.deepClone(allocator),
+                    style: css.generic.deepClone(S, &_.style, allocator),
                 };
             }
 
             return out;
         }
 
-        pub fn deepClone(this: *const @This(), allocator: std.mem.Allocator): @This() {
-            return css.implementDeepClone(@This(), this, allocator);
+        pub fn deepClone(allocator: std.mem.Allocator): @This() {
+            return css.implementDeepClone(@This(), &_, allocator);
         }
 
         pub fn eql(other: *const This): bool {
             return css.implementEql(@This(), &_, other);
         }
 
-        pub inline fn default(): This {
+        pub static inline fn default(): This {
             return This{
                 width: .medium,
                 style: S.default(),
@@ -709,13 +709,13 @@ struct BorderFlushState {
         }
     }
 
-    inline fn is_eq(s: *@This(), comptime key: []const u8): bool {
+    static inline fn is_eq(s: *@This(), comptime key: []const u8): bool {
         return css.generic.eql(@TypeOf(@field(s.block_start, key)), &@field(s.block_start, key), &@field(s.block_end, key)) &&
             css.generic.eql(@TypeOf(@field(s.inline_start, key)), &@field(s.inline_start, key), &@field(s.inline_end, key)) &&
             css.generic.eql(@TypeOf(@field(s.inline_start, key)), &@field(s.inline_start, key), &@field(s.block_start, key));
     }
 
-    inline fn prop_diff(s: *@This(), border: auto, fallback: auto, border_fallback: auto, comptime is_logical: bool) {
+    static inline fn prop_diff(s: *@This(), border: auto, fallback: auto, border_fallback: auto, comptime is_logical: bool) {
         if (!is_logical &&
             s.is_eq("color") &&
             s.is_eq("style"))
@@ -742,7 +742,7 @@ struct BorderFlushState {
         }
     }
 
-    inline fn side_diff(s: *@This(), border: auto, other: auto, comptime prop_name: []const u8, width: auto, style: auto, comptime color: []const u8) {
+    static inline fn side_diff(s: *@This(), border: auto, other: auto, comptime prop_name: []const u8, width: auto, style: auto, comptime color: []const u8) {
         const eq_width = css.generic.eql(@TypeOf(border.width), &border.width, &other.width);
         const eq_style = css.generic.eql(@TypeOf(border.style), &border.style, &other.style);
         const eq_color = css.generic.eql(@TypeOf(border.color), &border.color, &other.color);
@@ -760,7 +760,7 @@ struct BorderFlushState {
         }
     }
 
-    inline fn side(s: *@This(), val: auto, comptime short: []const u8, comptime width: []const u8, comptime style: []const u8, comptime color: []const u8) {
+    static inline fn side(s: *@This(), val: auto, comptime short: []const u8, comptime width: []const u8, comptime style: []const u8, comptime color: []const u8) {
         if (val.isValid()) {
             s.f.prop(short, val.toBorder(s.f.ctx.allocator));
         } else {
@@ -779,7 +779,7 @@ struct BorderFlushState {
     }
 
     // If both values of an inline logical property are equal, then we can just convert them to physical properties.
-    inline fn inlineProp(s: *@This(), comptime key: []const u8, comptime left: []const u8, comptime right: []const u8) {
+    static inline fn inlineProp(s: *@This(), comptime key: []const u8, comptime left: []const u8, comptime right: []const u8) {
         if (@field(s.inline_start, key) != null && css.generic.eql(@TypeOf(@field(s.inline_start, key)), &@field(s.inline_start, key), &@field(s.inline_end, key))) {
             s.f.prop(left, bun.take(&@field(s.inline_start, key)).?);
             s.f.prop(right, bun.take(&@field(s.inline_end, key)).?);
@@ -794,7 +794,7 @@ struct BorderFlushContext {
     logical_supported: bool,
     logical_shorthand_supported: bool,
 
-    inline fn logicalProp(f: *BorderFlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: auto) {
+    static inline fn logicalProp(f: *BorderFlushContext, comptime ltr: []const u8, comptime rtl: []const u8, val: auto) {
         const cloned = if (comptime @typeInfo(@TypeOf(val)) == .pointer)
             css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
         else
@@ -812,7 +812,7 @@ struct BorderFlushContext {
         f.ctx.addLogicalRule(f.ctx.allocator, @unionInit(css.Property, ltr, ltr_val), @unionInit(css.Property, rtl, rtl_val));
     }
 
-    inline fn push(f: *BorderFlushContext, comptime p: []const u8, val: auto) {
+    static inline fn push(f: *BorderFlushContext, comptime p: []const u8, val: auto) {
         bun.bits.insert(BorderProperty, &f.self.flushed_properties, @field(BorderProperty, p));
         const cloned = if (comptime @typeInfo(@TypeOf(val)) == .pointer)
             css.generic.deepClone(@TypeOf(val.*), val, f.ctx.allocator)
@@ -826,7 +826,7 @@ struct BorderFlushContext {
         bun.handleOom(f.dest.append(f.ctx.allocator, @unionInit(css.Property, p, final_val)));
     }
 
-    inline fn fallbacks(f: *BorderFlushContext, comptime p: []const u8, _val: auto) {
+    static inline fn fallbacks(f: *BorderFlushContext, comptime p: []const u8, _val: auto) {
         let val = _val;
         const TargetType = @FieldType(css.Property, p);
         if (!bun.bits.contains(BorderProperty, f.self.flushed_properties, @field(BorderProperty, p))) {
@@ -842,7 +842,7 @@ struct BorderFlushContext {
         push(f, p, val);
     }
 
-    inline fn prop(f: *BorderFlushContext, comptime prop_name: []const u8, val: auto) {
+    static inline fn prop(f: *BorderFlushContext, comptime prop_name: []const u8, val: auto) {
         @setEvalBranchQuota(10000);
         if (comptime std.mem.eql(u8, prop_name, "border-inline-start")) {
             if (f.logical_supported) {
@@ -1451,7 +1451,7 @@ pub struct BorderHandler {
         bun.bits.insert(BorderProperty, &_.flushed_properties, @field(BorderProperty, id));
     }
 
-    inline fn unparsedLogicalProp(
+    static inline fn unparsedLogicalProp(
         c: *css.PropertyHandlerContext,
         up: *const UnparsedProperty,
         comptime ltr: []const u8,

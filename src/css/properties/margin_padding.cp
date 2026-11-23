@@ -699,34 +699,34 @@ fn NewSizeHandler(
                             right: right.?,
                         },
                     ),
-                ) catch |e| bun.handleOom(e);
+                ) catch e => bun.handleOom(e);
             } else {
                 if (t := top) {
                     dest.append(
                         context.allocator,
                         @unionInit(Property, @tagName(top_prop), t),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
 
                 if (b := bottom) {
                     dest.append(
                         context.allocator,
                         @unionInit(Property, @tagName(bottom_prop), b),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
 
                 if (b := left) {
                     dest.append(
                         context.allocator,
                         @unionInit(Property, @tagName(left_prop), b),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
 
                 if (b := right) {
                     dest.append(
                         context.allocator,
                         @unionInit(Property, @tagName(right_prop), b),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
             }
 
@@ -820,7 +820,7 @@ fn NewSizeHandler(
                     Property,
                     @tagName(shorthand_property),
                     value,
-                )) catch |e| bun.handleOom(e);
+                )) catch e => bun.handleOom(e);
             } else {
                 if (start.* != null) {
                     bun.handleOom(dest.append(context.allocator, start.*.?));
@@ -848,14 +848,14 @@ fn NewSizeHandler(
                             @tagName(physical),
                             @field(v, @tagName(logical)),
                         ),
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 } else if (v.* == .unparsed) {
                     dest.append(
                         context.allocator,
                         Property{
                             unparsed: v.unparsed.withPropertyId(context.allocator, physical),
                         },
-                    ) catch |e| bun.handleOom(e);
+                    ) catch e => bun.handleOom(e);
                 }
             }
         }

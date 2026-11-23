@@ -1347,8 +1347,8 @@ pub fn getFallbacks(self: *@This(), allocator: Allocator, targets: css.targets.T
             return out;
     }
 
-pub fn deepClone(self: *const @This(), allocator: std.mem.Allocator) @This() {
-            return css.implementDeepClone(@This(), self, allocator);
+pub fn deepClone(self: @This(), allocator: std.mem.Allocator) @This() {
+            return css.implementDeepClone(@This(), (&self), allocator);
     }
 
 pub fn eql(self: @This(), other: *const This) bool {

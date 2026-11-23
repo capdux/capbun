@@ -87,13 +87,11 @@ return .{ .err = e };
 },
 }) else widths.deepClone(input.allocator()));
             const Size2DLP = Size2D(LengthPercentage);
-            _ = &Size2DLP;
             return .{ .result = BorderRadius{ .top_left = Size2DLP{ .a = widths.top, .b = heights.top }, .top_right = Size2DLP{ .a = widths.right, .b = heights.right }, .bottom_right = Size2DLP{ .a = widths.bottom, .b = heights.bottom }, .bottom_left = Size2DLP{ .a = widths.left, .b = heights.left } } };
     }
 
 pub fn toCss(self: BorderRadius, dest: *Printer) PrintErr!void {
             const RectLP = Rect(*const LengthPercentage);
-            _ = &RectLP;
             const widths = RectLP{ .top = (&self.top_left.a), .right = (&self.top_right.a), .bottom = (&self.bottom_right.a), .left = (&self.bottom_left.a) };
             const heights = RectLP{ .top = (&self.top_left.b), .right = (&self.top_right.b), .bottom = (&self.bottom_right.b), .left = (&self.bottom_left.b) };
             _ = try widths.toCss(dest);
