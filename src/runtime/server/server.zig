@@ -2044,7 +2044,7 @@ pub fn onReloadFromZig(self: *@This(), new_config: *ServerConfig, globalThis: *j
             self.config.static_routes = .init(bun.default_allocator);
             for (static_routes.items) |*route| {
                 _ = &route;
-                _ = route.deinit();
+                _ = (route.*).deinit();
             }
             _ = static_routes.deinit();
             self.config.static_routes = new_config.static_routes;
@@ -2215,6 +2215,12 @@ pub fn onFetch(self: *@This(), ctx: *jsc.JSGlobalObject, callframe: *jsc.CallFra
                     }
                     if (try opts.fastGet(ctx, .body)) |body__| {
                         _ = &body__;
+                        if (Blob.get(ctx, body__, true, false)) |new_blob| {
+                            _ = &new_blob;
+                            body = .{ .Blob = new_blob };
+                        } else {
+                            return JSPromise.dangerouslyCreateRejectedPromiseValueWithoutNotifyingVM(ctx, ZigString.init("fetch() received invalid body").toErrorInstance(ctx));
+                        }
                     }
                 }
                 existing_request = Request.init2(bun.String.cloneUTF8(url.href), headers, bun.handleOom(self.vm.initRequestBodyValue(body)), method);
@@ -2365,7 +2371,7 @@ var port: u16 = self.config.address.tcp.port;
 }
     }
 
-pub fn getURLAsString(self: *const @This()) bun.OOM!bun.String {
+pub fn getURLAsString(self: @This()) bun.OOM!bun.String {
             const fmt = (switch (self.config.address) {
 .unix => |unix| brk: {
             if (((unix.len > 1) and (unix[0] == 0))) {
@@ -2488,16 +2494,16 @@ pub fn finalize(self: *@This()) void {
             _ = self.deinitIfWeCan();
     }
 
-pub fn activeSocketsCount(self: *const @This()) u32 {
+pub fn activeSocketsCount(self: @This()) u32 {
             const websocket = (&((self.config.websocket) orelse { return 0; }));
             return @as(u32, @truncate(websocket.handler.active_connections));
     }
 
-pub fn hasActiveWebSockets(self: *const @This()) bool {
+pub fn hasActiveWebSockets(self: @This()) bool {
             return (self.activeSocketsCount() > 0);
     }
 
-pub fn hasListener(self: *const @This()) bool {
+pub fn hasListener(self: @This()) bool {
             if ((self.listener != null)) {
                 return true;
             }
@@ -2726,7 +2732,7 @@ pub fn init(config: *ServerConfig, global: *JSGlobalObject) bun.JSOOM!*ThisServe
             return server;
     }
 
-pub noinline fn onListenFailed(self: *@This()) void {
+pub noinline fn onListenFailed(self: @This()) void {
             _ = httplog("onListenFailed", .{});
             const globalThis = self.globalThis;
             var error_instance = jsc.JSValue.zero;
@@ -3170,8 +3176,10 @@ pub fn onSavedRequest(self: *@This(), req: SavedRequest.Union, resp: *App.Respon
             const args = (.{ prepared.js_request } ++ extra_args);
             const response_value = (blk_catch_21: { break :blk_catch_21 ((callback.call(self.globalThis, self.jsValueAssertAlive(), (&args))) catch |err| { _ = &err; break :blk_catch_21 self.globalThis.takeException(err); }); });
             defer {
-            if ((req == .stack)) {
-                _ = prepared.request_object.request_context.detachRequest();
+            {
+                if ((req == .stack)) {
+                    _ = prepared.request_object.request_context.detachRequest();
+                }
             }
             }
             const original_state = ctx.defer_deinit_until_callback_completes;
@@ -3302,14 +3310,14 @@ pub fn warn(p: *void, _: *Ctx.Resp) void {
             }
             return .{ .js_request = (switch (create_js_request) {
 .yes => request_object.toJS(self.globalThis),
-.bake => (blk_catch_24: { break :blk_catch_24 ((request_object.toJSForBake(self.globalThis)) catch |err| { _ = &err; break :blk_catch_24 (__sw_blk_5: { const __disc_5 = err; _ = &__disc_5; if ((!cp_has_ok_val(__disc_5) and !cp_is_null_val(__disc_5))) { const __err_v_5 = cp_unwrap_err_val(__disc_5); _ = &__err_v_5; if (cp_match_tag(__err_v_5, .OutOfMemory)) {  break :__sw_blk_5 cp_val(bun.outOfMemory()); } } {  return null; }  unreachable; }); }); }),
+.bake => (blk_catch_24: { break :blk_catch_24 ((request_object.toJSForBake(self.globalThis)) catch |err| { _ = &err; break :blk_catch_24 (__sw_blk_6: { const __disc_6 = err; _ = &__disc_6; if ((!cp_has_ok_val(__disc_6) and !cp_is_null_val(__disc_6))) { const __err_v_6 = cp_unwrap_err_val(__disc_6); _ = &__err_v_6; if (cp_match_tag(__err_v_6, .OutOfMemory)) {  break :__sw_blk_6 cp_val(bun.outOfMemory()); } } {  return null; }  unreachable; }); }); }),
 .no => .zero,
 }), .request_object = request_object, .ctx = ctx };
     }
 
-pub fn upgradeWebSocketUserRoute(self: *UserRoute, resp: *App.Response, req: *uws.Request, upgrade_ctx: *uws.WebSocketUpgradeContext, method: ?bun.http.Method) void {
-            const server = self.server;
-            const index = self.id;
+pub fn upgradeWebSocketUserRoute(ctx_ptr: *UserRoute, resp: *App.Response, req: *uws.Request, upgrade_ctx: *uws.WebSocketUpgradeContext, method: ?bun.http.Method) void {
+            const server = ctx_ptr.server;
+            const index = ctx_ptr.id;
             var should_deinit_context = false;
             _ = &should_deinit_context;
             var prepared = ((server.prepareJsRequestContext(req, resp, (&should_deinit_context), .no, method)) orelse { return; });
@@ -3467,11 +3475,12 @@ pub fn setRoutes(self: *@This()) jsc.JSValue {
                 _ = &_guard_callbacks_js;
                 var ___guard_callbacks_js_moved = false; _ = &___guard_callbacks_js_moved;
                 defer if (!___guard_callbacks_js_moved) { ___guard_callbacks_js_moved = true; const __T = @TypeOf(_guard_callbacks_js); if (@typeInfo(__T) == .optional) { if (_guard_callbacks_js) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_callbacks_js.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_callbacks_js; _drop_val.__cp_deinit(); } };
-                for (user_routes_to_build_list.items, paths_zig, callbacks_js, 0..) |*builder, *p_zig, *cb_js, i| {
-                    _ = &builder;
-                    _ = &p_zig;
-                    _ = &cb_js;
-                    _ = &i;
+                var i: usize = 0;
+                _ = &i;
+                while ((i < user_routes_to_build_list.items.len)) : (i = (i + 1)) {
+                    const builder = (&user_routes_to_build_list.items[@as(usize, @intCast(i))]);
+                    const p_zig = (&paths_zig[@as(usize, @intCast(i))]);
+                    const cb_js = (&callbacks_js[@as(usize, @intCast(i))]);
                     p_zig.* = ZigString.init(builder.route.path);
                     cb_js.* = (builder.callback.get()).?;
                     _ = self.user_routes.appendAssumeCapacity(.{ .id = @truncate(i), .server = self, .route = builder.route });
@@ -3480,7 +3489,7 @@ pub fn setRoutes(self: *@This()) jsc.JSValue {
                 route_list_value = Bun__ServerRouteList__create(self.globalThis, callbacks_js.ptr, paths_zig.ptr, user_routes_to_build_list.items.len);
                 for (user_routes_to_build_list.items) |*builder| {
                     _ = &builder;
-                    _ = builder.deinit();
+                    _ = (builder.*).deinit();
                 }
                 _ = user_routes_to_build_list.deinit(bun.default_allocator);
             }
@@ -3810,14 +3819,14 @@ else => {
                 }
                 if (self.config.sni) |*sni| {
                     _ = &sni;
-                    for (sni.slice()) |*sni_ssl_config| {
+                    for (cp_mut_slice(&(sni.*).slice())) |*sni_ssl_config| {
                         _ = &sni_ssl_config;
-                        const sni_servername: [:0]const u8 = std.mem.span(sni_ssl_config.server_name.?);
+                        const sni_servername: [:0]const u8 = std.mem.span((sni_ssl_config.*).server_name.?);
                         if ((sni_servername.len > 0)) {
                             if (comptime has_h3) {
                                 if (self.h3_app) |h3a| {
                                     _ = &h3a;
-                                    _ = (blk_catch_33: { break :blk_catch_33 ((h3a.addServerNameWithOptions(sni_servername, sni_ssl_config.asUSockets())) catch |__ce_33| { _ = &__ce_33; if ((!globalThis.hasException())) {
+                                    _ = (blk_catch_33: { break :blk_catch_33 ((h3a.addServerNameWithOptions(sni_servername, (sni_ssl_config.*).asUSockets())) catch |__ce_33| { _ = &__ce_33; if ((!globalThis.hasException())) {
                                         switch (globalThis.throw("Failed to add serverName \"{s}\" for HTTP/3", .{ sni_servername })) {
 else => {
 
@@ -3831,7 +3840,7 @@ else => {
                             _ = (blk_catch_34: { break :blk_catch_34 ((self.app.?.addServerNameWithOptions((blk: {
                             break :blk @constCast(sni_servername.ptr);
 
-}), sni_ssl_config.asUSockets())) catch |__ce_34| { _ = &__ce_34; if ((!globalThis.hasException())) {
+}), (sni_ssl_config.*).asUSockets())) catch |__ce_34| { _ = &__ce_34; if ((!globalThis.hasException())) {
                                 if ((!throwSSLErrorIfNecessary(globalThis))) {
                                     switch (globalThis.throw("Failed to add serverName: {s}", .{ sni_servername })) {
 else => {

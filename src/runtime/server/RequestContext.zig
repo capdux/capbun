@@ -317,6 +317,46 @@ pub const SendfileContext = struct {
     total: Blob.SizeType = 0,
 };
 
+pub const FlagsDebug = packed struct(u16) {
+    has_marked_complete: bool = false,
+    has_marked_pending: bool = false,
+    has_abort_handler: bool = false,
+    has_timeout_handler: bool = false,
+    has_sendfile_ctx: bool = false,
+    has_called_error_handler: bool = false,
+    needs_content_length: bool = false,
+    needs_content_range: bool = false,
+    is_transfer_encoding: bool = false,
+    is_waiting_for_request_body: bool = false,
+    is_web_browser_navigation: bool = false,
+    has_written_status: bool = false,
+    response_protected: bool = false,
+    aborted: bool = false,
+    has_finalized: bun.DebugOnly(bool) = (if (Environment.isDebug) false else null),
+    is_error_promise_pending: bool = false,
+    _padding: std.meta.Int(.unsigned, if (Environment.isDebug) 0 else 1) = 0,
+};
+
+pub const FlagsRelease = packed struct(u16) {
+    has_marked_complete: bool = false,
+    has_marked_pending: bool = false,
+    has_abort_handler: bool = false,
+    has_timeout_handler: bool = false,
+    has_sendfile_ctx: bool = false,
+    has_called_error_handler: bool = false,
+    needs_content_length: bool = false,
+    needs_content_range: bool = false,
+    is_transfer_encoding: bool = false,
+    is_waiting_for_request_body: bool = false,
+    is_web_browser_navigation: void = @as(void, undefined),
+    has_written_status: bool = false,
+    response_protected: bool = false,
+    aborted: bool = false,
+    has_finalized: bun.DebugOnly(bool) = (if (Environment.isDebug) false else null),
+    is_error_promise_pending: bool = false,
+    _padding: std.meta.Int(.unsigned, if (Environment.isDebug) 1 else 2) = 0,
+};
+
 const welcome_page_html_gz = @embedFile("../api/welcome-page.html.gz");
 const ctxLog = Output.scoped(.RequestContext, .visible);
 const Fallback = runtime_mod.Fallback;
@@ -377,7 +417,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
     defer_deinit_until_callback_completes: ?*bool = null,
     additional_on_abort: ?AdditionalOnAbortCallback = null,
 
-pub fn setSignalAborted(self: *RequestContext, reason: bun.jsc.CommonAbortReason) void {
+pub fn setSignalAborted(self: *@This(), reason: bun.jsc.CommonAbortReason) void {
             if (self.signal) |signal| {
                 _ = &signal;
                 if (self.server) |server| {
@@ -387,20 +427,20 @@ pub fn setSignalAborted(self: *RequestContext, reason: bun.jsc.CommonAbortReason
             }
     }
 
-pub fn devServer(self: *const RequestContext) ?*bun.bake.DevServer {
+pub fn devServer(self: *const @This()) ?*bun.bake.DevServer {
             const server = ((self.server) orelse { return null; });
             return server.dev_server;
     }
 
-pub fn memoryCost(self: *const RequestContext) usize {
+pub fn memoryCost(self: @This()) usize {
             return (((@sizeOf(RequestContext) + self.request_body_buf.capacity) + self.response_buf_owned.capacity) + self.blob.memoryCost());
     }
 
-pub inline fn isAsync(self: *const RequestContext) bool {
+pub inline fn isAsync(self: @This()) bool {
             return (self.defer_deinit_until_callback_completes == null);
     }
 
-pub fn drainMicrotasks(self: *const RequestContext) void {
+pub fn drainMicrotasks(self: @This()) void {
             if (self.isAsync()) {
                 return;
             }
@@ -410,7 +450,7 @@ pub fn drainMicrotasks(self: *const RequestContext) void {
             }
     }
 
-pub fn setAbortHandler(self: *RequestContext) void {
+pub fn setAbortHandler(self: *@This()) void {
             if (self.flags.has_abort_handler) {
                 return;
             }
@@ -421,7 +461,7 @@ pub fn setAbortHandler(self: *RequestContext) void {
             }
     }
 
-pub fn setCookies(self: *RequestContext, cookie_map: ?*jsc.WebCore.CookieMap) void {
+pub fn setCookies(self: *@This(), cookie_map: ?*jsc.WebCore.CookieMap) void {
             if (self.cookies) |cookies| {
                 _ = &cookies;
                 _ = cookies.deref();
@@ -433,7 +473,7 @@ pub fn setCookies(self: *RequestContext, cookie_map: ?*jsc.WebCore.CookieMap) vo
             }
     }
 
-pub fn setTimeoutHandler(self: *RequestContext) void {
+pub fn setTimeoutHandler(self: *@This()) void {
             if (self.flags.has_timeout_handler) {
                 return;
             }
@@ -503,10 +543,12 @@ pub fn handleResolve(ctx: *RequestContext, value: jsc.JSValue) void {
                 _ = ctx.renderMissingInvalidResponse(value);
                 return;
             }
-            const response = ((value.as(jsc.WebCore.Response)) orelse {
-            _ = ctx.renderMissingInvalidResponse(value);
-            return;
-});
+            const response_opt = value.as(jsc.WebCore.Response);
+            if ((response_opt == null)) {
+                _ = ctx.renderMissingInvalidResponse(value);
+                return;
+            }
+            const response = response_opt.?;
             ctx.response_jsvalue = value;
             _ = assert((!ctx.flags.response_protected));
             ctx.flags.response_protected = true;
@@ -523,7 +565,7 @@ pub fn handleResolve(ctx: *RequestContext, value: jsc.JSValue) void {
             _ = ctx.render(response);
     }
 
-pub fn shouldRenderMissing(self: *RequestContext) bool {
+pub fn shouldRenderMissing(self: *@This()) bool {
             _ = ctxLog("RequestContext(0x{x}).shouldRenderMissing {s} {s} {s} {s} {s} {s} {s}", .{ (blk: {
             break :blk @intFromPtr(self);
 
@@ -531,7 +573,7 @@ pub fn shouldRenderMissing(self: *RequestContext) bool {
             return (((((((self.resp != null) and (!self.flags.aborted)) and (!self.flags.has_marked_complete)) and (!self.flags.has_marked_pending)) and (self.ref_count == 1)) and (!self.flags.is_waiting_for_request_body)) and (!self.flags.has_sendfile_ctx));
     }
 
-pub fn isDeadRequest(self: *RequestContext) bool {
+pub fn isDeadRequest(self: *@This()) bool {
             if ((self.ref_count > 1)) {
                 return false;
             }
@@ -544,7 +586,7 @@ pub fn isDeadRequest(self: *RequestContext) bool {
             return true;
     }
 
-pub fn deinit(self: *RequestContext) void {
+pub fn deinit(self: *@This()) void {
             _ = ctxLog("deinit", .{});
             _ = self.detachResponse();
             _ = self.endRequestStreamingAndDrain();
@@ -584,7 +626,7 @@ pub fn deinit(self: *RequestContext) void {
             }
     }
 
-pub fn deref(self: *RequestContext) void {
+pub fn deref(self: *@This()) void {
             _ = streamLog("deref {d} -> {d}", .{ self.ref_count, (self.ref_count - 1) });
             _ = assert((self.ref_count > 0));
             const ref_count = self.ref_count;
@@ -595,7 +637,7 @@ pub fn deref(self: *RequestContext) void {
             }
     }
 
-pub fn ref(self: *RequestContext) void {
+pub fn ref(self: *@This()) void {
             _ = streamLog("ref {d} -> {d}", .{ self.ref_count, (self.ref_count + 1) });
             self.ref_count = (self.ref_count + 1);
     }
@@ -687,7 +729,7 @@ pub fn renderMissingCorked(ctx: *RequestContext) void {
             }
     }
 
-pub fn renderDefaultError(self: *RequestContext, arena_allocator: std.mem.Allocator, log: *logger.Log, err: anyerror, exceptions: []Api.JsException, comptime fmt: []const u8, args: anytype) void {
+pub fn renderDefaultError(self: *@This(), arena_allocator: std.mem.Allocator, log: *logger.Log, err: anyerror, exceptions: []Api.JsException, comptime fmt: []const u8, args: anytype) void {
             if ((!self.flags.has_written_status)) {
                 self.flags.has_written_status = true;
                 if (self.resp) |resp| {
@@ -726,14 +768,14 @@ pub fn renderDefaultError(self: *RequestContext, arena_allocator: std.mem.Alloca
             }
     }
 
-pub fn renderResponseBuffer(self: *RequestContext) void {
+pub fn renderResponseBuffer(self: *@This()) void {
             if (self.resp) |resp| {
                 _ = &resp;
                 _ = resp.onWritable(self, onWritableResponseBuffer);
             }
     }
 
-pub fn drainResponseBufferAndMetadata(self: *RequestContext) void {
+pub fn drainResponseBufferAndMetadata(self: *@This()) void {
             if (self.resp) |resp| {
                 _ = &resp;
                 _ = self.renderMetadata();
@@ -742,7 +784,7 @@ pub fn drainResponseBufferAndMetadata(self: *RequestContext) void {
             self.response_buf_owned.items.len = 0;
     }
 
-pub fn end(self: *RequestContext, data: []const u8, closeConnection: bool) void {
+pub fn end(self: *@This(), data: []const u8, closeConnection: bool) void {
             _ = ctxLog("end", .{});
             if (self.resp) |resp| {
                 _ = &resp;
@@ -756,7 +798,7 @@ pub fn end(self: *RequestContext, data: []const u8, closeConnection: bool) void 
             }
     }
 
-pub fn endStream(self: *RequestContext, closeConnection: bool) void {
+pub fn endStream(self: *@This(), closeConnection: bool) void {
             _ = ctxLog("endStream", .{});
             if (self.resp) |resp| {
                 _ = &resp;
@@ -772,7 +814,7 @@ pub fn endStream(self: *RequestContext, closeConnection: bool) void {
             }
     }
 
-pub fn endWithoutBody(self: *RequestContext, closeConnection: bool) void {
+pub fn endWithoutBody(self: *@This(), closeConnection: bool) void {
             _ = ctxLog("endWithoutBody", .{});
             if (self.resp) |resp| {
                 _ = &resp;
@@ -786,7 +828,7 @@ pub fn endWithoutBody(self: *RequestContext, closeConnection: bool) void {
             }
     }
 
-pub fn forceClose(self: *RequestContext) void {
+pub fn forceClose(self: *@This()) void {
             if (self.resp) |resp| {
                 _ = &resp;
                 var _guard_this = DerefGuard(*RequestContext){ .val = (&self.*) };
@@ -799,7 +841,7 @@ pub fn forceClose(self: *RequestContext) void {
             }
     }
 
-pub fn onWritableResponseBuffer(self: *RequestContext, _: u64, resp: *App.Response) bool {
+pub fn onWritableResponseBuffer(self: *@This(), _: u64, resp: *App.Response) bool {
             _ = ctxLog("onWritableResponseBuffer", .{});
             _ = assert((self.resp == resp));
             if (self.isAbortedOrEnded()) {
@@ -809,7 +851,7 @@ pub fn onWritableResponseBuffer(self: *RequestContext, _: u64, resp: *App.Respon
             return false;
     }
 
-pub fn onWritableCompleteResponseBufferAndMetadata(self: *RequestContext, write_offset: u64, resp: *App.Response) bool {
+pub fn onWritableCompleteResponseBufferAndMetadata(self: *@This(), write_offset: u64, resp: *App.Response) bool {
             _ = ctxLog("onWritableCompleteResponseBufferAndMetadata", .{});
             _ = assert((self.resp == resp));
             if (self.isAbortedOrEnded()) {
@@ -825,7 +867,7 @@ pub fn onWritableCompleteResponseBufferAndMetadata(self: *RequestContext, write_
             return self.sendWritableBytesForCompleteResponseBuffer(self.response_buf_owned.items, write_offset, resp);
     }
 
-pub fn onWritableCompleteResponseBuffer(self: *RequestContext, write_offset: u64, resp: *App.Response) bool {
+pub fn onWritableCompleteResponseBuffer(self: *@This(), write_offset: u64, resp: *App.Response) bool {
             _ = ctxLog("onWritableCompleteResponseBuffer", .{});
             _ = assert((self.resp == resp));
             if (self.isAbortedOrEnded()) {
@@ -838,12 +880,12 @@ pub inline fn anyResponse(r: *App.Response) uws.AnyResponse {
             return (if (comptime http3) .{ .H3 = r } else (if (comptime ssl_enabled) .{ .SSL = r } else .{ .TCP = r }));
     }
 
-pub fn create(self: *RequestContext, server: *ThisServer, req: *Req, resp: *App.Response, should_deinit_context: ?*bool, method: ?bun.http.Method) void {
+pub fn create(self: *@This(), server: *ThisServer, req: *Req, resp: *App.Response, should_deinit_context: ?*bool, method: ?bun.http.Method) void {
             self.* = .{ .allocator = server.allocator, .resp = resp, .req = req, .method = ((method) orelse (((HTTP.Method.which(req.method())) orelse (.GET)))), .server = server, .defer_deinit_until_callback_completes = should_deinit_context, .range = RangeRequest.rawFromRequest((if (comptime http3) .{ .h3 = req } else .{ .h1 = req })) };
             _ = ctxLog("create<d> ({*})<r>", .{ self });
     }
 
-pub fn onTimeout(self: *RequestContext, resp: *App.Response) void {
+pub fn onTimeout(self: *@This(), resp: *App.Response) void {
             _ = assert((self.resp == resp));
             _ = assert((self.server != null));
             var any_js_calls = false;
@@ -866,7 +908,7 @@ pub fn onTimeout(self: *RequestContext, resp: *App.Response) void {
             }
     }
 
-pub fn onAbort(self: *RequestContext, resp: *App.Response) void {
+pub fn onAbort(self: *@This(), resp: *App.Response) void {
             _ = ctxLog("onAbort", .{});
             _ = assert((self.resp == resp));
             if (comptime http3) {
@@ -953,7 +995,7 @@ pub fn onAbort(self: *RequestContext, resp: *App.Response) void {
             }
     }
 
-pub fn finalizeWithoutDeinit(self: *RequestContext) void {
+pub fn finalizeWithoutDeinit(self: *@This()) void {
             _ = ctxLog("finalizeWithoutDeinit<d> ({*})<r>", .{ self });
             _ = self.blob.detach();
             _ = assert((self.server != null));
@@ -1009,28 +1051,28 @@ pub fn finalizeWithoutDeinit(self: *RequestContext) void {
     }
 
 pub fn onFileStreamComplete(ctx: *anyopaque, _: uws.AnyResponse) void {
-            const this: *RequestContext = (blk: {
+            const req_ctx: *RequestContext = (blk: {
             break :blk @ptrCast(@alignCast(ctx));
 
 });
-            _ = this.detachResponse();
-            _ = this.endRequestStreamingAndDrain();
-            _ = this.deref();
+            _ = req_ctx.detachResponse();
+            _ = req_ctx.endRequestStreamingAndDrain();
+            _ = req_ctx.deref();
     }
 
 pub fn onFileStreamAbort(ctx: *anyopaque, resp: uws.AnyResponse) void {
-            const this: *RequestContext = (blk: {
+            const req_ctx: *RequestContext = (blk: {
             break :blk @ptrCast(@alignCast(ctx));
 
 });
-            _ = this.onAbort((if (comptime http3) resp.H3 else (if (comptime ssl_enabled) resp.SSL else resp.TCP)));
+            _ = req_ctx.onAbort((if (comptime http3) resp.H3 else (if (comptime ssl_enabled) resp.SSL else resp.TCP)));
     }
 
 pub fn onFileStreamError(ctx: *anyopaque, resp: uws.AnyResponse, _: bun.sys.Error) void {
             _ = onFileStreamComplete(ctx, resp);
     }
 
-pub fn onWritableBytes(self: *RequestContext, write_offset: u64, resp: *App.Response) bool {
+pub fn onWritableBytes(self: *@This(), write_offset: u64, resp: *App.Response) bool {
             _ = ctxLog("onWritableBytes", .{});
             _ = assert((self.resp == resp));
             if (self.isAbortedOrEnded()) {
@@ -1042,7 +1084,7 @@ pub fn onWritableBytes(self: *RequestContext, write_offset: u64, resp: *App.Resp
             return true;
     }
 
-pub fn sendWritableBytesForBlob(self: *RequestContext, bytes_: []const u8, write_offset_: u64, resp: *App.Response) bool {
+pub fn sendWritableBytesForBlob(self: *@This(), bytes_: []const u8, write_offset_: u64, resp: *App.Response) bool {
             _ = assert((self.resp == resp));
             const write_offset: usize = write_offset_;
             const bytes = bytes_[@min(bytes_.len, @as(usize, @truncate(write_offset)))..];
@@ -1058,7 +1100,7 @@ pub fn sendWritableBytesForBlob(self: *RequestContext, bytes_: []const u8, write
             }
     }
 
-pub fn sendWritableBytesForCompleteResponseBuffer(self: *RequestContext, bytes_: []const u8, write_offset_: u64, resp: *App.Response) bool {
+pub fn sendWritableBytesForCompleteResponseBuffer(self: *@This(), bytes_: []const u8, write_offset_: u64, resp: *App.Response) bool {
             const write_offset: usize = write_offset_;
             _ = assert((self.resp == resp));
             const bytes = bytes_[@min(bytes_.len, @as(usize, @truncate(write_offset)))..];
@@ -1074,7 +1116,7 @@ pub fn sendWritableBytesForCompleteResponseBuffer(self: *RequestContext, bytes_:
             return true;
     }
 
-pub fn doSendfile(self: *RequestContext, blob: Blob) void {
+pub fn doSendfile(self: *@This(), blob: Blob) void {
             if (self.isAbortedOrEnded()) {
                 return;
             }
@@ -1206,11 +1248,11 @@ if (auto_close) {
             _ = FileResponseStream.start(.{ .fd = fd, .auto_close = auto_close, .resp = anyResponse(resp), .vm = self.server.?.vm, .file_type = file_type, .pollable = pollable, .offset = self.sendfile.offset, .length = (if (is_regular) (if (comptime @typeInfo(@TypeOf(self.sendfile.remain)) == .@"enum") cp_cast_int(u64, @intFromEnum(self.sendfile.remain)) else cp_cast_int(u64, self.sendfile.remain)) else null), .idle_timeout = self.server.?.config.idleTimeout, .ctx = self, .on_complete = onFileStreamComplete, .on_abort = onFileStreamAbort, .on_error = onFileStreamError });
     }
 
-pub fn doRenderWithBodyLocked(self: *anyopaque, value: *jsc.WebCore.Body.Value) void {
-            _ = doRenderWithBody(bun.cast(RequestContextPtr, self), value, null);
+pub fn doRenderWithBodyLocked(req_ctx: *anyopaque, value: *jsc.WebCore.Body.Value) void {
+            _ = doRenderWithBody(bun.cast(RequestContextPtr, req_ctx), value, null);
     }
 
-pub fn renderWithBlobFromBodyValue(self: *RequestContext) void {
+pub fn renderWithBlobFromBodyValue(self: *@This()) void {
             if (self.isAbortedOrEnded()) {
                 return;
             }
@@ -1231,33 +1273,33 @@ pub fn handleFirstStreamWrite(self: *@This()) void {
 
 pub fn doRenderStream(pair: *StreamPair) void {
             _ = ctxLog("doRenderStream", .{});
-            var this = pair.this;
-            _ = &this;
+            var req_ctx = pair.this;
+            _ = &req_ctx;
             var stream = pair.stream;
             _ = &stream;
-            _ = assert((this.server != null));
-            const globalThis = this.server.?.globalThis;
-            if (this.isAbortedOrEnded()) {
+            _ = assert((req_ctx.server != null));
+            const globalThis = req_ctx.server.?.globalThis;
+            if (req_ctx.isAbortedOrEnded()) {
                 _ = stream.cancel(globalThis);
-                _ = this.response_body_readable_stream_ref.deinit();
+                _ = req_ctx.response_body_readable_stream_ref.deinit();
                 return;
             }
-            const resp = this.resp.?;
+            const resp = req_ctx.resp.?;
             _ = (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value).ensureStillAlive();
-            var response_stream = ((this.allocator.create(ResponseStream.JSSink)) catch unreachable);
+            var response_stream = ((req_ctx.allocator.create(ResponseStream.JSSink)) catch unreachable);
             _ = &response_stream;
-            response_stream.* = ResponseStream.JSSink{ .sink = .{ .res = resp, .allocator = this.allocator, .buffer = bun.ByteList{  }, .onFirstWrite = (blk: {
+            response_stream.* = ResponseStream.JSSink{ .sink = .{ .res = resp, .allocator = req_ctx.allocator, .buffer = bun.ByteList{  }, .onFirstWrite = (blk: {
             break :blk @ptrCast((&handleFirstStreamWrite));
 
-}), .ctx = this, .globalThis = globalThis } };
+}), .ctx = req_ctx, .globalThis = globalThis } };
             var sink_signal = (&response_stream.sink.signal);
             _ = &sink_signal;
-            this.sink = response_stream;
+            req_ctx.sink = response_stream;
             sink_signal.* = ResponseStream.JSSink.SinkSignal.init(JSValue.zero);
             _ = sink_signal.clear();
             _ = assert(sink_signal.isDead());
-            if ((!this.flags.has_written_status)) {
-                _ = this.renderMetadata();
+            if ((!req_ctx.flags.has_written_status)) {
+                _ = req_ctx.renderMetadata();
             }
             const assignment_result: JSValue = ResponseStream.JSSink.assignToStream(globalThis, (if (@typeInfo(@TypeOf(stream)) == .@"enum") @intFromEnum(stream) else stream.value), response_stream, (blk: {
             break :blk @as(**anyopaque, @alignCast(@ptrCast((&sink_signal.ptr))));
@@ -1266,27 +1308,27 @@ pub fn doRenderStream(pair: *StreamPair) void {
             _ = assignment_result.ensureStillAlive();
             _ = assert((!sink_signal.isDead()));
             if (comptime Environment.allow_assert) {
-                if (resp.hasResponded()) {
+                if ((resp).?.hasResponded()) {
                     _ = streamLog("responded", .{});
                 }
             }
-            this.flags.aborted = (this.flags.aborted or response_stream.sink.aborted);
+            req_ctx.flags.aborted = (req_ctx.flags.aborted or response_stream.sink.aborted);
             if (assignment_result.toError()) |err_value| {
                 _ = &err_value;
                 _ = streamLog("returned an error", .{});
                 _ = response_stream.detach(globalThis);
-                this.sink = null;
+                req_ctx.sink = null;
                 _ = response_stream.sink.destroy();
-                return this.handleReject(err_value);
+                return req_ctx.handleReject(err_value);
             }
-            if (resp.hasResponded()) {
+            if ((resp).?.hasResponded()) {
                 _ = streamLog("done", .{});
                 _ = response_stream.detach(globalThis);
-                this.sink = null;
+                req_ctx.sink = null;
                 _ = response_stream.sink.destroy();
                 _ = stream.done(globalThis);
-                _ = this.response_body_readable_stream_ref.deinit();
-                _ = this.endStream(this.shouldCloseConnection());
+                _ = req_ctx.response_body_readable_stream_ref.deinit();
+                _ = req_ctx.endStream(req_ctx.shouldCloseConnection());
                 return;
             }
             var effective_result = assignment_result;
@@ -1302,26 +1344,26 @@ pub fn doRenderStream(pair: *StreamPair) void {
                 if (effective_result.asAnyPromise()) |promise| {
                     _ = &promise;
                     _ = streamLog("returned a promise", .{});
-                    _ = this.drainMicrotasks();
+                    _ = req_ctx.drainMicrotasks();
                     switch (promise.status()) {
 .pending => {
 _ = streamLog("promise still Pending", .{});
-                    if ((!this.flags.has_written_status)) {
+                    if ((!req_ctx.flags.has_written_status)) {
                         response_stream.sink.onFirstWrite = null;
                         response_stream.sink.ctx = null;
-                        _ = this.renderMetadata();
+                        _ = req_ctx.renderMetadata();
                     }
-                    const bodyValue = (this.response_weakref.get()).?.getBodyValue();
+                    const bodyValue = (req_ctx.response_weakref.get()).?.getBodyValue();
                     bodyValue.* = .{ .Locked = .{ .readable = jsc.WebCore.ReadableStream.Strong.init(stream, globalThis), .global = globalThis } };
-                    _ = this.ref();
-                    const cell = NativePromiseContext.create(globalThis, this);
+                    _ = req_ctx.ref();
+                    const cell = NativePromiseContext.create(globalThis, req_ctx);
                     _ = (blk_catch_10: { break :blk_catch_10 ((effective_result.thenWithValue(globalThis, cell, onResolveStream, onRejectStream)) catch |__ce_10| { _ = &__ce_10;  }); });
 },
 .fulfilled => {
 _ = streamLog("promise Fulfilled", .{});
-                    var response_body_readable_stream_ref = this.response_body_readable_stream_ref;
+                    var response_body_readable_stream_ref = req_ctx.response_body_readable_stream_ref;
                     _ = &response_body_readable_stream_ref;
-                    this.response_body_readable_stream_ref = .{};
+                    req_ctx.response_body_readable_stream_ref = .{};
                     var _guard_ref = DeinitGuard(@TypeOf(&response_body_readable_stream_ref)){ .val = (&response_body_readable_stream_ref) };
                     _ = &_guard_ref;
                     var ___guard_ref_moved = false; _ = &___guard_ref_moved;
@@ -1330,13 +1372,13 @@ _ = streamLog("promise Fulfilled", .{});
                     _ = &_guard_stream;
                     var ___guard_stream_moved = false; _ = &___guard_stream_moved;
                     defer if (!___guard_stream_moved) { ___guard_stream_moved = true; const __T = @TypeOf(_guard_stream); if (@typeInfo(__T) == .optional) { if (_guard_stream) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_stream.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_stream; _drop_val.__cp_deinit(); } };
-                    _ = this.handleResolveStream();
+                    _ = req_ctx.handleResolveStream();
 },
 .rejected => {
 _ = streamLog("promise Rejected", .{});
-                    var response_body_readable_stream_ref = this.response_body_readable_stream_ref;
+                    var response_body_readable_stream_ref = req_ctx.response_body_readable_stream_ref;
                     _ = &response_body_readable_stream_ref;
-                    this.response_body_readable_stream_ref = .{};
+                    req_ctx.response_body_readable_stream_ref = .{};
                     var _guard_ref = DeinitGuard(@TypeOf(&response_body_readable_stream_ref)){ .val = (&response_body_readable_stream_ref) };
                     _ = &_guard_ref;
                     var ___guard_ref_moved = false; _ = &___guard_ref_moved;
@@ -1347,35 +1389,35 @@ _ = streamLog("promise Rejected", .{});
                     defer if (!___guard_stream_moved) { ___guard_stream_moved = true; const __T = @TypeOf(_guard_stream); if (@typeInfo(__T) == .optional) { if (_guard_stream) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_stream.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_stream; _drop_val.__cp_deinit(); } };
                     var promise_mut = promise;
                     _ = &promise_mut;
-                    _ = this.handleRejectStream(globalThis, promise_mut.result(globalThis.vm()));
+                    _ = req_ctx.handleRejectStream(globalThis, promise_mut.result(globalThis.vm()));
 },
 }
                     return;
                 } else {
                     _ = streamLog("returned an error", .{});
                     _ = response_stream.detach(globalThis);
-                    this.sink = null;
+                    req_ctx.sink = null;
                     _ = response_stream.sink.destroy();
-                    return this.handleReject(effective_result);
+                    return req_ctx.handleReject(effective_result);
                 }
             }
-            if (this.isAbortedOrEnded()) {
+            if (req_ctx.isAbortedOrEnded()) {
                 _ = response_stream.detach(globalThis);
                 _ = stream.cancel(globalThis);
-                var _guard_ref = DeinitGuard(@TypeOf(&this.response_body_readable_stream_ref)){ .val = (&this.response_body_readable_stream_ref) };
+                var _guard_ref = DeinitGuard(@TypeOf(&req_ctx.response_body_readable_stream_ref)){ .val = (&req_ctx.response_body_readable_stream_ref) };
                 _ = &_guard_ref;
                 var ___guard_ref_moved = false; _ = &___guard_ref_moved;
                 defer if (!___guard_ref_moved) { ___guard_ref_moved = true; const __T = @TypeOf(_guard_ref); if (@typeInfo(__T) == .optional) { if (_guard_ref) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_ref.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_ref; _drop_val.__cp_deinit(); } };
                 _ = response_stream.sink.markDone();
                 response_stream.sink.onFirstWrite = null;
                 _ = response_stream.sink.finalize();
-                this.sink = null;
+                req_ctx.sink = null;
                 _ = response_stream.sink.destroy();
                 return;
             }
-            var response_body_readable_stream_ref = this.response_body_readable_stream_ref;
+            var response_body_readable_stream_ref = req_ctx.response_body_readable_stream_ref;
             _ = &response_body_readable_stream_ref;
-            this.response_body_readable_stream_ref = .{};
+            req_ctx.response_body_readable_stream_ref = .{};
             var _guard_ref = DeinitGuard(@TypeOf(&response_body_readable_stream_ref)){ .val = (&response_body_readable_stream_ref) };
             _ = &_guard_ref;
             var ___guard_ref_moved = false; _ = &___guard_ref_moved;
@@ -1391,9 +1433,9 @@ _ = streamLog("promise Rejected", .{});
                         _ = response_stream.detach(globalThis);
                         _ = response_stream.sink.markDone();
                         _ = response_stream.sink.finalize();
-                        this.sink = null;
+                        req_ctx.sink = null;
                         _ = response_stream.sink.destroy();
-                        _ = this.renderMissing();
+                        _ = req_ctx.renderMissing();
                         return;
                     }
                 }
@@ -1405,12 +1447,12 @@ _ = streamLog("promise Rejected", .{});
             _ = stream.cancel(globalThis);
             _ = response_stream.sink.markDone();
             _ = response_stream.sink.finalize();
-            this.sink = null;
+            req_ctx.sink = null;
             _ = response_stream.sink.destroy();
-            _ = this.renderMissing();
+            _ = req_ctx.renderMissing();
     }
 
-pub fn didUpgradeWebSocket(self: *RequestContext) bool {
+pub fn didUpgradeWebSocket(self: *@This()) bool {
             return ((blk: {
             break :blk @intFromPtr(self.upgrade_context);
 
@@ -1441,14 +1483,14 @@ pub fn toAsync(ctx: *RequestContext, req: *Req, request_object: *Request) void {
             _ = ctx.setAbortHandler();
     }
 
-pub fn endRequestStreamingAndDrain(self: *RequestContext) void {
+pub fn endRequestStreamingAndDrain(self: *@This()) void {
             _ = assert((self.server != null));
             if ((blk_catch_13: { break :blk_catch_13 ((self.endRequestStreaming()) catch |__ce_13| { _ = &__ce_13; break :blk_catch_13 true; }); })) {
                 _ = self.server.?.vm.drainMicrotasks();
             }
     }
 
-pub fn endRequestStreaming(self: *RequestContext) bun.JSTerminated!bool {
+pub fn endRequestStreaming(self: *@This()) bun.JSTerminated!bool {
             _ = assert((self.server != null));
             _ = self.request_body_buf.clearAndFree(bun.default_allocator);
             if (self.request_body) |body| {
@@ -1461,7 +1503,7 @@ pub fn endRequestStreaming(self: *RequestContext) bun.JSTerminated!bool {
             return false;
     }
 
-pub fn detachResponse(self: *RequestContext) void {
+pub fn detachResponse(self: *@This()) void {
             _ = self.request_body_buf.clearAndFree(bun.default_allocator);
             if (self.resp) |resp| {
                 _ = &resp;
@@ -1481,30 +1523,30 @@ pub fn detachResponse(self: *RequestContext) void {
             }
     }
 
-pub fn isAbortedOrEnded(self: *const RequestContext) bool {
+pub fn isAbortedOrEnded(self: @This()) bool {
             return ((((self.resp == null) or self.flags.aborted) or (self.server == null)) or self.server.?.flags.terminated);
     }
 
 pub fn doRenderHeadResponseAfterS3SizeResolved(pair: *HeaderResponseSizePair) void {
-            var this = pair.this;
-            _ = &this;
-            _ = this.renderMetadata();
-            if (this.resp) |resp| {
+            var req_ctx = pair.this;
+            _ = &req_ctx;
+            _ = req_ctx.renderMetadata();
+            if (req_ctx.resp) |resp| {
                 _ = &resp;
                 _ = resp.writeHeaderInt("content-length", pair.size);
             }
-            _ = this.endWithoutBody(this.shouldCloseConnection());
-            _ = this.deref();
+            _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+            _ = req_ctx.deref();
     }
 
-pub fn onS3SizeResolved(result: S3.S3StatResult, self: *RequestContext) void {
-            var _guard_this = DerefGuard(*RequestContext){ .val = (&self.*) };
+pub fn onS3SizeResolved(result: S3.S3StatResult, req_ctx: *RequestContext) void {
+            var _guard_this = DerefGuard(*RequestContext){ .val = (&req_ctx.*) };
             _ = &_guard_this;
             var ___guard_this_moved = false; _ = &___guard_this_moved;
             defer if (!___guard_this_moved) { ___guard_this_moved = true; const __T = @TypeOf(_guard_this); if (@typeInfo(__T) == .optional) { if (_guard_this) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_this.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_this; _drop_val.__cp_deinit(); } };
-            if (self.resp) |resp| {
+            if (req_ctx.resp) |resp| {
                 _ = &resp;
-                var pair = HeaderResponseSizePair{ .this = self, .size = (switch (result) {
+                var pair = HeaderResponseSizePair{ .this = req_ctx, .size = (switch (result) {
 .failure, .not_found => 0,
 .success => |stat| stat.size,
 }) };
@@ -1514,47 +1556,49 @@ pub fn onS3SizeResolved(result: S3.S3StatResult, self: *RequestContext) void {
     }
 
 pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
-            var this = pair.this;
-            _ = &this;
+            var req_ctx = pair.this;
+            _ = &req_ctx;
             var response = pair.response;
             _ = &response;
-            if ((this.resp == null)) {
+            if ((req_ctx.resp == null)) {
                 return;
             }
-            this.flags.needs_content_length = false;
-            const resp = this.resp.?;
-            _ = this.setResponse(response);
-            const server = ((this.server) orelse {
-            _ = this.renderMetadata();
-            _ = resp.writeHeaderInt("content-length", 0);
-            _ = this.endWithoutBody(this.shouldCloseConnection());
-            return;
-});
-            const globalThis = server.globalThis;
+            req_ctx.flags.needs_content_length = false;
+            const resp = req_ctx.resp.?;
+            _ = req_ctx.setResponse(response);
+            const server_opt = req_ctx.server;
+            if ((server_opt == null)) {
+                _ = req_ctx.renderMetadata();
+                _ = (resp).?.writeHeaderInt("content-length", 0);
+                _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
+                return;
+            }
+            const server = server_opt.?;
+            const globalThis = (server).?.globalThis;
             if (response.getFetchHeaders()) |headers| {
                 _ = &headers;
                 if (comptime (!http3)) {
                     if (headers.fastGet(.TransferEncoding)) |transfer_encoding| {
                         _ = &transfer_encoding;
-                        const transfer_encoding_str = bun.handleOom(transfer_encoding.toSliceClone(server.allocator));
+                        const transfer_encoding_str = bun.handleOom(transfer_encoding.toSliceClone((server).?.allocator));
                         var _guard_te = DeinitGuard(@TypeOf(transfer_encoding_str)){ .val = transfer_encoding_str };
                         _ = &_guard_te;
                         var ___guard_te_moved = false; _ = &___guard_te_moved;
                         defer if (!___guard_te_moved) { ___guard_te_moved = true; const __T = @TypeOf(_guard_te); if (@typeInfo(__T) == .optional) { if (_guard_te) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_te.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_te; _drop_val.__cp_deinit(); } };
-                        _ = this.renderMetadata();
-                        _ = resp.writeHeader("transfer-encoding", transfer_encoding_str.slice());
-                        _ = this.endWithoutBody(this.shouldCloseConnection());
+                        _ = req_ctx.renderMetadata();
+                        _ = (resp).?.writeHeader("transfer-encoding", transfer_encoding_str.slice());
+                        _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                         return;
                     }
                 }
                 if (headers.fastGet(.ContentLength)) |content_length| {
                     _ = &content_length;
-                    const content_length_str = content_length.toSlice(server.allocator);
+                    const content_length_str = content_length.toSlice((server).?.allocator);
                     const len = (blk_catch_14: { break :blk_catch_14 ((std.fmt.parseInt(usize, content_length_str.slice(), 10)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 0; }); });
                     _ = content_length_str.deinit();
-                    _ = this.renderMetadata();
-                    _ = resp.writeHeaderInt("content-length", len);
-                    _ = this.endWithoutBody(this.shouldCloseConnection());
+                    _ = req_ctx.renderMetadata();
+                    _ = (resp).?.writeHeaderInt("content-length", len);
+                    _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                     return;
                 }
             }
@@ -1569,51 +1613,51 @@ var blob = bodyValue.useAsAnyBlobAllowNonUTF8String();
             var ___guard_blob_moved = false; _ = &___guard_blob_moved;
             defer if (!___guard_blob_moved) { ___guard_blob_moved = true; const __T = @TypeOf(_guard_blob); if (@typeInfo(__T) == .optional) { if (_guard_blob) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_blob.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_blob; _drop_val.__cp_deinit(); } };
             const size = blob.size();
-            _ = this.renderMetadata();
+            _ = req_ctx.renderMetadata();
             if ((size == Blob.max_size)) {
-                _ = resp.writeHeaderInt("content-length", 0);
+                _ = (resp).?.writeHeaderInt("content-length", 0);
             } else {
-                _ = resp.writeHeaderInt("content-length", size);
+                _ = (resp).?.writeHeaderInt("content-length", size);
             }
-            _ = this.endWithoutBody(this.shouldCloseConnection());
+            _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 .Blob => |*blob| {
 if (blob.isS3()) {
-                _ = this.ref();
+                _ = req_ctx.ref();
                 const credentials = blob.store.?.data.s3.getCredentials();
                 const path = blob.store.?.data.s3.path();
                 const env = globalThis.bunVM().transpiler.env;
                 _ = (blk_catch_15: { break :blk_catch_15 ((S3.stat(credentials, path, (blk: {
                 break :blk @ptrCast((&onS3SizeResolved));
 
-}), this, (if (env.getHttpProxy(true, null, null)) |proxy| proxy.href else null), blob.store.?.data.s3.request_payer)) catch |__ce_15| { _ = &__ce_15;  }); });
+}), req_ctx, (if (env.getHttpProxy(true, null, null)) |proxy| proxy.href else null), blob.store.?.data.s3.request_payer)) catch |__ce_15| { _ = &__ce_15;  }); });
                 return;
             }
-            _ = this.renderMetadata();
+            _ = req_ctx.renderMetadata();
             _ = blob.resolveSize();
             if ((blob.size == Blob.max_size)) {
-                _ = resp.writeHeaderInt("content-length", 0);
+                _ = (resp).?.writeHeaderInt("content-length", 0);
             } else {
-                _ = resp.writeHeaderInt("content-length", blob.size);
+                _ = (resp).?.writeHeaderInt("content-length", blob.size);
             }
-            _ = this.endWithoutBody(this.shouldCloseConnection());
+            _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 .Locked => {
-_ = this.renderMetadata();
+_ = req_ctx.renderMetadata();
             if (comptime (!http3)) {
-                _ = resp.writeHeader("transfer-encoding", "chunked");
+                _ = (resp).?.writeHeader("transfer-encoding", "chunked");
             }
-            _ = this.endWithoutBody(this.shouldCloseConnection());
+            _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 .Used, .Null, .Empty, .Error => {
-_ = this.renderMetadata();
-            _ = resp.writeHeaderInt("content-length", 0);
-            _ = this.endWithoutBody(this.shouldCloseConnection());
+_ = req_ctx.renderMetadata();
+            _ = (resp).?.writeHeaderInt("content-length", 0);
+            _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 }
     }
 
-pub fn onResponse(ctx: *RequestContext, self: *ThisServer, request_value: JSValue, response_value: JSValue) void {
+pub fn onResponse(ctx: *RequestContext, req_ctx: *ThisServer, request_value: JSValue, response_value: JSValue) void {
             _ = request_value.ensureStillAlive();
             _ = response_value.ensureStillAlive();
             _ = ctx.drainMicrotasks();
@@ -1667,7 +1711,7 @@ else => {
                 }
                 return;
             }
-            var vm = self.vm;
+            var vm = req_ctx.vm;
             _ = &vm;
             if (response_value.asAnyPromise()) |promise| {
                 _ = &promise;
@@ -1676,8 +1720,8 @@ else => {
                 switch (p.unwrap(vm.global.vm(), .mark_handled)) {
 .pending => {
 _ = ctx.ref();
-                const cell = NativePromiseContext.create(self.globalThis, ctx);
-                _ = (blk_catch_16: { break :blk_catch_16 ((response_value.thenWithValue(self.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_16| { _ = &__ce_16;  }); });
+                const cell = NativePromiseContext.create(req_ctx.globalThis, ctx);
+                _ = (blk_catch_16: { break :blk_catch_16 ((response_value.thenWithValue(req_ctx.globalThis, cell, RequestContext.onResolve, RequestContext.onReject)) catch |__ce_16| { _ = &__ce_16;  }); });
                 return;
 },
 .fulfilled => |fulfilled_value| {
@@ -1688,10 +1732,13 @@ if (ctx.didUpgradeWebSocket()) {
                     _ = ctx.renderMissingInvalidResponse(fulfilled_value);
                     return;
                 }
-                var response = ((fulfilled_value.as(jsc.WebCore.Response)) orelse {
-                _ = ctx.renderMissingInvalidResponse(fulfilled_value);
-                return;
-});
+                var response_opt = fulfilled_value.as(jsc.WebCore.Response);
+                _ = &response_opt;
+                if ((response_opt == null)) {
+                    _ = ctx.renderMissingInvalidResponse(fulfilled_value);
+                    return;
+                }
+                var response = response_opt.?;
                 _ = &response;
                 ctx.response_jsvalue = fulfilled_value;
                 _ = ctx.response_jsvalue.ensureStillAlive();
@@ -1847,6 +1894,7 @@ pub fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: J
                         _ = server.vm.runErrorHandler(err, (&exception_list));
                         if (server.dev_server) |dev_server| {
                             _ = &dev_server;
+                            _ = &dev_server;
                             if ((!req.flags.has_written_status)) {
                                 req.flags.has_written_status = true;
                                 if (req.resp) |resp| {
@@ -1883,7 +1931,7 @@ pub fn handleRejectStream(req: *@This(), globalThis: *jsc.JSGlobalObject, err: J
             _ = req.endStream(req.shouldCloseConnection());
     }
 
-pub fn doRenderWithBody(self: *RequestContext, value: *jsc.WebCore.Body.Value, owned_readable: ?jsc.WebCore.ReadableStream) void {
+pub fn doRenderWithBody(self: *@This(), value: *jsc.WebCore.Body.Value, owned_readable: ?jsc.WebCore.ReadableStream) void {
             _ = self.drainMicrotasks();
             _ = value.toBlobIfPossible();
             const globalThis = self.server.?.globalThis;
@@ -1998,7 +2046,7 @@ else => {
             _ = self.doRenderBlob();
     }
 
-pub fn onPipe(self: *RequestContext, stream: jsc.WebCore.streams.Result, allocator: std.mem.Allocator) void {
+pub fn onPipe(self: *@This(), stream: jsc.WebCore.streams.Result, allocator: std.mem.Allocator) void {
             var stream_ = stream;
             _ = &stream_;
             const stream_needs_deinit = ((stream == .owned) or (stream == .owned_and_done));
@@ -2028,7 +2076,7 @@ pub fn onPipe(self: *RequestContext, stream: jsc.WebCore.streams.Result, allocat
             }
     }
 
-pub fn doRenderBlob(self: *RequestContext) void {
+pub fn doRenderBlob(self: *@This()) void {
             if ((self.flags.has_abort_handler and (self.blob.fastSize() < (16384 - 1024)))) {
                 if (self.resp) |resp| {
                     _ = &resp;
@@ -2039,12 +2087,12 @@ pub fn doRenderBlob(self: *RequestContext) void {
             }
     }
 
-pub fn doRenderBlobCorked(self: *RequestContext) void {
+pub fn doRenderBlobCorked(self: *@This()) void {
             _ = self.renderMetadata();
             _ = self.renderBytes();
     }
 
-pub fn doRender(self: *RequestContext) void {
+pub fn doRender(self: *@This()) void {
             _ = ctxLog("doRender", .{});
             if (self.isAbortedOrEnded()) {
                 return;
@@ -2054,7 +2102,7 @@ pub fn doRender(self: *RequestContext) void {
             _ = self.doRenderWithBody(response.getBodyValue(), response.getBodyReadableStream(self.server.?.globalThis));
     }
 
-pub fn renderProductionError(self: *RequestContext, status: u16) void {
+pub fn renderProductionError(self: *@This(), status: u16) void {
             if (self.resp) |resp| {
                 _ = &resp;
                 switch (status) {
@@ -2077,15 +2125,15 @@ if ((!self.flags.has_written_status)) {
             }
     }
 
-pub fn runErrorHandler(self: *RequestContext, value: jsc.JSValue) void {
+pub fn runErrorHandler(self: *@This(), value: jsc.JSValue) void {
             _ = runErrorHandlerWithStatusCode(self, value, 500);
     }
 
-pub fn ensurePathname(self: *RequestContext) PathnameFormatter {
+pub fn ensurePathname(self: *@This()) PathnameFormatter {
             return .{ .ctx = self };
     }
 
-pub inline fn shouldCloseConnection(self: *const RequestContext) bool {
+pub inline fn shouldCloseConnection(self: @This()) bool {
             if (self.resp) |resp| {
                 _ = &resp;
                 return resp.shouldCloseConnection();
@@ -2093,7 +2141,7 @@ pub inline fn shouldCloseConnection(self: *const RequestContext) bool {
             return false;
     }
 
-pub fn finishRunningErrorHandler(self: *RequestContext, value: jsc.JSValue, status: u16) void {
+pub fn finishRunningErrorHandler(self: *@This(), value: jsc.JSValue, status: u16) void {
             if ((self.server == null)) {
                 return self.renderProductionError(status);
             }
@@ -2107,8 +2155,8 @@ pub fn finishRunningErrorHandler(self: *RequestContext, value: jsc.JSValue, stat
                 _ = &_guard_arena;
                 var ___guard_arena_moved = false; _ = &___guard_arena_moved;
                 defer if (!___guard_arena_moved) { ___guard_arena_moved = true; const __T = @TypeOf(_guard_arena); if (@typeInfo(__T) == .optional) { if (_guard_arena) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_arena.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_arena; _drop_val.__cp_deinit(); } };
-                const allocator = err_arena.allocator();
-                var exception_list: std.array_list.Managed(Api.JsException) = std.array_list.Managed(Api.JsException).init(allocator);
+                const err_alloc = err_arena.allocator();
+                var exception_list: std.array_list.Managed(Api.JsException) = std.array_list.Managed(Api.JsException).init(err_alloc);
                 _ = &exception_list;
                 var _guard_ex = DeinitGuard(@TypeOf(&exception_list)){ .val = (&exception_list) };
                 _ = &_guard_ex;
@@ -2118,7 +2166,7 @@ pub fn finishRunningErrorHandler(self: *RequestContext, value: jsc.JSValue, stat
                 vm.onUnhandledRejectionExceptionList = (&exception_list);
                 _ = vm.onUnhandledRejection(vm, globalThis, value);
                 vm.onUnhandledRejectionExceptionList = prev_exception_list;
-                _ = self.renderDefaultError(allocator, vm.log, error.ExceptionOcurred, exception_list.items, "<r><red>{s}<r> - <b>{f}<r> failed", .{ @as([]const u8, @tagName(self.method)), self.ensurePathname() });
+                _ = self.renderDefaultError(err_alloc, vm.log, error.ExceptionOcurred, exception_list.items, "<r><red>{s}<r> - <b>{f}<r> failed", .{ @as([]const u8, @tagName(self.method)), self.ensurePathname() });
             } else {
                 if ((status != 404)) {
                     _ = vm.onUnhandledRejection(vm, globalThis, value);
@@ -2128,7 +2176,7 @@ pub fn finishRunningErrorHandler(self: *RequestContext, value: jsc.JSValue, stat
             _ = vm.log.reset();
     }
 
-pub fn runErrorHandlerWithStatusCodeDontCheckResponded(self: *RequestContext, value: jsc.JSValue, status: u16) void {
+pub fn runErrorHandlerWithStatusCodeDontCheckResponded(self: *@This(), value: jsc.JSValue, status: u16) void {
             _ = jsc.markBinding(@src());
             if (self.server) |server| {
                 _ = &server;
@@ -2180,10 +2228,13 @@ ctx.flags.is_error_promise_pending = true;
 if (ctx.didUpgradeWebSocket()) {
                 return;
             }
-            var response = ((fulfilled_value.as(jsc.WebCore.Response)) orelse {
-            _ = ctx.finishRunningErrorHandler(value, status);
-            return;
-});
+            var response_opt = fulfilled_value.as(jsc.WebCore.Response);
+            _ = &response_opt;
+            if ((response_opt == null)) {
+                _ = ctx.finishRunningErrorHandler(value, status);
+                return;
+            }
+            var response = response_opt.?;
             _ = &response;
             ctx.response_jsvalue = fulfilled_value;
             _ = ctx.response_jsvalue.ensureStillAlive();
@@ -2215,7 +2266,7 @@ _ = ctx.finishRunningErrorHandler(err, status);
 }
     }
 
-pub fn runErrorHandlerWithStatusCode(self: *RequestContext, value: jsc.JSValue, status: u16) void {
+pub fn runErrorHandlerWithStatusCode(self: *@This(), value: jsc.JSValue, status: u16) void {
             _ = jsc.markBinding(@src());
             if (((self.resp == null) or self.resp.?.hasResponded())) {
                 return;
@@ -2223,7 +2274,7 @@ pub fn runErrorHandlerWithStatusCode(self: *RequestContext, value: jsc.JSValue, 
             _ = runErrorHandlerWithStatusCodeDontCheckResponded(self, value, status);
     }
 
-pub fn renderMetadata(self: *RequestContext) void {
+pub fn renderMetadata(self: *@This()) void {
             if ((self.resp == null)) {
                 return;
             }
@@ -2318,7 +2369,7 @@ pub fn renderMetadata(self: *RequestContext) void {
             }
     }
 
-pub fn doWriteStatus(self: *RequestContext, status: u16) void {
+pub fn doWriteStatus(self: *@This(), status: u16) void {
             _ = assert((!self.flags.has_written_status));
             self.flags.has_written_status = true;
             const resp = ((self.resp) orelse { return; });
@@ -2332,7 +2383,7 @@ pub fn doWriteStatus(self: *RequestContext, status: u16) void {
             }
     }
 
-pub fn doWriteHeaders(self: *RequestContext, headers: *WebCore.FetchHeaders) void {
+pub fn doWriteHeaders(self: *@This(), headers: *WebCore.FetchHeaders) void {
             _ = ctxLog("writeHeaders", .{});
             _ = headers.fastRemove(.ContentLength);
             _ = headers.fastRemove(.TransferEncoding);
@@ -2348,7 +2399,7 @@ pub fn doWriteHeaders(self: *RequestContext, headers: *WebCore.FetchHeaders) voi
             }
     }
 
-pub fn renderBytes(self: *RequestContext) void {
+pub fn renderBytes(self: *@This()) void {
             const blob = self.blob;
             const bytes = blob.slice();
             if (self.resp) |resp| {
@@ -2364,7 +2415,7 @@ pub fn renderBytes(self: *RequestContext) void {
             _ = self.deref();
     }
 
-pub fn setResponse(self: *RequestContext, response: *jsc.WebCore.Response) void {
+pub fn setResponse(self: *@This(), response: *jsc.WebCore.Response) void {
             if ((self.response_weakref.raw_ptr == response)) {
                 return;
             }
@@ -2372,13 +2423,13 @@ pub fn setResponse(self: *RequestContext, response: *jsc.WebCore.Response) void 
             self.response_weakref = .initRef(response);
     }
 
-pub fn render(self: *RequestContext, response: *jsc.WebCore.Response) void {
+pub fn render(self: *@This(), response: *jsc.WebCore.Response) void {
             _ = ctxLog("render", .{});
             _ = self.setResponse(response);
             _ = self.doRender();
     }
 
-pub fn onBufferedBodyChunk(self: *RequestContext, resp: *App.Response, chunk: []const u8, last: bool) void {
+pub fn onBufferedBodyChunk(self: *@This(), resp: *App.Response, chunk: []const u8, last: bool) void {
             _ = ctxLog("onBufferedBodyChunk {} {}", .{ chunk.len, last });
             _ = assert((self.resp == resp));
             self.flags.is_waiting_for_request_body = (last == false);
@@ -2477,7 +2528,7 @@ pub fn onBufferedBodyChunk(self: *RequestContext, resp: *App.Response, chunk: []
             }
     }
 
-pub fn onStartStreamingRequestBody(self: *RequestContext) jsc.WebCore.DrainResult {
+pub fn onStartStreamingRequestBody(self: *@This()) jsc.WebCore.DrainResult {
             _ = ctxLog("onStartStreamingRequestBody", .{});
             if (self.isAbortedOrEnded()) {
                 return jsc.WebCore.DrainResult.aborted;
@@ -2491,7 +2542,7 @@ pub fn onStartStreamingRequestBody(self: *RequestContext) jsc.WebCore.DrainResul
             return .{ .estimated_size = self.request_body_content_len };
     }
 
-pub fn onStartBuffering(self: *RequestContext) void {
+pub fn onStartBuffering(self: *@This()) void {
             if (self.server) |server| {
                 _ = &server;
                 _ = ctxLog("onStartBuffering", .{});
@@ -2512,25 +2563,25 @@ pub fn onStartBuffering(self: *RequestContext) void {
     }
 
 pub fn onRequestBodyReadableStreamAvailable(ptr: *anyopaque, globalThis: *jsc.JSGlobalObject, readable: jsc.WebCore.ReadableStream) void {
-            var this = bun.cast(RequestContextPtr, ptr);
-            _ = &this;
-            _ = bun.debugAssert((this.request_body_readable_stream_ref.held.impl == null));
-            this.request_body_readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis);
+            var req_ctx = bun.cast(RequestContextPtr, ptr);
+            _ = &req_ctx;
+            _ = bun.debugAssert((req_ctx.request_body_readable_stream_ref.held.impl == null));
+            req_ctx.request_body_readable_stream_ref = jsc.WebCore.ReadableStream.Strong.init(readable, globalThis);
     }
 
-pub fn onStartBufferingCallback(self: *anyopaque) void {
-            _ = onStartBuffering(bun.cast(RequestContextPtr, self));
+pub fn onStartBufferingCallback(req_ctx: *anyopaque) void {
+            _ = onStartBuffering(bun.cast(RequestContextPtr, req_ctx));
     }
 
-pub fn onStartStreamingRequestBodyCallback(self: *anyopaque) jsc.WebCore.DrainResult {
-            return onStartStreamingRequestBody(bun.cast(RequestContextPtr, self));
+pub fn onStartStreamingRequestBodyCallback(req_ctx: *anyopaque) jsc.WebCore.DrainResult {
+            return onStartStreamingRequestBody(bun.cast(RequestContextPtr, req_ctx));
     }
 
-pub fn getRemoteSocketInfo(self: *RequestContext) ?uws.SocketAddress {
+pub fn getRemoteSocketInfo(self: *@This()) ?uws.SocketAddress {
             return ((self.resp) orelse { return null; }).getRemoteSocketInfo();
     }
 
-pub fn setTimeout(self: *RequestContext, seconds: c_uint) bool {
+pub fn setTimeout(self: *@This(), seconds: c_uint) bool {
             if (self.resp) |resp| {
                 _ = &resp;
                 _ = resp.timeout(@min(seconds, 255));
@@ -2579,45 +2630,7 @@ pub fn setTimeout(self: *RequestContext, seconds: c_uint) bool {
 }
 
 pub fn NewFlags(comptime debug_mode: bool) type {
-        return packed struct(u16) {
-        has_marked_complete: bool = false,
-        has_marked_pending: bool = false,
-        has_abort_handler: bool = false,
-        has_timeout_handler: bool = false,
-        has_sendfile_ctx: bool = false,
-        has_called_error_handler: bool = false,
-        needs_content_length: bool = false,
-        needs_content_range: bool = false,
-        /// Used to avoid looking at the uws.Request struct after it's been freed
-        is_transfer_encoding: bool = false,
-
-        /// Used to identify if request can be safely deinitialized
-        is_waiting_for_request_body: bool = false,
-        /// Used in renderMissing in debug mode to show the user an HTML page
-        /// Used to avoid looking at the uws.Request struct after it's been freed
-        is_web_browser_navigation: if (debug_mode) bool else void = if (debug_mode) false,
-        has_written_status: bool = false,
-        response_protected: bool = false,
-        aborted: bool = false,
-        has_finalized: bun.DebugOnly(bool) = if (Environment.isDebug) false,
-
-        is_error_promise_pending: bool = false,
-
-        _padding: PaddingInt = 0,
-
-        const PaddingInt = brk: {
-            var size: usize = 2;
-            if (Environment.isDebug) {
-                size -= 1;
-            }
-
-            if (debug_mode) {
-                size -= 1;
-            }
-
-            break :brk std.meta.Int(.unsigned, size);
-        };
-    };
+        return (if (debug_mode) FlagsDebug else FlagsRelease);
 }
 
 pub fn getContentType(headers: ?*WebCore.FetchHeaders, blob: *const WebCore.Blob.Any, allocator: std.mem.Allocator) struct { MimeType, bool, bool } {
