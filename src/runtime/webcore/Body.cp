@@ -700,7 +700,7 @@ pub union(enum) Value {
         }
 
         return Body.Value{
-            Blob: Blob.get(globalThis, value, true, false) catch |e| {
+            Blob: Blob.get(globalThis, value, true, false) catch e => {
                 if (!globalThis.hasException()) {
                     if (e == error.InvalidArguments) {
                         return globalThis.throwInvalidArguments("Expected an Array", {});
@@ -1806,7 +1806,7 @@ static fn Mixin(comptime Type: type): type {
                 }
             }
 
-            let encoder = (try this_obj.getFormDataEncoding()) ?? {
+            let encoder = (this_obj.getFormDataEncoding()?) ?? {
                 // TODO: catch specific errors from getFormDataEncoding
                 return globalObject.ERR(.FORMDATA_PARSE_ERROR, "Can't decode form data from body because of incorrect MIME type/boundary", {}).reject();
             };
@@ -1827,7 +1827,7 @@ static fn Mixin(comptime Type: type): type {
                 globalObject,
                 blob.slice(),
                 encoder.encoding,
-            ) catch |e| {
+            ) catch e => {
                 return globalObject.ERR(
                     .FORMDATA_PARSE_ERROR,
                     "FormData parse error {s}",

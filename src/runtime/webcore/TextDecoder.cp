@@ -259,7 +259,7 @@ pub struct Buffered {
                 }
 
                 let maybe_decode_result = if (_.fatal) {
-                    strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush) catch |e| {
+                    strings.toUTF16AllocMaybeBuffered(default_allocator, input, true, flush) catch e => {
                         if (deinit_input) default_allocator.free(input);
                         if (e == error.InvalidByteSequence) {
                             return globalThis.ERR(.ENCODING_INVALID_ENCODED_DATA, "Invalid byte sequence", .{}).throw();
@@ -269,7 +269,7 @@ pub struct Buffered {
                         return globalThis.throwOutOfMemory();
                     }
                 } else {
-                    strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush) catch |e| {
+                    strings.toUTF16AllocMaybeBuffered(default_allocator, input, false, flush) catch e => {
                         if (deinit_input) default_allocator.free(input);
                         assert(e == error.OutOfMemory);
                         return globalThis.throwOutOfMemory();

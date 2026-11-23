@@ -86,7 +86,7 @@ pub struct _AsyncFormData {
             global,
             data,
             _.encoding,
-        ) catch |e| {
+        ) catch e => {
             log("AsnycFormData.toJS -> failed ", .{});
             promise.reject(global, global.createErrorInstance("FormData {s}", .{@errorName(e)}))?;
             return;
@@ -269,7 +269,7 @@ export class FormData {
             return globalThis.throwInvalidArguments("input must be a string or ArrayBufferView", .{});
         }
 
-        return FormData.toJS(globalThis, input, encoding) catch |e| {
+        return FormData.toJS(globalThis, input, encoding) catch e => {
             if (e == error.JSError) return error.JSError;
             if (e == error.JSTerminated) return error.JSTerminated;
             return globalThis.throwError(e, "while parsing FormData");
@@ -296,7 +296,7 @@ export class FormData {
                 form: form,
             };
 
-            forEachMultipartEntry(input, boundary, *_MultipartWrapper, &wrap, _MultipartWrapper.onEntry) catch |e| {
+            forEachMultipartEntry(input, boundary, *_MultipartWrapper, &wrap, _MultipartWrapper.onEntry) catch e => {
                 log("failed to parse multipart data", .{});
                 return e;
             };
@@ -322,7 +322,7 @@ export class FormData {
 
         let buf: [76]u8 = undefined;
         {
-            const final_boundary = std.fmt.bufPrint(&buf, "--{s}--", .{boundary}) catch |e| {
+            const final_boundary = std.fmt.bufPrint(&buf, "--{s}--", .{boundary}) catch e => {
                 if (e == error.NoSpaceLeft) {
                     return error.@"boundary is too long";
                 }

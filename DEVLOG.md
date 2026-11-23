@@ -1787,3 +1787,5 @@
 - [Wave #104] 清零 `src/runtime/{api,image,timer}/`（100% 全清）及 `src/runtime/server/` 前 4 文件共 18 个文件（`api/{Archive,BunObject,JSBundler,JSON5Object,JSONCObject,JSTranspiler,TOMLObject,YAMLObject,cron,csrf_jsc,glob}`, `image/Image`, `server/{HTMLBundle,NodeHTTPResponse,ServerConfig,ServerWebSocket}`, `timer/{DateHeaderTimer,Timer}`）的 `--strict` 违规；修复 `BunObject.cp` `toJSLazyPropertyCallback` `static fn callback` 与 `Timer.cp` `EventLoopTimerPtrHolder`；`zig:check` 5/5 通过。
 
 - [Wave #105] 清零 `src/runtime/server/` 剩余 2 大文件（`RequestContext.cp`, `server.cp` -> **`src/runtime/server/` 100% `--strict` 全清**）；修复 `RequestContext.cp` `NewRequestContext` 匿名 `return struct`（防 `TaggedPointerUnion` `@typeName` 碰撞）及 `is_web_browser_navigation = @as(void, undefined)`；`zig:check` 5/5 通过。
+
+- [Wave #106] 清零 `src/runtime/webcore/*.cp` 全部 12 个报错文件（`BakeResponse`, `Body`, `fetch`, `FormData`, `prompt`, `ReadableStream`, `Request`, `Response`, `ResumableSink`, `Sink`, `streams`, `TextDecoder` -> **`src/runtime/webcore/` 100% `--strict` 全清**）；补全 `Request`/`Sink`/`ResumableSink` 53 处 `static fn`；`zig:check` 5/5 通过。

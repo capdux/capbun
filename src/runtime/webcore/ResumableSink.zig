@@ -358,7 +358,7 @@ pub fn cancel(self: *@This(), reason: JSValue) void {
             }
     }
 
-pub fn isDetached(self: *const @This()) bool {
+pub fn isDetached(self: @This()) bool {
             return ((self.#js_this != .strong) or (self.status == .done));
     }
 

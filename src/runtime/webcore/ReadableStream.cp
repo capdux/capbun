@@ -671,7 +671,7 @@ fn MakeJSReadableStreamSource(
                     .ready => return JSValue.jsNumber(16384),
                     .chunk_size => |size| return JSValue.jsNumber(size),
                     .err => |e| {
-                        return globalThis.throwValue(try e.toJS(globalThis));
+                        return globalThis.throwValue(e.toJS(globalThis)?);
                     },
                     else => |rc| {
                         return rc.toJS(globalThis);
@@ -688,7 +688,7 @@ fn MakeJSReadableStreamSource(
                 switch (result) {
                     .err => |e| {
                         if (e == .Error) {
-                            return globalThis.throwValue(try e.Error.toJS(globalThis));
+                            return globalThis.throwValue(e.Error.toJS(globalThis)?);
                         } else {
                             const js_err = e.JSValue;
                             js_err.ensureStillAlive();

@@ -351,7 +351,7 @@ pub struct Init {
     fn getBodyReadableStream(*_, globalObject: *JSGlobalObject): jsc.WebCore.ReadableStream? {
         if (js_r := _.#js_ref.tryGet()) {
             if (stream := js.gc.stream.get(js_r)) {
-                return jsc.WebCore.ReadableStream.fromJS(stream, globalObject) catch |e| {
+                return jsc.WebCore.ReadableStream.fromJS(stream, globalObject) catch e => {
                     * = globalObject.takeException(e);
                     return null;
                 };
@@ -675,7 +675,7 @@ pub struct Init {
             } else if (arg_init.isNumber()) {
                 response.#init.status_code = @as(u16, @intCast(@min(@max(0, arg_init.toInt32()), std.math.maxInt(u16))));
             } else {
-                const maybe_init = Init.init(globalThis, arg_init) catch |e| blk: {
+                const maybe_init = Init.init(globalThis, arg_init) catch e => blk: {
                     if (e == error.JSError) return JSValue.zero;
                     break :blk @as(Init?, null);
                 };
@@ -806,7 +806,7 @@ pub struct Init {
                     let result = credentials.signRequest(.{
                         .path = blob.store.?.data.s3.path(),
                         .method = .GET,
-                    }, false, .{ .expires = 15 * 60 }) catch |sign_err| {
+                    }, false, .{ .expires = 15 * 60 }) catch sign_err => {
                         return s3.throwSignError(sign_err, globalThis);
                     };
                     const result_guard = DeinitGuard<@TypeOf(result)>{ ptr: unsafe { &result } };

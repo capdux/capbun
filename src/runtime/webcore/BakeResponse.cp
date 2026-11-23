@@ -30,8 +30,8 @@ export enum SSRKind: u8 {
 }
 
 pub fn toJSForSSR(*_: *Response, globalObject: *JSGlobalObject, kind: SSRKind): JSValue {
-    this.calculateEstimatedByteSize();
-    return BakeResponse__createForSSR(globalObject, this, @intFromEnum(kind));
+    _.calculateEstimatedByteSize();
+    return BakeResponse__createForSSR(globalObject, _, @intFromEnum(kind));
 }
 
 @callconv(jsc.conv)
@@ -41,7 +41,7 @@ pub fn toJSForSSR(*_: *Response, globalObject: *JSGlobalObject, kind: SSRKind): 
     bake_ssr_has_jsx: *c_int,
     js_this: jsc.JSValue,
 ): *!? {
-    const res = constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this) catch |e| {
+    const res = constructor(globalObject, callFrame, bake_ssr_has_jsx, js_this) catch e => {
         if (e == error.OutOfMemory) {
             if (globalObject.throwOutOfMemory() == error.JSError) {}
         }

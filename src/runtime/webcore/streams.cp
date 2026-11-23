@@ -531,7 +531,7 @@ export union(enum) Result {
                 promise.resolve(globalThis, JSValue.false) catch {};
             },
             else => {
-                let value = result.toJS(globalThis) catch |e| {
+                let value = result.toJS(globalThis) catch e => {
                     result.* = .{ .temporary = .{} };
                     promise.reject(globalThis, e) catch {};
                     return;
@@ -1346,7 +1346,7 @@ pub union(enum) BufferAction {
 
     fn fulfill(*_, global: *JSGlobalObject, blob: *AnyBlob): bun.JSTerminated!void {
         let p = jsc.AnyPromise{ .normal = _.swap() };
-        const val = blob.toPromise(global, _.*) catch |e| {
+        const val = blob.toPromise(global, _.*) catch e => {
             return p.reject(global, global.takeException(e));
         };
         return p.resolve(global, val);

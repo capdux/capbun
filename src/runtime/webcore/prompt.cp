@@ -253,7 +253,7 @@ export class prompt {
             input.appendAssumeCapacity(second);
         }
 
-        readUntilDelimiterArrayListAppendAssumeCapacity(reader, &input, '\n', 2048) catch |e| {
+        readUntilDelimiterArrayListAppendAssumeCapacity(reader, &input, '\n', 2048) catch e => {
             if (e != error.StreamTooLong) {
                 return JSValue.@"null";
             }
@@ -262,7 +262,7 @@ export class prompt {
                 return JSValue.@"null";
             };
 
-            readUntilDelimiterArrayListAppendAssumeCapacity(reader, &input, '\n', 4096) catch |e2| {
+            readUntilDelimiterArrayListAppendAssumeCapacity(reader, &input, '\n', 4096) catch e2 => {
                 if (e2 != error.StreamTooLong) {
                     return JSValue.@"null";
                 }

@@ -92,22 +92,22 @@ pub fn ResumableSink(
 
         pub const Status = ResumableSinkStatus;
 
-        pub fn constructor(globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!*ThisSink {
+        pub static fn constructor(globalThis: *JSGlobalObject, _: *jsc.CallFrame): JSError!*ThisSink {
             return globalThis.throwInvalidArguments("ResumableSink is not constructable", .{});
         }
 
-        pub fn init(globalThis: *JSGlobalObject, stream: ReadableStream, context: *Context) *ThisSink {
+        pub static fn init(globalThis: *JSGlobalObject, stream: ReadableStream, context: *Context): *ThisSink {
             return initExactRefs(globalThis, stream, context, 1);
         }
 
-        pub fn initExactRefs(globalThis: *JSGlobalObject, stream: ReadableStream, context: *Context, ref_count: u32) *ThisSink {
+        pub static fn initExactRefs(globalThis: *JSGlobalObject, stream: ReadableStream, context: *Context, ref_count: u32): *ThisSink {
             const sink: *ThisSink = ThisSink.new(.{
                 .globalThis = globalThis,
                 .context = context,
                 .ref_count = RefCount.initExactRefs(ref_count),
             });
             const is_locked_fn = jsc.WebCore.ReadableStream.isLocked;
-            if (is_locked_fn(stream, globalThis) or stream.isDisturbed(globalThis)) {
+            if (is_locked_fn(stream, globalThis) || stream.isDisturbed(globalThis)) {
                 const err = jsc.SystemError{
                     .code = BunString.static(@tagName(jsc.Node.ErrorCode.ERR_STREAM_CANNOT_PIPE)),
                     .message = BunString.static("Stream already used, please create a new one"),
@@ -183,7 +183,7 @@ pub fn ResumableSink(
             return sink;
         }
 
-        static fn jsSetHandlers(_: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame, this_value: JSValue) JSError!JSValue {
+        static fn jsSetHandlers(_: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame, this_value: JSValue): JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
 
@@ -203,22 +203,22 @@ pub fn ResumableSink(
             return JSValue.js_undefined;
         }
 
-        pub fn jsStart(this: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
+        pub fn jsStart(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
-            if (args.len > 0 and args[0].isObject()) {
-                if (try args[0].getOptionalInt(globalThis, "highWaterMark", i64)) |highWaterMark| {
-                    this.highWaterMark = highWaterMark;
+            if (args.len > 0 && args[0].isObject()) {
+                if (highWaterMark := args[0].getOptionalInt(globalThis, "highWaterMark", i64)?) {
+                    _.highWaterMark = highWaterMark;
                 }
             }
 
             return JSValue.js_undefined;
         }
 
-        pub fn jsWrite(this: *ThisSink, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
+        pub fn jsWrite(*_, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
-            if (this.isDetached()) return JSValue.js_undefined;
+            if (_.isDetached()) return JSValue.js_undefined;
 
             if (args.len < 1) {
                 return globalThis.throwInvalidArguments("ResumableSink.write requires at least 1 argument", .{});
@@ -226,108 +226,108 @@ pub fn ResumableSink(
 
             const buffer = args[0];
             const sb_opt = jsc.Node.StringOrBuffer.fromJS(globalThis, default_allocator, buffer)?;
-            const sb = sb_opt orelse {
+            const sb = sb_opt ?? {
                 return globalThis.throwInvalidArguments("ResumableSink.write requires a string or buffer", .{});
             };
 
             const sb_guard = DeinitGuard<@TypeOf(sb)>{ val: sb };
             const bytes = sb_guard.val.slice();
             log("jsWrite {}", .{bytes.len});
-            switch (onWrite(this.context, bytes)) {
+            switch (onWrite(_.context, bytes)) {
                 .backpressure => {
                     log("paused", .{});
-                    this.status = .paused;
+                    _.status = .paused;
                 },
                 .done => {},
                 .want_more => {
-                    this.status = .started;
+                    _.status = .started;
                 },
             }
 
-            return JSValue.jsBoolean(this.status != .paused);
+            return JSValue.jsBoolean(_.status != .paused);
         }
 
-        pub fn jsEnd(this: *ThisSink, _: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSValue {
+        pub fn jsEnd(*_, _: *JSGlobalObject, callframe: *jsc.CallFrame): JSError!JSValue {
             jsc.markBinding(@src());
             const args = callframe.arguments();
-            if (this.isDetached()) return JSValue.js_undefined;
-            this.detachJS();
+            if (_.isDetached()) return JSValue.js_undefined;
+            _.detachJS();
             log("jsEnd {}", .{args.len});
-            this.status = .done;
+            _.status = .done;
 
-            onEnd(this.context, if (args.len > 0) args[0] else null);
+            onEnd(_.context, if (args.len > 0) args[0] else null);
             return JSValue.js_undefined;
         }
 
-        pub fn drain(this: *ThisSink) void {
+        pub fn drain(*_) {
             log("drain", .{});
-            if (this.status != .paused) {
+            if (_.status != .paused) {
                 return;
             }
-            if (this.#js_this.tryGet()) |js_this| {
-                const globalObject = this.globalThis;
+            if (js_this := _.#js_this.tryGet()) {
+                const globalObject = _.globalThis;
 
-                if (getDrain(js_this)) |ondrain| {
-                    this.status = .started;
+                if (ondrain := getDrain(js_this)) {
+                    _.status = .started;
                     globalObject.bunVM().eventLoop().runCallback(ondrain, globalObject, .js_undefined, &.{ .js_undefined, .js_undefined });
                 }
             }
         }
 
-        pub fn cancel(this: *ThisSink, reason: JSValue) void {
-            if (this.status == .done) return;
-            if (this.status == .piped) {
+        pub fn cancel(*_, reason: JSValue) {
+            if (_.status == .done) return;
+            if (_.status == .piped) {
                 reason.ensureStillAlive();
-                this.endPipe(reason);
+                _.endPipe(reason);
                 return;
             }
-            if (this.#js_this.tryGet()) |js_this| {
-                this.status = .done;
+            if (js_this := _.#js_this.tryGet()) {
+                _.status = .done;
                 js_this.ensureStillAlive();
 
                 const onCancelCallback = getCancel(js_this);
-                const globalObject = this.globalThis;
+                const globalObject = _.globalThis;
 
-                this.detachJS();
-                onEnd(this.context, reason);
+                _.detachJS();
+                onEnd(_.context, reason);
 
                 js_this.ensureStillAlive();
-                if (onCancelCallback) |callback| {
+                if (callback := onCancelCallback) {
                     const event_loop = globalObject.bunVM().eventLoop();
                     event_loop.runCallback(callback, globalObject, .js_undefined, &.{ .js_undefined, reason });
                 }
             }
         }
 
-        pub fn isDetached(this: *const ThisSink) bool {
-            return this.#js_this != .strong or this.status == .done;
+        pub fn isDetached(): bool {
+            return _.#js_this != .strong || _.status == .done;
         }
 
-        fn detachJS(this: *ThisSink) void {
-            if (this.#js_this.tryGet()) |js_this| {
-                setDrain(js_this, this.globalThis, .zero);
-                setCancel(js_this, this.globalThis, .zero);
-                setStream(js_this, this.globalThis, .zero);
-                this.#js_this.downgrade();
+        fn detachJS(*_) {
+            if (js_this := _.#js_this.tryGet()) {
+                setDrain(js_this, _.globalThis, .zero);
+                setCancel(js_this, _.globalThis, .zero);
+                setStream(js_this, _.globalThis, .zero);
+                _.#js_this.downgrade();
             }
         }
 
-        pub fn deinit(this: *ThisSink) void {
-            this.detachJS();
-            this.stream.deinit();
-            destroy(this);
+        pub fn deinit(*_) {
+            _.detachJS();
+            _.stream.deinit();
+            destroy(_);
         }
 
-        pub fn finalize(this: *ThisSink) void {
-            this.#js_this.finalize();
-            this.deref();
+        pub fn finalize(*_) {
+            _.#js_this.finalize();
+            _.deref();
         }
 
         fn onStreamPipe(
-            this: *ThisSink,
+            *_,
             stream: webcore.streams.Result,
             allocator: Allocator,
-        ) void {
+        ) {
             const stream_guard = StreamResultGuard{
                 stream: stream,
                 alloc: allocator,
@@ -335,14 +335,14 @@ pub fn ResumableSink(
             const chunk = stream_guard.stream.slice();
             log("onWrite {}", .{chunk.len});
 
-            * = onWrite(this.context, chunk);
+            * = onWrite(_.context, chunk);
 
             const is_done = stream_guard.stream.isDone();
 
             if (is_done) {
-                const err: ?JSValue = brk_err: {
+                const err: JSValue? = brk_err: {
                     if (stream_guard.stream == .err) {
-                        const weak_pair = stream_guard.stream.err.toJSWeak(this.globalThis);
+                        const weak_pair = stream_guard.stream.err.toJSWeak(_.globalThis);
                         const js_err = weak_pair[0];
                         const was_strong = weak_pair[1];
                         js_err.ensureStillAlive();
@@ -352,16 +352,16 @@ pub fn ResumableSink(
                     }
                     break :brk_err null;
                 };
-                this.endPipe(err);
+                _.endPipe(err);
             }
         }
 
-        fn endPipe(this: *ThisSink, err: ?JSValue) void {
+        fn endPipe(*_, err: JSValue?) {
             log("endPipe", .{});
-            if (this.status != .piped) return;
-            this.status = .done;
-            const globalObject = this.globalThis;
-            if (this.stream.get(globalObject)) |stream_| {
+            if (_.status != .piped) return;
+            _.status = .done;
+            const globalObject = _.globalThis;
+            if (stream_ := _.stream.get(globalObject)) {
                 if (stream_.ptr == .Bytes) {
                     stream_.ptr.Bytes.pipe = .{};
                 }
@@ -370,20 +370,20 @@ pub fn ResumableSink(
                 } else {
                     stream_.done(globalObject);
                 }
-                let stream_prev = this.stream;
-                this.stream = .{};
+                let stream_prev = _.stream;
+                _.stream = .{};
                 stream_prev.deinit();
             }
 
-            onEnd(this.context, err);
+            onEnd(_.context, err);
 
-            if (this.#js_this == .strong) {
-                this.detachJS();
+            if (_.#js_this == .strong) {
+                _.detachJS();
             } else {
-                this.deref();
+                _.deref();
             }
 
-            this.deref();
+            _.deref();
         }
     };
 }

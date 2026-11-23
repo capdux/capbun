@@ -629,10 +629,10 @@ fn fetchImpl(
                             if (headers_value := proxy_arg.get(globalThis, "headers")?) {
                                 if (!headers_value.isUndefinedOrNull()) {
                                     if (fetch_hdrs := headers_value.as(FetchHeaders)) {
-                                        proxy_headers.val = Headers.from(fetch_hdrs, allocator, .{}) catch |e| bun.handleOom(e);
+                                        proxy_headers.val = Headers.from(fetch_hdrs, allocator, .{}) catch e => bun.handleOom(e);
                                     } else if (fetch_hdrs := FetchHeaders.createFromJS(globalThis, headers_value)?) {
                                         const _fh_guard = DerefGuard<*FetchHeaders>{ val: fetch_hdrs };
-                                        proxy_headers.val = Headers.from(fetch_hdrs, allocator, .{}) catch |e| bun.handleOom(e);
+                                        proxy_headers.val = Headers.from(fetch_hdrs, allocator, .{}) catch e => bun.handleOom(e);
                                     }
                                 }
                             }
@@ -791,7 +791,7 @@ fn fetchImpl(
                 upgraded_connection = true;
             }
         }
-        headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch |e| bun.handleOom(e);
+        headers = Headers.from(fh, allocator, .{ .body = body.getAnyBlob() }) catch e => bun.handleOom(e);
     }
     if (globalThis.hasException()) return JSValue.zero;
 
@@ -807,14 +807,14 @@ fn fetchImpl(
                 .blob => url.href["blob:".len..],
                 .remote => unreachable,
             },
-        ) catch |e| {
+        ) catch e => {
             return globalThis.throwError(e, "Failed to decode file url");
         }];
         let url_string = DerefGuard<bun.String>{ val: bun.String.empty };
         const blob_to_use = blob: {
             if (url_type == URLType.blob) {
                 if (resolved := jsc.WebCore.ObjectURLRegistry.singleton().resolveAndDupe(url_path_decoded)) {
-                    url_string.val = bun.String.createFormat("blob:{s}", .{url_path_decoded}) catch |e| bun.handleOom(e);
+                    url_string.val = bun.String.createFormat("blob:{s}", .{url_path_decoded}) catch e => bun.handleOom(e);
                     break :blob resolved;
                 } else {
                     const err = globalThis.toTypeError(.INVALID_ARG_VALUE, "Failed to resolve blob:{s}", .{
@@ -830,7 +830,7 @@ fn fetchImpl(
                         if (url_path_decoded[0] == '/') {
                             url_path_decoded = url_path_decoded[1..];
                         }
-                        break :brk PosixToWinNormalizer.resolveCWDWithExternalBufZ(&path_buf, url_path_decoded) catch |e| {
+                        break :brk PosixToWinNormalizer.resolveCWDWithExternalBufZ(&path_buf, url_path_decoded) catch e => {
                             return globalThis.throwError(e, "Failed to resolve file url");
                         };
                     }
@@ -838,7 +838,7 @@ fn fetchImpl(
                 }
 
                 let cwd_buf: bun.PathBuffer = undefined;
-                const cwd = if (Environment.isWindows) (bun.getcwd(&cwd_buf) catch |e| {
+                const cwd = if (Environment.isWindows) (bun.getcwd(&cwd_buf) catch e => {
                     return globalThis.throwError(e, "Failed to resolve file url");
                 }) else globalThis.bunVM().transpiler.fs.top_level_dir;
 
@@ -853,7 +853,7 @@ fn fetchImpl(
                     .auto,
                 );
                 if (Environment.isWindows) {
-                    break :brk PosixToWinNormalizer.resolveCWDWithExternalBufZ(&path_buf2, fullpath) catch |e| {
+                    break :brk PosixToWinNormalizer.resolveCWDWithExternalBufZ(&path_buf2, fullpath) catch e => {
                         return globalThis.throwError(e, "Failed to resolve file url");
                     };
                 }
@@ -912,7 +912,7 @@ fn fetchImpl(
             null,
             allocator,
             { body: body.getAnyBlob() },
-        ) catch |e| bun.handleOom(e);
+        ) catch e => bun.handleOom(e);
     }
 
     let http_body = body;
@@ -1177,7 +1177,7 @@ fn fetchImpl(
             .unix_socket_path = unix_socket_path,
         },
         promise,
-    ) catch |e| bun.handleOom(e);
+    ) catch e => bun.handleOom(e);
 
     if (Environment.isDebug) {
         if (store := body.store()) {

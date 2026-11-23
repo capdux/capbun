@@ -92,7 +92,7 @@ pub struct InternalJSEventCallback {
         if (callback := _.function.get()) {
             * = callback.call(globalThis, .js_undefined, &.{jsc.JSValue.jsNumber(
                 @intFromEnum(eventType),
-            )}) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
+            )}) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
             return true;
         }
         return false;
@@ -153,21 +153,21 @@ pub const getFormData = RequestMixin.getFormData;
 pub const getBlobWithoutCallFrame = RequestMixin.getBlobWithoutCallFrame;
 pub const WeakRef = bun.ptr.WeakPtr(Request, "weak_ptr_data");
 
-pub fn memoryCost(client: *const Request): usize {
+pub static fn memoryCost(client: *const Request): usize {
     return @sizeOf(Request) + client.request_context.memoryCost() + client.url.byteSlice().len + client.#body.value.memoryCost();
 }
 
-@export @c fn Request__setCookiesOnRequestContext(client: *Request, cookieMap: (*jsc.WebCore.CookieMap)?) {
+@export @c static fn Request__setCookiesOnRequestContext(client: *Request, cookieMap: (*jsc.WebCore.CookieMap)?) {
     client.request_context.setCookies(cookieMap);
 }
 
-@export @c fn Request__getUWSRequest(
+@export @c static fn Request__getUWSRequest(
     client: *Request,
 ): (*uws.Request)? {
     return client.request_context.getRequest();
 }
 
-@export @c fn Request__setInternalEventCallback(
+@export @c static fn Request__setInternalEventCallback(
     client: *Request,
     callback: jsc.JSValue,
     globalThis: *jsc.JSGlobalObject,
@@ -177,7 +177,7 @@ pub fn memoryCost(client: *const Request): usize {
     client.request_context.enableTimeoutEvents();
 }
 
-@export @c fn Request__setTimeout(client: *Request, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) {
+@export @c static fn Request__setTimeout(client: *Request, seconds: jsc.JSValue, globalThis: *jsc.JSGlobalObject) {
     if (!seconds.isNumber()) {
         if (globalThis.throw("Failed to set timeout: The provided value is not of type 'number'.", {}) == error.JSError) {}
         return;
@@ -186,7 +186,7 @@ pub fn memoryCost(client: *const Request): usize {
     client.setTimeout(seconds.to(c_uint));
 }
 
-@export @c fn Request__clone(client: *Request, globalThis: *jsc.JSGlobalObject): (*Request)? {
+@export @c static fn Request__clone(client: *Request, globalThis: *jsc.JSGlobalObject): (*Request)? {
     return client.clone(bun.default_allocator, globalThis) catch return null;
 }
 
@@ -197,7 +197,7 @@ const _keep_exports = .{
     Request__setTimeout,
 };
 
-pub fn init(
+pub static fn init(
     method: Method,
     request_context: jsc.API.AnyRequestContext,
     https: bool,
@@ -214,7 +214,7 @@ pub fn init(
 }
 
 /// TODO: do we need this?
-pub fn init2(
+pub static fn init2(
     url: bun.String,
     headers: (*FetchHeaders)?,
     body: *Body.Value.HiveRef,
@@ -251,7 +251,7 @@ pub fn getContentType(
     return null;
 }
 
-pub fn getFormDataEncoding(client: *Request): bun.JSError!(*bun.FormData.AsyncFormData)? {
+pub static fn getFormDataEncoding(client: *Request): bun.JSError!(*bun.FormData.AsyncFormData)? {
     const content_type_opt = client.getContentType()?;
     let content_type_slice: ZigString.Slice = undefined;
     if (v := content_type_opt) {
@@ -270,11 +270,11 @@ pub fn getFormDataEncoding(client: *Request): bun.JSError!(*bun.FormData.AsyncFo
 }
 
 @callconv(bun.jsc.conv)
-pub fn estimatedSize(client: *Request): usize {
+pub static fn estimatedSize(client: *Request): usize {
     return client.reported_estimated_size;
 }
 
-pub fn getRemoteSocketInfo(client: *Request, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
+pub static fn getRemoteSocketInfo(client: *Request, globalObject: *jsc.JSGlobalObject): jsc.JSValue? {
     if (info := client.request_context.getRemoteSocketInfo()) {
         return jsc.JSSocketAddress.create(globalObject, info.ip, info.port, info.is_ipv6);
     }
@@ -282,11 +282,11 @@ pub fn getRemoteSocketInfo(client: *Request, globalObject: *jsc.JSGlobalObject):
     return null;
 }
 
-pub fn calculateEstimatedByteSize(client: *Request) {
+pub static fn calculateEstimatedByteSize(client: *Request) {
     client.reported_estimated_size = client.#body.value.estimatedSize() + client.sizeOfURL() + @sizeOf(Request);
 }
 
-@export @c fn Bun__JSRequest__calculateEstimatedByteSize(client: *Request) {
+@export @c static fn Bun__JSRequest__calculateEstimatedByteSize(client: *Request) {
     client.calculateEstimatedByteSize();
 }
 
@@ -297,7 +297,7 @@ pub inline fn getBodyReadableStream(
     if (js_ref := _.#js_ref.tryGet()) {
         if (stream := js.gc.stream.get(js_ref)) {
             // JS is always source of truth for the stream
-            return jsc.WebCore.ReadableStream.fromJS(stream, globalObject) catch |e| {
+            return jsc.WebCore.ReadableStream.fromJS(stream, globalObject) catch e => {
                 * = globalObject.takeException(e);
                 return null;
             };
@@ -308,7 +308,7 @@ pub inline fn getBodyReadableStream(
     }
     return null;
 }
-pub inline fn detachReadableStream(client: *Request, globalObject: *jsc.JSGlobalObject) {
+pub static inline fn detachReadableStream(client: *Request, globalObject: *jsc.JSGlobalObject) {
     if (js_ref := client.#js_ref.tryGet()) {
         js.gc.stream.clear(js_ref, globalObject);
     }
@@ -319,7 +319,7 @@ pub inline fn detachReadableStream(client: *Request, globalObject: *jsc.JSGlobal
     }
 }
 
-pub fn toJS(client: *Request, globalObject: *JSGlobalObject): JSValue {
+pub static fn toJS(client: *Request, globalObject: *JSGlobalObject): JSValue {
     client.calculateEstimatedByteSize();
     const js_value = js.toJSUnchecked(globalObject, client);
     client.#js_ref = .initWeak(js_value);
@@ -328,7 +328,7 @@ pub fn toJS(client: *Request, globalObject: *JSGlobalObject): JSValue {
     return js_value;
 }
 
-pub fn toJSForBake(client: *Request, globalObject: *JSGlobalObject): bun.JSError!JSValue {
+pub static fn toJSForBake(client: *Request, globalObject: *JSGlobalObject): bun.JSError!JSValue {
     return bun.jsc.fromJSHostCall(
         globalObject,
         @src(),
@@ -337,7 +337,7 @@ pub fn toJSForBake(client: *Request, globalObject: *JSGlobalObject): bun.JSError
     );
 }
 
-pub fn writeFormat(client: *Request, this_value: JSValue, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool): anyerror!void {
+pub static fn writeFormat(client: *Request, this_value: JSValue, comptime Formatter: type, formatter: *Formatter, writer: auto, comptime enable_ansi_colors: bool): anyerror!void {
     const Writer = @TypeOf(writer);
 
     const params_object = Bun__getParamsIfBunRequest(this_value);
@@ -407,7 +407,7 @@ pub fn writeFormat(client: *Request, this_value: JSValue, comptime Formatter: ty
     writer.writeAll("}")?;
 }
 
-pub fn mimeType(client: *const Request): string {
+pub static fn mimeType(client: *const Request): string {
     if (headers := client.#headers) {
         if (content_type := headers.fastGet(.ContentType)?) {
             return content_type.slice();
@@ -455,7 +455,7 @@ pub fn getIntegrity(
     return ZigString.Empty.toJS(globalThis);
 }
 
-pub fn getSignal(client: *Request, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
+pub static fn getSignal(client: *Request, globalThis: *jsc.JSGlobalObject): jsc.JSValue {
     // Already have an C++ instance
     if (signal := client.signal) {
         return signal.toJS(globalThis);
@@ -484,7 +484,7 @@ pub fn getMode(
     return _.flags.mode.toJS(globalThis);
 }
 
-pub fn finalizeWithoutDeinit(client: *Request) {
+pub static fn finalizeWithoutDeinit(client: *Request) {
     if (headers := client.#headers) {
         headers.deref();
         client.#headers = null;
@@ -500,7 +500,7 @@ pub fn finalizeWithoutDeinit(client: *Request) {
     client.internal_event_callback.deinit();
 }
 
-pub fn finalize(client: *Request) {
+pub static fn finalize(client: *Request) {
     client.#js_ref.finalize();
     client.finalizeWithoutDeinit();
     * = client.#body.unref();
@@ -533,12 +533,12 @@ pub fn getReferrerPolicy(
 ): jsc.JSValue {
     return ZigString.init("").toJS(globalThis);
 }
-pub fn getUrl(client: *Request, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
+pub static fn getUrl(client: *Request, globalObject: *jsc.JSGlobalObject): bun.JSError!jsc.JSValue {
     client.ensureURL()?;
     return client.url.toJS(globalObject);
 }
 
-pub fn sizeOfURL(client: *const Request): usize {
+pub static fn sizeOfURL(client: *const Request): usize {
     if (client.url.length() > 0)
         return client.url.byteSlice().len;
 
@@ -559,14 +559,14 @@ pub fn sizeOfURL(client: *const Request): usize {
     return 0;
 }
 
-pub fn getProtocol(client: *const Request): []const u8 {
+pub static fn getProtocol(client: *const Request): []const u8 {
     if (client.flags.https)
         return "https://";
 
     return "http://";
 }
 
-pub fn ensureURL(client: *Request): bun.OOM!void {
+pub static fn ensureURL(client: *Request): bun.OOM!void {
     if (!client.url.isEmpty()) return;
 
     if (req := client.request_context.getRequest()) {
@@ -623,7 +623,7 @@ pub fn ensureURL(client: *Request): bun.OOM!void {
                         client.getProtocol(),
                         fmt,
                         req_url,
-                    }) catch |e| {
+                    }) catch e => {
                         if (e == error.NoSpaceLeft) unreachable;
                         unreachable;
                     };
@@ -656,7 +656,7 @@ pub fn ensureURL(client: *Request): bun.OOM!void {
     }
 }
 
-fn checkBodyStreamRef(client: *Request, globalObject: *JSGlobalObject) {
+static fn checkBodyStreamRef(client: *Request, globalObject: *JSGlobalObject) {
     if (js_value := client.#js_ref.tryGet()) {
         if (client.#body.value == .Locked) {
             if (stream := client.#body.value.Locked.readable.get(globalObject)) {
@@ -671,7 +671,7 @@ fn checkBodyStreamRef(client: *Request, globalObject: *JSGlobalObject) {
         }
     }
 }
-pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSValue, this_value: jsc.JSValue): bun.JSError!Request {
+pub static fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSValue, this_value: jsc.JSValue): bun.JSError!Request {
     let success = false;
     const vm = globalThis.bunVM();
     const body = vm.initRequestBodyValue(.Null)?;
@@ -953,7 +953,7 @@ pub fn constructInto(globalThis: *jsc.JSGlobalObject, arguments: []const jsc.JSV
     return req;
 }
 
-pub fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, this_value: jsc.JSValue): bun.JSError!*Request {
+pub static fn constructor(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, this_value: jsc.JSValue): bun.JSError!*Request {
     const arguments_ = callframe.arguments_old(2);
     const arguments = arguments_.ptr[0..arguments_.len];
 
@@ -999,7 +999,7 @@ pub fn doClone(
 }
 
 // Returns if the request has headers already cached/set.
-pub fn hasFetchHeaders(client: *Request): bool {
+pub static fn hasFetchHeaders(client: *Request): bool {
     return client.#headers != null;
 }
 
@@ -1100,7 +1100,7 @@ pub fn getHeaders(
     return headers.toJS(globalThis);
 }
 
-pub fn cloneHeaders(client: *Request, globalThis: *JSGlobalObject): bun.JSError!(*FetchHeaders)? {
+pub static fn cloneHeaders(client: *Request, globalThis: *JSGlobalObject): bun.JSError!(*FetchHeaders)? {
     if (client.#headers == null) {
         if (uws_req := client.request_context.getRequest()) {
             client.#headers = FetchHeaders.createFromUWS(uws_req);
@@ -1163,7 +1163,7 @@ pub fn cloneInto(
     _headers_guard.val = null;
 }
 
-pub fn clone(client: *Request, allocator: std.mem.Allocator, globalThis: *JSGlobalObject): bun.JSError!*Request {
+pub static fn clone(client: *Request, allocator: std.mem.Allocator, globalThis: *JSGlobalObject): bun.JSError!*Request {
     const req = Request.new(undefined);
     let _req_guard = DestroyGuard<Request>{ ptr: req };
     client.cloneInto(req, allocator, globalThis, false)?;

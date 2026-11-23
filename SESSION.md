@@ -875,3 +875,4 @@
 - [Wave #103] `js_parser`/`js_printer`/`resolver` 剩余 6 文件 `--strict` 清零（四目录 100% 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`b3c832d8` `runtime/{api,image,timer,server}`）并行推进中。
 - [Wave #104] `runtime/{api,image,timer}/` 全清与 `server/` 4 文件共 18 文件 `--strict` 清零并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`83f48f33` `RequestContext.cp`+`server.cp`）并行推进中。
 - [Wave #105] `src/runtime/server/{RequestContext,server}.cp` `--strict` 清零（`runtime/{api,image,timer,server}/` 四目录 100% 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`355e74db` `runtime/webcore/*.cp`）并行推进中。
+- [Wave #106] `src/runtime/webcore/*.cp` 全部 12 文件 `--strict` 清零（`runtime/webcore/` 100% 全清）并通过 `zig:check` 5/5，已原子提交；路 1（`eb89699e` 只读排查）与路 2（`013bd857` `runtime/node/**/*.cp`）并行推进中。

@@ -345,8 +345,8 @@ pub fn JSSink(comptime SinkType: type, comptime abi_name: []const u8) type {
         return struct {
     sink: SinkType,
 
-pub fn memoryCost(self: *@This()) callconv(.c) usize {
-            return (@sizeOf(ThisSink) + self.sink.memoryCost());
+pub fn memoryCost(inst: *ThisSink) callconv(.c) usize {
+            return (@sizeOf(ThisSink) + inst.sink.memoryCost());
     }
 
 pub fn assignToStream(globalThis: *JSGlobalObject, stream: JSValue, ptr: *anyopaque, jsvalue_ptr: *OpaquePtr) JSValue {
@@ -398,7 +398,7 @@ pub fn construct(globalThis: *JSGlobalObject, _: *jsc.CallFrame) JSError!JSValue
     }
 
 pub fn finalize(ptr: *anyopaque) callconv(.c) void {
-            var inst = cast(*ThisSink, ptr);
+            var inst = cast((&ThisSink), ptr);
             _ = &inst;
             _ = inst.sink.finalize();
     }
@@ -531,7 +531,7 @@ pub fn writeUTF8(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError
 
 pub fn close(globalThis: *JSGlobalObject, sink_ptr: ?*anyopaque) callconv(.c) JSValue {
             _ = jsc.markBinding(@src());
-            const inst: *ThisSink = cast(*ThisSink, ((sink_ptr) orelse { return .js_undefined; }));
+            const inst: *ThisSink = cast((&ThisSink), ((sink_ptr) orelse { return .js_undefined; }));
             if (comptime @hasDecl(SinkType, "getPendingError")) {
                 if (inst.sink.getPendingError()) |e| {
                     _ = &e;
@@ -605,7 +605,7 @@ pub fn end(globalThis: *JSGlobalObject, callframe: *jsc.CallFrame) JSError!JSVal
 
 pub fn endWithSink(ptr: *anyopaque, globalThis: *JSGlobalObject) callconv(jsc.conv) JSValue {
             _ = jsc.markBinding(@src());
-            var inst = cast(*ThisSink, ptr);
+            var inst = cast((&ThisSink), ptr);
             _ = &inst;
             if (comptime @hasDecl(SinkType, "getPendingError")) {
                 if (inst.sink.getPendingError()) |e| {
@@ -618,7 +618,7 @@ pub fn endWithSink(ptr: *anyopaque, globalThis: *JSGlobalObject) callconv(jsc.co
 
 pub fn updateRef(ptr: *anyopaque, value: bool) callconv(.c) void {
             _ = jsc.markBinding(@src());
-            var inst = cast(*ThisSink, ptr);
+            var inst = cast((&ThisSink), ptr);
             _ = &inst;
             if (comptime @hasDecl(SinkType, "updateRef")) {
                 _ = inst.sink.updateRef(value);
@@ -626,7 +626,7 @@ pub fn updateRef(ptr: *anyopaque, value: bool) callconv(.c) void {
     }
 
 pub fn jsGetInternalFd(ptr: *anyopaque) callconv(.c) JSValue {
-            var inst = cast(*ThisSink, ptr);
+            var inst = cast((&ThisSink), ptr);
             _ = &inst;
             if (comptime @hasDecl(SinkType, "getFd")) {
                 return JSValue.jsNumber(inst.sink.getFd());
