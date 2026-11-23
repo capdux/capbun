@@ -326,17 +326,17 @@ pub fn initEmptyDefault() Self {
     }
 
 pub fn initEmpty(allocator: Allocator, bit_length: usize) !Self {
-            var self = Self{  };
-            _ = &self;
-            _ = try self.resize(allocator, bit_length, false);
-            return self;
+            var result = Self{  };
+            _ = &result;
+            _ = try result.resize(allocator, bit_length, false);
+            return result;
     }
 
 pub fn initFull(allocator: Allocator, bit_length: usize) !Self {
-            var self = Self{  };
-            _ = &self;
-            _ = try self.resize(allocator, bit_length, true);
-            return self;
+            var result = Self{  };
+            _ = &result;
+            _ = try result.resize(allocator, bit_length, true);
+            return result;
     }
 
 pub fn resize(self: *DynamicBitSetUnmanaged, allocator: Allocator, new_len: usize, fill: bool) !void {
@@ -374,7 +374,7 @@ pub fn resize(self: *DynamicBitSetUnmanaged, allocator: Allocator, new_len: usiz
                 if ((new_len > old_len)) {
                     if ((fill and (old_masks > 0))) {
                         const old_padding_bits = ((old_masks * @bitSizeOf(MaskInt)) - old_len);
-                        const old_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(old_padding_bits)));
+                        const old_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(old_padding_bits)));
                         var m = self.masks[0..old_masks];
                         _ = &m;
                         m[cp_cast_int(usize, (old_masks - 1))] = (m[@as(usize, @intCast((old_masks - 1)))] | (~old_mask));
@@ -386,7 +386,7 @@ pub fn resize(self: *DynamicBitSetUnmanaged, allocator: Allocator, new_len: usiz
                 }
                 if ((new_len > 0)) {
                     const padding_bits = ((new_masks * @bitSizeOf(MaskInt)) - new_len);
-                    const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
+                    const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
                     var m = self.masks[0..new_masks];
                     _ = &m;
                     m[cp_cast_int(usize, (new_masks - 1))] = (m[@as(usize, @intCast((new_masks - 1)))] & last_item_mask);
@@ -592,7 +592,7 @@ pub fn toggleSet(self: *DynamicBitSetUnmanaged, toggles: Self) void {
                     }
                 }
                 const padding_bits = ((num_masks * @bitSizeOf(MaskInt)) - bit_length);
-                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
+                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
                 a[cp_cast_int(usize, (num_masks - 1))] = (a[@as(usize, @intCast((num_masks - 1)))] & last_item_mask);
             }
     }
@@ -615,7 +615,7 @@ pub fn setAll(self: *DynamicBitSetUnmanaged, value: bool) void {
                     }
                 }
                 const padding_bits = ((num_masks * @bitSizeOf(MaskInt)) - bit_length);
-                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
+                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
                 a[cp_cast_int(usize, (num_masks - 1))] = (a[@as(usize, @intCast((num_masks - 1)))] & last_item_mask);
             }
     }
@@ -638,7 +638,7 @@ pub fn toggleAll(self: *DynamicBitSetUnmanaged) void {
                     }
                 }
                 const padding_bits = ((num_masks * @bitSizeOf(MaskInt)) - bit_length);
-                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
+                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
                 a[cp_cast_int(usize, (num_masks - 1))] = (a[@as(usize, @intCast((num_masks - 1)))] & last_item_mask);
             }
     }
@@ -662,7 +662,7 @@ pub fn copyInto(self: *DynamicBitSetUnmanaged, other: Self) void {
                     }
                 }
                 const padding_bits = ((num_masks * @bitSizeOf(MaskInt)) - bit_length);
-                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
+                const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
                 a[cp_cast_int(usize, (num_masks - 1))] = (a[@as(usize, @intCast((num_masks - 1)))] & last_item_mask);
             }
     }
@@ -784,7 +784,7 @@ pub fn toggleFirstSet(self: *DynamicBitSetUnmanaged) ?usize {
                     while (i < __end_12) : (i += 1) {
                         if ((a[@as(usize, @intCast(i))] != 0)) {
                             const index = @ctz(a[@as(usize, @intCast(i))]);
-                            a[cp_cast_int(usize, i)] = (a[@as(usize, @intCast(i))] & (a[@as(usize, @intCast(i))] - (if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1))));
+                            a[cp_cast_int(usize, i)] = (a[@as(usize, @intCast(i))] & (a[@as(usize, @intCast(i))] - (if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1))));
                             return (offset + index);
                         }
                         offset = (offset + @bitSizeOf(MaskInt));
@@ -854,7 +854,7 @@ pub fn supersetOf(self: DynamicBitSetUnmanaged, other: Self) bool {
 pub fn iterator(self: *const DynamicBitSetUnmanaged, comptime options: IteratorOptions) Iterator(options) {
             const num_masks = DynamicBitSetUnmanaged.numMasks(self.bit_length);
             const padding_bits = ((num_masks * @bitSizeOf(MaskInt)) - self.bit_length);
-            const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
+            const last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))), @as(ShiftInt, @intCast(padding_bits)));
             {
                 return DynamicBitSetUnmanaged.Iterator(options).init(self.masks[0..num_masks], last_item_mask);
             }
@@ -865,7 +865,7 @@ pub fn Iterator(comptime options: IteratorOptions) type {
     }
 
 pub fn maskBit(index: usize) MaskInt {
-            return (if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index))))) else @as(MaskInt, cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index)))));
+            return (if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index))))) == .int or @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index))))) == .comptime_int)) @as(MaskInt, @enumFromInt(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index))))) else @as(MaskInt, cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index)))));
     }
 
 pub fn maskIndex(index: usize) usize {
@@ -873,7 +873,7 @@ pub fn maskIndex(index: usize) usize {
     }
 
 pub fn boolMaskBit(index: usize, value: bool) MaskInt {
-            return (if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index))))) else @as(MaskInt, cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index)))));
+            return (if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(value))) == .int or @typeInfo(@TypeOf(@intFromBool(value))) == .comptime_int)) @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index))))) == .int or @typeInfo(@TypeOf(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(value))) == .int or @typeInfo(@TypeOf(@intFromBool(value))) == .comptime_int)) @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index))))) == .comptime_int)) @as(MaskInt, @enumFromInt(cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(value))) == .int or @typeInfo(@TypeOf(@intFromBool(value))) == .comptime_int)) @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index))))) else @as(MaskInt, cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(value))) == .int or @typeInfo(@TypeOf(@intFromBool(value))) == .comptime_int)) @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index)))));
     }
 
 pub fn numMasks(bit_length: usize) usize {
@@ -1022,7 +1022,7 @@ const next_index = @ctz(self.bits_remain);
 .reverse => {
 const leading_zeroes = @clz(self.bits_remain);
             const top_bit = ((@bitSizeOf(MaskInt) - 1) - leading_zeroes);
-            self.bits_remain = (self.bits_remain & (cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @intCast(top_bit))) - 1));
+            self.bits_remain = (self.bits_remain & (cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @intCast(top_bit))) - 1));
             return top_bit;
 },
 }
@@ -1042,7 +1042,7 @@ pub fn initEmpty() Self {
     }
 
 pub fn initFull() Self {
-            return Self{ .mask = (~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))) };
+            return Self{ .mask = (~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))) };
     }
 
 pub inline fn capacity(self: @This()) usize {
@@ -1172,11 +1172,12 @@ pub fn eql(self: @This(), other: Self) bool {
     }
 
 pub fn subsetOf(self: @This(), other: Self) bool {
-            return self.intersectWith(other).eql(self);
+            return self.intersectWith(other).eql();
     }
 
 pub fn supersetOf(self: @This(), other: Self) bool {
-            return other.subsetOf(self);
+        _ = self;
+            return other.subsetOf();
     }
 
 pub fn complement(self: @This()) Self {
@@ -1214,7 +1215,7 @@ pub fn differenceWith(self: @This(), other: Self) Self {
             return result;
     }
 
-pub fn iterator(self: *const @This(), comptime options: IteratorOptions) Iterator(options) {
+pub fn iterator(self: @This(), comptime options: IteratorOptions) Iterator(options) {
             const IterT = Iterator(options);
             return IterT{ .bits_remain = (switch (options.kind) {
 .set => self.mask,
@@ -1230,14 +1231,14 @@ pub fn maskBit(index: usize) MaskInt {
             if ((MaskInt == u0)) {
                 return 0;
             }
-            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @intCast(index)));
+            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @intCast(index)));
     }
 
 pub fn boolMaskBit(index: usize, value: bool) MaskInt {
             if ((MaskInt == u0)) {
                 return 0;
             }
-            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index)));
+            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(value))) == .int or @typeInfo(@TypeOf(@intFromBool(value))) == .comptime_int)) @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index)));
     }
     const Self = @This();
     pub const bit_length: usize = size;
@@ -1278,19 +1279,19 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize) type {
         const mask_len = @bitSizeOf(MaskIntType);
         const num_masks = (((size + mask_len) - 1) / mask_len);
         const last_pad_bits = ((mask_len * num_masks) - size);
-        const computed_last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskIntType) == .@"enum") @as(MaskIntType, @enumFromInt(0)) else @as(MaskIntType, 0))), last_pad_bits);
+        const computed_last_item_mask = cp_shr((~(if (comptime @typeInfo(MaskIntType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskIntType, @enumFromInt(0)) else @as(MaskIntType, 0))), last_pad_bits);
         return struct {
     masks: [num_masks]MaskInt,
 
 pub fn initEmpty() Self {
-            return Self{ .masks = @as([num_masks]MaskInt, @splat(@as(MaskInt, (if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))))) };
+            return Self{ .masks = @as([num_masks]MaskInt, @splat(@as(MaskInt, (if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))))) };
     }
 
 pub fn initFull() Self {
             if ((num_masks == 0)) {
                 return Self{ .masks = &.{} };
             } else {
-                var m: [num_masks]MaskInt = @as([num_masks]MaskInt, @splat(@as(MaskInt, (~(if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))))));
+                var m: [num_masks]MaskInt = @as([num_masks]MaskInt, @splat(@as(MaskInt, (~(if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(MaskInt, @enumFromInt(0)) else @as(MaskInt, 0))))));
                 _ = &m;
                 m[cp_cast_int(usize, (num_masks - 1))] = last_item_mask;
                 return Self{ .masks = m };
@@ -1303,7 +1304,7 @@ pub inline fn capacity(self: @This()) usize {
             return bit_length;
     }
 
-pub fn isSet(self: *const @This(), index: usize) bool {
+pub fn isSet(self: @This(), index: usize) bool {
             if (comptime Environment.allow_assert) {
                 _ = bun.assert((index < bit_length));
             }
@@ -1313,7 +1314,7 @@ pub fn isSet(self: *const @This(), index: usize) bool {
             return ((self.masks[@as(usize, @intCast(maskIndex(index)))] & maskBit(index)) != 0);
     }
 
-pub fn count(self: *const @This()) usize {
+pub fn count(self: @This()) usize {
             var total: usize = 0;
             _ = &total;
             for (cp_iter_slice(self.masks)) |mask| {
@@ -1463,7 +1464,7 @@ pub fn setIntersection(self: *@This(), other: *const Self) void {
             }
     }
 
-pub fn findFirstSet(self: *const @This()) ?usize {
+pub fn findFirstSet(self: @This()) ?usize {
             var offset: usize = 0;
             _ = &offset;
             {
@@ -1501,7 +1502,7 @@ pub fn toggleFirstSet(self: *@This()) ?usize {
             return null;
     }
 
-pub fn eql(self: *const @This(), other: *const Self) bool {
+pub fn eql(self: @This(), other: *const Self) bool {
             var i: usize = 0;
             _ = &i;
             while ((i < num_masks)) : (i = (i + 1)) {
@@ -1512,36 +1513,37 @@ pub fn eql(self: *const @This(), other: *const Self) bool {
             return true;
     }
 
-pub fn subsetOf(self: *const @This(), other: *const Self) bool {
-            return self.intersectWith(other).eql(self);
+pub fn subsetOf(self: @This(), other: *const Self) bool {
+            return self.intersectWith(other).eql();
     }
 
-pub fn supersetOf(self: *const @This(), other: *const Self) bool {
-            return other.subsetOf(self);
+pub fn supersetOf(self: @This(), other: *const Self) bool {
+        _ = self;
+            return other.subsetOf();
     }
 
-pub fn complement(self: *const @This()) Self {
+pub fn complement(self: @This()) Self {
             var result = self.*;
             _ = &result;
             _ = result.toggleAll();
             return result;
     }
 
-pub fn unionWith(self: *const @This(), other: *const Self) Self {
+pub fn unionWith(self: @This(), other: *const Self) Self {
             var result = self.*;
             _ = &result;
             _ = result.setUnion(other);
             return result;
     }
 
-pub fn intersectWith(self: *const @This(), other: *const Self) Self {
+pub fn intersectWith(self: @This(), other: *const Self) Self {
             var result = self.*;
             _ = &result;
             _ = result.setIntersection(other);
             return result;
     }
 
-pub fn hasIntersection(self: *const @This(), other: *const Self) bool {
+pub fn hasIntersection(self: @This(), other: *const Self) bool {
             {
                 var i: i32 = 0;
                 _ = &i;
@@ -1555,14 +1557,14 @@ pub fn hasIntersection(self: *const @This(), other: *const Self) bool {
             return false;
     }
 
-pub fn xorWith(self: *const @This(), other: *const Self) Self {
+pub fn xorWith(self: @This(), other: *const Self) Self {
             var result = self.*;
             _ = &result;
             _ = result.toggleSet(other);
             return result;
     }
 
-pub fn differenceWith(self: *const @This(), other: *const Self) Self {
+pub fn differenceWith(self: @This(), other: *const Self) Self {
             var result = self.*;
             _ = &result;
             const comp = other.complement();
@@ -1571,7 +1573,7 @@ pub fn differenceWith(self: *const @This(), other: *const Self) Self {
             return result;
     }
 
-pub fn iterator(self: *const @This(), comptime options: IteratorOptions) Iterator(options) {
+pub fn iterator(self: @This(), comptime options: IteratorOptions) Iterator(options) {
             return Iterator(options).init((&self.masks), last_item_mask);
     }
 
@@ -1580,7 +1582,7 @@ pub fn Iterator(comptime options: IteratorOptions) type {
     }
 
 pub inline fn maskBit(index: usize) MaskInt {
-            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index)));
+            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @truncate(index)));
     }
 
 pub inline fn maskIndex(index: usize) usize {
@@ -1588,7 +1590,7 @@ pub inline fn maskIndex(index: usize) usize {
     }
 
 pub inline fn boolMaskBit(index: usize, value: bool) MaskInt {
-            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index)));
+            return cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(value))) == .int or @typeInfo(@TypeOf(@intFromBool(value))) == .comptime_int)) @as(MaskInt, @enumFromInt(@intFromBool(value))) else @as(MaskInt, @intFromBool(value))), @as(ShiftInt, @intCast(index)));
     }
     const Self = @This();
     pub const bit_length: usize = size;
@@ -1656,7 +1658,7 @@ const next_index = (@ctz(self.bits_remain) + self.bit_offset);
 .reverse => {
 const leading_zeroes = @clz(self.bits_remain);
             const top_bit = ((@bitSizeOf(MaskInt) - 1) - leading_zeroes);
-            const no_top_bit_mask = (cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum") @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @intCast(top_bit))) - 1);
+            const no_top_bit_mask = (cp_shl((if (comptime @typeInfo(MaskInt) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(MaskInt, @enumFromInt(1)) else @as(MaskInt, 1)), @as(ShiftInt, @intCast(top_bit))) - 1);
             self.bits_remain = (self.bits_remain & no_top_bit_mask);
             return (top_bit + self.bit_offset);
 },

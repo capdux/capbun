@@ -275,8 +275,8 @@ pub fn init(valkey_parent: *JSValkeyClient) bun.JSError!Self {
             const callback_map = jsc.JSMap.create(valkey_parent.globalObject);
             const parent_this = (valkey_parent.this_value.tryGet()).?;
             _ = ParentJS.gc.set(.subscriptionCallbackMap, parent_this, valkey_parent.globalObject, callback_map);
-            const self = Self{ .original_enable_offline_queue = valkey_parent.client.flags.enable_offline_queue, .original_enable_auto_pipelining = valkey_parent.client.flags.enable_auto_pipelining, .is_subscriber = false };
-            return self;
+            const result = Self{ .original_enable_offline_queue = valkey_parent.client.flags.enable_offline_queue, .original_enable_auto_pipelining = valkey_parent.client.flags.enable_auto_pipelining, .is_subscriber = false };
+            return result;
     }
 
 pub fn parent(self: *SubscriptionCtx) *JSValkeyClient {

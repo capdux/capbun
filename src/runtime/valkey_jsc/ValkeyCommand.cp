@@ -82,7 +82,7 @@ pub struct Promise {
             return_as_buffer: _.meta.return_as_buffer,
         };
 
-        const js_value = value.toJSWithOptions(globalObject, options) catch |e| {
+        const js_value = value.toJSWithOptions(globalObject, options) catch e => {
             (_.reject(globalObject, globalObject.takeError(e)))?;
             return;
         };

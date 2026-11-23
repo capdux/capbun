@@ -107,7 +107,7 @@ pub fn jsSend(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
         globalObject,
         callframe.this(),
         &cmd,
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send command", e);
     };
     return promise.toJS();
@@ -131,7 +131,7 @@ pub fn get(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
             command: "GET",
             args: .{ .args = &.{key} },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send GET command", e);
     };
     return promise.toJS();
@@ -155,7 +155,7 @@ pub fn getBuffer(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
             args: .{ .args = &.{key} },
             meta: .{ .return_as_buffer = true },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send GET command", e);
     };
     return promise.toJS();
@@ -202,7 +202,7 @@ pub fn set(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
             command: "SET",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SET command", e);
     };
 
@@ -227,7 +227,7 @@ pub fn incr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: "INCR",
             args: .{ .args = &.{key} },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send INCR command", e);
     };
     return promise.toJS();
@@ -251,7 +251,7 @@ pub fn decr(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: "DECR",
             args: .{ .args = &.{key} },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send DECR command", e);
     };
     return promise.toJS();
@@ -276,7 +276,7 @@ pub fn exists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
             args: .{ .args = &.{key} },
             meta: .{ .return_as_bool = true },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send EXISTS command", e);
     };
     return promise.toJS();
@@ -311,7 +311,7 @@ pub fn expire(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
             command: "EXPIRE",
             args: .{ .raw = &.{ key.slice(), seconds_slice } },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send EXPIRE command", e);
     };
     return promise.toJS();
@@ -335,7 +335,7 @@ pub fn ttl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callframe
             command: "TTL",
             args: .{ .args = &.{key} },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send TTL command", e);
     };
     return promise.toJS();
@@ -380,7 +380,7 @@ pub fn srem(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: "SREM",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SREM command", e);
     };
     return promise.toJS();
@@ -419,7 +419,7 @@ pub fn srandmember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, c
             command: "SRANDMEMBER",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SRANDMEMBER command", e);
     };
     return promise.toJS();
@@ -444,7 +444,7 @@ pub fn smembers(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, call
             command: "SMEMBERS",
             args: .{ .args = &.{key} },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SMEMBERS command", e);
     };
     return promise.toJS();
@@ -483,7 +483,7 @@ pub fn spop(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: "SPOP",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SPOP command", e);
     };
     return promise.toJS();
@@ -528,7 +528,7 @@ pub fn sadd(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: "SADD",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SADD command", e);
     };
     return promise.toJS();
@@ -560,7 +560,7 @@ pub fn sismember(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, cal
             args: .{ .args = &.{ key, value } },
             meta: .{ .return_as_bool = true },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SISMEMBER command", e);
     };
     return promise.toJS();
@@ -622,7 +622,7 @@ pub fn hmget(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
             command: "HMGET",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send HMGET command", e);
     };
     return promise.toJS();
@@ -654,7 +654,7 @@ pub fn hincrby(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
             command: "HINCRBY",
             args: .{ .slices = &.{ key_slice, field_slice, value_slice } },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send HINCRBY command", e);
     };
     return promise.toJS();
@@ -686,7 +686,7 @@ pub fn hincrbyfloat(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, 
             command: "HINCRBYFLOAT",
             args: .{ .slices = &.{ key_slice, field_slice, value_slice } },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send HINCRBYFLOAT command", e);
     };
     return promise.toJS();
@@ -789,7 +789,7 @@ fn hsetImpl(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: command,
             args: .{ .slices = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         const msg = if (bun.strings.eqlComptime(command, "HSET")) "Failed to send HSET command" else "Failed to send HMSET command";
         return protocol.valkeyErrorToJS(globalObject, msg, e);
     };
@@ -851,7 +851,7 @@ pub fn hsetnx(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfr
             args: .{ .args = &.{ key, field, value } },
             meta: .{ .return_as_bool = true },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send HSETNX command", e);
     };
     return promise.toJS();
@@ -880,7 +880,7 @@ pub fn hexists(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callf
             args: .{ .args = &.{ key, field } },
             meta: .{ .return_as_bool = true },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send HEXISTS command", e);
     };
     return promise.toJS();
@@ -909,7 +909,7 @@ pub fn ping(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfram
             command: "PING",
             args: .{ .args = args_slice },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send PING command", e);
     };
     return promise.toJS();
@@ -1046,7 +1046,7 @@ pub fn smove(client: *JSValkeyClient, globalObject: *jsc.JSGlobalObject, callfra
             args: .{ .args = &.{ source, destination, member } },
             meta: .{ .return_as_bool = true },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SMOVE command", e);
     };
     return promise.toJS();
@@ -1104,7 +1104,7 @@ pub fn publish(
             command: "PUBLISH",
             args: .{ .args = args.items },
         },
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send PUBLISH command", e);
     };
 
@@ -1175,7 +1175,7 @@ pub fn subscribe(
         globalObject,
         callframe.this(),
         &command,
-    ) catch |e| {
+    ) catch e => {
         // If we catch an error, we need to clean up any handlers we may have added && fall out of subscription mode
         client._subscription_ctx.clearAllReceiveHandlers(globalObject)?;
         return protocol.valkeyErrorToJS(globalObject, "Failed to send SUBSCRIBE command", e);
@@ -1202,7 +1202,7 @@ fn sendUnsubscribeRequestAndCleanup(
         globalObject,
         this_js,
         &command,
-    ) catch |e| {
+    ) catch e => {
         return protocol.valkeyErrorToJS(globalObject, "Failed to send UNSUBSCRIBE command", e);
     };
 

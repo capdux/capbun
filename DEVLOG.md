@@ -1767,3 +1767,5 @@
 - [Wave #93] 修复 `typegraphql/ts_example.test.ts` ASan SEGV：`src/js_parser/ast/parseTypescript.cp` `parseTypeScriptDecorators` 中 `p.parseExprWithFlags(..., &decorators.unusedCapacitySlice()[0])?` 在 codegen 时整行被静默丢弃（未初始化 `0xaa` 被计入长度），提取 `slot` 后恢复生成；同时修复 `src/js_parser/ast/visit.cp` `visitTSDecorators` 循环体被丢弃及 `recordDeclaredSymbol` `sym_ref.isSymbol()`。
 
 - [Wave #94] 清零 `src/test_runner/` 剩余 4 文件（`expect.cp`, `jest.cp`, `pretty_format.cp`, `snapshot.cp` -> 12/12 全清）与 `src/analytics/schema.cp` 的 `--strict` 违规；修复 `pretty_format.cp` 两处 `bun.cast(*Self, ctx.?)` 为显式 `*Self` 类型注解，避免 `(&Self)` 生成错误；`zig:check` 5/5 通过。
+
+- [Wave #95] 清零 `src/runtime/valkey_jsc/` 剩余 3 文件（`ValkeyCommand.cp`, `js_valkey_functions.cp`, `js_valkey.cp` -> 7/7 全清）与 `src/collections/bit_set.cp` 的 `--strict` 违规；修复 `js_valkey.cp:832` `callframe.this()` 及 `SocketHandler` 11 处 `static fn`；`zig:check` 5/5 通过。
