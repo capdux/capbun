@@ -1573,34 +1573,30 @@ pub fn doRenderHeadResponse(pair: *HeaderResponsePair) void {
                 _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 return;
             }
-            const server = (blk: {
-            break :blk server_opt.?;
-
-});
             const globalThis = req_ctx.server.?.globalThis;
             if (response.getFetchHeaders()) |headers| {
                 _ = &headers;
                 if (comptime (!http3)) {
                     if (headers.fastGet(.TransferEncoding)) |transfer_encoding| {
                         _ = &transfer_encoding;
-                        const transfer_encoding_str = bun.handleOom(transfer_encoding.toSliceClone((server).?.allocator));
+                        const transfer_encoding_str = bun.handleOom(transfer_encoding.toSliceClone(req_ctx.server.?.allocator));
                         var _guard_te = DeinitGuard(@TypeOf(transfer_encoding_str)){ .val = transfer_encoding_str };
                         _ = &_guard_te;
                         var ___guard_te_moved = false; _ = &___guard_te_moved;
                         defer if (!___guard_te_moved) { ___guard_te_moved = true; const __T = @TypeOf(_guard_te); if (@typeInfo(__T) == .optional) { if (_guard_te) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_te.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_te; _drop_val.__cp_deinit(); } };
                         _ = req_ctx.renderMetadata();
-                        _ = (resp).?.writeHeader("transfer-encoding", transfer_encoding_str.slice());
+                        _ = App.Response.writeHeader(resp, "transfer-encoding", transfer_encoding_str.slice());
                         _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                         return;
                     }
                 }
                 if (headers.fastGet(.ContentLength)) |content_length| {
                     _ = &content_length;
-                    const content_length_str = content_length.toSlice((server).?.allocator);
+                    const content_length_str = content_length.toSlice(req_ctx.server.?.allocator);
                     const len = (blk_catch_14: { break :blk_catch_14 ((std.fmt.parseInt(usize, content_length_str.slice(), 10)) catch |__ce_14| { _ = &__ce_14; break :blk_catch_14 0; }); });
                     _ = content_length_str.deinit();
                     _ = req_ctx.renderMetadata();
-                    _ = (resp).?.writeHeaderInt("content-length", len);
+                    _ = App.Response.writeHeaderInt(resp, "content-length", len);
                     _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                     return;
                 }
@@ -1618,9 +1614,9 @@ var blob = bodyValue.useAsAnyBlobAllowNonUTF8String();
             const size = blob.size();
             _ = req_ctx.renderMetadata();
             if ((size == Blob.max_size)) {
-                _ = (resp).?.writeHeaderInt("content-length", 0);
+                _ = App.Response.writeHeaderInt(resp, "content-length", 0);
             } else {
-                _ = (resp).?.writeHeaderInt("content-length", size);
+                _ = App.Response.writeHeaderInt(resp, "content-length", size);
             }
             _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
@@ -1639,23 +1635,23 @@ if (blob.isS3()) {
             _ = req_ctx.renderMetadata();
             _ = blob.resolveSize();
             if ((blob.size == Blob.max_size)) {
-                _ = (resp).?.writeHeaderInt("content-length", 0);
+                _ = App.Response.writeHeaderInt(resp, "content-length", 0);
             } else {
-                _ = (resp).?.writeHeaderInt("content-length", blob.size);
+                _ = App.Response.writeHeaderInt(resp, "content-length", blob.size);
             }
             _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 .Locked => {
 _ = req_ctx.renderMetadata();
             if (comptime (!http3)) {
-                _ = (resp).?.writeHeader("transfer-encoding", "chunked");
+                _ = App.Response.writeHeader(resp, "transfer-encoding", "chunked");
             }
             _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },
 .Used, .Null, .Empty, .Error => {
 _ = req_ctx.renderMetadata();
             {
-                _ = (resp).?.writeHeaderInt("content-length", 0);
+                _ = App.Response.writeHeaderInt(resp, "content-length", 0);
             }
             _ = req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 },

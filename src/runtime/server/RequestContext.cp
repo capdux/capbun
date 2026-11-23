@@ -1491,7 +1491,6 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 return;
             }
-            const server = unsafe { server_opt.? };
             const globalThis = req_ctx.server.?.globalThis;
             if (headers := response.getFetchHeaders()) {
                 // first respect the headers
@@ -1500,10 +1499,10 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     // doWriteHeaders() calls fastRemove(.TransferEncoding) and derefs the
                     // FetchHeaders, freeing that StringImpl before we write it. Clone so
                     // the bytes outlive renderMetadata().
-                    const transfer_encoding_str = bun.handleOom(transfer_encoding.toSliceClone(server.allocator));
+                    const transfer_encoding_str = bun.handleOom(transfer_encoding.toSliceClone(req_ctx.server.?.allocator));
                     const _guard_te = DeinitGuard<@TypeOf(transfer_encoding_str)>{ val: transfer_encoding_str };
                     req_ctx.renderMetadata();
-                    resp.writeHeader("transfer-encoding", transfer_encoding_str.slice());
+                    App.Response.writeHeader(resp, "transfer-encoding", transfer_encoding_str.slice());
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
 
                     return;
@@ -1511,12 +1510,12 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 if (content_length := headers.fastGet(.ContentLength)) {
                     // Parse before renderMetadata(): doWriteHeaders() will fastRemove(.ContentLength)
                     // and deref the FetchHeaders, freeing the borrowed StringImpl.
-                    const content_length_str = content_length.toSlice(server.allocator);
+                    const content_length_str = content_length.toSlice(req_ctx.server.?.allocator);
                     const len = std.fmt.parseInt(usize, content_length_str.slice(), 10) catch 0;
                     content_length_str.deinit();
 
                     req_ctx.renderMetadata();
-                    resp.writeHeaderInt("content-length", len);
+                    App.Response.writeHeaderInt(resp, "content-length", len);
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                     return;
                 }
@@ -1532,9 +1531,9 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                     req_ctx.renderMetadata();
 
                     if (size == Blob.max_size) {
-                        resp.writeHeaderInt("content-length", 0);
+                        App.Response.writeHeaderInt(resp, "content-length", 0);
                     } else {
-                        resp.writeHeaderInt("content-length", size);
+                        App.Response.writeHeaderInt(resp, "content-length", size);
                     }
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 },
@@ -1556,20 +1555,20 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
 
                     blob.resolveSize();
                     if (blob.size == Blob.max_size) {
-                        resp.writeHeaderInt("content-length", 0);
+                        App.Response.writeHeaderInt(resp, "content-length", 0);
                     } else {
-                        resp.writeHeaderInt("content-length", blob.size);
+                        App.Response.writeHeaderInt(resp, "content-length", blob.size);
                     }
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 },
                 .Locked => {
                     req_ctx.renderMetadata();
-                    if (comptime !http3) resp.writeHeader("transfer-encoding", "chunked");
+                    if (comptime !http3) App.Response.writeHeader(resp, "transfer-encoding", "chunked");
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 },
                 .Used, .Null, .Empty, .Error => {
                     req_ctx.renderMetadata();
-                    unsafe { resp.writeHeaderInt("content-length", 0); }
+                    unsafe { App.Response.writeHeaderInt(resp, "content-length", 0); }
                     req_ctx.endWithoutBody(req_ctx.shouldCloseConnection());
                 },
             }
