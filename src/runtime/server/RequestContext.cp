@@ -1492,7 +1492,7 @@ pub fn NewRequestContext(comptime ssl_enabled: bool, comptime debug_mode: bool, 
                 return;
             }
             const server = unsafe { server_opt.? };
-            const globalThis = server.globalThis;
+            const globalThis = unsafe { server.globalThis };
             if (headers := response.getFetchHeaders()) {
                 // first respect the headers
                 if (comptime !http3) if (transfer_encoding := headers.fastGet(.TransferEncoding)) {
