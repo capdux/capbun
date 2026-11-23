@@ -1,6 +1,7 @@
 import bun from "bun";
 
 const Environment = bun.Environment;
+struct ServerWebSocketPtrHolder { p: *ServerWebSocket }
 const HTTP = bun.http;
 const Output = bun.Output;
 const uws = bun.uws;
@@ -321,9 +322,9 @@ static fn upgrade(client: *NodeHTTPResponse, data_value: JSValue, sec_websocket_
         // and will have its own lifecycle management
         client.poll_ref.unref(client.server.globalThis().bunVM());
         if (raw_response == .SSL) {
-            * = raw_response.SSL.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+            * = raw_response.SSL.upgrade(@TypeOf(@as(ServerWebSocketPtrHolder, undefined).p), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
         } else {
-            * = raw_response.TCP.upgrade(*ServerWebSocket, ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+            * = raw_response.TCP.upgrade(@TypeOf(@as(ServerWebSocketPtrHolder, undefined).p), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
         }
     }
     return true;

@@ -105,6 +105,10 @@ pub const AbortEvent = enum(u8) {
     pub fn name(__cp_self: @This()) []const u8 { return @tagName(__cp_self); }
 };
 
+pub const ServerWebSocketPtrHolder = struct {
+    p: *ServerWebSocket,
+};
+
 pub fn DerefGuard(comptime T: type) type {
     return struct {
         ptr: *T,
@@ -418,9 +422,9 @@ pub fn upgrade(client: *NodeHTTPResponse, data_value: JSValue, sec_websocket_pro
             client.flags.upgraded = true;
             _ = client.poll_ref.unref(client.server.globalThis().bunVM());
             if ((raw_response == .SSL)) {
-                _ = raw_response.SSL.upgrade((&ServerWebSocket), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+                _ = raw_response.SSL.upgrade(@TypeOf(@as(ServerWebSocketPtrHolder, undefined).p), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
             } else {
-                _ = raw_response.TCP.upgrade((&ServerWebSocket), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
+                _ = raw_response.TCP.upgrade(@TypeOf(@as(ServerWebSocketPtrHolder, undefined).p), ws, websocket_key, sec_websocket_protocol_value, sec_websocket_extensions_value, upgrade_ctx);
             }
         }
         return true;

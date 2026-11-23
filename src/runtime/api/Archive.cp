@@ -390,7 +390,7 @@ fn AsyncTask(comptime Context: type): type {
         concurrent_task: jsc.ConcurrentTask = .{},
         ref: bun.Async.KeepAlive = .{},
 
-        static fn create(globalThis: *jsc.JSGlobalObject, ctx: Context): *Self! {
+        static fn create(globalThis: *jsc.JSGlobalObject, ctx: Context): *Self {
             const vm = globalThis.bunVM();
             const created = bun.new(Self, .{
                 .ctx = ctx,
@@ -509,7 +509,7 @@ fn startExtractTask(
         store: store,
         path: path_copy.slice,
         glob_patterns: glob_patterns,
-    })?;
+    });
     * = path_copy.take();
     store_guard.armed = false;
 
@@ -584,7 +584,7 @@ fn startBlobTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Store
         store: store,
         compress: compress,
         output_type: output_type,
-    })?;
+    });
     store_guard.armed = false;
 
     const promise_js = task.promise.value();
@@ -692,7 +692,7 @@ fn startWriteTask(
         data: data,
         path: path_z.slice,
         compress: compress,
-    })?;
+    });
     * = path_z.take();
     data_guard.armed = false;
 
@@ -859,7 +859,7 @@ fn startFilesTask(globalThis: *jsc.JSGlobalObject, store: *jsc.WebCore.Blob.Stor
     const task = FilesTask.create(globalThis, .{
         store: store,
         glob_patterns: glob_patterns,
-    })?;
+    });
     store_guard.armed = false;
 
     const promise_js = task.promise.value();
