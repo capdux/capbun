@@ -244,9 +244,9 @@ pub struct ChunkCssImportOrder {
         }
     }
 
-    fn fmt(ctx: *LinkerContext): ChunkCssImportOrderDebug {
+    fn fmt(_: *const @This(), ctx: *LinkerContext): ChunkCssImportOrderDebug {
         return {
-            inner: &_,
+            inner: _,
             ctx: ctx,
         };
     }

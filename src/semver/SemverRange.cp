@@ -47,8 +47,8 @@ export struct Comparator {
 
     export const Formatter = ComparatorFormatter;
 
-    export fn fmt(buf: []const u8): @This().Formatter {
-        return .{ .buffer = buf, .comparator = &_ };
+    export fn fmt(_: *const Comparator, buf: []const u8): @This().Formatter {
+        return .{ .buffer = buf, .comparator = _ };
     }
 
     export static fn satisfies(
@@ -186,8 +186,8 @@ export @root struct Range {
 
     export const Formatter = RangeFormatter;
 
-    export fn fmt(buf: []const u8): @This().Formatter {
-        return .{ .buffer = buf, .range = &_ };
+    export fn fmt(_: *const Range, buf: []const u8): @This().Formatter {
+        return .{ .buffer = buf, .range = _ };
     }
 
     export static fn satisfies(range: Range, version: Version, range_buf: string, version_buf: string): bool {

@@ -252,8 +252,8 @@ _ = bun.writeAnyToHasher(hasher, idx);
 }
     }
 
-pub fn fmt(self: ChunkCssImportOrder, ctx: *LinkerContext) ChunkCssImportOrderDebug {
-            return .{ .inner = (&self), .ctx = ctx };
+pub fn fmt(self: *const ChunkCssImportOrder, ctx: *LinkerContext) ChunkCssImportOrderDebug {
+            return .{ .inner = self, .ctx = ctx };
     }
     pub const Layers = CssImportOrderLayers;
     pub const CssImportOrderDebug = ChunkCssImportOrderDebug;

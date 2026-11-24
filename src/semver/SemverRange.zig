@@ -115,8 +115,8 @@ pub fn eql(lhs: Comparator, rhs: Comparator) bool {
             return ((lhs.op == rhs.op) and lhs.version.eql(rhs.version));
     }
 
-pub fn fmt(self: Comparator, buf: []const u8) @This().Formatter {
-            return .{ .buffer = buf, .comparator = (&self) };
+pub fn fmt(self: *const Comparator, buf: []const u8) @This().Formatter {
+            return .{ .buffer = buf, .comparator = self };
     }
 
 pub fn satisfies(comparator: Comparator, version: Version, comparator_buf: []const u8, version_buf: []const u8) bool {
@@ -208,8 +208,8 @@ pub fn eql(lhs: Range, rhs: Range) bool {
         return (lhs.left.eql(rhs.left) and lhs.right.eql(rhs.right));
 }
 
-pub fn fmt(self: Range, buf: []const u8) @This().Formatter {
-        return .{ .buffer = buf, .range = (&self) };
+pub fn fmt(self: *const Range, buf: []const u8) @This().Formatter {
+        return .{ .buffer = buf, .range = self };
 }
 
 pub fn satisfies(range: Range, version: Version, range_buf: []const u8, version_buf: []const u8) bool {

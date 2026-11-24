@@ -1819,3 +1819,5 @@
 - [Phase 2 第六批修复] 修复 `test/regression/issue/text-chunk-null-access.test.ts` 在 `lol_html_text_chunk_is_removed` 触发的 ASan SEGV：`src/runtime/api/html_rewriter.cp` 通过 `WrapperGuardType(...)` 返回局部 `struct { ~init() }`，导致 `cpc` RAII 分析未能识别其析构方法而漏注 `defer __cp_deinit()`；改为显式 `defer cleanupWrapper(ZigType, field_name, wrapper)` 后 `zig:check` 5/5 通过。
 
 - [Phase 2 第七批修复] 解决 2 项运行时缺陷：(1) 用已修复一元负号的 `cpc` 重编 `src/interchange/json5.cp`，`json5.zig:512` 恢复 `(-n)` 保留 `-0.0` 符号位；(2) `src/runtime/api/bun/Terminal.cp` `createPty` 补回 `bun.sys.updateNonblocking(..., true)` 与 `bun.sys.setCloseOnExec(...)`，根除 `/dev/ptmx` 处于阻塞模式时 `PipeReader` 二次排空读在内核永久阻塞导致 `Bun.Terminal` / `26286.test.ts` 卡死问题；`zig:check` 5/5 通过。
+
+- [Phase 2 第八批修复] 根治 `migrate-bun-lockb-v2.test.ts` 中 `SemverRange.zig:147` ASan `stack-buffer-overflow`：`SemverRange.cp` `Comparator.fmt`/`Range.fmt` 省略指针接收者导致按值传参返回 `&_` 栈帧悬垂指针；同步全仓 `rg` 扫描清理 `Chunk.cp:247` 同类隐患，全部改用 `_: *const ...` 接收者并返回 `_`，`zig:check` 5/5 通过。
