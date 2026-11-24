@@ -1900,3 +1900,7 @@
 - Phase 3 第十九批安全性加固要点：`generateChunksInParallel.cp:295` 新增 `DuplicatesMapGuard`，在作用域退出与 `error.DuplicateOutputPath` 早退路径统一遍历释放每个 `DuplicateEntry.sources` 及 `duplicates_map` 本体。
 
 - Phase 3 第二十批安全性加固要点：`security_scanner.cp`、`isolated_install.cp`、`PackageManager.cp` 补齐所有权转移后 `errdefer` 解除标记消除 Double-Free；`PackageManagerLifecycle.cp:129` 补齐 `stackFallback` 堆回退释放；`yarn.cp`、`PackageInstaller.cp`、`PackageManagerDirectories.cp` 补齐空切片长度校验防止无符号下溢。
+
+- Phase 3 第二十一批安全性加固要点：`Headers.cp:29-35` `Headers.clone()` 将 `entries.clone` 与 `buf.clone` 拆分，并在 `buf.clone` 失败时释放 `entries`，消除 OOM 路径泄漏。
+
+- Phase 3 第二十一批（续）安全性加固要点：`interpreter.cp:1112-1114` 将 `DeinitGuard<ShellArgs>` 提前至 `readFileAlloc` 调用前，防止文件读取失败时泄漏 `ArenaAllocator`。

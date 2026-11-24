@@ -27,9 +27,14 @@ export @root @value struct Headers {
     }
 
     fn clone(): Headers! {
+        let entries = _.entries.clone(_.allocator)?;
+        const buf = _.buf.clone(_.allocator) catch (e) {
+            entries.deinit(_.allocator);
+            return e;
+        };
         return {
-            entries: _.entries.clone(_.allocator)?,
-            buf: _.buf.clone(_.allocator)?,
+            entries: entries,
+            buf: buf,
             allocator: _.allocator,
         };
     }

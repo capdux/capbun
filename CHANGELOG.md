@@ -2339,3 +2339,7 @@
 - Phase 3 第十九批：修复 `src/bundler/linker_context/generateChunksInParallel.{cp,zig}` `duplicates_map` 及其条目切片列表在重复路径早退时的堆内存泄漏。
 
 - Phase 3 第二十批：加固 7 个 `src/install/` `.cp` 模块及其生成的 `.zig`（`src/install/{PackageManager/security_scanner,isolated_install,PackageManager,PackageManager/PackageManagerLifecycle,yarn,PackageInstaller,PackageManager/PackageManagerDirectories}.{cp,zig}`）。
+
+- Phase 3 第二十一批：修复 `src/http/Headers.{cp,zig}` `Headers.clone()` 在 `buf.clone` OOM 时泄漏已克隆 `entries` 的问题。
+
+- Phase 3 第二十一批（续）：修复 `src/shell/interpreter.{cp,zig}` `initAndRunFromFile` 在 `readFileAlloc` 失败路径泄漏 `ShellArgs` 的问题。
