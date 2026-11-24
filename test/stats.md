@@ -255,3 +255,7 @@
 | `test/js/bun/{md,json5,ini,cookie}/` (14 files, `bun-debug`) | debug (`abb8c9b9`) | 1652 | 0 | - | **1652/0 全绿**（36 snapshots，2908 expects，74.29s，exit 0） |
 
 | `test/js/bun/crypto/` (3 files, `bun-debug`) | debug (`abb8c9b9`) | 10248 | 0 | - | **10248/0 全绿**（29400 expects，101.60s，exit 0） |
+
+| `test/js/bun/glob/` (5 文件除 `scan`) & `bun/plugin/` (2 files, `bun-debug`) | debug (`abb8c9b9`) | 64 | 1 | 1 todo | `plugin` **30/0**、`glob` **34/1**（`match`/`path-length`/`proto`/`stress` 全绿，仅 `leak > scan` 在 Debug 超 60s） |
+
+| 新版 Release (`c79d4f22d`) 定点复验 (`production`/`init`/`archive`/`s3-leak`/`os`/`dirname`/`NODE_EXTRA_CA_CERTS`/`hot-sourcemap`) | release (`c79d4f22d`) | 189 | 0 | 1 skip | **189/0 全绿**（`production` 8/0 289ms、`hot` 4/0、`NODE_EXTRA_CA_CERTS` 4/0、`archive` 100/0、`os` 51/0、`dirname` 10/0、`init` 10/0、`s3-leak` 1/0） |
