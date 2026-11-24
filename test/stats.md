@@ -233,3 +233,5 @@
 | `test/{package-json-lint.test.ts,snippets,config}` & `test/v8/v8.test.ts` | release | 40 | 1 | 2 skip / 3 todo | `package-json-lint` **21/0**、`snippets` **1/0**、`config/bunfig/preload` **18/0**；`v8.test.ts` 仅宿主机 `node@26.1.0` 头文件移除 `WriteUtf8`（Bun 自身 `node@24.3.0` 编译成功） |
 
 | `test/js/node/zlib/` (7 files) & `bun/archive.test.ts` | release | 502 | 1 | 3 skip | **502/0 逻辑**（`zlib` 其余 4 文件 **14/0**、`archive` **100/0**、`leak.test.ts` 单跑 **8/0**） |
+
+| `test/napi/` (全部 59 files, 串行) | release | 527 | 0 | 25 todo | **527/0 全绿**（1246 expects，113.00s，exit 0；消除 `--max-concurrency=2` 下 `node-gyp` 目录竞争） |
