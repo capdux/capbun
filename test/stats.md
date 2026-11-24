@@ -65,7 +65,7 @@
 | `test/bake/dev/{bundle,plugins,vfile,request-cookies,server-sourcemap,esm,import-meta-inline,react-response}.test.ts` & 顶层 (`deinitialization`, `serve-plugins`, `framework-router`, `dev-and-prod`) | debug / release | 117 | 0 | - | `DevServer.cp` + `SourceMapStore.cp` 修复 + `internal-for-testing` 环境变量后全绿 |
 | `test/js/bun/glob/scan.test.ts` & `esbuild-child_process.test.ts` | release (新版) | 171 | 0 | - | `glob.cp` 与 `subprocess.cp` + `child_process.ts` 修复后全绿 |
 | `test/js/bun/jsc-stress/` (1) & `cli/{update_interactive_*,heap-prof}` (4) & `internal/` (4) | release / debug | 133 | 0 | - | `jsc-stress` **83/0**、`update_interactive`+`heap-prof` **43/0**、`internal/` 4 文件 **7/0** |
-| `test/regression/issue/` (385 files, `cb2eac2e` 97 批扫测) | release (新版) | 1100+ | 12 | 2 file | **91/97 批全绿**；剩余 6 批（`1632`/`16474`/`22650`/`24157`/`25589`/`patch-bounds-check`）正在排查 |
+| `test/regression/issue/` (385 files, `cb2eac2e` 97 批扫测) | release (新版) | 1120+ | 0 | - | **385/385 文件全部通过**（`1632`/`16474` 5/0、`22650` 1/0、`24157` 2/0、`25589` 6/0；清理 `/root/.bun/install/cache/lodash@*` 旧缓存后 `patch-bounds-check` 3/0） |
 
 ## 二、 剩余非阻塞环境/外网/长耗时差异汇总
 
