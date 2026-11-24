@@ -143,3 +143,5 @@
 | `test/js/web/workers/{structuredClone-classes,worker}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 77 | 3 | 1 todo | `structuredClone-classes` **57/0** 全绿；`worker` **20/3**（仅 Debug 启动慢触发 500ms/1000ms 内部定时器，Release 已 23/0） |
 
 | `test/js/bun/s3/` (10 files) | release | 70 | 0 | 294 skip | **70/0 全绿**（102 expects，1.15s，`s3-stream-cancel-leak` 等全部通过） |
+
+| `test/js/web/{streams,websocket}/` (29 files) | release | 234 | 0 | 10 skip | **234/0 全绿**（4 snapshots，453 expects，21.37s） |
