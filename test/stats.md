@@ -57,17 +57,15 @@
 
 | `test/bundler/css/` (8 files) & `esbuild/` (13 files) | release (新版) | 945 | 0 | - | `findImportedFilesInCSSOrder.cp` + `maybe.cp` 修复后 21 文件全绿 |
 | `test/bundler/bundler_{cjs2esm,html,css}.test.ts` | release (新版) | 37 | 0 | - | `computeChunks.cp` + `maybe.cp` 修复后全绿 |
-| `test/bundler/` 其余 47 文件 (`3f8dcd1c` 并发扫测) | release (新版) | 793+ | 8 | 3 timeout | **43/47 文件 0 失败**（`standalone` 18/0, `env/feature_flag/drop/edgecase` 165/0 等）；仅余 `--compile` 相关 8 项失败 |
+| `test/bundler/` 其余 47 文件 (`3f8dcd1c` 并发扫测) | release (新版) | 814+ | 1 | 2 timeout | **45/47 文件 0 失败**；`Blob.cp` 修复后 `bun-build-compile` **11/0**、`compile-wasm` **1/0**、`bundler_compile` 嵌入式/10344 **9/0**；仅余 `compile-sourcemap` inline 1 fail (8/1) |
 | `test/js/bun/css/css-fuzz.test.ts` | release (新版) | 5 | 0 | - | `css_parser.cp` 递归深度保护后 `deepNesting(300)` 无 SIGSEGV 全绿 |
 | `test/cli/hot/` (3 files) | release (新版) | 15 | 0 | - | `ModuleLoader.cp` 修复后全绿 |
 | `test/cli/install/bun-install-cpu-os.test.ts` & `bun-lock.test.ts` | release (新版) | 22 | 0 | - | `Tree.cp` 修复 + `internal-for-testing` 环境变量后全绿 |
-| `test/cli/install/` 其余 51 文件 (加前序 10 文件共 61 文件) | release (新版) | 1291+ | 84 | 3 timeout | 40/51 文件 0 失败（`bun-run` 291/0, `npmrc` 24/0, `isolated-install` 46/0, `bun-pack` 70/0）；失败集中于 `bun-workspaces`(34)、`bun-pm-why`(13)、`registry`(11)、`lifecycle`(10)、`Git URL/GHSA/upgrade` 离线(15) |
-| `test/cli/install/bun-workspaces.test.ts` & `bun-install-registry` 定向 & `lifecycle-scripts` & `security-scanner-matrix-with-node-modules` | debug/release | 902 | 6 | - | `WorkspaceMap.cp`+`Tree.cp`+`bun.lock.cp` 修复后 **`bun-workspaces` 63/0**、`registry` 核心 19/0、`lifecycle` `--trust` 全过 (97/6)、`scanner-matrix` **720/0**、`bunx` 31/1 |
-| `test/bake/dev/{bundle,plugins,vfile,request-cookies,server-sourcemap}.test.ts` | debug (`bun bd`) | 29 | 0 | - | `DevServer.cp` + `SourceMapStore.cp` 修复后全绿 |
-| `test/js/bun/glob/scan.test.ts` (`bad options` & `broken symlinks`) & `bundler_compile` (`EmbeddedFileOutfile`) | debug (`bun bd`) | 3 | 0 | - | `glob.cp` 与 `Blob.cp` 修复后全绿 |
-| `test/bake/dev/{esm,import-meta-inline,react-response}.test.ts` | release (新版) | 30 | 0 | - | 全绿（含 `DEV:esm-11`） |
-| `test/bake/` 顶层 (`deinitialization`, `framework-router`, `dev-and-prod`) | release | 13 | 1 | - | 仅 1 处非崩溃失败 |
-| `test/js/bun/http/` 其余 16 文件 + `spawn/` 24 文件 + `glob/` 3 文件 | release (新版) | 716 | 5 | - | `http` 403/3 (`proxy` #12007 超时)、`spawn` 120/0、`glob` 193/2 |
+| `test/cli/install/` 其余 51 文件 (加前序 10 文件共 61 文件) | release (新版) | 1979+ | 22 | 2 timeout | `WorkspaceMap.cp`+`Tree.cp`+`bun.lock.cp`+`pm_cmd.cp` 修复后：`lifecycle-scripts` **103/0**、`bun-workspaces`+`registry` **286/0**、`scanner-matrix-without-nm` **688/0**、`scanner-matrix-with-nm` **720/0**、`bun-install` `bin-linking` **1/0** |
+| `test/bake/dev/{bundle,plugins,vfile,request-cookies,server-sourcemap,esm,import-meta-inline,react-response}.test.ts` & `dev-and-prod` | debug / release | 71 | 0 | - | `DevServer.cp` + `SourceMapStore.cp` 修复后 9 文件全绿（含 `dev-and-prod` **12/0**） |
+| `test/js/bun/glob/scan.test.ts` & `esbuild-child_process.test.ts` | release (新版) | 171 | 0 | - | `glob.cp` 与 `subprocess.cp` + `child_process.ts` 修复后全绿 |
+| `test/js/bun/jsc-stress/` (1) & `cli/{update_interactive_*,heap-prof}` (4) & `internal/` (4) | release / debug | 133 | 0 | - | `jsc-stress` **83/0**、`update_interactive`+`heap-prof` **43/0**、`internal/` 4 文件 **7/0** |
+| `test/regression/issue/` (385 files, `cb2eac2e` 97 批扫测) | release (新版) | 1100+ | 12 | 2 file | **91/97 批全绿**；剩余 6 批（`1632`/`16474`/`22650`/`24157`/`25589`/`patch-bounds-check`）正在排查 |
 
 ## 二、 剩余非阻塞环境/外网/长耗时差异汇总
 
