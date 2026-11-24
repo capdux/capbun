@@ -1859,3 +1859,5 @@
 - [Phase 2 第二十五批修复] 采纳 `01352f38` 根因定位修复 `src/runtime/webcore/Blob.cp:2504-2511`：`constructBunFile` 迁移时直接调用 `BlobStore.initFile` 绕过了 `Blob.findOrCreateFileFromPath(&path, globalObject, false)`，导致 `Bun.file("/$bunfs/...")` 无法命中 `standalone_module_graph`；同时修正 `DeinitUnprotectGuard` 守卫位置后，`cpc_brief.py` 与 `zig:check` 5/5 通过。
 
 - [Phase 2 第二十六批修复] 采纳 `1b6bff86` 根因定位修复两处高频安装故障：(1) `src/install/lockfile/Tree.cp:401-442` 补全 `parent_res`、`dep.behavior.isEnabled(dep_features)` 以及 `manager.subcommand != .install || parent_pkg_id != 0` 与 `!dep.behavior.isWorkspace()` 分支，使 `--omit=dev/peer/optional` 与 `--production` 生效；(2) `src/cli/package_manager_command.cp:155-157` 移除多余的 `args[0] == "pm"` 切片，使 `TrustCommand`/`UntrustedCommand` 收到完整 `["pm", "trust", ...]`；`cpc_brief.py` 与 `zig:check` 5/5 通过。
+
+- [Phase 2 第二十七批修复] 采纳 `71283ff4` 根因定位修复 `src/install/lockfile/bun.lock.cp:2024-2029`：迁移时将 `seen_deps.getOrPut` 提前到 `if (!dep.behavior.isWorkspace() && ...)` 之前，破坏短路求值并导致 workspace 条目污染 `seen_deps`、跳过 `mapDepToPkg` 致使 `from_dep.version.value.workspace` 未更新而重复写盘；收回条件分支内后 `cpc_brief.py` 与 `zig:check` 5/5 通过。

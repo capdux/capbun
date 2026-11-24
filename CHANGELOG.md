@@ -2305,3 +2305,5 @@
 - [Phase 2 第二十五批修复] 修改 .cp/.zig：`src/runtime/webcore/Blob.{cp,zig}`（`constructBunFile` 恢复 `findOrCreateFileFromPath` 与 `DeinitUnprotectGuard` 位置，`zig:check` 5/5）。
 
 - [Phase 2 第二十六批修复] 修改 .cp/.zig：`src/install/lockfile/Tree.{cp,zig}`（`isEnabled(dep_features)` 与根包/工作区过滤）、`src/cli/package_manager_command.{cp,zig}`（`bun pm trust` 参数修复）、`GEMINI.md`（`task-22829` #3，`zig:check` 5/5）。
+
+- [Phase 2 第二十七批修复] 修改 .cp/.zig：`src/install/lockfile/bun.lock.{cp,zig}`（恢复 `seen_deps.getOrPut` 短路条件语义，修复 `bun-workspaces` 30 项重复保存 lockfile 问题，`zig:check` 5/5）。

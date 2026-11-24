@@ -2021,11 +2021,12 @@ pub fn parseIntoBinaryLockfile(
                 }
                 const res_id = res_id_opt.?;
 
-                const seen_gop = seen_deps.getOrPut(allocator, dep.name.slice(lockfile.buffers.string_bytes.items))?;
-                if (!dep.behavior.isWorkspace() && seen_gop.found_existing)
-                {
-                    lockfile.buffers.resolutions.items[dep_id] = res_id;
-                    continue;
+                if (!dep.behavior.isWorkspace()) {
+                    const seen_gop = seen_deps.getOrPut(allocator, dep.name.slice(lockfile.buffers.string_bytes.items))?;
+                    if (seen_gop.found_existing) {
+                        lockfile.buffers.resolutions.items[dep_id] = res_id;
+                        continue;
+                    }
                 }
 
                 mapDepToPkg(dep, dep_id, res_id, lockfile, pkg_resolutions);
