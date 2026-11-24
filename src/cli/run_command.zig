@@ -1093,17 +1093,7 @@ else => (if (comptime @typeInfo(@TypeOf(32)) == .@"enum") cp_cast_int(u8, @intFr
 
 pub fn printHelp(package_json: ?*PackageJSON) void {
             const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun run<r> <cyan>[flags]<r> \\<file or script\\>";
-            const examples_text: []const u8 = "<b>Examples:<r>";
-            _ = "  <d>Run a JavaScript or TypeScript file<r>";
-            _ = "  <b><green>bun run<r> <blue>./index.js<r>";
-            _ = "  <b><green>bun run<r> <blue>./index.tsx<r>";
-            _ = "";
-            _ = "  <d>Run a package.json script<r>";
-            _ = "  <b><green>bun run<r> <blue>dev<r>";
-            _ = "  <b><green>bun run<r> <blue>lint<r>";
-            _ = "";
-            _ = "Full documentation is available at <magenta>https://bun.com/docs/cli/run<r>";
-            _ = "";
+            const examples_text: []const u8 = "<b>Examples:<r>\n  <d>Run a JavaScript or TypeScript file<r>\n  <b><green>bun run<r> <blue>./index.js<r>\n  <b><green>bun run<r> <blue>./index.tsx<r>\n\n  <d>Run a package.json script<r>\n  <b><green>bun run<r> <blue>dev<r>\n  <b><green>bun run<r> <blue>lint<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/run<r>\n";
             _ = Output.pretty((intro_text ++ "\n\n"), .{});
             _ = Output.pretty("<b>Flags:<r>", .{});
             _ = clap.simpleHelp((&Arguments.run_params));

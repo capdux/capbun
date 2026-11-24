@@ -2699,10 +2699,10 @@ pub fn clonefileat(from_fd: FD, from_path: [:0]const u8, to: FD, to_path: [:0]co
                 if ((e.getErrno() == .INTR)) {
                     continue;
                 }
-                _ = log("clonefileat(", "  {f},", "  {s},", "  {f},", "  {s},", ") = {s}", "", .{ from_fd, from_path, to, to_path, @tagName(e.getErrno()) });
+                _ = log("clonefileat(\n  {f},\n  {s},\n  {f},\n  {s},\n) = {s}\n", .{ from_fd, from_path, to, to_path, @tagName(e.getErrno()) });
                 return e;
             }
-            _ = log("clonefileat(", "  {f},", "  {s},", "  {f},", "  {s},", ") = 0", "", .{ from_fd, from_path, to, to_path });
+            _ = log("clonefileat(\n  {f},\n  {s},\n  {f},\n  {s},\n) = 0\n", .{ from_fd, from_path, to, to_path });
             return .success;
         }
 }

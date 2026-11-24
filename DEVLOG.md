@@ -1807,3 +1807,5 @@
 - [Phase 2 修复] 修复 `bun test` 与 Release 编译暴露的 4 处根因：`Installer.cp` `startTask` 改用 `unsafe { &_.tasks.ptr[idx] }` 避免值拷贝栈指针传入 `ThreadPool.schedule` 引发 `SIGSEGV`；`NetworkTask.cp` `appendAuth` 补回 `npm-auth-type: legacy` 请求头；`pm_pkg_command.cp` `getJsonValue` 去除剥离引号的特判分支改回 `formatJson`；`RequestContext.cp` `has_finalized` 补全 `else @as(void, undefined)`；`zig:check` 5/5 通过。
 
 - [Phase 2 第二批修复] 根治 2 项运行时/测试根因：`pm_pkg_command.cp` `help_text` 将 `\\` 多行字符串改为 `\n` 拼接（规避 `cpc` 将 `\\` 拆为 `_ = "..."` 丢失后续行，同步向 `cp_agy` 提交 `task-bun-20261124-multiline-string`）且 `execGet` 补回非对象根校验；`bit_set.cp` `ArrayBitSet.iterator` 补全 `_: *const Self` 避免按值接收导致 `&self.masks` 悬垂栈指针引发 `GlobWalker.evalFile` 越界（`index 68, len 3`）及 `bun-patch` workspace `SIGILL`；`zig:check` 5/5 通过。
+
+- [跨 AGY 结单全仓重编] `cp_agy` 修复 `task-bun-20261124-multiline-string`（`cpc` 支持 `\\` 多行字符串合并为 `\n` 拼接单串）后，批量重编全仓 10 个含 `\\` 的 `.cp` 文件，刷新 8 个 `.zig` 产物（含 `CommandLineArguments.zig`、`cli.zig`、`run_command.zig`、`why_command.zig` 等帮助与多行文本输出）并 `bun run zig:check` 5/5 通过。

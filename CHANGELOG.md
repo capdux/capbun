@@ -2253,3 +2253,5 @@
 - [Phase 2 修复] 修改 .cp/.zig：`src/install/isolated_install/Installer.{cp,zig}`、`src/install/NetworkTask.{cp,zig}`、`src/cli/pm_pkg_command.{cp,zig}`、`src/runtime/server/RequestContext.{cp,zig}`（`zig:check` 5/5）。
 
 - [Phase 2 第二批修复] 修改 .cp/.zig：`src/cli/pm_pkg_command.{cp,zig}`、`src/collections/bit_set.{cp,zig}`（`zig:check` 5/5）。
+
+- [跨 AGY 结单全仓重编] 修改 .zig：`src/bundler/entry_points.zig`、`src/cli/{cli,run_command,why_command}.zig`、`src/install/PackageManager/CommandLineArguments.zig`、`src/install/padding_checker.zig`、`src/runtime/api/cron.zig`、`src/sys/sys.zig`（`task-bun-20261124-multiline-string` 重编 + `zig:check` 5/5）。

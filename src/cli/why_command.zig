@@ -353,20 +353,7 @@ pub fn compareDependents(context: void, a: DependentInfo, b: DependentInfo) bool
 
 pub fn printUsage() void {
         _ = Output.prettyln((("<r><b>bun why<r> <d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), .{});
-        const usage_text: []const u8 = "Explain why a package is installed";
-        _ = "";
-        _ = "<b>Arguments:<r>";
-        _ = "  <blue>\\<package\\><r>     <d>The package name to explain (supports glob patterns like '@org/*')<r>";
-        _ = "";
-        _ = "<b>Options:<r>";
-        _ = "  <cyan>--top<r>         <d>Show only the top dependency tree instead of nested ones<r>";
-        _ = "  <cyan>--depth<r> <blue>\\<NUM\\><r> <d>Maximum depth of the dependency tree to display<r>";
-        _ = "";
-        _ = "<b>Examples:<r>";
-        _ = "  <d>$<r> <b><green>bun why<r> <blue>react<r>";
-        _ = "  <d>$<r> <b><green>bun why<r> <blue>\"@types/*\"<r> <cyan>--depth<r> <blue>2<r>";
-        _ = "  <d>$<r> <b><green>bun why<r> <blue>\"*-lodash\"<r> <cyan>--top<r>";
-        _ = "";
+        const usage_text: []const u8 = "Explain why a package is installed\n\n<b>Arguments:<r>\n  <blue>\\<package\\><r>     <d>The package name to explain (supports glob patterns like '@org/*')<r>\n\n<b>Options:<r>\n  <cyan>--top<r>         <d>Show only the top dependency tree instead of nested ones<r>\n  <cyan>--depth<r> <blue>\\<NUM\\><r> <d>Maximum depth of the dependency tree to display<r>\n\n<b>Examples:<r>\n  <d>$<r> <b><green>bun why<r> <blue>react<r>\n  <d>$<r> <b><green>bun why<r> <blue>\"@types/*\"<r> <cyan>--depth<r> <blue>2<r>\n  <d>$<r> <b><green>bun why<r> <blue>\"*-lodash\"<r> <cyan>--top<r>\n";
         _ = Output.pretty(usage_text, .{});
         _ = Output.flush();
 }

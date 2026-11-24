@@ -263,47 +263,8 @@ pub fn execWithReason(_: std.mem.Allocator, comptime reason: Reason) void {
             "svelte",
             "elysia",
         };
-    pub const cli_helptext_fmt =
-            \\<b>Usage:<r> <b>bun \<command\> <cyan>[...flags]<r> <b>[...args]<r>
-            \\
-            \\<b>Commands:<r>
-            \\  <b><magenta>run<r>       <d>./my-script.ts<r>       Execute a file with Bun
-            \\            <d>lint<r>                 Run a package.json script
-            \\  <b><magenta>test<r>                           Run unit tests with Bun
-            \\  <b><magenta>x<r>         <d>{s:<16}<r>     Execute a package binary (CLI), installing if needed <d>(bunx)<r>
-            \\  <b><magenta>repl<r>                           Start a REPL session with Bun
-            \\  <b><magenta>exec<r>                           Run a shell script directly with Bun
-            \\
-            \\  <b><blue>install<r>                        Install dependencies for a package.json <d>(bun i)<r>
-            \\  <b><blue>add<r>       <d>{s:<16}<r>     Add a dependency to package.json <d>(bun a)<r>
-            \\  <b><blue>remove<r>    <d>{s:<16}<r>     Remove a dependency from package.json <d>(bun rm)<r>
-            \\  <b><blue>update<r>    <d>{s:<16}<r>     Update outdated dependencies
-            \\  <b><blue>audit<r>                          Check installed packages for vulnerabilities
-            \\  <b><blue>outdated<r>                       Display latest versions of outdated dependencies
-            \\  <b><blue>link<r>      <d>[\<package\>]<r>          Register or link a local npm package
-            \\  <b><blue>unlink<r>                         Unregister a local npm package
-            \\  <b><blue>publish<r>                        Publish a package to the npm registry
-            \\  <b><blue>patch <d>\<pkg\><r>                    Prepare a package for patching
-            \\  <b><blue>pm <d>\<subcommand\><r>                Additional package management utilities
-            \\  <b><blue>info<r>      <d>{s:<16}<r>     Display package metadata from the registry
-            \\  <b><blue>why<r>       <d>{s:<16}<r>     Explain why a package is installed
-            \\
-            \\  <b><yellow>build<r>     <d>./a.ts ./b.jsx<r>       Bundle TypeScript & JavaScript into a single file
-            \\
-            \\  <b><cyan>init<r>                           Start an empty Bun project from a built-in template
-            \\  <b><cyan>create<r>    <d>{s:<16}<r>     Create a new project from a template <d>(bun c)<r>
-            \\  <b><cyan>upgrade<r>                        Upgrade to latest version of Bun.
-            \\  <b><cyan>feedback<r>  <d>./file1 ./file2<r>      Provide feedback to the Bun team.
-            \\
-            \\  <d>\<command\><r> <b><cyan>--help<r>               Print help text for command.
-            \\
-        ;
-    const cli_helptext_footer =
-            \\
-            \\Learn more about Bun:            <magenta>https://bun.com/docs<r>
-            \\Join our Discord community:      <blue>https://bun.com/discord<r>
-            \\
-        ;
+    pub const cli_helptext_fmt = "<b>Usage:<r> <b>bun \\<command\\> <cyan>[...flags]<r> <b>[...args]<r>\n\n<b>Commands:<r>\n  <b><magenta>run<r>       <d>./my-script.ts<r>       Execute a file with Bun\n            <d>lint<r>                 Run a package.json script\n  <b><magenta>test<r>                           Run unit tests with Bun\n  <b><magenta>x<r>         <d>{s:<16}<r>     Execute a package binary (CLI), installing if needed <d>(bunx)<r>\n  <b><magenta>repl<r>                           Start a REPL session with Bun\n  <b><magenta>exec<r>                           Run a shell script directly with Bun\n\n  <b><blue>install<r>                        Install dependencies for a package.json <d>(bun i)<r>\n  <b><blue>add<r>       <d>{s:<16}<r>     Add a dependency to package.json <d>(bun a)<r>\n  <b><blue>remove<r>    <d>{s:<16}<r>     Remove a dependency from package.json <d>(bun rm)<r>\n  <b><blue>update<r>    <d>{s:<16}<r>     Update outdated dependencies\n  <b><blue>audit<r>                          Check installed packages for vulnerabilities\n  <b><blue>outdated<r>                       Display latest versions of outdated dependencies\n  <b><blue>link<r>      <d>[\\<package\\>]<r>          Register or link a local npm package\n  <b><blue>unlink<r>                         Unregister a local npm package\n  <b><blue>publish<r>                        Publish a package to the npm registry\n  <b><blue>patch <d>\\<pkg\\><r>                    Prepare a package for patching\n  <b><blue>pm <d>\\<subcommand\\><r>                Additional package management utilities\n  <b><blue>info<r>      <d>{s:<16}<r>     Display package metadata from the registry\n  <b><blue>why<r>       <d>{s:<16}<r>     Explain why a package is installed\n\n  <b><yellow>build<r>     <d>./a.ts ./b.jsx<r>       Bundle TypeScript & JavaScript into a single file\n\n  <b><cyan>init<r>                           Start an empty Bun project from a built-in template\n  <b><cyan>create<r>    <d>{s:<16}<r>     Create a new project from a template <d>(bun c)<r>\n  <b><cyan>upgrade<r>                        Upgrade to latest version of Bun.\n  <b><cyan>feedback<r>  <d>./file1 ./file2<r>      Provide feedback to the Bun team.\n\n  <d>\\<command\\><r> <b><cyan>--help<r>               Print help text for command.\n";
+    const cli_helptext_footer = "\nLearn more about Bun:            <magenta>https://bun.com/docs<r>\nJoin our Discord community:      <blue>https://bun.com/discord<r>\n";
 };
 
 pub const ReservedCommand = struct {
@@ -787,23 +748,7 @@ _ = HelpCommand.printWithReason(.explicit, show_all_flags);
 _ = RunCommand_.printHelp(null);
 },
 .InitCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun init<r> <cyan>[flags]<r> <blue>[\\<folder\\>]<r>";
-            _ = "  Initialize a Bun project in the current directory.";
-            _ = "  Creates a package.json, tsconfig.json, and bunfig.toml if they don't exist.";
-            _ = "";
-            _ = "<b>Flags<r>:";
-            _ = "      <cyan>--help<r>             Print this menu";
-            _ = "  <cyan>-y, --yes<r>              Accept all default options";
-            _ = "  <cyan>-m, --minimal<r>          Only initialize type definitions";
-            _ = "  <cyan>-r, --react<r>            Initialize a React project";
-            _ = "      <cyan>--react=tailwind<r>   Initialize a React project with TailwindCSS";
-            _ = "      <cyan>--react=shadcn<r>     Initialize a React project with @shadcn/ui and TailwindCSS";
-            _ = "";
-            _ = "<b>Examples:<r>";
-            _ = "  <b><green>bun init<r>";
-            _ = "  <b><green>bun init<r> <cyan>--yes<r>";
-            _ = "  <b><green>bun init<r> <cyan>--react<r>";
-            _ = "  <b><green>bun init<r> <cyan>--react=tailwind<r> <blue>my-app<r>";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun init<r> <cyan>[flags]<r> <blue>[\\<folder\\>]<r>\n  Initialize a Bun project in the current directory.\n  Creates a package.json, tsconfig.json, and bunfig.toml if they don't exist.\n\n<b>Flags<r>:\n      <cyan>--help<r>             Print this menu\n  <cyan>-y, --yes<r>              Accept all default options\n  <cyan>-m, --minimal<r>          Only initialize type definitions\n  <cyan>-r, --react<r>            Initialize a React project\n      <cyan>--react=tailwind<r>   Initialize a React project with TailwindCSS\n      <cyan>--react=shadcn<r>     Initialize a React project with @shadcn/ui and TailwindCSS\n\n<b>Examples:<r>\n  <b><green>bun init<r>\n  <b><green>bun init<r> <cyan>--yes<r>\n  <b><green>bun init<r> <cyan>--react<r>\n  <b><green>bun init<r> <cyan>--react=tailwind<r> <blue>my-app<r>";
             _ = Output.pretty((intro_text ++ "\n"), .{});
             _ = Output.flush();
 },
@@ -811,22 +756,8 @@ const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun init<r> <cyan>[flags]
 _ = Output.prettyErrorln("<b>Usage<r>: <b><green>bunx<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> [flags and arguments for the package]<r>\nExecute an npm package executable (CLI), automatically installing into a global shared cache if not installed in node_modules.\n\nFlags:\n  <cyan>--bun<r>                  Force the command to run with Bun instead of Node.js\n  <cyan>-p, --package <blue>\\<package\\><r>    Specify package to install when binary name differs from package name\n  <cyan>--no-install<r>           Skip installation if package is not already installed\n  <cyan>--verbose<r>              Enable verbose output during installation\n  <cyan>--silent<r>               Suppress output during installation\n\nExamples<d>:<r>\n  <b><green>bunx<r> <blue>prisma<r> migrate<r>\n  <b><green>bunx<r> <blue>prettier<r> foo.js<r>\n  <b><green>bunx<r> <cyan>-p @angular/cli<r> <blue>ng<r> new my-app\n  <b><green>bunx<r> <cyan>--bun<r> <blue>vite<r> dev foo.js<r>\n", .{});
 },
 .BuildCommand => {
-const intro_text: []const u8 = "<b>Usage<r>:";
-            _ = "  Transpile and bundle one or more files.";
-            _ = "  <b><green>bun build<r> <cyan>[flags]<r> <blue>\\<entrypoint\\><r>";
-            const outro_text: []const u8 = "<b>Examples:<r>";
-            _ = "  <d>Frontend web apps:<r>";
-            _ = "  <b><green>bun build<r> <cyan>--outfile=bundle.js<r> <blue>./src/index.ts<r>";
-            _ = "  <b><green>bun build<r> <cyan>--minify --splitting --outdir=out<r> <blue>./index.jsx ./lib/worker.ts<r>";
-            _ = "";
-            _ = "  <d>Bundle code to be run in Bun (reduces server startup time)<r>";
-            _ = "  <b><green>bun build<r> <cyan>--target=bun --outfile=server.js<r> <blue>./server.ts<r>";
-            _ = "";
-            _ = "  <d>Creating a standalone executable (see https://bun.com/docs/bundler/executables)<r>";
-            _ = "  <b><green>bun build<r> <cyan>--compile --outfile=my-app<r> <blue>./cli.ts<r>";
-            _ = "";
-            _ = "A full list of flags is available at <magenta>https://bun.com/docs/bundler<r>";
-            _ = "";
+const intro_text: []const u8 = "<b>Usage<r>:\n  Transpile and bundle one or more files.\n  <b><green>bun build<r> <cyan>[flags]<r> <blue>\\<entrypoint\\><r>";
+            const outro_text: []const u8 = "<b>Examples:<r>\n  <d>Frontend web apps:<r>\n  <b><green>bun build<r> <cyan>--outfile=bundle.js<r> <blue>./src/index.ts<r>\n  <b><green>bun build<r> <cyan>--minify --splitting --outdir=out<r> <blue>./index.jsx ./lib/worker.ts<r>\n\n  <d>Bundle code to be run in Bun (reduces server startup time)<r>\n  <b><green>bun build<r> <cyan>--target=bun --outfile=server.js<r> <blue>./server.ts<r>\n\n  <d>Creating a standalone executable (see https://bun.com/docs/bundler/executables)<r>\n  <b><green>bun build<r> <cyan>--compile --outfile=my-app<r> <blue>./cli.ts<r>\n\nA full list of flags is available at <magenta>https://bun.com/docs/bundler<r>\n";
             _ = Output.pretty((intro_text ++ "\n\n"), .{});
             _ = Output.flush();
             _ = Output.pretty("<b>Flags:<r>", .{});
@@ -836,20 +767,8 @@ const intro_text: []const u8 = "<b>Usage<r>:";
             _ = Output.flush();
 },
 .TestCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun test<r> <cyan>[flags]<r> <blue>[\\<patterns\\>]<r>";
-            _ = "  Run all matching test files and print the results to stdout";
-            const outro_text: []const u8 = "<b>Examples:<r>";
-            _ = "  <d>Run all test files<r>";
-            _ = "  <b><green>bun test<r>";
-            _ = "";
-            _ = "  <d>Run all test files with \"foo\" or \"bar\" in the file name<r>";
-            _ = "  <b><green>bun test<r> <blue>foo bar<r>";
-            _ = "";
-            _ = "  <d>Run all test files, only including tests whose names includes \"baz\"<r>";
-            _ = "  <b><green>bun test<r> <cyan>--test-name-pattern<r> <blue>baz<r>";
-            _ = "";
-            _ = "Full documentation is available at <magenta>https://bun.com/docs/cli/test<r>";
-            _ = "";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun test<r> <cyan>[flags]<r> <blue>[\\<patterns\\>]<r>\n  Run all matching test files and print the results to stdout";
+            const outro_text: []const u8 = "<b>Examples:<r>\n  <d>Run all test files<r>\n  <b><green>bun test<r>\n\n  <d>Run all test files with \"foo\" or \"bar\" in the file name<r>\n  <b><green>bun test<r> <blue>foo bar<r>\n\n  <d>Run all test files, only including tests whose names includes \"baz\"<r>\n  <b><green>bun test<r> <cyan>--test-name-pattern<r> <blue>baz<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/test<r>\n";
             _ = Output.pretty(intro_text, .{});
             _ = Output.flush();
             _ = Output.pretty("\n\n<b>Flags:<r>", .{});
@@ -860,30 +779,8 @@ const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun test<r> <cyan>[flags]
             _ = Output.flush();
 },
 .CreateCommand => {
-const intro_text: []const u8 = "<b>Usage<r><d>:<r>";
-            _ = "  <b><green>bun create<r> <magenta>\\<MyReactComponent.(jsx|tsx)\\><r>";
-            _ = "  <b><green>bun create<r> <magenta>\\<template\\><r> <cyan>[...flags]<r> <blue>dest<r>";
-            _ = "  <b><green>bun create<r> <magenta>\\<github-org/repo\\><r> <cyan>[...flags]<r> <blue>dest<r>";
-            _ = "";
-            _ = "<b>Environment variables<r><d>:<r>";
-            _ = "  <cyan>GITHUB_TOKEN<r>         <d>Supply a token to download code from GitHub with a higher rate limit<r>";
-            _ = "  <cyan>GITHUB_API_DOMAIN<r>    <d>Configure custom/enterprise GitHub domain. Default \"api.github.com\"<r>";
-            _ = "  <cyan>NPM_CLIENT<r>           <d>Absolute path to the npm client executable<r>";
-            _ = "  <cyan>BUN_CREATE_DIR<r>       <d>Custom path for global templates (default: $HOME/.bun-create)<r>";
-            const outro_text: []const u8 = "<b>React Component Projects<r><d>:<r>";
-            _ = "  • Turn an existing React component into a complete frontend dev environment";
-            _ = "  • Automatically starts a hot-reloading dev server";
-            _ = "  • Auto-detects & configures TailwindCSS and shadcn/ui";
-            _ = "";
-            _ = "  <b><magenta>bun create \\<MyReactComponent.(jsx|tsx)\\><r>";
-            _ = "";
-            _ = "<b>Templates<r><d>:<r>";
-            _ = "  • NPM: Runs <b><magenta>bunx create-\\<template\\><r> with given arguments";
-            _ = "  • GitHub: Downloads repository contents as template";
-            _ = "  • Local: Uses templates from $HOME/.bun-create/\\<name\\> or ./.bun-create/\\<name\\>";
-            _ = "";
-            _ = "Learn more: <magenta>https://bun.com/docs/cli/bun-create<r>";
-            _ = "";
+const intro_text: []const u8 = "<b>Usage<r><d>:<r>\n  <b><green>bun create<r> <magenta>\\<MyReactComponent.(jsx|tsx)\\><r>\n  <b><green>bun create<r> <magenta>\\<template\\><r> <cyan>[...flags]<r> <blue>dest<r>\n  <b><green>bun create<r> <magenta>\\<github-org/repo\\><r> <cyan>[...flags]<r> <blue>dest<r>\n\n<b>Environment variables<r><d>:<r>\n  <cyan>GITHUB_TOKEN<r>         <d>Supply a token to download code from GitHub with a higher rate limit<r>\n  <cyan>GITHUB_API_DOMAIN<r>    <d>Configure custom/enterprise GitHub domain. Default \"api.github.com\"<r>\n  <cyan>NPM_CLIENT<r>           <d>Absolute path to the npm client executable<r>\n  <cyan>BUN_CREATE_DIR<r>       <d>Custom path for global templates (default: $HOME/.bun-create)<r>";
+            const outro_text: []const u8 = "<b>React Component Projects<r><d>:<r>\n  • Turn an existing React component into a complete frontend dev environment\n  • Automatically starts a hot-reloading dev server\n  • Auto-detects & configures TailwindCSS and shadcn/ui\n\n  <b><magenta>bun create \\<MyReactComponent.(jsx|tsx)\\><r>\n\n<b>Templates<r><d>:<r>\n  • NPM: Runs <b><magenta>bunx create-\\<template\\><r> with given arguments\n  • GitHub: Downloads repository contents as template\n  • Local: Uses templates from $HOME/.bun-create/\\<name\\> or ./.bun-create/\\<name\\>\n\nLearn more: <magenta>https://bun.com/docs/cli/bun-create<r>\n";
             _ = Output.pretty(intro_text, .{});
             _ = Output.pretty("\n\n", .{});
             _ = Output.pretty(outro_text, .{});
@@ -893,8 +790,7 @@ const intro_text: []const u8 = "<b>Usage<r><d>:<r>";
 _ = HelpCommand.printWithReason(.explicit);
 },
 .UpgradeCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun upgrade<r> <cyan>[flags]<r>";
-            _ = "  Upgrade Bun";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun upgrade<r> <cyan>[flags]<r>\n  Upgrade Bun";
             const outro_text: []const u8 = "<b>Examples:<r>\n  <d>Install the latest {s} version<r>\n  <b><green>bun upgrade<r>\n\n  <d>{s}<r>\n  <b><green>bun upgrade<r> <cyan>--{s}<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/installation#upgrading<r>\n";
             const args = (if (Environment.is_canary) .{ "canary", "Switch from the canary version back to the latest stable release", "stable" } else .{ "stable", "Install the most recent canary version of Bun", "canary" });
             _ = Output.pretty(intro_text, .{});
@@ -904,9 +800,7 @@ const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun upgrade<r> <cyan>[fla
             _ = Output.flush();
 },
 .ReplCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun repl<r> <cyan>[flags]<r>";
-            _ = "  Open a Bun REPL";
-            _ = "";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun repl<r> <cyan>[flags]<r>\n  Open a Bun REPL\n";
             _ = Output.pretty(intro_text, .{});
             _ = Output.flush();
 },
@@ -937,44 +831,12 @@ _ = Install.PackageManager.CommandLineArguments.printHelp((switch (cmd) {
 }));
 },
 .InfoCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> <blue>[property path]<r>";
-            _ = "  Display package metadata from the registry.";
-            _ = "";
-            _ = "<b>Examples:<r>";
-            _ = "  <d>View basic information about a package<r>";
-            _ = "  <b><green>bun info<r> <blue>react<r>";
-            _ = "";
-            _ = "  <d>View specific version<r>";
-            _ = "  <b><green>bun info<r> <blue>react@18.0.0<r>";
-            _ = "";
-            _ = "  <d>View specific property<r>";
-            _ = "  <b><green>bun info<r> <blue>react<r> version";
-            _ = "  <b><green>bun info<r> <blue>react<r> dependencies";
-            _ = "  <b><green>bun info<r> <blue>react<r> versions";
-            _ = "";
-            _ = "Full documentation is available at <magenta>https://bun.com/docs/cli/info<r>";
-            _ = "";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun info<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> <blue>[property path]<r>\n  Display package metadata from the registry.\n\n<b>Examples:<r>\n  <d>View basic information about a package<r>\n  <b><green>bun info<r> <blue>react<r>\n\n  <d>View specific version<r>\n  <b><green>bun info<r> <blue>react@18.0.0<r>\n\n  <d>View specific property<r>\n  <b><green>bun info<r> <blue>react<r> version\n  <b><green>bun info<r> <blue>react<r> dependencies\n  <b><green>bun info<r> <blue>react<r> versions\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/info<r>\n";
             _ = Output.pretty(intro_text, .{});
             _ = Output.flush();
 },
 .WhyCommand => {
-const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun why<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> <blue>[property path]<r>";
-            _ = "Explain why a package is installed";
-            _ = "";
-            _ = "<b>Arguments:<r>";
-            _ = "  <blue>\\<package\\><r>     <d>The package name to explain (supports glob patterns like '@org/*')<r>";
-            _ = "";
-            _ = "<b>Options:<r>";
-            _ = "  <cyan>--top<r>         <d>Show only the top dependency tree instead of nested ones<r>";
-            _ = "  <cyan>--depth<r> <blue>\\<NUM\\><r> <d>Maximum depth of the dependency tree to display<r>";
-            _ = "";
-            _ = "<b>Examples:<r>";
-            _ = "  <d>$<r> <b><green>bun why<r> <blue>react<r>";
-            _ = "  <d>$<r> <b><green>bun why<r> <blue>\"@types/*\"<r> <cyan>--depth<r> <blue>2<r>";
-            _ = "  <d>$<r> <b><green>bun why<r> <blue>\"*-lodash\"<r> <cyan>--top<r>";
-            _ = "";
-            _ = "Full documentation is available at <magenta>https://bun.com/docs/cli/why<r>";
-            _ = "";
+const intro_text: []const u8 = "<b>Usage<r>: <b><green>bun why<r> <cyan>[flags]<r> <blue>\\<package\\><r><d>\\<@version\\><r> <blue>[property path]<r>\nExplain why a package is installed\n\n<b>Arguments:<r>\n  <blue>\\<package\\><r>     <d>The package name to explain (supports glob patterns like '@org/*')<r>\n\n<b>Options:<r>\n  <cyan>--top<r>         <d>Show only the top dependency tree instead of nested ones<r>\n  <cyan>--depth<r> <blue>\\<NUM\\><r> <d>Maximum depth of the dependency tree to display<r>\n\n<b>Examples:<r>\n  <d>$<r> <b><green>bun why<r> <blue>react<r>\n  <d>$<r> <b><green>bun why<r> <blue>\"@types/*\"<r> <cyan>--depth<r> <blue>2<r>\n  <d>$<r> <b><green>bun why<r> <blue>\"*-lodash\"<r> <cyan>--top<r>\n\nFull documentation is available at <magenta>https://bun.com/docs/cli/why<r>\n";
             _ = Output.pretty(intro_text, .{});
             _ = Output.flush();
 },
