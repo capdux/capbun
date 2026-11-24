@@ -2289,3 +2289,5 @@
 - [Phase 2 第十八批修复] 修改 .cp/.zig：`src/bundler/linker_context/findImportedFilesInCSSOrder.{cp,zig}`、`src/js_parser/ast/maybe.{cp,zig}`、`src/bake/DevServer.{cp,zig}` 及 `test/stats.md`（`zig:check` 5/5）。
 
 - [Phase 2 第十九批修复] 修改 .cp/.zig：`src/bundler/linker_context/computeChunks.{cp,zig}`（`base_sorted_len` 预存修复 `remapped_css_indexes` 越界，`zig:check` 5/5）。
+
+- [Phase 2 第二十批修复] 修改 .cp/.zig：`src/css/css_parser.{cp,zig}`（`NestedRuleParser.parseNested` 增加 `depth >= 64` 递归深度保护，`zig:check` 5/5）。

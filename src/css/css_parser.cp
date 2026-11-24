@@ -2256,6 +2256,7 @@ pub fn NestedRuleParser(comptime T: type): type {
         local_properties: *LocalPropertyUsage,
 
         allocator: Allocator,
+        depth: u16 = 0,
 
         const This = @This();
 
@@ -2853,10 +2854,14 @@ pub fn NestedRuleParser(comptime T: type): type {
         }
 
         pub fn parseNested(*_, input: *Parser, is_style_rule: bool): Result(struct { DeclarationBlock, CssRuleList(T.CustomAtRuleParser.AtRule) }) {
+            if (_.depth >= 64) {
+                return .{ .err = input.newCustomError(ParserError.maximum_nesting_depth) };
+            }
             // TODO: think about memory management in error cases
             let rules: CssRuleList(T.CustomAtRuleParser.AtRule) = .{};
             let nested_parser = This{
                 .allocator = input.allocator(),
+                .depth = _.depth + 1,
                 .options = _.options,
                 .at_rule_parser = _.at_rule_parser,
                 .declarations = DeclarationList{},
