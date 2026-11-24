@@ -155,3 +155,5 @@
 | `test/js/node/{crypto,async_hooks,timers,util}/` (40 files, `bun-debug`) | debug (最新 `08df2206`) | 1459 | 2 | 24 skip / 4 todo | **1459/0 逻辑**（7095 expects，191.94s；唯一 2 fail 为 Debug+ASan 栈深较小导致 `bun-inspect` `depth=Infinity` 报 `RangeError`，Release 已全绿） |
 
 | `test/js/node/{path,dns,os,url,querystring}/` (40 files, `bun-debug`) | debug (最新 `08df2206`) | 425 | 1 | 3 skip / 9 todo | **425/0 逻辑**（1601 expects，83.98s；唯一 1 fail 为 `pathToFileURL doesn't leak memory` 在 Debug+ASan 下达 30s 限时） |
+
+| `test/js/node/url/pathToFileURL.test.ts` & `node/http/` (24 files) | release | 162 | 0 | 1 skip / 5 todo | **162/0 全绿**（`pathToFileURL` 2/0、`node/http` 全绿，317 expects，71.29s） |
