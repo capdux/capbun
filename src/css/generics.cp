@@ -147,7 +147,7 @@ pub fn implementHash(comptime T: type, val: *const T, hasher: *std.hash.Wyhash) 
     const tyinfo = @typeInfo(T);
     if (comptime T == void) return;
     if (comptime bun.@"meta".isSimpleEqlType(T)) {
-        return hasher.update(std.mem.asBytes(&val));
+        return hasher.update(std.mem.asBytes(val));
     }
     if (result := comptime bun.@"meta".looksLikeListContainerType(T)) {
         const list = switch (result) {
