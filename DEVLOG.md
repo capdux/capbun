@@ -1863,3 +1863,5 @@
 - [Phase 2 第二十七批修复] 采纳 `71283ff4` 根因定位修复 `src/install/lockfile/bun.lock.cp:2024-2029`：迁移时将 `seen_deps.getOrPut` 提前到 `if (!dep.behavior.isWorkspace() && ...)` 之前，破坏短路求值并导致 workspace 条目污染 `seen_deps`、跳过 `mapDepToPkg` 致使 `from_dep.version.value.workspace` 未更新而重复写盘；收回条件分支内后 `cpc_brief.py` 与 `zig:check` 5/5 通过。
 
 - [Phase 2 第二十八批修复] 采纳 `5a749196` 根因定位修复 `src/runtime/api/bun/subprocess.cp:359-390`：`jsRef` 与 `jsUnref` 迁移时遗漏了 `_.process.enableKeepingEventLoopAlive()`/`disableKeepingEventLoopAlive()`、`hasCalledGetter` 守卫与 `_.updateHasPendingActivity()`，导致 `child.unref()` 后事件循环仍被子进程句柄保活无法退出（`esbuild-child_process.test.ts` 超时）；对齐 `subprocess_.zig` 后 `cpc_brief.py` 与 `zig:check` 5/5 通过。
+
+- [Phase 2 第二十九批修复] 采纳 `94f33add` 定位修复 `src/js/node/child_process.ts:1512-1524`：`spawn()` 阶段提前加载 `this.stdio` 并调用 `item?.ref?.()`，而 `ChildProcess.unref()` 仅调用 `this.#handle.unref()`（此时 `Subprocess.jsUnref` 因已调用 getter 跳过 `stdout`/`stderr`）导致 `NativeReadable` 持续保活事件循环；为 `ref()`/`unref()` 补全对已创建 `[this.#stdin, this.#stdout, this.#stderr]` 的同步调用后，`node:child_process.spawn("sleep", ["10"]).unref()` 立即正常退出（exit 0）。

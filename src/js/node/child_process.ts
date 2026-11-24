@@ -1511,10 +1511,16 @@ class ChildProcess extends EventEmitter {
 
   ref() {
     if (this.#handle) this.#handle.ref();
+    for (const item of [this.#stdin, this.#stdout, this.#stderr]) {
+      item?.ref?.();
+    }
   }
 
   unref() {
     if (this.#handle) this.#handle.unref();
+    for (const item of [this.#stdin, this.#stdout, this.#stderr]) {
+      item?.unref?.();
+    }
   }
 
   // Static initializer to make stdio properties enumerable on the prototype

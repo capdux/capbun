@@ -2309,3 +2309,5 @@
 - [Phase 2 第二十七批修复] 修改 .cp/.zig：`src/install/lockfile/bun.lock.{cp,zig}`（恢复 `seen_deps.getOrPut` 短路条件语义，修复 `bun-workspaces` 30 项重复保存 lockfile 问题，`zig:check` 5/5）。
 
 - [Phase 2 第二十八批修复] 修改 .cp/.zig：`src/runtime/api/bun/subprocess.{cp,zig}`（`jsRef`/`jsUnref` 补全 `process` 事件循环保活控制与 `updateHasPendingActivity`，`zig:check` 5/5）。
+
+- [Phase 2 第二十九批修复] 修改 `src/js/node/child_process.ts`（`ChildProcess.ref/unref` 同步 `ref/unref` stdio 流）及 `test/stats.md`。

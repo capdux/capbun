@@ -47,7 +47,8 @@
 | `test/cli/test/` (12 files) | release | 200 | 0 | 6 skip | `--timeout=5000` 全绿 |
 | `test/cli/{bunfig-test-options,bun,console-depth,user-agent}.test.ts` | release | 24 | 0 | 2 skip | `--timeout=5000` 全绿 |
 | `test/cli/inspect/` (4 files) | release | 34 | 0 | - | `--timeout=5000` 全绿 |
-| `test/js/bun/` 已测子目录 (`sqlite` 82/0, `crypto` 10248/0, `ini/yaml/jsonl` 829/1, `cookie` 147/0, `dns` 76/0, `md/transpiler/ffi` 1080/2, `websocket/udp/net` 326/2, `console/perf_hooks/sourcemap/ts` 185/1, `wasm/archive/symbols` 102/1, `stream` 269/0, `terminal` 120/1, `http` 已测 266/0, `shell` 20 files 586/2, `s3/globals` 93/0, `fetch/cron/perf/bun-object` 226/0, `binary/jsc` 85/0, `test/` 14 files 529/1) | release | 15249 | 11 | - | `--timeout=5000` 分批扫测；补环境后 `shell/lex/parse` 全绿（仅余离线 `sharp` 与 `root` `EACCES`）；`ffi` 2 项为 `-fPIC`/`node_api.h` 环境差异 |
+| `test/js/bun/` 已测子目录 (`sqlite` 82/0, `crypto` 10248/0, `yaml` 560/0, `ini` 52/0, `jsonl` 269/0, `cookie` 147/0, `dns` 76/0, `md` 1022/0, `transpiler` 43/0, `io` 36/0, `sys` 1/0, `s3` 70/0, `ffi` 2 fail, `websocket` 97/0, `udp` 209/0, `net/tcp-server` 8/0, `webview` 6/0, `console/perf_hooks/sourcemap/ts` 185/1, `wasm/archive/symbols` 102/1, `stream` 269/0, `terminal` 120/1, `http` 已测 857/4, `shell` 20 files 586/2, `globals` 23/0, `fetch/cron/perf/bun-object` 425/0, `binary/jsc` 85/0, `test/` 45+ files 1069/0, `spawn/` 24 files 120/0, `glob/` 3 files 193/2, `util/` 53 files 1757/0, `plugin/` 30/0, `repl/` 105/0, `import-attributes/` 12/0, `image/` 220/0) | release (新版) | 19186 | 12 | - | `js/bun/test/` 45+ 文件全绿、`md/transpiler/io/sys/s3` 24 文件全绿、`util/` 53 文件全绿、`bun-object/perf_hooks/cron` 全绿 |
+| `test/cli/watch/` (2) & `test/cli/env/ci-info.test.ts` & `test/cli/init/` (1) | release (新版) | 20 | 0 | - | `--timeout=10000` 全绿 |
 | `test/js/web/` (138 files) | release | 5097+ | 6 | 3 timeout | 加 `BUN_GARBAGE_COLLECTOR_LEVEL=0 BUN_FEATURE_FLAG_INTERNAL_FOR_TESTING=1` 后 `text-decoder`+`FormData`+`uv-error` 等 **192/0** |
 | `test/js/node/` (248 files，不含 `zlib`/`readline`) | release | 4825+ | 14 | 4 timeout | 补齐 `internal-for-testing` 环境变量后 `v8`/`tls`/`fs` 补测 **65/0**；`tls peer cert`/`dlopen`/`http uaf` 经排查均非 `.cp` 缺陷 |
 | `test/js/first_party/` (5 files) & `deno/` (16) & `junit-reporter/` (1) & `workerd/` (3) & `valkey/` (14) | release | 363 | 0 | - | 全绿（`valkey` 外部服务用例 skip） |
@@ -61,7 +62,9 @@
 | `test/cli/hot/` (3 files) | release (新版) | 15 | 0 | - | `ModuleLoader.cp` 修复后全绿 |
 | `test/cli/install/bun-install-cpu-os.test.ts` & `bun-lock.test.ts` | release (新版) | 22 | 0 | - | `Tree.cp` 修复 + `internal-for-testing` 环境变量后全绿 |
 | `test/cli/install/` 其余 51 文件 (加前序 10 文件共 61 文件) | release (新版) | 1291+ | 84 | 3 timeout | 40/51 文件 0 失败（`bun-run` 291/0, `npmrc` 24/0, `isolated-install` 46/0, `bun-pack` 70/0）；失败集中于 `bun-workspaces`(34)、`bun-pm-why`(13)、`registry`(11)、`lifecycle`(10)、`Git URL/GHSA/upgrade` 离线(15) |
-| `test/bake/dev/{bundle,plugins,vfile,request-cookies}.test.ts` | debug (`bun bd`) | 26 | 0 | - | `DevServer.cp` (`RouterTypeListGuard` + `JSValue.null`) 修复后全绿 |
+| `test/cli/install/bun-workspaces.test.ts` & `bun-install-registry` 定向 & `lifecycle-scripts` & `security-scanner-matrix-with-node-modules` | debug/release | 902 | 6 | - | `WorkspaceMap.cp`+`Tree.cp`+`bun.lock.cp` 修复后 **`bun-workspaces` 63/0**、`registry` 核心 19/0、`lifecycle` `--trust` 全过 (97/6)、`scanner-matrix` **720/0**、`bunx` 31/1 |
+| `test/bake/dev/{bundle,plugins,vfile,request-cookies,server-sourcemap}.test.ts` | debug (`bun bd`) | 29 | 0 | - | `DevServer.cp` + `SourceMapStore.cp` 修复后全绿 |
+| `test/js/bun/glob/scan.test.ts` (`bad options` & `broken symlinks`) & `bundler_compile` (`EmbeddedFileOutfile`) | debug (`bun bd`) | 3 | 0 | - | `glob.cp` 与 `Blob.cp` 修复后全绿 |
 | `test/bake/dev/{esm,import-meta-inline,react-response}.test.ts` | release (新版) | 30 | 0 | - | 全绿（含 `DEV:esm-11`） |
 | `test/bake/` 顶层 (`deinitialization`, `framework-router`, `dev-and-prod`) | release | 13 | 1 | - | 仅 1 处非崩溃失败 |
 | `test/js/bun/http/` 其余 16 文件 + `spawn/` 24 文件 + `glob/` 3 文件 | release (新版) | 716 | 5 | - | `http` 403/3 (`proxy` #12007 超时)、`spawn` 120/0、`glob` 193/2 |
