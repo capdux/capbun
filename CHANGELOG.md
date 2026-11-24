@@ -2283,3 +2283,5 @@
 - [Phase 2 第十五批修复] 修改 .cp/.zig：`src/css/generics.{cp,zig}`（`pub fn hash` `std.mem.asBytes(val)` 修复，`zig:check` 5/5）。
 
 - [Phase 2 第十六批修复] 修改 .cp/.zig：`src/css/selectors/selector.{cp,zig}`（`downlevelSelectors` 去除重复步进，`zig:check` 5/5）。
+
+- [Phase 2 第十七批修复] 修改 .cp/.zig：`src/install/lockfile/Tree.{cp,zig}`（补全 `--cpu`/`--os` `isDisabled`、`isOptionalPeer`、`isBundled` 过滤，`zig:check` 5/5）。

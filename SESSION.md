@@ -918,3 +918,5 @@
 - [Phase 2 第十四批修复] 修复 `src/css/selectors/selector.cp:255,258`（`getPrefix` 外/内两层 `while` 循环补全 `: (s_i += 1)` 与 `: (c_i += 1)`，根除 CSS 压缩/前缀路径死循环；全仓 `deeb718b` 审计确认再无同类漏步进循环），`zig:check` 5/5 通过并原子提交。
 - [Phase 2 第十五批修复] 修复 `src/css/generics.cp:676`（`pub fn hash` 中另一处 `std.mem.asBytes(&val)` 改为 `std.mem.asBytes(val)`，消除 `isSimpleEqlType` 哈希栈地址问题），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
 - [Phase 2 第十六批修复] 修复 `src/css/selectors/selector.cp:114-116`（`downlevelSelectors` 删除重复 `c_i += 1; s_i += 1;`，修复步进 +2 导致 `css.test.ts` 42 处降级/前缀用例失败），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。
+- [Phase 2 阶段里程碑] 完成全仓测试扫测、3 轮全仓 1,295 文件静态安全审计及 19 个 `.cp` 模块修复并重编 `build/release/bun`（100/100 步）；Release 回归验证 12 组核心测试集 **676 pass / 0 fail**（`css.test.ts` 因依赖 Debug 专属 `bun:internal-for-testing`，在 `bun-debug` 下已 **1,032 pass / 0 fail**）。
+- [Phase 2 第十七批修复] 修复 `src/install/lockfile/Tree.cp`（`isFilteredDependencyOrWorkspace` 补全 `isOptionalPeer()`、`pkg_metas[pkg_id].isDisabled(cpu, os)` 与 `isBundled()` 过滤，解决 `bun-install-cpu-os.test.ts` 8 处 `ENOENT` 失败），`cpc_brief.py` 4 项门禁与 `zig:check` 5/5 通过并原子提交。

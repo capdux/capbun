@@ -1837,3 +1837,5 @@
 - [Phase 2 第十五批修复] 修复 `src/css/generics.cp:676` `pub fn hash` 中遗漏的另一处 `std.mem.asBytes(&val)` 为 `std.mem.asBytes(val)`，消除简单值类型哈希指针地址的隐患，`zig:check` 5/5 通过。
 
 - [Phase 2 第十六批修复] 修复 `src/css/selectors/selector.cp:114-116` `downlevelSelectors` 中因同时存在 `: (s_i += 1)`/`: (c_i += 1)` 与循环末尾 `c_i += 1; s_i += 1;` 导致步进 +2 的问题（`css.test.ts` `border`/`margin`/`padding`/`selectors`/`transition` 42 处降级失效），删除末尾重复步进后 `zig:check` 5/5 通过。
+
+- [Phase 2 第十七批修复] 根据 `74e47d30` 排查结果修复 `bun-install-cpu-os.test.ts` 8 个失败用例：`src/install/lockfile/Tree.cp` `isFilteredDependencyOrWorkspace` 迁移时遗漏 `dep.behavior.isOptionalPeer()`、`pkg_metas[pkg_id].isDisabled(manager.options.cpu, manager.options.os)` 与 `dep.behavior.isBundled()` 过滤，导致已跳过的跨平台依赖仍进入安装阶段报 `ENOENT`；补全后 `zig:check` 5/5 通过。
