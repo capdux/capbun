@@ -215,3 +215,5 @@
 | `test/cli/install/bun-link.test.ts` (Release) & `cli/install/{bun-pm-why,bun-pm-pkg,bun-info}.test.ts` (`bun-debug`) | release / debug | 124 | 0 | 3 todo | **124/0 全绿**（`bun-link` **4/0**，`why`/`pkg`/`info` **120/0**，73.94s，exit 0） |
 
 | `test/bundler/{bundler_string,bundler_minify,bundler_jsx}.test.ts` (`bun-debug`) | debug (最新 `08df2206`) | 118 | 0 | 4 todo | **118/0 全绿**（13 snapshots，167 expects，102.87s，exit 0） |
+
+| `test/js/web/{fetch,html}` 核心 9 文件 (`headers`/`response`/`body`/`FormData`/`URLSearchParams`, `bun-debug`) | debug (最新 `08df2206`) | 603 | 1 | 4 skip | **603/0 逻辑**（1368 expects，150.78s，8/9 文件全绿；仅 `FormData` 引用计数压测在 Debug 超时） |
