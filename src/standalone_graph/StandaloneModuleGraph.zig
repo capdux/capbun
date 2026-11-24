@@ -1011,13 +1011,18 @@ else => {
 };
             switch (target.os) {
 .mac => {
-const input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, bun.default_allocator);
+var input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, bun.default_allocator);
+            _ = &input_result;
             if (input_result.err) |e| {
                 _ = &e;
                 _ = Output.prettyErrorln("Error reading standalone module graph: {f}", .{ e });
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd;
             }
+            var _guard_input = DeinitGuard(@TypeOf(input_result.bytes)){ .ptr = (&input_result.bytes) };
+            _ = &_guard_input;
+            var ___guard_input_moved = false; _ = &___guard_input_moved;
+            defer if (!___guard_input_moved) { ___guard_input_moved = true; const __T = @TypeOf(_guard_input); if (@typeInfo(__T) == .optional) { if (_guard_input) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_input.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_input; _drop_val.__cp_deinit(); } };
             var macho_file = (blk_catch_5: { break :blk_catch_5 ((bun.macho.MachoFile.init(bun.default_allocator, input_result.bytes.items, bytes.len)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error initializing standalone module graph: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
@@ -1029,7 +1034,6 @@ const input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd },
             _ = (blk_catch_6: { break :blk_catch_6 ((macho_file.writeSection(bytes)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing standalone module graph: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
-            _ = input_result.bytes.deinit();
             switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
 .err => |e| {
 _ = Output.prettyErrorln("Error seeking to start of temporary file: {f}", .{ e });
@@ -1059,13 +1063,18 @@ else => {
             return cloned_executable_fd;
 },
 .windows => {
-const input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, bun.default_allocator);
+var input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, bun.default_allocator);
+            _ = &input_result;
             if (input_result.err) |e| {
                 _ = &e;
                 _ = Output.prettyErrorln("Error reading standalone module graph: {f}", .{ e });
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd;
             }
+            var _guard_input = DeinitGuard(@TypeOf(input_result.bytes)){ .ptr = (&input_result.bytes) };
+            _ = &_guard_input;
+            var ___guard_input_moved = false; _ = &___guard_input_moved;
+            defer if (!___guard_input_moved) { ___guard_input_moved = true; const __T = @TypeOf(_guard_input); if (@typeInfo(__T) == .optional) { if (_guard_input) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_input.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_input; _drop_val.__cp_deinit(); } };
             var pe_file = (blk_catch_9: { break :blk_catch_9 ((bun.pe.PEFile.init(bun.default_allocator, input_result.bytes.items)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error initializing PE file: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
@@ -1077,7 +1086,6 @@ const input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd },
             _ = (blk_catch_10: { break :blk_catch_10 ((pe_file.addBunSection(bytes, .strip_always)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error adding Bun section to PE file: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
-            _ = input_result.bytes.deinit();
             switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
 .err => |e| {
 _ = Output.prettyErrorln("Error seeking to start of temporary file: {f}", .{ e });
@@ -1100,13 +1108,18 @@ else => {
             return cloned_executable_fd;
 },
 .linux, .freebsd => {
-const input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, bun.default_allocator);
+var input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd }, bun.default_allocator);
+            _ = &input_result;
             if (input_result.err) |e| {
                 _ = &e;
                 _ = Output.prettyErrorln("Error reading executable: {f}", .{ e });
                 _ = cleanupTempFile(zname, cloned_executable_fd);
                 return bun.invalid_fd;
             }
+            var _guard_input = DeinitGuard(@TypeOf(input_result.bytes)){ .ptr = (&input_result.bytes) };
+            _ = &_guard_input;
+            var ___guard_input_moved = false; _ = &___guard_input_moved;
+            defer if (!___guard_input_moved) { ___guard_input_moved = true; const __T = @TypeOf(_guard_input); if (@typeInfo(__T) == .optional) { if (_guard_input) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _guard_input.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _guard_input; _drop_val.__cp_deinit(); } };
             var elf_file = (blk_catch_12: { break :blk_catch_12 ((bun.elf.ElfFile.init(bun.default_allocator, input_result.bytes.items)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error initializing ELF file: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
@@ -1119,7 +1132,6 @@ const input_result = bun.sys.File.readToEnd(.{ .handle = cloned_executable_fd },
             _ = (blk_catch_13: { break :blk_catch_13 ((elf_file.writeBunSection(bytes)) catch |e| { _ = &e; _ = Output.prettyErrorln("Error writing .bun section to ELF: {}", .{ e });
             _ = cleanupTempFile(zname, cloned_executable_fd);
             return bun.invalid_fd; }); });
-            _ = input_result.bytes.deinit();
             switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
 .err => |e| {
 _ = Output.prettyErrorln("Error seeking to start of temporary file: {f}", .{ e });

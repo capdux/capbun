@@ -373,7 +373,9 @@ pub struct ValkeyReader {
         }
 
         const format = allocator.dupe(u8, content_with_format[0..3])?;
+        let _format_guard = OptFreeGuard<u8>{ slice: format, alloc: allocator };
         const content = allocator.dupe(u8, content_with_format[4..])?;
+        _format_guard.slice = null;
 
         return VerbatimString{
             format: format,

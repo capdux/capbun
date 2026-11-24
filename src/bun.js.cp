@@ -223,6 +223,7 @@ pub struct Run {
             const escaped_period = escapeForJSString(bun.default_allocator, ctx.runtime_options.cron_period)?;
             const _escaped_period_guard = FreeGuard<[]const u8>{ allocator: bun.default_allocator, ptr: escaped_period };
             const cron_script = std.fmt.allocPrint(bun.default_allocator, "const mod = await import(\"{s}\");\nconst scheduled = (mod.default || mod).scheduled;\nif (typeof scheduled !== \"function\") throw new Error(\"Module does not export default.scheduled()\");\nconst controller = {{ cron: \"{s}\", type: \"scheduled\", scheduledTime: Date.now() }};\nawait scheduled(controller);\n", .{ escaped_path, escaped_period })?;
+            errdefer bun.default_allocator.free(cron_script);
             // entry_path must end with /[eval] for the transpiler to use eval_source
             const trigger = bun.pathLiteral("/[eval]");
             let cwd_buf: bun.PathBuffer = undefined;

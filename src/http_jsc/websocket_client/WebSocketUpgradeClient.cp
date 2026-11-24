@@ -724,21 +724,21 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
         }
 
-        @c pub fn cancel(*_) {
-            _.clearData();
+        @c pub static fn cancel(client: *HTTPClient) {
+            client.clearData();
 
-            _.ref();
-            const _guard_deref = DerefGuard<HTTPClient>{ ptr: _ };
+            client.ref();
+            const _guard_deref = DerefGuard<HTTPClient>{ ptr: client };
 
-            if (_.outgoing_websocket != null) {
-                _.outgoing_websocket = null;
-                _.deref();
+            if (client.outgoing_websocket != null) {
+                client.outgoing_websocket = null;
+                client.deref();
             }
 
             if (comptime ssl) {
-                _.tcp.close(.normal);
+                client.tcp.close(.normal);
             } else {
-                _.tcp.close(.failure);
+                client.tcp.close(.failure);
             }
         }
 
@@ -1250,6 +1250,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 };
                 @memcpy(overflow, remain_buf);
             }
+            let _guard_overflow = FreeGuard<u8>{ allocator: bun.default_allocator, slice: if (overflow_len > 0) overflow else null };
 
             if (*p := _.proxy) {
                 if (tunnel := p.getTunnel()) {
@@ -1262,6 +1263,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                         const ws = bun.take(&_.outgoing_websocket).?;
 
                         ws.didConnectWithTunnel(tunnel, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null);
+                        _guard_overflow.disarm();
 
                         _.state = .done;
                     } else if (_.tcp.isClosed()) {
@@ -1289,6 +1291,7 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
                 const _guard_deref2 = DerefGuard<HTTPClient>{ ptr: _ };
                 if (native_socket := socket.socket.get()) {
                     ws.didConnect(native_socket, overflow.ptr, overflow.len, if (deflate_result.enabled) &deflate_result.params else null, _guard_secure.ctx);
+                    _guard_overflow.disarm();
                     _guard_secure.disarm();
                 } else {
                     _.terminate(ErrorCode.failed_to_connect);
@@ -1300,10 +1303,10 @@ pub fn NewHTTPUpgradeClient(comptime ssl: bool): type {
             }
         }
 
-        @c pub fn memoryCost(*_): usize {
+        @c pub static fn memoryCost(client: *HTTPClient): usize {
             let cost: usize = @sizeOf(HTTPClient);
-            cost += _.body.capacity;
-            cost += _.to_send.len;
+            cost += client.body.capacity;
+            cost += client.to_send.len;
             return cost;
         }
 

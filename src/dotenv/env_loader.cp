@@ -881,6 +881,7 @@ pub struct Loader {
 
                 // prevent retrying
                 @field(_, base) = logger.Source.initPathString(base, "");
+                _.allocator.free(buf);
                 return;
             } else {
                 return e;
@@ -952,6 +953,7 @@ pub struct Loader {
 
                 // prevent retrying
                 _.custom_files_loaded.put(file_path, logger.Source.initPathString(file_path, ""))?;
+                _.allocator.free(buf);
                 return;
             } else {
                 return e;

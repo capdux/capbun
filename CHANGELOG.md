@@ -2353,3 +2353,5 @@
 - Phase 3 第二十五批：加固 4 个 `.cp` 模块及其生成的 `.zig`（`src/js_printer/js_printer.{cp,zig}`, `src/test_runner/{expect,snapshot,jest}.{cp,zig}`）。
 
 - Phase 3 第二十六批：加固 9 个 `.cp` 模块及其生成的 `.zig`（`src/js_printer/renamer.{cp,zig}`, `src/js_parser/lexer.{cp,zig}`, `src/watcher/Watcher.{cp,zig}`, `src/sys/walker_skippable.{cp,zig}`, `src/string/{immutable/unicode,immutable}.{cp,zig}`, `src/bun_core/fmt.{cp,zig}`, `src/s3_signing/credentials.{cp,zig}`, `src/install_jsc/npm_jsc.{cp,zig}`）。
+
+- Phase 3 第二十七批：加固 6 个 `.cp` 模块及其生成的 `.zig`（`src/http_jsc/{websocket_client,websocket_client/WebSocketUpgradeClient}.{cp,zig}`, `src/dotenv/env_loader.{cp,zig}`, `src/valkey/valkey_protocol.{cp,zig}`, `src/bun.js.{cp,zig}`, `src/standalone_graph/StandaloneModuleGraph.{cp,zig}`），完成全仓所有 `.cp` 目录的 Phase 3 内存安全专项审计。

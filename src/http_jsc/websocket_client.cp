@@ -446,22 +446,22 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             }
         }
 
-        @c pub fn cancel(*_) {
+        @c pub static fn cancel(ws: *WebSocket) {
             log("cancel", {});
-            _.ref();
-            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, _) } };
+            ws.ref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: ws };
 
-            const had_tunnel = _.proxy_tunnel != null;
-            _.clearData();
+            const had_tunnel = ws.proxy_tunnel != null;
+            ws.clearData();
 
             if (comptime ssl) {
-                _.tcp.close(.normal);
+                ws.tcp.close(.normal);
             } else {
-                _.tcp.close(.failure);
+                ws.tcp.close(.failure);
             }
 
             if (had_tunnel) {
-                _.dispatchAbruptClose(ErrorCode.ended);
+                ws.dispatchAbruptClose(ErrorCode.ended);
             }
         }
 
@@ -621,7 +621,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     _.receive_buffer.update(data_.len);
                 }
 
-                if (left_in_fragment >= data_.len && left_in_fragment - data_.len - _.receive_pending_chunk_len == 0) {
+                if (left_in_fragment >= data_.len && left_in_fragment - data_.len == _.receive_pending_chunk_len) {
                     _.receive_pending_chunk_len = 0;
                     _.receive_body_remain = 0;
                     if (is_final) {
@@ -655,7 +655,7 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             @memcpy(writable[0..data_.len], data_);
             _.receive_buffer.update(data_.len);
 
-            if (left_in_fragment >= data_.len && left_in_fragment - data_.len - _.receive_pending_chunk_len == 0) {
+            if (left_in_fragment >= data_.len && left_in_fragment - data_.len == _.receive_pending_chunk_len) {
                 _.receive_pending_chunk_len = 0;
                 _.receive_body_remain = 0;
                 if (is_final) {
@@ -1238,16 +1238,16 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             return false;
         }
 
-        @c pub fn writeBinaryData(*_,
+        @c pub static fn writeBinaryData(ws: *WebSocket,
             ptr: [*]const u8!,
             len: usize,
             op: u8,
         ) {
-            _.ref();
-            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, _) } };
+            ws.ref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: ws };
 
-            if (!_.hasTCP() || op > 0xF) {
-                _.dispatchAbruptClose(ErrorCode.ended);
+            if (!ws.hasTCP() || op > 0xF) {
+                ws.dispatchAbruptClose(ErrorCode.ended);
                 return;
             }
 
@@ -1255,14 +1255,14 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             const slice = unsafe { ptr[0..len] };
             let bytes: Copy = .bytes(slice);
             const frame_size = WebsocketHeader.frameSizeIncludingMask(len);
-            if (!_.hasBackpressure() && frame_size < stack_frame_size) {
+            if (!ws.hasBackpressure() && frame_size < stack_frame_size) {
                 let inline_buf: [stack_frame_size]u8 = undefined;
-                bytes.copy(_.globalThis, inline_buf[0..frame_size], slice.len, opcode);
-                * = _.enqueueEncodedBytes(_.tcp, inline_buf[0..frame_size]);
+                bytes.copy(ws.globalThis, inline_buf[0..frame_size], slice.len, opcode);
+                * = ws.enqueueEncodedBytes(ws.tcp, inline_buf[0..frame_size]);
                 return;
             }
 
-            * = _.sendData(bytes, !_.hasBackpressure(), opcode);
+            * = ws.sendData(bytes, !ws.hasBackpressure(), opcode);
         }
 
         fn hasTCP(*_): bool {
@@ -1270,15 +1270,15 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             return !_.tcp.isClosed() && !_.tcp.isShutdown();
         }
 
-        @c pub fn writeBlob(*_,
+        @c pub static fn writeBlob(ws: *WebSocket,
             blob_value: jsc.JSValue,
             op: u8,
         ) {
-            _.ref();
-            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, _) } };
+            ws.ref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: ws };
 
-            if (!_.hasTCP() || op > 0xF) {
-                _.dispatchAbruptClose(ErrorCode.ended);
+            if (!ws.hasTCP() || op > 0xF) {
+                ws.dispatchAbruptClose(ErrorCode.ended);
                 return;
             }
 
@@ -1288,39 +1288,39 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                 const data = blob.sharedView();
                 if (data.len == 0) {
                     const bytes: Copy = .bytes("");
-                    * = _.sendData(bytes, !_.hasBackpressure(), opcode);
+                    * = ws.sendData(bytes, !ws.hasBackpressure(), opcode);
                     return;
                 }
 
                 let bytes: Copy = .bytes(data);
 
                 const frame_size = WebsocketHeader.frameSizeIncludingMask(data.len);
-                if (!_.hasBackpressure() && frame_size < stack_frame_size) {
+                if (!ws.hasBackpressure() && frame_size < stack_frame_size) {
                     let inline_buf: [stack_frame_size]u8 = undefined;
-                    bytes.copy(_.globalThis, inline_buf[0..frame_size], data.len, opcode);
-                    * = _.enqueueEncodedBytes(_.tcp, inline_buf[0..frame_size]);
+                    bytes.copy(ws.globalThis, inline_buf[0..frame_size], data.len, opcode);
+                    * = ws.enqueueEncodedBytes(ws.tcp, inline_buf[0..frame_size]);
                     return;
                 }
 
-                * = _.sendData(bytes, !_.hasBackpressure(), opcode);
+                * = ws.sendData(bytes, !ws.hasBackpressure(), opcode);
             } else {
-                _.dispatchAbruptClose(ErrorCode.ended);
+                ws.dispatchAbruptClose(ErrorCode.ended);
             }
         }
 
-        @c pub fn writeString(*_,
+        @c pub static fn writeString(ws: *WebSocket,
             str_: *const jsc.ZigString,
             op: u8,
         ) {
-            _.ref();
-            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, _) } };
+            ws.ref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: ws };
 
             const str = unsafe { str_.* };
-            if (!_.hasTCP()) {
-                _.dispatchAbruptClose(ErrorCode.ended);
+            if (!ws.hasTCP()) {
+                ws.dispatchAbruptClose(ErrorCode.ended);
                 return;
             }
-            const tcp = _.tcp;
+            const tcp = ws.tcp;
 
             const opcode = @as(Opcode, @enumFromInt(@as(u4, @truncate(op))));
             {
@@ -1330,28 +1330,28 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
                     let bytes: Copy = .latin1(str.slice());
                     let byte_len: usize = 0;
                     const frame_size = bytes.len(&byte_len);
-                    if (!_.hasBackpressure() && frame_size < stack_frame_size) {
-                        bytes.copy(_.globalThis, inline_buf[0..frame_size], byte_len, opcode);
-                        * = _.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
+                    if (!ws.hasBackpressure() && frame_size < stack_frame_size) {
+                        bytes.copy(ws.globalThis, inline_buf[0..frame_size], byte_len, opcode);
+                        * = ws.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
                         return;
                     }
-                } else if ((str.len * 4) < stack_frame_size && !_.hasBackpressure()) {
+                } else if ((str.len * 4) < stack_frame_size && !ws.hasBackpressure()) {
                     let bytes: Copy = .utf16(str.utf16SliceAligned());
                     let byte_len: usize = 0;
                     const frame_size = bytes.len(&byte_len);
                     bun.assert(frame_size <= stack_frame_size);
-                    bytes.copy(_.globalThis, inline_buf[0..frame_size], byte_len, opcode);
-                    * = _.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
+                    bytes.copy(ws.globalThis, inline_buf[0..frame_size], byte_len, opcode);
+                    * = ws.enqueueEncodedBytes(tcp, inline_buf[0..frame_size]);
                     return;
                 }
             }
 
-            * = _.sendData(
+            * = ws.sendData(
                 if (str.is16Bit())
                     Copy.utf16(str.utf16SliceAligned())
                 else
                     Copy.latin1(str.slice()),
-                !_.hasBackpressure(),
+                !ws.hasBackpressure(),
                 opcode,
             );
         }
@@ -1374,24 +1374,24 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             _.deref();
         }
 
-        @c pub fn close(*_, code: u16, reason: (*const jsc.ZigString)?) {
-            _.ref();
-            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, _) } };
+        @c pub static fn close(ws: *WebSocket, code: u16, reason: (*const jsc.ZigString)?) {
+            ws.ref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: ws };
 
-            if (!_.hasTCP())
+            if (!ws.hasTCP())
                 return;
-            const tcp = _.tcp;
+            const tcp = ws.tcp;
             let close_reason_buf: [128]u8 = undefined;
             if (str := reason) {
                 let fixed_buffer = std.heap.FixedBufferAllocator.init(&close_reason_buf);
                 const allocator = fixed_buffer.allocator();
                 if (wrote := std.fmt.allocPrint(allocator, "{f}", [unsafe { str.* }]) catch null) {
-                    _.sendCloseWithBody(tcp, code, unsafe { wrote.ptr[0..125] }, wrote.len);
+                    ws.sendCloseWithBody(tcp, code, unsafe { wrote.ptr[0..125] }, wrote.len);
                     return;
                 }
             }
 
-            _.sendCloseWithBody(tcp, code, null, 0);
+            ws.sendCloseWithBody(tcp, code, null, 0);
         }
 
         @c pub static fn init(
@@ -1522,23 +1522,23 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             * = _.sendBuffer(send_buf);
         }
 
-        @c pub fn finalize(*_) {
+        @c pub static fn finalize(ws: *WebSocket) {
             log("finalize", {});
-            _.ref();
-            const _deref_guard = DerefGuard<WebSocket>{ ptr: unsafe { @as(*WebSocket!, _) } };
+            ws.ref();
+            const _deref_guard = DerefGuard<WebSocket>{ ptr: ws };
 
-            _.clearData();
+            ws.clearData();
 
-            if (_.outgoing_websocket != null) {
-                _.outgoing_websocket = null;
-                _.deref();
+            if (ws.outgoing_websocket != null) {
+                ws.outgoing_websocket = null;
+                ws.deref();
             }
 
-            if (!_.tcp.isClosed()) {
+            if (!ws.tcp.isClosed()) {
                 if (comptime ssl) {
-                    _.tcp.close(.normal);
+                    ws.tcp.close(.normal);
                 } else {
-                    _.tcp.close(.failure);
+                    ws.tcp.close(.failure);
                 }
             }
         }
@@ -1550,10 +1550,10 @@ pub fn NewWebSocketClient(comptime ssl: bool): type {
             bun.destroy(_);
         }
 
-        @c pub fn memoryCost(*_): usize {
+        @c pub static fn memoryCost(ws: *WebSocket): usize {
             let cost: usize = @sizeOf(WebSocket);
-            cost += _.send_buffer.buf.len;
-            cost += _.receive_buffer.buf.len;
+            cost += ws.send_buffer.buf.len;
+            cost += ws.receive_buffer.buf.len;
             return cost;
         }
 

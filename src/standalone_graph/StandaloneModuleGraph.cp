@@ -939,12 +939,13 @@ pub struct StandaloneModuleGraph {
 
         switch (target.os) {
             .mac => {
-                const input_result = bun.sys.File.readToEnd({ handle: cloned_executable_fd }, bun.default_allocator);
+                let input_result = bun.sys.File.readToEnd({ handle: cloned_executable_fd }, bun.default_allocator);
                 if (e := input_result.err) {
                     Output.prettyErrorln("Error reading standalone module graph: {f}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 }
+                const _guard_input = DeinitGuard<@TypeOf(input_result.bytes)>{ ptr: &input_result.bytes };
                 let macho_file = bun.macho.MachoFile.init(bun.default_allocator, input_result.bytes.items, bytes.len) catch e => {
                     Output.prettyErrorln("Error initializing standalone module graph: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
@@ -956,7 +957,6 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
-                input_result.bytes.deinit();
 
                 switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
                     .err e => {
@@ -987,12 +987,13 @@ pub struct StandaloneModuleGraph {
                 return cloned_executable_fd;
             },
             .windows => {
-                const input_result = bun.sys.File.readToEnd({ handle: cloned_executable_fd }, bun.default_allocator);
+                let input_result = bun.sys.File.readToEnd({ handle: cloned_executable_fd }, bun.default_allocator);
                 if (e := input_result.err) {
                     Output.prettyErrorln("Error reading standalone module graph: {f}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 }
+                const _guard_input = DeinitGuard<@TypeOf(input_result.bytes)>{ ptr: &input_result.bytes };
                 let pe_file = bun.pe.PEFile.init(bun.default_allocator, input_result.bytes.items) catch e => {
                     Output.prettyErrorln("Error initializing PE file: {}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
@@ -1004,7 +1005,6 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
-                input_result.bytes.deinit();
 
                 switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
                     .err e => {
@@ -1028,12 +1028,13 @@ pub struct StandaloneModuleGraph {
                 return cloned_executable_fd;
             },
             .linux, .freebsd => {
-                const input_result = bun.sys.File.readToEnd({ handle: cloned_executable_fd }, bun.default_allocator);
+                let input_result = bun.sys.File.readToEnd({ handle: cloned_executable_fd }, bun.default_allocator);
                 if (e := input_result.err) {
                     Output.prettyErrorln("Error reading executable: {f}", [e]);
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 }
+                const _guard_input = DeinitGuard<@TypeOf(input_result.bytes)>{ ptr: &input_result.bytes };
 
                 let elf_file = bun.elf.ElfFile.init(bun.default_allocator, input_result.bytes.items) catch e => {
                     Output.prettyErrorln("Error initializing ELF file: {}", [e]);
@@ -1049,7 +1050,6 @@ pub struct StandaloneModuleGraph {
                     cleanupTempFile(zname, cloned_executable_fd);
                     return bun.invalid_fd;
                 };
-                input_result.bytes.deinit();
 
                 switch (Syscall.setFileOffset(cloned_executable_fd, 0)) {
                     .err e => {
