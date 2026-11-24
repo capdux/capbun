@@ -1289,8 +1289,8 @@ pub fn next(self: *AttributeIterator, globalObject: *JSGlobalObject, _: *jsc.Cal
             const value = attribute.@"value"();
             const name = attribute.@"name"();
             const to_str = @TypeOf(name).toString;
-            const s0 = (if (comptime @typeInfo(bun.String) == .@"enum") @as(bun.String, @enumFromInt(to_str(name))) else @as(bun.String, to_str(name)));
-            const s1 = (if (comptime @typeInfo(bun.String) == .@"enum") @as(bun.String, @enumFromInt(to_str(value))) else @as(bun.String, to_str(value)));
+            const s0 = (if (comptime @typeInfo(bun.String) == .@"enum" and (@typeInfo(@TypeOf(to_str(name))) == .int or @typeInfo(@TypeOf(to_str(name))) == .comptime_int)) @as(bun.String, @enumFromInt(to_str(name))) else @as(bun.String, to_str(name)));
+            const s1 = (if (comptime @typeInfo(bun.String) == .@"enum" and (@typeInfo(@TypeOf(to_str(value))) == .int or @typeInfo(@TypeOf(to_str(value))) == .comptime_int)) @as(bun.String, @enumFromInt(to_str(value))) else @as(bun.String, to_str(value)));
             const strings_to_array: [2]bun.String = .{ s0, s1 };
             return JSValue.createObject2(globalObject, done_label, value_label, .false, try bun.String.toJSArray(globalObject, (&strings_to_array)));
     }
@@ -1572,24 +1572,15 @@ const JSValue = jsc.JSValue;
 const ZigString = jsc.ZigString;
 const host_fn = jsc.host_fn;
 
-pub fn WrapperGuardType(comptime ZigType: type, comptime field_name: []const u8) type {
-        return struct {
-    w: *ZigType,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *@This()) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            {
-                if (comptime @hasDecl(ZigType, "invalidate")) {
-                    _ = self.w.invalidate();
-                } else {
-                    @field(self.w, field_name) = null;
-                }
-                _ = self.w.deref();
+pub fn cleanupWrapper(comptime ZigType: type, comptime field_name: []const u8, w: *ZigType) void {
+        {
+            if (comptime @hasDecl(ZigType, "invalidate")) {
+                _ = w.invalidate();
+            } else {
+                @field(w, field_name) = null;
             }
-    }
-};
+            _ = w.deref();
+        }
 }
 
 pub fn HandlerCallback(comptime HandlerType: type, comptime ZigType: type, comptime LOLHTMLType: type, comptime field_name: []const u8, comptime callback_name: []const u8) *const fn (*HandlerType, *LOLHTMLType) bool {
@@ -1600,9 +1591,9 @@ pub fn callback(handler: *HandlerType, value: *LOLHTMLType) bool {
             var wrapper = ZigType.init(value);
             _ = &wrapper;
             _ = wrapper.ref();
-            const WrapperGuard = WrapperGuardType(ZigType, field_name);
-            const _guard_wrapper = WrapperGuard{ .w = wrapper };
-            _ = &_guard_wrapper;
+            defer {
+            _ = cleanupWrapper(ZigType, field_name, wrapper);
+            }
             var scope: bun.jsc.TopExceptionScope = undefined;
             _ = &scope;
             _ = scope.init(handler.global, @src());

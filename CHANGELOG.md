@@ -2261,3 +2261,5 @@
 - [Phase 2 第四批修复] 修改 .cp/.zig：`src/js_parser/lexer.{cp,zig}`（`.@"private"` 枚举转义修复 `#\u0063onstructor` 词法解析，`zig:check` 5/5）。
 
 - [Phase 2 第五批修复] 修改 .cp/.zig：`src/jsc/ModuleLoader.{cp,zig}`（`InputFdGuard.should_close: *bool` 修复 `--hot` `EISDIR` 报错，`zig:check` 5/5）。
+
+- [Phase 2 第六批修复] 修改 .cp/.zig：`src/runtime/api/html_rewriter.{cp,zig}`（`WrapperGuardType` 改为 `defer cleanupWrapper` 修复 `text-chunk-null-access` SEGV，`zig:check` 5/5）。

@@ -932,20 +932,15 @@ struct DocumentHandler {
     }
 }
 
-fn WrapperGuardType(comptime ZigType: type, comptime field_name: string): type {
-    return struct {
-        w: *ZigType!,
-        ~init() {
-            unsafe {
-                if (comptime @hasDecl(ZigType, "invalidate")) {
-                    _.w.invalidate();
-                } else {
-                    @field(_.w, field_name) = null;
-                }
-                _.w.deref();
-            }
+fn cleanupWrapper(comptime ZigType: type, comptime field_name: string, w: *ZigType!) {
+    unsafe {
+        if (comptime @hasDecl(ZigType, "invalidate")) {
+            w.invalidate();
+        } else {
+            @field(w, field_name) = null;
         }
-    };
+        w.deref();
+    }
 }
 
 fn HandlerCallback(
@@ -966,8 +961,7 @@ fn HandlerCallback(
             // as it's an opaque type now
             // The init values are handled by bun.new with .init()
 
-            const WrapperGuard = WrapperGuardType(ZigType, field_name);
-            const _guard_wrapper = WrapperGuard{ w: wrapper };
+            defer cleanupWrapper(ZigType, field_name, wrapper);
 
             // Use a TopExceptionScope to properly handle exceptions from the JavaScript callback
             let scope: bun.jsc.TopExceptionScope = undefined;
