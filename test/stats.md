@@ -253,3 +253,5 @@
 | `test/js/bun/util/` (39 files 除 `fuzzy-wuzzy`, `bun-debug`) | debug (`abb8c9b9`) | 1386 | 2 | 1 skip | **1386/0 逻辑**（66017 expects；仅 `sleep.test.ts` 1035ms<1000 与 `sliceAnsi-fuzz` 压测在 Debug 超时） |
 
 | `test/js/bun/{md,json5,ini,cookie}/` (14 files, `bun-debug`) | debug (`abb8c9b9`) | 1652 | 0 | - | **1652/0 全绿**（36 snapshots，2908 expects，74.29s，exit 0） |
+
+| `test/js/bun/crypto/` (3 files, `bun-debug`) | debug (`abb8c9b9`) | 10248 | 0 | - | **10248/0 全绿**（29400 expects，101.60s，exit 0） |
