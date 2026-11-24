@@ -613,9 +613,9 @@ pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name:
             }
             request.* = .{ .resolver_for_caching = resolver, .hash = hash, .head = .{ .resolver = resolver, .poll_ref = poll_ref, .globalThis = globalThis, .promise = jsc.JSPromise.Strong.init(globalThis), .allocated = false, .name = name } };
             request.tail = (&request.head);
-            if ((cache == .@"new")) {
+            if (((cache == .@"new") and (name.len <= std.math.maxInt(u9)))) {
                 request.resolver_for_caching = resolver;
-                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate(name.len)) };
+                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @intCast(name.len)) };
                 cache.@"new".lookup = (blk: {
                 break :blk @ptrCast(request);
 
@@ -741,9 +741,9 @@ pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name:
             _ = poll_ref.ref(globalThis.bunVM());
             request.* = .{ .resolver_for_caching = resolver, .hash = hash, .head = .{ .poll_ref = poll_ref, .globalThis = globalThis, .promise = jsc.JSPromise.Strong.init(globalThis), .allocated = false, .name = name } };
             request.tail = (&request.head);
-            if ((cache == .@"new")) {
+            if (((cache == .@"new") and (name.len <= std.math.maxInt(u9)))) {
                 request.resolver_for_caching = resolver;
-                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate(name.len)) };
+                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @intCast(name.len)) };
                 cache.@"new".lookup = (blk: {
                 break :blk @ptrCast(request);
 
@@ -890,9 +890,9 @@ pub fn init(cache: Resolver.CacheHit, backend: Backend, resolver: ?*Resolver, qu
             }
             request.* = .{ .backend = backend, .resolver_for_caching = resolver, .hash = query.hash(), .head = .{ .resolver = resolver, .globalThis = globalThis, .poll_ref = poll_ref, .promise = jsc.JSPromise.Strong.init(globalThis), .allocated = false } };
             request.tail = (&request.head);
-            if ((cache == .@"new")) {
+            if (((cache == .@"new") and ((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name).len <= std.math.maxInt(u9)))) {
                 request.resolver_for_caching = resolver;
-                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name).len)) };
+                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @intCast((if (@typeInfo(@TypeOf(query)) == .@"enum" or @typeInfo(@TypeOf(query)) == .@"union") @tagName(query) else query.name).len)) };
                 cache.@"new".lookup = (blk: {
                 break :blk @ptrCast(request);
 
@@ -3354,9 +3354,9 @@ pub fn init(cache: Resolver.LookupCacheHit(@This()), resolver: ?*Resolver, name:
             }
             request.* = .{ .resolver_for_caching = resolver, .hash = hash, .head = .{ .resolver = resolver, .poll_ref = poll_ref, .globalThis = globalThis, .promise = jsc.JSPromise.Strong.init(globalThis), .allocated = false, .name = name } };
             request.tail = (&request.head);
-            if ((cache == .@"new")) {
+            if (((cache == .@"new") and (name.len <= std.math.maxInt(u9)))) {
                 request.resolver_for_caching = resolver;
-                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @truncate(name.len)) };
+                request.cache = CacheConfig{ .pending_cache = true, .entry_cache = false, .pos_in_pending = @as(u5, @truncate(pendingIndexOf((&@field(resolver.?, cache_field)), cache.@"new"))), .name_len = @as(u9, @intCast(name.len)) };
                 cache.@"new".lookup = (blk: {
                 break :blk @ptrCast(request);
 

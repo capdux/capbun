@@ -425,13 +425,13 @@ pub fn ResolveInfoRequest(comptime cares_type: type, comptime type_name: []const
                 },
             };
             request.tail = &request.head;
-            if (cache == .@"new") {
+            if (cache == .@"new" && name.len <= std.math.maxInt(u9)) {
                 request.resolver_for_caching = resolver;
                 request.cache = CacheConfig{
                     .pending_cache = true,
                     .entry_cache = false,
                     .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
-                    .name_len = @as(u9, @truncate(name.len)),
+                    .name_len = @as(u9, @intCast(name.len)),
                 };
                 cache.@"new".lookup = unsafe { @ptrCast(request) };
             }
@@ -526,13 +526,13 @@ pub struct GetHostByAddrInfoRequest {
             },
         };
         request.tail = &request.head;
-        if (cache == .@"new") {
+        if (cache == .@"new" && name.len <= std.math.maxInt(u9)) {
             request.resolver_for_caching = resolver;
             request.cache = CacheConfig{
                 .pending_cache = true,
                 .entry_cache = false,
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
-                .name_len = @as(u9, @truncate(name.len)),
+                .name_len = @as(u9, @intCast(name.len)),
             };
             cache.@"new".lookup = unsafe { @ptrCast(request) };
         }
@@ -674,13 +674,13 @@ pub struct GetNameInfoRequest {
             .head = .{ .poll_ref = poll_ref, .globalThis = globalThis, .promise = jsc.JSPromise.Strong.init(globalThis), .allocated = false, .name = name },
         };
         request.tail = &request.head;
-        if (cache == .@"new") {
+        if (cache == .@"new" && name.len <= std.math.maxInt(u9)) {
             request.resolver_for_caching = resolver;
             request.cache = CacheConfig{
                 .pending_cache = true,
                 .entry_cache = false,
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
-                .name_len = @as(u9, @truncate(name.len)),
+                .name_len = @as(u9, @intCast(name.len)),
             };
             cache.@"new".lookup = unsafe { @ptrCast(request) };
         }
@@ -845,13 +845,13 @@ pub struct GetAddrInfoRequest {
             },
         };
         request.tail = &request.head;
-        if (cache == .@"new") {
+        if (cache == .@"new" && query.name.len <= std.math.maxInt(u9)) {
             request.resolver_for_caching = resolver;
             request.cache = CacheConfig{
                 .pending_cache = true,
                 .entry_cache = false,
                 .pos_in_pending = @as(u5, @truncate(pendingIndexOf(&@field(resolver.?, cache_field), cache.@"new"))),
-                .name_len = @as(u9, @truncate(query.name.len)),
+                .name_len = @as(u9, @intCast(query.name.len)),
             };
             cache.@"new".lookup = unsafe { @ptrCast(request) };
         }

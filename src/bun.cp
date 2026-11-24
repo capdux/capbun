@@ -1939,15 +1939,18 @@ pub struct StringMap {
     }
 
     fn insert(*_, key: []const u8, value: []const u8)! {
-        const entry = _.map.getOrPut(key)?;
-        if (!entry.found_existing) {
-            if (_.dupe_keys)
-                entry.key_ptr.* = _.map.allocator.dupe(u8, key)?;
-        } else {
+        const duped_value = _.map.allocator.dupe(u8, value)?;
+        errdefer _.map.allocator.free(duped_value);
+        const duped_key = if (_.dupe_keys) _.map.allocator.dupe(u8, key)? else key;
+        errdefer if (_.dupe_keys) _.map.allocator.free(duped_key);
+
+        const entry = _.map.getOrPut(duped_key)?;
+        if (entry.found_existing) {
+            if (_.dupe_keys) _.map.allocator.free(duped_key);
             _.map.allocator.free(entry.value_ptr.*);
         }
 
-        entry.value_ptr.* = _.map.allocator.dupe(u8, value)?;
+        entry.value_ptr.* = duped_value;
     }
     pub const put = insert;
 

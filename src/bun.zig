@@ -713,15 +713,24 @@ pub fn toAPI(self: StringMap) schema.api.StringMap {
     }
 
 pub fn insert(self: *StringMap, key: []const u8, value: []const u8) !void {
-            const entry = try self.map.getOrPut(key);
-            if ((!entry.found_existing)) {
+            const duped_value = try self.map.allocator.dupe(u8, value);
+            errdefer {
+            _ = self.map.allocator.free(duped_value);
+            }
+            const duped_key = (if (self.dupe_keys) try self.map.allocator.dupe(u8, key) else key);
+            errdefer {
+            if (self.dupe_keys) {
+                _ = self.map.allocator.free(duped_key);
+            }
+            }
+            const entry = try self.map.getOrPut(duped_key);
+            if (entry.found_existing) {
                 if (self.dupe_keys) {
-                    entry.key_ptr.* = try self.map.allocator.dupe(u8, key);
+                    _ = self.map.allocator.free(duped_key);
                 }
-            } else {
                 _ = self.map.allocator.free(entry.value_ptr.*);
             }
-            entry.value_ptr.* = try self.map.allocator.dupe(u8, value);
+            entry.value_ptr.* = duped_value;
     }
 
 pub fn get(self: *const StringMap, key: []const u8) ?[]const u8 {
