@@ -1215,7 +1215,7 @@ pub fn differenceWith(self: @This(), other: Self) Self {
             return result;
     }
 
-pub fn iterator(self: @This(), comptime options: IteratorOptions) Iterator(options) {
+pub fn iterator(self: *const @This(), comptime options: IteratorOptions) Iterator(options) {
             const IterT = Iterator(options);
             return IterT{ .bits_remain = (switch (options.kind) {
 .set => self.mask,
@@ -1573,7 +1573,7 @@ pub fn differenceWith(self: @This(), other: *const Self) Self {
             return result;
     }
 
-pub fn iterator(self: @This(), comptime options: IteratorOptions) Iterator(options) {
+pub fn iterator(self: *const @This(), comptime options: IteratorOptions) Iterator(options) {
             return Iterator(options).init((&self.masks), last_item_mask);
     }
 

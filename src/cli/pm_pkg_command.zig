@@ -192,24 +192,7 @@ _ = printHelp();
 
 pub fn printHelp() void {
             _ = Output.prettyln((("<r><b>bun pm pkg<r> <d>v" ++ Global.package_json_version_with_sha) ++ "<r>"), .{});
-            const help_text: []const u8 = "  Manage data in package.json";
-            _ = "";
-            _ = "<b>Subcommands<r>:";
-            _ = "  <cyan>get<r> <blue>[key ...]<r>          Get values from package.json";
-            _ = "  <cyan>set<r> <blue>key=value ...<r>      Set values in package.json";
-            _ = "    <d>└<r> <cyan>--json<r>             Parse values as JSON (e.g. {{\"a\":1}})";
-            _ = "  <cyan>delete<r> <blue>key ...<r>         Delete keys from package.json";
-            _ = "  <cyan>fix<r>                    Auto-correct common package.json errors";
-            _ = "";
-            _ = "<b>Examples<r>:";
-            _ = "  <d>$<r> <b><green>bun pm pkg<r> <cyan>get<r> <blue>name version<r>";
-            _ = "  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>description=\"My awesome package\"<r>";
-            _ = "  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>keywords='[\"test\",\"demo\",\"example\"]'<r> <cyan>--json<r>";
-            _ = "  <d>$<r> <b><green>bun pm pkg<r> <cyan>delete<r> <blue>description<r>";
-            _ = "  <d>$<r> <b><green>bun pm pkg<r> <cyan>fix<r>";
-            _ = "";
-            _ = "More info: <magenta>https://bun.com/docs/cli/pm#pkg<r>";
-            _ = "";
+            const help_text = (((((((((((((((("  Manage data in package.json\n" ++ "\n") ++ "<b>Subcommands<r>:\n") ++ "  <cyan>get<r> <blue>[key ...]<r>          Get values from package.json\n") ++ "  <cyan>set<r> <blue>key=value ...<r>      Set values in package.json\n") ++ "    <d>└<r> <cyan>--json<r>             Parse values as JSON (e.g. {{\"a\":1}})\n") ++ "  <cyan>delete<r> <blue>key ...<r>         Delete keys from package.json\n") ++ "  <cyan>fix<r>                    Auto-correct common package.json errors\n") ++ "\n") ++ "<b>Examples<r>:\n") ++ "  <d>$<r> <b><green>bun pm pkg<r> <cyan>get<r> <blue>name version<r>\n") ++ "  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>description=\"My awesome package\"<r>\n") ++ "  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>keywords='[\"test\",\"demo\",\"example\"]'<r> <cyan>--json<r>\n") ++ "  <d>$<r> <b><green>bun pm pkg<r> <cyan>delete<r> <blue>description<r>\n") ++ "  <d>$<r> <b><green>bun pm pkg<r> <cyan>fix<r>\n") ++ "\n") ++ "More info: <magenta>https://bun.com/docs/cli/pm#pkg<r>\n\n");
             _ = Output.pretty(help_text, .{});
             _ = Output.flush();
     }
@@ -255,6 +238,10 @@ pub fn execGet(ctx: Command.Context, pm: *PackageManager, args: []const []const 
             _ = &_contents_guard;
             var ___contents_guard_moved = false; _ = &___contents_guard_moved;
             defer if (!___contents_guard_moved) { ___contents_guard_moved = true; const __T = @TypeOf(_contents_guard); if (@typeInfo(__T) == .optional) { if (_contents_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _contents_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _contents_guard; _drop_val.__cp_deinit(); } };
+            if ((pkg.root.data != .e_object)) {
+                _ = Output.errGeneric("package.json root must be an object", .{});
+                _ = Global.exit(1);
+            }
             if ((args.len == 0)) {
                 const formatted = try formatJson(ctx.allocator, pkg.root, null);
                 var _fmt_guard = FreeGuard(u8){ .allocator = ctx.allocator, .slice = formatted };

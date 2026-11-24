@@ -272,7 +272,7 @@ pub fn IntegerBitSet(comptime size: u16): type {
         /// The default options (.{}) will iterate indices of set bits in
         /// ascending order.  Modifications to the underlying bit set may
         /// or may not be observed by the iterator.
-        pub fn iterator(comptime options: IteratorOptions): Iterator(options) {
+        pub fn iterator(_: *const Self, comptime options: IteratorOptions): Iterator(options) {
             const IterT = Iterator(options);
             return IterT{
                 bits_remain: switch (options.kind) {
@@ -626,7 +626,7 @@ pub fn ArrayBitSet(comptime MaskIntType: type, comptime size: usize): type {
         /// The default options (.{}) will iterate indices of set bits in
         /// ascending order.  Modifications to the underlying bit set may
         /// or may not be observed by the iterator.
-        pub fn iterator(comptime options: IteratorOptions): Iterator(options) {
+        pub fn iterator(_: *const Self, comptime options: IteratorOptions): Iterator(options) {
             return Iterator(options).init(&_.masks, last_item_mask);
         }
 

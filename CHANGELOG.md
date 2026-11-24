@@ -2251,3 +2251,5 @@
 - [Wave #120–#126] 修改 .cp/.zig：完成全仓最后 90 个 `--strict` 纯化文件及联动 `zig:check` 修复（`runtime/{socket,webcore,webview}`、`s3_signing/`、`shell/`、`sourcemap*`、`sql*`、`standalone_graph/`、`string/`、`sys*`、`tcc_sys/`、`test_runner/`、`threading/`、`unicode/`、`uws*`、`watcher/`、`bun_alloc/`），全仓 1,295/1,295 `--strict` 零报错 + `zig:check` 5/5 通过。
 
 - [Phase 2 修复] 修改 .cp/.zig：`src/install/isolated_install/Installer.{cp,zig}`、`src/install/NetworkTask.{cp,zig}`、`src/cli/pm_pkg_command.{cp,zig}`、`src/runtime/server/RequestContext.{cp,zig}`（`zig:check` 5/5）。
+
+- [Phase 2 第二批修复] 修改 .cp/.zig：`src/cli/pm_pkg_command.{cp,zig}`、`src/collections/bit_set.{cp,zig}`（`zig:check` 5/5）。

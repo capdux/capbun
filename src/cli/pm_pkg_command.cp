@@ -104,25 +104,23 @@ pub struct PmPkgCommand {
     static fn printHelp() {
         Output.prettyln("<r><b>bun pm pkg<r> <d>v" ++ Global.package_json_version_with_sha ++ "<r>", .{});
         const help_text =
-            \\  Manage data in package.json
-            \\
-            \\<b>Subcommands<r>:
-            \\  <cyan>get<r> <blue>[key ...]<r>          Get values from package.json
-            \\  <cyan>set<r> <blue>key=value ...<r>      Set values in package.json
-            \\    <d>└<r> <cyan>--json<r>             Parse values as JSON (e.g. {{"a":1}})
-            \\  <cyan>delete<r> <blue>key ...<r>         Delete keys from package.json
-            \\  <cyan>fix<r>                    Auto-correct common package.json errors
-            \\
-            \\<b>Examples<r>:
-            \\  <d>$<r> <b><green>bun pm pkg<r> <cyan>get<r> <blue>name version<r>
-            \\  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>description="My awesome package"<r>
-            \\  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>keywords='["test","demo","example"]'<r> <cyan>--json<r>
-            \\  <d>$<r> <b><green>bun pm pkg<r> <cyan>delete<r> <blue>description<r>
-            \\  <d>$<r> <b><green>bun pm pkg<r> <cyan>fix<r>
-            \\
-            \\More info: <magenta>https://bun.com/docs/cli/pm#pkg<r>
-            \\
-        ;
+            "  Manage data in package.json\n" ++
+            "\n" ++
+            "<b>Subcommands<r>:\n" ++
+            "  <cyan>get<r> <blue>[key ...]<r>          Get values from package.json\n" ++
+            "  <cyan>set<r> <blue>key=value ...<r>      Set values in package.json\n" ++
+            "    <d>└<r> <cyan>--json<r>             Parse values as JSON (e.g. {{\"a\":1}})\n" ++
+            "  <cyan>delete<r> <blue>key ...<r>         Delete keys from package.json\n" ++
+            "  <cyan>fix<r>                    Auto-correct common package.json errors\n" ++
+            "\n" ++
+            "<b>Examples<r>:\n" ++
+            "  <d>$<r> <b><green>bun pm pkg<r> <cyan>get<r> <blue>name version<r>\n" ++
+            "  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>description=\"My awesome package\"<r>\n" ++
+            "  <d>$<r> <b><green>bun pm pkg<r> <cyan>set<r> <blue>keywords='[\"test\",\"demo\",\"example\"]'<r> <cyan>--json<r>\n" ++
+            "  <d>$<r> <b><green>bun pm pkg<r> <cyan>delete<r> <blue>description<r>\n" ++
+            "  <d>$<r> <b><green>bun pm pkg<r> <cyan>fix<r>\n" ++
+            "\n" ++
+            "More info: <magenta>https://bun.com/docs/cli/pm#pkg<r>\n\n";
         Output.pretty(help_text, .{});
         Output.flush();
     }
@@ -185,6 +183,11 @@ pub struct PmPkgCommand {
 
         const pkg = loadPackageJson(ctx, ctx.allocator, path)?;
         const _contents_guard = FreeGuard<u8>{ allocator: ctx.allocator, slice: pkg.contents };
+
+        if (pkg.root.data != .e_object) {
+            Output.errGeneric("package.json root must be an object", .{});
+            Global.exit(1);
+        }
 
         if (args.len == 0) {
             const formatted = formatJson(ctx.allocator, pkg.root, null)?;
