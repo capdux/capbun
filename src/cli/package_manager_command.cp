@@ -154,9 +154,6 @@ pub struct PackageManagerCommand {
         const is_direct_whoami = if (bun.argv.len > 1) strings.eqlComptime(bun.argv[1], "whoami") else false;
         let args = std.process.argsAlloc(ctx.allocator)?;
         args = args[1..];
-        if (args.len > 0 && strings.eqlComptime(args[0], "pm")) {
-            args = args[1..];
-        }
 
         if (args.len > 0 && strings.eqlComptime(args[0], "hash")) {
             if (args.len > 1) {

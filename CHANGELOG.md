@@ -2303,3 +2303,5 @@
 - [Phase 2 第二十四批修复] 修改 .cp/.zig：`src/bake/DevServer/SourceMapStore.{cp,zig}`（`renderJSON` 合法 JSON 与 `file://`/`bun://` 路径修复）、`src/runtime/api/glob.{cp,zig}`（`cwd` 类型校验与 `throwErrorOnBrokenSymlink` 拼写修复，`zig:check` 5/5）。
 
 - [Phase 2 第二十五批修复] 修改 .cp/.zig：`src/runtime/webcore/Blob.{cp,zig}`（`constructBunFile` 恢复 `findOrCreateFileFromPath` 与 `DeinitUnprotectGuard` 位置，`zig:check` 5/5）。
+
+- [Phase 2 第二十六批修复] 修改 .cp/.zig：`src/install/lockfile/Tree.{cp,zig}`（`isEnabled(dep_features)` 与根包/工作区过滤）、`src/cli/package_manager_command.{cp,zig}`（`bun pm trust` 参数修复）、`GEMINI.md`（`task-22829` #3，`zig:check` 5/5）。

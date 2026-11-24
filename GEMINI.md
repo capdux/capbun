@@ -266,3 +266,6 @@ python3 ~/.agy/comm/task_queue.py unacked --agent cp_agy --json
 4. **`bun bd` 串行构建互斥 + 小批次 `--timeout=5000` 防阻塞**：
    - 当 `bun bd` 正在后台链接 `build/debug/bun-debug` 时，严禁并发启动第二个 `bun bd`；等待期间用 `./build/release/bun test` 摸底独立测试目录，或做 `.cp` 静态排雷 + `cpc_brief.py` + `zig:check`。
    - 摸底含外部网络/子进程挂起风险的集成与 CLI 测试时，强制传 `--timeout=5000` 并限制 `≤ 4` 个文件/批，确保单批在 `timeout 30` 内必然打印 `Ran X tests` 摘要。
+5. **Release 解锁 `bun:internal-for-testing` + 复用产物并发扫测**：
+   - 使用 `./build/release/bun test` 并发扫测时，统一附加 `BUN_GARBAGE_COLLECTOR_LEVEL=0 BUN_FEATURE_FLAG_INTERNAL_FOR_TESTING=1`，无需依赖 Debug 构建即可启用 `bun:internal-for-testing`（避免 `ENOENT` 假失败）。
+   - 不新开 `--build-dir` 冷构建，而是待一次 `bun bd`/`build:release` 完成后直接并发调用产物二进制运行多路只读扫测（过滤管道使用 `rg -a` 兼容含 `\0` 输出），仅在集中修复多处 `.cp` 后再串行重编一次。

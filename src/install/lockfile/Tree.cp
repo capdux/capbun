@@ -399,6 +399,7 @@ pub fn isFilteredDependencyOrWorkspace(
 
     const dep = lockfile.buffers.dependencies.items[dep_id];
     const res = pkg_resolutions[pkg_id];
+    const parent_res = &pkg_resolutions[parent_pkg_id];
 
     if (pkg_metas[pkg_id].isDisabled(manager.options.cpu, manager.options.os)) {
         if (manager.options.log_level.isVerbose()) {
@@ -419,21 +420,27 @@ pub fn isFilteredDependencyOrWorkspace(
         return true;
     }
 
-    if (manager.subcommand != .install || parent_pkg_id != 0) {
-        if (res.tag == .workspace) {
-            return false;
-        }
-    }
+    const dep_features = switch (parent_res.tag) {
+        .root, .workspace, .folder => manager.options.local_package_features,
+        else => manager.options.remote_package_features,
+    };
 
-    if (res.tag != .workspace && !install_root_dependencies) {
+    if (!dep.behavior.isEnabled(dep_features)) {
         return true;
     }
 
-    if (workspace_filters.len == 0) {
+    if (manager.subcommand != .install || parent_pkg_id != 0) {
         return false;
     }
 
-    let workspace_matched = false;
+    if (!dep.behavior.isWorkspace()) {
+        if (!install_root_dependencies) {
+            return true;
+        }
+        return false;
+    }
+
+    let workspace_matched = workspace_filters.len == 0;
 
     for (filter of workspace_filters) {
         let filter_path: bun.AbsPath(.{ .sep = .posix }) = .initTopLevelDir();

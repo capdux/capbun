@@ -651,6 +651,7 @@ pub fn isFilteredDependencyOrWorkspace(dep_id: DependencyID, parent_pkg_id: Pack
         const pkg_resolutions = pkgs.items(.resolution);
         const dep = lockfile.buffers.dependencies.items[@as(usize, @intCast(dep_id))];
         const res = pkg_resolutions[@as(usize, @intCast(pkg_id))];
+        const parent_res = (&pkg_resolutions[@as(usize, @intCast(parent_pkg_id))]);
         if (pkg_metas[@as(usize, @intCast(pkg_id))].isDisabled(manager.options.cpu, manager.options.os)) {
             if (manager.options.log_level.isVerbose()) {
                 const meta = (&pkg_metas[@as(usize, @intCast(pkg_id))]);
@@ -672,18 +673,23 @@ pub fn isFilteredDependencyOrWorkspace(dep_id: DependencyID, parent_pkg_id: Pack
         if (dep.behavior.isBundled()) {
             return true;
         }
-        if (((manager.subcommand != .install) or (parent_pkg_id != 0))) {
-            if ((res.tag == .workspace)) {
-                return false;
-            }
-        }
-        if (((res.tag != .workspace) and (!install_root_dependencies))) {
+        const dep_features = (switch (parent_res.tag) {
+.root, .workspace, .folder => manager.options.local_package_features,
+else => manager.options.remote_package_features,
+});
+        if ((!dep.behavior.isEnabled(dep_features))) {
             return true;
         }
-        if ((workspace_filters.len == 0)) {
+        if (((manager.subcommand != .install) or (parent_pkg_id != 0))) {
             return false;
         }
-        var workspace_matched = false;
+        if ((!dep.behavior.isWorkspace())) {
+            if ((!install_root_dependencies)) {
+                return true;
+            }
+            return false;
+        }
+        var workspace_matched = (workspace_filters.len == 0);
         _ = &workspace_matched;
         for (cp_iter_slice(workspace_filters)) |filter| {
             _ = &filter;
