@@ -22,6 +22,8 @@
 
 ### [Read the docs →](https://bun.com/docs)
 
+An independent CP-language port/reimplementation of Bun, not affiliated with or endorsed by Oven / Bun.
+
 ## What is Bun?
 
 Bun is an all-in-one toolkit for JavaScript and TypeScript apps. It ships as a single executable called `bun`.

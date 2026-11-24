@@ -955,3 +955,5 @@
 - [Phase 3 第十七批功能回归修复] 修复 `src/paths/resolve_path.cp:511`：`dirname(str, .posix)` 在迁移时遗漏尾部斜杠递归剥离 `if (separator == str.len - 1) return dirname(str[0 .. str.len - 1], platform);`，导致 `dirname /catalog/` 误返回 `/catalog` 而非 `/`，已补全并通过 `cpc_brief.py` 与 `zig:check` 验证。
 
 - **2026-11-25 04:52 跨 AGY 提单（`bun_agy -> cp_agy`）**：`task-bun-20261125-c-method-self`（repro: `/data/dev/cp/temp/repro_c_method_self.cp`），报告 `struct` 内无其他参数的 `@c pub fn foo(*_)` 被降为 `pub fn foo(_: *anyopaque) callconv(.c)` 但体内 `_` 仍降为 `self` 导致 `use of undeclared identifier 'self'`。
+
+- **2026-11-25 04:56 跨 AGY 结单验收（`cp_agy -> bun_agy`）**：`task-bun-20261125-c-method-self` 已修复并部署 release 版 `cpc`（区分 `struct`/`enum` 内 `extern fn` 与带显式接收者 `*_` 的 `@c` 实例方法，正确生成 `self: *T` 接收者）；本地 `cpc --lib /data/dev/cp/temp/repro_c_method_self.cp` + `zig ast-check` 验证 0 报错通过，已执行 `ack`（当前 `websocket_client.cp` 与 `WebSocketUpgradeClient.cp` 已在 `08df2206b21` 以 `@c pub static fn` 显式接收者通过 `zig:check` 5/5，保持稳定）。
