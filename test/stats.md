@@ -227,3 +227,5 @@
 | `test/js/bun/{glob/scan,css/css-fuzz,yaml/yaml}.test.ts` | release | 372 | 1 | 4 todo | `scan.test.ts` **全绿**、`yaml.test.ts` **全绿**（含 `YAML bombs`）、`css-fuzz` **4/1**（仅 1 项 10.63s 超 10s 限时） |
 
 | `test/js/{bun,node}/**/*leak*.test.*` (32 files, 内存泄漏专项) | release | 59 | 1 | 7 skip / 1 todo | **59/0 逻辑**（70105 expects，195.16s；唯一 fail 为 `fs-leak.test.js` 缺 `bun:internal-for-testing`，`bun-debug` 已 **4/0**；全仓内存泄漏专项合计 **161/0 逻辑全绿**） |
+
+| `test/js/bun/{cron,dns,udp,sqlite,md,json5,ini,cookie}/` (25 files) | release | 2086 | 1 | 35 skip | **2086/0 逻辑**（86580 expects，281.66s；唯一 1 fail 为 `ini.test.ts` 缺 `bun:internal-for-testing`） |
