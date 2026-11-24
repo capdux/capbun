@@ -64,24 +64,13 @@ pub struct OptDeinitGuard<T> {
     }
 }
 
-fn DuplicateNodeGuard(comptime Enabled: bool): type {
-    if (!Enabled) {
-        return struct {
-            ~init() {}
-        };
+fn releaseDuplicateNode(comptime Enabled: bool, node: auto, duplicates: auto) {
+    if (comptime !Enabled) return;
+    unsafe {
+        node.data = duplicates.*;
     }
-    return struct {
-        node: *PoolLinkedList.Node!,
-        duplicates: *PoolHashMap!,
-
-        ~init() {
-            unsafe {
-                _.node.data = _.duplicates.*;
-            }
-            const release_fn = HashMapPool.release;
-            release_fn(_.node);
-        }
-    };
+    const release_fn = HashMapPool.release;
+    release_fn(node);
 }
 
 fn newExpr(t: auto, loc: logger.Loc): Expr {
@@ -211,11 +200,7 @@ fn parseJSONExpr(p: *auto, comptime opts: js_lexer.JSONOptions, comptime maybe_a
 
             let duplicates: HashMapType = if (opts.json_warn_duplicate_keys) duplicates_node.data else undefined;
 
-            const DuplicateGuardType = DuplicateNodeGuard(opts.json_warn_duplicate_keys);
-            const duplicates_guard = if (opts.json_warn_duplicate_keys)
-                DuplicateGuardType{ node: duplicates_node, duplicates: &duplicates }
-            else
-                DuplicateGuardType{};
+            defer releaseDuplicateNode(opts.json_warn_duplicate_keys, duplicates_node, &duplicates);
 
             while (p.lexer.token != .t_close_brace) {
                 if (properties.items.len > 0) {

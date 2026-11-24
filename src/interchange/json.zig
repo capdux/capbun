@@ -199,7 +199,7 @@ const value = self.lexer.number;
 _ = try self.lexer.next();
             const value = self.lexer.number;
             _ = try self.lexer.expect(.t_numeric_literal);
-            return newExpr(E.Number{ .value = (0 - value) }, loc);
+            return newExpr(E.Number{ .value = (-value) }, loc);
 },
 .t_open_bracket => {
 _ = try self.lexer.next();
@@ -332,32 +332,15 @@ const Stmt = js_ast.Stmt;
 const js_lexer = bun.js_lexer;
 const Token = js_lexer.T;
 
-pub fn DuplicateNodeGuard(comptime Enabled: bool) type {
-        if ((!Enabled)) {
-            return struct {
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *@This()) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-    }
-};
+pub fn releaseDuplicateNode(comptime Enabled: bool, node: anytype, duplicates: anytype) void {
+        if (comptime (!Enabled)) {
+            return;
         }
-        return struct {
-    node: *PoolLinkedList.Node,
-    duplicates: *PoolHashMap,
-    __cp_dropped: bool = false,
-
-pub fn __cp_deinit(self: *@This()) void {
-        if (self.__cp_dropped) return;
-        self.__cp_dropped = true;
-            {
-                self.node.data = self.duplicates.*;
-            }
-            const release_fn = HashMapPool.release;
-            _ = release_fn(self.node);
-    }
-};
+        {
+            node.data = duplicates.*;
+        }
+        const release_fn = HashMapPool.release;
+        _ = release_fn(node);
 }
 
 pub fn newExpr(t: anytype, loc: logger.Loc) Expr {
@@ -426,7 +409,7 @@ const value = p.lexer.number;
 _ = try p.lexer.next();
         const value = p.lexer.number;
         _ = try p.lexer.expect(.t_numeric_literal);
-        return newExpr(E.Number{ .value = (0 - value) }, loc);
+        return newExpr(E.Number{ .value = (-value) }, loc);
 },
 .t_open_bracket => {
 _ = try p.lexer.next();
@@ -476,9 +459,9 @@ _ = try p.lexer.next();
         _ = &duplicates_node;
         var duplicates: HashMapType = (if (opts.json_warn_duplicate_keys) duplicates_node.data else undefined);
         _ = &duplicates;
-        const DuplicateGuardType = DuplicateNodeGuard(opts.json_warn_duplicate_keys);
-        const duplicates_guard = (if (opts.json_warn_duplicate_keys) DuplicateGuardType{ .node = duplicates_node, .duplicates = (&duplicates) } else DuplicateGuardType{  });
-        _ = &duplicates_guard;
+        defer {
+        _ = releaseDuplicateNode(opts.json_warn_duplicate_keys, duplicates_node, (&duplicates));
+        }
         while ((p.lexer.token != .t_close_brace)) {
             if ((properties.items.len > 0)) {
                 if (p.lexer.has_newline_before) {

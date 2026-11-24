@@ -1823,3 +1823,5 @@
 - [Phase 2 第八批修复] 根治 `migrate-bun-lockb-v2.test.ts` 中 `SemverRange.zig:147` ASan `stack-buffer-overflow`：`SemverRange.cp` `Comparator.fmt`/`Range.fmt` 省略指针接收者导致按值传参返回 `&_` 栈帧悬垂指针；同步全仓 `rg` 扫描清理 `Chunk.cp:247` 同类隐患，全部改用 `_: *const ...` 接收者并返回 `_`，`zig:check` 5/5 通过。
 
 - [Phase 2 第九批修复] 全仓静态安全审计 1,295 个 `.cp` 文件后，消除最后 3 处值接收者方法内返回 `&_` 悬垂栈指针隐患：`src/css/selectors/parser.cp`（`SelectorList.debug`、`ComplexSelector.debug` 改为 `_: *const This` 返回 `_`）与 `src/event_loop/SpawnSyncEventLoop.cp`（`handle` 改为 `*_` 接收者）；`zig:check` 5/5 全绿通过。
+
+- [Phase 2 第十批修复] 全仓 1,295 个 `.cp` 文件 RAII Guard 漏注入 `defer` 静态审计发现最后一处真实漏注：`src/interchange/json.cp` `DuplicateNodeGuard` 返回 `struct { ~init() }` 导致 `json.zig:480` 缺失 `defer __cp_deinit` 造成 `HashMapPool` 节点泄漏；改为 `defer releaseDuplicateNode` 后 `zig:check` 5/5 通过。
