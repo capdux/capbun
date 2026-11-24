@@ -127,29 +127,31 @@ pub struct ScanOpts {
             return globalThis.throw("{s}: expected first argument to be an object", [ fnName ]);
         }
 
-        if (cwdVal := optsObj.get(globalThis, "cwd")?) {
-            if (cwdVal.isString()) {
-                const result = parseCWD(globalThis, arena_alloc.allocator(), cwdVal, out.absolute, fnName)?;
-                if (result.len > 0) {
-                    out.cwd = result;
-                }
-            }
-        }
-
         if (only_files := optsObj.getTruthy(globalThis, "onlyFiles")?) {
             out.only_files = if (only_files.isBoolean()) only_files.asBoolean() else false;
         }
 
-        if (absolute := optsObj.getTruthy(globalThis, "absolute")?) {
-            out.absolute = if (absolute.isBoolean()) absolute.asBoolean() else false;
+        if (error_on_broken_symlinks := optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymlink")?) {
+            out.error_on_broken_symlinks = if (error_on_broken_symlinks.isBoolean()) error_on_broken_symlinks.asBoolean() else false;
         }
 
         if (follow_symlinks := optsObj.getTruthy(globalThis, "followSymlinks")?) {
             out.follow_symlinks = if (follow_symlinks.isBoolean()) follow_symlinks.asBoolean() else false;
         }
 
-        if (error_on_broken_symlinks := optsObj.getTruthy(globalThis, "throwErrorOnBrokenSymbolicLink")?) {
-            out.error_on_broken_symlinks = if (error_on_broken_symlinks.isBoolean()) error_on_broken_symlinks.asBoolean() else false;
+        if (absolute := optsObj.getTruthy(globalThis, "absolute")?) {
+            out.absolute = if (absolute.isBoolean()) absolute.asBoolean() else false;
+        }
+
+        if (cwdVal := optsObj.getTruthy(globalThis, "cwd")?) {
+            if (!cwdVal.isString()) {
+                return globalThis.throw("{s}: invalid `cwd`, not a string", [ fnName ]);
+            }
+
+            const result = parseCWD(globalThis, arena_alloc.allocator(), cwdVal, out.absolute, fnName)?;
+            if (result.len > 0) {
+                out.cwd = result;
+            }
         }
 
         if (dot := optsObj.getTruthy(globalThis, "dot")?) {

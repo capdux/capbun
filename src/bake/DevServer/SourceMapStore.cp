@@ -60,55 +60,53 @@ pub struct StoreEntry {
 
     pub static fn renderJSON(map: *const StoreEntry, dev: *DevServer, arena_alloc: Allocator, kind: ChunkKind, gpa: Allocator, side: bake.Side): ![]u8 {
         let j = StringJoiner{ allocator: arena_alloc };
-        j.pushStatic("{\"version\":3,\"file\":");
+        j.pushStatic("{\"version\":3,\"sources\":[\"bun://Bun/Bun HMR Runtime\"");
 
         const paths = map.paths;
         let source_map_strings = std.array_list.Managed(u8).init(arena_alloc);
 
         const map_files = map.files.slice();
 
-        encodeSourceMapPath(side, paths[paths.len - 1], &source_map_strings)?;
-        j.pushStatic(source_map_strings.items);
-        source_map_strings.clearRetainingCapacity();
-        j.pushStatic(",\"sources\":[\"// (Bun's internal HMR runtime is minified)\"");
         for (native_file_path of paths) {
-            j.pushStatic(",");
+            source_map_strings.appendSlice(",")?;
 
             let relative_path_buf = bun.path_buffer_pool.get();
             const _rel_path_guard = PathBufferPoolGuard<@TypeOf(relative_path_buf)>{ buf: relative_path_buf };
             * = _rel_path_guard;
-            const rel_path = dev.relativePath(relative_path_buf, native_file_path);
+            const path = if (Environment.isWindows)
+                bun.path.pathToPosixBuf(u8, native_file_path, relative_path_buf)
+            else
+                native_file_path;
 
-            if (side == .client) {
-                // If it starts with "..", in the browser we can't reference it relative to the URL.
-                // so we need to encode it with the prefix
-                if (bun.strings.startsWith(rel_path, "..")) {
-                    source_map_strings.appendSlice("\"")?;
-                    source_map_strings.appendSlice(DevServer.source_dir_prefix)?;
-                    source_map_strings.appendSlice("/")?;
-                    // this does not prevent "../../" in the browser URL
-                    encodeSourceMapPath(
-                        side,
-                        rel_path,
-                        &source_map_strings,
-                    )?;
-                    source_map_strings.appendSlice("\"")?;
+            if (std.fs.path.isAbsolute(path)) {
+                const is_windows_drive_path = Environment.isWindows && path[0] != '/';
+                if (side == .client) {
+                    source_map_strings.appendSlice(if (is_windows_drive_path) "\"file:///" else "\"file://")?;
                 } else {
-                    source_map_strings.appendSlice("\"")?;
+                    source_map_strings.append('"')?;
+                }
+                if (Environment.isWindows && !is_windows_drive_path) {
                     encodeSourceMapPath(
                         side,
-                        rel_path,
+                        if (path.len > 2 && path[0] == '/' && path[1] == '/') path[2..] else path,
                         &source_map_strings,
-                    )?;
-                    source_map_strings.appendSlice("\"")?;
+                    ) catch e => switch (e) {
+                        error.IncompleteUTF8 => @panic("Unexpected: asset with incomplete UTF-8 as file path"),
+                        error.OutOfMemory => return e,
+                    };
+                } else {
+                    encodeSourceMapPath(side, path, &source_map_strings) catch e => switch (e) {
+                        error.IncompleteUTF8 => @panic("Unexpected: asset with incomplete UTF-8 as file path"),
+                        error.OutOfMemory => return e,
+                    };
                 }
-            } else {
                 source_map_strings.appendSlice("\"")?;
-                encodeSourceMapPath(
-                    side,
-                    rel_path,
-                    &source_map_strings,
-                )?;
+            } else {
+                source_map_strings.appendSlice("\"bun://")?;
+                bun.strings.percentEncodeWrite(path, &source_map_strings) catch e => switch (e) {
+                    error.IncompleteUTF8 => @panic("Unexpected: asset with incomplete UTF-8 as file path"),
+                    error.OutOfMemory => return e,
+                };
                 source_map_strings.appendSlice("\"")?;
             }
         }

@@ -2299,3 +2299,5 @@
 - [Phase 2 全仓扫测与 Release 收官] 更新 `test/stats.md`（记录全仓 `test/` 各目录通过统计与非 `.cp` 差异归因）。
 
 - [Phase 2 第二十三批修复] 修改 .cp/.zig：`src/install/lockfile/Package/WorkspaceMap.{cp,zig}`（补全否定 workspace 模式过滤与根 `package.json` 跳过，`zig:check` 5/5）及 `test/stats.md`。
+
+- [Phase 2 第二十四批修复] 修改 .cp/.zig：`src/bake/DevServer/SourceMapStore.{cp,zig}`（`renderJSON` 合法 JSON 与 `file://`/`bun://` 路径修复）、`src/runtime/api/glob.{cp,zig}`（`cwd` 类型校验与 `throwErrorOnBrokenSymlink` 拼写修复，`zig:check` 5/5）。
