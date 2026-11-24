@@ -2293,3 +2293,5 @@
 - [Phase 2 第二十批修复] 修改 .cp/.zig：`src/css/css_parser.{cp,zig}`（`NestedRuleParser.parseNested` 增加 `depth >= 64` 递归深度保护，`zig:check` 5/5）。
 
 - [Phase 2 第二十一批修复] 修改 .cp/.zig：`src/js_parser/ast/maybe.{cp,zig}`（还原 `for ... else` 后置去优化语义，修复 `cjs2esm/UnwrappedModuleRequireAssigned`，`zig:check` 5/5）。
+
+- [Phase 2 第二十二批修复] 修改 .cp/.zig：`src/bake/DevServer.{cp,zig}`（`makeArrayForServerComponentsPatch` 空数组改回 `JSValue.null`，`zig:check` 5/5）。

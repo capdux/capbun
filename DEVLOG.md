@@ -1847,3 +1847,5 @@
 - [Phase 2 第二十批修复] 解决 `css-fuzz.test.ts` `memory.deepNesting(300)` 在 Release 模式下引发栈溢出 `SIGSEGV` 的问题：在 `src/css/css_parser.cp` `NestedRuleParser` 中增加 `depth: u16 = 0` 追踪递归深度，超过 64 层时返回 `ParserError.maximum_nesting_depth`（`zig:check` 5/5 通过）。
 
 - [Phase 2 第二十一批修复] 采纳 `dcebb8dc` 根因定位修复 `src/js_parser/ast/maybe.cp`：Zig 原版 `maybe_.zig:167-198` 的 `for (props) |prop| { ... } else { p.deoptimizeCommonJSNamedExports(); return null; }` 因循环体无 `break` 而总是执行 `else` 分支去优化为 `.cjs`；迁移时误改为 `if (props.len == 0)` 导致 `module.exports = { react: "react" }` 被优化为 ESM 缺失 `__toESM(`。还原后 `cpc_brief.py` 与 `zig:check` 5/5 通过。
+
+- [Phase 2 第二十二批修复] 采纳 `61f6910f` 定位修复 `src/bake/DevServer.cp:2632`：`makeArrayForServerComponentsPatch` 在 `items.len == 0` 时误返回 `JSValue.zero` 而非 `JSValue.null`，导致 `server_register_update_callback.call(...)` 触发 `Bun__JSValue__call` `!JSValue::decode(arguments[i]).isEmpty()` 断言失败；改回 `JSValue.null` 后 `zig:check` 5/5 通过。

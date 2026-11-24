@@ -2629,7 +2629,7 @@ fn traceAllRouteImports(dev: *DevServer, route_bundle: *RouteBundle, gts: *Graph
 }
 
 fn makeArrayForServerComponentsPatch(dev: *DevServer, global: *jsc.JSGlobalObject, items: []const IncrementalGraph(.server).FileIndex): bun.JSError!JSValue {
-    if (items.len == 0) return JSValue.zero;
+    if (items.len == 0) return JSValue.null;
     const arr = jsc.JSArray.createEmpty(global, items.len)?;
     const names = dev.server_graph.bundled_files.keys();
     for (i of 0..items.len) {

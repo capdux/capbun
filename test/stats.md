@@ -46,9 +46,15 @@
 | `test/cli/run/` (31 files, 含 `require-cache` 6/0, `no-orphans` 18/0) | release | 1021 | 0 | 6 skip | `--timeout=5000` 分批全绿 |
 | `test/cli/test/` (12 files) | release | 200 | 0 | 6 skip | `--timeout=5000` 全绿 |
 | `test/cli/{bunfig-test-options,bun,console-depth,user-agent}.test.ts` | release | 24 | 0 | 2 skip | `--timeout=5000` 全绿 |
+| `test/cli/inspect/` (4 files) | release | 34 | 0 | - | `--timeout=5000` 全绿 |
+| `test/js/bun/` 已测子目录 (`sqlite` 82/0, `crypto` 10248/0, `ini/yaml/jsonl` 829/1, `cookie` 147/0, `dns` 76/0, `md/transpiler/ffi` 1080/2, `websocket/udp/net` 326/2, `console/perf_hooks/sourcemap/ts` 185/1, `wasm/archive/symbols` 102/1, `stream` 269/0, `terminal` 120/1, `http` 部分 250/0, `shell` 20 files 540/4, `s3/globals` 93/0, `fetch/cron/perf/bun-object` 226/0, `binary/jsc` 85/0, `test/` 14 files 529/1) | release | 15187 | 13 | - | `--timeout=5000` 分批扫测；`secrets` 8 项需系统密钥环 |
+| `test/js/web/` (138 files) | release | 5097+ | 6 | 3 timeout | 加 `BUN_GARBAGE_COLLECTOR_LEVEL=0 BUN_FEATURE_FLAG_INTERNAL_FOR_TESTING=1` 后 `text-decoder`+`FormData`+`uv-error` 等 **192/0** |
+| `test/js/node/` (248 files，不含 `zlib`/`readline`) | release | 4825+ | 14 | 4 timeout | 补齐 `internal-for-testing` 环境变量后 `v8`/`tls`/`fs` 补测 **65/0**；`tls peer cert`/`dlopen`/`http uaf` 经排查均非 `.cp` 缺陷 |
+| `test/js/first_party/` (5 files) & `deno/` (16) & `junit-reporter/` (1) & `workerd/` (3) & `valkey/` (14) | release | 363 | 0 | - | 全绿（`valkey` 外部服务用例 skip） |
+| `test/js/sql/` (23 files) | release | 464 | 2 | - | `unix://` 协议校验与 exotic SQL fuzz 各 1 处 |
+| `test/js/third_party/` (120 files) | release | 1183 | 10 | 9 timeout | `--timeout=5000` 15s 限时扫测 |
 
 ## 二、 正在收敛中
 
-- **`test/bake/dev/`**（9 文件）：`DevServer.cp` + `maybe.cp` + `computeChunks.cp` + `css_parser.cp` 已修复提交，待 `bun bd` 链接完成后实测。
-- **`test/bundler/*.test.*`**：`computeChunks.cp`（`html/*`）与 `maybe.cp`（`cjs2esm`）已修复，待重测。
-- **`test/js/web/` & `test/cli/inspect/`**：子智能体 `d2d949e7` 正在分批扫测中。
+- **`test/bake/dev/`**（9 文件）：`DevServer.cp` `JSValue.null` 已修复，即将用 `bun bd test` 验证 `bundle`/`plugins`/`vfile`/`request-cookies`。
+- **`test/cli/install/` 12 个 `verdaccio` 依赖测试**：8/12 已绿，剩余 `bun-workspaces`/`npmrc`/`bun-lock` 待收敛。

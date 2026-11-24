@@ -2974,7 +2974,7 @@ _ = try dev.client_graph.traceImports(html.bundled_file, gts, goal);
 
 pub fn makeArrayForServerComponentsPatch(dev: *DevServer, global: *jsc.JSGlobalObject, items: []const IncrementalGraph(.server).FileIndex) bun.JSError!JSValue {
         if ((items.len == 0)) {
-            return JSValue.zero;
+            return JSValue.null;
         }
         const arr = try jsc.JSArray.createEmpty(global, items.len);
         const names = dev.server_graph.bundled_files.keys();
