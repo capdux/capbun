@@ -94,7 +94,6 @@ import tracy from "./perf/tracy.zig";
 import zstd from "./zstd/zstd.zig";
 import string_mod from "./string/string.zig";
 import Async from "async";
-comptime { * = Async; }
 import heap_breakdown from "./bun_alloc/heap_breakdown.zig";
 import io from "./io/io.zig";
 import brotli from "./brotli/brotli.zig";
