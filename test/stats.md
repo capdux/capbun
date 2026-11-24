@@ -159,3 +159,5 @@
 | `test/js/node/url/pathToFileURL.test.ts` & `node/http/` (24 files) | release | 162 | 0 | 1 skip / 5 todo | **162/0 全绿**（`pathToFileURL` 2/0、`node/http` 全绿，317 expects，71.29s） |
 
 | `test/js/node/{http2,https,net}/` (13 files) | release | 434 | 0 | 14 skip | **434/0 全绿**（12353 expects，16.86s，exit 0） |
+
+| `test/js/node/fs/` (20 files) | release | 389 | 4 | 22 skip | **389/0 逻辑**（16.88s，16/20 文件全绿；唯一 4 fail 为 `fs-leak`/`fs-oom`/`fs-stats-truncate`/`translate-uv-error-windows` 缺 `bun:internal-for-testing`） |
