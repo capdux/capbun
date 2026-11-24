@@ -179,3 +179,5 @@
 | `test/js/node/zlib/leak.test.ts` & `zlib.kMaxLength.global.test.js` (隔离复验) | release | 8 | 8 | - | `zlib/leak.test.ts` **8/0 全绿**（26.38s，包含 `zstdCompress`）；`zlib.kMaxLength.global` 0/8 待排查 |
 
 | `test/cli/test/` (16 files, `bun-debug`) | debug (最新 `08df2206`) | 198 | 2 | 6 todo | **198/0 逻辑**（686 expects；仅 `parallel.test.ts` 2 项受 Debug 启动慢并发调度波动，Release 已 **200/0**） |
+
+| `test/regression/issue/2*.test.ts` (185 files, `bun-debug`) | debug (最新 `08df2206`) | 503 | 0 | 16 skip / 1 todo | **503/0 全绿**（13 snapshots，8563 expects，exit 0） |
