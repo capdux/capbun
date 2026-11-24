@@ -14,7 +14,7 @@ export @root struct VLQ {
     }
 
     pub fn writeTo(writer: auto)! {
-        writer.writeAll(this.bytes[0..this.len as usize])?;
+        writer.writeAll(_.bytes[0.._.len as usize])?;
     }
 }
 

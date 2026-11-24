@@ -64,7 +64,9 @@ pub fn parent(self: @This()) ?BorrowedParent {
 
 pub fn intoParent(self: *@This()) ?Allocator {
             defer {
-            self.* = undefined;
+            {
+                self.* = undefined;
+            }
             }
             return self.rawParent();
     }

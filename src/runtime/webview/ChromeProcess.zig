@@ -405,20 +405,20 @@ pub fn @"spawn"(vm: *jsc.VirtualMachine, userDataDir: ?[*:0]const u8, explicitPa
         var spawned = try spawned_maybe.unwrap();
         _ = &spawned;
         _ = (blk: { if (!__fd1_guard_moved) { __fd1_guard_moved = true; fd1_guard.__cp_deinit(); } break :blk {}; });
-        const self = bun.new(ChromeProcess, .{ .process = spawned.toProcess(vm.eventLoop(), false) });
-        _ = self.process.setExitHandler(self);
-        switch (self.process.watch()) {
+        const proc = bun.new(ChromeProcess, .{ .process = spawned.toProcess(vm.eventLoop(), false) });
+        _ = proc.process.setExitHandler(proc);
+        switch (proc.process.watch()) {
 .result => {
-_ = self.process.disableKeepingEventLoopAlive();
+_ = proc.process.disableKeepingEventLoopAlive();
 },
 .err => |e| {
 _ = log("watch failed: {f}", .{ e });
-        _ = self.process.deref();
-        _ = bun.destroy(self);
+        _ = proc.process.deref();
+        _ = bun.destroy(proc);
         return error.WatchFailed;
 },
 }
-        instance = self;
+        instance = proc;
         fd0_guard.val = null;
         return fds[0];
 }

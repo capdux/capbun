@@ -14,12 +14,12 @@ fn PostgresBinarySingleDimensionArray(comptime T: type): type {
         index: i32,
         first_value: T,
 
-        pub fn slice(*this): []T {
-            let head = unsafe { @as([*]T!, &this.first_value) };
-            if (this.len <= 0) return unsafe { head[0..0] };
+        pub fn slice(*_): []T {
+            let head = unsafe { @as([*]T!, &_.first_value) };
+            if (_.len <= 0) return unsafe { head[0..0] };
 
             let current = head;
-            const len: usize = @intCast(this.len);
+            const len: usize = @intCast(_.len);
             for (i of 0..len) {
                 current = unsafe { current[1..] };
 

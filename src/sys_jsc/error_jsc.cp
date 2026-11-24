@@ -7,11 +7,11 @@ const jsc = bun.jsc;
 const Error = bun.sys.Error;
 
 pub fn toJS(_: Error, ptr: *jsc.JSGlobalObject): jsc.JSValue ! bun.JSError {
-    return this.toSystemError().toErrorInstance(ptr);
+    return _.toSystemError().toErrorInstance(ptr);
 }
 
 pub fn toJSWithAsyncStack(_: Error, ptr: *jsc.JSGlobalObject, promise: *jsc.JSPromise): jsc.JSValue ! bun.JSError {
-    return this.toSystemError().toErrorInstanceWithAsyncStack(ptr, promise);
+    return _.toSystemError().toErrorInstanceWithAsyncStack(ptr, promise);
 }
 
 @c fn sentryHandler(sig: c_int) {

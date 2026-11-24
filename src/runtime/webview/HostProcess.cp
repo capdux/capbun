@@ -80,7 +80,7 @@ struct CloseGuard<T> {
     if (comptime !bun.Environment.isMac) return -1;
     if (instance != null) return -1; // C++ already holds the fd
 
-    const fd = @"spawn"(global.bunVM(), stdoutInherit, stderrInherit) catch |e| {
+    const fd = @"spawn"(global.bunVM(), stdoutInherit, stderrInherit) catch e => {
         log("spawn failed: {s}", .{@errorName(e)});
         return -1;
     };
@@ -140,28 +140,28 @@ fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: bool): 
     )?).unwrap()?;
     let spawned = sp_result;
 
-    const self = bun.new(HostProcess, {
+    const proc = bun.new(HostProcess, {
         process: spawned.toProcess(vm.eventLoop(), false),
     });
-    self.process.setExitHandler(self);
-    switch (self.process.watch()) {
+    proc.process.setExitHandler(proc);
+    switch (proc.process.watch()) {
         .result => {
             // Weak handle: parent exits when no views + nothing pending,
             // child gets socket EOF and exits, EVFILT_PROC fires into a
             // dead process (kernel discards). If we ref'd, parent would
             // stay alive forever waiting on a child that is waiting on us.
             // dispatchOnExit also SIGKILLs via Bun__WebViewHost__kill.
-            self.process.disableKeepingEventLoopAlive();
+            proc.process.disableKeepingEventLoopAlive();
         },
         .err => |e| {
             log("watch failed: {f}", .{e});
-            self.process.deref();
-            bun.destroy(self);
+            proc.process.deref();
+            bun.destroy(proc);
             // errdefer at the top closes fds[0]; don't double-close here.
             return error.WatchFailed;
         },
     }
-    instance = self;
+    instance = proc;
     fd_guard.val = null;
     // fd handed to C++ which adopts it into usockets. Not stored here —
     // usockets owns the socket; Zig only owns process lifetime.

@@ -713,7 +713,8 @@ pub inline fn throw(self: GlobalMini, comptime fmt: []const u8, args: anytype) S
             return .{ .custom = str };
     }
 
-pub inline fn actuallyThrow(shellerr: ShellErr) void {
+pub inline fn actuallyThrow(self: GlobalMini, shellerr: ShellErr) void {
+        _ = self;
             _ = shellerr.throwMini();
     }
 
@@ -1133,7 +1134,7 @@ pub fn new_simple(atom: ASTSimpleAtom) ASTAtom {
     }
 
 pub fn is_compound(self: ASTAtom) bool {
-            switch (self.*) {
+            switch (self) {
 .compound => {
 return true;
 },
@@ -2953,16 +2954,6 @@ pub fn setEnv(name: [*:0]const u8, value: [*:0]const u8) void {
         _ = setenv(name, value, 1);
 }
 
-pub fn #atomsMemoryCost(self: *const @This()) usize {
-        var cost: usize = 0;
-        _ = &cost;
-        for (cp_mut_slice(&self.atoms)) |*atom| {
-            _ = &atom;
-            cost = (cost + (atom.*).memoryCost());
-        }
-        return cost;
-}
-
 pub fn NewLexerBacktrackSnapshot(comptime Chars: type) type {
         return struct {
     chars: Chars,
@@ -4077,22 +4068,31 @@ pub fn peek(self: *@This()) ?InputChar {
     }
 
 pub fn read_char(self: *@This()) ?InputChar {
-            const indexed_value = ((self.src.index()) orelse { return null; });
-            var char = indexed_value.char;
+            const indexed_value = ((self.src.index()) orelse (null));
+            if ((indexed_value == null)) {
+                return null;
+            }
+            var char = indexed_value.?.char;
             _ = &char;
             if (((char != 92) or (self.state == .Single))) {
                 return .{ .char = char };
             }
             switch (self.state) {
 .Normal => {
-const peeked = ((self.src.indexNext()) orelse { return null; });
-            char = peeked.char;
+const peeked = ((self.src.indexNext()) orelse (null));
+            if ((peeked == null)) {
+                return null;
+            }
+            char = peeked.?.char;
 },
 .Double => {
-const peeked = ((self.src.indexNext()) orelse { return null; });
-            switch (peeked.char) {
+const peeked = ((self.src.indexNext()) orelse (null));
+            if ((peeked == null)) {
+                return null;
+            }
+            switch (peeked.?.char) {
 '$', '`', '"', '\\', 10, '#' => {
-char = peeked.char;
+char = peeked.?.char;
 },
 else => {
 return .{ .char = char, .escaped = false };
@@ -4523,10 +4523,10 @@ pub fn initWith(val: T) @This() {
             return res;
     }
 
-pub fn memoryCost(self: *const @This()) usize {
+pub fn memoryCost(self: @This()) usize {
             var cost: usize = @sizeOf(@This());
             _ = &cost;
-            switch (self.*) {
+            switch (self) {
 .inlined => |*inlined| {
 if (comptime (bun.trait.isContainer(T) and @hasDecl(T, "memoryCost"))) {
                 for (cp_mut_slice(&inlined.slice())) |*item| {
@@ -4569,12 +4569,12 @@ pub fn initWithSlice(vals: []const T) @This() {
             return res;
     }
 
-pub fn format(self: *const @This(), writer: *std.Io.Writer) !void {
+pub fn format(self: @This(), writer: *std.Io.Writer) !void {
             const slc = self.slice();
             _ = try writer.print("{}", .{ slc });
     }
 
-pub fn jsonStringify(self: *const @This(), writer: anytype) !void {
+pub fn jsonStringify(self: @This(), writer: anytype) !void {
             const slc = self.slice();
             _ = try writer.write(slc);
     }

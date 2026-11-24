@@ -122,7 +122,7 @@ pub enum create_bun_socket_error_t: c_int {
     invalid_ciphers,
 
     pub fn message(): string? {
-        return switch (this) {
+        return switch (_) {
             .none => null,
             .load_ca_file => "Failed to load CA file",
             .invalid_ca_file => "Invalid CA file",

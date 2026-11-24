@@ -141,7 +141,7 @@ pub fn int(self: @This(), comptime Int: type) !Int {
                 return error.ShortRead;
             }
             if (comptime (Int == u8)) {
-                return (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(slice[0])) else @as(Int, slice[0]));
+                return (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf(slice[0])) == .int or @typeInfo(@TypeOf(slice[0])) == .comptime_int)) @as(Int, @enumFromInt(slice[0])) else @as(Int, slice[0]));
             }
             return @byteSwap(@as(Int, @bitCast((blk: {
             break :blk (slice[0..@sizeOf(Int)]).*;

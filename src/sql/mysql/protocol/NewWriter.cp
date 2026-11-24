@@ -24,13 +24,13 @@ pub fn NewWriterPacket(comptime WrappedWriter: type): type {
         offset: usize,
         ctx: WrappedWriter,
 
-        pub fn end(*this) AnyMySQLError.Error!void {
-            const new_offset = this.ctx.offset();
-            const length = new_offset - this.offset - PacketHeader.size;
-            this.header.length = @intCast(length);
-            debug("writing packet header: {d}", .{this.header.length});
-            const encoded = this.header.encode();
-            this.ctx.pwrite(encoded[0..], this.offset)?;
+        pub fn end(*_): AnyMySQLError.Error!void {
+            const new_offset = _.ctx.offset();
+            const length = new_offset - _.offset - PacketHeader.size;
+            _.header.length = @intCast(length);
+            debug("writing packet header: {d}", .{_.header.length});
+            const encoded = _.header.encode();
+            _.ctx.pwrite(encoded[0..], _.offset)?;
         }
     };
 }
@@ -54,67 +54,67 @@ pub fn NewWriterWrap(
         pub const WrappedWriter = @This();
         const Packet = NewWriterPacket(WrappedWriter);
 
-        pub inline fn writeLengthEncodedInt(this, data: u64) AnyMySQLError.Error!void {
+        pub inline fn writeLengthEncodedInt(data: u64): AnyMySQLError.Error!void {
             const encoded = encodeLengthInt(data);
-            writeFn(this.wrapped, encoded.slice())?;
+            writeFn(_.wrapped, encoded.slice())?;
         }
 
-        pub inline fn writeLengthEncodedString(this, data: []const u8) AnyMySQLError.Error!void {
-            this.writeLengthEncodedInt(data.len)?;
-            writeFn(this.wrapped, data)?;
+        pub inline fn writeLengthEncodedString(data: []const u8): AnyMySQLError.Error!void {
+            _.writeLengthEncodedInt(data.len)?;
+            writeFn(_.wrapped, data)?;
         }
 
-        pub fn write(this, data: []const u8) AnyMySQLError.Error!void {
-            writeFn(this.wrapped, data)?;
+        pub fn write(data: []const u8): AnyMySQLError.Error!void {
+            writeFn(_.wrapped, data)?;
         }
 
-        pub fn start(this, sequence_id: u8) AnyMySQLError.Error!Packet {
-            const o = offsetFn(this.wrapped);
+        pub fn start(sequence_id: u8): AnyMySQLError.Error!Packet {
+            const o = offsetFn(_.wrapped);
             debug("starting packet: {d}", .{o});
             const zeros = std.mem.zeroes([PacketHeader.size]u8);
-            this.write(zeros[0..])?;
+            _.write(zeros[0..])?;
             return Packet{
                 header: PacketHeader{ sequence_id: sequence_id, length: 0 },
                 offset: o,
-                ctx: this,
+                ctx: _,
             };
         }
 
-        pub fn offset(this) usize {
-            return offsetFn(this.wrapped);
+        pub fn offset(): usize {
+            return offsetFn(_.wrapped);
         }
 
-        pub fn pwrite(this, data: []const u8, i: usize) AnyMySQLError.Error!void {
-            pwriteFn(this.wrapped, data, i)?;
+        pub fn pwrite(data: []const u8, i: usize): AnyMySQLError.Error!void {
+            pwriteFn(_.wrapped, data, i)?;
         }
 
-        pub fn int4(this, value: MySQLInt32) AnyMySQLError.Error!void {
+        pub fn int4(value: MySQLInt32): AnyMySQLError.Error!void {
             const bytes = std.mem.toBytes(value);
-            this.write(bytes[0..])?;
+            _.write(bytes[0..])?;
         }
 
-        pub fn int8(this, value: MySQLInt64) AnyMySQLError.Error!void {
+        pub fn int8(value: MySQLInt64): AnyMySQLError.Error!void {
             const bytes = std.mem.toBytes(value);
-            this.write(bytes[0..])?;
+            _.write(bytes[0..])?;
         }
 
-        pub fn int1(this, value: u8) AnyMySQLError.Error!void {
+        pub fn int1(value: u8): AnyMySQLError.Error!void {
             const bytes: [1]u8 = [value];
-            this.write(bytes[0..])?;
+            _.write(bytes[0..])?;
         }
 
-        pub fn writeZ(this, value: []const u8) AnyMySQLError.Error!void {
-            this.write(value)?;
+        pub fn writeZ(value: []const u8): AnyMySQLError.Error!void {
+            _.write(value)?;
             if (value.len == 0 || value[value.len - 1] != 0) {
                 const zero: [1]u8 = [0];
-                this.write(zero[0..])?;
+                _.write(zero[0..])?;
             }
         }
 
-        pub fn String(this, value: bun.String) AnyMySQLError.Error!void {
+        pub fn String(value: bun.String): AnyMySQLError.Error!void {
             const zero: [1]u8 = [0];
             if (value.isEmpty()) {
-                this.write(zero[0..])?;
+                _.write(zero[0..])?;
                 return;
             }
 
@@ -122,9 +122,9 @@ pub fn NewWriterWrap(
             let sliced_guard = DeinitGuard<@TypeOf(sliced)>{ val: sliced };
             const slice = sliced_guard.val.slice();
 
-            this.write(slice)?;
+            _.write(slice)?;
             if (slice.len == 0 || slice[slice.len - 1] != 0) {
-                this.write(zero[0..])?;
+                _.write(zero[0..])?;
             }
         }
     };
@@ -140,14 +140,14 @@ pub fn NewWriter(comptime Context: type): type {
 
 pub fn writeWrap(comptime Container: type, comptime writeFn: anytype): type {
     return struct {
-        pub fn write(target: *Container, context: anytype) AnyMySQLError.Error!void {
+        pub static fn write(target: *Container, context: anytype): AnyMySQLError.Error!void {
             const Context = @TypeOf(context);
             const first_param = @typeInfo(@TypeOf(writeFn)).@"fn".params[0].type;
             const self_arg = if (comptime first_param == Container) unsafe { target.* } else target;
             if (@hasDecl(Context, "is_wrapped")) {
-                writeFn(self_arg, Context, context) catch |e| return @errorCast(e);
+                writeFn(self_arg, Context, context) catch e => return @errorCast(e);
             } else {
-                writeFn(self_arg, Context, .{ .wrapped = context }) catch |e| return @errorCast(e);
+                writeFn(self_arg, Context, .{ .wrapped = context }) catch e => return @errorCast(e);
             }
         }
     };

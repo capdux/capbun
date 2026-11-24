@@ -63,7 +63,8 @@ const CONTEXT = std.os.windows.CONTEXT;
 const EXCEPTION_RECORD = std.os.windows.EXCEPTION_RECORD;
 pub const panic: type = std.debug.FullPanic((struct {
 
-pub fn panic(msg: []const u8, first_trace_addr: ?usize) noreturn {
+pub fn panic(self: @This(), msg: []const u8, first_trace_addr: ?usize) noreturn {
+        _ = self;
             _ = panicked();
             _ = std.debug.defaultPanic(msg, first_trace_addr);
     }

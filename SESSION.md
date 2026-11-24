@@ -884,3 +884,10 @@
 
 - [Wave #113–#119] 完成 105 个 `--strict` 报错 `.cp` 文件的清零与 4 项硬门禁验收（覆盖 `css/values/*`、`event_loop/*`、`exe_format/*`、`http_jsc/*`、`ini`、`interchange/yaml`、`io/*`、`js_parser/parser`、`jsc/*`、`libarchive*/`、`libdeflate_sys`、`logger`、`lolhtml_sys`、`main*`、`md/*`、`meta`、`mimalloc_sys`、`napi`、`options_types`、`patch*`、`paths`、`perf/*`、`picohttp`、`platform/darwin`、`ptr/*`、`router/*`、`runtime/api/bun/*`、`runtime/crypto/CryptoHasher`、`runtime/dns_jsc/*`、`runtime/ffi/ffi`、`runtime/node`），全仓 `bun run zig:check` 5/5 绿色通过，已原子提交。
 - [用户] 执行当前任务后，收回子智能体，暂停工作，要退出 agy 切换配额账号。[回应] 已完成 Wave #112–#119 全仓 `bun run zig:check` 5/5 校验与原子 Git 提交，已通过 `manage_subagents(Action='kill_all')` 收回并终止全部子智能体，当前工作树干净，已暂停后续派发。
+
+- [用户] 配额恢复了，继续开两个子智能体和主智能体并行工作，完成阶段任务、更新文档、git提交后自主推导下阶段任务持续工作。[回应] 已核查 `temp/strict_scan.json` 剩余 84 个 `--strict` 文件，立即启动 Wave #120（`socket/`+`webcore/`+`webview/`+`s3_signing/` 15 文件）与 Wave #121（`shell/`+`sourcemap/`+`sourcemap_jsc/` 15 文件）双路并发纯化。
+
+- [用户] 最大限度节省 token 情况下加快进度；每隔 3 小时分析一次如何节省 token、提高效率，测试如有效，执行的同时合并到 `GEMINI.md` 固化，实现自我优化。[回应] 已注册每 3 小时自动唤醒的自优化复盘定时任务（`0 */3 * * *`），并继续保持双路子智能体流水线接力与批量校验以最大化省 Token 提速。
+- [用户] 你当前计划是什么? 执行 bun 测试文件, 还是 优化 cp 代码?[回应] 当前正处于全仓 `.cp` `--strict` 纯化的最后收官阶段（Wave #120–#123 60 文件已完成，最后 2 批 Wave #124–#125 共 24 文件正在 2 路子智能体并行收尾）；待全仓 1295/1295 `--strict` 清零与 `zig:check` 5/5 全绿提交后，立即切入重新构建 `release/debug` 并系统修复 `bun test` 运行时失败/崩溃用例。
+- [用户] 为何屏幕输出很多代码, 浪费 token?[回应] 此前 `bun run zig:check 2>&1 | tail -n 30` 会打印多行 Zig `referenced by:` 调用栈；已立即改用 `rg -E "error:|Build Summary|steps succeeded|FAILED"` 过滤，仅保留 2–5 行核心摘要以节省 Token。
+- [Wave #120–#126 里程碑] 完成全仓最后 90 个 `.cp` 文件的 `--strict` 纯化与 4 项硬门禁验收（覆盖 `runtime/socket/*`、`webcore/{blob,fetch,s3}/*`、`webview/*`、`s3_signing/*`、`shell/*`、`sourcemap*/*`、`sql*/*`、`standalone_graph`、`string/*`、`sys*/*`、`tcc_sys`、`test_runner/*`、`threading/*`、`unicode/*`、`uws*/*`、`watcher/`、`bun_alloc/*`），全仓 **1,295/1,295 `.cp` `--strict` 0 报错**且 **`bun run zig:check` 5/5 steps succeeded**，已原子提交；同步已启动 Phase 2 只读诊断（`176eddd6` 排查 `bun pm pkg get` 与 `bun-patch` segfault）。

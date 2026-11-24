@@ -748,7 +748,7 @@ export class FetchTasklet {
                 if (x509 := bun.BoringSSL.c.d2i_X509(null, &cert_ptr, @intCast(cert.len))) {
                     const globalObject = _.global_this;
                     const _guard_x509 = FreeMethodGuard<@TypeOf(x509)>{ ptr: x509 };
-                    const js_cert = X509.toJS(x509, globalObject) catch |e| {
+                    const js_cert = X509.toJS(x509, globalObject) catch e => {
                         if (e == error.OutOfMemory) {
                             if (globalObject.throwOutOfMemory() == error.JSError) {}
                         }
@@ -763,7 +763,7 @@ export class FetchTasklet {
                     };
                     let hostname: BunString = BunString.cloneUTF8(certificate_info.hostname);
                     const _guard_hostname = DerefGuard<BunString>{ ptr: &hostname };
-                    const js_hostname = hostname.toJS(globalObject) catch |e| {
+                    const js_hostname = hostname.toJS(globalObject) catch e => {
                         if (e == error.OutOfMemory) {
                             if (globalObject.throwOutOfMemory() == error.JSError) {}
                         }
@@ -778,7 +778,7 @@ export class FetchTasklet {
                     };
                     js_hostname.ensureStillAlive();
                     js_cert.ensureStillAlive();
-                    const check_result = check_server_identity.call(globalObject, .js_undefined, &.{ js_hostname, js_cert }) catch |e| globalObject.takeException(e);
+                    const check_result = check_server_identity.call(globalObject, .js_undefined, &.{ js_hostname, js_cert }) catch e => globalObject.takeException(e);
 
                     if (check_result.isAnyError()) {
                         _.is_waiting_abort = _.result.has_more;
@@ -936,7 +936,7 @@ export class FetchTasklet {
                 else => BunString.createFormat("{s} fetching \"{f}\". For more information, pass `verbose: true` in the second argument to fetch()", .{
                     @errorName(fail_err),
                     path,
-                }) catch |e2| handleOom(e2),
+                }) catch e2 => handleOom(e2),
             },
             .path = path,
         };

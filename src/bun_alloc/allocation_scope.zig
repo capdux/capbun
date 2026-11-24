@@ -482,7 +482,7 @@ pub fn downcastImpl(std_alloc: std.mem.Allocator, parent_alloc: if ((Allocator =
                 if (comptime enabled) {
                     _ = bun.assertf((std_alloc.vtable == (&vtable)), "allocator is not an allocation scope (has vtable {*})", .{ std_alloc.vtable });
                     {
-                        state = (if (comptime @typeInfo(BorrowedStateField) == .@"enum") @as(BorrowedStateField, @enumFromInt(@as(*State, @ptrCast(@alignCast(std_alloc.ptr))))) else @as(BorrowedStateField, @as(*State, @ptrCast(@alignCast(std_alloc.ptr)))));
+                        state = (if (comptime @typeInfo(BorrowedStateField) == .@"enum" and (@typeInfo(@TypeOf(@as(*State, @ptrCast(@alignCast(std_alloc.ptr))))) == .int or @typeInfo(@TypeOf(@as(*State, @ptrCast(@alignCast(std_alloc.ptr))))) == .comptime_int)) @as(BorrowedStateField, @enumFromInt(@as(*State, @ptrCast(@alignCast(std_alloc.ptr))))) else @as(BorrowedStateField, @as(*State, @ptrCast(@alignCast(std_alloc.ptr)))));
                     }
                 }
                 const current_std_parent = (if (comptime enabled) state.parent else std_alloc);

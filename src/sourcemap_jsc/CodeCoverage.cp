@@ -90,26 +90,26 @@ struct Generator {
             return;
         }
 
-        const rep = this.byte_range_mapping.generateReportFromBlocks(
-            this.allocator,
-            this.byte_range_mapping.source_url,
+        const rep = _.byte_range_mapping.generateReportFromBlocks(
+            _.allocator,
+            _.byte_range_mapping.source_url,
             blocks,
             function_blocks,
             ignore_sourcemap,
         ) catch null;
         unsafe {
-            this.result.* = rep;
+            _.result.* = rep;
         }
     }
 }
 
-type GeneratorCallback = *const @c (
+type GeneratorCallback = *const fn (
     gen: *Generator,
     blocks_ptr: [*]const BasicBlockRange!,
     blocks_len: usize,
     function_start_offset: usize,
     ignore_sourcemap: bool,
-): void;
+) callconv(.c) void;
 
 extern fn CodeCoverage__withBlocksAndFunctions(
     vm: *bun.jsc.VM,
@@ -145,20 +145,20 @@ pub struct Report {
     }
 
     pub fn stmtsCoverageFraction(): f64 {
-        const total_count: f64 = @floatFromInt(this.stmts.items.len);
+        const total_count: f64 = @floatFromInt(_.stmts.items.len);
         if (total_count == 0) {
             return 1.0;
         }
-        const exec_count: f64 = @floatFromInt(this.stmts_which_have_executed.count());
+        const exec_count: f64 = @floatFromInt(_.stmts_which_have_executed.count());
         return exec_count / total_count;
     }
 
     pub fn functionCoverageFraction(): f64 {
-        const total_count: f64 = @floatFromInt(this.functions.items.len);
+        const total_count: f64 = @floatFromInt(_.functions.items.len);
         if (total_count == 0) {
             return 1.0;
         }
-        const exec_count: f64 = @floatFromInt(this.functions_which_have_executed.count());
+        const exec_count: f64 = @floatFromInt(_.functions_which_have_executed.count());
         return exec_count / total_count;
     }
 
@@ -166,13 +166,13 @@ pub struct Report {
     pub const Lcov = ReportLcov;
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        this.executable_lines.deinit(allocator);
-        this.lines_which_have_executed.deinit(allocator);
-        this.line_hits.deinit(allocator);
-        this.functions.deinit(allocator);
-        this.stmts.deinit(allocator);
-        this.functions_which_have_executed.deinit(allocator);
-        this.stmts_which_have_executed.deinit(allocator);
+        _.executable_lines.deinit(allocator);
+        _.lines_which_have_executed.deinit(allocator);
+        _.line_hits.deinit(allocator);
+        _.functions.deinit(allocator);
+        _.stmts.deinit(allocator);
+        _.functions_which_have_executed.deinit(allocator);
+        _.stmts_which_have_executed.deinit(allocator);
     }
 
     pub static fn generate(
@@ -392,7 +392,7 @@ pub struct ByteRangeMapping {
     }
 
     pub fn deinit(*_) {
-        this.line_offset_table.deinit(bun.default_allocator);
+        _.line_offset_table.deinit(bun.default_allocator);
     }
 
     @c pub static fn generate(str: bun.String, source_contents_str: bun.String, source_id: i32) {
@@ -422,7 +422,7 @@ pub struct ByteRangeMapping {
     }
 
     @c pub fn getSourceID(*_): i32 {
-        return this.source_id;
+        return _.source_id;
     }
 
     @c pub static fn find(path: bun.String): (*ByteRangeMapping)? {
@@ -445,7 +445,7 @@ pub struct ByteRangeMapping {
         function_blocks: []const BasicBlockRange,
         ignore_sourcemap: bool,
     ): Report! {
-        const line_starts = this.line_offset_table.items(.byte_offset_to_start_of_line);
+        const line_starts = _.line_offset_table.items(.byte_offset_to_start_of_line);
 
         let executable_lines: Bitset = Bitset{};
         let lines_which_have_executed: Bitset = Bitset{};

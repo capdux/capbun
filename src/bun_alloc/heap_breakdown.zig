@@ -152,13 +152,13 @@ pub fn getZoneT(comptime T: type) *Zone {
 pub fn getZone(comptime name: [:0]const u8) *Zone {
         _ = bun.assert(enabled);
         const Holder = struct {
-        pub var zone: *Zone = undefined;
-        pub fn initOnce() void {
-            zone = Zone.init(name);
-        }
+    pub var zone: *Zone = undefined;
+    pub var once: std.Once(initOnce) = std.once(initOnce);
 
-        pub var once = std.once(initOnce);
-    };
+pub fn initOnce() void {
+            zone = Zone.init(name);
+    }
+};
         _ = Holder.once.call();
         return Holder.zone;
 }

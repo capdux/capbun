@@ -203,9 +203,9 @@ pub fn onReceivedData(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFra
         _ = log("onReceivedData", .{});
         const function = callframe.callee();
         const args = callframe.arguments_old(1);
-        if (jsc.host_fn.getFunctionData(function)) |self| {
-            _ = &self;
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (jsc.host_fn.getFunctionData(function)) |ctx| {
+            _ = &ctx;
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if ((args.len >= 1)) {
                 const data_arg = args.ptr[0];
                 if (req.origin.has()) {
@@ -231,9 +231,9 @@ pub fn onEnd(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) bun.J
         _ = log("onEnd", .{});
         _ = &globalObject;
         const function = callframe.callee();
-        if (jsc.host_fn.getFunctionData(function)) |self| {
-            _ = &self;
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (jsc.host_fn.getFunctionData(function)) |ctx| {
+            _ = &ctx;
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if ((req.wrapper != null)) {
                 _ = req.handlers.onEnd(req.handlers.ctx);
             }
@@ -245,9 +245,9 @@ pub fn onWritable(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) 
         _ = log("onWritable", .{});
         _ = &globalObject;
         const function = callframe.callee();
-        if (jsc.host_fn.getFunctionData(function)) |self| {
-            _ = &self;
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (jsc.host_fn.getFunctionData(function)) |ctx| {
+            _ = &ctx;
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if (req.wrapper) |*wrapper| {
                 _ = &wrapper;
                 _ = (wrapper.*).flush();
@@ -261,9 +261,9 @@ pub fn onCloseJS(globalObject: *jsc.JSGlobalObject, callframe: *jsc.CallFrame) b
         _ = log("onCloseJS", .{});
         _ = &globalObject;
         const function = callframe.callee();
-        if (jsc.host_fn.getFunctionData(function)) |self| {
-            _ = &self;
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (jsc.host_fn.getFunctionData(function)) |ctx| {
+            _ = &ctx;
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if (req.wrapper) |*wrapper| {
                 _ = &wrapper;
                 _ = (wrapper.*).shutdown(true);

@@ -33,47 +33,47 @@ pub fn NewReaderWrap(
 
         pub const Ctx = Context;
 
-        pub inline fn markMessageStart(this) {
-            let w = this.wrapped;
+        pub inline fn markMessageStart() {
+            let w = _.wrapped;
             if (comptime @typeInfo(@TypeOf(markMessageStartFn)).@"fn".params[0].type.? == *Context) markMessageStartFn(&w) else markMessageStartFn(w);
         }
 
-        pub inline fn read(this, count: usize): AnyPostgresError!Data {
-            let w = this.wrapped;
+        pub inline fn read(count: usize): AnyPostgresError!Data {
+            let w = _.wrapped;
             return (if (comptime @typeInfo(@TypeOf(readFn)).@"fn".params[0].type.? == *Context) readFn(&w, count) else readFn(w, count))?;
         }
 
-        pub inline fn eatMessage(this, comptime msg_: anytype): AnyPostgresError!void {
+        pub inline fn eatMessage(comptime msg_: anytype): AnyPostgresError!void {
             const msg = msg_[1..];
-            this.ensureCapacity(msg.len)?;
-            let input = DeinitGuard<Data>{ val: this.read(msg.len)? };
+            _.ensureCapacity(msg.len)?;
+            let input = DeinitGuard<Data>{ val: _.read(msg.len)? };
             if (bun.strings.eqlComptime(input.val.slice(), msg)) return;
             return err.InvalidMessage;
         }
 
-        pub fn skip(this, count: usize): AnyPostgresError!void {
-            let w = this.wrapped;
+        pub fn skip(count: usize): AnyPostgresError!void {
+            let w = _.wrapped;
             if (comptime @typeInfo(@TypeOf(skipFn)).@"fn".params[0].type.? == *Context) skipFn(&w, count) else skipFn(w, count);
         }
 
-        pub fn peek(this): []const u8 {
-            let w = this.wrapped;
+        pub fn peek(): []const u8 {
+            let w = _.wrapped;
             return if (comptime @typeInfo(@TypeOf(peekFn)).@"fn".params[0].type.? == *Context) peekFn(&w) else peekFn(w);
         }
 
-        pub inline fn readZ(this): AnyPostgresError!Data {
-            let w = this.wrapped;
+        pub inline fn readZ(): AnyPostgresError!Data {
+            let w = _.wrapped;
             return (if (comptime @typeInfo(@TypeOf(readZFn)).@"fn".params[0].type.? == *Context) readZFn(&w) else readZFn(w))?;
         }
 
-        pub inline fn ensureCapacity(this, count: usize): AnyPostgresError!void {
-            let w = this.wrapped;
+        pub inline fn ensureCapacity(count: usize): AnyPostgresError!void {
+            let w = _.wrapped;
             const ok = if (comptime @typeInfo(@TypeOf(ensureCapacityFn)).@"fn".params[0].type.? == *Context) ensureCapacityFn(&w, count) else ensureCapacityFn(w, count);
             if (!ok) return err.ShortRead;
         }
 
-        pub fn int(this, comptime Int: type): Int! {
-            let data = DeinitGuard<Data>{ val: this.read(@sizeOf(Int))? };
+        pub fn int(comptime Int: type): Int! {
+            let data = DeinitGuard<Data>{ val: _.read(@sizeOf(Int))? };
             const slice = data.val.slice();
             if (slice.len < @sizeOf(Int)) {
                 return err.ShortRead;
@@ -84,31 +84,31 @@ pub fn NewReaderWrap(
             return @byteSwap(@as(Int, @bitCast(unsafe { slice[0..@sizeOf(Int)].* })));
         }
 
-        pub fn peekInt(this, comptime Int: type): Int? {
-            const remain = this.peek();
+        pub fn peekInt(comptime Int: type): Int? {
+            const remain = _.peek();
             if (remain.len < @sizeOf(Int)) {
                 return null;
             }
             return @byteSwap(@as(Int, @bitCast(unsafe { remain[0..@sizeOf(Int)].* })));
         }
 
-        pub fn expectInt(this, comptime Int: type, comptime value: comptime_int): bool! {
-            const actual = this.int(Int)?;
+        pub fn expectInt(comptime Int: type, comptime value: comptime_int): bool! {
+            const actual = _.int(Int)?;
             return actual == value;
         }
 
-        pub fn int4(this): PostgresInt32! {
-            return this.int(PostgresInt32);
+        pub fn int4(): PostgresInt32! {
+            return _.int(PostgresInt32);
         }
 
-        pub fn short(this): PostgresShort! {
-            return this.int(PostgresShort);
+        pub fn short(): PostgresShort! {
+            return _.int(PostgresShort);
         }
 
-        pub fn length(this): PostgresInt32! {
-            const expected = this.int(PostgresInt32)?;
+        pub fn length(): PostgresInt32! {
+            const expected = _.int(PostgresInt32)?;
             if (expected > -1) {
-                this.ensureCapacity(@intCast(expected -| 4))?;
+                _.ensureCapacity(@intCast(expected -| 4))?;
             }
 
             return expected;
@@ -116,8 +116,8 @@ pub fn NewReaderWrap(
 
         pub const bytes = read;
 
-        pub fn String(this): bun.String! {
-            let result = DeinitGuard<Data>{ val: this.readZ()? };
+        pub fn String(): bun.String! {
+            let result = DeinitGuard<Data>{ val: _.readZ()? };
             return bun.String.borrowUTF8(result.val.slice());
         }
     };

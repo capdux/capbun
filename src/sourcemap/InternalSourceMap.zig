@@ -717,13 +717,13 @@ pub fn isValidBlob(blob: []const u8) bool {
         if ((blob.len < header_size)) {
             return false;
         }
-        const self = InternalSourceMap{ .data = blob.ptr };
-        const total = self.totalLen();
+        const ism = InternalSourceMap{ .data = blob.ptr };
+        const total = ism.totalLen();
         if ((total != blob.len)) {
             return false;
         }
-        const sync_n = self.syncCount();
-        const stream_off = self.streamOffset();
+        const sync_n = ism.syncCount();
+        const stream_off = ism.streamOffset();
         const sync_end = (header_size + ((if (comptime @typeInfo(@TypeOf(sync_n)) == .@"enum") cp_cast_int(usize, @intFromEnum(sync_n)) else cp_cast_int(usize, sync_n)) * @sizeOf(SyncEntry)));
         if ((stream_off < sync_end)) {
             return false;
@@ -1005,7 +1005,7 @@ pub inline fn zigzagEncode(value: i32) u32 {
 }
 
 pub inline fn zigzagDecode(value: u32) i32 {
-        return (@as(i32, @bitCast(cp_shr(value, 1))) ^ (0 - @as(i32, @bitCast((value & 1)))));
+        return (@as(i32, @bitCast(cp_shr(value, 1))) ^ (-@as(i32, @bitCast((value & 1)))));
 }
 
 pub fn writeVarint(buf: [*]u8, signed: i32) usize {

@@ -98,7 +98,7 @@ pub fn stat(
         request_payer = request_payer,
     };
     const cb: S3HttpSimpleTask.Callback = .{ .stat = callback };
-    S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
+    S3SimpleRequest.executeSimpleS3Request(_, req_opts, cb, callback_context)?;
 }
 
 pub fn download(
@@ -117,7 +117,7 @@ pub fn download(
         request_payer = request_payer,
     };
     const cb: S3HttpSimpleTask.Callback = .{ .download = callback };
-    S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
+    S3SimpleRequest.executeSimpleS3Request(_, req_opts, cb, callback_context)?;
 }
 
 pub fn downloadSlice(
@@ -148,7 +148,7 @@ pub fn downloadSlice(
         request_payer = request_payer,
     };
     const cb: S3HttpSimpleTask.Callback = .{ .download = callback };
-    S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
+    S3SimpleRequest.executeSimpleS3Request(_, req_opts, cb, callback_context)?;
 }
 
 pub fn delete(
@@ -167,7 +167,7 @@ pub fn delete(
         request_payer = request_payer,
     };
     const cb: S3HttpSimpleTask.Callback = .{ .delete = callback };
-    S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
+    S3SimpleRequest.executeSimpleS3Request(_, req_opts, cb, callback_context)?;
 }
 
 pub fn listObjects(
@@ -240,11 +240,11 @@ pub fn listObjects(
         handleOom(search_params.appendFmt(default_allocator, "&start-after={s}", .{ encoded }));
     }
 
-    let result = this.signRequest(.{
+    let result = _.signRequest(.{
         .path = "",
         .method = bun.http.Method.GET,
         .search_params = search_params.slice(),
-    }, true, null) catch |sign_err| {
+    }, true, null) catch sign_err => {
         search_params.deinit(default_allocator);
 
         let error_code_and_message = Error.getSignErrorCodeAndMessage(sign_err);
@@ -281,7 +281,7 @@ pub fn listObjects(
         &task.response_buffer,
         "",
         bun.http.HTTPClientResult.Callback.New(
-            *S3HttpSimpleTask,
+            @FieldType(struct { p: *S3HttpSimpleTask }, "p"),
             S3HttpSimpleTask.httpCallback,
         ).init(task),
         .follow,
@@ -325,7 +325,7 @@ pub fn upload(
         request_payer = request_payer,
     };
     const cb: S3HttpSimpleTask.Callback = .{ .upload = callback };
-    S3SimpleRequest.executeSimpleS3Request(this, req_opts, cb, callback_context)?;
+    S3SimpleRequest.executeSimpleS3Request(_, req_opts, cb, callback_context)?;
 }
 
 export class NetworkSinkCallbackWrapper {
@@ -374,13 +374,13 @@ pub fn writableStream(
     request_payer: bool,
 ): JSError!JSValue {
     let proxy_url = proxy ?? "";
-    this.ref();
+    _.ref();
     let ct_dup = if (content_type != null) handleOom(default_allocator.dupe(u8, content_type.?)) else null;
     let cd_dup = if (content_disposition != null) handleOom(default_allocator.dupe(u8, content_disposition.?)) else null;
     let ce_dup = if (content_encoding != null) handleOom(default_allocator.dupe(u8, content_encoding.?)) else null;
     let task = bun.new(MultiPartUpload, .{
         .ref_count = .initExactRefs(2),
-        .credentials = this,
+        .credentials = _,
         .path = handleOom(default_allocator.dupe(u8, path)),
         .proxy = if (proxy_url.len > 0) handleOom(default_allocator.dupe(u8, proxy_url)) else "",
         .content_type = ct_dup,
@@ -432,9 +432,9 @@ export class S3UploadStreamWrapper {
     global: *JSGlobalObject;
 
     fn detachSink(*_) {
-        log("detachSink {}", .{ this.sink != null });
-        if (sink := this.sink) {
-            this.sink = null;
+        log("detachSink {}", .{ _.sink != null });
+        if (sink := _.sink) {
+            _.sink = null;
             sink.deref();
         }
     }
@@ -451,63 +451,63 @@ export class S3UploadStreamWrapper {
 
     pub fn writeRequestData(*_, data: string): WebCore.ResumableSinkBackpressure {
         log("writeRequestData {}", .{ data.len });
-        return handleOom(this.task.writeBytes(data, false));
+        return handleOom(_.task.writeBytes(data, false));
     }
 
     pub fn writeEndRequest(*_, err_val: JSValue?) {
         log("writeEndRequest {}", .{ err_val != null });
-        this.detachSink();
-        const _self_guard = DerefGuard<S3UploadStreamWrapper>{ ptr: this };
+        _.detachSink();
+        const _self_guard = DerefGuard<S3UploadStreamWrapper>{ ptr: _ };
         if (js_err := err_val) {
-            if (this.endPromise.hasValue() && !js_err.isEmptyOrUndefinedOrNull()) {
-                this.endPromise.reject(this.global, js_err) catch {};
-                this.endPromise = .empty;
+            if (_.endPromise.hasValue() && !js_err.isEmptyOrUndefinedOrNull()) {
+                _.endPromise.reject(_.global, js_err) catch {};
+                _.endPromise = .empty;
             }
-            if (!this.task.ended) {
-                this.task.fail(.{
+            if (!_.task.ended) {
+                _.task.fail(.{
                     .code = "UnknownError",
                     .message = "ReadableStream ended with an error",
                 }) catch {};
             }
         } else {
-            * = handleOom(this.task.writeBytes("", true));
+            * = handleOom(_.task.writeBytes("", true));
         }
     }
 
     static fn resolve(result: S3UploadResult, self_any: *!): JSTerminatedError!void {
-        let self: *S3UploadStreamWrapper = unsafe { @ptrCast(@alignCast(self_any)) };
+        let wrapper: *S3UploadStreamWrapper = unsafe { @ptrCast(@alignCast(self_any)) };
         log("resolve {any}", .{ result });
-        const _self_guard = DerefGuard<S3UploadStreamWrapper>{ ptr: self };
+        const _self_guard = DerefGuard<S3UploadStreamWrapper>{ ptr: wrapper };
         switch (result) {
             .success => {
-                if (self.endPromise.hasValue()) {
-                    self.endPromise.resolve(self.global, .jsNumber(0))?;
-                    self.endPromise = .empty;
+                if (wrapper.endPromise.hasValue()) {
+                    wrapper.endPromise.resolve(wrapper.global, .jsNumber(0))?;
+                    wrapper.endPromise = .empty;
                 }
             },
             .failure(s3_err) => {
-                if (sink := self.sink) {
-                    self.sink = null;
-                    sink.cancel(s3_err.toJS(self.global, self.path));
+                if (sink := wrapper.sink) {
+                    wrapper.sink = null;
+                    sink.cancel(s3_err.toJS(wrapper.global, wrapper.path));
                     sink.deref();
-                } else if (self.endPromise.hasValue()) {
-                    self.endPromise.reject(self.global, s3_err.toJS(self.global, self.path))?;
-                    self.endPromise = .empty;
+                } else if (wrapper.endPromise.hasValue()) {
+                    wrapper.endPromise.reject(wrapper.global, s3_err.toJS(wrapper.global, wrapper.path))?;
+                    wrapper.endPromise = .empty;
                 }
             },
         }
 
-        if (callback := self.callback) {
-            callback(result, self.callback_context);
+        if (callback := wrapper.callback) {
+            callback(result, wrapper.callback_context);
         }
     }
 
     pub fn deinit(*_) {
-        log("deinit {}", .{ this.sink != null });
-        this.detachSink();
-        this.task.deref();
-        this.endPromise.deinit();
-        destroy(this);
+        log("deinit {}", .{ _.sink != null });
+        _.detachSink();
+        _.task.deref();
+        _.endPromise.deinit();
+        destroy(_);
     }
 }
 
@@ -527,7 +527,7 @@ pub fn uploadStream(
     callback: S3UploadVoidCallbackFn?,
     callback_context: *!,
 ): JSError!JSValue {
-    this.ref();
+    _.ref();
     let proxy_url = proxy ?? "";
     if (readable_stream.isDisturbed(globalThis)) {
         return JSPromise.rejectedPromise(globalThis, bun.String.static("ReadableStream is already disturbed").toErrorInstance(globalThis)).toJS();
@@ -571,7 +571,7 @@ pub fn uploadStream(
     let ce_dup = if (content_encoding != null) handleOom(default_allocator.dupe(u8, content_encoding.?)) else null;
     let task = bun.new(MultiPartUpload, .{
         .ref_count = .initExactRefs(2),
-        .credentials = this,
+        .credentials = _,
         .path = handleOom(default_allocator.dupe(u8, path)),
         .proxy = if (proxy_url.len > 0) handleOom(default_allocator.dupe(u8, proxy_url)) else "",
         .content_type = ct_dup,
@@ -626,11 +626,11 @@ pub fn downloadStream(
         break :brk handleOom(allocPrint(default_allocator, "bytes={}-", .{ offset }));
     };
 
-    let result = this.signRequest(.{
+    let result = _.signRequest(.{
         .path = path,
         .method = .GET,
         .request_payer = request_payer,
-    }, false, null) catch |sign_err| {
+    }, false, null) catch sign_err => {
         if (range_ := range) default_allocator.free(range_);
         let error_code_and_message = Error.getSignErrorCodeAndMessage(sign_err);
         callback(.{ .allocator = default_allocator, .list = .{} }, false, .{
@@ -676,7 +676,7 @@ pub fn downloadStream(
         &task.response_buffer,
         "",
         bun.http.HTTPClientResult.Callback.New(
-            *S3HttpDownloadStreamingTask,
+            @FieldType(struct { p: *S3HttpDownloadStreamingTask }, "p"),
             S3HttpDownloadStreamingTask.httpCallback,
         ).init(task),
         .follow,
@@ -701,14 +701,14 @@ export class S3DownloadStreamWrapper {
     path: string;
     global: *JSGlobalObject;
 
-    static fn callback(chunk: MutableString, has_more: bool, request_err: S3Error?, self: *S3DownloadStreamWrapper): JSTerminatedError!void {
-        const _self_guard = DeinitPtrGuard<S3DownloadStreamWrapper>{ ptr: if (!has_more) self else null };
+    static fn callback(chunk: MutableString, has_more: bool, request_err: S3Error?, wrapper: *S3DownloadStreamWrapper): JSTerminatedError!void {
+        const _self_guard = DeinitPtrGuard<S3DownloadStreamWrapper>{ ptr: if (!has_more) wrapper else null };
 
-        if (readable := self.readable_stream_ref.get(self.global)) {
+        if (readable := wrapper.readable_stream_ref.get(wrapper.global)) {
             if (readable.ptr == .Bytes) {
                 if (s3_err := request_err) {
                     readable.ptr.Bytes.onData(
-                        .{ .err = .{ .JSValue = s3_err.toJS(self.global, self.path) } },
+                        .{ .err = .{ .JSValue = s3_err.toJS(wrapper.global, wrapper.path) } },
                         default_allocator,
                     )?;
                     return;
@@ -749,14 +749,14 @@ export class S3DownloadStreamWrapper {
 
     @c static fn onStreamCancelled(ctx: *!?) {
         if (c := ctx) {
-            let self: *S3DownloadStreamWrapper = unsafe { @ptrCast(@alignCast(c)) };
-            self.readable_stream_ref.deinit();
+            let wrapper: *S3DownloadStreamWrapper = unsafe { @ptrCast(@alignCast(c)) };
+            wrapper.readable_stream_ref.deinit();
         }
     }
 
     static fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: S3Error?, opaque_self: *!) {
-        let self: *S3DownloadStreamWrapper = unsafe { @ptrCast(@alignCast(opaque_self)) };
-        S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, self) catch {};
+        let wrapper: *S3DownloadStreamWrapper = unsafe { @ptrCast(@alignCast(opaque_self)) };
+        S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, wrapper) catch {};
     }
 }
 
@@ -790,7 +790,7 @@ pub fn readableStream(
     reader.cancel_ctx = unsafe { @ptrCast(wrapper) };
 
     downloadStream(
-        this,
+        _,
         path,
         offset,
         size,

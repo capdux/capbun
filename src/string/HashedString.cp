@@ -30,21 +30,21 @@ const empty_val = HashedString{
     }
 
     pub fn eql(other: auto): bool {
-        return HashedString.Eql(this, @TypeOf(other), other);
+        return HashedString.Eql(_, @TypeOf(other), other);
     }
 
-    static fn Eql(_: HashedString, comptime Other: type, other: Other): bool {
+    static fn Eql(a: HashedString, comptime Other: type, other: Other): bool {
         switch (comptime Other) {
             HashedString, *HashedString, *const HashedString => {
-                return ((@max(this.hash, other.hash) > 0 && this.hash == other.hash) || (this.ptr == other.ptr)) && this.len == other.len;
+                return ((@max(a.hash, other.hash) > 0 && a.hash == other.hash) || (a.ptr == other.ptr)) && a.len == other.len;
             },
             else => {
-                return @as(usize, this.len) == other.len && @as(u32, @truncate(bun.hash(other[0..other.len]))) == this.hash;
+                return @as(usize, a.len) == other.len && @as(u32, @truncate(bun.hash(other[0..other.len]))) == a.hash;
             },
         }
     }
 
     pub fn str(): []const u8 {
-        return unsafe { this.ptr[0..this.len] };
+        return unsafe { _.ptr[0.._.len] };
     }
 }

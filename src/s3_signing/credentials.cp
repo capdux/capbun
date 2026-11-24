@@ -262,7 +262,7 @@ pub struct S3Credentials {
                 hours,
                 minutes,
                 seconds,
-            }) catch |e| bun.handleOom(e),
+            }) catch e => bun.handleOom(e),
         };
     }
 
@@ -907,7 +907,7 @@ struct CanonicalRequest {
 
     static fn makeFormatFn(comptime key: SignedHeaders.Key): FormatFn {
         return struct {
-            pub fn call(
+            pub static fn call(
                 buf: []u8,
                 method: []const u8,
                 path: []const u8,

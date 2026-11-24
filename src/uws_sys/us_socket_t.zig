@@ -65,7 +65,7 @@ pub fn ssl(self: *us_socket_t) ?*bun.BoringSSL.c.SSL {
                 return null;
             }
             {
-                return @as(?*bun.BoringSSL.c.SSL, @ptrCast(@alignCast(us_socket_get_native_handle(self))));
+                return @as(?*bun.BoringSSL.c.SSL, us_socket_get_native_handle(self));
             }
     }
 

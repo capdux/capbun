@@ -18,12 +18,12 @@ pub fn GuardedBy(comptime Value: type, comptime MutexType: type): type {
         mutex: MutexType,
 
         /// Creates a guarded value with a default-initialized mutex.
-        pub fn init(value: Value) Self {
+        pub static fn init(value: Value): Self {
             return .initWithMutex(value, bun.memory.initDefault(MutexType));
         }
 
         /// Creates a guarded value with the given mutex.
-        pub fn initWithMutex(value: Value, mutex: MutexType) Self {
+        pub static fn initWithMutex(value: Value, mutex: MutexType): Self {
             return .{
                 .unsynchronized_value = value,
                 .mutex = mutex,
@@ -31,30 +31,30 @@ pub fn GuardedBy(comptime Value: type, comptime MutexType: type): type {
         }
 
         /// Locks the mutex and returns a pointer to the value.
-        pub fn lock(self: *Self) *Value {
-            self.mutex.lock();
-            return &self.unsynchronized_value;
+        pub fn lock(*_): *Value {
+            _.mutex.lock();
+            return &_.unsynchronized_value;
         }
 
         /// Unlocks the mutex.
-        pub fn unlock(self: *Self) void {
-            self.mutex.unlock();
+        pub fn unlock(*_) {
+            _.mutex.unlock();
         }
 
         /// Returns the inner unprotected value.
-        pub fn intoUnprotected(self: *Self) Value {
-            defer self.* = undefined;
-            bun.memory.deinit(&self.mutex);
-            return self.unsynchronized_value;
+        pub fn intoUnprotected(*_): Value {
+            defer _.* = undefined;
+            bun.memory.deinit(&_.mutex);
+            return _.unsynchronized_value;
         }
 
-        pub fn release(self: *Self) void {
-            bun.memory.deinit(&self.unsynchronized_value);
-            bun.memory.deinit(&self.#mutex);
+        pub fn release(*_) {
+            bun.memory.deinit(&_.unsynchronized_value);
+            bun.memory.deinit(&_.mutex);
         }
 
-        pub fn deinit(self: *Self) void {
-            self.release();
+        pub fn deinit(*_) {
+            _.release();
         }
     };
 }

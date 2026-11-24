@@ -36,19 +36,19 @@ pub fn Channel(
             .Dynamic => initDynamic,
         };
 
-        pub inline fn initStatic() Self {
+        pub inline static fn initStatic(): Self {
             return .withBuffer(Buffer.init());
         }
 
-        pub inline fn initSlice(buf: []T) Self {
+        pub inline static fn initSlice(buf: []T): Self {
             return .withBuffer(Buffer.init(buf));
         }
 
-        pub inline fn initDynamic(allocator: std.mem.Allocator) Self {
+        pub inline static fn initDynamic(allocator: std.mem.Allocator): Self {
             return .withBuffer(Buffer.init(allocator));
         }
 
-        fn withBuffer(buffer: Buffer) Self {
+        static fn withBuffer(buffer: Buffer): Self {
             return Self{
                 .mutex = .{},
                 .putters = .{},
@@ -58,84 +58,84 @@ pub fn Channel(
             };
         }
 
-        pub fn release(self: *Self) void {
-            self.buffer.deinit();
-            bun.memory.deinit(&self.mutex);
-            bun.memory.deinit(&self.putters);
-            bun.memory.deinit(&self.getters);
+        pub fn release(*_) {
+            _.buffer.deinit();
+            bun.memory.deinit(&_.mutex);
+            bun.memory.deinit(&_.putters);
+            bun.memory.deinit(&_.getters);
         }
 
-        pub fn deinit(self: *Self) void {
-            self.release();
+        pub fn deinit(*_) {
+            _.release();
         }
 
-        pub fn close(self: *Self) void {
-            const _lock_guard = MutexUnlockGuard.lock(unsafe { &self.mutex });
+        pub fn close(*_) {
+            const _lock_guard = MutexUnlockGuard.lock(unsafe { &_.mutex });
 
-            if (self.is_closed) return;
+            if (_.is_closed) return;
 
-            self.is_closed = true;
-            self.putters.broadcast();
-            self.getters.broadcast();
+            _.is_closed = true;
+            _.putters.broadcast();
+            _.getters.broadcast();
         }
 
-        pub fn tryWriteItem(self: *Self, item: T): bool! {
+        pub fn tryWriteItem(*_, item: T): bool! {
             const arr: [1]T = [ item ];
-            const wrote = self.write(&arr)?;
+            const wrote = _.write(&arr)?;
             return wrote == 1;
         }
 
-        pub fn writeItem(self: *Self, item: T)! {
+        pub fn writeItem(*_, item: T)! {
             const arr: [1]T = [ item ];
-            return self.writeAll(&arr);
+            return _.writeAll(&arr);
         }
 
-        pub fn write(self: *Self, items: []const T): usize! {
-            return self.writeItems(items, false);
+        pub fn write(*_, items: []const T): usize! {
+            return _.writeItems(items, false);
         }
 
-        pub fn tryReadItem(self: *Self): (T?)! {
+        pub fn tryReadItem(*_): (T?)! {
             let items: [1]T = undefined;
-            if ((try self.read(&items)) != 1) {
+            if ((_.read(&items)?) != 1) {
                 return null;
             }
             return items[0];
         }
 
-        pub fn readItem(self: *Self): T! {
+        pub fn readItem(*_): T! {
             let items: [1]T = undefined;
-            try self.readAll(&items);
+            _.readAll(&items)?;
             return items[0];
         }
 
-        pub fn read(self: *Self, items: []T): usize! {
-            return self.readItems(items, false);
+        pub fn read(*_, items: []T): usize! {
+            return _.readItems(items, false);
         }
 
-        pub fn writeAll(self: *Self, items: []const T)! {
-            bun.assert((try self.writeItems(items, true)) == items.len);
+        pub fn writeAll(*_, items: []const T)! {
+            bun.assert((_.writeItems(items, true)?) == items.len);
         }
 
-        pub fn readAll(self: *Self, items: []T)! {
-            bun.assert((try self.readItems(items, true)) == items.len);
+        pub fn readAll(*_, items: []T)! {
+            bun.assert((_.readItems(items, true)?) == items.len);
         }
 
-        fn writeItems(self: *Self, items: []const T, should_block: bool): usize! {
-            const _lock_guard = MutexUnlockGuard.lock(unsafe { &self.mutex });
+        fn writeItems(*_, items: []const T, should_block: bool): usize! {
+            const _lock_guard = MutexUnlockGuard.lock(unsafe { &_.mutex });
 
             let pushed: usize = 0;
             while (pushed < items.len) {
-                if (self.is_closed) return error.Closed;
+                if (_.is_closed) return error.Closed;
                 let did_push = true;
-                self.buffer.write(items) catch |e| {
+                _.buffer.write(items) catch e => {
                     if (buffer_type == .Dynamic) return e;
                     did_push = false;
                 };
                 if (did_push) {
-                    self.getters.signal();
+                    _.getters.signal();
                     pushed += 1;
                 } else if (should_block) {
-                    self.putters.wait(&self.mutex);
+                    _.putters.wait(&_.mutex);
                 } else {
                     break;
                 }
@@ -144,21 +144,21 @@ pub fn Channel(
             return pushed;
         }
 
-        fn readItems(self: *Self, items: []T, should_block: bool): usize! {
-            const _lock_guard = MutexUnlockGuard.lock(unsafe { &self.mutex });
+        fn readItems(*_, items: []T, should_block: bool): usize! {
+            const _lock_guard = MutexUnlockGuard.lock(unsafe { &_.mutex });
 
             let popped: usize = 0;
             while (popped < items.len) {
                 const new_item = blk: {
                     // Buffer can contain null items but readItem will return null if the buffer is empty.
                     // we need to check if the buffer is empty before trying to read an item.
-                    if (self.buffer.count == 0) {
-                        if (self.is_closed) return error.Closed;
+                    if (_.buffer.count == 0) {
+                        if (_.is_closed) return error.Closed;
                         break :blk null;
                     }
 
-                    const item = self.buffer.readItem();
-                    self.putters.signal();
+                    const item = _.buffer.readItem();
+                    _.putters.signal();
                     break :blk item;
                 };
 
@@ -166,7 +166,7 @@ pub fn Channel(
                     items[popped] = item;
                     popped += 1;
                 } else if (should_block) {
-                    self.getters.wait(&self.mutex);
+                    _.getters.wait(&_.mutex);
                 } else {
                     break;
                 }

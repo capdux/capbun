@@ -76,8 +76,8 @@ extern fn setcontext(ucp: *const std.c.ucontext_t): noreturn;
 
 struct musl {
     const jmp_buf = @cImport(@cInclude("setjmp.h")).jmp_buf;
-    extern fn setjmp(env: *jmp_buf): c_int;
-    extern fn longjmp(env: *const jmp_buf, val: c_int): noreturn;
+    static extern fn setjmp(env: *jmp_buf): c_int;
+    static extern fn longjmp(env: *const jmp_buf, val: c_int): noreturn;
 }
 
 inline fn getContext(ctx: *Context) {

@@ -219,43 +219,59 @@ pub fn BunSocket(comptime ssl: bool) type {
 pub fn BunListener(comptime ssl: bool) type {
         const S = uws.NewSocketHandler(ssl);
         const NS = api.NewSocket(ssl);
+        const OptNS = @FieldType(struct {
+    p: ?*NS,
+}, "p");
         return struct {
-        pub fn onOpen(s: *us_socket_t, _: bool, _: string) void {
+
+pub fn onOpen(s: *us_socket_t, _: bool, _: []const u8) void {
             const listener = s.group().owner(api.Listener);
             const ns = api.Listener.onCreate(ssl, listener, S.from(s));
-            swallow(ns.onOpen(S.from(s)));
-        }
-        pub fn onClose(s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
-            if (s.ext(?*NS).*) |ns| {
-                swallow(ns.onClose(S.from(s), code, reason));
+            _ = swallow(ns.onOpen(S.from(s)));
+    }
+
+pub fn onClose(s: *us_socket_t, code: i32, reason: ?*anyopaque) void {
+            if ((s.ext(OptNS)).*) |ns| {
+                _ = &ns;
+                _ = swallow(ns.onClose(S.from(s), code, reason));
             }
-        }
-        pub fn onData(s: *us_socket_t, data: string) void {
-            if (s.ext(?*NS).*) |ns| {
-                swallow(ns.onData(S.from(s), data));
+    }
+
+pub fn onData(s: *us_socket_t, data: []const u8) void {
+            if ((s.ext(OptNS)).*) |ns| {
+                _ = &ns;
+                _ = swallow(ns.onData(S.from(s), data));
             }
-        }
-        pub fn onWritable(s: *us_socket_t) void {
-            if (s.ext(?*NS).*) |ns| {
-                swallow(ns.onWritable(S.from(s)));
+    }
+
+pub fn onWritable(s: *us_socket_t) void {
+            if ((s.ext(OptNS)).*) |ns| {
+                _ = &ns;
+                _ = swallow(ns.onWritable(S.from(s)));
             }
-        }
-        pub fn onEnd(s: *us_socket_t) void {
-            if (s.ext(?*NS).*) |ns| {
-                swallow(ns.onEnd(S.from(s)));
+    }
+
+pub fn onEnd(s: *us_socket_t) void {
+            if ((s.ext(OptNS)).*) |ns| {
+                _ = &ns;
+                _ = swallow(ns.onEnd(S.from(s)));
             }
-        }
-        pub fn onTimeout(s: *us_socket_t) void {
-            if (s.ext(?*NS).*) |ns| {
-                swallow(ns.onTimeout(S.from(s)));
+    }
+
+pub fn onTimeout(s: *us_socket_t) void {
+            if ((s.ext(OptNS)).*) |ns| {
+                _ = &ns;
+                _ = swallow(ns.onTimeout(S.from(s)));
             }
-        }
-        pub fn onHandshake(s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {
-            if (s.ext(?*NS).*) |ns| {
-                swallow(ns.onHandshake(S.from(s), @intFromBool(ok), err));
+    }
+
+pub fn onHandshake(s: *us_socket_t, ok: bool, err: uws.us_bun_verify_error_t) void {
+            if ((s.ext(OptNS)).*) |ns| {
+                _ = &ns;
+                _ = swallow(ns.onHandshake(S.from(s), @intFromBool(ok), err));
             }
-        }
-    };
+    }
+};
 }
 
 pub fn NsHandler(comptime Owner: type, comptime H: type, comptime ssl: bool) type {

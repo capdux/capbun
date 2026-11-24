@@ -219,7 +219,7 @@ struct StringListGuard {
     }
 
     pub fn estimatedSize(*_): usize {
-        return this.memoryCost();
+        return _.memoryCost();
     }
 
     pub fn getPayload(*_, globalObject: *JSGlobalObject): JSValue {
@@ -245,12 +245,12 @@ struct StringListGuard {
     fn mappingNameToJS(globalObject: *JSGlobalObject, mapping: *const Mapping): JSValue ! bun.JSError {
         const name_index = mapping.nameIndex();
         if (name_index >= 0) {
-            if (name := this.sourcemap.mappings.getName(name_index)) {
+            if (name := _.sourcemap.mappings.getName(name_index)) {
                 return bun.String.createUTF8ForJS(globalObject, name);
             } else {
                 const index: usize = @intCast(name_index);
-                if (index < this.names.len) {
-                    return this.names[index].toJS(globalObject);
+                if (index < _.names.len) {
+                    return _.names[index].toJS(globalObject);
                 }
             }
         }
@@ -259,10 +259,10 @@ struct StringListGuard {
 
     fn sourceNameToJS(globalObject: *JSGlobalObject, mapping: *const Mapping): JSValue ! bun.JSError {
         const source_index = mapping.sourceIndex();
-        const len_i32: i32 = @intCast(this.sources.len);
+        const len_i32: i32 = @intCast(_.sources.len);
         if (source_index >= 0 && source_index < len_i32) {
             const idx: usize = @intCast(source_index);
-            return this.sources[idx].toJS(globalObject);
+            return _.sources[idx].toJS(globalObject);
         }
 
         return JSValue.js_undefined;
@@ -270,11 +270,11 @@ struct StringListGuard {
 
     pub fn findOrigin(*_, globalObject: *JSGlobalObject, callFrame: *CallFrame): JSValue ! bun.JSError {
         const coords = getLineColumn(globalObject, callFrame)?;
-        const mapping_opt = this.sourcemap.findMapping(.fromZeroBased(coords[0]), .fromZeroBased(coords[1]));
+        const mapping_opt = _.sourcemap.findMapping(.fromZeroBased(coords[0]), .fromZeroBased(coords[1]));
         if (mapping_opt == null) return jsc.JSValue.createEmptyObject(globalObject, 0);
         const mapping: Mapping = mapping_opt.?;
-        const name = this.mappingNameToJS(globalObject, &mapping)?;
-        const source = this.sourceNameToJS(globalObject, &mapping)?;
+        const name = _.mappingNameToJS(globalObject, &mapping)?;
+        const source = _.sourceNameToJS(globalObject, &mapping)?;
         return unsafe {
             Bun__createNodeModuleSourceMapOriginObject(
                 globalObject,
@@ -288,11 +288,11 @@ struct StringListGuard {
 
     pub fn findEntry(*_, globalObject: *JSGlobalObject, callFrame: *CallFrame): JSValue ! bun.JSError {
         const coords = getLineColumn(globalObject, callFrame)?;
-        const mapping_opt = this.sourcemap.findMapping(.fromZeroBased(coords[0]), .fromZeroBased(coords[1]));
+        const mapping_opt = _.sourcemap.findMapping(.fromZeroBased(coords[0]), .fromZeroBased(coords[1]));
         if (mapping_opt == null) return jsc.JSValue.createEmptyObject(globalObject, 0);
         const mapping: Mapping = mapping_opt.?;
-        const name = this.mappingNameToJS(globalObject, &mapping)?;
-        const source = this.sourceNameToJS(globalObject, &mapping)?;
+        const name = _.mappingNameToJS(globalObject, &mapping)?;
+        const source = _.sourceNameToJS(globalObject, &mapping)?;
         return unsafe {
             Bun__createNodeModuleSourceMapEntryObject(
                 globalObject,
@@ -307,23 +307,23 @@ struct StringListGuard {
     }
 
     pub fn deinit(*_) {
-        for (*str of this.sources) {
+        for (*str of _.sources) {
             str.deref();
         }
-        bun.default_allocator.free(this.sources);
+        bun.default_allocator.free(_.sources);
 
-        for (*name of this.names) {
+        for (*name of _.names) {
             name.deref();
         }
 
-        bun.default_allocator.free(this.names);
+        bun.default_allocator.free(_.names);
 
-        this.sourcemap.deref();
-        bun.destroy(this);
+        _.sourcemap.deref();
+        bun.destroy(_);
     }
 
     pub fn finalize(*_) {
-        this.deinit();
+        _.deinit();
     }
 }
 

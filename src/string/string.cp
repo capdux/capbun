@@ -131,7 +131,7 @@ export @c struct String {
         return @intCast(val);
     }
 
-    pub fn ascii(bytes: []const u8): String {
+    pub static fn ascii(bytes: []const u8): String {
         return String{ tag: .ZigString, value: { ZigString: ZigString.init(bytes) } };
     }
 
@@ -188,10 +188,10 @@ export @c struct String {
         }
     }
 
-    pub fn createIfDifferent(other: String, utf8_slice: []const u8): String {
-        if (other.tag == .WTFStringImpl) {
-            if (other.eqlUTF8(utf8_slice)) {
-                return other.dupeRef();
+    pub fn createIfDifferent(utf8_slice: []const u8): String {
+        if (_.tag == .WTFStringImpl) {
+            if (_.eqlUTF8(utf8_slice)) {
+                return _.dupeRef();
             }
         }
 
@@ -233,7 +233,7 @@ export @c struct String {
     /// check earlier and use String.empty in that case.
     ///
     /// If the length is too large, _ will return a dead string.
-    pub fn createUninitialized(
+    pub static fn createUninitialized(
         comptime kind: WTFEncoding,
         len: usize,
     ): [String, []kind.Byte()] {
@@ -244,7 +244,7 @@ export @c struct String {
         };
     }
 
-    pub fn cloneLatin1(bytes: []const u8): String {
+    pub static fn cloneLatin1(bytes: []const u8): String {
         jsc.markBinding(@src());
         if (bytes.len == 0) return String.empty;
         return String.validateRefCount(bun.cpp.BunString__fromLatin1(bytes.ptr, bytes.len));
@@ -261,11 +261,11 @@ export @c struct String {
         return _;
     }
 
-    pub fn cloneUTF8(bytes: []const u8): String {
+    pub static fn cloneUTF8(bytes: []const u8): String {
         return jsc.WebCore.encoding.toBunStringComptime(bytes, .utf8);
     }
 
-    pub fn cloneUTF16(bytes: []const u16): String {
+    pub static fn cloneUTF16(bytes: []const u16): String {
         if (bytes.len == 0) return String.empty;
         if (bun.strings.firstNonASCII16(bytes) == null) {
             return String.validateRefCount(bun.cpp.BunString__fromUTF16ToLatin1(bytes.ptr, bytes.len));
@@ -273,7 +273,7 @@ export @c struct String {
         return String.validateRefCount(bun.cpp.BunString__fromUTF16(bytes.ptr, bytes.len));
     }
 
-    pub fn createFormat(comptime fmt: [:0]const u8, args: anytype): OOM!String {
+    pub static fn createFormat(comptime fmt: [:0]const u8, args: anytype): OOM!String {
         if (comptime std.meta.fieldNames(@TypeOf(args)).len == 0) {
             return String.static(fmt);
         }
@@ -285,7 +285,7 @@ export @c struct String {
         return String.cloneUTF8(buf);
     }
 
-    pub fn createFromOSPath(os_path: bun.OSPathSlice): String {
+    pub static fn createFromOSPath(os_path: bun.OSPathSlice): String {
         return switch (@TypeOf(os_path)) {
             []const u8 => String.cloneUTF8(os_path),
             []const u16 => String.cloneUTF16(os_path),
@@ -325,12 +325,12 @@ export @c struct String {
     }
 
     /// Must be given ascii input
-    pub fn createAtomASCII(bytes: []const u8): String {
+    pub static fn createAtomASCII(bytes: []const u8): String {
         return bun.cpp.BunString__createAtom(bytes.ptr, bytes.len);
     }
 
     /// Will return null if the input is non-ascii or too long
-    pub fn tryCreateAtom(bytes: []const u8): String? {
+    pub static fn tryCreateAtom(bytes: []const u8): String? {
         const atom = bun.cpp.BunString__tryCreateAtom(bytes.ptr, bytes.len);
         return if (atom.tag == .Dead) null else atom;
     }
@@ -338,7 +338,7 @@ export @c struct String {
     /// Atomized strings are interned strings
     /// They're de-duplicated in a threadlocal hash table
     /// They cannot be used from other threads.
-    pub fn createAtomIfPossible(bytes: []const u8): String {
+    pub static fn createAtomIfPossible(bytes: []const u8): String {
         if (bytes.len == 0) {
             return String.empty;
         }
@@ -391,7 +391,7 @@ export @c struct String {
 
     /// Create a bun.String from a slice. This is never a copy.
     /// For strings created from static string literals, use `String.static`
-    pub fn init(value: anytype): String {
+    pub static fn init(value: anytype): String {
         const Type = @TypeOf(value);
         return switch (Type) {
             String => value,
@@ -416,7 +416,7 @@ export @c struct String {
         };
     }
 
-    pub fn static(input: [:0]const u8): String {
+    pub static fn static(input: [:0]const u8): String {
         return {
             tag: .StaticZigString,
             value: { StaticZigString: ZigString.init(input) },
@@ -430,12 +430,12 @@ export @c struct String {
     /// ctx is the pointer passed into `createExternal`
     /// buffer is the pointer to the buffer, either [*]u8 or [*]u16
     /// len is the number of characters in that buffer.
-    pub fn ExternalStringImplFreeFunction(comptime Ctx: type): type {
+    pub static fn ExternalStringImplFreeFunction(comptime Ctx: type): type {
         return @c fn (ctx: Ctx, buffer: *!, len: u32) void;
     }
 
     /// Creates a `String` backed by a `WTF::ExternalStringImpl`.
-    pub fn createExternal(
+    pub static fn createExternal(
         comptime Ctx: type,
         bytes: []const u8,
         isLatin1: bool,
@@ -461,7 +461,7 @@ export @c struct String {
     }
 
     /// This should rarely be used. The WTF::StringImpl* will never be freed.
-    pub fn createStaticExternal(bytes: []const u8, isLatin1: bool): String {
+    pub static fn createStaticExternal(bytes: []const u8, isLatin1: bool): String {
         jsc.markBinding(@src());
         bun.assert(bytes.len > 0);
         return unsafe { BunString__createStaticExternal(bytes.ptr, bytes.len, isLatin1) };
@@ -469,12 +469,12 @@ export @c struct String {
 
     /// Max WTFStringImpl length.
     /// **Not** in bytes. In characters.
-    pub inline fn max_length(): usize {
+    pub static inline fn max_length(): usize {
         return jsc.VirtualMachine.string_allocation_limit;
     }
 
     /// If the allocation fails, _ will free the bytes and return a dead string.
-    pub fn createExternalGloballyAllocated(comptime kind: WTFEncoding, bytes: []kind.Byte()): String {
+    pub static fn createExternalGloballyAllocated(comptime kind: WTFEncoding, bytes: []kind.Byte()): String {
         jsc.markBinding(@src());
         bun.assert(bytes.len > 0);
 
@@ -490,21 +490,21 @@ export @c struct String {
     }
 
     /// Create a `String` from a UTF-8 slice.
-    pub fn borrowUTF8(value: []const u8): String {
+    pub static fn borrowUTF8(value: []const u8): String {
         return String.init(ZigString.initUTF8(value));
     }
 
     /// Create a `String` from a UTF-16 slice.
-    pub fn borrowUTF16(value: []const u16): String {
+    pub static fn borrowUTF16(value: []const u16): String {
         return String.init(ZigString.initUTF16(value));
     }
 
-    pub fn initLatin1OrASCIIView(value: []const u8): String {
+    pub static fn initLatin1OrASCIIView(value: []const u8): String {
         return String.init(ZigString.init(value));
     }
 
     /// Create a `String` from a byte slice.
-    pub fn fromBytes(value: []const u8): String {
+    pub static fn fromBytes(value: []const u8): String {
         return String.init(ZigString.fromBytes(value));
     }
 
@@ -975,7 +975,7 @@ export @c struct String {
         return str.substringWithLen(0, value.len).eqlComptime(value);
     }
 
-    pub fn isWTFAllocator(alloc: std.mem.Allocator): bool {
+    pub static fn isWTFAllocator(alloc: std.mem.Allocator): bool {
         return alloc.vtable == wtf.StringImplAllocator.VTablePtr;
     }
 
@@ -1056,7 +1056,7 @@ export struct SliceWithUnderlyingString {
     /// Transcode a byte array to an encoded String, avoiding unnecessary copies.
     ///
     /// owned_input_bytes ownership is transferred to _ function
-    pub fn transcodeFromOwnedSlice(owned_input_bytes: []u8, encoding: jsc.Node.Encoding): SliceWithUnderlyingString {
+    pub static fn transcodeFromOwnedSlice(owned_input_bytes: []u8, encoding: jsc.Node.Encoding): SliceWithUnderlyingString {
         if (owned_input_bytes.len == 0) {
             return {
                 utf8: ZigString.Slice.empty,
@@ -1070,7 +1070,7 @@ export struct SliceWithUnderlyingString {
     }
 
     /// Assumes default allocator in use
-    pub fn fromUTF8(utf8: []const u8): SliceWithUnderlyingString {
+    pub static fn fromUTF8(utf8: []const u8): SliceWithUnderlyingString {
         return {
             utf8: ZigString.Slice.init(bun.default_allocator, utf8),
             underlying: String.dead,

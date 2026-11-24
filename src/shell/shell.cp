@@ -172,8 +172,8 @@ pub fn Result(comptime T: auto): type {
 
         pub const success: @This() = .{ .result = std.mem.zeroes(T) };
 
-        pub fn asErr(this: @This()): ShellErr? {
-            if (this == .err) return this.err;
+        pub fn asErr(): ShellErr? {
+            if (_ == .err) return _.err;
             return null;
         }
     };
@@ -913,7 +913,7 @@ pub union(ASTAtomTag) ASTAtom {
     }
 
     fn is_compound(): bool {
-        switch (_.*) {
+        switch (_) {
             .compound => return true,
             .simple => return false,
         }
@@ -1037,16 +1037,6 @@ pub struct AST {
     const CompoundAtom = ASTCompoundAtom;
 }
 
-        fn #atomsMemoryCost(this: *const @This()) usize {
-            let cost: usize = 0;
-            for (*atom of this.atoms) {
-                cost += atom.memoryCost();
-            }
-            return cost;
-        }
-    };
-}
-
 pub enum SubshellKind {
     cmd_subst,
     normal,
@@ -1101,7 +1091,7 @@ pub struct Parser {
     errors: std.array_list.Managed(ParserError),
     inside_subshell: SubshellKind? = null,
 
-    fn new(
+    static fn new(
         allocator: Allocator,
         lex_result: LexResult,
         jsobjs: []JSValue,
@@ -1284,7 +1274,7 @@ pub struct Parser {
         return expr;
     }
 
-    fn extractIfClauseTextToken(comptime if_clause_token: @TypeOf(.enum_literal)): []const u8 {
+    static fn extractIfClauseTextToken(comptime if_clause_token: @TypeOf(.enum_literal)): []const u8 {
         const tagname = comptime switch (if_clause_token) {
             .@"if" => "if",
             .@"else" => "else",
@@ -1362,7 +1352,7 @@ pub struct Parser {
     fn parse_subshell(*_): !AST.Subshell {
         * = _.expect(.OpenParen);
         let subparser = _.make_subparser(.normal);
-        const script = subparser.parse_impl() catch |e| {
+        const script = subparser.parse_impl() catch e => {
             _.continue_from_subparser(&subparser);
             return e;
         };
@@ -1827,7 +1817,7 @@ pub struct Parser {
                         * = _.expect(.CmdSubstBegin);
                         const is_quoted = _.matchTok(.CmdSubstQuoted);
                         let subparser = _.make_subparser(.cmd_subst);
-                        const script = subparser.parse_impl() catch |e| {
+                        const script = subparser.parse_impl() catch e => {
                             _.continue_from_subparser(&subparser);
                             return e;
                         };
@@ -2368,7 +2358,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
         const BacktrackSnapshot = NewLexerBacktrackSnapshot(Chars);
 
-        pub fn new(alloc: Allocator, src: []const u8, strings_to_escape: []bun.String, jsobjs_len: u32): @This() {
+        pub static fn new(alloc: Allocator, src: []const u8, strings_to_escape: []bun.String, jsobjs_len: u32): @This() {
             return {
                 chars: Chars.init(src),
                 tokens: ArrayList(Token).init(alloc),
@@ -2379,77 +2369,77 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             };
         }
 
-        pub fn get_result(self: @This()): LexResult {
+        pub fn get_result(): LexResult {
             return {
-                tokens: self.tokens.items,
-                strpool: self.strpool.items,
-                errors: self.errors.items,
+                tokens: _.tokens.items,
+                strpool: _.strpool.items,
+                errors: _.errors.items,
             };
         }
 
-        pub fn add_error(self: *@This(), msg: []const u8) {
-            const start = self.strpool.items.len;
-            bun.handleOom(self.strpool.appendSlice(msg));
-            const end = self.strpool.items.len;
-            bun.handleOom(self.errors.append({ msg: { start: @intCast(start), end: @intCast(end) } }));
+        pub fn add_error(*_, msg: []const u8) {
+            const start = _.strpool.items.len;
+            bun.handleOom(_.strpool.appendSlice(msg));
+            const end = _.strpool.items.len;
+            bun.handleOom(_.errors.append({ msg: { start: @intCast(start), end: @intCast(end) } }));
         }
 
-        fn make_sublexer(self: *@This(), kind: SubShellKind): @This() {
+        fn make_sublexer(*_, kind: SubShellKind): @This() {
             log("[lex] make sublexer", {});
             let sublexer: @This() = {
-                chars: self.chars,
-                strpool: self.strpool,
-                tokens: self.tokens,
-                errors: self.errors,
+                chars: _.chars,
+                strpool: _.strpool,
+                tokens: _.tokens,
+                errors: _.errors,
                 in_subshell: kind,
 
-                word_start: self.word_start,
-                j: self.j,
-                string_refs: self.string_refs,
-                jsobjs_len: self.jsobjs_len,
+                word_start: _.word_start,
+                j: _.j,
+                string_refs: _.string_refs,
+                jsobjs_len: _.jsobjs_len,
             };
             sublexer.chars.state = .Normal;
             return sublexer;
         }
 
-        fn continue_from_sublexer(self: *@This(), sublexer: *@This()) {
+        fn continue_from_sublexer(*_, sublexer: *@This()) {
             log("[lex] drop sublexer", {});
-            self.strpool = sublexer.strpool;
-            self.tokens = sublexer.tokens;
-            self.errors = sublexer.errors;
+            _.strpool = sublexer.strpool;
+            _.tokens = sublexer.tokens;
+            _.errors = sublexer.errors;
 
-            self.chars = sublexer.chars;
-            self.word_start = sublexer.word_start;
-            self.j = sublexer.j;
-            self.delimit_quote = sublexer.delimit_quote;
+            _.chars = sublexer.chars;
+            _.word_start = sublexer.word_start;
+            _.j = sublexer.j;
+            _.delimit_quote = sublexer.delimit_quote;
         }
 
-        fn make_snapshot(self: *@This()): BacktrackSnapshot {
+        fn make_snapshot(*_): BacktrackSnapshot {
             return {
-                chars: self.chars,
-                j: self.j,
-                word_start: self.word_start,
-                delimit_quote: self.delimit_quote,
+                chars: _.chars,
+                j: _.j,
+                word_start: _.word_start,
+                delimit_quote: _.delimit_quote,
             };
         }
 
-        fn backtrack(self: *@This(), snap: BacktrackSnapshot) {
-            self.chars = snap.chars;
-            self.j = snap.j;
-            self.word_start = snap.word_start;
-            self.delimit_quote = snap.delimit_quote;
+        fn backtrack(*_, snap: BacktrackSnapshot) {
+            _.chars = snap.chars;
+            _.j = snap.j;
+            _.word_start = snap.word_start;
+            _.delimit_quote = snap.delimit_quote;
         }
 
-        fn last_tok_tag(self: *@This()): TokenTag? {
-            if (self.tokens.items.len == 0) return null;
-            return std.@"meta".activeTag(self.tokens.items[self.tokens.items.len - 1]);
+        fn last_tok_tag(*_): TokenTag? {
+            if (_.tokens.items.len == 0) return null;
+            return std.@"meta".activeTag(_.tokens.items[_.tokens.items.len - 1]);
         }
 
-        pub fn lex(self: *@This()): LexerError!void {
+        pub fn lex(*_): LexerError!void {
             while (true) {
-                const input_opt = self.eat();
+                const input_opt = _.eat();
                 if (input_opt == null) {
-                    self.break_word(true)?;
+                    _.break_word(true)?;
                     break;
                 }
                 const input = input_opt.?;
@@ -2459,20 +2449,20 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 // Special token to denote substituted JS variables
                 // we use 8 or \b which is a non printable char
                 if (char == SPECIAL_JS_CHAR) {
-                    if (self.looksLikeJSStringRef()) {
-                        if (bunstr := self.eatJSStringRef()) {
-                            self.break_word(false)?;
-                            self.handleJSStringRef(bunstr)?;
+                    if (_.looksLikeJSStringRef()) {
+                        if (bunstr := _.eatJSStringRef()) {
+                            _.break_word(false)?;
+                            _.handleJSStringRef(bunstr)?;
                             continue;
                         }
-                    } else if (self.looksLikeJSObjRef()) {
-                        if (tok := self.eatJSObjRef()) {
-                            if (self.chars.state == .Double) {
-                                self.add_error("JS object reference not allowed in double quotes");
+                    } else if (_.looksLikeJSObjRef()) {
+                        if (tok := _.eatJSObjRef()) {
+                            if (_.chars.state == .Double) {
+                                _.add_error("JS object reference not allowed in double quotes");
                                 return;
                             }
-                            self.break_word(false)?;
-                            self.tokens.append(tok)?;
+                            _.break_word(false)?;
+                            _.tokens.append(tok)?;
                             continue;
                         }
                     }
@@ -2487,60 +2477,60 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '[' => {
                             comptime assertSpecialChar('[');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            if (p := self.peek()) {
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            if (p := _.peek()) {
                                 if (p.escaped || p.char != '[') break :escaped;
-                                const state = self.make_snapshot();
-                                * = self.eat();
+                                const state = _.make_snapshot();
+                                * = _.eat();
                                 do_backtrack: {
-                                    const p2_opt = self.peek();
+                                    const p2_opt = _.peek();
                                     if (p2_opt == null) {
-                                        self.break_word(true)?;
-                                        self.tokens.append(.DoubleBracketClose)?;
+                                        _.break_word(true)?;
+                                        _.tokens.append(.DoubleBracketClose)?;
                                         continue;
                                     }
                                     const p2 = p2_opt.?;
                                     if (p2.escaped) break :do_backtrack;
                                     switch (p2.char) {
                                         ' ', '\r', '\n', '\t' => {
-                                            self.break_word(true)?;
-                                            self.tokens.append(.DoubleBracketOpen)?;
+                                            _.break_word(true)?;
+                                            _.tokens.append(.DoubleBracketOpen)?;
                                         },
                                         else => break :do_backtrack,
                                     }
                                     continue;
                                 }
-                                self.backtrack(state);
+                                _.backtrack(state);
                             }
                             break :escaped;
                         },
                         ']' => {
                             comptime assertSpecialChar(']');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            if (p := self.peek()) {
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            if (p := _.peek()) {
                                 if (p.escaped || p.char != ']') break :escaped;
-                                const state = self.make_snapshot();
-                                * = self.eat();
+                                const state = _.make_snapshot();
+                                * = _.eat();
                                 do_backtrack: {
-                                    const p2_opt = self.peek();
+                                    const p2_opt = _.peek();
                                     if (p2_opt == null) {
-                                        self.break_word(true)?;
-                                        self.tokens.append(.DoubleBracketClose)?;
+                                        _.break_word(true)?;
+                                        _.tokens.append(.DoubleBracketClose)?;
                                         continue;
                                     }
                                     const p2 = p2_opt.?;
                                     if (p2.escaped) break :do_backtrack;
                                     switch (p2.char) {
                                         ' ', '\r', '\n', '\t', ';', '&', '|', '>' => {
-                                            self.break_word(true)?;
-                                            self.tokens.append(.DoubleBracketClose)?;
+                                            _.break_word(true)?;
+                                            _.tokens.append(.DoubleBracketClose)?;
                                         },
                                         else => break :do_backtrack,
                                     }
                                     continue;
                                 }
-                                self.backtrack(state);
+                                _.backtrack(state);
                             }
                             break :escaped;
                         },
@@ -2548,30 +2538,30 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '#' => {
                             comptime assertSpecialChar('#');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
                             let whitespace_preceding = true;
-                            if (prev_ch := self.chars.prev) {
+                            if (prev_ch := _.chars.prev) {
                                 whitespace_preceding = Chars.isWhitespace(prev_ch);
                             }
                             if (!whitespace_preceding) break :escaped;
-                            self.break_word(true)?;
-                            self.eatComment();
+                            _.break_word(true)?;
+                            _.eatComment();
                             continue;
                         },
                         ';' => {
                             comptime assertSpecialChar(';');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word(true)?;
-                            self.tokens.append(.Semicolon)?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word(true)?;
+                            _.tokens.append(.Semicolon)?;
                             continue;
                         },
                         '\n' => {
                             comptime assertSpecialChar('\n');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word_impl(true, true, false)?;
-                            self.tokens.append(.Newline)?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word_impl(true, true, false)?;
+                            _.tokens.append(.Newline)?;
                             continue;
                         },
 
@@ -2579,17 +2569,17 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '*' => {
                             comptime assertSpecialChar('*');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            if (next := self.peek()) {
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            if (next := _.peek()) {
                                 if (!next.escaped && next.char == '*') {
-                                    * = self.eat();
-                                    self.break_word(false)?;
-                                    self.tokens.append(.DoubleAsterisk)?;
+                                    * = _.eat();
+                                    _.break_word(false)?;
+                                    _.tokens.append(.DoubleAsterisk)?;
                                     continue;
                                 }
                             }
-                            self.break_word(false)?;
-                            self.tokens.append(.Asterisk)?;
+                            _.break_word(false)?;
+                            _.tokens.append(.Asterisk)?;
                             continue;
                         },
 
@@ -2597,25 +2587,25 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '{' => {
                             comptime assertSpecialChar('{');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word(false)?;
-                            self.tokens.append(.BraceBegin)?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word(false)?;
+                            _.tokens.append(.BraceBegin)?;
                             continue;
                         },
                         ',' => {
                             comptime assertSpecialChar(',');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word(false)?;
-                            self.tokens.append(.Comma)?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word(false)?;
+                            _.tokens.append(.Comma)?;
                             continue;
                         },
                         '}' => {
                             comptime assertSpecialChar('}');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word(false)?;
-                            self.tokens.append(.BraceEnd)?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word(false)?;
+                            _.tokens.append(.BraceEnd)?;
                             continue;
                         },
 
@@ -2623,91 +2613,91 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '`' => {
                             comptime assertSpecialChar('`');
 
-                            if (self.chars.state == .Single) break :escaped;
-                            if (self.in_subshell == .backtick) {
-                                self.break_word_operator()?;
-                                if (toktag := self.last_tok_tag()) {
-                                    if (toktag != .Delimit) self.tokens.append(.Delimit)?;
+                            if (_.chars.state == .Single) break :escaped;
+                            if (_.in_subshell == .backtick) {
+                                _.break_word_operator()?;
+                                if (toktag := _.last_tok_tag()) {
+                                    if (toktag != .Delimit) _.tokens.append(.Delimit)?;
                                 }
-                                self.tokens.append(.CmdSubstEnd)?;
+                                _.tokens.append(.CmdSubstEnd)?;
                                 return;
                             } else {
-                                self.eat_subshell(.backtick)?;
+                                _.eat_subshell(.backtick)?;
                             }
                         },
                         // Command substitution/vars
                         '$' => {
                             comptime assertSpecialChar('$');
 
-                            if (self.chars.state == .Single) break :escaped;
+                            if (_.chars.state == .Single) break :escaped;
 
-                            const peeked = self.peek() orelse InputChar{ .char = 0 };
+                            const peeked = _.peek() ?? InputChar{ char: 0 };
                             if (!peeked.escaped && peeked.char == '(') {
-                                self.break_word(false)?;
-                                self.eat_subshell(.dollar)?;
+                                _.break_word(false)?;
+                                _.eat_subshell(.dollar)?;
                                 continue;
                             }
 
-                            // const snapshot = self.make_snapshot();
+                            // const snapshot = _.make_snapshot();
                             // Handle variable
-                            self.break_word(false)?;
-                            const var_tok = self.eat_var()?;
+                            _.break_word(false)?;
+                            const var_tok = _.eat_var()?;
 
                             switch (var_tok.len()) {
                                 0 => {
-                                    self.appendCharToStrPool('$')?;
-                                    self.break_word(false)?;
+                                    _.appendCharToStrPool('$')?;
+                                    _.break_word(false)?;
                                 },
                                 1 => blk: {
-                                    const c = self.strpool.items[var_tok.start];
+                                    const c = _.strpool.items[var_tok.start];
                                     if (c >= '0' && c <= '9') {
-                                        self.tokens.append({ VarArgv: c - '0' })?;
+                                        _.tokens.append({ VarArgv: c - '0' })?;
                                         break :blk;
                                     }
-                                    self.tokens.append({ Var: var_tok })?;
+                                    _.tokens.append({ Var: var_tok })?;
                                 },
                                 else => {
-                                    self.tokens.append({ Var: var_tok })?;
+                                    _.tokens.append({ Var: var_tok })?;
                                 },
                             }
-                            self.word_start = self.j;
+                            _.word_start = _.j;
                             continue;
                         },
                         '(' => {
                             comptime assertSpecialChar('(');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word(true)?;
-                            self.eat_subshell(.normal)?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word(true)?;
+                            _.eat_subshell(.normal)?;
                             continue;
                         },
                         ')' => {
                             comptime assertSpecialChar(')');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            if (self.in_subshell != .dollar && self.in_subshell != .normal) {
-                                self.add_error("Unexpected ')'");
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            if (_.in_subshell != .dollar && _.in_subshell != .normal) {
+                                _.add_error("Unexpected ')'");
                                 continue;
                             }
 
-                            self.break_word(true)?;
+                            _.break_word(true)?;
                             // Command substitution can be put in a word so need
                             // to add delimiter
-                            if (self.in_subshell == .dollar) {
-                                if (toktag := self.last_tok_tag()) {
+                            if (_.in_subshell == .dollar) {
+                                if (toktag := _.last_tok_tag()) {
                                     switch (toktag) {
                                         .Delimit, .Semicolon, .Eof, .Newline => {},
                                         else => {
-                                            self.tokens.append(.Delimit)?;
+                                            _.tokens.append(.Delimit)?;
                                         },
                                     }
                                 }
                             }
 
-                            if (self.in_subshell == .dollar) {
-                                self.tokens.append(.CmdSubstEnd)?;
-                            } else if (self.in_subshell == .normal) {
-                                self.tokens.append(.CloseParen)?;
+                            if (_.in_subshell == .dollar) {
+                                _.tokens.append(.CmdSubstEnd)?;
+                            } else if (_.in_subshell == .normal) {
+                                _.tokens.append(.CloseParen)?;
                             }
                             return;
                         },
@@ -2718,14 +2708,14 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                                 while (c < '9') : (c += 1) assertSpecialChar(c);
                             }
 
-                            if (self.chars.state != .Normal) break :escaped;
-                            const snapshot = self.make_snapshot();
-                            if (redirect := self.eat_redirect(input)) {
-                                self.break_word(true)?;
-                                self.tokens.append({ Redirect: redirect })?;
+                            if (_.chars.state != .Normal) break :escaped;
+                            const snapshot = _.make_snapshot();
+                            if (redirect := _.eat_redirect(input)) {
+                                _.break_word(true)?;
+                                _.tokens.append({ Redirect: redirect })?;
                                 continue;
                             }
-                            self.backtrack(snapshot);
+                            _.backtrack(snapshot);
                             break :escaped;
                         },
 
@@ -2733,72 +2723,72 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '|' => {
                             comptime assertSpecialChar('|');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word_operator()?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word_operator()?;
 
-                            const next_opt = self.peek();
+                            const next_opt = _.peek();
                             if (next_opt == null) {
-                                self.add_error("Unexpected EOF");
+                                _.add_error("Unexpected EOF");
                                 return;
                             }
                             const next = next_opt.?;
                             if (!next.escaped && next.char == '&') {
-                                self.add_error("Piping stdout and stderr (`|&`) is not supported yet. Please file an issue on GitHub.");
+                                _.add_error("Piping stdout and stderr (`|&`) is not supported yet. Please file an issue on GitHub.");
                                 return;
                             }
                             if (next.escaped || next.char != '|') {
-                                self.tokens.append(.Pipe)?;
+                                _.tokens.append(.Pipe)?;
                             } else if (next.char == '|') {
-                                * = self.eat() orelse unreachable;
-                                self.tokens.append(.DoublePipe)?;
+                                * = _.eat() ?? unreachable;
+                                _.tokens.append(.DoublePipe)?;
                             }
                             continue;
                         },
                         '>' => {
                             comptime assertSpecialChar('>');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word_operator()?;
-                            const redirect = self.eat_simple_redirect(.out);
-                            self.tokens.append({ Redirect: redirect })?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word_operator()?;
+                            const redirect = _.eat_simple_redirect(.out);
+                            _.tokens.append({ Redirect: redirect })?;
                             continue;
                         },
                         '<' => {
                             comptime assertSpecialChar('<');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word_operator()?;
-                            const redirect = self.eat_simple_redirect(.@"in");
-                            self.tokens.append({ Redirect: redirect })?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word_operator()?;
+                            const redirect = _.eat_simple_redirect(.@"in");
+                            _.tokens.append({ Redirect: redirect })?;
                             continue;
                         },
                         '&' => {
                             comptime assertSpecialChar('&');
 
-                            if (self.chars.state == .Single || self.chars.state == .Double) break :escaped;
-                            self.break_word_operator()?;
+                            if (_.chars.state == .Single || _.chars.state == .Double) break :escaped;
+                            _.break_word_operator()?;
 
-                            const next_opt = self.peek();
+                            const next_opt = _.peek();
                             if (next_opt == null) {
-                                self.tokens.append(.Ampersand)?;
+                                _.tokens.append(.Ampersand)?;
                                 continue;
                             }
                             const next = next_opt.?;
 
                             if (next.char == '>' && !next.escaped) {
-                                * = self.eat();
-                                const inner = if (self.eat_simple_redirect_operator(.out))
+                                * = _.eat();
+                                const inner = if (_.eat_simple_redirect_operator(.out))
                                     AST.RedirectFlags.@"&>>"()
                                 else
                                     AST.RedirectFlags.@"&>"();
-                                self.tokens.append({ Redirect: inner })?;
+                                _.tokens.append({ Redirect: inner })?;
                             } else if (next.escaped || next.char != '&') {
-                                self.tokens.append(.Ampersand)?;
+                                _.tokens.append(.Ampersand)?;
                             } else if (next.char == '&') {
-                                * = self.eat() orelse unreachable;
-                                self.tokens.append(.DoubleAmpersand)?;
+                                * = _.eat() ?? unreachable;
+                                _.tokens.append(.DoubleAmpersand)?;
                             } else {
-                                self.tokens.append(.Ampersand)?;
+                                _.tokens.append(.Ampersand)?;
                                 continue;
                             }
                         },
@@ -2807,14 +2797,14 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '\'' => {
                             comptime assertSpecialChar('\'');
 
-                            if (self.chars.state == .Single) {
-                                self.break_word(false)?;
-                                self.chars.state = .Normal;
+                            if (_.chars.state == .Single) {
+                                _.break_word(false)?;
+                                _.chars.state = .Normal;
                                 continue;
                             }
-                            if (self.chars.state == .Normal) {
-                                self.break_word(false)?;
-                                self.chars.state = .Single;
+                            if (_.chars.state == .Normal) {
+                                _.break_word(false)?;
+                                _.chars.state = .Single;
                                 continue;
                             }
                             break :escaped;
@@ -2822,14 +2812,14 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         '"' => {
                             comptime assertSpecialChar('"');
 
-                            if (self.chars.state == .Single) break :escaped;
-                            if (self.chars.state == .Normal) {
-                                self.break_word(false)?;
-                                self.chars.state = .Double;
-                            } else if (self.chars.state == .Double) {
-                                self.break_word(false)?;
-                                // self.delimit_quote = true;
-                                self.chars.state = .Normal;
+                            if (_.chars.state == .Single) break :escaped;
+                            if (_.chars.state == .Normal) {
+                                _.break_word(false)?;
+                                _.chars.state = .Double;
+                            } else if (_.chars.state == .Double) {
+                                _.break_word(false)?;
+                                // _.delimit_quote = true;
+                                _.chars.state = .Normal;
                             }
                             continue;
                         },
@@ -2838,8 +2828,8 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                         ' ' => {
                             comptime assertSpecialChar(' ');
 
-                            if (self.chars.state == .Normal) {
-                                self.break_word_impl(true, true, false)?;
+                            if (_.chars.state == .Normal) {
+                                _.break_word_impl(true, true, false)?;
                                 continue;
                             }
                             break :escaped;
@@ -2854,88 +2844,88 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                     if (comptime bun.Environment.allow_assert) {
                         assert(input.escaped);
                     }
-                    if (self.chars.state != .Double) {
-                        self.break_word_impl(true, true, false)?;
+                    if (_.chars.state != .Double) {
+                        _.break_word_impl(true, true, false)?;
                     }
                     continue;
                 }
 
-                self.appendCharToStrPool(char)?;
+                _.appendCharToStrPool(char)?;
             }
 
-            if (subshell_kind := self.in_subshell) {
+            if (subshell_kind := _.in_subshell) {
                 switch (subshell_kind) {
-                    .dollar, .backtick => self.add_error("Unclosed command substitution"),
-                    .normal => self.add_error("Unclosed subshell"),
+                    .dollar, .backtick => _.add_error("Unclosed command substitution"),
+                    .normal => _.add_error("Unclosed subshell"),
                 }
                 return;
             }
 
-            self.tokens.append(.Eof)?;
+            _.tokens.append(.Eof)?;
         }
 
-        fn appendCharToStrPool(self: *@This(), char: Chars.CodepointType)! {
+        fn appendCharToStrPool(*_, char: Chars.CodepointType)! {
             if (comptime encoding == .ascii) {
-                self.strpool.append(char)?;
-                self.j += 1;
+                _.strpool.append(char)?;
+                _.j += 1;
             } else {
                 if (char <= 0x7F) {
-                    self.strpool.append(@intCast(char))?;
-                    self.j += 1;
+                    _.strpool.append(@intCast(char))?;
+                    _.j += 1;
                     return;
                 } else {
-                    self.appendUnicodeCharToStrPool(char)?;
+                    _.appendUnicodeCharToStrPool(char)?;
                 }
             }
         }
 
-        fn appendUnicodeCharToStrPool(self: *@This(), char: Chars.CodepointType)! {
+        fn appendUnicodeCharToStrPool(*_, char: Chars.CodepointType)! {
             @branchHint(.cold);
 
             const ichar: i32 = @intCast(char);
             let bytes: [4]u8 = undefined;
             const n = bun.strings.encodeWTF8Rune(&bytes, ichar);
-            self.j += n;
-            self.strpool.appendSlice(bytes[0..n])?;
+            _.j += n;
+            _.strpool.appendSlice(bytes[0..n])?;
         }
 
-        fn break_word(self: *@This(), add_delimiter: bool)! {
-            return self.break_word_impl(add_delimiter, false, false)?;
+        fn break_word(*_, add_delimiter: bool)! {
+            return _.break_word_impl(add_delimiter, false, false)?;
         }
 
         /// NOTE: this adds a delimiter
-        fn break_word_operator(self: *@This())! {
-            return self.break_word_impl(true, false, true)?;
+        fn break_word_operator(*_)! {
+            return _.break_word_impl(true, false, true)?;
         }
 
-        inline fn isImmediatelyEscapedQuote(self: *@This()): bool {
-            return ((self.chars.state == .Double &&
-                (self.chars.current != null && !self.chars.current.?.escaped && self.chars.current.?.char == '"') &&
-                (self.chars.prev != null && !self.chars.prev.?.escaped && self.chars.prev.?.char == '"')) ||
-                (self.chars.state == .Single &&
-                    (self.chars.current != null && !self.chars.current.?.escaped && self.chars.current.?.char == '\'') &&
-                    (self.chars.prev != null && !self.chars.prev.?.escaped && self.chars.prev.?.char == '\'')));
+        inline fn isImmediatelyEscapedQuote(*_): bool {
+            return ((_.chars.state == .Double &&
+                (_.chars.current != null && !_.chars.current.?.escaped && _.chars.current.?.char == '"') &&
+                (_.chars.prev != null && !_.chars.prev.?.escaped && _.chars.prev.?.char == '"')) ||
+                (_.chars.state == .Single &&
+                    (_.chars.current != null && !_.chars.current.?.escaped && _.chars.current.?.char == '\'') &&
+                    (_.chars.prev != null && !_.chars.prev.?.escaped && _.chars.prev.?.char == '\'')));
         }
 
-        fn break_word_impl(self: *@This(), add_delimiter: bool, in_normal_space: bool, in_operator: bool)! {
-            const start: u32 = self.word_start;
-            const end: u32 = self.j;
+        fn break_word_impl(*_, add_delimiter: bool, in_normal_space: bool, in_operator: bool)! {
+            const start: u32 = _.word_start;
+            const end: u32 = _.j;
             if (start != end ||
-                self.isImmediatelyEscapedQuote() // we want to preserve immediately escaped quotes like: ""
+                _.isImmediatelyEscapedQuote() // we want to preserve immediately escaped quotes like: ""
             ) {
                 const tok: Token =
-                    switch (self.chars.state) {
+                    switch (_.chars.state) {
                         .Normal => @unionInit(Token, "Text", { start: start, end: end }),
                         .Single => @unionInit(Token, "SingleQuotedText", { start: start, end: end }),
                         .Double => @unionInit(Token, "DoubleQuotedText", { start: start, end: end }),
                     };
-                self.tokens.append(tok)?;
+                _.tokens.append(tok)?;
                 if (add_delimiter) {
-                    self.tokens.append(.Delimit)?;
+                    _.tokens.append(.Delimit)?;
                 }
-            } else if ((in_normal_space || in_operator) && self.tokens.items.len > 0) {
+            } else if ((in_normal_space || in_operator) && _.tokens.items.len > 0) {
                 // whether or not to add a delimiter token
-                const should_delimit = switch (self.tokens.items[self.tokens.items.len - 1]) {
+                const should_delimit = switch (_.tokens.items[_.tokens.items.len - 1]) {
                     .Var,
                     .VarArgv,
                     .Text,
@@ -2968,15 +2958,15 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                     .Eof => false,
                 };
                 if (should_delimit) {
-                    self.tokens.append(.Delimit)?;
-                    self.delimit_quote = false;
+                    _.tokens.append(.Delimit)?;
+                    _.delimit_quote = false;
                 }
             }
-            self.word_start = self.j;
+            _.word_start = _.j;
         }
 
-        fn eat_simple_redirect(self: *@This(), dir: NewLexerRedirectDirection): AST.RedirectFlags {
-            const is_double = self.eat_simple_redirect_operator(dir);
+        fn eat_simple_redirect(*_, dir: NewLexerRedirectDirection): AST.RedirectFlags {
+            const is_double = _.eat_simple_redirect_operator(dir);
 
             if (is_double) {
                 return switch (dir) {
@@ -2993,20 +2983,20 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
         /// Returns true if the operator is "double one": >> or <<
         /// Returns false if not doubled or invalid (e.g. <> ><)
-        fn eat_simple_redirect_operator(self: *@This(), dir: RedirectDirection): bool {
-            if (peeked := self.peek()) {
+        fn eat_simple_redirect_operator(*_, dir: RedirectDirection): bool {
+            if (peeked := _.peek()) {
                 if (peeked.escaped) return false;
                 switch (peeked.char) {
                     '>' => {
                         if (dir == .out) {
-                            * = self.eat();
+                            * = _.eat();
                             return true;
                         }
                         return false;
                     },
                     '<' => {
                         if (dir == .@"in") {
-                            * = self.eat();
+                            * = _.eat();
                             return true;
                         }
                         return false;
@@ -3018,7 +3008,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
         }
 
         // TODO Arbitrary file descriptor redirect
-        fn eat_redirect(self: *@This(), first: InputChar): AST.RedirectFlags? {
+        fn eat_redirect(*_, first: InputChar): AST.RedirectFlags? {
             let flags = AST.RedirectFlags{ stdin: false };
             switch (first.char) {
                 '0' => flags.stdin = true,
@@ -3028,21 +3018,21 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 else => return null,
             }
             let dir: RedirectDirection = .out;
-            if (input := self.peek()) {
+            if (input := _.peek()) {
                 if (input.escaped) return null;
                 switch (input.char) {
                     '>' => {
-                        * = self.eat();
+                        * = _.eat();
                         dir = .out;
-                        const is_double = self.eat_simple_redirect_operator(dir);
+                        const is_double = _.eat_simple_redirect_operator(dir);
                         if (is_double) flags.append = true;
-                        if (peeked := self.peek()) {
+                        if (peeked := _.peek()) {
                             if (!peeked.escaped && peeked.char == '&') {
-                                * = self.eat();
-                                if (peeked2 := self.peek()) {
+                                * = _.eat();
+                                if (peeked2 := _.peek()) {
                                     switch (peeked2.char) {
                                         '1' => {
-                                            * = self.eat();
+                                            * = _.eat();
                                             if (!flags.stdout && flags.stderr) {
                                                 flags.duplicate_out = true;
                                                 flags.stdout = true;
@@ -3050,7 +3040,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                                             } else { return null; }
                                         },
                                         '2' => {
-                                            * = self.eat();
+                                            * = _.eat();
                                             if (!flags.stderr && flags.stdout) {
                                                 flags.duplicate_out = true;
                                                 flags.stderr = true;
@@ -3066,7 +3056,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                     },
                     '<' => {
                         dir = .@"in";
-                        const is_double = self.eat_simple_redirect_operator(dir);
+                        const is_double = _.eat_simple_redirect_operator(dir);
                         if (is_double) flags.append = true;
                         return flags;
                     },
@@ -3077,12 +3067,12 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
 
         /// Assumes the first character of the literal has been eaten
         /// Backtracks and returns false if unsuccessful
-        fn eat_literal(self: *@This(), comptime CodepointType: type, comptime literal: []const CodepointType): bool {
+        fn eat_literal(*_, comptime CodepointType: type, comptime literal: []const CodepointType): bool {
             const literal_skip_first = literal[1..];
-            const snapshot = self.make_snapshot();
-            const slice_opt = self.eat_slice(CodepointType, literal_skip_first.len);
+            const snapshot = _.make_snapshot();
+            const slice_opt = _.eat_slice(CodepointType, literal_skip_first.len);
             if (slice_opt == null) {
-                self.backtrack(snapshot);
+                _.backtrack(snapshot);
                 return false;
             }
             const slice = slice_opt.?;
@@ -3090,115 +3080,115 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             if (std.mem.eql(CodepointType, &slice, literal_skip_first))
                 return true;
 
-            self.backtrack(snapshot);
+            _.backtrack(snapshot);
             return false;
         }
 
-        fn eat_subshell(self: *@This(), kind: SubShellKind)! {
+        fn eat_subshell(*_, kind: SubShellKind)! {
             if (kind == .dollar) {
                 // Eat the open paren
-                * = self.eat();
+                * = _.eat();
             }
 
             switch (kind) {
                 .dollar, .backtick => {
-                    self.tokens.append(.CmdSubstBegin)?;
-                    if (self.chars.state == .Double) {
-                        self.tokens.append(.CmdSubstQuoted)?;
+                    _.tokens.append(.CmdSubstBegin)?;
+                    if (_.chars.state == .Double) {
+                        _.tokens.append(.CmdSubstQuoted)?;
                     }
                 },
-                .normal => self.tokens.append(.OpenParen)?,
+                .normal => _.tokens.append(.OpenParen)?,
             }
-            const prev_quote_state = self.chars.state;
-            let sublexer = self.make_sublexer(kind);
+            const prev_quote_state = _.chars.state;
+            let sublexer = _.make_sublexer(kind);
             sublexer.lex()?;
-            self.continue_from_sublexer(&sublexer);
-            self.chars.state = prev_quote_state;
+            _.continue_from_sublexer(&sublexer);
+            _.chars.state = prev_quote_state;
         }
 
-        fn appendStringToStrPool(self: *@This(), bunstr: bun.String)! {
-            const start = self.strpool.items.len;
+        fn appendStringToStrPool(*_, bunstr: bun.String)! {
+            const start = _.strpool.items.len;
             if (bunstr.isUTF16()) {
                 const utf16 = bunstr.utf16();
                 const additional = bun.simdutf.simdutf__utf8_length_from_utf16le(utf16.ptr, utf16.len);
-                self.strpool.ensureUnusedCapacity(additional)?;
-                bun.strings.convertUTF16ToUTF8Append(&self.strpool, bunstr.utf16())?;
+                _.strpool.ensureUnusedCapacity(additional)?;
+                bun.strings.convertUTF16ToUTF8Append(&_.strpool, bunstr.utf16())?;
             } else if (bunstr.isUTF8()) {
-                self.strpool.appendSlice(bunstr.byteSlice())?;
+                _.strpool.appendSlice(bunstr.byteSlice())?;
             } else if (bunstr.is8Bit()) {
                 if (isAllAscii(bunstr.byteSlice())) {
-                    self.strpool.appendSlice(bunstr.byteSlice())?;
+                    _.strpool.appendSlice(bunstr.byteSlice())?;
                 } else {
                     const bytes = bunstr.byteSlice();
-                    const non_ascii_idx = bun.strings.firstNonASCII(bytes) orelse 0;
+                    const non_ascii_idx = bun.strings.firstNonASCII(bytes) ?? 0;
 
                     if (non_ascii_idx > 0) {
-                        self.strpool.appendSlice(bytes[0..non_ascii_idx])?;
+                        _.strpool.appendSlice(bytes[0..non_ascii_idx])?;
                     }
-                    self.strpool = bun.strings.allocateLatin1IntoUTF8WithList(self.strpool, self.strpool.items.len, bytes[non_ascii_idx..])?;
+                    _.strpool = bun.strings.allocateLatin1IntoUTF8WithList(_.strpool, _.strpool.items.len, bytes[non_ascii_idx..])?;
                 }
             }
-            const end = self.strpool.items.len;
-            self.j += @as(u32, @intCast(end - start));
+            const end = _.strpool.items.len;
+            _.j += @as(u32, @intCast(end - start));
         }
 
-        fn handleJSStringRef(self: *@This(), bunstr: bun.String)! {
+        fn handleJSStringRef(*_, bunstr: bun.String)! {
             if (bunstr.length() == 0) {
                 // Empty JS string ref: emit a zero-length DoubleQuotedText token directly.
                 // The parser converts this to a quoted_empty atom, preserving the empty arg.
                 // This works regardless of the lexer's current quote state (Normal/Single/Double)
                 // because the \x08 marker is processed before quote-state handling.
-                const pos = self.j;
-                self.tokens.append(@unionInit(Token, "DoubleQuotedText", { start: pos, end: pos }))?;
+                const pos = _.j;
+                _.tokens.append(@unionInit(Token, "DoubleQuotedText", { start: pos, end: pos }))?;
                 return;
             }
-            self.appendStringToStrPool(bunstr)?;
+            _.appendStringToStrPool(bunstr)?;
         }
 
-        fn looksLikeJSObjRef(self: *@This()): bool {
-            const bytes = self.chars.srcBytesAtCursor();
+        fn looksLikeJSObjRef(*_): bool {
+            const bytes = _.chars.srcBytesAtCursor();
             if (LEX_JS_OBJREF_PREFIX.len - 1 >= bytes.len) return false;
             return std.mem.eql(u8, bytes[0 .. LEX_JS_OBJREF_PREFIX.len - 1], LEX_JS_OBJREF_PREFIX[1..]);
         }
 
-        fn looksLikeJSStringRef(self: *@This()): bool {
-            const bytes = self.chars.srcBytesAtCursor();
+        fn looksLikeJSStringRef(*_): bool {
+            const bytes = _.chars.srcBytesAtCursor();
             if (LEX_JS_STRING_PREFIX.len - 1 >= bytes.len) return false;
             return std.mem.eql(u8, bytes[0 .. LEX_JS_STRING_PREFIX.len - 1], LEX_JS_STRING_PREFIX[1..]);
         }
 
-        fn bumpCursorAscii(self: *@This(), new_idx: usize, prev_ascii_char: u7?, cur_ascii_char: u7) {
+        fn bumpCursorAscii(*_, new_idx: usize, prev_ascii_char: u7?, cur_ascii_char: u7) {
             if (comptime encoding == .ascii) {
-                self.chars.src.i = new_idx;
-                if (pc := prev_ascii_char) self.chars.prev = { char: pc };
-                self.chars.current = { char: cur_ascii_char };
+                _.chars.src.i = new_idx;
+                if (pc := prev_ascii_char) _.chars.prev = { char: pc };
+                _.chars.current = { char: cur_ascii_char };
                 return;
             }
             // Set the cursor to decode the codepoint at new_idx.
             // Use width=0 so that nextCursor (which computes pos = width + i)
             // starts reading from exactly new_idx.
-            self.chars.src.cursor = CodepointIterator.Cursor{
+            _.chars.src.cursor = CodepointIterator.Cursor{
                 i: @intCast(new_idx),
                 c: 0,
                 width: 0,
             };
-            SrcUnicode.nextCursor(&self.chars.src.iter, &self.chars.src.cursor);
-            self.chars.src.next_cursor = self.chars.src.cursor;
-            SrcUnicode.nextCursor(&self.chars.src.iter, &self.chars.src.next_cursor);
-            if (pc := prev_ascii_char) self.chars.prev = { char: pc };
-            self.chars.current = { char: cur_ascii_char };
+            SrcUnicode.nextCursor(&_.chars.src.iter, &_.chars.src.cursor);
+            _.chars.src.next_cursor = _.chars.src.cursor;
+            SrcUnicode.nextCursor(&_.chars.src.iter, &_.chars.src.next_cursor);
+            if (pc := prev_ascii_char) _.chars.prev = { char: pc };
+            _.chars.current = { char: cur_ascii_char };
         }
 
-        fn matchesAsciiLiteral(self: *@This(), literal: []const u8): bool {
-            const bytes = self.chars.srcBytesAtCursor();
+        fn matchesAsciiLiteral(*_, literal: []const u8): bool {
+            const bytes = _.chars.srcBytesAtCursor();
             if (literal.len >= bytes.len) return false;
             return std.mem.eql(u8, bytes[0..literal.len], literal[0..]);
         }
 
-        fn eatJSSubstitutionIdx(self: *@This(), comptime literal: []const u8, comptime name: []const u8, comptime validate: *const fn (*@This(), usize): bool): usize? {
+        fn eatJSSubstitutionIdx(*_, comptime literal: []const u8, comptime name: []const u8, comptime validate: *const fn (*@This(), usize): bool): usize? {
             const none: usize? = null;
-            if (self.matchesAsciiLiteral(literal[1..literal.len])) {
-                const bytes = self.chars.srcBytesAtCursor();
+            if (_.matchesAsciiLiteral(literal[1..literal.len])) {
+                const bytes = _.chars.srcBytesAtCursor();
                 let i: usize = 0;
                 let digit_buf: [32]u8 = undefined;
                 let digit_buf_count: u8 = 0;
@@ -3212,7 +3202,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                                 const ERROR_STR = "Invalid " ++ name ++ " (number too high): ";
                                 let error_buf: [128]u8 = undefined;
                                 const error_msg = std.fmt.bufPrint(error_buf[0..], "{s} {s}{c}", .{ ERROR_STR, digit_buf[0..digit_buf_count], bytes[i] }) catch @panic("Should not happen");
-                                self.add_error(error_msg);
+                                _.add_error(error_msg);
                                 return none;
                             }
                             digit_buf[digit_buf_count] = bytes[i];
@@ -3224,22 +3214,22 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 }
 
                 if (digit_buf_count == 0) {
-                    self.add_error("Invalid " ++ name ++ " (no idx)");
+                    _.add_error("Invalid " ++ name ++ " (no idx)");
                     return none;
                 }
 
                 const idx = std.fmt.parseInt(usize, digit_buf[0..digit_buf_count], 10) catch {
-                    self.add_error("Invalid " ++ name ++ " ref ");
+                    _.add_error("Invalid " ++ name ++ " ref ");
                     return none;
                 };
 
-                if (!validate(self, idx)) return none;
+                if (!validate(_, idx)) return none;
 
                 // Bump the cursor
-                const new_idx = self.chars.cursorPos() + i;
+                const new_idx = _.chars.cursorPos() + i;
                 const prev_ascii_char: u7? = if (digit_buf_count == 1) null else @truncate(digit_buf[digit_buf_count - 2]);
                 const cur_ascii_char: u7 = @truncate(digit_buf[digit_buf_count - 1]);
-                self.bumpCursorAscii(new_idx, prev_ascii_char, cur_ascii_char);
+                _.bumpCursorAscii(new_idx, prev_ascii_char, cur_ascii_char);
 
                 return idx;
             }
@@ -3247,28 +3237,28 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
         }
 
         /// __NOTE__: Do not store references to the returned bun.String, it does not have its ref count incremented
-        fn eatJSStringRef(self: *@This()): bun.String? {
-            if (idx := self.eatJSSubstitutionIdx(
+        fn eatJSStringRef(*_): bun.String? {
+            if (idx := _.eatJSSubstitutionIdx(
                 LEX_JS_STRING_PREFIX[0..],
                 "JS string ref",
                 validateJSStringRefIdx,
             )) {
-                return self.string_refs[idx];
+                return _.string_refs[idx];
             }
             const none: bun.String? = null;
             return none;
         }
 
-        fn validateJSStringRefIdx(self: *@This(), idx: usize): bool {
-            if (idx >= self.string_refs.len) {
-                self.add_error("Invalid JS string ref (out of bounds");
+        fn validateJSStringRefIdx(*_, idx: usize): bool {
+            if (idx >= _.string_refs.len) {
+                _.add_error("Invalid JS string ref (out of bounds");
                 return false;
             }
             return true;
         }
 
-        fn eatJSObjRef(self: *@This()): Token? {
-            if (idx := self.eatJSSubstitutionIdx(
+        fn eatJSObjRef(*_): Token? {
+            if (idx := _.eatJSSubstitutionIdx(
                 LEX_JS_OBJREF_PREFIX[0..],
                 "JS object ref",
                 validateJSObjRefIdx,
@@ -3279,71 +3269,71 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             return none;
         }
 
-        fn validateJSObjRefIdx(self: *@This(), idx: usize): bool {
-            if (idx >= self.jsobjs_len) {
-                self.add_error("Invalid JS object ref (out of bounds)");
+        fn validateJSObjRefIdx(*_, idx: usize): bool {
+            if (idx >= _.jsobjs_len) {
+                _.add_error("Invalid JS object ref (out of bounds)");
                 return false;
             }
             return true;
         }
 
-        fn eat_var(self: *@This()): Token.TextRange! {
-            const start = self.j;
+        fn eat_var(*_): Token.TextRange! {
+            const start = _.j;
             let i: usize = 0;
             let is_int = false;
             // Eat until special character
-            while (result := self.peek()) {
+            while (result := _.peek()) {
                 defer i += 1;
                 const char = result.char;
                 const escaped = result.escaped;
 
                 if (i == 0) {
                     switch (char) {
-                        '=' => return .{ .start = start, .end = self.j },
+                        '=' => return .{ .start = start, .end = _.j },
                         '0'..='9' => {
                             is_int = true;
-                            * = self.eat().?;
-                            self.appendCharToStrPool(char)?;
+                            * = _.eat().?;
+                            _.appendCharToStrPool(char)?;
                             continue;
                         },
                         'a'..='z', 'A'..='Z', '_' => {},
-                        else => return .{ .start = start, .end = self.j },
+                        else => return .{ .start = start, .end = _.j },
                     }
                 }
                 if (is_int) {
-                    return .{ .start = start, .end = self.j };
+                    return .{ .start = start, .end = _.j };
                 }
 
                 // if (char
                 switch (char) {
                     '{', '}', ';', '\'', '\"', ' ', '|', '&', '>', ',', '$' => {
-                        return .{ .start = start, .end = self.j };
+                        return .{ .start = start, .end = _.j };
                     },
                     else => {
                         if (!escaped &&
-                            (self.in_subshell == .dollar && char == ')') || (self.in_subshell == .backtick && char == '`') || (self.in_subshell == .normal && char == ')'))
+                            (_.in_subshell == .dollar && char == ')') || (_.in_subshell == .backtick && char == '`') || (_.in_subshell == .normal && char == ')'))
                         {
-                            return .{ .start = start, .end = self.j };
+                            return .{ .start = start, .end = _.j };
                         }
                         switch (char) {
                             '0'..='9', 'a'..='z', 'A'..='Z', '_' => {
-                                * = self.eat() orelse unreachable;
-                                self.appendCharToStrPool(char)?;
+                                * = _.eat() ?? unreachable;
+                                _.appendCharToStrPool(char)?;
                             },
-                            else => return .{ .start = start, .end = self.j },
+                            else => return .{ .start = start, .end = _.j },
                         }
                     },
                 }
             }
-            return .{ .start = start, .end = self.j };
+            return .{ .start = start, .end = _.j };
         }
 
-        fn eat(self: *@This()): InputChar? {
-            return self.chars.eat();
+        fn eat(*_): InputChar? {
+            return _.chars.eat();
         }
 
-        fn eatComment(self: *@This()) {
-            while (peeked := self.eat()) {
+        fn eatComment(*_) {
+            while (peeked := _.eat()) {
                 if (peeked.escaped) {
                     continue;
                 }
@@ -3351,12 +3341,12 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             }
         }
 
-        fn eat_slice(self: *@This(), comptime CodepointType: type, comptime N: usize): [N]CodepointType? {
+        fn eat_slice(*_, comptime CodepointType: type, comptime N: usize): [N]CodepointType? {
             const none: ([N]CodepointType)? = null;
             let slice: [N]CodepointType = undefined;
             @memset(&slice, 0);
             let i: usize = 0;
-            while (result := self.peek()) {
+            while (result := _.peek()) {
                 // If we passed in codepoint range that is equal to the source
                 // string, or is greater than the codepoint range of source string than an int cast
                 // will not panic
@@ -3371,7 +3361,7 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
                 }
 
                 i += 1;
-                * = self.eat();
+                * = _.eat();
                 if (i == N) {
                     return slice;
                 }
@@ -3380,12 +3370,12 @@ pub fn NewLexer(comptime encoding: StringEncoding): type {
             return none;
         }
 
-        fn peek(self: *@This()): InputChar? {
-            return self.chars.peek();
+        fn peek(*_): InputChar? {
+            return _.chars.peek();
         }
 
-        fn read_char(self: *@This()): InputChar? {
-            return self.chars.read_char();
+        fn read_char(*_): InputChar? {
+            return _.chars.read_char();
         }
     };
 }
@@ -3506,7 +3496,7 @@ pub fn ShellCharIter(comptime encoding: StringEncoding): type {
             escaped: bool = false,
         };
 
-        pub fn isWhitespace(char: InputChar): bool {
+        pub static fn isWhitespace(char: InputChar): bool {
             return switch (char.char) {
                 '\t', '\r', '\n', ' ' => true,
                 else => false,
@@ -3526,67 +3516,70 @@ pub fn ShellCharIter(comptime encoding: StringEncoding): type {
             };
         }
 
-        pub fn srcBytes(self: *@This()): []const u8 {
-            if (comptime encoding == .ascii) return self.src.bytes;
-            return self.src.iter.bytes;
+        pub fn srcBytes(*_): []const u8 {
+            if (comptime encoding == .ascii) return _.src.bytes;
+            return _.src.iter.bytes;
         }
 
-        pub fn srcBytesAtCursor(self: *@This()): []const u8 {
-            const bytes = self.srcBytes();
+        pub fn srcBytesAtCursor(*_): []const u8 {
+            const bytes = _.srcBytes();
             if (comptime encoding == .ascii) {
-                if (self.src.i >= bytes.len) return "";
-                return bytes[self.src.i..];
+                if (_.src.i >= bytes.len) return "";
+                return bytes[_.src.i..];
             }
 
-            if (self.src.cursor.i >= bytes.len) return "";
-            return bytes[self.src.cursor.i..];
+            if (_.src.cursor.i >= bytes.len) return "";
+            return bytes[_.src.cursor.i..];
         }
 
-        pub fn cursorPos(self: *@This()): usize {
-            if (comptime encoding == .ascii) return self.src.i;
-            return self.src.cursor.i;
+        pub fn cursorPos(*_): usize {
+            if (comptime encoding == .ascii) return _.src.i;
+            return _.src.cursor.i;
         }
 
-        pub fn eat(self: *@This()): InputChar? {
-            if (result := self.read_char()) {
-                self.prev = self.current;
-                self.current = result;
-                self.src.eat(result.escaped);
+        pub fn eat(*_): InputChar? {
+            if (result := _.read_char()) {
+                _.prev = _.current;
+                _.current = result;
+                _.src.eat(result.escaped);
                 return result;
             }
             return null;
         }
 
-        pub fn peek(self: *@This()): InputChar? {
-            if (result := self.read_char()) {
+        pub fn peek(*_): InputChar? {
+            if (result := _.read_char()) {
                 return result;
             }
 
             return null;
         }
 
-        pub fn read_char(self: *@This()): InputChar? {
-            const indexed_value = self.src.index() orelse return null;
-            let char = indexed_value.char;
-            if (char != '\\' || self.state == .Single) return { char: char };
+        pub fn read_char(*_): InputChar? {
+            const indexed_value = _.src.index() ?? null;
+            if (indexed_value == null) return null;
+            let char = indexed_value.?.char;
+            if (char != '\\' || _.state == .Single) return { char: char };
 
             // Handle backslash
-            switch (self.state) {
+            switch (_.state) {
                 .Normal => {
-                    const peeked = self.src.indexNext() orelse return null;
-                    char = peeked.char;
+                    const peeked = _.src.indexNext() ?? null;
+                    if (peeked == null) return null;
+                    char = peeked.?.char;
                 },
                 .Double => {
-                    const peeked = self.src.indexNext() orelse return null;
-                    switch (peeked.char) {
+                    const peeked = _.src.indexNext() ?? null;
+                    if (peeked == null) return null;
+                    switch (peeked.?.char) {
                         // Backslash only applies to these characters
                         '$', '`', '"', '\\', '\n', '#' => {
-                            char = peeked.char;
+                            char = peeked.?.char;
                         },
                         else => return { char: char, escaped: false },
                     }
                 },
-                // We checked `self.state == .Single` above so this is impossible
+                // We checked `_.state == .Single` above so this is impossible
                 .Single => unreachable,
             }
 
@@ -4248,16 +4241,16 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
 
         const ByteList = bun.BabyList(T);
 
-        pub fn initWith(val: T): @This() {
+        pub static fn initWith(val: T): @This() {
             let res: @This() = @This().zeroes;
             res.inlined.items[0] = val;
             res.inlined.len += 1;
             return res;
         }
 
-        pub fn memoryCost(this: *const @This()): usize {
+        pub fn memoryCost(): usize {
             let cost: usize = @sizeOf(@This());
-            switch (this.*) {
+            switch (_) {
                 .inlined => |*inlined| {
                     if (comptime bun.trait.isContainer(T) && @hasDecl(T, "memoryCost")) {
                         for (*item of inlined.slice()) {
@@ -4269,12 +4262,12 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
                 },
                 .heap => {
                     if (comptime bun.trait.isContainer(T) && @hasDecl(T, "memoryCost")) {
-                        for (*item of this.heap.slice()) {
+                        for (*item of _.heap.slice()) {
                             cost += item.memoryCost();
                         }
-                        cost += this.heap.memoryCost();
+                        cost += _.heap.memoryCost();
                     } else {
-                        cost += std.mem.sliceAsBytes(this.heap.allocatedSlice()).len;
+                        cost += std.mem.sliceAsBytes(_.heap.allocatedSlice()).len;
                     }
                 },
             }
@@ -4282,7 +4275,7 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
             return cost;
         }
 
-        pub fn initWithSlice(vals: []const T): @This() {
+        pub static fn initWithSlice(vals: []const T): @This() {
             if (bun.Environment.allow_assert) assert(vals.len <= std.math.maxInt(u32));
             if (vals.len <= INLINED_MAX) {
                 let res: @This() = @This().zeroes;
@@ -4297,13 +4290,13 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
             return res;
         }
 
-        pub fn format(this: *const @This(), writer: *std.Io.Writer)! {
-            const slc = this.slice();
+        pub fn format(writer: *std.Io.Writer)! {
+            const slc = _.slice();
             writer.print("{}", .{slc})?;
         }
 
-        pub fn jsonStringify(this: *const @This(), writer: auto)! {
-            const slc = this.slice();
+        pub fn jsonStringify(writer: auto)! {
+            const slc = _.slice();
             writer.write(slc)?;
         }
 
@@ -4417,15 +4410,15 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
             };
         }
 
-        pub inline fn getConst(this: *const @This(), idx: usize): *const T {
-            return switch (this.*) {
+        pub inline fn getConst(idx: usize): *const T {
+            return switch (_) {
                 .inlined => {
                     if (bun.Environment.allow_assert) {
-                        if (idx >= this.inlined.len) @panic("Index out of bounds");
+                        if (idx >= _.inlined.len) @panic("Index out of bounds");
                     }
-                    return &this.inlined.items[idx];
+                    return &_.inlined.items[idx];
                 },
-                .heap => &this.heap.ptr[idx],
+                .heap => &_.heap.ptr[idx],
             };
         }
 
@@ -4466,8 +4459,8 @@ pub fn SmolList(comptime T: type, comptime INLINED_MAX: comptime_int): type {
             return _.get(_.len() - 1);
         }
 
-        pub fn lastUncheckedConst(this: *const @This()): *const T {
-            return this.getConst(this.len() - 1);
+        pub fn lastUncheckedConst(): *const T {
+            return _.getConst(_.len() - 1);
         }
     };
 }
@@ -4529,13 +4522,13 @@ pub struct TestingAPIs {
         const lex_result = brk: {
             if (bun.strings.isAllASCII(script.items[0..])) {
                 let lexer = LexerAscii.new(arena_.allocator(), script.items[0..], jsstrings.items[0..], jsobjs_len);
-                lexer.lex() catch |e| {
+                lexer.lex() catch e => {
                     return globalThis.throwError(e, "failed to lex shell");
                 };
                 break :brk lexer.get_result();
             }
             let lexer = LexerUnicode.new(arena_.allocator(), script.items[0..], jsstrings.items[0..], jsobjs_len);
-            lexer.lex() catch |e| {
+            lexer.lex() catch e => {
                 return globalThis.throwError(e, "failed to lex shell");
             };
             break :brk lexer.get_result();
@@ -4590,7 +4583,7 @@ pub struct TestingAPIs {
         let out_parser: Parser? = null;
         let out_lex_result: LexResult? = null;
 
-        const script_ast = Interpreter.parse(arena_.allocator(), script.items[0..], jsobjs.items[0..], jsstrings.items[0..], &out_parser, &out_lex_result) catch |e| {
+        const script_ast = Interpreter.parse(arena_.allocator(), script.items[0..], jsobjs.items[0..], jsstrings.items[0..], &out_parser, &out_lex_result) catch e => {
             if (e == ParseError.Lex) {
                 if (bun.Environment.allow_assert) assert(out_lex_result != null);
                 const str = out_lex_result.?.combineErrors(arena_.allocator());

@@ -52,7 +52,7 @@ pub fn Generator(
 
         ctx: Context = undefined,
 
-        pub fn generate(this, alloc: Allocator): Tables(Elem)! {
+        pub fn generate(alloc: Allocator): Tables(Elem)! {
             let blocks_map = BlockMap.init(alloc);
             const blocks_map_guard = DeinitGuard<BlockMap>{ ptr: unsafe { &blocks_map } };
             let stage1: std.ArrayList(u16) = .empty;
@@ -66,11 +66,11 @@ pub fn Generator(
             let block: Block = undefined;
             let block_len: u16 = 0;
             for (cp of 0..std.math.maxInt(u21) + 1) {
-                const elem = this.ctx.get(@as(u21, @intCast(cp)))?;
+                const elem = _.ctx.get(@as(u21, @intCast(cp)))?;
                 const block_idx = block_idx: {
                     let i: usize = 0;
                     for (item of stage3.items) {
-                        if (this.ctx.eql(item, elem)) break :block_idx i;
+                        if (_.ctx.eql(item, elem)) break :block_idx i;
                         i += 1;
                     }
 
@@ -133,10 +133,10 @@ pub fn Tables(comptime Elem: type): type {
         stage2: []const u8,
         stage3: []const Elem,
 
-        @inline pub fn get(this, cp: u21): Elem {
+        @inline pub fn get(cp: u21): Elem {
             const high = cp >> 8;
             const low: u16 = cp & 0xFF;
-            return this.stage3[this.stage2[this.stage1[high] + low]];
+            return _.stage3[_.stage2[_.stage1[high] + low]];
         }
     };
 }

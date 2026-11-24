@@ -28,7 +28,7 @@ export enum InternalSocket {
     pipe(*bun.uws.WindowsNamedPipe),
 
     pub fn pauseResume(pause: bool): bool {
-        switch (this) {
+        switch (_) {
             .detached => return true,
             .connected(socket) => {
                 if (pause) socket.pause() else socket.resumeSocket();
@@ -46,25 +46,25 @@ export enum InternalSocket {
     }
 
     pub fn isDetached(): bool {
-        return switch (this) {
+        return switch (_) {
             .detached => true,
             else => false,
         };
     }
 
     pub fn isNamedPipe(): bool {
-        return switch (this) {
+        return switch (_) {
             .pipe => true,
             else => false,
         };
     }
 
     pub fn detach(*_) {
-        this.* = InternalSocket.detached;
+        _.* = InternalSocket.detached;
     }
 
     pub fn setNoDelay(enabled: bool): bool {
-        switch (this) {
+        switch (_) {
             .pipe, .upgradedDuplex, .connecting, .detached => return false,
             .connected(socket) => {
                 socket.setNodelay(enabled);
@@ -74,14 +74,14 @@ export enum InternalSocket {
     }
 
     pub fn setKeepAlive(enabled: bool, delay: u32): bool {
-        switch (this) {
+        switch (_) {
             .pipe, .upgradedDuplex, .connecting, .detached => return false,
             .connected(socket) => return socket.setKeepalive(enabled, delay) == 0,
         }
     }
 
     pub fn close(code: us_socket_t.CloseCode) {
-        switch (this) {
+        switch (_) {
             .detached => {},
             .connected(socket) => socket.close(code),
             .connecting(socket) => socket.close(),
@@ -93,7 +93,7 @@ export enum InternalSocket {
     }
 
     pub fn isClosed(): bool {
-        return switch (this) {
+        return switch (_) {
             .connected(socket) => socket.isClosed(),
             .connecting(socket) => socket.isClosed(),
             .detached => true,
@@ -105,14 +105,14 @@ export enum InternalSocket {
     }
 
     pub fn get(): *us_socket_t? {
-        return switch (this) {
+        return switch (_) {
             .connected(socket) => socket,
             else => null,
         };
     }
 
     pub fn eq(other: InternalSocket): bool {
-        return switch (this) {
+        return switch (_) {
             .connected(a) => switch (other) {
                 .connected(b) => a == b,
                 else => false,
@@ -151,24 +151,24 @@ export class SocketHandler<const is_ssl: bool> {
 
     pub const detached: SocketHandler(is_ssl) = .{ .socket = .detached };
 
-    pub fn getNativeHandle(): *NativeSocketHandleType(is_ssl)? {
+    pub fn getNativeHandle(): (*NativeSocketHandleType(is_ssl))? {
         unsafe {
-            return switch (this.socket) {
-                .connected(socket) => socket.getNativeHandle() as *NativeSocketHandleType(is_ssl)?,
-                .connecting(socket) => socket.getNativeHandle() as *NativeSocketHandleType(is_ssl)?,
+            return switch (_.socket) {
+                .connected(socket) => @ptrCast(socket.getNativeHandle()),
+                .connecting(socket) => @ptrCast(socket.getNativeHandle()),
                 .detached => null,
-                .upgradedDuplex(socket) => if (is_ssl) socket.ssl() as *NativeSocketHandleType(is_ssl)? else null,
-                .pipe(socket) => if (is_ssl && bun.Environment.isWindows) socket.ssl() as *NativeSocketHandleType(is_ssl)? else null,
+                .upgradedDuplex(socket) => if (is_ssl) @ptrCast(socket.ssl()) else null,
+                .pipe(socket) => if (is_ssl && bun.Environment.isWindows) @ptrCast(socket.ssl()) else null,
             };
         }
     }
 
     pub fn setNoDelay(enabled: bool): bool {
-        return this.socket.setNoDelay(enabled);
+        return _.socket.setNoDelay(enabled);
     }
 
     pub fn setKeepAlive(enabled: bool, delay: u32): bool {
-        return this.socket.setKeepAlive(enabled, delay);
+        return _.socket.setKeepAlive(enabled, delay);
     }
 
     pub fn pauseStream(): bool {
@@ -180,7 +180,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn detach(*_) {
-        this.socket.detach();
+        _.socket.detach();
     }
 
     pub fn isDetached(): bool {
@@ -192,7 +192,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn getVerifyError(): bun.uws.us_bun_verify_error_t {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => return socket.getVerifyError(),
             .upgradedDuplex(socket) => return socket.sslError(),
             .pipe(pipe) => {
@@ -204,7 +204,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn isEstablished(): bool {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => return socket.isEstablished(),
             .upgradedDuplex(socket) => return socket.isEstablished(),
             .pipe(pipe) => {
@@ -216,7 +216,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn timeout(seconds: u32) {
-        switch (this.socket) {
+        switch (_.socket) {
             .upgradedDuplex(socket) => socket.setTimeout(seconds),
             .pipe(pipe) => {
                 if (bun.Environment.isWindows) pipe.setTimeout(seconds);
@@ -228,7 +228,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn setTimeout(seconds: u32) {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => {
                 if (seconds > 240) {
                     socket.setTimeout(0);
@@ -256,7 +256,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn setTimeoutMinutes(minutes: u32) {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => {
                 socket.setTimeout(0);
                 socket.setLongTimeout(minutes);
@@ -274,7 +274,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn startTLS(is_client: bool) {
-        let sock = this.socket.get();
+        let sock = _.socket.get();
         if (sock != null) sock.?.open(is_client, null);
     }
 
@@ -301,7 +301,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn ext(@comptime ContextType: type): *ContextType? {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(sock) => sock.ext(ContextType),
             .connecting(sock) => sock.ext(ContextType),
             .detached, .upgradedDuplex, .pipe => null,
@@ -309,7 +309,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn group(): *SocketGroup? {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(socket) => socket.group(),
             .connecting(socket) => socket.group(),
             .detached, .upgradedDuplex, .pipe => null,
@@ -317,7 +317,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn flush() {
-        switch (this.socket) {
+        switch (_.socket) {
             .upgradedDuplex(socket) => socket.flush(),
             .pipe(pipe) => {
                 if (bun.Environment.isWindows) pipe.flush();
@@ -328,7 +328,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn write(data: string): i32 {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .upgradedDuplex(socket) => socket.encodeAndWrite(data),
             .pipe(pipe) => {
                 if (bun.Environment.isWindows) return pipe.encodeAndWrite(data) else return 0;
@@ -339,15 +339,15 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn writeFd(data: string, file_descriptor: bun.FD): i32 {
-        return switch (this.socket) {
-            .upgradedDuplex, .pipe => this.write(data),
+        return switch (_.socket) {
+            .upgradedDuplex, .pipe => _.write(data),
             .connected(socket) => socket.writeFd(data, file_descriptor),
             .connecting, .detached => 0,
         };
     }
 
     pub fn rawWrite(data: string): i32 {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(socket) => socket.rawWrite(data),
             .connecting, .detached => 0,
             .upgradedDuplex(socket) => socket.rawWrite(data),
@@ -358,7 +358,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn shutdown() {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => socket.shutdown(),
             .connecting(socket) => socket.shutdown(),
             .detached => {},
@@ -370,7 +370,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn shutdownRead() {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => socket.shutdownRead(),
             .connecting(socket) => socket.shutdownRead(),
             .upgradedDuplex(socket) => socket.shutdownRead(),
@@ -382,7 +382,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn isShutdown(): bool {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(socket) => socket.isShutdown(),
             .connecting(socket) => socket.isShutdown(),
             .upgradedDuplex(socket) => socket.isShutdown(),
@@ -401,7 +401,7 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn getError(): i32 {
-        switch (this.socket) {
+        switch (_.socket) {
             .connected(socket) => return socket.getError(),
             .connecting(socket) => return socket.getError(),
             .detached => return 0,
@@ -417,32 +417,32 @@ export class SocketHandler<const is_ssl: bool> {
     }
 
     pub fn close(code: us_socket_t.CloseCode) {
-        this.socket.close(code);
+        _.socket.close(code);
     }
 
     pub fn localPort(): i32 {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(socket) => socket.localPort(),
             .pipe, .upgradedDuplex, .connecting, .detached => 0,
         };
     }
 
     pub fn remotePort(): i32 {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(socket) => socket.remotePort(),
             .pipe, .upgradedDuplex, .connecting, .detached => 0,
         };
     }
 
     pub fn remoteAddress(buf: *u8[]): string? {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(sock) => sock.remoteAddress(buf) catch null,
             .pipe, .upgradedDuplex, .connecting, .detached => null,
         };
     }
 
     pub fn localAddress(buf: *u8[]): string? {
-        return switch (this.socket) {
+        return switch (_.socket) {
             .connected(sock) => sock.localAddress(buf) catch null,
             .pipe, .upgradedDuplex, .connecting, .detached => null,
         };
@@ -575,98 +575,98 @@ export enum AnySocket {
     SocketTLS(SocketTLS),
 
     pub fn setTimeout(seconds: u32) {
-        switch (this) {
+        switch (_) {
             .SocketTCP(s) => s.setTimeout(seconds),
             .SocketTLS(s) => s.setTimeout(seconds),
         }
     }
 
     pub fn shutdown() {
-        switch (this) {
+        switch (_) {
             .SocketTCP(sock) => sock.shutdown(),
             .SocketTLS(sock) => sock.shutdown(),
         }
     }
 
     pub fn shutdownRead() {
-        switch (this) {
+        switch (_) {
             .SocketTCP(sock) => sock.shutdownRead(),
             .SocketTLS(sock) => sock.shutdownRead(),
         }
     }
 
     pub fn isShutdown(): bool {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(s) => s.isShutdown(),
             .SocketTLS(s) => s.isShutdown(),
         };
     }
 
     pub fn isClosed(): bool {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(s) => s.isClosed(),
             .SocketTLS(s) => s.isClosed(),
         };
     }
 
     pub fn close() {
-        switch (this) {
+        switch (_) {
             .SocketTCP(s) => s.close(us_socket_t.CloseCode.normal),
             .SocketTLS(s) => s.close(us_socket_t.CloseCode.normal),
         }
     }
 
     pub fn terminate() {
-        switch (this) {
+        switch (_) {
             .SocketTCP(s) => s.close(us_socket_t.CloseCode.failure),
             .SocketTLS(s) => s.close(us_socket_t.CloseCode.failure),
         }
     }
 
     pub fn write(data: string): i32 {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(sock) => sock.write(data),
             .SocketTLS(sock) => sock.write(data),
         };
     }
 
     pub fn getNativeHandle(): *!? {
-        return switch (this.socket()) {
+        return switch (_.socket()) {
             .connected(sock) => sock.getNativeHandle(),
             else => null,
         };
     }
 
     pub fn localPort(): i32 {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(sock) => sock.localPort(),
             .SocketTLS(sock) => sock.localPort(),
         };
     }
 
     pub fn isSSL(): bool {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP => false,
             .SocketTLS => true,
         };
     }
 
     pub fn socket(): InternalSocket {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(s) => s.socket,
             .SocketTLS(s) => s.socket,
         };
     }
 
     pub fn ext(@comptime ContextType: type): *ContextType? {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(s) => s.ext(ContextType),
             .SocketTLS(s) => s.ext(ContextType),
         };
     }
 
     pub fn group(): *SocketGroup {
-        return switch (this) {
+        return switch (_) {
             .SocketTCP(sock) => sock.group().?,
             .SocketTLS(sock) => sock.group().?,
         };

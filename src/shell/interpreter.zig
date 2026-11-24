@@ -1054,7 +1054,7 @@ pub fn initAndRunFromFile(ctx: bun.cli.Command.Context, mini: *jsc.MiniEventLoop
 .result => |i| i,
 });
             _ = &interp;
-            const exit_code: ExitCode = (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1));
+            const exit_code: ExitCode = (if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1));
             var is_done: IsDone = .{ .interp = interp };
             _ = &is_done;
             interp.exit_code = exit_code;
@@ -1109,7 +1109,7 @@ pub fn initAndRunFromSource(ctx: bun.cli.Command.Context, mini: *jsc.MiniEventLo
             _ = &interp;
             var is_done: IsDone = .{ .interp = interp };
             _ = &is_done;
-            const exit_code: ExitCode = (if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1));
+            const exit_code: ExitCode = (if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(ExitCode, @enumFromInt(1)) else @as(ExitCode, 1));
             interp.exit_code = exit_code;
             switch (try interp.run()) {
 .err => |e| {
@@ -1794,7 +1794,6 @@ pub fn scopedAllocator(self: @This()) if (bun.Environment.enableAllocScopes) *bu
             }
             const tags = (comptime std.@"meta".fields(Ptr.Tag));
             inline for (tags) |tag| {
-                _ = &tag;
                 if ((self.tagInt() == (if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value))) {
                     const Ty = (comptime Ptr.typeFromTag((if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value)));
                     _ = Ptr.assert_type(Ty);
@@ -1810,7 +1809,6 @@ pub fn scopedAllocator(self: @This()) if (bun.Environment.enableAllocScopes) *bu
 pub fn allocator(self: @This()) std.mem.Allocator {
             const tags = (comptime std.@"meta".fields(Ptr.Tag));
             inline for (tags) |tag| {
-                _ = &tag;
                 if ((self.tagInt() == (if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value))) {
                     const Ty = (comptime Ptr.typeFromTag((if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value)));
                     _ = Ptr.assert_type(Ty);
@@ -1846,7 +1844,6 @@ pub fn destroy(self: @This(), ptr: anytype) void {
 pub fn start(self: @This()) Yield {
             const tags = (comptime std.@"meta".fields(Ptr.Tag));
             inline for (tags) |tag| {
-                _ = &tag;
                 if ((self.tagInt() == (if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value))) {
                     const Ty = (comptime Ptr.typeFromTag((if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value)));
                     _ = Ptr.assert_type(Ty);
@@ -1861,7 +1858,6 @@ pub fn start(self: @This()) Yield {
 pub fn deinit(self: @This()) void {
             const tags = (comptime std.@"meta".fields(Ptr.Tag));
             inline for (tags) |tag| {
-                _ = &tag;
                 if ((self.tagInt() == (if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value))) {
                     const Ty = (comptime Ptr.typeFromTag((if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value)));
                     _ = Ptr.assert_type(Ty);
@@ -1877,7 +1873,6 @@ pub fn deinit(self: @This()) void {
 pub fn childDone(self: @This(), child: anytype, exit_code: ExitCode) Yield {
             const tags = (comptime std.@"meta".fields(Ptr.Tag));
             inline for (tags) |tag| {
-                _ = &tag;
                 if ((self.tagInt() == (if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value))) {
                     const Ty = (comptime Ptr.typeFromTag((if (@typeInfo(@TypeOf(tag)) == .@"enum") @intFromEnum(tag) else tag.value)));
                     _ = Ptr.assert_type(Ty);
@@ -1979,7 +1974,8 @@ pub fn runFromMainThread(self: *@This()) void {
             _ = runFromMainThread_(ctx);
     }
 
-pub fn runFromMainThreadMini(self: *@This(), _: *void) void {
+pub fn runFromMainThreadMini(self: *@This(), _unused: *void) void {
+            _ = &_unused;
             _ = self.runFromMainThread();
     }
     pub const InnerShellTask = @This();
@@ -2064,7 +2060,8 @@ _ = @panic("Invalid state");
 }
     }
 
-pub fn onIOWriterChunk(self: *@This(), _: usize, e: OutputTaskSysErr) Yield {
+pub fn onIOWriterChunk(self: *@This(), _written: usize, e: OutputTaskSysErr) Yield {
+            _ = &_written;
             _ = log("OutputTask({s}, 0x{x}) onIOWriterChunk", .{ @typeName(Parent), @intFromPtr(self) });
             if ((e != null)) {
                 _ = e.?.deref();

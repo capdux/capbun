@@ -11,7 +11,7 @@ export enum ACL {
     log_delivery_write,
 
     pub fn toString(): string {
-        return switch (this) {
+        return switch (_) {
             .@"private" => "private",
             .public_read => "public-read",
             .public_read_write => "public-read-write",

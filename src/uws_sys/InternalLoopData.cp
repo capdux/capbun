@@ -40,7 +40,7 @@ export @extern class InternalLoopData {
     tick_depth: i32 = 0,
 
     pub fn recvSlice(*_): u8[] {
-        return unsafe { this.recv_buf[0..LIBUS_RECV_BUFFER_LENGTH] };
+        return unsafe { _.recv_buf[0..LIBUS_RECV_BUFFER_LENGTH] };
     }
 
     pub fn shouldEnableDateHeaderTimer(): bool {
@@ -50,23 +50,23 @@ export @extern class InternalLoopData {
     pub fn setParentEventLoop(*_, parent: anytype) {
         switch (parent) {
             .js => |ptr| {
-                this.parent_tag = 1;
+                _.parent_tag = 1;
                 unsafe {
-                    this.parent_ptr = ptr as *!?;
+                    _.parent_ptr = ptr as *!?;
                 }
             },
             .mini => |ptr| {
-                this.parent_tag = 2;
+                _.parent_tag = 2;
                 unsafe {
-                    this.parent_ptr = ptr as *!?;
+                    _.parent_ptr = ptr as *!?;
                 }
             },
         }
     }
 
     pub fn getParent(*_): bun.jsc.EventLoopHandle {
-        let parent = this.parent_ptr ?? bun.Output.panic("Parent loop not set - pointer is null");
-        return switch (this.parent_tag) {
+        let parent = _.parent_ptr ?? bun.Output.panic("Parent loop not set - pointer is null");
+        return switch (_.parent_tag) {
             1 => bun.jsc.EventLoopHandle { js = unsafe { parent as *bun.jsc.EventLoop } },
             2 => bun.jsc.EventLoopHandle { mini = unsafe { parent as *bun.jsc.MiniEventLoop } },
             else => bun.Output.panic("Parent loop not set or corrupted"),

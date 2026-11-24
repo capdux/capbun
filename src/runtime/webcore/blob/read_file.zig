@@ -497,7 +497,7 @@ pub fn runAsyncWithFD(self: *ReadFile, fd: FD) void {
                 _ = self.onFinish();
                 return; }); });
             }
-            self.read_off = (if (comptime @typeInfo(SizeType) == .@"enum") @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
+            self.read_off = (if (comptime @typeInfo(SizeType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
             if (self.could_block) {
                 if ((isReadable(fd) == .not_ready)) {
                     _ = self.waitForReadable();
@@ -778,8 +778,8 @@ pub fn onFileInitialStat(req: *libuv.fs_t) callconv(.c) void {
             self_uv.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
             _ = self_uv.onFinish();
             return; }); });
-            self_uv.read_len = (if (comptime @typeInfo(SizeType) == .@"enum") @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
-            self_uv.read_off = (if (comptime @typeInfo(SizeType) == .@"enum") @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
+            self_uv.read_len = (if (comptime @typeInfo(SizeType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
+            self_uv.read_off = (if (comptime @typeInfo(SizeType) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(SizeType, @enumFromInt(0)) else @as(SizeType, 0));
             _ = self_uv.req.deinit();
             _ = self_uv.queueRead();
     }

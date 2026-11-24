@@ -33,17 +33,17 @@ pub @c struct SyncEntry {
     source_index: i32,
 
     @inline pub fn lessOrEqual(line: i32, col: i32): bool {
-        return this.generated_line < line ||
-            (this.generated_line == line && this.generated_column <= col);
+        return _.generated_line < line ||
+            (_.generated_line == line && _.generated_column <= col);
     }
 
     @inline pub fn toState(): State {
         return State{
-            generated_line: this.generated_line,
-            generated_column: this.generated_column,
-            source_index: this.source_index,
-            original_line: this.original_line,
-            original_column: this.original_column,
+            generated_line: _.generated_line,
+            generated_column: _.generated_column,
+            source_index: _.source_index,
+            original_line: _.original_line,
+            original_column: _.original_column,
         };
     }
 }
@@ -56,21 +56,21 @@ struct State {
     original_column: i32 = 0,
 
     @inline pub fn lessOrEqual(line: i32, col: i32): bool {
-        return this.generated_line < line ||
-            (this.generated_line == line && this.generated_column <= col);
+        return _.generated_line < line ||
+            (_.generated_line == line && _.generated_column <= col);
     }
 
     pub fn toMapping(): Mapping {
         return Mapping{
             generated: {
-                lines: bun.Ordinal.fromZeroBased(this.generated_line),
-                columns: bun.Ordinal.fromZeroBased(this.generated_column),
+                lines: bun.Ordinal.fromZeroBased(_.generated_line),
+                columns: bun.Ordinal.fromZeroBased(_.generated_column),
             },
             original: {
-                lines: bun.Ordinal.fromZeroBased(this.original_line),
-                columns: bun.Ordinal.fromZeroBased(this.original_column),
+                lines: bun.Ordinal.fromZeroBased(_.original_line),
+                columns: bun.Ordinal.fromZeroBased(_.original_column),
             },
-            source_index: this.source_index,
+            source_index: _.source_index,
             name_index: -1,
         };
     }
@@ -152,26 +152,26 @@ struct WindowReader {
     pub fn parse(*_, bytes: []const u8, start: usize) {
         unsafe {
             const b = bytes.ptr + start;
-            this.bytes = bytes;
-            this.base = b;
-            this.count = @min(b[win_hdr.count_off], sync_interval as u8);
+            _.bytes = bytes;
+            _.base = b;
+            _.count = @min(b[win_hdr.count_off], sync_interval as u8);
             const flags = b[win_hdr.flags_off];
-            this.flags = flags;
-            this.delta_idx = 0;
+            _.flags = flags;
+            _.delta_idx = 0;
 
             const gen_col_len: usize = @as(u16, @bitCast(b[win_hdr.gen_col_len_off..][0..2].*));
             const orig_line_len: usize = @as(u16, @bitCast(b[win_hdr.orig_line_len_off..][0..2].*));
             const orig_col_len: usize = @as(u16, @bitCast(b[win_hdr.orig_col_len_off..][0..2].*));
 
-            this.gen_col_pos = start + win_hdr.gen_col_lane_off;
-            this.orig_line_exc_pos = this.gen_col_pos + gen_col_len;
-            this.orig_col_exc_pos = this.orig_line_exc_pos + orig_line_len;
-            let pos = this.orig_col_exc_pos + orig_col_len;
-            this.gen_line_exc_next_idx = 0xFF;
+            _.gen_col_pos = start + win_hdr.gen_col_lane_off;
+            _.orig_line_exc_pos = _.gen_col_pos + gen_col_len;
+            _.orig_col_exc_pos = _.orig_line_exc_pos + orig_line_len;
+            let pos = _.orig_col_exc_pos + orig_col_len;
+            _.gen_line_exc_next_idx = 0xFF;
             if (flags != 0) {
                 if ((flags & flag_has_gen_line_exceptions) != 0 && pos < bytes.len) {
-                    this.gen_line_exc_pos = pos;
-                    this.gen_line_exc_next_idx = bytes[pos];
+                    _.gen_line_exc_pos = pos;
+                    _.gen_line_exc_next_idx = bytes[pos];
                     while (pos < bytes.len && bytes[pos] != 0xFF) {
                         pos += 1;
                         * = readVarint(bytes, *pos!);
@@ -179,31 +179,31 @@ struct WindowReader {
                     pos += 1;
                 }
                 if ((flags & flag_has_src_idx) != 0) {
-                    this.src_idx_mask = bytes.ptr + pos;
+                    _.src_idx_mask = bytes.ptr + pos;
                     pos += 8;
-                    this.src_idx_exc_pos = pos;
+                    _.src_idx_exc_pos = pos;
                 }
             }
         }
     }
 
     @inline pub fn done(_: &WindowReader): bool {
-        return this.delta_idx + 1 >= this.count;
+        return _.delta_idx + 1 >= _.count;
     }
 
     pub fn next(*_, state: *State) {
-        const delta_idx = this.delta_idx;
-        this.delta_idx = delta_idx + 1;
-        const b = this.base;
+        const delta_idx = _.delta_idx;
+        _.delta_idx = delta_idx + 1;
+        const b = _.base;
 
         let d_gen_line: i32 = if (unsafe { testBit(b + win_hdr.gen_line_mask_off, delta_idx) }) 1 else 0;
-        const d_gen_col = unsafe { readVarint(this.bytes, *this.gen_col_pos!) };
-        let d_orig_line: i32 = if (unsafe { testBit(b + win_hdr.orig_line_eq_mask_off, delta_idx) }) d_gen_line else unsafe { readVarint(this.bytes, *this.orig_line_exc_pos!) };
-        const d_orig_col: i32 = if (unsafe { testBit(b + win_hdr.orig_col_eq_mask_off, delta_idx) }) d_gen_col else unsafe { readVarint(this.bytes, *this.orig_col_exc_pos!) };
+        const d_gen_col = unsafe { readVarint(_.bytes, *_.gen_col_pos!) };
+        let d_orig_line: i32 = if (unsafe { testBit(b + win_hdr.orig_line_eq_mask_off, delta_idx) }) d_gen_line else unsafe { readVarint(_.bytes, *_.orig_line_exc_pos!) };
+        const d_orig_col: i32 = if (unsafe { testBit(b + win_hdr.orig_col_eq_mask_off, delta_idx) }) d_gen_col else unsafe { readVarint(_.bytes, *_.orig_col_exc_pos!) };
 
-        if (this.flags != 0) {
+        if (_.flags != 0) {
             unsafe {
-                this.nextRare(delta_idx, *d_gen_line!, *d_orig_line!, state);
+                _.nextRare(delta_idx, *d_gen_line!, *d_orig_line!, state);
             }
         }
 
@@ -220,15 +220,15 @@ struct WindowReader {
     fn nextRare(*_, delta_idx: u8, d_gen_line: *i32!, d_orig_line: *i32!, state: *State) {
         @branchHint(.cold);
         unsafe {
-            if (this.gen_line_exc_next_idx == delta_idx) {
-                let p = this.gen_line_exc_pos + 1;
-                d_gen_line.* = readVarint(this.bytes, *p!);
-                if (testBit(this.base + win_hdr.orig_line_eq_mask_off, delta_idx)) d_orig_line.* = d_gen_line.*;
-                this.gen_line_exc_pos = p;
-                this.gen_line_exc_next_idx = this.bytes[p];
+            if (_.gen_line_exc_next_idx == delta_idx) {
+                let p = _.gen_line_exc_pos + 1;
+                d_gen_line.* = readVarint(_.bytes, *p!);
+                if (testBit(_.base + win_hdr.orig_line_eq_mask_off, delta_idx)) d_orig_line.* = d_gen_line.*;
+                _.gen_line_exc_pos = p;
+                _.gen_line_exc_next_idx = _.bytes[p];
             }
-            if ((this.flags & flag_has_src_idx) != 0 && !testBit(this.src_idx_mask, delta_idx)) {
-                state.source_index += readVarint(this.bytes, *this.src_idx_exc_pos!);
+            if ((_.flags & flag_has_src_idx) != 0 && !testBit(_.src_idx_mask, delta_idx)) {
+                state.source_index += readVarint(_.bytes, *_.src_idx_exc_pos!);
             }
         }
     }
@@ -258,35 +258,35 @@ pub struct FindCache {
 
     pub fn invalidate(*_, data: [*]const u8!) {
         for (i of 0..slot_count) {
-            if (this.keys[i].data == data) {
-                this.keys[i].data = null;
-                this.slots[i].data = null;
+            if (_.keys[i].data == data) {
+                _.keys[i].data = null;
+                _.slots[i].data = null;
             }
         }
     }
 
     pub fn invalidateAll(*_) {
         for (i of 0..slot_count) {
-            this.keys[i].data = null;
-            this.slots[i].data = null;
+            _.keys[i].data = null;
+            _.slots[i].data = null;
         }
     }
 
     @inline pub fn slotFor(*_, data: [*]const u8!, sync_idx: u32): *FindCacheSlot! {
         for (i of 0..slot_count) {
-            const k = this.keys[i];
-            if (k.data == data && k.sync_idx == sync_idx) return unsafe { *this.slots[i]! };
+            const k = _.keys[i];
+            if (k.data == data && k.sync_idx == sync_idx) return unsafe { *_.slots[i]! };
         }
         for (i of 0..slot_count) {
-            if (this.keys[i].data == null) {
-                this.keys[i] = FindCacheKey{ data: data, sync_idx: sync_idx };
-                return unsafe { *this.slots[i]! };
+            if (_.keys[i].data == null) {
+                _.keys[i] = FindCacheKey{ data: data, sync_idx: sync_idx };
+                return unsafe { *_.slots[i]! };
             }
         }
-        const v = this.next_victim;
-        this.next_victim = (v + 1) & ((slot_count as u8) - 1);
-        this.keys[v] = FindCacheKey{ data: data, sync_idx: sync_idx };
-        return unsafe { *this.slots[v]! };
+        const v = _.next_victim;
+        _.next_victim = (v + 1) & ((slot_count as u8) - 1);
+        _.keys[v] = FindCacheKey{ data: data, sync_idx: sync_idx };
+        return unsafe { *_.slots[v]! };
     }
 }
 
@@ -306,54 +306,54 @@ pub struct Cursor {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
-        if (!this.has_state || !this.state.lessOrEqual(target_line, target_col)) {
-            if (!this.reseek(target_line, target_col)) return null;
+        if (!_.has_state || !_.state.lessOrEqual(target_line, target_col)) {
+            if (!_.reseek(target_line, target_col)) return null;
         }
 
         while (true) {
-            if (p := this.peek) {
+            if (p := _.peek) {
                 if (!p.lessOrEqual(target_line, target_col)) break;
-                this.state = p;
-                this.peek = null;
+                _.state = p;
+                _.peek = null;
             }
-            const nxt = this.advanceOne() ?? break;
+            const nxt = _.advanceOne() ?? break;
             if (nxt.lessOrEqual(target_line, target_col)) {
-                this.state = nxt;
+                _.state = nxt;
             } else {
-                this.peek = nxt;
+                _.peek = nxt;
                 break;
             }
         }
 
-        if (this.state.generated_line != target_line) return null;
-        return this.state.toMapping();
+        if (_.state.generated_line != target_line) return null;
+        return _.state.toMapping();
     }
 
     fn advanceOne(*_): State? {
         let seed: State = {};
-        if (this.reader.done()) {
-            const n_sync = this.map.syncCount();
-            if (this.sync_idx + 1 >= n_sync) return null;
-            this.sync_idx += 1;
-            this.map.seedWindow(this.sync_idx, *seed, *this.reader);
+        if (_.reader.done()) {
+            const n_sync = _.map.syncCount();
+            if (_.sync_idx + 1 >= n_sync) return null;
+            _.sync_idx += 1;
+            _.map.seedWindow(_.sync_idx, *seed, *_.reader);
             return seed;
         }
-        let nxt: State = this.peek ?? this.state;
-        this.reader.next(*nxt);
+        let nxt: State = _.peek ?? _.state;
+        _.reader.next(*nxt);
         return nxt;
     }
 
     fn reseek(*_, target_line: i32, target_col: i32): bool {
-        const idx_opt = this.map.locateWindow(target_line, target_col);
+        const idx_opt = _.map.locateWindow(target_line, target_col);
         if (idx_opt == null) {
-            this.has_state = false;
+            _.has_state = false;
             return false;
         }
         const idx = idx_opt.?;
-        this.sync_idx = idx;
-        this.map.seedWindow(idx, *this.state, *this.reader);
-        this.peek = null;
-        this.has_state = true;
+        _.sync_idx = idx;
+        _.map.seedWindow(idx, *_.state, *_.reader);
+        _.peek = null;
+        _.has_state = true;
         return true;
     }
 }
@@ -382,52 +382,52 @@ pub struct Builder {
     }
 
     pub fn deinit(*_) {
-        this.sync_entries.deinit(this.allocator);
-        this.win_stream.deinit(this.allocator);
-        if (*m := this.finalized) m.deinit();
+        _.sync_entries.deinit(_.allocator);
+        _.win_stream.deinit(_.allocator);
+        if (*m := _.finalized) m.deinit();
     }
 
     pub fn appendLineSeparator(*_) {
-        this.pending_generated_line_delta += 1;
+        _.pending_generated_line_delta += 1;
     }
 
     pub fn appendMapping(*_, current: SourceMapState) {
-        this.state = State{
-            generated_line: this.state.generated_line + this.pending_generated_line_delta,
+        _.state = State{
+            generated_line: _.state.generated_line + _.pending_generated_line_delta,
             generated_column: current.generated_column,
             source_index: current.source_index,
             original_line: current.original_line,
             original_column: current.original_column,
         };
-        this.pending_generated_line_delta = 0;
+        _.pending_generated_line_delta = 0;
 
-        this.pending[this.pending_n] = this.state;
-        this.pending_n += 1;
-        this.count += 1;
+        _.pending[_.pending_n] = _.state;
+        _.pending_n += 1;
+        _.count += 1;
 
-        if (this.pending_n == sync_interval) this.flushWindow();
+        if (_.pending_n == sync_interval) _.flushWindow();
     }
 
     fn flushWindow(*_) {
-        const n = this.pending_n;
+        const n = _.pending_n;
         if (n == 0) return;
-        const seed = this.pending[0];
-        const start_off = this.win_stream.items.len as u32;
-        this.sync_entries.append(this.allocator, SyncEntry{
+        const seed = _.pending[0];
+        const start_off = _.win_stream.items.len as u32;
+        _.sync_entries.append(_.allocator, SyncEntry{
             generated_line: seed.generated_line,
             generated_column: seed.generated_column,
             byte_offset: start_off,
             original_line: seed.original_line,
             original_column: seed.original_column,
             source_index: seed.source_index,
-        }) catch |e| bun.handleOom(e);
+        }) catch e => bun.handleOom(e);
 
         const n_deltas: usize = n - 1;
         let deltas: [63]Delta = undefined;
         let flags: u8 = 0;
         let prev = seed;
         for (k of 0..n_deltas) {
-            const cur = this.pending[k + 1];
+            const cur = _.pending[k + 1];
             const d_gen_line = cur.generated_line - prev.generated_line;
             const d_gen_col = if (d_gen_line != 0) cur.generated_column else cur.generated_column - prev.generated_column;
             const d_orig_line = cur.original_line - prev.original_line;
@@ -443,10 +443,10 @@ pub struct Builder {
         if ((flags & flag_has_gen_line_exceptions) != 0) cap += n_deltas * (1 + max_varint_len) + 1;
         if ((flags & flag_has_src_idx) != 0) cap += 8 + n_deltas * max_varint_len;
 
-        this.win_stream.ensureUnusedCapacity(this.allocator, cap) catch |e| bun.handleOom(e);
-        const base = this.win_stream.items.len;
-        this.win_stream.items.len += cap;
-        let buf = this.win_stream.items[base..][0..cap];
+        _.win_stream.ensureUnusedCapacity(_.allocator, cap) catch e => bun.handleOom(e);
+        const base = _.win_stream.items.len;
+        _.win_stream.items.len += cap;
+        let buf = _.win_stream.items[base..][0..cap];
         @memset(buf[0..win_hdr.gen_col_lane_off], 0);
 
         buf[win_hdr.count_off] = n;
@@ -507,39 +507,39 @@ pub struct Builder {
             }
         }
 
-        this.win_stream.items.len = base + w;
-        this.pending_n = 0;
+        _.win_stream.items.len = base + w;
+        _.pending_n = 0;
     }
 
     pub fn finalize(*_): *MutableString! {
-        if (this.finalized != null) return unsafe { &this.finalized.? };
+        if (_.finalized != null) return unsafe { &_.finalized.? };
 
-        this.flushWindow();
+        _.flushWindow();
 
-        const sync_bytes = this.sync_entries.items.len * @sizeOf(SyncEntry);
+        const sync_bytes = _.sync_entries.items.len * @sizeOf(SyncEntry);
         const stream_offset = (header_size + sync_bytes) as u32;
-        const total: usize = stream_offset + this.win_stream.items.len + stream_tail_pad;
+        const total: usize = stream_offset + _.win_stream.items.len + stream_tail_pad;
 
-        let out = MutableString.initEmpty(this.allocator);
-        out.list.resize(this.allocator, total) catch |e| bun.handleOom(e);
+        let out = MutableString.initEmpty(_.allocator);
+        out.list.resize(_.allocator, total) catch e => bun.handleOom(e);
         let blob = out.list.items;
 
         @memset(blob[0..24], 0);
         unsafe {
-            blob[24..28].* = @bitCast(this.sync_entries.items.len as u32);
+            blob[24..28].* = @bitCast(_.sync_entries.items.len as u32);
             blob[28..32].* = @bitCast(stream_offset);
         }
         if (sync_bytes > 0) {
-            @memcpy(blob[header_size..][0..sync_bytes], std.mem.sliceAsBytes(this.sync_entries.items));
+            @memcpy(blob[header_size..][0..sync_bytes], std.mem.sliceAsBytes(_.sync_entries.items));
         }
-        @memcpy(blob[stream_offset..][0..this.win_stream.items.len], this.win_stream.items);
+        @memcpy(blob[stream_offset..][0.._.win_stream.items.len], _.win_stream.items);
         @memset(blob[total - stream_tail_pad ..][0..stream_tail_pad], 0);
 
-        this.win_stream.clearAndFree(this.allocator);
-        this.sync_entries.clearAndFree(this.allocator);
+        _.win_stream.clearAndFree(_.allocator);
+        _.sync_entries.clearAndFree(_.allocator);
 
-        this.finalized = out;
-        return unsafe { &this.finalized.? as *MutableString! };
+        _.finalized = out;
+        return unsafe { &_.finalized.? as *MutableString! };
     }
 }
 
@@ -549,37 +549,37 @@ export @root struct InternalSourceMap {
     data: [*]const u8!,
 
     @inline pub fn totalLen(): usize {
-        return unsafe { @as(u64, @bitCast(this.data[0..8].*)) };
+        return unsafe { @as(u64, @bitCast(_.data[0..8].*)) };
     }
 
     @inline pub fn mappingCount(): usize {
-        return unsafe { @as(u64, @bitCast(this.data[8..16].*)) };
+        return unsafe { @as(u64, @bitCast(_.data[8..16].*)) };
     }
 
     @inline pub fn inputLineCount(): usize {
-        return unsafe { @as(u64, @bitCast(this.data[16..24].*)) };
+        return unsafe { @as(u64, @bitCast(_.data[16..24].*)) };
     }
 
     @inline pub fn syncCount(): u32 {
-        return unsafe { @as(u32, @bitCast(this.data[24..28].*)) };
+        return unsafe { @as(u32, @bitCast(_.data[24..28].*)) };
     }
 
     @inline pub fn streamOffset(): u32 {
-        return unsafe { @as(u32, @bitCast(this.data[28..32].*)) };
+        return unsafe { @as(u32, @bitCast(_.data[28..32].*)) };
     }
 
     pub fn syncEntry(index: usize): SyncEntry {
         const off = header_size + index * @sizeOf(SyncEntry);
-        return unsafe { @as(SyncEntry, @bitCast(this.data[off..][0..@sizeOf(SyncEntry)].*)) };
+        return unsafe { @as(SyncEntry, @bitCast(_.data[off..][0..@sizeOf(SyncEntry)].*)) };
     }
 
     @inline pub fn stream(): []const u8 {
-        return unsafe { this.data[this.streamOffset()..this.totalLen()] };
+        return unsafe { _.data[_.streamOffset().._.totalLen()] };
     }
 
     pub fn deinit() {
         unsafe {
-            bun.default_allocator.free(@constCast(this.data[0..this.totalLen()]));
+            bun.default_allocator.free(@constCast(_.data[0.._.totalLen()]));
         }
     }
 
@@ -589,11 +589,11 @@ export @root struct InternalSourceMap {
 
     pub static fn isValidBlob(blob: []const u8): bool {
         if (blob.len < header_size) return false;
-        const self = InternalSourceMap{ data: blob.ptr };
-        const total = self.totalLen();
+        const ism = InternalSourceMap{ data: blob.ptr };
+        const total = ism.totalLen();
         if (total != blob.len) return false;
-        const sync_n = self.syncCount();
-        const stream_off = self.streamOffset();
+        const sync_n = ism.syncCount();
+        const stream_off = ism.streamOffset();
         const sync_end = header_size + (sync_n as usize) * @sizeOf(SyncEntry);
         if (stream_off < sync_end) return false;
         if (stream_off > total) return false;
@@ -602,13 +602,13 @@ export @root struct InternalSourceMap {
     }
 
     fn locateWindow(target_line: i32, target_col: i32): u32? {
-        const n_sync = this.syncCount();
+        const n_sync = _.syncCount();
         if (n_sync == 0) return null;
         let lo: usize = 0;
         let hi: usize = n_sync;
         while (lo < hi) {
             const mid = lo + (hi - lo) / 2;
-            if (this.syncEntry(mid).lessOrEqual(target_line, target_col)) {
+            if (_.syncEntry(mid).lessOrEqual(target_line, target_col)) {
                 lo = mid + 1;
             } else {
                 hi = mid;
@@ -619,23 +619,23 @@ export @root struct InternalSourceMap {
     }
 
     fn seedWindow(sync_idx: u32, state: *State, reader: *WindowReader) {
-        const se = this.syncEntry(sync_idx);
+        const se = _.syncEntry(sync_idx);
         unsafe { state.* = se.toState(); }
-        reader.parse(this.stream(), se.byte_offset);
+        reader.parse(_.stream(), se.byte_offset);
     }
 
     pub fn findWithCache(line: bun.Ordinal, column: bun.Ordinal, set: *FindCache): Mapping? {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
-        const sync_idx_opt = this.locateWindow(target_line, target_col);
+        const sync_idx_opt = _.locateWindow(target_line, target_col);
         if (sync_idx_opt == null) return null;
         const sync_idx = sync_idx_opt.?;
-        const cache = set.slotFor(this.data, sync_idx);
+        const cache = set.slotFor(_.data, sync_idx);
 
-        if (cache.data != this.data || cache.sync_idx != sync_idx || cache.decoded_count == 0) {
-            this.seedWindow(sync_idx, *cache.decoded[0], *cache.reader);
-            cache.data = this.data;
+        if (cache.data != _.data || cache.sync_idx != sync_idx || cache.decoded_count == 0) {
+            _.seedWindow(sync_idx, *cache.decoded[0], *cache.reader);
+            cache.data = _.data;
             cache.sync_idx = sync_idx;
             cache.decoded_count = 1;
         }
@@ -670,13 +670,13 @@ export @root struct InternalSourceMap {
         const target_line = line.zeroBased();
         const target_col = column.zeroBased();
 
-        const sync_idx_opt = this.locateWindow(target_line, target_col);
+        const sync_idx_opt = _.locateWindow(target_line, target_col);
         if (sync_idx_opt == null) return null;
         const sync_idx = sync_idx_opt.?;
 
         let state: State = {};
         let reader: WindowReader = undefined;
-        this.seedWindow(sync_idx, *state, *reader);
+        _.seedWindow(sync_idx, *state, *reader);
 
         let best: State = state;
         let nxt: State = state;
@@ -697,7 +697,7 @@ export @root struct InternalSourceMap {
     }
 
     pub fn appendVLQTo(out: *MutableString) {
-        const n_sync = this.syncCount();
+        const n_sync = _.syncCount();
         let prev: SourceMapState = {};
         let generated_line: i32 = 0;
         let state: State = {};
@@ -706,7 +706,7 @@ export @root struct InternalSourceMap {
         let idx: u32 = 0;
         while (idx < n_sync) : (idx += 1) {
             state = {};
-            this.seedWindow(idx, *state, *reader);
+            _.seedWindow(idx, *state, *reader);
             unsafe { emitVLQ(*state, *prev, *generated_line!, out); }
             while (!reader.done()) {
                 reader.next(*state);
@@ -718,7 +718,7 @@ export @root struct InternalSourceMap {
     static fn emitVLQ(state: *State, prev: *SourceMapState, generated_line: *i32!, out: *MutableString) {
         unsafe {
             while (generated_line.* < state.generated_line) : (generated_line.* += 1) {
-                out.appendChar(';') catch |e| bun.handleOom(e);
+                out.appendChar(';') catch e => bun.handleOom(e);
                 prev.generated_column = 0;
             }
         }
@@ -817,7 +817,7 @@ export @root struct InternalSourceMap {
             blob[16..24].* = @bitCast(input_lines);
         }
 
-        const owned = out.list.toOwnedSlice(allocator) catch |e| bun.handleOom(e);
+        const owned = out.list.toOwnedSlice(allocator) catch e => bun.handleOom(e);
         builder.finalized = null;
         return owned;
     }

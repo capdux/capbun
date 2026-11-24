@@ -30,7 +30,7 @@ export enum SocketKind : u8 {
     uws_ws_tls,
 
     pub fn isTLS(): bool {
-        return switch (this) {
+        return switch (_) {
             .bun_socket_tls,
             .bun_listener_tls,
             .http_client_tls,

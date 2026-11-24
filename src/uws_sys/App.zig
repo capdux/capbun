@@ -281,7 +281,9 @@ pub fn create(opts: BunSocketContextOptions) ?*@This() {
                 return null;
             }
             const Self = @This();
-            const Ptr = ?*Self;
+            const Ptr = @FieldType(struct {
+    p: ?*Self,
+}, "p");
             return bun.cast(Ptr, app);
     }
 

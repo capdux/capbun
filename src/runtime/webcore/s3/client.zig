@@ -252,40 +252,40 @@ pub fn writeEndRequest(self: *S3UploadStreamWrapper, err_val: ?JSValue) void {
     }
 
 pub fn resolve(result: S3UploadResult, self_any: *anyopaque) JSTerminatedError!void {
-            var self: *S3UploadStreamWrapper = (blk: {
+            var wrapper: *S3UploadStreamWrapper = (blk: {
             break :blk @ptrCast(@alignCast(self_any));
 
 });
-            _ = &self;
+            _ = &wrapper;
             _ = log("resolve {any}", .{ result });
-            var _self_guard = DerefGuard(S3UploadStreamWrapper){ .ptr = self };
+            var _self_guard = DerefGuard(S3UploadStreamWrapper){ .ptr = wrapper };
             _ = &_self_guard;
             var ___self_guard_moved = false; _ = &___self_guard_moved;
             defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
             switch (result) {
 .success => {
-if (self.endPromise.hasValue()) {
-                _ = try self.endPromise.resolve(self.global, .jsNumber(0));
-                self.endPromise = .empty;
+if (wrapper.endPromise.hasValue()) {
+                _ = try wrapper.endPromise.resolve(wrapper.global, .jsNumber(0));
+                wrapper.endPromise = .empty;
             }
 },
 .failure => |s3_err| {
-if (self.sink) |sink| {
+if (wrapper.sink) |sink| {
                 _ = &sink;
-                self.sink = null;
-                _ = sink.cancel(s3_err.toJS(self.global, self.path));
+                wrapper.sink = null;
+                _ = sink.cancel(s3_err.toJS(wrapper.global, wrapper.path));
                 _ = sink.deref();
             } else {
-                if (self.endPromise.hasValue()) {
-                    _ = try self.endPromise.reject(self.global, s3_err.toJS(self.global, self.path));
-                    self.endPromise = .empty;
+                if (wrapper.endPromise.hasValue()) {
+                    _ = try wrapper.endPromise.reject(wrapper.global, s3_err.toJS(wrapper.global, wrapper.path));
+                    wrapper.endPromise = .empty;
                 }
             }
 },
 }
-            if (self.callback) |callback| {
+            if (wrapper.callback) |callback| {
                 _ = &callback;
-                _ = callback(result, self.callback_context);
+                _ = callback(result, wrapper.callback_context);
             }
     }
 
@@ -317,17 +317,17 @@ pub fn init(self: *S3DownloadStreamWrapper, readable_stream_ref: WebCore.Readabl
             self.global = global;
     }
 
-pub fn callback(chunk: MutableString, has_more: bool, request_err: ?S3Error, self: *S3DownloadStreamWrapper) JSTerminatedError!void {
-            var _self_guard = DeinitPtrGuard(S3DownloadStreamWrapper){ .ptr = (if ((!has_more)) self else null) };
+pub fn callback(chunk: MutableString, has_more: bool, request_err: ?S3Error, wrapper: *S3DownloadStreamWrapper) JSTerminatedError!void {
+            var _self_guard = DeinitPtrGuard(S3DownloadStreamWrapper){ .ptr = (if ((!has_more)) wrapper else null) };
             _ = &_self_guard;
             var ___self_guard_moved = false; _ = &___self_guard_moved;
             defer if (!___self_guard_moved) { ___self_guard_moved = true; const __T = @TypeOf(_self_guard); if (@typeInfo(__T) == .optional) { if (_self_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _self_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _self_guard; _drop_val.__cp_deinit(); } };
-            if (self.readable_stream_ref.get(self.global)) |readable| {
+            if (wrapper.readable_stream_ref.get(wrapper.global)) |readable| {
                 _ = &readable;
                 if ((readable.ptr == .Bytes)) {
                     if (request_err) |s3_err| {
                         _ = &s3_err;
-                        _ = try readable.ptr.Bytes.onData(.{ .err = .{ .JSValue = s3_err.toJS(self.global, self.path) } }, default_allocator);
+                        _ = try readable.ptr.Bytes.onData(.{ .err = .{ .JSValue = s3_err.toJS(wrapper.global, wrapper.path) } }, default_allocator);
                         return;
                     }
                     if (has_more) {
@@ -362,22 +362,22 @@ pub fn deinit(self: *S3DownloadStreamWrapper) void {
 pub fn onStreamCancelled(ctx: ?*anyopaque) callconv(.c) void {
             if (ctx) |c| {
                 _ = &c;
-                var self: *S3DownloadStreamWrapper = (blk: {
+                var wrapper: *S3DownloadStreamWrapper = (blk: {
                 break :blk @ptrCast(@alignCast(c));
 
 });
-                _ = &self;
-                _ = self.readable_stream_ref.deinit();
+                _ = &wrapper;
+                _ = wrapper.readable_stream_ref.deinit();
             }
     }
 
 pub fn opaqueCallback(chunk: MutableString, has_more: bool, s3_err: ?S3Error, opaque_self: *anyopaque) void {
-            var self: *S3DownloadStreamWrapper = (blk: {
+            var wrapper: *S3DownloadStreamWrapper = (blk: {
             break :blk @ptrCast(@alignCast(opaque_self));
 
 });
-            _ = &self;
-            _ = (blk_catch_2: { break :blk_catch_2 ((S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, self)) catch |__ce_2| { _ = &__ce_2;  }); });
+            _ = &wrapper;
+            _ = (blk_catch_2: { break :blk_catch_2 ((S3DownloadStreamWrapper.callback(chunk, has_more, s3_err, wrapper)) catch |__ce_2| { _ = &__ce_2;  }); });
     }
     pub const new = bun.TrivialNew(@This());
 };
@@ -560,7 +560,9 @@ pub fn listObjects(self: *S3Credentials, listOptions: S3ListObjectsOptions, call
         var proxy = ((proxy_url) orelse (""));
         _ = &proxy;
         task.proxy_url = (if ((proxy.len > 0)) handleOom(default_allocator.dupe(u8, proxy)) else "");
-        task.http = bun.http.AsyncHTTP.init(default_allocator, .GET, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), "", bun.http.HTTPClientResult.Callback.New(*S3HttpSimpleTask, S3HttpSimpleTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((task.proxy_url.len > 0)) URL.parse(task.proxy_url) else null), .verbose = task.vm.getVerboseFetch(), .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });
+        task.http = bun.http.AsyncHTTP.init(default_allocator, .GET, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), "", bun.http.HTTPClientResult.Callback.New(@FieldType(struct {
+    p: *S3HttpSimpleTask,
+}, "p"), S3HttpSimpleTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((task.proxy_url.len > 0)) URL.parse(task.proxy_url) else null), .verbose = task.vm.getVerboseFetch(), .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });
         _ = bun.http.HTTPThread.init((&.{}));
         var batch: ThreadPool.Batch = .{};
         _ = &batch;
@@ -731,7 +733,9 @@ pub fn downloadStream(self: *S3Credentials, path: []const u8, offset: usize, siz
         var url = URL.parse(result.url);
         _ = &url;
         task.signals = task.signal_store.to();
-        task.http = bun.http.AsyncHTTP.init(default_allocator, .GET, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), "", bun.http.HTTPClientResult.Callback.New(*S3HttpDownloadStreamingTask, S3HttpDownloadStreamingTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((owned_proxy.len > 0)) URL.parse(owned_proxy) else null), .verbose = task.vm.getVerboseFetch(), .signals = task.signals, .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });
+        task.http = bun.http.AsyncHTTP.init(default_allocator, .GET, url, task.headers.entries, task.headers.buf.items, (&task.response_buffer), "", bun.http.HTTPClientResult.Callback.New(@FieldType(struct {
+    p: *S3HttpDownloadStreamingTask,
+}, "p"), S3HttpDownloadStreamingTask.httpCallback).init(task), .follow, .{ .http_proxy = (if ((owned_proxy.len > 0)) URL.parse(owned_proxy) else null), .verbose = task.vm.getVerboseFetch(), .signals = task.signals, .reject_unauthorized = task.vm.getTLSRejectUnauthorized() });
         _ = task.http.enableResponseBodyStreaming();
         _ = bun.http.HTTPThread.init((&.{}));
         var batch: ThreadPool.Batch = .{};

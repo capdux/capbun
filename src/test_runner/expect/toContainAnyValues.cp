@@ -3,7 +3,7 @@ pub fn toContainAnyValues(
     globalObject: *JSGlobalObject,
     callFrame: *CallFrame,
 ): bun.JSError!JSValue {
-    defer this.postMatch(globalObject);
+    defer _.postMatch(globalObject);
     const thisValue = callFrame.this();
     const arguments_ = callFrame.arguments_old(1);
     const arguments = arguments_.slice();
@@ -12,16 +12,16 @@ pub fn toContainAnyValues(
         return globalObject.throwInvalidArguments("toContainAnyValues() takes 1 argument", {});
     }
 
-    this.incrementExpectCallCounter();
+    _.incrementExpectCallCounter();
 
     const expected = arguments[0];
     if (!expected.jsType().isArray()) {
         return globalObject.throwInvalidArgumentType("toContainAnyValues", "expected", "array");
     }
     expected.ensureStillAlive();
-    const value: JSValue = this.getValue(globalObject, thisValue, "toContainAnyValues", "<green>expected<r>")?;
+    const value: JSValue = _.getValue(globalObject, thisValue, "toContainAnyValues", "<green>expected<r>")?;
 
-    const not = this.flags.not;
+    const not = _.flags.not;
     let pass = false;
 
     if (!value.isUndefinedOrNull()) {
@@ -52,13 +52,13 @@ pub fn toContainAnyValues(
         const received_fmt = value.toFmt(&formatter.val);
         const expected_line = "Expected to not contain any of the following values: <green>{f}<r>\nReceived: <red>{f}<r>\n";
         const fmt = "\n\n" ++ expected_line;
-        return this.throw(globalObject, comptime getSignature("toContainAnyValues", "<green>expected<r>", true), fmt, { expected_fmt, received_fmt });
+        return _.throw(globalObject, comptime getSignature("toContainAnyValues", "<green>expected<r>", true), fmt, { expected_fmt, received_fmt });
     }
 
     const expected_line = "Expected to contain any of the following values: <green>{f}<r>\n";
     const received_line = "Received: <red>{f}<r>\n";
     const fmt = "\n\n" ++ expected_line ++ received_line;
-    return this.throw(globalObject, comptime getSignature("toContainAnyValues", "<green>expected<r>", false), fmt, { expected_fmt, value_fmt });
+    return _.throw(globalObject, comptime getSignature("toContainAnyValues", "<green>expected<r>", false), fmt, { expected_fmt, value_fmt });
 }
 
 import bun from "bun";

@@ -101,8 +101,7 @@ pub inline fn push(comptime len: anytype, chars_: *const [len]u8, allo: std.mem.
                 const chars = chars_.*;
                 var total: usize = 0;
                 _ = &total;
-                inline for (comptime bun.range(0, len)) |i| {
-                    _ = &i;
+                inline for ((comptime bun.range(0, len))) |i| {
                     total = (total + scalar_lengths[@as(usize, @intCast(chars[@as(usize, @intCast(i))]))]);
                 }
                 if ((total == len)) {
@@ -111,8 +110,7 @@ pub inline fn push(comptime len: anytype, chars_: *const [len]u8, allo: std.mem.
                 const output = ((allo.alloc(u8, total)) catch unreachable);
                 var head = output.ptr;
                 _ = &head;
-                inline for (comptime bun.range(0, len)) |i| {
-                    _ = &i;
+                inline for ((comptime bun.range(0, len))) |i| {
                     head = (head + Scalar.append(head, chars[@as(usize, @intCast(i))]));
                 }
                 return EscapedU8{ .allocated = output };
@@ -326,7 +324,7 @@ else => {
                     if (comptime Environment.allow_assert) {
                         _ = assert((!any_needs_escape));
                     }
-                    const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum") @as(AsciiVector, @enumFromInt((remaining[0..ascii_vector_size]).*)) else @as(AsciiVector, (remaining[0..ascii_vector_size]).*));
+                    const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum" and (@typeInfo(@TypeOf((remaining[0..ascii_vector_size]).*)) == .int or @typeInfo(@TypeOf((remaining[0..ascii_vector_size]).*)) == .comptime_int)) @as(AsciiVector, @enumFromInt((remaining[0..ascii_vector_size]).*)) else @as(AsciiVector, (remaining[0..ascii_vector_size]).*));
                     if ((@reduce(.Max, ((((@as(AsciiVectorU1, @bitCast((vec == vecs[0]))) | @as(AsciiVectorU1, @bitCast((vec == vecs[1])))) | @as(AsciiVectorU1, @bitCast((vec == vecs[2])))) | @as(AsciiVectorU1, @bitCast((vec == vecs[3])))) | @as(AsciiVectorU1, @bitCast((vec == vecs[4]))))) == 1)) {
                         if (comptime Environment.allow_assert) {
                             _ = assert((buf.capacity == 0));
@@ -336,7 +334,6 @@ else => {
                         _ = buf.appendSliceAssumeCapacity(latin1[0..copy_len]);
                         any_needs_escape = true;
                         inline for (0..ascii_vector_size) |i| {
-                            _ = &i;
                             switch (vec[@as(usize, @intCast(i))]) {
 '"' => {
 _ = ((buf.ensureUnusedCapacity(((ascii_vector_size - i) + "&quot;".len))) catch unreachable);
@@ -371,11 +368,10 @@ _ = buf.appendAssumeCapacity(c);
             }
             if (any_needs_escape) {
                 while ((remaining.len >= ascii_vector_size)) {
-                    const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum") @as(AsciiVector, @enumFromInt((remaining[0..ascii_vector_size]).*)) else @as(AsciiVector, (remaining[0..ascii_vector_size]).*));
+                    const vec: AsciiVector = (if (comptime @typeInfo(AsciiVector) == .@"enum" and (@typeInfo(@TypeOf((remaining[0..ascii_vector_size]).*)) == .int or @typeInfo(@TypeOf((remaining[0..ascii_vector_size]).*)) == .comptime_int)) @as(AsciiVector, @enumFromInt((remaining[0..ascii_vector_size]).*)) else @as(AsciiVector, (remaining[0..ascii_vector_size]).*));
                     if ((@reduce(.Max, ((((@as(AsciiVectorU1, @bitCast((vec == vecs[0]))) | @as(AsciiVectorU1, @bitCast((vec == vecs[1])))) | @as(AsciiVectorU1, @bitCast((vec == vecs[2])))) | @as(AsciiVectorU1, @bitCast((vec == vecs[3])))) | @as(AsciiVectorU1, @bitCast((vec == vecs[4]))))) == 1)) {
                         _ = ((buf.ensureUnusedCapacity((ascii_vector_size + 6))) catch unreachable);
                         inline for (0..ascii_vector_size) |i| {
-                            _ = &i;
                             switch (vec[@as(usize, @intCast(i))]) {
 '"' => {
 _ = ((buf.ensureUnusedCapacity(((ascii_vector_size - i) + "&quot;".len))) catch unreachable);
@@ -549,7 +545,7 @@ else => {
                     if (comptime Environment.allow_assert) {
                         _ = assert((!any_needs_escape));
                     }
-                    const vec: AsciiU16Vector = (if (comptime @typeInfo(AsciiU16Vector) == .@"enum") @as(AsciiU16Vector, @enumFromInt((remaining[0..ascii_u16_vector_size]).*)) else @as(AsciiU16Vector, (remaining[0..ascii_u16_vector_size]).*));
+                    const vec: AsciiU16Vector = (if (comptime @typeInfo(AsciiU16Vector) == .@"enum" and (@typeInfo(@TypeOf((remaining[0..ascii_u16_vector_size]).*)) == .int or @typeInfo(@TypeOf((remaining[0..ascii_u16_vector_size]).*)) == .comptime_int)) @as(AsciiU16Vector, @enumFromInt((remaining[0..ascii_u16_vector_size]).*)) else @as(AsciiU16Vector, (remaining[0..ascii_u16_vector_size]).*));
                     if ((@reduce(.Max, (((((@as(AsciiVectorU16U1, @bitCast((vec > vec_127))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[0])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[1])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[2])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[3])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[4]))))) == 1)) {
                         var i: u16 = 0;
                         _ = &i;
@@ -611,7 +607,7 @@ i = (i + 1);
                 }
                 if (any_needs_escape) {
                     while ((remaining.len >= ascii_u16_vector_size)) {
-                        const vec: AsciiU16Vector = (if (comptime @typeInfo(AsciiU16Vector) == .@"enum") @as(AsciiU16Vector, @enumFromInt((remaining[0..ascii_u16_vector_size]).*)) else @as(AsciiU16Vector, (remaining[0..ascii_u16_vector_size]).*));
+                        const vec: AsciiU16Vector = (if (comptime @typeInfo(AsciiU16Vector) == .@"enum" and (@typeInfo(@TypeOf((remaining[0..ascii_u16_vector_size]).*)) == .int or @typeInfo(@TypeOf((remaining[0..ascii_u16_vector_size]).*)) == .comptime_int)) @as(AsciiU16Vector, @enumFromInt((remaining[0..ascii_u16_vector_size]).*)) else @as(AsciiU16Vector, (remaining[0..ascii_u16_vector_size]).*));
                         if ((@reduce(.Max, (((((@as(AsciiVectorU16U1, @bitCast((vec > vec_127))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[0])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[1])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[2])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[3])))) | @as(AsciiVectorU16U1, @bitCast((vec == vecs[4]))))) == 1)) {
                             _ = ((buf.ensureUnusedCapacity(ascii_u16_vector_size)) catch unreachable);
                             var i: u16 = 0;

@@ -3503,7 +3503,7 @@ pub struct MaxPipeSizeOnLinuxLoader {
                 const _pipe_fd_guard = FdGuard{ fd: pipe_max_size_fd };
                 let max_pipe_size_buf: [128]u8 = undefined;
                 const max_pipe_size = switch (read(pipe_max_size_fd, max_pipe_size_buf[0..])) {
-                    .result => |bytes_read| std.fmt.parseInt(i64, strings.trim(max_pipe_size_buf[0..bytes_read], "\n"), 10) catch |e| {
+                    .result => |bytes_read| std.fmt.parseInt(i64, strings.trim(max_pipe_size_buf[0..bytes_read], "\n"), 10) catch e => {
                         log("Failed to parse /proc/sys/fs/pipe-max-size: {s}\n", .{@errorName(e)});
                         return default_out_size;
                     },

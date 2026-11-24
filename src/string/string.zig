@@ -214,10 +214,10 @@ return .{ (blk: {
 }
     }
 
-pub fn createIfDifferent(other: String, utf8_slice: []const u8) String {
-            if ((other.tag == .WTFStringImpl)) {
-                if (other.eqlUTF8(utf8_slice)) {
-                    return other.dupeRef();
+pub fn createIfDifferent(self: String, utf8_slice: []const u8) String {
+            if ((self.tag == .WTFStringImpl)) {
+                if (self.eqlUTF8(utf8_slice)) {
+                    return self.dupeRef();
                 }
             }
             return String.cloneUTF8(utf8_slice);
@@ -1007,7 +1007,7 @@ pub const SliceWithUnderlyingString = struct {
 pub inline fn reportExtraMemory(self: *SliceWithUnderlyingString, vm: *jsc.VM) void {
             if (comptime bun.Environment.isDebug) {
                 _ = bun.assert((!self.did_report_extra_memory_debug));
-                self.did_report_extra_memory_debug = (if (comptime @typeInfo(bun.DebugOnly(bool)) == .@"enum") @as(bun.DebugOnly(bool), @enumFromInt(true)) else @as(bun.DebugOnly(bool), true));
+                self.did_report_extra_memory_debug = (if (comptime @typeInfo(bun.DebugOnly(bool)) == .@"enum" and (@typeInfo(@TypeOf(true)) == .int or @typeInfo(@TypeOf(true)) == .comptime_int)) @as(bun.DebugOnly(bool), @enumFromInt(true)) else @as(bun.DebugOnly(bool), true));
             }
             _ = self.utf8.reportExtraMemory(vm);
     }

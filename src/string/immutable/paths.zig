@@ -269,7 +269,7 @@ pub fn normalizeSlashesOnlyT(comptime T: type, buf: []T, path: []const T, compti
                 for (cp_mut_slice(&buf[0..path.len])) |*c| {
                     _ = &c;
                     if (((c.*) == undesired_slash)) {
-                        (c.*) = (if (comptime @typeInfo(T) == .@"enum") @as(T, @enumFromInt(desired_slash)) else @as(T, desired_slash));
+                        (c.*) = (if (comptime @typeInfo(T) == .@"enum" and (@typeInfo(@TypeOf(desired_slash)) == .int or @typeInfo(@TypeOf(desired_slash)) == .comptime_int)) @as(T, @enumFromInt(desired_slash)) else @as(T, desired_slash));
                     }
                 }
             }

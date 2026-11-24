@@ -65,11 +65,11 @@ fn #computeEstimatedSizeForGC(): usize {
     return size;
 }
 
-pub fn memoryCost(client: *const ParsedShellScript): usize {
+pub static fn memoryCost(client: *const ParsedShellScript): usize {
     return client.#computeEstimatedSizeForGC();
 }
 
-pub fn estimatedSize(client: *const ParsedShellScript): usize {
+pub static fn estimatedSize(client: *const ParsedShellScript): usize {
     return client.estimated_size_for_gc;
 }
 
@@ -107,7 +107,7 @@ pub fn finalize(*_) {
     bun.destroy(_);
 }
 
-pub fn setCwd(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+pub static fn setCwd(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arguments_ = callframe.arguments_old(2);
     let arguments = jsc.CallFrame.ArgumentsSlice.init(globalThis.bunVM(), arguments_.slice());
     const str_js_opt = arguments.nextEat();
@@ -120,13 +120,13 @@ pub fn setCwd(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe
     return jsc.JSValue.js_undefined;
 }
 
-pub fn setQuiet(client: *ParsedShellScript, _: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+pub static fn setQuiet(client: *ParsedShellScript, _: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const arg = callframe.argument(0);
     client.quiet = arg.toBoolean();
     return jsc.JSValue.js_undefined;
 }
 
-pub fn setEnv(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
+pub static fn setEnv(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe: *jsc.CallFrame): bun.JSError!jsc.JSValue {
     const value1_opt = callframe.argument(0).getObject();
     if (value1_opt == null) {
         return globalThis.throwInvalidArguments("env must be an object", {});
@@ -168,7 +168,7 @@ pub fn setEnv(client: *ParsedShellScript, globalThis: *JSGlobalObject, callframe
 
 pub const createParsedShellScript = jsc.MarkedArgumentBuffer.wrap(createParsedShellScriptImpl);
 
-fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer): bun.JSError!JSValue {
+static fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.CallFrame, marked_argument_buffer: *jsc.MarkedArgumentBuffer): bun.JSError!JSValue {
     let shargs_guard = OptDeinitGuard<*ShellArgs>{ val: ShellArgs.init() };
 
     const arguments_ = callframe.arguments_old(2);
@@ -197,7 +197,7 @@ fn createParsedShellScriptImpl(globalThis: *jsc.JSGlobalObject, callframe: *jsc.
         jsstrings.val.items[0..],
         &parser,
         &lex_result,
-    ) catch |e| {
+    ) catch e => {
         if (e == shell.ParseError.Lex) {
             const str = lex_result.combineErrors(shargs_guard.val.?.arena_allocator());
             return globalThis.throwPretty("{s}", .{str});

@@ -221,11 +221,11 @@ pub struct SerializedSourceMapLoaded {
     decompressed_files: []OptMutBytes,
 
     pub fn sourceFileContents(*_, index: usize): ([]const u8)? {
-        if (decompressed := this.decompressed_files[index]) {
+        if (decompressed := _.decompressed_files[index]) {
             return if (decompressed.len == 0) null else decompressed;
         }
 
-        const compressed_file = this.map.compressedSourceFileAt(index).slice(this.map.bytes);
+        const compressed_file = _.map.compressedSourceFileAt(index).slice(_.map.bytes);
         const size = bun.zstd.getDecompressedSize(compressed_file);
 
         const bytes = bun.handleOom(bun.default_allocator.alloc(u8, size));
@@ -234,12 +234,12 @@ pub struct SerializedSourceMapLoaded {
         if (result == .err) {
             bun.Output.warn("Source map decompression error: {s}", [result.err]);
             bun.default_allocator.free(bytes);
-            this.decompressed_files[index] = "";
+            _.decompressed_files[index] = "";
             return null;
         }
 
         const data = bytes[0..result.success];
-        this.decompressed_files[index] = data;
+        _.decompressed_files[index] = data;
         return data;
     }
 }
@@ -251,7 +251,7 @@ pub struct StandaloneSerializedSourceMap {
     pub const Loaded = SerializedSourceMapLoaded;
 
     pub fn header(): Header {
-        return std.mem.bytesToValue(Header, this.bytes[0..@sizeOf(Header)]);
+        return std.mem.bytesToValue(Header, _.bytes[0..@sizeOf(Header)]);
     }
 
     pub fn mappingBlob(): ([]const u8)? {
@@ -268,13 +268,13 @@ pub struct StandaloneSerializedSourceMap {
 
     pub fn sourceFileNameAt(index: usize): StringPointer {
         const start = @sizeOf(Header) + index * @sizeOf(StringPointer);
-        return std.mem.bytesToValue(StringPointer, this.bytes[start..][0..@sizeOf(StringPointer)]);
+        return std.mem.bytesToValue(StringPointer, _.bytes[start..][0..@sizeOf(StringPointer)]);
     }
 
     pub fn compressedSourceFileAt(index: usize): StringPointer {
-        const head = this.header();
+        const head = _.header();
         const start = @sizeOf(Header) + (head.source_files_count + index) * @sizeOf(StringPointer);
-        return std.mem.bytesToValue(StringPointer, this.bytes[start..][0..@sizeOf(StringPointer)]);
+        return std.mem.bytesToValue(StringPointer, _.bytes[start..][0..@sizeOf(StringPointer)]);
     }
 }
 
@@ -287,18 +287,18 @@ pub enum StandaloneLazySourceMap {
         g_lazy_sourcemap_init_lock.lock();
         const _guard_lock = UnlockGuard<bun.Mutex>{ ptr: &g_lazy_sourcemap_init_lock };
 
-        switch (this.*) {
+        switch (_.*) {
             .none => return null,
             .parsed map => return map,
             .serialized serialized => {
                 const blob_opt = serialized.mappingBlob();
                 if (blob_opt == null) {
-                    this.* = .none;
+                    _.* = .none;
                     return null;
                 }
                 const blob = blob_opt.?;
                 if (!SourceMap.InternalSourceMap.isValidBlob(blob)) {
-                    this.* = .none;
+                    _.* = .none;
                     return null;
                 }
                 const ism = SourceMap.InternalSourceMap{ data: blob.ptr };
@@ -334,7 +334,7 @@ pub enum StandaloneLazySourceMap {
 
                 const parsed = bun.new(SourceMap.ParsedSourceMap, stored);
                 parsed.ref();
-                this.* = { parsed: parsed };
+                _.* = { parsed: parsed };
                 return parsed;
             },
         }
@@ -363,7 +363,7 @@ pub struct StandaloneFile {
 
     pub fn stat(): bun.Stat {
         let result = std.mem.zeroes(bun.Stat);
-        result.size = this.contents.len as i64;
+        result.size = _.contents.len as i64;
         result.mode = bun.S.IFREG | 0o644;
         return result;
     }
@@ -376,18 +376,18 @@ pub struct StandaloneFile {
     }
 
     pub fn toWTFString(*_): bun.String {
-        if (this.wtf_string.isEmpty()) {
-            switch (this.encoding) {
+        if (_.wtf_string.isEmpty()) {
+            switch (_.encoding) {
                 .binary, .utf8 => {
-                    this.wtf_string = bun.String.cloneUTF8(this.contents);
+                    _.wtf_string = bun.String.cloneUTF8(_.contents);
                 },
                 .latin1 => {
-                    this.wtf_string = bun.String.createStaticExternal(this.contents, true);
+                    _.wtf_string = bun.String.createStaticExternal(_.contents, true);
                 },
             }
         }
 
-        return this.wtf_string.dupeRef();
+        return _.wtf_string.dupeRef();
     }
 }
 
@@ -412,7 +412,7 @@ pub enum CompileResultReason {
     no_output_files,
 
     pub fn message(): []const u8 {
-        return switch (this) {
+        return switch (_) {
             .no_entry_point => "No entry point found for compilation",
             .no_output_files => "No output files to bundle",
         };
@@ -426,7 +426,7 @@ pub enum CompileResultError {
     pub const Reason = CompileResultReason;
 
     pub fn slice(): []const u8 {
-        return switch (this) {
+        return switch (_) {
             .message msg => msg,
             .reason r => r.message(),
         };
@@ -448,7 +448,7 @@ pub enum StandaloneCompileResult {
     }
 
     pub fn deinit() {
-        switch (this) {
+        switch (_) {
             .success => {},
             .err e => switch (e) {
                 .message msg => bun.default_allocator.free(msg),
@@ -519,7 +519,7 @@ pub struct StandaloneModuleGraph {
     }
 
     pub fn entryPoint(): *StandaloneFile {
-        return &this.files.values()[this.entry_point_id];
+        return &_.files.values()[_.entry_point_id];
     }
 
     pub fn find(name: []const u8): (*StandaloneFile)? {
@@ -527,11 +527,11 @@ pub struct StandaloneModuleGraph {
             return null;
         }
 
-        return this.findAssumeStandalonePath(name);
+        return _.findAssumeStandalonePath(name);
     }
 
     pub fn stat(name: []const u8): bun.Stat? {
-        const file_opt = this.find(name);
+        const file_opt = _.find(name);
         if (file_opt == null) return null;
         const file = file_opt.?;
         return file.stat();
@@ -542,9 +542,9 @@ pub struct StandaloneModuleGraph {
             let normalized_buf: bun.PathBuffer = undefined;
             const input = strings.withoutNTPrefix(u8, name);
             const normalized = bun.path.platformToPosixBuf(u8, input, &normalized_buf);
-            return this.files.getPtr(normalized);
+            return _.files.getPtr(normalized);
         }
-        return this.files.getPtr(name);
+        return _.files.getPtr(name);
     }
 
     pub static fn fromBytes(allocator: std.mem.Allocator, raw_bytes: []u8, offsets: StandaloneOffsets): StandaloneModuleGraph! {

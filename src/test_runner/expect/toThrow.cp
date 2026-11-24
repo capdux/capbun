@@ -107,7 +107,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             if (globalThis.hasException()) return JSValue.zero;
             // TODO: REMOVE THIS GETTER! Expose a binding to call .test on the RegExp object directly.
             if (test_fn := expected_value.get(globalThis, "test")?) {
-                const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch |e| globalThis.takeException(e);
+                const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch e => globalThis.takeException(e);
                 if (!matches.toBoolean()) return JSValue.js_undefined;
             }
 
@@ -180,7 +180,7 @@ pub fn toThrow(client: *Expect, globalThis: *JSGlobalObject, callFrame: *CallFra
             if (received_message := _received_message) {
                 // TODO: REMOVE THIS GETTER! Expose a binding to call .test on the RegExp object directly.
                 if (test_fn := expected_value.get(globalThis, "test")?) {
-                    const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch |e| globalThis.takeException(e);
+                    const matches = test_fn.call(globalThis, expected_value, &.{ received_message }) catch e => globalThis.takeException(e);
                     if (matches.toBoolean()) return JSValue.js_undefined;
                 }
             }

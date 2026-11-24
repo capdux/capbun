@@ -177,20 +177,20 @@ pub fn @"spawn"(vm: *jsc.VirtualMachine, stdoutInherit: bool, stderrInherit: boo
 })).unwrap();
         var spawned = sp_result;
         _ = &spawned;
-        const self = bun.new(HostProcess, .{ .process = spawned.toProcess(vm.eventLoop(), false) });
-        _ = self.process.setExitHandler(self);
-        switch (self.process.watch()) {
+        const proc = bun.new(HostProcess, .{ .process = spawned.toProcess(vm.eventLoop(), false) });
+        _ = proc.process.setExitHandler(proc);
+        switch (proc.process.watch()) {
 .result => {
-_ = self.process.disableKeepingEventLoopAlive();
+_ = proc.process.disableKeepingEventLoopAlive();
 },
 .err => |e| {
 _ = log("watch failed: {f}", .{ e });
-        _ = self.process.deref();
-        _ = bun.destroy(self);
+        _ = proc.process.deref();
+        _ = bun.destroy(proc);
         return error.WatchFailed;
 },
 }
-        instance = self;
+        instance = proc;
         fd_guard.val = null;
         return fds[0];
 }

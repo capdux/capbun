@@ -521,16 +521,16 @@ pub fn containsChar(client: []const u8, char: u8) bool {
         return (indexOfChar(client, char) != null);
 }
 
-pub fn containsCharT(comptime T: type, self: []const T, char: u8) bool {
-        return (if (T == u8) containsChar(self, char) else if (T == u16) (std.mem.indexOfScalar(u16, self, char) != null) else @compileError("invalid type"));
+pub fn containsCharT(comptime T: type, client: []const T, char: u8) bool {
+        return (if (T == u8) containsChar(client, char) else if (T == u16) (std.mem.indexOfScalar(u16, client, char) != null) else @compileError("invalid type"));
 }
 
 pub fn contains(client: []const u8, str: []const u8) bool {
         return containsT(u8, client, str);
 }
 
-pub fn containsT(comptime T: type, self: []const T, str: []const T) bool {
-        return (indexOfT(T, self, str) != null);
+pub fn containsT(comptime T: type, client: []const T, str: []const T) bool {
+        return (indexOfT(T, client, str) != null);
 }
 
 pub fn containsCaseInsensitiveASCII(client: []const u8, str: []const u8) bool {
@@ -1043,8 +1043,8 @@ pub fn lastIndexOfChar(str: []const u8, char: u8) ?usize {
         return lastIndexOfCharT(u8, str, char);
 }
 
-pub fn lastIndexOfCharT(comptime T: type, self: []const T, char: T) ?usize {
-        return std.mem.lastIndexOfScalar(T, self, char);
+pub fn lastIndexOfCharT(comptime T: type, client: []const T, char: T) ?usize {
+        return std.mem.lastIndexOfScalar(T, client, char);
 }
 
 pub fn lastIndexOf(client: []const u8, str: []const u8) ?usize {
@@ -1199,11 +1199,11 @@ pub fn startsWithCaseInsensitiveAscii(client: []const u8, prefix: []const u8) bo
         return ((client.len >= prefix.len) and eqlCaseInsensitiveASCII(client[0..prefix.len], prefix, false));
 }
 
-pub fn startsWithGeneric(comptime T: type, self: []const T, str: []const T) bool {
-        if ((str.len > self.len)) {
+pub fn startsWithGeneric(comptime T: type, client: []const T, str: []const T) bool {
+        if ((str.len > client.len)) {
             return false;
         }
-        return eqlLong(bun.reinterpretSlice(u8, self[0..str.len]), bun.reinterpretSlice(u8, str[0..str.len]), false);
+        return eqlLong(bun.reinterpretSlice(u8, client[0..str.len]), bun.reinterpretSlice(u8, str[0..str.len]), false);
 }
 
 pub fn endsWith(client: []const u8, str: []const u8) bool {
@@ -1237,21 +1237,21 @@ pub fn endsWithAny(client: []const u8, str: []const u8) bool {
         return false;
 }
 
-pub fn quotedAlloc(allocator: std.mem.Allocator, self: []const u8) ![]const u8 {
+pub fn quotedAlloc(allocator: std.mem.Allocator, client: []const u8) ![]const u8 {
         var count: usize = 0;
         _ = &count;
-        for (cp_iter_slice(self)) |char| {
+        for (cp_iter_slice(client)) |char| {
             _ = &char;
             count = (count + @intFromBool((char == 34)));
         }
         if ((count == 0)) {
-            return allocator.dupe(u8, self);
+            return allocator.dupe(u8, client);
         }
         var i: usize = 0;
         _ = &i;
-        var out = try allocator.alloc(u8, (self.len + count));
+        var out = try allocator.alloc(u8, (client.len + count));
         _ = &out;
-        for (cp_iter_slice(self)) |char| {
+        for (cp_iter_slice(client)) |char| {
             _ = &char;
             if ((char == 34)) {
                 out[cp_cast_int(usize, i)] = 92;
@@ -1315,11 +1315,11 @@ pub fn eql(client: []const u8, other: []const u8) bool {
         return eqlLong(client, other, false);
 }
 
-pub fn eqlComptimeT(comptime T: type, self: []const T, comptime alt: anytype) bool {
+pub fn eqlComptimeT(comptime T: type, client: []const T, comptime alt: anytype) bool {
         if ((T == u16)) {
-            return eqlComptimeUTF16(self, alt);
+            return eqlComptimeUTF16(client, alt);
         }
-        return eqlComptime(self, alt);
+        return eqlComptime(client, alt);
 }
 
 pub fn eqlComptime(client: []const u8, comptime alt: anytype) bool {
@@ -1342,9 +1342,9 @@ pub fn hasPrefixComptimeUTF16(str: []const u16, comptime alt: []const u8) bool {
         return ((str.len >= alt.len) and eqlComptimeCheckLenWithType(u16, str[0..alt.len], (comptime toUTF16Literal(alt)), false));
 }
 
-pub fn hasPrefixComptimeType(comptime T: type, self: []const T, comptime alt: anytype) bool {
+pub fn hasPrefixComptimeType(comptime T: type, client: []const T, comptime alt: anytype) bool {
         const rhs = (comptime (if (T == u8) alt else if (T == u16) (if (bun.@"meta".Item(@TypeOf(alt)) == u16) alt else w(alt)) else @compileError("Unsupported type given to hasPrefixComptimeType")));
-        return ((self.len >= alt.len) and eqlComptimeCheckLenWithType(T, self[0..rhs.len], rhs, false));
+        return ((client.len >= alt.len) and eqlComptimeCheckLenWithType(T, client[0..rhs.len], rhs, false));
 }
 
 pub fn hasSuffixComptime(client: []const u8, comptime alt: anytype) bool {
@@ -1553,14 +1553,14 @@ pub fn eqlLong(a_str: []const u8, b_str: []const u8, comptime check_len: bool) b
         return true;
 }
 
-pub fn append(allocator: std.mem.Allocator, self: []const u8, other: []const u8) ![]u8 {
-        var buf = try allocator.alloc(u8, (self.len + other.len));
+pub fn append(allocator: std.mem.Allocator, client: []const u8, other: []const u8) ![]u8 {
+        var buf = try allocator.alloc(u8, (client.len + other.len));
         _ = &buf;
-        if ((self.len > 0)) {
-            _ = @memcpy(buf[0..self.len], self);
+        if ((client.len > 0)) {
+            _ = @memcpy(buf[0..client.len], client);
         }
         if ((other.len > 0)) {
-            _ = @memcpy(buf[self.len..][0..other.len], other);
+            _ = @memcpy(buf[client.len..][0..other.len], other);
         }
         return buf;
 }

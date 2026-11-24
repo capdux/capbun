@@ -20,7 +20,7 @@ pub fn BodyReaderMixin(comptime Wrap: type, comptime field: []const u8, comptime
 
         static fn onDataGeneric(mixin: *@This(), r: auto, chunk: []const u8, last: bool) {
             const any_resp = uws.AnyResponse.init(r);
-            mixin.onData(any_resp, chunk, last) catch |e| {
+            mixin.onData(any_resp, chunk, last) catch e => {
                 if (e == error.OutOfMemory) return mixin.fail(any_resp, "500 Internal Server Error");
                 return mixin.fail(any_resp, "400 Bad Request");
             };

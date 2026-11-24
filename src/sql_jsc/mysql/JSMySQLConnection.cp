@@ -333,7 +333,7 @@ struct TlsSetupGuard {
                 ssl_error: uws.us_bun_verify_error_t,
             ) {
                 * = s;
-                const handshakeWasSuccessful = conn.#connection.doHandshake(success, ssl_error) catch |e| return conn.failFmt(@errorCast(e), "Failed to send handshake response", .{});
+                const handshakeWasSuccessful = conn.#connection.doHandshake(success, ssl_error) catch e => return conn.failFmt(@errorCast(e), "Failed to send handshake response", .{});
                 if (!handshakeWasSuccessful) {
                     conn.failWithJSValue(ssl_error.toJS(conn.#globalObject) catch return);
                 }
@@ -388,7 +388,7 @@ struct TlsSetupGuard {
                 * = &_guard_loop;
                 conn.ensureJSValueIsAlive();
 
-                conn.#connection.readAndProcessData(data) catch |e| {
+                conn.#connection.readAndProcessData(data) catch e => {
                     conn.onError(null, @errorCast(e));
                 };
             }

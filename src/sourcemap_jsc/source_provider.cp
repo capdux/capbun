@@ -12,7 +12,7 @@ pub @opaque struct BakeSourceProvider {
     pub const getSourceSlice = BakeSourceProvider__getSourceSlice;
 
     pub fn toSourceContentPtr(*_): SourceMap.ParsedSourceMap.SourceContentPtr {
-        return SourceMap.ParsedSourceMap.SourceContentPtr.fromBakeProvider(this);
+        return SourceMap.ParsedSourceMap.SourceContentPtr.fromBakeProvider(_);
     }
 
     pub fn getExternalData(*_, source_filename: []const u8): ([]const u8)? {
@@ -35,7 +35,7 @@ pub @opaque struct BakeSourceProvider {
     ): SourceMap.ParseUrl? {
         return SourceMap.getSourceMapImpl(
             BakeSourceProvider,
-            this,
+            _,
             source_filename,
             load_hint,
             result,

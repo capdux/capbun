@@ -13,7 +13,7 @@ struct StringJoinerNode {
     slice: []const u8 = "",
     next: (*StringJoinerNode)? = null,
 
-    pub fn init(joiner_alloc: Allocator, slice: []const u8, slice_alloc: Allocator?): *StringJoinerNode {
+    pub static fn init(joiner_alloc: Allocator, slice: []const u8, slice_alloc: Allocator?): *StringJoinerNode {
         let node = bun.handleOom(joiner_alloc.create(StringJoinerNode));
         unsafe {
             node.* = {
@@ -25,8 +25,8 @@ struct StringJoinerNode {
     }
 
     pub fn deinit(*_, joiner_alloc: Allocator) {
-        this.allocator.free(this.slice);
-        joiner_alloc.destroy(this);
+        _.allocator.free(_.slice);
+        joiner_alloc.destroy(_);
     }
 }
 
@@ -55,51 +55,51 @@ pub struct JoinerWatcher {
 
     /// `data` is expected to live until `.done` is called
     pub fn pushStatic(*_, data: []const u8) {
-        this.push(data, null);
+        _.push(data, null);
     }
 
     /// `data` is cloned
     pub fn pushCloned(*_, data: []const u8) {
         if (data.len == 0) return;
-        this.push(
-            bun.handleOom(this.allocator.dupe(u8, data)),
-            this.allocator,
+        _.push(
+            bun.handleOom(_.allocator.dupe(u8, data)),
+            _.allocator,
         );
     }
 
     pub fn push(*_, data: []const u8, allocator: Allocator?) {
         if (data.len == 0) return;
-        this.len += data.len;
+        _.len += data.len;
 
-        const new_tail = Node.init(this.allocator, data, allocator);
+        const new_tail = Node.init(_.allocator, data, allocator);
 
         if (data.len > 0) {
-            this.watcher.estimated_count += @intFromBool(
-                this.watcher.input.len > 0 &&
-                    bun.strings.contains(data, this.watcher.input),
+            _.watcher.estimated_count += @intFromBool(
+                _.watcher.input.len > 0 &&
+                    bun.strings.contains(data, _.watcher.input),
             );
-            this.watcher.needs_newline = data[data.len - 1] != '\n';
+            _.watcher.needs_newline = data[data.len - 1] != '\n';
         }
 
-        if (current_tail := this.tail) {
+        if (current_tail := _.tail) {
             current_tail.next = new_tail;
         } else {
-            assert(this.head == null);
-            this.head = new_tail;
+            assert(_.head == null);
+            _.head = new_tail;
         }
-        this.tail = new_tail;
+        _.tail = new_tail;
     }
 
     /// This deinits the string joiner on success, the new string is owned by `allocator`
     pub fn done(*_, allocator: Allocator): ![]u8 {
-        if (this.head == null) {
-            assert(this.tail == null);
-            assert(this.len == 0);
+        if (_.head == null) {
+            assert(_.tail == null);
+            assert(_.len == 0);
             return unsafe { @constCast("") };
         }
-        let current: (*Node)? = this.head;
+        let current: (*Node)? = _.head;
 
-        const slice = allocator.alloc(u8, this.len)?;
+        const slice = allocator.alloc(u8, _.len)?;
 
         let remaining = slice;
         while (node := current) {
@@ -107,7 +107,7 @@ pub struct JoinerWatcher {
             remaining = remaining[node.slice.len..];
 
             current = node.next;
-            node.deinit(this.allocator);
+            node.deinit(_.allocator);
         }
 
         bun.assert(remaining.len == 0);
@@ -116,24 +116,24 @@ pub struct JoinerWatcher {
     }
 
     pub fn deinit(*_) {
-        if (this.head == null) {
-            assert(this.tail == null);
-            assert(this.len == 0);
+        if (_.head == null) {
+            assert(_.tail == null);
+            assert(_.len == 0);
             return;
         }
-        let current: (*Node)? = this.head;
+        let current: (*Node)? = _.head;
 
         while (node := current) {
             current = node.next;
-            node.deinit(this.allocator);
+            node.deinit(_.allocator);
         }
     }
 
     /// Same as `.done`, but appends extra slice `end`
     pub fn doneWithEnd(*_, allocator: Allocator, end: []const u8): ![]u8 {
-        if (this.head == null) {
-            assert(this.tail == null);
-            assert(this.len == 0);
+        if (_.head == null) {
+            assert(_.tail == null);
+            assert(_.len == 0);
 
             if (end.len > 0) {
                 return allocator.dupe(u8, end);
@@ -141,9 +141,9 @@ pub struct JoinerWatcher {
 
             return unsafe { @constCast("") };
         }
-        let current: (*Node)? = this.head;
+        let current: (*Node)? = _.head;
 
-        const slice = allocator.alloc(u8, this.len + end.len)?;
+        const slice = allocator.alloc(u8, _.len + end.len)?;
 
         let remaining = slice;
         while (node := current) {
@@ -151,7 +151,7 @@ pub struct JoinerWatcher {
             remaining = remaining[node.slice.len..];
 
             current = node.next;
-            node.deinit(this.allocator);
+            node.deinit(_.allocator);
         }
 
         bun.assert(remaining.len == end.len);
@@ -161,7 +161,7 @@ pub struct JoinerWatcher {
     }
 
     pub fn lastByte(_: *const StringJoiner): u8 {
-        const tail_opt = this.tail;
+        const tail_opt = _.tail;
         if (tail_opt == null) return 0;
         const tail_node = tail_opt.?;
         const slice = tail_node.slice;
@@ -170,14 +170,14 @@ pub struct JoinerWatcher {
     }
 
     pub fn ensureNewlineAtEnd(*_) {
-        if (this.watcher.needs_newline) {
-            this.watcher.needs_newline = false;
-            this.pushStatic("\n");
+        if (_.watcher.needs_newline) {
+            _.watcher.needs_newline = false;
+            _.pushStatic("\n");
         }
     }
 
     pub fn contains(_: *const StringJoiner, slice: []const u8): bool {
-        let el = this.head;
+        let el = _.head;
         while (node := el) {
             el = node.next;
             if (bun.strings.contains(node.slice, slice)) return true;

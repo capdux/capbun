@@ -20,14 +20,14 @@ fn NewWriterLengthWriter(comptime WrappedWriter: type): type {
         index: usize,
         context: WrappedWriter,
 
-        pub fn write(this): AnyPostgresError!void {
-            const b = Int32(this.context.offset() - this.index);
-            this.context.pwrite(&b, this.index)?;
+        pub fn write(): AnyPostgresError!void {
+            const b = Int32(_.context.offset() - _.index);
+            _.context.pwrite(&b, _.index)?;
         }
 
-        pub fn writeExcludingSelf(this): AnyPostgresError!void {
-            const b = Int32(this.context.offset() -| (this.index + 4));
-            this.context.pwrite(&b, this.index)?;
+        pub fn writeExcludingSelf(): AnyPostgresError!void {
+            const b = Int32(_.context.offset() -| (_.index + 4));
+            _.context.pwrite(&b, _.index)?;
         }
     };
 }
@@ -49,90 +49,90 @@ pub fn NewWriterWrap(
         pub const WrappedWriter = @This();
         pub const LengthWriter = NewWriterLengthWriter(@This());
 
-        pub inline fn write(this, data: []const u8): AnyPostgresError!void {
-            writeFn(this.wrapped, data)?;
+        pub inline fn write(data: []const u8): AnyPostgresError!void {
+            writeFn(_.wrapped, data)?;
         }
 
-        pub inline fn length(this): AnyPostgresError!LengthWriter {
-            const i = this.offset();
-            this.int4(0)?;
+        pub inline fn length(): AnyPostgresError!LengthWriter {
+            const i = _.offset();
+            _.int4(0)?;
             return LengthWriter{
                 index: i,
-                context: this,
+                context: _,
             };
         }
 
-        pub inline fn offset(this): usize {
-            return offsetFn(this.wrapped);
+        pub inline fn offset(): usize {
+            return offsetFn(_.wrapped);
         }
 
-        pub inline fn pwrite(this, data: []const u8, i: usize): AnyPostgresError!void {
-            pwriteFn(this.wrapped, data, i)?;
+        pub inline fn pwrite(data: []const u8, i: usize): AnyPostgresError!void {
+            pwriteFn(_.wrapped, data, i)?;
         }
 
-        pub fn int4(this, value: PostgresInt32): void! {
+        pub fn int4(value: PostgresInt32): void! {
             const swapped = @byteSwap(value);
-            this.write(std.mem.asBytes(unsafe { &swapped }))?;
+            _.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
-        pub fn int8(this, value: PostgresInt64): void! {
+        pub fn int8(value: PostgresInt64): void! {
             const swapped = @byteSwap(value);
-            this.write(std.mem.asBytes(unsafe { &swapped }))?;
+            _.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
-        pub fn sint4(this, value: i32): void! {
+        pub fn sint4(value: i32): void! {
             const swapped = @byteSwap(value);
-            this.write(std.mem.asBytes(unsafe { &swapped }))?;
+            _.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
-        pub fn @"f64"(this, value: f64): void! {
+        pub fn @"f64"(value: f64): void! {
             const swapped = @byteSwap(@as(u64, @bitCast(value)));
-            this.write(std.mem.asBytes(unsafe { &swapped }))?;
+            _.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
-        pub fn @"f32"(this, value: f32): void! {
+        pub fn @"f32"(value: f32): void! {
             const swapped = @byteSwap(@as(u32, @bitCast(value)));
-            this.write(std.mem.asBytes(unsafe { &swapped }))?;
+            _.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
-        pub fn short(this, value: anytype): void! {
+        pub fn short(value: anytype): void! {
             const T = @TypeOf(value);
             const int_value = switch (@typeInfo(T)) {
                 .int, .comptime_int => value,
                 else => @compileError("short() requires an integer type"),
             };
-            const swapped = @byteSwap(std.math.cast(u16, int_value) orelse return err.TooManyParameters);
-            this.write(std.mem.asBytes(unsafe { &swapped }))?;
+            const swapped = @byteSwap(std.math.cast(u16, int_value) ?? return err.TooManyParameters);
+            _.write(std.mem.asBytes(unsafe { &swapped }))?;
         }
 
-        pub fn @"string"(this, value: []const u8): void! {
-            this.write(value)?;
+        pub fn @"string"(value: []const u8): void! {
+            _.write(value)?;
             if (value.len == 0 || value[value.len - 1] != 0) {
                 const zero: [1]u8 = [0];
-                this.write(&zero)?;
+                _.write(&zero)?;
             }
         }
 
-        pub fn bytes(this, value: []const u8): void! {
-            this.write(value)?;
+        pub fn bytes(value: []const u8): void! {
+            _.write(value)?;
             if (value.len == 0 || value[value.len - 1] != 0) {
                 const zero: [1]u8 = [0];
-                this.write(&zero)?;
+                _.write(&zero)?;
             }
         }
 
-        pub fn @"bool"(this, value: bool): void! {
-            this.write(if (value) "t" else "f")?;
+        pub fn @"bool"(value: bool): void! {
+            _.write(if (value) "t" else "f")?;
         }
 
-        pub fn @"null"(this): void! {
-            this.int4(std.math.maxInt(PostgresInt32))?;
+        pub fn @"null"(): void! {
+            _.int4(std.math.maxInt(PostgresInt32))?;
         }
 
-        pub fn String(this, value: bun.String): void! {
+        pub fn String(value: bun.String): void! {
             const zero: [1]u8 = [0];
             if (value.isEmpty()) {
-                this.write(&zero)?;
+                _.write(&zero)?;
                 return;
             }
 
@@ -140,9 +140,9 @@ pub fn NewWriterWrap(
             let sliced_guard = DeinitGuard<@TypeOf(sliced)>{ val: sliced };
             const slice = sliced_guard.val.slice();
 
-            this.write(slice)?;
+            _.write(slice)?;
             if (slice.len == 0 || slice[slice.len - 1] != 0) {
-                this.write(&zero)?;
+                _.write(&zero)?;
             }
         }
     };

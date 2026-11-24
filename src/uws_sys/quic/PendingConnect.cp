@@ -11,9 +11,9 @@ export @opaque class PendingConnect {
         return us_quic_pending_connect_addrinfo(_);
     }
     pub fn resolved(*_): *Socket? {
-        return us_quic_pending_connect_resolved(this);
+        return us_quic_pending_connect_resolved(_);
     }
     pub fn cancel(*_) {
-        us_quic_pending_connect_cancel(this);
+        us_quic_pending_connect_cancel(_);
     }
 }

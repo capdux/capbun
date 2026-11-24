@@ -139,42 +139,42 @@ export @opaque struct State {
     /// Free a TCC compilation context
     pub fn deinit(*_) {
         unsafe {
-            tcc_delete(this);
+            tcc_delete(_);
         }
     }
 
     /// Set `CONFIG_TCCDIR` at runtime
     pub fn setLibPath(*_, path: cstring) {
         unsafe {
-            tcc_set_lib_path(this, path.ptr);
+            tcc_set_lib_path(_, path.ptr);
         }
     }
 
     /// Set error/warning display callback
     pub fn setErrorFunc(*_, comptime Context: type, errorOpaque: *Context!?, errorFunc: ErrorFunc(Context)) {
         unsafe {
-            tcc_set_error_func(this, errorOpaque, @ptrCast(errorFunc));
+            tcc_set_error_func(_, errorOpaque, @ptrCast(errorFunc));
         }
     }
 
     /// Return error/warning callback
     pub fn getErrorFunc(*_): TCCErrorFunc {
         unsafe {
-            return tcc_get_error_func(this);
+            return tcc_get_error_func(_);
         }
     }
 
     /// Return error/warning callback opaque pointer
     pub fn getErrorOpaque(*_): *!? {
         unsafe {
-            return tcc_get_error_opaque(this);
+            return tcc_get_error_opaque(_);
         }
     }
 
     /// Set options as from command line (multiple supported)
     pub fn setOptions(*_, str: cstring): void ! TccError {
         unsafe {
-            if (tcc_set_options(this, str.ptr) != 0) {
+            if (tcc_set_options(_, str.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.InvalidOptions;
             }
@@ -186,7 +186,7 @@ export @opaque struct State {
     /// Add include path
     pub fn addIncludePath(*_, pathname: cstring): void ! TccError {
         unsafe {
-            if (tcc_add_include_path(this, pathname.ptr) != 0) {
+            if (tcc_add_include_path(_, pathname.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.InvalidIncludePath;
             }
@@ -196,7 +196,7 @@ export @opaque struct State {
     /// Add in system include path
     pub fn addSysIncludePath(*_, pathname: cstring): void ! TccError {
         unsafe {
-            if (tcc_add_sysinclude_path(this, pathname.ptr) != 0) {
+            if (tcc_add_sysinclude_path(_, pathname.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.InvalidIncludePath;
             }
@@ -206,7 +206,7 @@ export @opaque struct State {
     /// Define preprocessor symbol 'sym'. value can be NULL, sym can be "sym=val"
     pub fn defineSymbol(*_, sym: cstring, value: cstring) {
         unsafe {
-            tcc_define_symbol(this, sym.ptr, value.ptr);
+            tcc_define_symbol(_, sym.ptr, value.ptr);
         }
     }
 
@@ -219,13 +219,13 @@ export @opaque struct State {
             const value = @field(symbols, field.name);
             switch (@typeInfo(field.type)) {
                 .int | .comptime_int => {
-                    this.defineSymbol(
+                    _.defineSymbol(
                         field.name,
                         std.fmt.bufPrintZ(&buf, "{d}", [value]) catch unreachable,
                     );
                 },
                 .pointer => {
-                    this.defineSymbol(field.name, value);
+                    _.defineSymbol(field.name, value);
                 },
                 else => @compileError(std.fmt.comptimePrint("Macro '{s}' has unsupported symbol type: {s}", [field.name, @typeName(@typeOf(value))])),
             }
@@ -235,7 +235,7 @@ export @opaque struct State {
     /// Undefine preprocess symbol 'sym'
     pub fn undefineSymbol(*_, sym: cstring) {
         unsafe {
-            tcc_undefine_symbol(this, sym.ptr);
+            tcc_undefine_symbol(_, sym.ptr);
         }
     }
 
@@ -244,7 +244,7 @@ export @opaque struct State {
     /// Add a file (C file, dll, object, library, ld script).
     pub fn addFile(*_, filename: cstring): void ! TccError {
         unsafe {
-            if (tcc_add_file(this, filename.ptr) != 0) {
+            if (tcc_add_file(_, filename.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.CompileError;
             }
@@ -254,7 +254,7 @@ export @opaque struct State {
     /// Compile a string containing a C source.
     pub fn compileString(*_, buf: cstring): void ! TccError {
         unsafe {
-            if (tcc_compile_string(this, buf.ptr) != 0) {
+            if (tcc_compile_string(_, buf.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.CompileError;
             }
@@ -266,7 +266,7 @@ export @opaque struct State {
     /// Set output type. MUST BE CALLED before any compilation
     pub fn setOutputType(*_, outputType: OutputFormat): void ! TccError {
         unsafe {
-            if (tcc_set_output_type(this, @intFromEnum(outputType)) == -1) {
+            if (tcc_set_output_type(_, @intFromEnum(outputType)) == -1) {
                 @branchHint(.unlikely);
                 return TccError.InvalidOutputType;
             }
@@ -276,7 +276,7 @@ export @opaque struct State {
     /// Add a library. Equivalent to `-Lpath` option
     pub fn addLibraryPath(*_, pathname: cstring): void ! TccError {
         unsafe {
-            if (tcc_add_library_path(this, pathname.ptr) != 0) {
+            if (tcc_add_library_path(_, pathname.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.InvalidLibraryPath;
             }
@@ -286,7 +286,7 @@ export @opaque struct State {
     /// Add a library. The library name is the same as the argument of the `-l` option
     pub fn addLibrary(*_, libraryname: cstring): void ! TccError {
         unsafe {
-            if (tcc_add_library(this, libraryname.ptr) != 0) {
+            if (tcc_add_library(_, libraryname.ptr) != 0) {
                 @branchHint(.unlikely);
                 return TccError.InvalidLibraryPath;
             }
@@ -296,7 +296,7 @@ export @opaque struct State {
     /// Add a symbol to the compiled program
     pub fn addSymbol(*_, name: cstring, val: *const !): void ! TccError {
         unsafe {
-            if (tcc_add_symbol(this, name.ptr, val) != 0) {
+            if (tcc_add_symbol(_, name.ptr, val) != 0) {
                 @branchHint(.unlikely);
                 return TccError.InvalidSymbol;
             }
@@ -308,14 +308,14 @@ export @opaque struct State {
         const info = @typeInfo(@typeOf(symbols));
         inline for (field of info.@"struct".fields) {
             const value = @field(symbols, field.name);
-            this.addSymbol(field.name, value)?;
+            _.addSymbol(field.name, value)?;
         }
     }
 
     /// Output an executable, library or object file. DO NOT call `relocate` before.
     pub fn outputFile(*_, filename: cstring): void ! TccError {
         unsafe {
-            if (tcc_output_file(this, filename.ptr) == -1) {
+            if (tcc_output_file(_, filename.ptr) == -1) {
                 @branchHint(.unlikely);
                 return TccError.OutputError;
             }
@@ -326,7 +326,7 @@ export @opaque struct State {
     /// Returns the status code returned by the program's `main()` function.
     pub fn run(*_, argc: c_int, argv: [*:0](const CStr)): c_int {
         unsafe {
-            return tcc_run(this, argc, @ptrCast(@constCast(argv)));
+            return tcc_run(_, argc, @ptrCast(@constCast(argv)));
         }
     }
 
@@ -334,7 +334,7 @@ export @opaque struct State {
     /// Memory is allocated and managed internally by TinyCC.
     /// Returns 0 on success, error on failure.
     pub fn relocate(*_): void ! TccError {
-        const ret = unsafe { tcc_relocate(this) };
+        const ret = unsafe { tcc_relocate(_) };
         if (ret < 0) {
             @branchHint(.unlikely);
             return TccError.RelocationError;
@@ -344,14 +344,14 @@ export @opaque struct State {
     /// Return symbol value or NULL if not found
     pub fn getSymbol(*_, name: cstring): *Symbol!? {
         unsafe {
-            return @ptrCast(tcc_get_symbol(this, name.ptr));
+            return @ptrCast(tcc_get_symbol(_, name.ptr));
         }
     }
 
     /// Return symbol value or NULL if not found
     pub fn listSymbols(*_, ctx: *!?, symbolCb: SymbolCallback) {
         unsafe {
-            tcc_list_symbols(this, ctx, @ptrCast(symbolCb));
+            tcc_list_symbols(_, ctx, @ptrCast(symbolCb));
         }
     }
 }

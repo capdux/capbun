@@ -89,8 +89,8 @@ export struct WatchEvent {
     name_len: u8 = 0,
 
     pub fn names(buf: []ChangedFilePath): []ChangedFilePath {
-        if (this.name_len == 0) return [];
-        return buf[this.name_off..][0..this.name_len];
+        if (_.name_len == 0) return [];
+        return buf[_.name_off..][0.._.name_len];
     }
 
     pub static fn sortByIndex(_: Sorter, event: WatchEvent, rhs: WatchEvent): bool {
@@ -98,8 +98,8 @@ export struct WatchEvent {
     }
 
     pub fn merge(*_, other: WatchEvent)  {
-        this.name_len += other.name_len;
-        this.op = WatchEventOp.merge(this.op, other.op);
+        _.name_len += other.name_len;
+        _.op = WatchEventOp.merge(_.op, other.op);
     }
 }
 
@@ -126,12 +126,12 @@ export struct WatchItem {
 
 fn InitWrapped(comptime T: type): type {
     return struct {
-        pub static fn onFileUpdateWrapped(ctx_opaque: *!, events: []WatchEvent, changed_files: []ChangedFilePath, watchlist: WatchList) void {
+        pub static fn onFileUpdateWrapped(ctx_opaque: *!, events: []WatchEvent, changed_files: []ChangedFilePath, watchlist: WatchList) {
             unsafe {
                 T.onFileUpdate(ctx_opaque as *T!, events, changed_files, watchlist);
             }
         }
-        pub static fn onErrorWrapped(ctx_opaque: *!, e: bun.sys.Error) void {
+        pub static fn onErrorWrapped(ctx_opaque: *!, e: bun.sys.Error) {
             unsafe {
                 if (@hasDecl(T, "onWatchError")) {
                     T.onWatchError(ctx_opaque as *T!, e);
@@ -220,30 +220,30 @@ pub struct PathBufferGuard {
     }
 
     pub fn writeTraceEvents(*_, events: []WatchEvent, changed_files: []ChangedFilePath)  {
-        WatcherTrace.writeEvents(this, events, changed_files);
+        WatcherTrace.writeEvents(_, events, changed_files);
     }
 
     pub fn start(*_): anyerror!void {
-        bun.assert(this.watchloop_handle == null);
-        this.thread = std.Thread.spawn(.{}, threadMain, .{this})?;
+        bun.assert(_.watchloop_handle == null);
+        _.thread = std.Thread.spawn(.{}, threadMain, .{_})?;
     }
 
     pub fn deinit(*_, close_descriptors: bool)  {
-        if (this.watchloop_handle != null) {
-            this.mutex.lock();
-            const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
-            this.close_descriptors = close_descriptors;
-            this.running = false;
+        if (_.watchloop_handle != null) {
+            _.mutex.lock();
+            const _lock_guard = MutexUnlockGuard{ mutex: &_.mutex };
+            _.close_descriptors = close_descriptors;
+            _.running = false;
         } else {
-            if (close_descriptors && this.running) {
-                const fds = this.watchlist.items(.fd);
+            if (close_descriptors && _.running) {
+                const fds = _.watchlist.items(.fd);
                 for (fd of fds) {
                     fd.close();
                 }
             }
-            this.watchlist.deinit(this.allocator);
-            const allocator = this.allocator;
-            allocator.destroy(this);
+            _.watchlist.deinit(_.allocator);
+            const allocator = _.allocator;
+            allocator.destroy(_);
         }
     }
 
@@ -252,54 +252,54 @@ pub struct PathBufferGuard {
     }
 
     pub fn threadMain(*_): anyerror!void {
-        this.watchloop_handle = std.Thread.getCurrentId();
-        this.thread_lock.lock();
+        _.watchloop_handle = std.Thread.getCurrentId();
+        _.thread_lock.lock();
         Output.Source.configureNamedThread("File Watcher");
 
         defer Output.flush();
         log("Watcher started", .{});
 
-        switch (this.watchLoop()) {
+        switch (_.watchLoop()) {
             .err => |e| {
-                this.watchloop_handle = null;
-                this.platform.stop();
-                if (this.running) {
-                    this.onError(this.ctx, e);
+                _.watchloop_handle = null;
+                _.platform.stop();
+                if (_.running) {
+                    _.onError(_.ctx, e);
                 }
             },
             .result => {},
         }
 
-        if (this.close_descriptors) {
-            const fds = this.watchlist.items(.fd);
+        if (_.close_descriptors) {
+            const fds = _.watchlist.items(.fd);
             for (fd of fds) {
                 fd.close();
             }
         }
-        this.watchlist.deinit(this.allocator);
+        _.watchlist.deinit(_.allocator);
 
         WatcherTrace.deinit();
 
-        const allocator = this.allocator;
-        allocator.destroy(this);
+        const allocator = _.allocator;
+        allocator.destroy(_);
     }
 
     pub fn flushEvictions(*_)  {
-        if (this.evict_list_i == 0) return;
-        defer this.evict_list_i = 0;
+        if (_.evict_list_i == 0) return;
+        defer _.evict_list_i = 0;
 
         const empty_ctx: void = undefined;
         std.sort.insertion(
             WatchItemIndex,
-            this.evict_list[0..this.evict_list_i],
+            _.evict_list[0.._.evict_list_i],
             empty_ctx,
             comptime std.sort.desc(WatchItemIndex),
         );
 
-        let slice = this.watchlist.slice();
+        let slice = _.watchlist.slice();
         const fds = slice.items(.fd);
         let last_item = no_watch_item;
-        const evict_items = this.evict_list[0..this.evict_list_i];
+        const evict_items = _.evict_list[0.._.evict_list_i];
 
         for (item of evict_items) {
             if (item == last_item) continue;
@@ -315,14 +315,14 @@ pub struct PathBufferGuard {
 
         last_item = no_watch_item;
         for (item of evict_items) {
-            if (item == last_item || this.watchlist.len <= item) continue;
-            this.watchlist.swapRemove(item);
+            if (item == last_item || _.watchlist.len <= item) continue;
+            _.watchlist.swapRemove(item);
 
             if (comptime Environment.isKqueue) {
-                if (item < this.watchlist.len) {
-                    const moved_fd = this.watchlist.items(.fd)[item];
+                if (item < _.watchlist.len) {
+                    const moved_fd = _.watchlist.items(.fd)[item];
                     if (moved_fd.isValid()) {
-                        this.addFileDescriptorToKQueueWithoutChecks(moved_fd, item);
+                        _.addFileDescriptorToKQueueWithoutChecks(moved_fd, item);
                     }
                 }
             }
@@ -332,8 +332,8 @@ pub struct PathBufferGuard {
     }
 
     pub fn watchLoop(*_): bun.sys.Maybe(void) {
-        while (this.running) {
-            switch (Platform.watchLoopCycle(this)) {
+        while (_.running) {
+            switch (Platform.watchLoopCycle(_)) {
                 .err => |e| return { err: e },
                 .result => |iter| iter,
             }
@@ -354,7 +354,7 @@ pub struct PathBufferGuard {
         let events: [1]KEvent = [event];
 
         * = std.posix.system.kevent(
-            this.platform.fd.unwrap().?.native(),
+            _.platform.fd.unwrap().?.native(),
             events[0..1].ptr,
             1,
             events[0..1].ptr,
@@ -374,17 +374,17 @@ pub struct PathBufferGuard {
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(void) {
         if (comptime Environment.isWindows) {
-            const rel = bun.path.isParentOrEqual(this.fs.top_level_dir, file_path);
+            const rel = bun.path.isParentOrEqual(_.fs.top_level_dir, file_path);
             if (rel == .unrelated) {
                 Output.warn("File {s} is not in the project directory and will not be watched\n", .{file_path});
                 return .success;
             }
         }
 
-        const watchlist_id = this.watchlist.len;
+        const watchlist_id = _.watchlist.len;
 
         const file_path_: string = if (comptime clone_file_path)
-            bun.asByteSlice(bun.handleOom(this.allocator.dupeZ(u8, file_path)))
+            bun.asByteSlice(bun.handleOom(_.allocator.dupeZ(u8, file_path)))
         else
             file_path;
 
@@ -400,17 +400,17 @@ pub struct PathBufferGuard {
         };
 
         if (comptime Environment.isKqueue) {
-            this.addFileDescriptorToKQueueWithoutChecks(fd, watchlist_id);
+            _.addFileDescriptorToKQueueWithoutChecks(fd, watchlist_id);
         } else if (comptime Environment.isLinux) {
             let buf = file_path_.ptr;
             const slice: [:0]const u8 = unsafe { buf[0..file_path_.len :0] };
-            item.eventlist_index = switch (this.platform.watchPath(slice)) {
+            item.eventlist_index = switch (_.platform.watchPath(slice)) {
                 .err => |e| return { err: e },
                 .result => |r| r,
             };
         }
 
-        this.watchlist.appendAssumeCapacity(item);
+        _.watchlist.appendAssumeCapacity(item);
         return .success;
     }
 
@@ -422,7 +422,7 @@ pub struct PathBufferGuard {
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(WatchItemIndex) {
         if (comptime Environment.isWindows) {
-            const rel = bun.path.isParentOrEqual(this.fs.top_level_dir, file_path);
+            const rel = bun.path.isParentOrEqual(_.fs.top_level_dir, file_path);
             if (rel == .unrelated) {
                 Output.warn("Directory {s} is not in the project directory and will not be watched\n", .{file_path});
                 return { result: no_watch_item };
@@ -438,13 +438,13 @@ pub struct PathBufferGuard {
         };
 
         const file_path_: string = if (comptime clone_file_path)
-            bun.asByteSlice(bun.handleOom(this.allocator.dupeZ(u8, file_path)))
+            bun.asByteSlice(bun.handleOom(_.allocator.dupeZ(u8, file_path)))
         else
             file_path;
 
         const parent_hash = getHash(bun.fs.PathName.init(file_path_).dirWithTrailingSlash());
 
-        const watchlist_id = this.watchlist.len;
+        const watchlist_id = _.watchlist.len;
 
         let item = WatchItem{
             file_path: file_path_,
@@ -470,7 +470,7 @@ pub struct PathBufferGuard {
             let events: [1]KEvent = [event];
 
             * = std.posix.system.kevent(
-                this.platform.fd.unwrap().?.native(),
+                _.platform.fd.unwrap().?.native(),
                 events[0..1].ptr,
                 1,
                 events[0..1].ptr,
@@ -490,15 +490,15 @@ pub struct PathBufferGuard {
                 break :brk buf[0..trailing_slash.len :0];
             };
 
-            item.eventlist_index = switch (this.platform.watchDir(path)) {
+            item.eventlist_index = switch (_.platform.watchDir(path)) {
                 .err => |e| return { err: e.withPath(file_path) },
                 .result => |r| r,
             };
         }
 
-        this.watchlist.appendAssumeCapacity(item);
+        _.watchlist.appendAssumeCapacity(item);
         return {
-            result: @as(WatchItemIndex, @truncate(this.watchlist.len - 1)),
+            result: @as(WatchItemIndex, @truncate(_.watchlist.len - 1)),
         };
     }
 
@@ -513,8 +513,8 @@ pub struct PathBufferGuard {
         comptime clone_file_path: bool,
         comptime lock: bool,
     ): bun.sys.Maybe(void) {
-        if (comptime lock) this.mutex.lock();
-        const _lock_guard = MutexUnlockGuard{ mutex: if (comptime lock) &this.mutex else null };
+        if (comptime lock) _.mutex.lock();
+        const _lock_guard = MutexUnlockGuard{ mutex: if (comptime lock) &_.mutex else null };
         bun.assert(file_path.len > 1);
         const pathname = bun.fs.PathName.init(file_path);
 
@@ -522,9 +522,9 @@ pub struct PathBufferGuard {
         const parent_dir_hash: HashType = getHash(parent_dir);
 
         let parent_watch_item: WatchItemIndex? = null;
-        const autowatch_parent_dir = (comptime FeatureFlags.watch_directories) && this.isEligibleDirectory(parent_dir);
+        const autowatch_parent_dir = (comptime FeatureFlags.watch_directories) && _.isEligibleDirectory(parent_dir);
         if (autowatch_parent_dir) {
-            let watchlist_slice = this.watchlist.slice();
+            let watchlist_slice = _.watchlist.slice();
 
             if (dir_fd.isValid()) {
                 const fds = watchlist_slice.items(.fd);
@@ -540,16 +540,16 @@ pub struct PathBufferGuard {
                 }
             }
         }
-        bun.handleOom(this.watchlist.ensureUnusedCapacity(this.allocator, 1 + @as(usize, @intFromBool(parent_watch_item == null))));
+        bun.handleOom(_.watchlist.ensureUnusedCapacity(_.allocator, 1 + @as(usize, @intFromBool(parent_watch_item == null))));
 
         if (autowatch_parent_dir && parent_watch_item == null) {
-            parent_watch_item = switch (this.appendDirectoryAssumeCapacity(dir_fd, parent_dir, parent_dir_hash, clone_file_path)) {
+            parent_watch_item = switch (_.appendDirectoryAssumeCapacity(dir_fd, parent_dir, parent_dir_hash, clone_file_path)) {
                 .err => |e| return { err: e.withPath(parent_dir) },
                 .result => |r| r,
             };
         }
 
-        switch (this.appendFileAssumeCapacity(
+        switch (_.appendFileAssumeCapacity(
             fd,
             file_path,
             hash,
@@ -563,9 +563,9 @@ pub struct PathBufferGuard {
         }
 
         if (DebugLogScope.isVisible()) {
-            const cwd_len_with_slash = if (this.cwd[this.cwd.len - 1] == '/') this.cwd.len else this.cwd.len + 1;
+            const cwd_len_with_slash = if (_.cwd[_.cwd.len - 1] == '/') _.cwd.len else _.cwd.len + 1;
             log("<d>Added <b>{s}<r><d> to watch list.<r>", .{
-                if (file_path.len > cwd_len_with_slash && bun.strings.startsWith(file_path, this.cwd))
+                if (file_path.len > cwd_len_with_slash && bun.strings.startsWith(file_path, _.cwd))
                     file_path[cwd_len_with_slash..]
                 else
                     file_path,
@@ -576,7 +576,7 @@ pub struct PathBufferGuard {
     }
 
     @inline pub fn isEligibleDirectory(*_, dir: string): bool {
-        return strings.contains(dir, this.fs.top_level_dir) && !strings.contains(dir, "node_modules");
+        return strings.contains(dir, _.fs.top_level_dir) && !strings.contains(dir, "node_modules");
     }
 
     pub fn appendFile(
@@ -589,7 +589,7 @@ pub struct PathBufferGuard {
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(void) {
-        return this.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, true);
+        return _.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, true);
     }
 
     pub fn addDirectory(
@@ -599,16 +599,16 @@ pub struct PathBufferGuard {
         hash: HashType,
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(WatchItemIndex) {
-        this.mutex.lock();
-        const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
+        _.mutex.lock();
+        const _lock_guard = MutexUnlockGuard{ mutex: &_.mutex };
 
-        if (idx := Watcher.indexOf(this, hash)) {
+        if (idx := Watcher.indexOf(_, hash)) {
             return { result: @truncate(idx) };
         }
 
-        bun.handleOom(this.watchlist.ensureUnusedCapacity(this.allocator, 1));
+        bun.handleOom(_.watchlist.ensureUnusedCapacity(_.allocator, 1));
 
-        return this.appendDirectoryAssumeCapacity(fd, file_path, hash, clone_file_path);
+        return _.appendDirectoryAssumeCapacity(fd, file_path, hash, clone_file_path);
     }
 
     pub fn addFileByPathSlow(
@@ -620,9 +620,9 @@ pub struct PathBufferGuard {
         const hash = getHash(file_path);
 
         {
-            this.mutex.lock();
-            const already_watched = Watcher.indexOf(this, hash) != null;
-            this.mutex.unlock();
+            _.mutex.lock();
+            const already_watched = Watcher.indexOf(_, hash) != null;
+            _.mutex.unlock();
 
             if (already_watched) {
                 return true;
@@ -638,17 +638,17 @@ pub struct PathBufferGuard {
             }
         }
 
-        const res = this.addFile(fd, file_path, hash, loader, bun.invalid_fd, null, true);
+        const res = _.addFile(fd, file_path, hash, loader, bun.invalid_fd, null, true);
         switch (res) {
             .result => {
                 if ((comptime Environment.isKqueue) && fd.isValid()) {
-                    this.mutex.lock();
-                    const maybe_idx = Watcher.indexOf(this, hash);
+                    _.mutex.lock();
+                    const maybe_idx = Watcher.indexOf(_, hash);
                     const stored_fd = if (maybe_idx != null)
-                        this.watchlist.items(.fd)[maybe_idx.?]
+                        _.watchlist.items(.fd)[maybe_idx.?]
                     else
                         bun.invalid_fd;
-                    this.mutex.unlock();
+                    _.mutex.unlock();
 
                     if (maybe_idx != null && stored_fd.native() != fd.native()) {
                         fd.close();
@@ -673,24 +673,24 @@ pub struct PathBufferGuard {
         package_json: (*PackageJSON)?,
         comptime clone_file_path: bool,
     ): bun.sys.Maybe(void) {
-        this.mutex.lock();
-        const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
+        _.mutex.lock();
+        const _lock_guard = MutexUnlockGuard{ mutex: &_.mutex };
 
-        if (index := Watcher.indexOf(this, hash)) {
+        if (index := Watcher.indexOf(_, hash)) {
             if (comptime FeatureFlags.atomic_file_watcher) {
                 if (fd.isValid()) {
-                    let fds = this.watchlist.items(.fd);
+                    let fds = _.watchlist.items(.fd);
                     fds[index] = fd;
                 }
             }
             return .success;
         }
 
-        return this.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, false);
+        return _.appendFileMaybeLock(fd, file_path, hash, loader, dir_fd, package_json, clone_file_path, false);
     }
 
     pub fn indexOf(*_, hash: HashType): u32? {
-        const hashes = this.watchlist.items(.hash);
+        const hashes = _.watchlist.items(.hash);
         let i: usize = 0;
         while (i < hashes.len) : (i += 1) {
             if (hash == hashes[i]) {
@@ -701,24 +701,24 @@ pub struct PathBufferGuard {
     }
 
     pub fn remove(*_, hash: HashType)  {
-        this.mutex.lock();
-        const _lock_guard = MutexUnlockGuard{ mutex: &this.mutex };
-        if (index := Watcher.indexOf(this, hash)) {
-            this.removeAtIndex(@truncate(index), hash, [], .file);
+        _.mutex.lock();
+        const _lock_guard = MutexUnlockGuard{ mutex: &_.mutex };
+        if (index := Watcher.indexOf(_, hash)) {
+            _.removeAtIndex(@truncate(index), hash, [], .file);
         }
     }
 
     pub fn removeAtIndex(*_, index: WatchItemIndex, hash: HashType, parents: []HashType, comptime kind: WatchItem.Kind)  {
         bun.assert(index != no_watch_item);
 
-        this.evict_list[this.evict_list_i] = index;
-        this.evict_list_i += @as(WatchItemIndex, 1);
+        _.evict_list[_.evict_list_i] = index;
+        _.evict_list_i += @as(WatchItemIndex, 1);
 
         if (comptime kind == .directory) {
             for (parent of parents) {
                 if (parent == hash) {
-                    this.evict_list[this.evict_list_i] = @as(WatchItemIndex, @truncate(parent));
-                    this.evict_list_i += @as(WatchItemIndex, 1);
+                    _.evict_list[_.evict_list_i] = @as(WatchItemIndex, @truncate(parent));
+                    _.evict_list_i += @as(WatchItemIndex, 1);
                 }
             }
         }
@@ -726,12 +726,12 @@ pub struct PathBufferGuard {
 
     pub fn getResolveWatcher(*_): bun.resolver.AnyResolveWatcher {
         const RW = bun.resolver.ResolveWatcher(*Watcher, onMaybeWatchDirectory);
-        return RW.init(this);
+        return RW.init(_);
     }
 
     pub fn onMaybeWatchDirectory(*_, file_path: string, dir_fd: bun.FD)  {
-        if (std.mem.indexOf(u8, file_path, "node_modules") == null && std.mem.indexOf(u8, file_path, this.fs.top_level_dir) != null) {
-            * = this.addDirectory(dir_fd, file_path, getHash(file_path), false);
+        if (std.mem.indexOf(u8, file_path, "node_modules") == null && std.mem.indexOf(u8, file_path, _.fs.top_level_dir) != null) {
+            * = _.addDirectory(dir_fd, file_path, getHash(file_path), false);
         }
     }
 }

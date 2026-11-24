@@ -533,7 +533,10 @@ pub fn selectALPNCallback(ssl: ?*BoringSSL.SSL, out: [*c][*c]const u8, outlen: [
         if ((ex_data == null)) {
             return BoringSSL.SSL_TLSEXT_ERR_NOACK;
         }
-        const this_ptr = bun.cast(*TLSSocket, ex_data.?);
+        const TLSSocketPtr = @FieldType(struct {
+    p: *TLSSocket,
+}, "p");
+        const this_ptr = bun.cast(TLSSocketPtr, ex_data.?);
         if (this_ptr.protos) |protos| {
             _ = &protos;
             if ((protos.len == 0)) {
@@ -622,22 +625,28 @@ var sf = std.heap.stackFallback(1024, bun.default_allocator);
             _ = &_hostz_guard;
             var ___hostz_guard_moved = false; _ = &___hostz_guard_moved;
             defer if (!___hostz_guard_moved) { ___hostz_guard_moved = true; const __T = @TypeOf(_hostz_guard); if (@typeInfo(__T) == .optional) { if (_hostz_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _hostz_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _hostz_guard; _drop_val.__cp_deinit(); } };
+            const ThisPtr = @FieldType(struct {
+    p: *This,
+}, "p");
             switch (group.connect(kind, ssl_ctx, hostz, host.port, flags, @sizeOf(OpaquePtr))) {
 .failed => {
 return error.FailedToOpenSocket;
 },
 .socket => |s| {
-(s.ext(*This)).* = self;
+(s.ext(ThisPtr)).* = self;
             self.socket = Socket.from(s);
 },
 .connecting => |conn_socket| {
-(conn_socket.ext(*This)).* = self;
+(conn_socket.ext(ThisPtr)).* = self;
             self.socket = Socket.fromConnecting(conn_socket);
 },
 }
 },
 .unix => |u| {
-var sf = std.heap.stackFallback(1024, bun.default_allocator);
+const ThisPtr = @FieldType(struct {
+    p: *This,
+}, "p");
+            var sf = std.heap.stackFallback(1024, bun.default_allocator);
             _ = &sf;
             const alloc = sf.get();
             const pathz = bun.handleOom(alloc.dupeZ(u8, u));
@@ -646,12 +655,15 @@ var sf = std.heap.stackFallback(1024, bun.default_allocator);
             var ___pathz_guard_moved = false; _ = &___pathz_guard_moved;
             defer if (!___pathz_guard_moved) { ___pathz_guard_moved = true; const __T = @TypeOf(_pathz_guard); if (@typeInfo(__T) == .optional) { if (_pathz_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _pathz_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _pathz_guard; _drop_val.__cp_deinit(); } };
             const s = ((group.connectUnix(kind, ssl_ctx, pathz, flags, @sizeOf(OpaquePtr))) orelse { return error.FailedToOpenSocket; });
-            (s.ext(*This)).* = self;
+            (s.ext(ThisPtr)).* = self;
             self.socket = Socket.from(s);
 },
 .fd => |f| {
-const s = ((group.fromFd(kind, ssl_ctx, @sizeOf(OpaquePtr), f, false)) orelse { return error.ConnectionFailed; });
-            (s.ext(*This)).* = self;
+const ThisPtr = @FieldType(struct {
+    p: *This,
+}, "p");
+            const s = ((group.fromFd(kind, ssl_ctx, @sizeOf(OpaquePtr), f, false)) orelse { return error.ConnectionFailed; });
+            (s.ext(ThisPtr)).* = self;
             self.socket = Socket.from(s);
             _ = self.onOpen(self.socket);
 },
@@ -761,7 +773,7 @@ pub fn onWritable(self: *@This(), _: Socket) void {
             defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            _ = (blk_catch_0: { break :blk_catch_0 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
+            _ = (blk_catch_0: { break :blk_catch_0 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
 
 pub fn onTimeout(self: *@This(), _: Socket) void {
@@ -784,7 +796,7 @@ pub fn onTimeout(self: *@This(), _: Socket) void {
             defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            _ = (blk_catch_1: { break :blk_catch_1 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
+            _ = (blk_catch_1: { break :blk_catch_1 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
 
 pub fn getHandlers(self: *const @This()) *Handlers {
@@ -827,7 +839,7 @@ pub fn handleConnectError(self: *@This(), errno: c_int) bun.JSError!void {
             }
             const callback = h.onConnectError;
             const globalObject = h.globalObject;
-            const err = jsc.SystemError{ .errno = (0 - errno_), .message = bun.String.static("Failed to connect"), .syscall = bun.String.static("connect"), .code = code_ };
+            const sys_err = jsc.SystemError{ .errno = (-errno_), .message = bun.String.static("Failed to connect"), .syscall = bun.String.static("connect"), .code = code_ };
             var _scope_guard = HandlersScopeGuard(This, @TypeOf(h.enter())){ .socket = self, .scope = h.enter() };
             _ = &_scope_guard;
             var ___scope_guard_moved = false; _ = &___scope_guard_moved;
@@ -840,7 +852,7 @@ pub fn handleConnectError(self: *@This(), errno: c_int) bun.JSError!void {
                     _ = &promise;
                     _ = h.promise.deinit();
                     const js_promise = (promise.asPromise()).?;
-                    const err_value = err.toErrorInstanceWithAsyncStack(globalObject, js_promise);
+                    const err_value = sys_err.toErrorInstanceWithAsyncStack(globalObject, js_promise);
                     _ = try js_promise.reject(globalObject, err_value);
                 }
                 return;
@@ -848,7 +860,7 @@ pub fn handleConnectError(self: *@This(), errno: c_int) bun.JSError!void {
             const this_value = self.getThisValue(globalObject);
             _ = this_value.ensureStillAlive();
             _ = self.this_value.downgrade();
-            const err_value = err.toErrorInstance(globalObject);
+            const err_value = sys_err.toErrorInstance(globalObject);
             const result = (blk_catch_2: { break :blk_catch_2 ((callback.call(globalObject, this_value, (&.{ this_value, err_value }))) catch |e| { _ = &e; break :blk_catch_2 globalObject.takeException(e); }); });
             if (result.toError()) |err_val| {
                 _ = &err_val;
@@ -861,7 +873,7 @@ pub fn handleConnectError(self: *@This(), errno: c_int) bun.JSError!void {
                     _ = &val;
                     var promise = (val.asPromise()).?;
                     _ = &promise;
-                    const err_ = err.toErrorInstanceWithAsyncStack(globalObject, promise);
+                    const err_ = sys_err.toErrorInstanceWithAsyncStack(globalObject, promise);
                     _ = try promise.rejectAsHandled(globalObject, err_);
                 }
             }
@@ -914,7 +926,7 @@ pub fn markInactive(self: *@This()) void {
             }
     }
 
-pub fn isServer(self: *const @This()) bool {
+pub fn isServer(self: @This()) bool {
             const handlers = ((self.handlers) orelse { return false; });
             return handlers.mode.isServer();
     }
@@ -995,9 +1007,9 @@ pub fn onOpen(self: *@This(), socket: Socket) void {
             _ = &_scope_guard;
             var ___scope_guard_moved = false; _ = &___scope_guard_moved;
             defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
-            const result = (blk_catch_5: { break :blk_catch_5 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; break :blk_catch_5 globalObject.takeException(err); }); });
-            if (result.toError()) |err| {
-                _ = &err;
+            const result = (blk_catch_5: { break :blk_catch_5 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |e| { _ = &e; break :blk_catch_5 globalObject.takeException(e); }); });
+            if (result.toError()) |e| {
+                _ = &e;
                 var _inactive_guard = MarkInactiveGuard(This){ .ptr = self };
                 _ = &_inactive_guard;
                 var ___inactive_guard_moved = false; _ = &___inactive_guard_moved;
@@ -1007,10 +1019,10 @@ pub fn onOpen(self: *@This(), socket: Socket) void {
                 } else {
                     _ = log("Already closed", .{});
                 }
-                if ((blk_catch_6: { break :blk_catch_6 ((h.rejectPromise(err)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 true; }); })) {
+                if ((blk_catch_6: { break :blk_catch_6 ((h.rejectPromise(e)) catch |__ce_6| { _ = &__ce_6; break :blk_catch_6 true; }); })) {
                     return;
                 }
-                _ = h.callErrorHandler(this_value, (&.{ this_value, err }));
+                _ = h.callErrorHandler(this_value, (&.{ this_value, e }));
             }
     }
 
@@ -1052,7 +1064,7 @@ pub fn onEnd(self: *@This(), _: Socket) void {
             defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            _ = (blk_catch_7: { break :blk_catch_7 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
+            _ = (blk_catch_7: { break :blk_catch_7 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
 
 pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bun_verify_error_t) bun.JSError!void {
@@ -1089,14 +1101,14 @@ pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bu
             var result: jsc.JSValue = jsc.JSValue.zero;
             _ = &result;
             if (is_open) {
-                result = (blk_catch_8: { break :blk_catch_8 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |err| { _ = &err; break :blk_catch_8 globalObject.takeException(err); }); });
+                result = (blk_catch_8: { break :blk_catch_8 ((callback.call(globalObject, this_value, (&.{ this_value }))) catch |e| { _ = &e; break :blk_catch_8 globalObject.takeException(e); }); });
                 if ((h.mode != .server)) {
                     _ = h.onOpen.unprotect();
                     h.onOpen = .zero;
                 }
             } else {
                 const authorization_error: JSValue = (if ((ssl_error.error_no == 0)) JSValue.jsNull() else try ssl_error.toJS(globalObject));
-                result = (blk_catch_9: { break :blk_catch_9 ((callback.call(globalObject, this_value, (&.{ this_value, JSValue.jsBoolean(authorized), authorization_error }))) catch |err| { _ = &err; break :blk_catch_9 globalObject.takeException(err); }); });
+                result = (blk_catch_9: { break :blk_catch_9 ((callback.call(globalObject, this_value, (&.{ this_value, JSValue.jsBoolean(authorized), authorization_error }))) catch |e| { _ = &e; break :blk_catch_9 globalObject.takeException(e); }); });
             }
             if (result.toError()) |err_value| {
                 _ = &err_value;
@@ -1104,7 +1116,7 @@ pub fn onHandshake(self: *@This(), s: Socket, success: i32, ssl_error: uws.us_bu
             }
     }
 
-pub fn onClose(self: *@This(), socket: Socket, err: c_int, reason: ?*anyopaque) bun.JSError!void {
+pub fn onClose(self: *@This(), socket: Socket, code: c_int, reason: ?*anyopaque) bun.JSError!void {
             _ = jsc.markBinding(@src());
             const h = self.getHandlers();
             _ = log("onClose {s}", .{ (if ((h.mode == .server)) "S" else "C") });
@@ -1113,7 +1125,7 @@ pub fn onClose(self: *@This(), socket: Socket, err: c_int, reason: ?*anyopaque) 
             if (self.twin) |raw| {
                 _ = &raw;
                 self.twin = null;
-                _ = (blk_catch_10: { break :blk_catch_10 ((raw.onClose(socket, err, reason)) catch |__ce_10| { _ = &__ce_10;  }); });
+                _ = (blk_catch_10: { break :blk_catch_10 ((raw.onClose(socket, code, reason)) catch |__ce_10| { _ = &__ce_10;  }); });
             }
             var _deref_guard = DerefGuard(This){ .ptr = self };
             _ = &_deref_guard;
@@ -1143,8 +1155,8 @@ pub fn onClose(self: *@This(), socket: Socket, err: c_int, reason: ?*anyopaque) 
             const this_value = self.getThisValue(globalObject);
             var js_error: JSValue = .js_undefined;
             _ = &js_error;
-            if ((err != 0)) {
-                js_error = try bun.sys.Error.fromCodeInt(err, .read).toJS(globalObject);
+            if ((code != 0)) {
+                js_error = try bun.sys.Error.fromCodeInt(code, .read).toJS(globalObject);
             }
             _ = (blk_catch_11: { break :blk_catch_11 ((callback.call(globalObject, this_value, (&.{ this_value, js_error }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
@@ -1169,16 +1181,17 @@ pub fn onData(self: *@This(), s: Socket, data: []const u8) void {
             }
             const globalObject = h.globalObject;
             const this_value = self.getThisValue(globalObject);
-            const output_value = (blk_catch_12: { break :blk_catch_12 ((h.binary_type.toJS(data, globalObject)) catch |err| { _ = &err; _ = self.handleError(globalObject.takeException(err));
+            const output_value = (blk_catch_12: { break :blk_catch_12 ((h.binary_type.toJS(data, globalObject)) catch |e| { _ = &e; _ = self.handleError(globalObject.takeException(e));
             return; }); });
             var _scope_guard = HandlersScopeGuard(This, @TypeOf(h.enter())){ .socket = self, .scope = h.enter() };
             _ = &_scope_guard;
             var ___scope_guard_moved = false; _ = &___scope_guard_moved;
             defer if (!___scope_guard_moved) { ___scope_guard_moved = true; const __T = @TypeOf(_scope_guard); if (@typeInfo(__T) == .optional) { if (_scope_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _scope_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _scope_guard; _drop_val.__cp_deinit(); } };
-            _ = (blk_catch_13: { break :blk_catch_13 ((callback.call(globalObject, this_value, (&.{ this_value, output_value }))) catch |err| { _ = &err; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(err) })); }); });
+            _ = (blk_catch_13: { break :blk_catch_13 ((callback.call(globalObject, this_value, (&.{ this_value, output_value }))) catch |e| { _ = &e; _ = h.callErrorHandler(this_value, (&.{ this_value, globalObject.takeError(e) })); }); });
     }
 
-pub fn getData(_: *This, _: *jsc.JSGlobalObject) JSValue {
+pub fn getData(self: *@This(), _: *jsc.JSGlobalObject) JSValue {
+        _ = self;
             _ = log("getData()", .{});
             return .js_undefined;
     }
@@ -1366,7 +1379,7 @@ pub fn getRemotePort(self: *@This(), _: *jsc.JSGlobalObject) JSValue {
             return JSValue.jsNumber(self.socket.remotePort());
     }
 
-pub inline fn doSocketWrite(self: *@This(), buffer: []const u8) i32 {
+pub inline fn doSocketWrite(self: @This(), buffer: []const u8) i32 {
             return (if (self.flags.bypass_tls) self.socket.rawWrite(buffer) else self.socket.write(buffer));
     }
 
@@ -1673,7 +1686,7 @@ pub fn tryWriteEmptyPacket(self: *@This()) bool {
             return false;
     }
 
-pub fn canEndAfterFlush(self: *@This()) bool {
+pub fn canEndAfterFlush(self: @This()) bool {
             return (((self.flags.is_active and self.flags.end_after_flush) and (!self.flags.empty_packet_pending)) and (self.buffered_data_for_node_net.len == 0));
     }
 
@@ -2007,16 +2020,16 @@ pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: 
             const group = vm.rareData().bunConnectGroup(vm, true);
             const new_raw = ((raw_socket.adoptTLS(group, .bun_socket_tls, tls.owned_ssl_ctx.?, sni, @sizeOf(OpaquePtr), @sizeOf(OpaquePtr))) orelse {
             const get_err_fn = BoringSSL.ERR_get_error;
-            const err = get_err_fn();
-            var _err_clear_guard = SSLErrClearGuard{ .has_err = (err != 0) };
+            const err_code = get_err_fn();
+            var _err_clear_guard = SSLErrClearGuard{ .has_err = (err_code != 0) };
             _ = &_err_clear_guard;
             var ___err_clear_guard_moved = false; _ = &___err_clear_guard_moved;
             defer if (!___err_clear_guard_moved) { ___err_clear_guard_moved = true; const __T = @TypeOf(_err_clear_guard); if (@typeInfo(__T) == .optional) { if (_err_clear_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _err_clear_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _err_clear_guard; _drop_val.__cp_deinit(); } };
             _ = tls.deref();
             _ = handlers_ptr.deinit();
             _ = vm.allocator.destroy(handlers_ptr);
-            if (((err != 0) and (!globalObject.hasException()))) {
-                return globalObject.throwValue(bun.BoringSSL.ERR_toJS(globalObject, err));
+            if (((err_code != 0) and (!globalObject.hasException()))) {
+                return globalObject.throwValue(bun.BoringSSL.ERR_toJS(globalObject, err_code));
             }
             if ((!globalObject.hasException())) {
                 return globalObject.throw("Failed to upgrade socket from TCP -> TLS. Is the TLS config correct?", .{});
@@ -2039,7 +2052,10 @@ pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: 
             defer if (!___deref_guard_moved) { ___deref_guard_moved = true; const __T = @TypeOf(_deref_guard); if (@typeInfo(__T) == .optional) { if (_deref_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { _deref_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = _deref_guard; _drop_val.__cp_deinit(); } };
             _ = self.detachNativeCallback();
             _ = self.socket.detach();
-            (new_raw.ext(*TLSSocket)).* = tls;
+            const TLSSocketPtr = @FieldType(struct {
+    p: *TLSSocket,
+}, "p");
+            (new_raw.ext(TLSSocketPtr)).* = tls;
             tls.socket = TLSSocket.Socket.from(new_raw);
             _ = tls.ref();
             var raw = bun.new(TLSSocket, .{ .ref_count = .init(), .handlers = raw_handlers, .socket = TLSSocket.Socket.from(new_raw), .connection = null, .protos = null, .flags = .{ .bypass_tls = true, .is_active = true } });
@@ -2063,19 +2079,23 @@ pub fn upgradeTLS(self: *@This(), globalObject: *jsc.JSGlobalObject, callframe: 
             return array;
     }
 
-pub fn tcp_socket_function_that_returns_undefined(_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+pub fn tcp_socket_function_that_returns_undefined(self: *@This(), _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = self;
             return JSValue.js_undefined;
     }
 
-pub fn tcp_socket_function_that_returns_false(_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+pub fn tcp_socket_function_that_returns_false(self: *@This(), _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = self;
             return JSValue.false;
     }
 
-pub fn tcp_socket_getter_that_returns_false(_: *This, _: *jsc.JSGlobalObject) bun.JSError!JSValue {
+pub fn tcp_socket_getter_that_returns_false(self: *@This(), _: *jsc.JSGlobalObject) bun.JSError!JSValue {
+        _ = self;
             return JSValue.false;
     }
 
-pub fn tcp_socket_function_that_returns_null(_: *This, _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+pub fn tcp_socket_function_that_returns_null(self: *@This(), _: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JSError!JSValue {
+        _ = self;
             return JSValue.null;
     }
     const This = @This();
@@ -2307,8 +2327,8 @@ pub fn jsCreateSocketPair(global: *jsc.JSGlobalObject, _: *jsc.CallFrame) bun.JS
         }
         var fds_: [2]std.c.fd_t = undefined;
         _ = &fds_;
-        fds_[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(std.c.fd_t) == .@"enum") @as(std.c.fd_t, @enumFromInt(0)) else @as(std.c.fd_t, 0));
-        fds_[cp_cast_int(usize, 1)] = (if (comptime @typeInfo(std.c.fd_t) == .@"enum") @as(std.c.fd_t, @enumFromInt(0)) else @as(std.c.fd_t, 0));
+        fds_[cp_cast_int(usize, 0)] = (if (comptime @typeInfo(std.c.fd_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.c.fd_t, @enumFromInt(0)) else @as(std.c.fd_t, 0));
+        fds_[cp_cast_int(usize, 1)] = (if (comptime @typeInfo(std.c.fd_t) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(std.c.fd_t, @enumFromInt(0)) else @as(std.c.fd_t, 0));
         const rc = std.c.socketpair(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0, (&fds_));
         if ((rc != 0)) {
             const err = bun.sys.Error.fromCode(bun.sys.getErrno(rc), .socketpair);

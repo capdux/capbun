@@ -1514,12 +1514,12 @@ pub const GetEnvironmentVariableError = error{
 
 pub const GetFileTypeExtern = struct {
 
-pub extern "c" fn GetFileType(hFile: win32.HANDLE) callconv(.winapi) win32.DWORD;
+pub extern "c" fn GetFileType(self: GetFileTypeExtern, hFile: win32.HANDLE) callconv(.winapi) win32.DWORD;
 };
 
 pub const CreateHardLinkWExtern = struct {
 
-pub extern "c" fn CreateHardLinkW(newFileName: LPCWSTR, existingFileName: LPCWSTR, securityAttributes: ?*win32.SECURITY_ATTRIBUTES) callconv(.winapi) BOOL;
+pub extern "c" fn CreateHardLinkW(self: CreateHardLinkWExtern, newFileName: LPCWSTR, existingFileName: LPCWSTR, securityAttributes: ?*win32.SECURITY_ATTRIBUTES) callconv(.winapi) BOOL;
 };
 
 pub const JOBOBJECT_ASSOCIATE_COMPLETION_PORT = extern struct {
@@ -1943,13 +1943,13 @@ pub const GetTempPathW = externs.GetTempPathW;
 pub const CreateJobObjectA = externs.CreateJobObjectA;
 pub const AssignProcessToJobObject = externs.AssignProcessToJobObject;
 pub const ResumeThread = externs.ResumeThread;
-pub const JobObjectAssociateCompletionPortInformation: DWORD = (if (@typeInfo(DWORD) == .@"enum") @as(DWORD, @enumFromInt(7)) else @as(DWORD, 7));
-pub const JobObjectExtendedLimitInformation: DWORD = (if (@typeInfo(DWORD) == .@"enum") @as(DWORD, @enumFromInt(9)) else @as(DWORD, 9));
+pub const JobObjectAssociateCompletionPortInformation: DWORD = (if (@typeInfo(DWORD) == .@"enum" and (@typeInfo(@TypeOf(7)) == .int or @typeInfo(@TypeOf(7)) == .comptime_int)) @as(DWORD, @enumFromInt(7)) else @as(DWORD, 7));
+pub const JobObjectExtendedLimitInformation: DWORD = (if (@typeInfo(DWORD) == .@"enum" and (@typeInfo(@TypeOf(9)) == .int or @typeInfo(@TypeOf(9)) == .comptime_int)) @as(DWORD, @enumFromInt(9)) else @as(DWORD, 9));
 pub const SetInformationJobObject = externs.SetInformationJobObject;
 pub const JOB_OBJECT_MSG_ACTIVE_PROCESS_ZERO = 4;
 pub const JOB_OBJECT_MSG_EXIT_PROCESS = 7;
 pub const OpenProcess = externs.OpenProcess;
-pub const PROCESS_QUERY_LIMITED_INFORMATION: DWORD = (if (@typeInfo(DWORD) == .@"enum") @as(DWORD, @enumFromInt(4096)) else @as(DWORD, 4096));
+pub const PROCESS_QUERY_LIMITED_INFORMATION: DWORD = (if (@typeInfo(DWORD) == .@"enum" and (@typeInfo(@TypeOf(4096)) == .int or @typeInfo(@TypeOf(4096)) == .comptime_int)) @as(DWORD, @enumFromInt(4096)) else @as(DWORD, 4096));
 pub const CreateDirectoryExW = externs.CreateDirectoryExW;
 const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS = 4;
 pub const GetThreadDescription = externs.GetThreadDescription;
@@ -1963,11 +1963,11 @@ pub const SetStdHandle = externs.SetStdHandle;
 pub const GetConsoleOutputCP = externs.GetConsoleOutputCP;
 pub const GetConsoleCP = externs.GetConsoleCP;
 pub const SetConsoleCP = externs.SetConsoleCP;
-const FILE_DISPOSITION_DELETE: ULONG = (if (@typeInfo(ULONG) == .@"enum") @as(ULONG, @enumFromInt(1)) else @as(ULONG, 1));
-const FILE_DISPOSITION_POSIX_SEMANTICS: ULONG = (if (@typeInfo(ULONG) == .@"enum") @as(ULONG, @enumFromInt(2)) else @as(ULONG, 2));
-const FILE_DISPOSITION_FORCE_IMAGE_SECTION_CHECK: ULONG = (if (@typeInfo(ULONG) == .@"enum") @as(ULONG, @enumFromInt(4)) else @as(ULONG, 4));
-const FILE_DISPOSITION_ON_CLOSE: ULONG = (if (@typeInfo(ULONG) == .@"enum") @as(ULONG, @enumFromInt(8)) else @as(ULONG, 8));
-const FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE: ULONG = (if (@typeInfo(ULONG) == .@"enum") @as(ULONG, @enumFromInt(16)) else @as(ULONG, 16));
+const FILE_DISPOSITION_DELETE: ULONG = (if (@typeInfo(ULONG) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(ULONG, @enumFromInt(1)) else @as(ULONG, 1));
+const FILE_DISPOSITION_POSIX_SEMANTICS: ULONG = (if (@typeInfo(ULONG) == .@"enum" and (@typeInfo(@TypeOf(2)) == .int or @typeInfo(@TypeOf(2)) == .comptime_int)) @as(ULONG, @enumFromInt(2)) else @as(ULONG, 2));
+const FILE_DISPOSITION_FORCE_IMAGE_SECTION_CHECK: ULONG = (if (@typeInfo(ULONG) == .@"enum" and (@typeInfo(@TypeOf(4)) == .int or @typeInfo(@TypeOf(4)) == .comptime_int)) @as(ULONG, @enumFromInt(4)) else @as(ULONG, 4));
+const FILE_DISPOSITION_ON_CLOSE: ULONG = (if (@typeInfo(ULONG) == .@"enum" and (@typeInfo(@TypeOf(8)) == .int or @typeInfo(@TypeOf(8)) == .comptime_int)) @as(ULONG, @enumFromInt(8)) else @as(ULONG, 8));
+const FILE_DISPOSITION_IGNORE_READONLY_ATTRIBUTE: ULONG = (if (@typeInfo(ULONG) == .@"enum" and (@typeInfo(@TypeOf(16)) == .int or @typeInfo(@TypeOf(16)) == .comptime_int)) @as(ULONG, @enumFromInt(16)) else @as(ULONG, 16));
 pub const EXCEPTION_CONTINUE_EXECUTION = -1;
 pub const MS_VC_EXCEPTION = 1080890248;
 pub const InitializeProcThreadAttributeList = externs.InitializeProcThreadAttributeList;
@@ -1995,7 +1995,7 @@ pub const CreateDirectoryW = externs.CreateDirectoryW;
 pub const SetEndOfFile = externs.SetEndOfFile;
 pub const GetProcessTimes = externs.GetProcessTimes;
 const watcherChildEnv: [:0]const u16 = bun.strings.toUTF16Literal("_BUN_WATCHER_CHILD");
-pub const watcher_reload_exit: DWORD = (if (@typeInfo(DWORD) == .@"enum") @as(DWORD, @enumFromInt(3224497970)) else @as(DWORD, 3224497970));
+pub const watcher_reload_exit: DWORD = (if (@typeInfo(DWORD) == .@"enum" and (@typeInfo(@TypeOf(3224497970)) == .int or @typeInfo(@TypeOf(3224497970)) == .comptime_int)) @as(DWORD, @enumFromInt(3224497970)) else @as(DWORD, 3224497970));
 pub const spawn = spawn_mod.PosixSpawn;
 pub const windows_enable_stdio_inheritance = externs.windows_enable_stdio_inheritance;
 const GetModuleFileNameW = externs.GetModuleFileNameW;
@@ -2081,7 +2081,7 @@ else => {
 }
 
 pub fn exePathW() [:0]const u16 {
-        const image_path_unicode_string = *const std.os.windows.peb().ProcessParameters.ImagePathName;
+        const image_path_unicode_string = (&std.os.windows.peb().ProcessParameters.ImagePathName);
         return image_path_unicode_string.Buffer.?[0..(image_path_unicode_string.Length / 2) :0];
 }
 
@@ -2338,7 +2338,7 @@ extern "c" fn rescle__setWindowsMetadata(exe_path: [*:0]const u16, icon_path: ?[
 
 pub fn updateStdioModeFlags(i: bun.FD.Stdio, opts: UpdateStdioModeFlagsOptions) !DWORD {
         const fd = i.fd();
-        var original_mode: DWORD = (if (comptime @typeInfo(DWORD) == .@"enum") @as(DWORD, @enumFromInt(0)) else @as(DWORD, 0));
+        var original_mode: DWORD = (if (comptime @typeInfo(DWORD) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(DWORD, @enumFromInt(0)) else @as(DWORD, 0));
         _ = &original_mode;
         if ((c.GetConsoleMode(fd.cast(), (&original_mode)) != 0)) {
             if ((c.SetConsoleMode(fd.cast(), ((original_mode | opts.set) & (~opts.unset))) == 0)) {
@@ -2377,7 +2377,7 @@ pub fn becomeWatcherManager(allocator: std.mem.Allocator) noreturn {
             }
             break :blk_catch_1 @as(void, Output.panic("Failed to spawn process: {s}\n", .{ @errorName(e) })); }); });
             _ = (blk_catch_2: { break :blk_catch_2 ((windows.WaitForSingleObject(procinfo.hProcess, c.INFINITE)) catch |e| { _ = &e; break :blk_catch_2 Output.panic("Failed to wait for child process: {s}\n", .{ @errorName(e) }); }); });
-            var exit_code: DWORD = (if (comptime @typeInfo(DWORD) == .@"enum") @as(DWORD, @enumFromInt(0)) else @as(DWORD, 0));
+            var exit_code: DWORD = (if (comptime @typeInfo(DWORD) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(DWORD, @enumFromInt(0)) else @as(DWORD, 0));
             _ = &exit_code;
             if ((c.GetExitCodeProcess(procinfo.hProcess, (&exit_code)) == 0)) {
                 const e = windows.GetLastError();
@@ -2459,7 +2459,7 @@ pub fn spawnWatcherChild(allocator: std.mem.Allocator, procinfo: *std.os.windows
         if ((rc == 0)) {
             return error.Win32Error;
         }
-        var is_in_job: c.BOOL = (if (comptime @typeInfo(c.BOOL) == .@"enum") @as(c.BOOL, @enumFromInt(0)) else @as(c.BOOL, 0));
+        var is_in_job: c.BOOL = (if (comptime @typeInfo(c.BOOL) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(c.BOOL, @enumFromInt(0)) else @as(c.BOOL, 0));
         _ = &is_in_job;
         _ = c.IsProcessInJob(procinfo.hProcess, job, (&is_in_job));
         _ = bun.debugAssert((is_in_job != 0));

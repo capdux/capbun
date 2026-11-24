@@ -115,9 +115,9 @@ pub fn onIOWriterChunk(self: *Export, _: usize, e: ?jsc.SystemError) Yield {
             var __err_guard_moved = false; _ = &__err_guard_moved;
             defer if (!__err_guard_moved) { __err_guard_moved = true; const __T = @TypeOf(err_guard); if (@typeInfo(__T) == .optional) { if (err_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { err_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = err_guard; _drop_val.__cp_deinit(); } };
             _ = (&err_guard);
-            return self.bltn().done((if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(@intFromEnum(err_val.getErrno()))) else @as(ExitCode, @intFromEnum(err_val.getErrno()))));
+            return self.bltn().done((if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(@intFromEnum(err_val.getErrno()))) == .int or @typeInfo(@TypeOf(@intFromEnum(err_val.getErrno()))) == .comptime_int)) @as(ExitCode, @enumFromInt(@intFromEnum(err_val.getErrno()))) else @as(ExitCode, @intFromEnum(err_val.getErrno()))));
         }
-        return self.bltn().done((if (comptime @typeInfo(ExitCode) == .@"enum") @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
+        return self.bltn().done((if (comptime @typeInfo(ExitCode) == .@"enum" and (@typeInfo(@TypeOf(0)) == .int or @typeInfo(@TypeOf(0)) == .comptime_int)) @as(ExitCode, @enumFromInt(0)) else @as(ExitCode, 0)));
 }
 
 pub fn start(self: *Export) Yield {

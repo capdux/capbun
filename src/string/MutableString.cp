@@ -20,29 +20,29 @@ pub struct MutableStringBufferedWriter {
     pub const Writer = std.Io.GenericWriter(*MutableStringBufferedWriter, Allocator.Error, MutableStringBufferedWriter.writeAll);
 
     inline fn remain(*_): []u8 {
-        return this.buffer[this.pos..];
+        return _.buffer[_.pos..];
     }
 
     pub fn flush(*_): Allocator.Error!void {
-        * = this.context.writeAll(this.buffer[0..this.pos])?;
-        this.pos = 0;
+        * = _.context.writeAll(_.buffer[0.._.pos])?;
+        _.pos = 0;
     }
 
     pub fn writeAll(*_, bytes: []const u8): Allocator.Error!usize {
         const pending = bytes;
 
         if (pending.len >= buffered_writer_max) {
-            this.flush()?;
-            this.context.append(pending)?;
+            _.flush()?;
+            _.context.append(pending)?;
             return pending.len;
         }
 
         if (pending.len > 0) {
-            if (pending.len + this.pos > buffered_writer_max) {
-                this.flush()?;
+            if (pending.len + _.pos > buffered_writer_max) {
+                _.flush()?;
             }
-            @memcpy(this.remain()[0..pending.len], pending);
-            this.pos += pending.len;
+            @memcpy(_.remain()[0..pending.len], pending);
+            _.pos += pending.len;
         }
 
         return pending.len;
@@ -55,10 +55,10 @@ pub struct MutableStringBufferedWriter {
     /// the same code path as TextEncoder
     pub fn writeString(*_, bytes: *E.String): Allocator.Error!usize {
         if (bytes.isUTF8()) {
-            return this.writeAll(bytes.slice(this.context.allocator))?;
+            return _.writeAll(bytes.slice(_.context.allocator))?;
         }
 
-        return this.writeAll16(bytes.slice16())?;
+        return _.writeAll16(bytes.slice16())?;
     }
 
     /// Write a UTF-16 string to the (UTF-8) buffer
@@ -68,27 +68,27 @@ pub struct MutableStringBufferedWriter {
         const pending = bytes;
 
         if (pending.len >= buffered_writer_max) {
-            this.flush()?;
-            this.context.list.ensureUnusedCapacity(this.context.allocator, bytes.len * 2)?;
+            _.flush()?;
+            _.context.list.ensureUnusedCapacity(_.context.allocator, bytes.len * 2)?;
             const decoded = strings.copyUTF16IntoUTF8(
-                this.remain()[0 .. bytes.len * 2],
+                _.remain()[0 .. bytes.len * 2],
                 @TypeOf(bytes),
                 bytes,
             );
-            this.context.list.items.len += @as(usize, decoded.written);
+            _.context.list.items.len += @as(usize, decoded.written);
             return pending.len;
         }
 
         if (pending.len > 0) {
-            if ((pending.len * 2) + this.pos > buffered_writer_max) {
-                this.flush()?;
+            if ((pending.len * 2) + _.pos > buffered_writer_max) {
+                _.flush()?;
             }
             const decoded = strings.copyUTF16IntoUTF8(
-                this.remain()[0 .. bytes.len * 2],
+                _.remain()[0 .. bytes.len * 2],
                 @TypeOf(bytes),
                 bytes,
             );
-            this.pos += @as(usize, decoded.written);
+            _.pos += @as(usize, decoded.written);
         }
 
         return pending.len;
@@ -96,22 +96,22 @@ pub struct MutableStringBufferedWriter {
 
     pub fn writeHTMLAttributeValueString(*_, str: *E.String): Allocator.Error!void {
         if (str.isUTF8()) {
-            this.writeHTMLAttributeValue(str.slice(this.context.allocator))?;
+            _.writeHTMLAttributeValue(str.slice(_.context.allocator))?;
             return;
         }
 
-        this.writeHTMLAttributeValue16(str.slice16())?;
+        _.writeHTMLAttributeValue16(str.slice16())?;
     }
 
     pub fn writeHTMLAttributeValue(*_, bytes: []const u8): Allocator.Error!void {
         let items = bytes;
         while (items.len > 0) {
             if (j := strings.indexOfAny(items, "\"<>")) {
-                * = this.writeAll(items[0..j])?;
+                * = _.writeAll(items[0..j])?;
                 * = switch (items[j]) {
-                    '"' => this.writeAll("&quot;")?,
-                    '<' => this.writeAll("&lt;")?,
-                    '>' => this.writeAll("&gt;")?,
+                    '"' => _.writeAll("&quot;")?,
+                    '<' => _.writeAll("&lt;")?,
+                    '>' => _.writeAll("&gt;")?,
                     else => unreachable,
                 };
 
@@ -119,7 +119,7 @@ pub struct MutableStringBufferedWriter {
                 continue;
             }
 
-            * = this.writeAll(items)?;
+            * = _.writeAll(items)?;
             break;
         }
     }
@@ -128,11 +128,11 @@ pub struct MutableStringBufferedWriter {
         let items = bytes;
         while (items.len > 0) {
             if (j := strings.indexOfAny16(items, "\"<>")) {
-                * = this.writeAll16(items[0..j])?;
+                * = _.writeAll16(items[0..j])?;
                 * = switch (items[j]) {
-                    '"' => this.writeAll("&quot;")?,
-                    '<' => this.writeAll("&lt;")?,
-                    '>' => this.writeAll("&gt;")?,
+                    '"' => _.writeAll("&quot;")?,
+                    '<' => _.writeAll("&lt;")?,
+                    '>' => _.writeAll("&gt;")?,
                     else => unreachable,
                 };
 
@@ -140,13 +140,13 @@ pub struct MutableStringBufferedWriter {
                 continue;
             }
 
-            * = this.writeAll16(items)?;
+            * = _.writeAll16(items)?;
             break;
         }
     }
 
     pub fn writer(*_): MutableStringBufferedWriter.Writer {
-        return MutableStringBufferedWriter.Writer{ context: this };
+        return MutableStringBufferedWriter.Writer{ context: _ };
     }
 }
 
@@ -156,64 +156,64 @@ pub struct MutableStringBufferedWriter {
 
     pub const BufferedWriter = MutableStringBufferedWriter;
 
-    pub fn init2048(allocator: Allocator): Allocator.Error!MutableString {
+    pub static fn init2048(allocator: Allocator): Allocator.Error!MutableString {
         return MutableString.init(allocator, 2048);
     }
 
     pub fn clone(*_): Allocator.Error!MutableString {
-        return MutableString.initCopy(this.allocator, this.list.items);
+        return MutableString.initCopy(_.allocator, _.list.items);
     }
 
     pub const Writer = std.Io.GenericWriter(MutableStringPtr, Allocator.Error, MutableString.writeAll);
     pub fn writer(*_): Writer {
         return Writer{
-            context: this,
+            context: _,
         };
     }
 
     pub fn isEmpty(_: *const MutableString): bool {
-        return this.list.items.len == 0;
+        return _.list.items.len == 0;
     }
 
     pub fn deinit(*_) {
-        if (this.list.capacity > 0) {
-            this.list.expandToCapacity();
-            this.list.clearAndFree(this.allocator);
+        if (_.list.capacity > 0) {
+            _.list.expandToCapacity();
+            _.list.clearAndFree(_.allocator);
         }
     }
 
     pub fn owns(_: *const MutableString, items: []const u8): bool {
-        return unsafe { bun.isSliceInBuffer(items, this.list.items.ptr[0..this.list.capacity]) };
+        return unsafe { bun.isSliceInBuffer(items, _.list.items.ptr[0.._.list.capacity]) };
     }
 
     pub inline fn growIfNeeded(*_, amount: usize): Allocator.Error!void {
-        this.list.ensureUnusedCapacity(this.allocator, amount)?;
+        _.list.ensureUnusedCapacity(_.allocator, amount)?;
     }
 
     pub fn writableNBytesAssumeCapacity(*_, amount: usize): []u8 {
-        bun.assert(this.list.items.len + amount <= this.list.capacity);
-        this.list.items.len += amount;
-        return this.list.items[this.list.items.len - amount ..];
+        bun.assert(_.list.items.len + amount <= _.list.capacity);
+        _.list.items.len += amount;
+        return _.list.items[_.list.items.len - amount ..];
     }
 
     /// Increases the length of the buffer by `amount` bytes, expanding the capacity if necessary.
     /// Returns a pointer to the end of the list - `amount` bytes.
     pub fn writableNBytes(*_, amount: usize): Allocator.Error![]u8 {
-        this.growIfNeeded(amount)?;
-        return this.writableNBytesAssumeCapacity(amount);
+        _.growIfNeeded(amount)?;
+        return _.writableNBytesAssumeCapacity(amount);
     }
 
     pub fn write(*_, bytes: anytype): Allocator.Error!usize {
-        bun.debugAssert(bytes.len == 0 || !bun.isSliceInBuffer(bytes, this.list.allocatedSlice()));
-        this.list.appendSlice(this.allocator, bytes)?;
+        bun.debugAssert(bytes.len == 0 || !bun.isSliceInBuffer(bytes, _.list.allocatedSlice()));
+        _.list.appendSlice(_.allocator, bytes)?;
         return bytes.len;
     }
 
     pub fn bufferedWriter(*_): BufferedWriter {
-        return BufferedWriter{ context: this };
+        return BufferedWriter{ context: _ };
     }
 
-    pub fn init(allocator: Allocator, capacity: usize): Allocator.Error!MutableString {
+    pub static fn init(allocator: Allocator, capacity: usize): Allocator.Error!MutableString {
         let list: std.ArrayListUnmanaged(u8) = {};
         if (capacity > 0) {
             list = std.ArrayListUnmanaged(u8).initCapacity(allocator, capacity)?;
@@ -224,22 +224,22 @@ pub struct MutableStringBufferedWriter {
         };
     }
 
-    pub fn initEmpty(allocator: Allocator): MutableString {
+    pub static fn initEmpty(allocator: Allocator): MutableString {
         return MutableString{ allocator: allocator, list: {} };
     }
 
     pub const ensureUnusedCapacity = MutableString.growIfNeeded;
 
-    pub fn initCopy(allocator: Allocator, str: anytype): Allocator.Error!MutableString {
-        let mutable = MutableString.init(allocator, str.len)?;
-        mutable.copy(str)?;
-        return mutable;
+    pub static fn initCopy(allocator: Allocator, str: anytype): Allocator.Error!MutableString {
+        let mut_str = MutableString.init(allocator, str.len)?;
+        mut_str.copy(str)?;
+        return mut_str;
     }
 
     /// Convert it to an ASCII identifier. Note: If you change this to a non-ASCII
     /// identifier, you're going to potentially cause trouble with non-BMP code
     /// points in target environments that don't support bracketed Unicode escapes.
-    pub fn ensureValidIdentifier(str: string, allocator: Allocator): Allocator.Error!string {
+    pub static fn ensureValidIdentifier(str: string, allocator: Allocator): Allocator.Error!string {
         if (str.len == 0) {
             return "_";
         }
@@ -269,7 +269,7 @@ pub struct MutableStringBufferedWriter {
         }
 
         if (needs_gap) {
-            let mutable = MutableString.initCopy(allocator, if (start_i == 0) "_" else str[0..start_i])?;
+            let mut_str = MutableString.initCopy(allocator, if (start_i == 0) "_" else str[0..start_i])?;
             needs_gap = false;
 
             let items = str[start_i..];
@@ -279,170 +279,170 @@ pub struct MutableStringBufferedWriter {
             while (iterator.next(&cursor)) {
                 if (js_lexer.isIdentifierContinue(cursor.c) && cursor.width == 1) {
                     if (needs_gap) {
-                        mutable.appendChar('_')?;
+                        mut_str.appendChar('_')?;
                         needs_gap = false;
                         has_needed_gap = true;
                     }
-                    mutable.append(items[cursor.i .. cursor.i + @as(u32, cursor.width)])?;
+                    mut_str.append(items[cursor.i .. cursor.i + @as(u32, cursor.width)])?;
                 } else if (!needs_gap) {
                     needs_gap = true;
                 }
             }
 
             if (needs_gap) {
-                mutable.appendChar('_')?;
+                mut_str.appendChar('_')?;
                 needs_gap = false;
                 has_needed_gap = true;
             }
 
             if (comptime bun.Environment.allow_assert) {
-                bun.assert(js_lexer.isIdentifier(mutable.list.items));
+                bun.assert(js_lexer.isIdentifier(mut_str.list.items));
             }
 
-            return mutable.list.toOwnedSlice(allocator)?;
+            return mut_str.list.toOwnedSlice(allocator)?;
         }
 
         return str;
     }
 
     pub fn len(_: *const MutableString): usize {
-        return this.list.items.len;
+        return _.list.items.len;
     }
 
     pub fn copy(*_, str: anytype): Allocator.Error!void {
-        this.list.ensureTotalCapacity(this.allocator, str[0..].len)?;
+        _.list.ensureTotalCapacity(_.allocator, str[0..].len)?;
 
-        if (this.list.items.len == 0) {
-            this.list.insertSlice(this.allocator, 0, str)?;
+        if (_.list.items.len == 0) {
+            _.list.insertSlice(_.allocator, 0, str)?;
         } else {
-            this.list.replaceRange(this.allocator, 0, str[0..].len, str[0..])?;
+            _.list.replaceRange(_.allocator, 0, str[0..].len, str[0..])?;
         }
     }
 
     pub inline fn growBy(*_, amount: usize): Allocator.Error!void {
-        this.list.ensureUnusedCapacity(this.allocator, amount)?;
+        _.list.ensureUnusedCapacity(_.allocator, amount)?;
     }
 
     pub inline fn appendSlice(*_, items: []const u8): Allocator.Error!void {
-        this.list.appendSlice(this.allocator, items)?;
+        _.list.appendSlice(_.allocator, items)?;
     }
 
     pub inline fn appendSliceExact(*_, items: []const u8): Allocator.Error!void {
         if (items.len == 0) return;
-        this.list.ensureTotalCapacityPrecise(this.allocator, this.list.items.len + items.len)?;
-        let end = unsafe { this.list.items.ptr + this.list.items.len };
-        this.list.items.len += items.len;
+        _.list.ensureTotalCapacityPrecise(_.allocator, _.list.items.len + items.len)?;
+        let end = unsafe { _.list.items.ptr + _.list.items.len };
+        _.list.items.len += items.len;
         unsafe {
             @memcpy(end[0..items.len], items);
         }
     }
 
     pub inline fn reset(*_) {
-        this.list.clearRetainingCapacity();
+        _.list.clearRetainingCapacity();
     }
 
     pub inline fn resetTo(*_, index: usize) {
-        bun.assert(index <= this.list.capacity);
-        this.list.items.len = index;
+        bun.assert(index <= _.list.capacity);
+        _.list.items.len = index;
     }
 
     pub fn inflate(*_, amount: usize): Allocator.Error!void {
-        this.list.resize(this.allocator, amount)?;
+        _.list.resize(_.allocator, amount)?;
     }
 
     pub inline fn appendCharNTimes(*_, char: u8, n: usize): Allocator.Error!void {
-        this.list.appendNTimes(this.allocator, char, n)?;
+        _.list.appendNTimes(_.allocator, char, n)?;
     }
 
     pub inline fn appendChar(*_, char: u8): Allocator.Error!void {
-        this.list.append(this.allocator, char)?;
+        _.list.append(_.allocator, char)?;
     }
 
     pub inline fn appendCharAssumeCapacity(*_, char: u8) {
-        this.list.appendAssumeCapacity(char);
+        _.list.appendAssumeCapacity(char);
     }
 
     pub inline fn append(*_, char: []const u8): Allocator.Error!void {
-        this.list.appendSlice(this.allocator, char)?;
+        _.list.appendSlice(_.allocator, char)?;
     }
 
     pub inline fn appendInt(*_, int: u64): Allocator.Error!void {
         const count = bun.fmt.fastDigitCount(int);
-        this.list.ensureUnusedCapacity(this.allocator, count)?;
-        const old = this.list.items.len;
-        this.list.items.len += count;
+        _.list.ensureUnusedCapacity(_.allocator, count)?;
+        const old = _.list.items.len;
+        _.list.items.len += count;
         unsafe {
-            bun.assert(count == std.fmt.printInt(this.list.items.ptr[old .. old + count], int, 10, .lower, {}));
+            bun.assert(count == std.fmt.printInt(_.list.items.ptr[old .. old + count], int, 10, .lower, {}));
         }
     }
 
     pub inline fn appendAssumeCapacity(*_, char: []const u8) {
-        this.list.appendSliceAssumeCapacity(char);
+        _.list.appendSliceAssumeCapacity(char);
     }
 
     pub inline fn lenI(*_): i32 {
-        return @as(i32, @intCast(this.list.items.len));
+        return @as(i32, @intCast(_.list.items.len));
     }
 
     pub fn takeSlice(*_): []u8 {
-        const out = this.list.items;
-        this.list = {};
+        const out = _.list.items;
+        _.list = {};
         return out;
     }
 
     pub fn toOwnedSlice(*_): []u8 {
-        return bun.handleOom(this.list.toOwnedSlice(this.allocator));
+        return bun.handleOom(_.list.toOwnedSlice(_.allocator));
     }
 
     pub fn toDynamicOwned(*_): DynamicOwned([]u8) {
-        return .fromRawIn(this.toOwnedSlice(), this.allocator);
+        return .fromRawIn(_.toOwnedSlice(), _.allocator);
     }
 
     /// `self.allocator` must be `bun.default_allocator`.
     pub fn toDefaultOwned(*_): Owned([]u8) {
-        bun.safety.alloc.assertEq(this.allocator, bun.default_allocator);
-        return .fromRaw(this.toOwnedSlice());
+        bun.safety.alloc.assertEq(_.allocator, bun.default_allocator);
+        return .fromRaw(_.toOwnedSlice());
     }
 
     pub fn slice(*_): []u8 {
-        return this.list.items;
+        return _.list.items;
     }
 
     /// Appends `0` if needed
     pub fn sliceWithSentinel(*_): [:0]u8 {
-        if (this.list.items.len > 0 && this.list.items[this.list.items.len - 1] != 0) {
-            bun.handleOom(this.list.append(this.allocator, 0));
+        if (_.list.items.len > 0 && _.list.items[_.list.items.len - 1] != 0) {
+            bun.handleOom(_.list.append(_.allocator, 0));
         }
-        return this.list.items[0 .. this.list.items.len - 1 :0];
+        return _.list.items[0 .. _.list.items.len - 1 :0];
     }
 
     pub fn toOwnedSliceLength(*_, length: usize): string {
-        this.list.items.len = length;
-        return this.toOwnedSlice();
+        _.list.items.len = length;
+        return _.toOwnedSlice();
     }
 
     pub fn containsChar(_: *const MutableString, char: u8): bool {
-        return this.indexOfChar(char) != null;
+        return _.indexOfChar(char) != null;
     }
 
     pub fn indexOfChar(_: *const MutableString, char: u8): u32? {
-        return strings.indexOfChar(this.list.items, char);
+        return strings.indexOfChar(_.list.items, char);
     }
 
     pub fn lastIndexOfChar(_: *const MutableString, char: u8): usize? {
-        return strings.lastIndexOfChar(this.list.items, char);
+        return strings.lastIndexOfChar(_.list.items, char);
     }
 
     pub fn lastIndexOf(_: *const MutableString, str: u8): usize? {
-        return strings.lastIndexOfChar(this.list.items, str);
+        return strings.lastIndexOfChar(_.list.items, str);
     }
 
     pub fn indexOf(_: *const MutableString, str: u8): usize? {
-        return std.mem.indexOf(u8, this.list.items, str);
+        return std.mem.indexOf(u8, _.list.items, str);
     }
 
     pub fn eql(*_, other: anytype): bool {
-        return std.mem.eql(u8, this.list.items, other);
+        return std.mem.eql(u8, _.list.items, other);
     }
 
     pub fn toSocketBuffers(*_, comptime count: usize, ranges: anytype): [count]std.posix.iovec_const {
@@ -451,8 +451,8 @@ pub struct MutableStringBufferedWriter {
         inline while (i < count) {
             const r = ranges[i];
             buffers[i] = {
-                iov_base: this.list.items[r[0]..r[1]].ptr,
-                iov_len: this.list.items[r[0]..r[1]].len,
+                iov_base: _.list.items[r[0]..r[1]].ptr,
+                iov_len: _.list.items[r[0]..r[1]].len,
             };
             i += 1;
         }
@@ -460,7 +460,7 @@ pub struct MutableStringBufferedWriter {
     }
 
     pub fn writeAll(*_, bytes: string): Allocator.Error!usize {
-        this.list.appendSlice(this.allocator, bytes)?;
+        _.list.appendSlice(_.allocator, bytes)?;
         return bytes.len;
     }
 }

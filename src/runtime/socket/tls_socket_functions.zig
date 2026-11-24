@@ -609,11 +609,11 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
                 var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
                 _ = &buffer;
                 const buffer_ptr = (blk: {
-                break :blk @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+                break :blk @as([*c]u8, @alignCast(@ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr)));
 
 });
                 const result = (blk: {
-                break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, @as([*c]const u8, @ptrCast(context_slice.ptr)), context_slice.len, 1);
+                break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @alignCast(@ptrCast(label_slice.ptr))), label_slice.len, @as([*c]const u8, @alignCast(@ptrCast(context_slice.ptr))), context_slice.len, 1);
 
 });
                 if ((result != 1)) {
@@ -628,11 +628,11 @@ pub fn exportKeyingMaterial(self: *This, globalObject: *jsc.JSGlobalObject, call
             var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
             _ = &buffer;
             const buffer_ptr = (blk: {
-            break :blk @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+            break :blk @as([*c]u8, @alignCast(@ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr)));
 
 });
             const result = (blk: {
-            break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @ptrCast(label_slice.ptr)), label_slice.len, null, 0, 0);
+            break :blk BoringSSL.SSL_export_keying_material(ssl_ptr, buffer_ptr, buffer_size, @as([*c]const u8, @alignCast(@ptrCast(label_slice.ptr))), label_slice.len, null, 0, 0);
 
 });
             if ((result != 1)) {
@@ -742,7 +742,7 @@ pub fn getSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
         var buffer = try JSValue.createBufferFromLength(globalObject, buffer_size);
         _ = &buffer;
         var buffer_ptr = (blk: {
-        break :blk @as([*c]u8, @ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr));
+        break :blk @as([*c]u8, @alignCast(@ptrCast((buffer.asArrayBuffer(globalObject)).?.ptr)));
 
 });
         _ = &buffer_ptr;
@@ -783,7 +783,7 @@ pub fn setSession(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *js
             const session_slice = mut_sb.slice();
             const ssl_ptr = self.socket.ssl();
             var tmp = (blk: {
-            break :blk @as([*c]const u8, @ptrCast(session_slice.ptr));
+            break :blk @as([*c]const u8, @alignCast(@ptrCast(session_slice.ptr)));
 
 });
             _ = &tmp;
@@ -822,7 +822,7 @@ pub fn getTLSTicket(self: *This, globalObject: *jsc.JSGlobalObject, callframe: *
         var length: usize = 0;
         _ = &length;
         _ = BoringSSL.SSL_SESSION_get0_ticket(session, (blk: {
-        break :blk @as([*c][*c]const u8, @ptrCast((&ticket)));
+        break :blk @as([*c][*c]const u8, @alignCast(@ptrCast((&ticket))));
 
 }), (&length));
         if (((ticket == null) or (length == 0))) {

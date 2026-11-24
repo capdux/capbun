@@ -162,7 +162,7 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) TimeoutEr
             if ((status >= 0)) {
                 return;
             }
-            switch (@as(c.E, @enumFromInt((0 - status)))) {
+            switch (@as(c.E, @enumFromInt((-status)))) {
 .INTR => {
 
 },
@@ -193,7 +193,7 @@ pub fn wake(ptr: *const atomic.Value(u32), max_waiters: u32) void {
                 if ((status >= 0)) {
                     return;
                 }
-                switch (@as(c.E, @enumFromInt((0 - status)))) {
+                switch (@as(c.E, @enumFromInt((-status)))) {
 .INTR => {
 continue;
 },
@@ -295,7 +295,7 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout: ?u64) TimeoutEr
             const rc = c._umtx_op((blk: {
             break :blk @intFromPtr((&ptr.raw));
 
-}), @intFromEnum(c.UMTX_OP.WAIT_UINT_PRIVATE), (if (comptime @typeInfo(c_ulong) == .@"enum" and (@typeInfo(@TypeOf(expect)) == .int or @typeInfo(@TypeOf(expect)) == .comptime_int)) @as(c_ulong, @enumFromInt(expect)) else @as(c_ulong, expect)), tm_size, (blk: {
+}), @intFromEnum(c.UMTX_OP.WAIT_UINT_PRIVATE), (if (comptime @typeInfo(@TypeOf(expect)) == .@"enum") cp_cast_int(c_ulong, @intFromEnum(expect)) else cp_cast_int(c_ulong, expect)), tm_size, (blk: {
             break :blk @intFromPtr(tm_ptr);
 
 }));

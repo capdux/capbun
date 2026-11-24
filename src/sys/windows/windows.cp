@@ -4082,15 +4082,15 @@ pub fn renameAtW(
 
 struct kernel32_2 {
     @callconv("winapi")
-    extern fn GetEnvironmentStringsW(): LPWSTR?;
+    static extern fn GetEnvironmentStringsW(): LPWSTR?;
 
     @callconv("winapi")
-    extern fn FreeEnvironmentStringsW(
+    static extern fn FreeEnvironmentStringsW(
         penv: LPWSTR,
     ): BOOL;
 
     @callconv("winapi")
-    extern fn GetEnvironmentVariableW(
+    static extern fn GetEnvironmentVariableW(
         lpName: LPCWSTR?,
         lpBuffer: ([*]WCHAR)?,
         nSize: DWORD,

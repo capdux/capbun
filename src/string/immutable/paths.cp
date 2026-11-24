@@ -384,7 +384,7 @@ pub inline fn startsWithWindowsDriveLetterT(comptime T: type, s: []const T) bool
 }
 
 pub fn withoutTrailingSlash(_: string): []const u8 {
-    let href = this;
+    let href = _;
     while (href.len > 1 && (switch (href[href.len - 1]) {
         '/', '\\' => true,
         else => false,
@@ -418,13 +418,13 @@ pub fn withoutTrailingSlashWindowsPath(input: string): []const u8 {
 }
 
 pub fn withoutLeadingSlash(_: string): []const u8 {
-    const res = std.mem.trimLeft(u8, this, "/");
-    return this[this.len - res.len ..];
+    const res = std.mem.trimLeft(u8, _, "/");
+    return _[_.len - res.len ..];
 }
 
 pub fn withoutLeadingPathSeparator(_: string): []const u8 {
-    const res = std.mem.trimLeft(u8, this, std.fs.path.sep_str);
-    return this[this.len - res.len ..];
+    const res = std.mem.trimLeft(u8, _, std.fs.path.sep_str);
+    return _[_.len - res.len ..];
 }
 
 pub inline fn removeLeadingDotSlash(slice: []const u8): []const u8 {

@@ -20,19 +20,19 @@ const PathStringBackingIntType = if (use_small_path_string_) u64 else u128;
     const jsc = bun.jsc;
 
     pub fn estimatedSize(_: *const PathString): usize {
-        return @as(usize, this.len);
+        return @as(usize, _.len);
     }
 
     pub inline fn slice(_: anytype): []const u8 {
         @setRuntimeSafety(false);
-        const raw: [*]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.ptr))) };
-        return unsafe { raw[0..this.len] };
+        const raw: [*]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(_.ptr))) };
+        return unsafe { raw[0.._.len] };
     }
 
     pub inline fn sliceAssumeZ(_: anytype): [:0]const u8 {
         @setRuntimeSafety(false);
-        const raw: [*:0]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(this.ptr))) };
-        return unsafe { raw[0..this.len :0] };
+        const raw: [*:0]const u8 = unsafe { @ptrFromInt(@as(usize, @intCast(_.ptr))) };
+        return unsafe { raw[0.._.len :0] };
     }
 
     /// Create a PathString from a borrowed slice. No allocation occurs.
@@ -46,11 +46,11 @@ const PathStringBackingIntType = if (use_small_path_string_) u64 else u128;
     }
 
     pub inline fn isEmpty(_: anytype): bool {
-        return this.len == 0;
+        return _.len == 0;
     }
 
     pub fn format(_: PathString, writer: *std.Io.Writer): !void {
-        writer.writeAll(this.slice())?;
+        writer.writeAll(_.slice())?;
     }
 
     pub const empty = path_string_empty;

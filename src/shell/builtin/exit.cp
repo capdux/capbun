@@ -30,7 +30,7 @@ struct DerefGuard<T> {
             0 => return _.bltn().done(0),
             1 => {
                 const first_arg = args[0][0..std.mem.len(args[0]) :0];
-                const exit_code: ExitCode = std.fmt.parseInt(u8, first_arg, 10) catch |e| switch (e) {
+                const exit_code: ExitCode = std.fmt.parseInt(u8, first_arg, 10) catch e => switch (e) {
                     error.Overflow => @as(ExitCode, @intCast((std.fmt.parseInt(usize, first_arg, 10) catch return _.fail("exit: numeric argument required\n")) % 256)),
                     error.InvalidCharacter => return _.fail("exit: numeric argument required\n"),
                 };

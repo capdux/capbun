@@ -84,7 +84,7 @@ pub struct DerefValGuard<T> {
                 keys.append({
                     key: entry.key_ptr.*,
                     value: entry.value_ptr.*,
-                }) catch |e| bun.handleOom(e);
+                }) catch e => bun.handleOom(e);
             }
 
             const sort_ctx: void = undefined;

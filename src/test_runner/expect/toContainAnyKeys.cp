@@ -3,7 +3,7 @@ pub fn toContainAnyKeys(
     globalThis: *JSGlobalObject,
     callFrame: *CallFrame,
 ): bun.JSError!JSValue {
-    defer this.postMatch(globalThis);
+    defer _.postMatch(globalThis);
     const thisValue = callFrame.this();
     const arguments_ = callFrame.arguments_old(1);
     const arguments = arguments_.slice();
@@ -12,17 +12,17 @@ pub fn toContainAnyKeys(
         return globalThis.throwInvalidArguments("toContainAnyKeys() takes 1 argument", {});
     }
 
-    this.incrementExpectCallCounter();
+    _.incrementExpectCallCounter();
 
     const expected = arguments[0];
     expected.ensureStillAlive();
-    const value: JSValue = this.getValue(globalThis, thisValue, "toContainAnyKeys", "<green>expected<r>")?;
+    const value: JSValue = _.getValue(globalThis, thisValue, "toContainAnyKeys", "<green>expected<r>")?;
 
     if (!expected.jsType().isArray()) {
         return globalThis.throwInvalidArgumentType("toContainAnyKeys", "expected", "array");
     }
 
-    const not = this.flags.not;
+    const not = _.flags.not;
     let pass = false;
 
     const count = expected.getLength(globalThis)?;
@@ -51,13 +51,13 @@ pub fn toContainAnyKeys(
         const received_fmt = value.toFmt(&formatter.val);
         const expected_line = "Expected to not contain: <green>{f}<r>\nReceived: <red>{f}<r>\n";
         const signature = comptime getSignature("toContainAnyKeys", "<green>expected<r>", true);
-        return this.throw(globalThis, signature, "\n\n" ++ expected_line, { expected_fmt, received_fmt });
+        return _.throw(globalThis, signature, "\n\n" ++ expected_line, { expected_fmt, received_fmt });
     }
 
     const expected_line = "Expected to contain: <green>{f}<r>\n";
     const received_line = "Received: <red>{f}<r>\n";
     const signature = comptime getSignature("toContainAnyKeys", "<green>expected<r>", false);
-    return this.throw(globalThis, signature, "\n\n" ++ expected_line ++ received_line, { expected_fmt, value_fmt });
+    return _.throw(globalThis, signature, "\n\n" ++ expected_line ++ received_line, { expected_fmt, value_fmt });
 }
 
 import bun from "bun";

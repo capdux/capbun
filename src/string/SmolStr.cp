@@ -34,27 +34,27 @@ const SmolStrNegatedTag: usize = ~SmolStrTag;
     }
 
     pub inline fn len(_: SmolStrInlined): u8 {
-        return @intCast(this.__len);
+        return @intCast(_.__len);
     }
 
     pub fn setLen(*_, new_len: u7) {
-        this.__len = new_len;
+        _.__len = new_len;
     }
 
     pub fn slice(_: *const SmolStrInlined): []const u8 {
-        return unsafe { @constCast(this).ptr()[0..this.__len] };
+        return unsafe { @constCast(_).ptr()[0.._.__len] };
     }
 
     pub fn sliceMut(*_): []u8 {
-        return unsafe { this.ptr()[0..this.__len] };
+        return unsafe { _.ptr()[0.._.__len] };
     }
 
     pub fn allChars(*_): *[inlined_max_len]u8 {
-        return unsafe { this.ptr()[0..inlined_max_len] };
+        return unsafe { _.ptr()[0..inlined_max_len] };
     }
 
     inline fn ptr(*_): [*]u8 {
-        return unsafe { @as([*]u8, @as(*u128, this)) };
+        return unsafe { @as([*]u8, @as(*u128, _)) };
     }
 }
 
@@ -76,7 +76,7 @@ const smol_inlined_empty = SmolStrInlined{
     pub const Inlined = SmolStrInlined;
 
     pub fn jsonStringify(_: *const SmolStr, writer: anytype): !void {
-        writer.write(this.slice())?;
+        writer.write(_.slice())?;
     }
 
     pub static fn empty(): SmolStr {
@@ -84,38 +84,38 @@ const smol_inlined_empty = SmolStrInlined{
     }
 
     pub fn len(_: *const SmolStr): u32 {
-        if (this.isInlined()) {
-            return @intCast((unsafe { @intFromPtr(this.__ptr) } >> 56) & 0b01111111);
+        if (_.isInlined()) {
+            return @intCast((unsafe { @intFromPtr(_.__ptr) } >> 56) & 0b01111111);
         }
 
-        return this.__len;
+        return _.__len;
     }
 
     pub fn ptr(*_): [*]u8 {
-        return unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) & SmolStrNegatedTag) };
+        return unsafe { @ptrFromInt(@as(usize, @intFromPtr(_.__ptr)) & SmolStrNegatedTag) };
     }
 
     pub fn ptrConst(_: *const SmolStr): [*]const u8 {
-        return unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) & SmolStrNegatedTag) };
+        return unsafe { @ptrFromInt(@as(usize, @intFromPtr(_.__ptr)) & SmolStrNegatedTag) };
     }
 
     pub fn markInlined(*_) {
-        this.__ptr = unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) | SmolStrTag) };
+        _.__ptr = unsafe { @ptrFromInt(@as(usize, @intFromPtr(_.__ptr)) | SmolStrTag) };
     }
 
     pub fn markHeap(*_) {
-        this.__ptr = unsafe { @ptrFromInt(@as(usize, @intFromPtr(this.__ptr)) & SmolStrNegatedTag) };
+        _.__ptr = unsafe { @ptrFromInt(@as(usize, @intFromPtr(_.__ptr)) & SmolStrNegatedTag) };
     }
 
     pub fn isInlined(_: *const SmolStr): bool {
-        return (@as(usize, unsafe { @intFromPtr(this.__ptr) }) & SmolStrTag) != 0;
+        return (@as(usize, unsafe { @intFromPtr(_.__ptr) }) & SmolStrTag) != 0;
     }
 
     /// ## Panics
     /// if `this` is too long to fit in an inlined string
     pub fn toInlined(_: *const SmolStr): Inlined {
-        assert(this.len() <= Inlined.max_len);
-        let inlined: Inlined = unsafe { @bitCast(@as(u128, @bitCast(this.*))) };
+        assert(_.len() <= Inlined.max_len);
+        let inlined: Inlined = unsafe { @bitCast(@as(u128, @bitCast(_.*))) };
         inlined._tag = 1;
         return inlined;
     }
@@ -150,8 +150,8 @@ const smol_inlined_empty = SmolStrInlined{
     }
 
     pub fn deinit(*_, allocator: Allocator) {
-        if (!this.isInlined()) {
-            allocator.free(this.slice());
+        if (!_.isInlined()) {
+            allocator.free(_.slice());
         }
     }
 
@@ -167,77 +167,77 @@ const smol_inlined_empty = SmolStrInlined{
     }
 
     pub fn slice(_: *const SmolStr): []const u8 {
-        if (this.isInlined()) {
-            const bytes: [*]const u8 = unsafe { @ptrCast(this) };
-            return unsafe { bytes[0..this.len()] };
+        if (_.isInlined()) {
+            const bytes: [*]const u8 = unsafe { @ptrCast(_) };
+            return unsafe { bytes[0.._.len()] };
         }
-        return unsafe { this.ptrConst()[0..this.__len] };
+        return unsafe { _.ptrConst()[0.._.__len] };
     }
 
     pub fn appendChar(*_, allocator: Allocator, char: u8): Allocator.Error!void {
-        if (this.isInlined()) {
-            let inlined = this.toInlined();
+        if (_.isInlined()) {
+            let inlined = _.toInlined();
             if (inlined.len() + 1 > Inlined.max_len) {
                 let baby_list = BabyList(u8).initCapacity(allocator, inlined.len() + 1)?;
                 baby_list.appendSliceAssumeCapacity(inlined.slice());
                 baby_list.append(allocator, char)?;
-                this.__len = baby_list.len;
-                this.__ptr = baby_list.ptr;
-                this.cap = baby_list.cap;
-                this.markHeap();
+                _.__len = baby_list.len;
+                _.__ptr = baby_list.ptr;
+                _.cap = baby_list.cap;
+                _.markHeap();
                 return;
             }
             inlined.allChars()[inlined.len()] = char;
             inlined.setLen(@intCast(inlined.len() + 1));
             unsafe {
-                this.* = @bitCast(inlined);
+                _.* = @bitCast(inlined);
             }
-            this.markInlined();
+            _.markInlined();
             return;
         }
 
         let baby_list = ByteBabyList{
-            ptr: this.ptr(),
-            len: this.__len,
-            cap: this.cap,
+            ptr: _.ptr(),
+            len: _.__len,
+            cap: _.cap,
         };
         baby_list.append(allocator, char)?;
 
-        this.__len = baby_list.len;
-        this.__ptr = baby_list.ptr;
-        this.cap = baby_list.cap;
+        _.__len = baby_list.len;
+        _.__ptr = baby_list.ptr;
+        _.cap = baby_list.cap;
         return;
     }
 
     pub fn appendSlice(*_, allocator: Allocator, values: []const u8): Allocator.Error!void {
-        if (this.isInlined()) {
-            let inlined = this.toInlined();
+        if (_.isInlined()) {
+            let inlined = _.toInlined();
             if (inlined.len() + values.len > Inlined.max_len) {
                 let baby_list = ByteBabyList.initCapacity(allocator, inlined.len() + values.len)?;
                 baby_list.appendSliceAssumeCapacity(inlined.slice());
                 baby_list.appendSliceAssumeCapacity(values);
                 unsafe {
-                    this.* = SmolStr.fromBabyList(baby_list);
+                    _.* = SmolStr.fromBabyList(baby_list);
                 }
                 return;
             }
             @memcpy(inlined.allChars()[inlined.len() .. inlined.len() + values.len], values);
             inlined.setLen(@intCast(inlined.len() + values.len));
             unsafe {
-                this.* = SmolStr.fromInlined(inlined);
+                _.* = SmolStr.fromInlined(inlined);
             }
             return;
         }
 
         let baby_list = ByteBabyList{
-            ptr: this.ptr(),
-            len: this.__len,
-            cap: this.cap,
+            ptr: _.ptr(),
+            len: _.__len,
+            cap: _.cap,
         };
         baby_list.appendSlice(allocator, values)?;
 
         unsafe {
-            this.* = SmolStr.fromBabyList(baby_list);
+            _.* = SmolStr.fromBabyList(baby_list);
         }
         return;
     }

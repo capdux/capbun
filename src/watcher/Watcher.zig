@@ -650,13 +650,13 @@ pub fn remove(self: *Watcher, hash: HashType) void {
 pub fn removeAtIndex(self: *Watcher, index: WatchItemIndex, hash: HashType, parents: []HashType, comptime kind: WatchItem.Kind) void {
         _ = bun.assert((index != no_watch_item));
         self.evict_list[cp_cast_int(usize, self.evict_list_i)] = index;
-        self.evict_list_i = (self.evict_list_i + (if (comptime @typeInfo(WatchItemIndex) == .@"enum") @as(WatchItemIndex, @enumFromInt(1)) else @as(WatchItemIndex, 1)));
+        self.evict_list_i = (self.evict_list_i + (if (comptime @typeInfo(WatchItemIndex) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(WatchItemIndex, @enumFromInt(1)) else @as(WatchItemIndex, 1)));
         if (comptime (kind == .directory)) {
             for (cp_iter_slice(parents)) |parent| {
                 _ = &parent;
                 if ((parent == hash)) {
                     self.evict_list[cp_cast_int(usize, self.evict_list_i)] = @as(WatchItemIndex, @truncate(parent));
-                    self.evict_list_i = (self.evict_list_i + (if (comptime @typeInfo(WatchItemIndex) == .@"enum") @as(WatchItemIndex, @enumFromInt(1)) else @as(WatchItemIndex, 1)));
+                    self.evict_list_i = (self.evict_list_i + (if (comptime @typeInfo(WatchItemIndex) == .@"enum" and (@typeInfo(@TypeOf(1)) == .int or @typeInfo(@TypeOf(1)) == .comptime_int)) @as(WatchItemIndex, @enumFromInt(1)) else @as(WatchItemIndex, 1)));
                 }
             }
         }

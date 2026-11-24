@@ -39,7 +39,7 @@ export @root struct Chunk {
     }
 
     pub fn deinit(*_) {
-        this.buffer.deinit();
+        _.buffer.deinit();
     }
 
     pub fn printSourceMapContents(
@@ -49,7 +49,7 @@ export @root struct Chunk {
         include_sources_contents: bool,
         comptime ascii_only: bool,
     )! {
-        printSourceMapContentsJSON(source, mutable, include_sources_contents, this.buffer.list.items, ascii_only)?;
+        printSourceMapContentsJSON(source, mutable, include_sources_contents, _.buffer.list.items, ascii_only)?;
     }
 
     pub fn printSourceMapContentsFromInternal(
@@ -59,7 +59,7 @@ export @root struct Chunk {
         include_sources_contents: bool,
         comptime ascii_only: bool,
     )! {
-        const ism = InternalSourceMap{ data: this.buffer.list.items.ptr };
+        const ism = InternalSourceMap{ data: _.buffer.list.items.ptr };
         let vlq_guard = MutableStringGuard{ val: MutableString.initEmpty(bun.default_allocator) };
         ism.appendVLQTo(&vlq_guard.val);
         printSourceMapContentsJSON(source, mutable, include_sources_contents, vlq_guard.val.list.items, ascii_only)?;
@@ -123,27 +123,27 @@ pub struct VLQSourceMap {
     }
 
     pub fn appendLineSeparator(*_)! {
-        if (*b := this.internal) {
+        if (*b := _.internal) {
             b.appendLineSeparator();
             return;
         }
-        this.data.appendChar(';')?;
+        _.data.appendChar(';')?;
     }
 
     pub fn append(*_, current_state: SourceMapState, prev_state: SourceMapState)! {
-        if (*b := this.internal) {
+        if (*b := _.internal) {
             b.appendMapping(current_state);
-            this.count += 1;
+            _.count += 1;
             return;
         }
 
-        const last_byte: u8 = if (this.data.list.items.len > this.offset)
-            this.data.list.items[this.data.list.items.len - 1]
+        const last_byte: u8 = if (_.data.list.items.len > _.offset)
+            _.data.list.items[_.data.list.items.len - 1]
         else
             0;
 
-        appendMappingToBuffer(&this.data, last_byte, prev_state, current_state);
-        this.count += 1;
+        appendMappingToBuffer(&_.data, last_byte, prev_state, current_state);
+        _.count += 1;
     }
 
     pub fn shouldIgnore(): bool {
@@ -151,22 +151,22 @@ pub struct VLQSourceMap {
     }
 
     pub fn getBuffer(*_): MutableString {
-        if (*b := this.internal) {
-            this.data = unsafe { b.finalize().* };
+        if (*b := _.internal) {
+            _.data = unsafe { b.finalize().* };
             b.finalized = null;
-            this.internal = null;
+            _.internal = null;
         }
-        return this.data;
+        return _.data;
     }
 
     pub fn takeBuffer(*_): MutableString {
-        if (*b := this.internal) {
-            this.data = unsafe { b.finalize().* };
+        if (*b := _.internal) {
+            _.data = unsafe { b.finalize().* };
             b.finalized = null;
-            this.internal = null;
+            _.internal = null;
         }
-        defer this.data = MutableString.initEmpty(this.data.allocator);
-        return this.data;
+        defer _.data = MutableString.initEmpty(_.data.allocator);
+        return _.data;
     }
 
     pub fn getCount(): usize {
@@ -182,28 +182,28 @@ pub fn SourceMapFormat(comptime Type: type): type {
             return { ctx: Type.init(allocator, prepend_count) };
         }
 
-        @inline pub fn appendLineSeparator(*this)! {
-            this.ctx.appendLineSeparator()?;
+        @inline pub fn appendLineSeparator(*_)! {
+            _.ctx.appendLineSeparator()?;
         }
 
-        @inline pub fn append(*this, current_state: SourceMapState, prev_state: SourceMapState)! {
-            this.ctx.append(current_state, prev_state)?;
+        @inline pub fn append(*_, current_state: SourceMapState, prev_state: SourceMapState)! {
+            _.ctx.append(current_state, prev_state)?;
         }
 
-        @inline pub fn shouldIgnore(this): bool {
-            return this.ctx.shouldIgnore();
+        @inline pub fn shouldIgnore(): bool {
+            return _.ctx.shouldIgnore();
         }
 
-        @inline pub fn getBuffer(*this): MutableString {
-            return this.ctx.getBuffer();
+        @inline pub fn getBuffer(*_): MutableString {
+            return _.ctx.getBuffer();
         }
 
-        @inline pub fn takeBuffer(*this): MutableString {
-            return this.ctx.takeBuffer();
+        @inline pub fn takeBuffer(*_): MutableString {
+            return _.ctx.takeBuffer();
         }
 
-        @inline pub fn getCount(this): usize {
-            return this.ctx.getCount();
+        @inline pub fn getCount(): usize {
+            return _.ctx.getCount();
         }
     };
 }
@@ -225,28 +225,28 @@ pub fn NewBuilder(comptime SourceMapFormatType: type): type {
 
         pub const SourceMapper = SourceMapFormat(SourceMapFormatType);
 
-        @noinline pub fn generateChunk(*this, output: []const u8): Chunk {
-            this.updateGeneratedLineAndColumn(output);
-            let buffer = this.source_map.getBuffer();
-            if (this.prepend_count) {
+        @noinline pub fn generateChunk(*_, output: []const u8): Chunk {
+            _.updateGeneratedLineAndColumn(output);
+            let buffer = _.source_map.getBuffer();
+            if (_.prepend_count) {
                 unsafe {
                     buffer.list.items[0..8].* = @as([8]u8, @bitCast(buffer.list.items.len));
-                    buffer.list.items[8..16].* = @as([8]u8, @bitCast(this.source_map.getCount()));
-                    buffer.list.items[16..24].* = @as([8]u8, @bitCast(this.approximate_input_line_count));
+                    buffer.list.items[8..16].* = @as([8]u8, @bitCast(_.source_map.getCount()));
+                    buffer.list.items[16..24].* = @as([8]u8, @bitCast(_.approximate_input_line_count));
                 }
             }
             return Chunk{
-                buffer: this.source_map.takeBuffer(),
-                mappings_count: this.source_map.getCount(),
-                end_state: this.prev_state,
-                final_generated_column: this.generated_column,
-                should_ignore: this.source_map.shouldIgnore(),
+                buffer: _.source_map.takeBuffer(),
+                mappings_count: _.source_map.getCount(),
+                end_state: _.prev_state,
+                final_generated_column: _.generated_column,
+                should_ignore: _.source_map.shouldIgnore(),
             };
         }
 
-        pub fn updateGeneratedLineAndColumn(*this, output: []const u8) {
-            const slice = output[this.last_generated_update..];
-            let needs_mapping = this.cover_lines_without_mappings && !this.line_starts_with_mapping && this.has_prev_state;
+        pub fn updateGeneratedLineAndColumn(*_, output: []const u8) {
+            const slice = output[_.last_generated_update..];
+            let needs_mapping = _.cover_lines_without_mappings && !_.line_starts_with_mapping && _.has_prev_state;
 
             let i: usize = 0;
             const n = slice.len as usize;
@@ -257,75 +257,75 @@ pub fn NewBuilder(comptime SourceMapFormatType: type): type {
                 i += len as usize;
 
                 switch (c) {
-                    14...127 => {
+                    14..=127 => {
                         if (j := strings.indexOfNewlineOrNonASCII(slice, i as u32)) {
-                            this.generated_column += (((j as usize) - i) + 1) as i32;
+                            _.generated_column += (((j as usize) - i) + 1) as i32;
                             i = j;
                             continue;
                         } else {
-                            this.generated_column += (slice[i..].len as i32) + 1;
+                            _.generated_column += (slice[i..].len as i32) + 1;
                             i = n;
                             break;
                         }
                     },
                     '\r' | '\n' | 0x2028 | 0x2029 => {
                         if (c == '\r') {
-                            const newline_check = this.last_generated_update + i + 1;
+                            const newline_check = _.last_generated_update + i + 1;
                             if (newline_check < output.len && output[newline_check] == '\n') {
                                 continue;
                             }
                         }
 
                         if (needs_mapping) {
-                            this.appendMappingWithoutRemapping(SourceMapState{
-                                generated_line: this.prev_state.generated_line,
+                            _.appendMappingWithoutRemapping(SourceMapState{
+                                generated_line: _.prev_state.generated_line,
                                 generated_column: 0,
-                                source_index: this.prev_state.source_index,
-                                original_line: this.prev_state.original_line,
-                                original_column: this.prev_state.original_column,
+                                source_index: _.prev_state.source_index,
+                                original_line: _.prev_state.original_line,
+                                original_column: _.prev_state.original_column,
                             });
                         }
 
-                        this.prev_state.generated_line += 1;
-                        this.prev_state.generated_column = 0;
-                        this.generated_column = 0;
-                        this.source_map.appendLineSeparator() catch unreachable;
+                        _.prev_state.generated_line += 1;
+                        _.prev_state.generated_column = 0;
+                        _.generated_column = 0;
+                        _.source_map.appendLineSeparator() catch unreachable;
 
-                        this.line_starts_with_mapping = false;
+                        _.line_starts_with_mapping = false;
 
-                        needs_mapping = this.cover_lines_without_mappings && !this.line_starts_with_mapping && this.has_prev_state;
+                        needs_mapping = _.cover_lines_without_mappings && !_.line_starts_with_mapping && _.has_prev_state;
                     },
                     else => {
-                        this.generated_column += (@intFromBool(c > 0xFFFF) as i32) + 1;
+                        _.generated_column += (@intFromBool(c > 0xFFFF) as i32) + 1;
                     },
                 }
             }
 
-            this.last_generated_update = output.len as u32;
+            _.last_generated_update = output.len as u32;
         }
 
-        pub fn appendMapping(*this, current_state: SourceMapState) {
-            this.appendMappingWithoutRemapping(current_state);
+        pub fn appendMapping(*_, current_state: SourceMapState) {
+            _.appendMappingWithoutRemapping(current_state);
         }
 
-        pub fn appendMappingWithoutRemapping(*this, current_state: SourceMapState) {
-            this.source_map.append(current_state, this.prev_state) catch unreachable;
-            this.prev_state = current_state;
-            this.has_prev_state = true;
+        pub fn appendMappingWithoutRemapping(*_, current_state: SourceMapState) {
+            _.source_map.append(current_state, _.prev_state) catch unreachable;
+            _.prev_state = current_state;
+            _.has_prev_state = true;
         }
 
-        pub fn addSourceMapping(*this, loc: Logger.Loc, output: []const u8) {
-            if (this.prev_loc.eql(loc) || loc.start == Logger.Loc.Empty.start)
+        pub fn addSourceMapping(*_, loc: Logger.Loc, output: []const u8) {
+            if (_.prev_loc.eql(loc) || loc.start == Logger.Loc.Empty.start)
                 return;
 
-            this.prev_loc = loc;
-            const list = this.line_offset_tables;
+            _.prev_loc = loc;
+            const list = _.line_offset_tables;
 
             if (list.len == 0) {
                 return;
             }
 
-            const original_line = LineOffsetTable.findLine(this.line_offset_table_byte_offset_list, loc);
+            const original_line = LineOffsetTable.findLine(_.line_offset_table_byte_offset_list, loc);
             const line: LineOffsetTable = list.get(@max(original_line, 0) as usize);
 
             let original_column = loc.start - (line.byte_offset_to_start_of_line as i32);
@@ -333,27 +333,27 @@ pub fn NewBuilder(comptime SourceMapFormatType: type): type {
                 original_column = line.columns_for_non_ascii.slice()[(original_column as u32) - line.byte_offset_to_first_non_ascii];
             }
 
-            this.updateGeneratedLineAndColumn(output);
+            _.updateGeneratedLineAndColumn(output);
 
-            if (this.cover_lines_without_mappings && !this.line_starts_with_mapping && this.generated_column > 0 && this.has_prev_state) {
-                this.appendMappingWithoutRemapping(SourceMapState{
-                    generated_line: this.prev_state.generated_line,
+            if (_.cover_lines_without_mappings && !_.line_starts_with_mapping && _.generated_column > 0 && _.has_prev_state) {
+                _.appendMappingWithoutRemapping(SourceMapState{
+                    generated_line: _.prev_state.generated_line,
                     generated_column: 0,
-                    source_index: this.prev_state.source_index,
-                    original_line: this.prev_state.original_line,
-                    original_column: this.prev_state.original_column,
+                    source_index: _.prev_state.source_index,
+                    original_line: _.prev_state.original_line,
+                    original_column: _.prev_state.original_column,
                 });
             }
 
-            this.appendMapping(SourceMapState{
-                generated_line: this.prev_state.generated_line,
-                generated_column: @max(this.generated_column, 0),
-                source_index: this.prev_state.source_index,
+            _.appendMapping(SourceMapState{
+                generated_line: _.prev_state.generated_line,
+                generated_column: @max(_.generated_column, 0),
+                source_index: _.prev_state.source_index,
                 original_line: @max(original_line, 0),
                 original_column: @max(original_column, 0),
             });
 
-            this.line_starts_with_mapping = true;
+            _.line_starts_with_mapping = true;
         }
     };
 }

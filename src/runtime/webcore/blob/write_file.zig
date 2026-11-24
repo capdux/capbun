@@ -758,9 +758,9 @@ pub fn init(self: *WriteFileWaitFromLockedValueTask, file_blob: Blob, globalThis
     }
 
 pub fn thenWrap(this_opaque: *anyopaque, value: *Body.Value) void {
-            var self: *WriteFileWaitFromLockedValueTask = cast(*WriteFileWaitFromLockedValueTask, this_opaque);
-            _ = &self;
-            _ = (blk_catch_5: { break :blk_catch_5 ((self.then(value)) catch |__ce_5| { _ = &__ce_5;  }); });
+            var task: *WriteFileWaitFromLockedValueTask = cast(*WriteFileWaitFromLockedValueTask, this_opaque);
+            _ = &task;
+            _ = (blk_catch_5: { break :blk_catch_5 ((task.then(value)) catch |__ce_5| { _ = &__ce_5;  }); });
     }
 
 pub fn then(self: *WriteFileWaitFromLockedValueTask, value: *Body.Value) bun.JSTerminated!void {

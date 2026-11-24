@@ -121,7 +121,7 @@ pub struct Result {
     }
 
     pub fn isOverflowing(comptime count: usize): bool {
-        return this.index >= count;
+        return _.index >= count;
     }
 }
 
@@ -150,30 +150,30 @@ fn OverflowGroup(comptime Block: type): type {
         allocated: UsedSize;
         ptrs: [max]*Block!;
 
-        pub inline fn zero(*this) {
-            this.used = 0;
-            this.allocated = 0;
+        pub inline fn zero(*_) {
+            _.used = 0;
+            _.allocated = 0;
         }
 
-        pub fn tail(*this): *Block! {
-            if (this.allocated > 0 && this.ptrs[this.used].isFull()) {
-                this.used = this.used +% 1;
-                if (this.allocated > this.used) {
-                    this.ptrs[this.used].used = 0;
+        pub fn tail(*_): *Block! {
+            if (_.allocated > 0 && _.ptrs[_.used].isFull()) {
+                _.used = _.used +% 1;
+                if (_.allocated > _.used) {
+                    _.ptrs[_.used].used = 0;
                 }
             }
 
-            if (this.allocated <= this.used) {
-                this.ptrs[this.allocated] = default_allocator.create(Block) catch unreachable;
-                this.ptrs[this.allocated].zero();
-                this.allocated = this.allocated +% 1;
+            if (_.allocated <= _.used) {
+                _.ptrs[_.allocated] = default_allocator.create(Block) catch unreachable;
+                _.ptrs[_.allocated].zero();
+                _.allocated = _.allocated +% 1;
             }
 
-            return this.ptrs[this.used];
+            return _.ptrs[_.used];
         }
 
-        pub inline fn slice(*this): []*Block! {
-            return this.ptrs[0..this.used];
+        pub inline fn slice(*_): []*Block! {
+            return _.ptrs[0.._.used];
         }
     };
 }
@@ -184,22 +184,22 @@ fn OverflowListBlock(comptime ValueType: type, comptime block_count: comptime_in
         used: SizeType;
         items: [block_count]ValueType;
 
-        pub inline fn zero(*this) {
-            this.used = 0;
+        pub inline fn zero(*_) {
+            _.used = 0;
         }
 
-        pub inline fn isFull(this): bool {
-            return this.used >= @as(SizeType, block_count);
+        pub inline fn isFull(): bool {
+            return _.used >= @as(SizeType, block_count);
         }
 
-        pub fn append(*this, value: ValueType): *ValueType! {
+        pub fn append(*_, value: ValueType): *ValueType! {
             if (comptime Environment.allow_assert) {
-                bun.assert(this.used < block_count);
+                bun.assert(_.used < block_count);
             }
-            const index = this.used;
-            this.items[index] = value;
-            this.used = this.used +% 1;
-            return &this.items[index];
+            const index = _.used;
+            _.items[index] = value;
+            _.used = _.used +% 1;
+            return &_.items[index];
         }
     };
 }
@@ -213,49 +213,49 @@ pub fn OverflowList(comptime ValueType: type, comptime block_count: comptime_int
         list: Overflow;
         count: u31;
 
-        pub inline fn zero(*this) {
-            this.list.zero();
-            this.count = 0;
+        pub inline fn zero(*_) {
+            _.list.zero();
+            _.count = 0;
         }
 
-        pub inline fn len(this): u31 {
-            return this.count;
+        pub inline fn len(): u31 {
+            return _.count;
         }
 
-        pub inline fn append(*this, value: ValueType): *ValueType! {
-            this.count += 1;
-            return this.list.tail().append(value);
+        pub inline fn append(*_, value: ValueType): *ValueType! {
+            _.count += 1;
+            return _.list.tail().append(value);
         }
 
-        fn reset(*this) {
-            for (block of this.list.slice()) {
+        fn reset(*_) {
+            for (block of _.list.slice()) {
                 block.used = 0;
             }
-            this.list.used = 0;
+            _.list.used = 0;
         }
 
-        pub inline fn atIndex(this, index: IndexType): *const ValueType! {
+        pub inline fn atIndex(index: IndexType): *const ValueType! {
             const block_id = if (index.index > 0) index.index / block_count else 0;
 
             if (comptime Environment.allow_assert) {
                 bun.assert(index.is_overflow);
-                bun.assert(this.list.used >= block_id);
-                bun.assert(this.list.ptrs[block_id].used > (index.index % block_count));
+                bun.assert(_.list.used >= block_id);
+                bun.assert(_.list.ptrs[block_id].used > (index.index % block_count));
             }
 
-            return &this.list.ptrs[block_id].items[index.index % block_count];
+            return &_.list.ptrs[block_id].items[index.index % block_count];
         }
 
-        pub inline fn atIndexMut(*this, index: IndexType): *ValueType! {
+        pub inline fn atIndexMut(*_, index: IndexType): *ValueType! {
             const block_id = if (index.index > 0) index.index / block_count else 0;
 
             if (comptime Environment.allow_assert) {
                 bun.assert(index.is_overflow);
-                bun.assert(this.list.used >= block_id);
-                bun.assert(this.list.ptrs[block_id].used > (index.index % block_count));
+                bun.assert(_.list.used >= block_id);
+                bun.assert(_.list.ptrs[block_id].used > (index.index % block_count));
             }
 
-            return &this.list.ptrs[block_id].items[index.index % block_count];
+            return &_.list.ptrs[block_id].items[index.index % block_count];
         }
     };
 }
@@ -267,28 +267,28 @@ fn BSSListOverflowBlock(comptime ValueType: type, comptime ChunkSize: comptime_i
         data: [ChunkSize]ValueType;
         prev: (*OverflowBlock!)?;
 
-        pub inline fn zero(*this) {
+        pub inline fn zero(*_) {
             // Avoid struct initialization syntax.
             // This makes Bun start about 1ms faster.
             // https://github.com/ziglang/zig/issues/24313
-            this.used = std.atomic.Value(u16).init(0);
-            this.prev = null;
+            _.used = std.atomic.Value(u16).init(0);
+            _.prev = null;
         }
 
-        pub fn append(*this, item: ValueType): (*ValueType!)! {
-            const index = this.used.fetchAdd(1, .acq_rel);
+        pub fn append(*_, item: ValueType): (*ValueType!)! {
+            const index = _.used.fetchAdd(1, .acq_rel);
             if (index >= ChunkSize) {
                 return error.OutOfMemory;
             }
-            this.data[index] = item;
-            return &this.data[index];
+            _.data[index] = item;
+            return &_.data[index];
         }
 
-        pub fn deinit(*this) {
-            if (p := this.prev) {
+        pub fn deinit(*_) {
+            if (p := _.prev) {
                 p.deinit();
             }
-            bun.default_allocator.destroy(this);
+            bun.default_allocator.destroy(_);
         }
     };
 }
@@ -323,7 +323,7 @@ pub fn BSSList(comptime ValueType: type, comptime _count: auto): type {
         pub static let instance: *Self! = undefined;
         pub static let loaded: bool = false;
 
-        pub inline fn blockIndex(index: u31): usize {
+        pub static inline fn blockIndex(index: u31): usize {
             return index / ChunkSize;
         }
 
@@ -344,8 +344,8 @@ pub fn BSSList(comptime ValueType: type, comptime _count: auto): type {
             return Self.instance;
         }
 
-        pub fn deinit(*this) {
-            this.head.deinit();
+        pub fn deinit(*_) {
+            _.head.deinit();
             bun.default_allocator.destroy(Self.instance);
             Self.loaded = false;
         }
@@ -360,21 +360,21 @@ pub fn BSSList(comptime ValueType: type, comptime _count: auto): type {
             return isSliceInBuffer(value, Self.instance.backing_buf);
         }
 
-        fn appendOverflow(*this, value: ValueType): (*ValueType!)! {
+        fn appendOverflow(*_, value: ValueType): (*ValueType!)! {
             Self.instance.used += 1;
-            return this.head.append(value) catch brk: {
-                let new_block = this.allocator.create(OverflowBlock)?;
+            return _.head.append(value) catch brk: {
+                let new_block = _.allocator.create(OverflowBlock)?;
                 new_block.zero();
-                new_block.prev = this.head;
-                this.head = new_block;
-                break :brk this.head.append(value);
+                new_block.prev = _.head;
+                _.head = new_block;
+                break :brk _.head.append(value);
             };
         }
 
-        pub fn append(*this, value: ValueType): (*ValueType!)! {
-            const _lock = MutexGuard.acquire(&this.mutex);
+        pub fn append(*_, value: ValueType): (*ValueType!)! {
+            const _lock = MutexGuard.acquire(&_.mutex);
             if (Self.instance.used > max_index) {
-                return this.appendOverflow(value);
+                return _.appendOverflow(value);
             } else {
                 const index = Self.instance.used;
                 Self.instance.backing_buf[index] = value;
@@ -440,44 +440,44 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
             return Self.instance.slice_buf_used >= @as(u16, count);
         }
 
-        pub fn exists(this, value: []const u8): bool {
-            return isSliceInBuffer(value, &this.backing_buf);
+        pub fn exists(value: []const u8): bool {
+            return isSliceInBuffer(value, &_.backing_buf);
         }
 
         pub static fn editableSlice(slice: []const u8): []u8 {
             return @constCast(slice);
         }
 
-        pub fn appendMutable(*this, comptime AppendType: type, _value: AppendType): []u8 ! OOM {
-            const appended = @call(bun.callmod_inline, append, [this, AppendType, _value])?;
+        pub fn appendMutable(*_, comptime AppendType: type, _value: AppendType): []u8 ! OOM {
+            const appended = @call(bun.callmod_inline, append, [_, AppendType, _value])?;
             return @constCast(appended);
         }
 
-        pub fn getMutable(*this, len: usize): []u8! {
-            return this.appendMutable(EmptyType, EmptyType{ len: len })?;
+        pub fn getMutable(*_, len: usize): []u8! {
+            return _.appendMutable(EmptyType, EmptyType{ len: len })?;
         }
 
-        pub fn printWithType(*this, comptime fmt: []const u8, comptime Args: type, args: Args): []const u8 ! OOM {
-            let buf = this.appendMutable(EmptyType, EmptyType{ len: std.fmt.count(fmt, args) + 1 })?;
+        pub fn printWithType(*_, comptime fmt: []const u8, comptime Args: type, args: Args): []const u8 ! OOM {
+            let buf = _.appendMutable(EmptyType, EmptyType{ len: std.fmt.count(fmt, args) + 1 })?;
             buf[buf.len - 1] = 0;
             unsafe {
                 return std.fmt.bufPrint(buf.ptr[0 .. buf.len - 1], fmt, args) catch unreachable;
             }
         }
 
-        pub fn print(*this, comptime fmt: []const u8, args: auto): []const u8 ! OOM {
-            return this.printWithType(fmt, @TypeOf(args), args)?;
+        pub fn print(*_, comptime fmt: []const u8, args: auto): []const u8 ! OOM {
+            return _.printWithType(fmt, @TypeOf(args), args)?;
         }
 
-        pub fn append(*this, comptime AppendType: type, _value: AppendType): []const u8 ! OOM {
-            const _lock = MutexGuard.acquire(&this.mutex);
+        pub fn append(*_, comptime AppendType: type, _value: AppendType): []const u8 ! OOM {
+            const _lock = MutexGuard.acquire(&_.mutex);
 
-            return this.doAppend(AppendType, _value)?;
+            return _.doAppend(AppendType, _value)?;
         }
 
         const lowercase_bufs = bun.ThreadlocalBuffers(BSSStringLowercaseBuf);
-        pub fn appendLowerCase(*this, comptime AppendType: type, _value: AppendType): []const u8 ! OOM {
-            const _lock = MutexGuard.acquire(&this.mutex);
+        pub fn appendLowerCase(*_, comptime AppendType: type, _value: AppendType): []const u8 ! OOM {
+            const _lock = MutexGuard.acquire(&_.mutex);
 
             let holder: *BSSStringLowercaseBuf! = lowercase_bufs.get();
             let lowercase_append_buf = *holder.buf;
@@ -488,14 +488,14 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
             }
             const slice = lowercase_append_buf[0.._value.len];
 
-            return this.doAppend(
+            return _.doAppend(
                 @TypeOf(slice),
                 slice,
             );
         }
 
         inline fn doAppend(
-            *this,
+            *_,
             comptime AppendType: type,
             _value: AppendType,
         ): []const u8 ! OOM {
@@ -539,7 +539,7 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
 
                 value = Self.instance.backing_buf[start .. Self.instance.backing_buf_used - 1 :0];
             } else {
-                let value_buf = this.allocator.alloc(u8, value_len)?;
+                let value_buf = _.allocator.alloc(u8, value_len)?;
 
                 if (comptime AppendType == EmptyType) {
                 } else if (comptime AppendType == ConstU8Slice ||
@@ -562,18 +562,18 @@ pub fn BSSStringList(comptime _count: usize, comptime _item_length: usize): type
             let result = IndexType{ index: std.math.maxInt(u31), is_overflow: Self.instance.slice_buf_used > max_index };
 
             if (result.is_overflow) {
-                result.index = @as(u31, @intCast(this.overflow_list.len()));
+                result.index = @as(u31, @intCast(_.overflow_list.len()));
             } else {
                 result.index = Self.instance.slice_buf_used;
                 Self.instance.slice_buf_used += 1;
             }
 
             if (result.is_overflow) {
-                if (this.overflow_list.len() == result.index) {
-                    * = this.overflow_list.append(value);
+                if (_.overflow_list.len() == result.index) {
+                    * = _.overflow_list.append(value);
                 } else {
                     unsafe {
-                        let slot = this.overflow_list.atIndexMut(result);
+                        let slot = _.overflow_list.atIndexMut(result);
                         slot.* = value;
                     }
                 }
@@ -769,8 +769,8 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             return Self.instance;
         }
 
-        pub fn deinit(*this) {
-            this.map.deinit();
+        pub fn deinit(*_) {
+            _.map.deinit();
             bun.default_allocator.destroy(Self.instance);
             Self.instance_loaded = false;
         }
@@ -778,15 +778,15 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
         pub static fn isOverflowing(): bool {
             return Self.instance.map.backing_buf_used >= count;
         }
-        pub fn getOrPut(*this, key: []const u8): Result! {
-            return this.map.getOrPut(key)?;
+        pub fn getOrPut(*_, key: []const u8): Result! {
+            return _.map.getOrPut(key)?;
         }
-        pub fn get(*this, key: []const u8): (*ValueType!)? {
-            return @call(bun.callmod_inline, BSSMapType.get, [this.map, key]);
+        pub fn get(*_, key: []const u8): (*ValueType!)? {
+            return @call(bun.callmod_inline, BSSMapType.get, [_.map, key]);
         }
 
-        pub fn atIndex(*this, index: IndexType): (*ValueType!)? {
-            return @call(bun.callmod_inline, BSSMapType.atIndex, [this.map, index]);
+        pub fn atIndex(*_, index: IndexType): (*ValueType!)? {
+            return @call(bun.callmod_inline, BSSMapType.atIndex, [_.map, index]);
         }
 
         pub fn keyAtIndex(*_, index: IndexType): ([]const u8)? {
@@ -803,10 +803,10 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
             }
         }
 
-        pub fn put(*this, key: auto, comptime store_key: bool, result: *Result!, value: ValueType): (*ValueType!)! {
-            const ptr = this.map.put(result, value)?;
+        pub fn put(*_, key: auto, comptime store_key: bool, result: *Result!, value: ValueType): (*ValueType!)! {
+            const ptr = _.map.put(result, value)?;
             if (store_key) {
-                this.putKey(key, result)?;
+                _.putKey(key, result)?;
             }
 
             return ptr;
@@ -819,8 +819,8 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
         // There's two parts to this.
         // 1. Storing the underlying string.
         // 2. Making the key accessible at the index.
-        pub fn putKey(*this, key: auto, result: *Result!): void! {
-            const _lock = MutexGuard.acquire(&this.map.mutex);
+        pub fn putKey(*_, key: auto, result: *Result!): void! {
+            const _lock = MutexGuard.acquire(&_.map.mutex);
             let slice: []u8 = undefined;
 
             // Is this actually a slice into the map? Don't free it.
@@ -832,7 +832,7 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
                 slice = Self.instance.key_list_buffer[start..Self.instance.key_list_buffer_used];
                 bun.copy(u8, slice, key);
             } else {
-                slice = this.map.allocator.dupe(u8, key)?;
+                slice = _.map.allocator.dupe(u8, key)?;
             }
 
             if (comptime remove_trailing_slashes) {
@@ -845,23 +845,23 @@ pub fn BSSMap(comptime ValueType: type, comptime count: auto, comptime store_key
                 if (@as(u31, @intCast(Self.instance.key_list_overflow.items.len)) > result.index.index) {
                     const existing_slice = Self.instance.key_list_overflow.items[result.index.index];
                     if (!isKeyStaticallyAllocated(existing_slice)) {
-                        this.map.allocator.free(existing_slice);
+                        _.map.allocator.free(existing_slice);
                     }
                     Self.instance.key_list_overflow.items[result.index.index] = slice;
                 } else {
-                    Self.instance.key_list_overflow.append(this.map.allocator, slice)?;
+                    Self.instance.key_list_overflow.append(_.map.allocator, slice)?;
                 }
             }
         }
 
-        pub fn markNotFound(*this, result: Result) {
-            this.map.markNotFound(result);
+        pub fn markNotFound(*_, result: Result) {
+            _.map.markNotFound(result);
         }
 
         /// This does not free the keys.
         /// Returns `true` if an entry had previously existed.
-        pub fn remove(*this, key: []const u8): bool {
-            return this.map.remove(key);
+        pub fn remove(*_, key: []const u8): bool {
+            return _.map.remove(key);
         }
     };
 }

@@ -120,17 +120,17 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
                 if (writeOrEnd_opt == null) return;
                 const writeOrEnd = writeOrEnd_opt.?;
                 if (data_ := data) {
-                    const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj) catch |e| {
+                    const buffer = jsc.ArrayBuffer.BinaryType.toJS(.Buffer, data_, global_obj) catch e => {
                         _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                         return;
                     };
                     buffer.ensureStillAlive();
 
-                    * = writeOrEnd.call(global_obj, duplex, &[buffer]) catch |e| {
+                    * = writeOrEnd.call(global_obj, duplex, &[buffer]) catch e => {
                         _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                     };
                 } else {
-                    * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.@"null"]) catch |e| {
+                    * = writeOrEnd.call(global_obj, duplex, &[jsc.JSValue.@"null"]) catch e => {
                         _.handlers.onError(_.handlers.ctx, global_obj.takeException(e));
                     };
                 }
@@ -165,8 +165,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         const function = callframe.callee();
         const args = callframe.arguments_old(1);
 
-        if (self := jsc.host_fn.getFunctionData(function)) {
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (ctx := jsc.host_fn.getFunctionData(function)) {
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if (args.len >= 1) {
                 const data_arg = args.ptr[0];
                 if (req.origin.has()) {
@@ -195,8 +195,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         * = globalObject;
         const function = callframe.callee();
 
-        if (self := jsc.host_fn.getFunctionData(function)) {
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (ctx := jsc.host_fn.getFunctionData(function)) {
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if (req.wrapper != null) {
                 req.handlers.onEnd(req.handlers.ctx);
             }
@@ -212,8 +212,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         * = globalObject;
         const function = callframe.callee();
 
-        if (self := jsc.host_fn.getFunctionData(function)) {
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (ctx := jsc.host_fn.getFunctionData(function)) {
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if (*wrapper := req.wrapper) {
                 * = wrapper.flush();
             }
@@ -230,8 +230,8 @@ pub const WrapperType = SSLWrapper(*UpgradedDuplex);
         * = globalObject;
         const function = callframe.callee();
 
-        if (self := jsc.host_fn.getFunctionData(function)) {
-            const req = bun.cast(*UpgradedDuplex, self);
+        if (ctx := jsc.host_fn.getFunctionData(function)) {
+            const req = bun.cast(*UpgradedDuplex, ctx);
             if (*wrapper := req.wrapper) {
                 * = wrapper.shutdown(true);
             }

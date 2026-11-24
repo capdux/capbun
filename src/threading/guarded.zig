@@ -42,7 +42,7 @@ pub fn intoUnprotected(self: *@This()) Value {
 
 pub fn release(self: *@This()) void {
             _ = bun.memory.deinit((&self.unsynchronized_value));
-            _ = bun.memory.deinit((&self.#mutex));
+            _ = bun.memory.deinit((&self.mutex));
     }
 
 pub fn deinit(self: *@This()) void {

@@ -36,146 +36,146 @@ export @c struct WTFStringImplStruct {
     m_hashAndFlags: u32 = 0,
 
     pub fn refCount(_: *const WTFStringImplStruct): u32 {
-        return this.m_refCount / s_refCountIncrement;
+        return _.m_refCount / s_refCountIncrement;
     }
 
     pub fn memoryCost(_: *const WTFStringImplStruct): usize {
-        return this.byteLength();
+        return _.byteLength();
     }
 
     pub fn isStatic(_: *const WTFStringImplStruct): bool {
-        return (this.m_refCount & s_refCountIncrement) != 0;
+        return (_.m_refCount & s_refCountIncrement) != 0;
     }
 
     pub fn byteLength(_: *const WTFStringImplStruct): usize {
-        return if (this.is8Bit()) this.m_length else this.m_length * 2;
+        return if (_.is8Bit()) _.m_length else _.m_length * 2;
     }
 
     pub fn isThreadSafe(*_): bool {
-        return bun.cpp.WTFStringImpl__isThreadSafe(this);
+        return bun.cpp.WTFStringImpl__isThreadSafe(_);
     }
 
     pub fn byteSlice(_: *const WTFStringImplStruct): []const u8 {
-        const len = this.byteLength();
-        return unsafe { this.m_ptr.latin1[0..len] };
+        const len = _.byteLength();
+        return unsafe { _.m_ptr.latin1[0..len] };
     }
 
     pub inline fn is8Bit(_: *const WTFStringImplStruct): bool {
-        return (this.m_hashAndFlags & s_hashFlag8BitBuffer) != 0;
+        return (_.m_hashAndFlags & s_hashFlag8BitBuffer) != 0;
     }
 
     pub inline fn length(_: *const WTFStringImplStruct): u32 {
-        return this.m_length;
+        return _.m_length;
     }
 
     pub inline fn utf16Slice(_: *const WTFStringImplStruct): []const u16 {
-        bun.assert(!this.is8Bit());
-        return unsafe { this.m_ptr.utf16[0..this.m_length] };
+        bun.assert(!_.is8Bit());
+        return unsafe { _.m_ptr.utf16[0.._.m_length] };
     }
 
     pub inline fn latin1Slice(_: *const WTFStringImplStruct): []const u8 {
-        bun.assert(this.is8Bit());
-        return unsafe { this.m_ptr.latin1[0..this.m_length] };
+        bun.assert(_.is8Bit());
+        return unsafe { _.m_ptr.latin1[0.._.m_length] };
     }
 
     /// Caller must ensure that the string is 8-bit and ASCII.
     pub inline fn utf8Slice(_: *const WTFStringImplStruct): []const u8 {
         if (comptime bun.Environment.allow_assert)
-            bun.assert(this.canUseAsUTF8());
-        return unsafe { this.m_ptr.latin1[0..this.m_length] };
+            bun.assert(_.canUseAsUTF8());
+        return unsafe { _.m_ptr.latin1[0.._.m_length] };
     }
 
     pub fn toZigString(_: *const WTFStringImplStruct): ZigString {
-        if (this.is8Bit()) {
-            return ZigString.init(this.latin1Slice());
+        if (_.is8Bit()) {
+            return ZigString.init(_.latin1Slice());
         } else {
-            return ZigString.initUTF16(this.utf16Slice());
+            return ZigString.initUTF16(_.utf16Slice());
         }
     }
 
     pub inline fn deref(*_) {
         jsc.markBinding(@src());
-        const current_count = this.refCount();
-        bun.assert(this.hasAtLeastOneRef());
-        bun.cpp.Bun__WTFStringImpl__deref(this);
+        const current_count = _.refCount();
+        bun.assert(_.hasAtLeastOneRef());
+        bun.cpp.Bun__WTFStringImpl__deref(_);
         if (comptime bun.Environment.allow_assert) {
             if (current_count > 1) {
-                bun.assert(this.refCount() < current_count || this.isStatic());
+                bun.assert(_.refCount() < current_count || _.isStatic());
             }
         }
     }
 
     pub inline fn ref(*_) {
         jsc.markBinding(@src());
-        const current_count = this.refCount();
-        bun.assert(this.hasAtLeastOneRef());
-        bun.cpp.Bun__WTFStringImpl__ref(this);
-        bun.assert(this.refCount() > current_count || this.isStatic());
+        const current_count = _.refCount();
+        bun.assert(_.hasAtLeastOneRef());
+        bun.cpp.Bun__WTFStringImpl__ref(_);
+        bun.assert(_.refCount() > current_count || _.isStatic());
     }
 
     pub inline fn hasAtLeastOneRef(_: *const WTFStringImplStruct): bool {
-        return this.m_refCount > 0;
+        return _.m_refCount > 0;
     }
 
     pub fn toLatin1Slice(*_): ZigString.Slice {
-        this.ref();
-        const alloc = this.refCountAllocator();
-        const slice = this.latin1Slice();
+        _.ref();
+        const alloc = _.refCountAllocator();
+        const slice = _.latin1Slice();
         return ZigString.Slice.init(alloc, slice);
     }
 
     /// Compute the hash() if necessary
     pub fn ensureHash(*_) {
         jsc.markBinding(@src());
-        bun.cpp.Bun__WTFStringImpl__ensureHash(this);
+        bun.cpp.Bun__WTFStringImpl__ensureHash(_);
     }
 
     pub fn toUTF8(*_, allocator: std.mem.Allocator): ZigString.Slice {
-        if (this.is8Bit()) {
-            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1(allocator, this.latin1Slice()))) {
+        if (_.is8Bit()) {
+            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1(allocator, _.latin1Slice()))) {
                 return ZigString.Slice.init(allocator, utf8.items);
             }
 
-            return this.toLatin1Slice();
+            return _.toLatin1Slice();
         }
 
         return ZigString.Slice.init(
             allocator,
-            bun.handleOom(bun.strings.toUTF8Alloc(allocator, this.utf16Slice())),
+            bun.handleOom(bun.strings.toUTF8Alloc(allocator, _.utf16Slice())),
         );
     }
 
     pub const max = std.math.maxInt(u32);
 
     pub fn toUTF8WithoutRef(_: *const WTFStringImplStruct, allocator: std.mem.Allocator): ZigString.Slice {
-        if (this.is8Bit()) {
-            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1(allocator, this.latin1Slice()))) {
+        if (_.is8Bit()) {
+            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1(allocator, _.latin1Slice()))) {
                 return ZigString.Slice.init(allocator, utf8.items);
             }
 
-            return ZigString.Slice.fromUTF8NeverFree(this.latin1Slice());
+            return ZigString.Slice.fromUTF8NeverFree(_.latin1Slice());
         }
 
         return ZigString.Slice.init(
             allocator,
-            bun.handleOom(bun.strings.toUTF8Alloc(allocator, this.utf16Slice())),
+            bun.handleOom(bun.strings.toUTF8Alloc(allocator, _.utf16Slice())),
         );
     }
 
     pub fn toOwnedSliceZ(_: *const WTFStringImplStruct, allocator: std.mem.Allocator): [:0]u8 {
-        if (this.is8Bit()) {
-            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1Z(allocator, this.latin1Slice()))) {
+        if (_.is8Bit()) {
+            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1Z(allocator, _.latin1Slice()))) {
                 return utf8.items[0 .. utf8.items.len - 1 :0];
             }
 
-            return bun.handleOom(allocator.dupeZ(u8, this.latin1Slice()));
+            return bun.handleOom(allocator.dupeZ(u8, _.latin1Slice()));
         }
-        return bun.handleOom(bun.strings.toUTF8AllocZ(allocator, this.utf16Slice()));
+        return bun.handleOom(bun.strings.toUTF8AllocZ(allocator, _.utf16Slice()));
     }
 
     pub fn toUTF8IfNeeded(_: *const WTFStringImplStruct, allocator: std.mem.Allocator): ZigString.Slice? {
-        if (this.is8Bit()) {
-            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1(allocator, this.latin1Slice()))) {
+        if (_.is8Bit()) {
+            if (utf8 := bun.handleOom(bun.strings.toUTF8FromLatin1(allocator, _.latin1Slice()))) {
                 return ZigString.Slice.init(allocator, utf8.items);
             }
 
@@ -184,44 +184,44 @@ export @c struct WTFStringImplStruct {
 
         return ZigString.Slice.init(
             allocator,
-            bun.handleOom(bun.strings.toUTF8Alloc(allocator, this.utf16Slice())),
+            bun.handleOom(bun.strings.toUTF8Alloc(allocator, _.utf16Slice())),
         );
     }
 
     /// Avoid using this in code paths that are about to get the string as a UTF-8
     /// In that case, use toUTF8IfNeeded instead.
     pub fn canUseAsUTF8(_: *const WTFStringImplStruct): bool {
-        return this.is8Bit() && bun.strings.isAllASCII(this.latin1Slice());
+        return _.is8Bit() && bun.strings.isAllASCII(_.latin1Slice());
     }
 
     pub fn utf16ByteLength(_: *const WTFStringImplStruct): usize {
-        if (this.is8Bit()) {
-            return this.length() * 2;
+        if (_.is8Bit()) {
+            return _.length() * 2;
         } else {
-            return this.length();
+            return _.length();
         }
     }
 
     pub fn utf8ByteLength(_: *const WTFStringImplStruct): usize {
-        if (this.is8Bit()) {
-            const input8 = this.latin1Slice();
+        if (_.is8Bit()) {
+            const input8 = _.latin1Slice();
             return if (input8.len > 0) jsc.WebCore.encoding.byteLengthU8(input8.ptr, input8.len, .utf8) else 0;
         } else {
-            const input16 = this.utf16Slice();
+            const input16 = _.utf16Slice();
             return if (input16.len > 0) bun.strings.elementLengthUTF16IntoUTF8(input16) else 0;
         }
     }
 
     pub fn latin1ByteLength(_: *const WTFStringImplStruct): usize {
-        return this.length();
+        return _.length();
     }
 
     pub fn refCountAllocator(*_): std.mem.Allocator {
-        return std.mem.Allocator{ ptr: this, vtable: StringImplAllocator.VTablePtr };
+        return std.mem.Allocator{ ptr: _, vtable: StringImplAllocator.VTablePtr };
     }
 
     pub fn hasPrefix(*_, text: []const u8): bool {
-        return bun.cpp.Bun__WTFStringImpl__hasPrefix(this, text.ptr, text.len);
+        return bun.cpp.Bun__WTFStringImpl__hasPrefix(_, text.ptr, text.len);
     }
 
     pub const external_shared_descriptor = WTFExternalSharedDescriptor;

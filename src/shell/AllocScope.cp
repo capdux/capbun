@@ -22,7 +22,7 @@ pub static fn endScope(client: *AllocScope) {
 pub static fn leakSlice(client: *AllocScope, memory: auto) {
     if (comptime bun.Environment.enableAllocScopes) {
         * = @typeInfo(@TypeOf(memory)).pointer;
-        client.__scope.trackExternalFree(memory, null) catch |e|
+        client.__scope.trackExternalFree(memory, null) catch e =>
             std.debug.panic("invalid free: {}", .{e});
     }
 }

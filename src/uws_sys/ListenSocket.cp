@@ -20,51 +20,51 @@ pub type OptOnServerNameCb = OnServerNameFn?;
 
 export @opaque class ListenSocket {
     pub fn close(*_) {
-        us_listen_socket_close(this);
+        us_listen_socket_close(_);
     }
 
     pub fn getLocalAddress(*_, buf: anytype): !string {
-        return this.getSocket().localAddress(buf);
+        return _.getSocket().localAddress(buf);
     }
 
     pub fn getLocalPort(*_): i32 {
-        return this.getSocket().localPort();
+        return _.getSocket().localPort();
     }
 
     pub fn getSocket(*_): *us_socket_t {
         unsafe {
-            return this as *us_socket_t;
+            return _ as *us_socket_t;
         }
     }
 
     pub fn socket(*_, comptime is_ssl: bool): SocketHandler(is_ssl) {
-        return SocketHandler(is_ssl).from(this.getSocket());
+        return SocketHandler(is_ssl).from(_.getSocket());
     }
 
     pub fn group(*_): *SocketGroup {
-        return us_listen_socket_group(this);
+        return us_listen_socket_group(_);
     }
 
     pub fn ext(*_, comptime T: type): *T {
         unsafe {
-            return us_listen_socket_ext(this) as *T;
+            return us_listen_socket_ext(_) as *T;
         }
     }
 
     pub fn fd(*_): bun.FD {
-        return bun.FD.fromNative(us_listen_socket_get_fd(this));
+        return bun.FD.fromNative(us_listen_socket_get_fd(_));
     }
 
     pub fn addServerName(*_, hostname: cstr, ssl_ctx: *!, user: *!?): bool {
-        return us_listen_socket_add_server_name(this, hostname, ssl_ctx, user) == 0;
+        return us_listen_socket_add_server_name(_, hostname, ssl_ctx, user) == 0;
     }
 
     pub fn removeServerName(*_, hostname: cstr) {
-        us_listen_socket_remove_server_name(this, hostname);
+        us_listen_socket_remove_server_name(_, hostname);
     }
 
     pub fn findServerNameUserdata(*_, comptime T: type, hostname: cstr): (*T)? {
-        let ptr = us_listen_socket_find_server_name_userdata(this, hostname);
+        let ptr = us_listen_socket_find_server_name_userdata(_, hostname);
         if (ptr == null) return null;
         unsafe {
             return ptr.? as *T;
@@ -72,6 +72,6 @@ export @opaque class ListenSocket {
     }
 
     pub fn onServerName(*_, cb: OptOnServerNameCb) {
-        us_listen_socket_on_server_name(this, cb);
+        us_listen_socket_on_server_name(_, cb);
     }
 }

@@ -255,10 +255,10 @@ pub fn initEmpty(allocator: Allocator) MutableString {
 }
 
 pub fn initCopy(allocator: Allocator, str: anytype) Allocator.Error!MutableString {
-        var mutable = try MutableString.init(allocator, str.len);
-        _ = &mutable;
-        _ = try mutable.copy(str);
-        return mutable;
+        var mut_str = try MutableString.init(allocator, str.len);
+        _ = &mut_str;
+        _ = try mut_str.copy(str);
+        return mut_str;
 }
 
 pub fn ensureValidIdentifier(str: []const u8, allocator: Allocator) Allocator.Error![]const u8 {
@@ -292,8 +292,8 @@ pub fn ensureValidIdentifier(str: []const u8, allocator: Allocator) Allocator.Er
             return ((JSLexerTables.StrictModeReservedWordsRemap.get(str)) orelse (str));
         }
         if (needs_gap) {
-            var mutable = try MutableString.initCopy(allocator, (if ((start_i == 0)) "_" else str[0..start_i]));
-            _ = &mutable;
+            var mut_str = try MutableString.initCopy(allocator, (if ((start_i == 0)) "_" else str[0..start_i]));
+            _ = &mut_str;
             needs_gap = false;
             var items = str[start_i..];
             _ = &items;
@@ -302,11 +302,11 @@ pub fn ensureValidIdentifier(str: []const u8, allocator: Allocator) Allocator.Er
             while (iterator.next((&cursor))) {
                 if ((js_lexer.isIdentifierContinue(cursor.c) and (cursor.width == 1))) {
                     if (needs_gap) {
-                        _ = try mutable.appendChar(95);
+                        _ = try mut_str.appendChar(95);
                         needs_gap = false;
                         has_needed_gap = true;
                     }
-                    _ = try mutable.append(items[cursor.i..(cursor.i + (if (comptime @typeInfo(@TypeOf(cursor.width)) == .@"enum") cp_cast_int(u32, @intFromEnum(cursor.width)) else cp_cast_int(u32, cursor.width)))]);
+                    _ = try mut_str.append(items[cursor.i..(cursor.i + (if (comptime @typeInfo(@TypeOf(cursor.width)) == .@"enum") cp_cast_int(u32, @intFromEnum(cursor.width)) else cp_cast_int(u32, cursor.width)))]);
                 } else {
                     if ((!needs_gap)) {
                         needs_gap = true;
@@ -314,14 +314,14 @@ pub fn ensureValidIdentifier(str: []const u8, allocator: Allocator) Allocator.Er
                 }
             }
             if (needs_gap) {
-                _ = try mutable.appendChar(95);
+                _ = try mut_str.appendChar(95);
                 needs_gap = false;
                 has_needed_gap = true;
             }
             if (comptime bun.Environment.allow_assert) {
-                _ = bun.assert(js_lexer.isIdentifier(mutable.list.items));
+                _ = bun.assert(js_lexer.isIdentifier(mut_str.list.items));
             }
-            return try mutable.list.toOwnedSlice(allocator);
+            return try mut_str.list.toOwnedSlice(allocator);
         }
         return str;
 }

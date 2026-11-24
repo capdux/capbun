@@ -61,7 +61,7 @@ fn readFileWrappedCall(comptime Function: anytype, b: *Blob, g: *JSGlobalObject,
 
 fn ReadFileHandler(comptime Context: type, comptime callback: fn (ctx: Context, bytes: ReadFileResultType) anyerror!void): type {
     return struct {
-        fn run(ptr: *!, bytes: ReadFileResultType) {
+        static fn run(ptr: *!, bytes: ReadFileResultType) {
             callback(cast(Context, ptr), bytes) catch {};
         }
     };
@@ -73,7 +73,7 @@ pub fn NewReadFileHandler(comptime Function: anytype): type {
         promise: JSPromise.Strong = .{},
         globalThis: *JSGlobalObject,
 
-        fn run(handler: *@This(), maybe_bytes: ReadFileResultType): ! {
+        static fn run(handler: *@This(), maybe_bytes: ReadFileResultType): ! {
             let promise = handler.promise.swap();
             let blob_guard = DeinitGuard<Blob>{ val: handler.context.takeOwnership() };
             const globalThis = handler.globalThis;
@@ -84,7 +84,7 @@ pub fn NewReadFileHandler(comptime Function: anytype): type {
                     if (blob_guard.val.size > 0)
                         blob_guard.val.size = @min(@as(SizeType, @truncate(bytes.len)), blob_guard.val.size);
                     jsc.AnyPromise.wrap(.{ .normal = promise }, globalThis, struct {
-                        fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8): jsc.JSValue {
+                        static fn wrapped(b: *Blob, g: *JSGlobalObject, by: []u8): jsc.JSValue {
                             return readFileWrappedCall(Function, b, g, by);
                         }
                     }.wrapped, .{ &blob_guard.val, globalThis, bytes })?;
@@ -437,7 +437,7 @@ export class ReadFile {
         }
 
         if (!_.could_block || (_.size > 0 && _.size != Blob.max_size))
-            _.buffer = ArrayListUnmanaged(u8).initCapacity(default_allocator, _.size +| 16) catch |e| {
+            _.buffer = ArrayListUnmanaged(u8).initCapacity(default_allocator, _.size +| 16) catch e => {
                 _.errno = e;
                 _.system_error = sys.Error.fromCode(sys.E.NOMEM, .read).toSystemError();
                 _.onFinish();

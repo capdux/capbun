@@ -248,7 +248,7 @@ pub inline fn zero(self: *@This()) void {
     }
 
 pub inline fn isFull(self: @This()) bool {
-            return (self.used >= (if (comptime @typeInfo(SizeType) == .@"enum") @as(SizeType, @enumFromInt(block_count)) else @as(SizeType, block_count)));
+            return (self.used >= (if (comptime @typeInfo(SizeType) == .@"enum" and (@typeInfo(@TypeOf(block_count)) == .int or @typeInfo(@TypeOf(block_count)) == .comptime_int)) @as(SizeType, @enumFromInt(block_count)) else @as(SizeType, block_count)));
     }
 
 pub fn append(self: *@This(), value: ValueType) *ValueType {

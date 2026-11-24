@@ -29,7 +29,7 @@ pub fn wait(ptr: *const atomic.Value(u32), expect: u32, timeout_ns: u64?): ! {
 pub fn waitForever(ptr: *const atomic.Value(u32), expect: u32) {
     @branchHint(.cold);
     while (true) {
-        Impl.wait(ptr, expect, null) catch |e| {
+        Impl.wait(ptr, expect, null) catch e => {
             if (e == error.Timeout) continue;
             break;
         };

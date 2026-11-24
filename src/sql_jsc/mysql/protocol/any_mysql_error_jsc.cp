@@ -49,5 +49,5 @@ pub fn mysqlErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8)?,
         code: code,
         errno: null,
         sqlState: null,
-    }) catch |ex| globalObject.takeException(ex);
+    }) catch ex => globalObject.takeException(ex);
 }

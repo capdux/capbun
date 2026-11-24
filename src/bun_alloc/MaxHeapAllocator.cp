@@ -33,11 +33,11 @@ import std from "std";
     ) {}
 
     pub fn reset(*_) {
-        this.array_list.items.len = 0;
+        _.array_list.items.len = 0;
     }
 
     pub fn deinit(*_) {
-        this.array_list.deinit();
+        _.array_list.deinit();
     }
 
     pub const vtable = std.mem.Allocator.VTable{
@@ -48,10 +48,10 @@ import std from "std";
     };
 
     pub fn init(*_, allocator: std.mem.Allocator): std.mem.Allocator {
-        this.array_list = ArrayList.init(allocator);
+        _.array_list = ArrayList.init(allocator);
 
         return std.mem.Allocator{
-            .ptr = this,
+            .ptr = _,
             .vtable = &MaxHeapAllocator.vtable,
         };
     }

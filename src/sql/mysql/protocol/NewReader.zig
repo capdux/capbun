@@ -109,7 +109,7 @@ pub fn int(self: @This(), comptime Int: type) AnyMySQLError.Error!Int {
             var __data_guard_moved = false; _ = &__data_guard_moved;
             defer if (!__data_guard_moved) { __data_guard_moved = true; const __T = @TypeOf(data_guard); if (@typeInfo(__T) == .optional) { if (data_guard) |__cp_opt_v| { const __OptT = @TypeOf(__cp_opt_v); if (@typeInfo(__OptT) == .pointer and @typeInfo(__OptT).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__OptT).pointer), "is_const")) !@typeInfo(__OptT).pointer.is_const else !@typeInfo(__OptT).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__OptT).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { __cp_opt_v.__cp_deinit(); } } else if (@typeInfo(__OptT) == .@"struct" and @hasDecl(__OptT, "__cp_deinit")) { var _drop_val = __cp_opt_v; _drop_val.__cp_deinit(); } } } else if (@typeInfo(__T) == .pointer and @typeInfo(__T).pointer.size == .one and (if (@hasField(@TypeOf(@typeInfo(__T).pointer), "is_const")) !@typeInfo(__T).pointer.is_const else !@typeInfo(__T).pointer.attrs.@"const")) { const __CpChild = @typeInfo(__T).pointer.child; if (@typeInfo(__CpChild) == .@"struct" and @hasDecl(__CpChild, "__cp_deinit")) { data_guard.__cp_deinit(); } } else if (@typeInfo(__T) == .@"struct" and @hasDecl(__T, "__cp_deinit")) { var _drop_val = data_guard; _drop_val.__cp_deinit(); } };
             if (comptime (Int == u8)) {
-                return (if (comptime @typeInfo(Int) == .@"enum") @as(Int, @enumFromInt(data_guard.val.slice()[0])) else @as(Int, data_guard.val.slice()[0]));
+                return (if (comptime @typeInfo(Int) == .@"enum" and (@typeInfo(@TypeOf(data_guard.val.slice()[0])) == .int or @typeInfo(@TypeOf(data_guard.val.slice()[0])) == .comptime_int)) @as(Int, @enumFromInt(data_guard.val.slice()[0])) else @as(Int, data_guard.val.slice()[0]));
             }
             const size = @divExact(@typeInfo(Int).int.bits, 8);
             return @as(Int, @bitCast((blk: {
@@ -169,21 +169,21 @@ pub fn NewReader(comptime Context: type) type {
 pub fn decoderWrap(comptime Container: type, comptime decodeFn: anytype) type {
         return struct {
 
-pub fn decode(self: *Container, context: anytype) anyerror!void {
+pub fn decode(target: *Container, context: anytype) anyerror!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
-                _ = try decodeFn(self, Context, context);
+                _ = try decodeFn(target, Context, context);
             } else {
-                _ = try decodeFn(self, Context, .{ .wrapped = context });
+                _ = try decodeFn(target, Context, .{ .wrapped = context });
             }
     }
 
-pub fn decodeAllocator(self: *Container, allocator: std.mem.Allocator, context: anytype) anyerror!void {
+pub fn decodeAllocator(target: *Container, allocator: std.mem.Allocator, context: anytype) anyerror!void {
             const Context = @TypeOf(context);
             if (@hasDecl(Context, "is_wrapped")) {
-                _ = try decodeFn(self, allocator, Context, context);
+                _ = try decodeFn(target, allocator, Context, context);
             } else {
-                _ = try decodeFn(self, allocator, Context, .{ .wrapped = context });
+                _ = try decodeFn(target, allocator, Context, .{ .wrapped = context });
             }
     }
 };

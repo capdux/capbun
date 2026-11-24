@@ -981,91 +981,62 @@ pub fn write(self: @This(), writer: *std.Io.Writer) !void {
 
 pub fn SliceTracking(comptime T: type, comptime max_len: usize) type {
         return struct {
-        max_offset: usize = 0,
-        max_len: usize = 0,
-        offset_map: SliceMap(T, usize) = .empty,
-        len_counts: [max_len]usize = [_]usize{0} ** max_len,
-        shift: ShiftTracking = .{},
+    max_offset: usize = 0,
+    max_len: usize = 0,
+    offset_map: SliceMap(T, usize) = .empty,
+    len_counts: [max_len]usize = @as([max_len]usize, @splat(0)),
+    shift: ShiftTracking = .{},
 
-        const Self = @This();
+pub fn deinit(self: *@This(), allocator: Allocator) void {
+            _ = self.offset_map.deinit(allocator);
+    }
 
-        pub fn deinit(self: *Self, allocator: Allocator) void {
-            self.offset_map.deinit(allocator);
-        }
+pub fn actualConfig(self: @This(), c: config.Field.Runtime) config.Field.Runtime {
+            return c.override(.{ .shift_low = self.shift.shift_low, .shift_high = self.shift.shift_high, .max_len = self.max_len, .max_offset = self.max_offset });
+    }
 
-        pub fn actualConfig(
-            self: *const Self,
-            c: config.Field.Runtime,
-        ) config.Field.Runtime {
-            return c.override(.{
-                .shift_low = self.shift.shift_low,
-                .shift_high = self.shift.shift_high,
-                .max_len = self.max_len,
-                .max_offset = self.max_offset,
-            });
-        }
-
-        pub fn minBitsConfig(
-            self: *const Self,
-            c: config.Field.Runtime,
-        ) config.Field.Runtime {
-            if (c.embedded_len != 0) {
-                @panic("embedded_len != 0 is not supported for minBitsConfig");
+pub fn minBitsConfig(self: @This(), c: config.Field.Runtime) config.Field.Runtime {
+            if ((c.embedded_len != 0)) {
+                _ = @panic("embedded_len != 0 is not supported for minBitsConfig");
             }
-
             const actual = self.actualConfig(c);
-
-            // In case of everything fitting in shift, return early
-            // to avoid log2_int error.
-            if (both(actual.max_len == 1, self.len_counts[0] == 0)) {
+            if (both((actual.max_len == 1), (self.len_counts[0] == 0))) {
                 return actual;
             }
-
             const item_bits = @bitSizeOf(T);
             var best_embedded_len: usize = actual.max_len;
+            _ = &best_embedded_len;
             var best_max_offset: usize = 0;
-            var best_bits = best_embedded_len * item_bits;
+            _ = &best_max_offset;
+            var best_bits = (best_embedded_len * item_bits);
+            _ = &best_bits;
             var current_max_offset: usize = 0;
-
+            _ = &current_max_offset;
             var i: usize = actual.max_len;
-            while (i != 0) {
-                i -= 1;
-                current_max_offset += (i + 1) * self.len_counts[i];
-
-                const embedded_bits = i * item_bits;
-
-                // We do over-estimate the max offset a bit by taking the
-                // offset _after_ the last item, since we don't know what
-                // the last item will be. This simplifies creating backing
-                // buffers of length `max_offset`.
+            _ = &i;
+            while ((i != 0)) {
+                i = (i - 1);
+                current_max_offset = (current_max_offset + ((i + 1) * self.len_counts[@as(usize, @intCast(i))]));
+                const embedded_bits = (i * item_bits);
                 const offset_bits = std.math.log2_int(usize, current_max_offset);
                 const bits = @max(offset_bits, embedded_bits);
-
-                if (either(bits < best_bits, both(bits == best_bits, current_max_offset <= best_max_offset))) {
+                if (either((bits < best_bits), both((bits == best_bits), (current_max_offset <= best_max_offset)))) {
                     best_embedded_len = i;
                     best_max_offset = current_max_offset;
                     best_bits = bits;
                 }
             }
-
-            std.debug.assert(current_max_offset == self.max_offset);
-
-            return c.override(.{
-                .shift_low = actual.shift_low,
-                .shift_high = actual.shift_high,
-                .max_len = actual.max_len,
-                .max_offset = best_max_offset,
-                .embedded_len = best_embedded_len,
-            });
-        }
-    };
+            _ = std.debug.assert((current_max_offset == self.max_offset));
+            return c.override(.{ .shift_low = actual.shift_low, .shift_high = actual.shift_high, .max_len = actual.max_len, .max_offset = best_max_offset, .embedded_len = best_embedded_len });
+    }
+    const Self = @This();
+};
 }
 
 pub fn SliceMapContext(comptime T: type) type {
         return struct {
 
-pub fn hash(self: @This(), s: []const T) u64 {
-            _ = &self;
+pub fn hash(s: []const T) u64 {
             var hasher = std.hash.Wyhash.init(718259503);
             _ = &hasher;
             _ = std.hash.autoHashStrat((&hasher), s, .Deep);
@@ -1073,8 +1044,7 @@ pub fn hash(self: @This(), s: []const T) u64 {
             return result;
     }
 
-pub fn eql(self: @This(), a: []const T, b: []const T) bool {
-            _ = &self;
+pub fn eql(a: []const T, b: []const T) bool {
             return std.mem.eql(T, a, b);
     }
     pub const Key = []const T;
@@ -1090,43 +1060,43 @@ pub fn PackedOptional(comptime c: config.Field) type {
             _ = @compileError("PackedOptional with min_value = 0 && max_value = 0. Set to minInt(isize), maxInt(isize) - 1 && run again to get actual values");
         }
         return packed struct {
-        data: Int,
+    data: Int,
 
-        const Self = @This();
-        pub const Tracking = OptionalTracking(c.type);
-        const T = @typeInfo(c.type).optional.child;
-        const Int = std.math.IntFittingRange(c.min_value, c.max_value + 1);
-        const null_data = std.math.maxInt(Int);
-        pub const @"null" = Self{ .data = null_data };
-
-        pub fn init(opt: ?T) Self {
+pub fn init(opt: ?T) Self {
             if (opt) |value| {
-                const d: Int = switch (@typeInfo(T)) {
-                    .int => value,
-                    .@"enum" => @intFromEnum(value),
-                    .bool => @intFromBool(value),
-                    else => unreachable,
-                };
-                std.debug.assert(d != null_data);
+                _ = &value;
+                const d: Int = (switch (@typeInfo(T)) {
+.int => value,
+.@"enum" => @intFromEnum(value),
+.bool => @intFromBool(value),
+else => unreachable,
+});
+                _ = std.debug.assert((d != null_data));
                 return .{ .data = d };
             } else {
                 return .null;
             }
-        }
+    }
 
-        pub fn unpack(self: Self) ?T {
-            if (self.data == null_data) {
+pub fn unpack(self: @This()) ?T {
+            if ((self.data == null_data)) {
                 return null;
             } else {
-                return switch (@typeInfo(T)) {
-                    .int => @intCast(self.data),
-                    .@"enum" => @enumFromInt(self.data),
-                    .bool => self.data == 1,
-                    else => unreachable,
-                };
+                return (switch (@typeInfo(T)) {
+.int => @intCast(self.data),
+.@"enum" => @enumFromInt(self.data),
+.bool => (self.data == 1),
+else => unreachable,
+});
             }
-        }
-    };
+    }
+    const Self = @This();
+    pub const Tracking = OptionalTracking(c.type);
+    const T = @typeInfo(c.type).optional.child;
+    const Int = std.math.IntFittingRange(c.min_value, (c.max_value + 1));
+    const null_data = std.math.maxInt(Int);
+    pub const @"null" = Self{ .data = null_data };
+};
 }
 
 pub fn OptionalTracking(comptime Optional: type) type {
@@ -1135,7 +1105,8 @@ pub fn OptionalTracking(comptime Optional: type) type {
     max_value: isize = 0,
 
 pub fn deinit(self: *@This(), allocator: Allocator) void {
-            _ = &self;
+            const self_ref = self;
+            _ = &self_ref;
             _ = &allocator;
     }
 
@@ -1158,11 +1129,11 @@ else => unreachable,
             }
     }
 
-pub fn actualConfig(self: *const @This(), c: config.Field.Runtime) config.Field.Runtime {
+pub fn actualConfig(self: @This(), c: config.Field.Runtime) config.Field.Runtime {
             return c.override(.{ .min_value = self.min_value, .max_value = self.max_value });
     }
 
-pub fn minBitsConfig(self: *const @This(), c: config.Field.Runtime) config.Field.Runtime {
+pub fn minBitsConfig(self: @This(), c: config.Field.Runtime) config.Field.Runtime {
             return self.actualConfig(c);
     }
     const Self = @This();
@@ -1223,41 +1194,37 @@ pub fn write(self: @This(), writer: *std.Io.Writer) !void {
 };
         }
         return packed struct {
-        data: Int,
+    data: Int,
 
-        const Self = @This();
-        pub const Tracking = ShiftTracking;
-        pub const @"null" = Self{ .data = null_data };
+pub fn init(cp: u21, d: u21) Self {
+            return Self{ .data = @intCast(((if (comptime @typeInfo(@TypeOf(d)) == .@"enum") cp_cast_int(isize, @intFromEnum(d)) else cp_cast_int(isize, d)) - (if (comptime @typeInfo(@TypeOf(cp)) == .@"enum") cp_cast_int(isize, @intFromEnum(cp)) else cp_cast_int(isize, cp)))) };
+    }
 
-        pub fn init(cp: u21, d: u21) Self {
-            return Self{ .data = @intCast(@as(isize, d) - @as(isize, cp)) };
-        }
-
-        pub fn initOptional(cp: u21, o: ?u21) Self {
+pub fn initOptional(cp: u21, o: ?u21) Self {
             if (o) |d| {
+                _ = &d;
                 return .init(cp, d);
             } else {
                 return .null;
             }
-        }
+    }
 
-        fn _unshift(self: Self, cp: u21) u21 {
-            return @intCast(@as(isize, cp) + @as(isize, self.data));
-        }
+pub fn _unshift(self: @This(), cp: u21) u21 {
+            return @intCast(((if (comptime @typeInfo(@TypeOf(cp)) == .@"enum") cp_cast_int(isize, @intFromEnum(cp)) else cp_cast_int(isize, cp)) + (if (comptime @typeInfo(@TypeOf(self.data)) == .@"enum") cp_cast_int(isize, @intFromEnum(self.data)) else cp_cast_int(isize, self.data))));
+    }
 
-        fn _unshiftOptional(self: Self, cp: u21) ?u21 {
-            if (self.data == null_data) {
+pub fn _unshiftOptional(self: @This(), cp: u21) ?u21 {
+            if ((self.data == null_data)) {
                 return null;
             } else {
                 return self._unshift(cp);
             }
-        }
-
-        pub const unshift = if (is_optional)
-            _unshiftOptional
-        else
-            _unshift;
-    };
+    }
+    const Self = @This();
+    pub const Tracking = ShiftTracking;
+    pub const @"null" = Self{ .data = null_data };
+    pub const unshift = (if (is_optional) _unshiftOptional else _unshift);
+};
 }
 
 pub fn Union(comptime c: config.Field, comptime packing: config.Table.Packing) type {
@@ -1294,139 +1261,89 @@ pub fn Union(comptime c: config.Field, comptime packing: config.Table.Packing) t
         const InnerUnion = @Type(std.builtin.Type{ .@"union" = std.builtin.Type.Union{ .layout = (if ((packing == .@"packed")) .@"packed" else .auto), .tag_type = (if ((packing == .@"packed")) null else Tag), .fields = (&fields), .decls = (&&.{}) } });
         if ((packing == .unpacked)) {
             return struct {
-        @"union": InnerUnion,
+    @"union": InnerUnion,
 
-        const Self = @This();
-        pub const Tracking = UnionShiftTracking;
+pub fn init(cp: u21, value: c.type) Self {
+            return .{ .@"union" = (switch ((if (comptime @typeInfo(Tag) == .@"enum" and (@typeInfo(@TypeOf(value)) == .int or @typeInfo(@TypeOf(value)) == .comptime_int)) @as(Tag, @enumFromInt(value)) else @as(Tag, value))) {
+inline else => |tag| (if ((@FieldType(InnerUnion, @tagName(tag)) == ShiftMember)) @unionInit(InnerUnion, @tagName(tag), .init(cp, @field(value, @tagName(tag)))) else @unionInit(InnerUnion, @tagName(tag), @field(value, @tagName(tag)))),
+}) };
+    }
 
-        pub fn init(cp: u21, value: c.type) Self {
-            return .{
-                .@"union" = switch (value) {
-                    inline else => |v, tag| if (@FieldType(InnerUnion, @tagName(tag)) == ShiftMember)
-                        @unionInit(InnerUnion, @tagName(tag), .init(cp, v))
-                    else
-                        @unionInit(InnerUnion, @tagName(tag), v),
-                },
-            };
-        }
+pub fn unshift(self: @This(), cp: u21) c.type {
+            return (switch ((if (comptime @typeInfo(Tag) == .@"enum" and (@typeInfo(@TypeOf(self.@"union")) == .int or @typeInfo(@TypeOf(self.@"union")) == .comptime_int)) @as(Tag, @enumFromInt(self.@"union")) else @as(Tag, self.@"union"))) {
+inline else => |comptime_tag| (if ((@FieldType(InnerUnion, @tagName(comptime_tag)) == ShiftMember)) @unionInit(c.type, @tagName(comptime_tag), @field(self.@"union", @tagName(comptime_tag)).unshift(cp)) else @unionInit(c.type, @tagName(comptime_tag), @field(self.@"union", @tagName(comptime_tag)))),
+});
+    }
 
-        pub fn unshift(self: Self, cp: u21) c.type {
-            return switch (self.@"union") {
-                inline else => |v, comptime_tag| if (@FieldType(InnerUnion, @tagName(comptime_tag)) == ShiftMember)
-                    @unionInit(
-                        c.type,
-                        @tagName(comptime_tag),
-                        v.unshift(cp),
-                    )
-                else
-                    @unionInit(
-                        c.type,
-                        @tagName(comptime_tag),
-                        v,
-                    ),
-            };
-        }
-
-        pub fn write(self: Self, writer: *std.Io.Writer) !void {
-            try writer.writeAll(
-                ".{\n    .@\"union\" =\n"
-            );
-            try writer.writeAll(" ");
-            try writeDataField(InnerUnion, writer, self.@"union");
-            try writer.writeAll(
-                ",\n}\n\n"
-            );
-        }
-    };
+pub fn write(self: @This(), writer: *std.Io.Writer) !void {
+            _ = try writer.writeAll(".{\n    .@\"union\" =\n");
+            _ = try writer.writeAll(" ");
+            _ = try writeDataField(InnerUnion, writer, self.@"union");
+            _ = try writer.writeAll(",\n}\n\n");
+    }
+    const Self = @This();
+    pub const Tracking = UnionShiftTracking;
+};
         }
         return packed struct {
-        tag: Int,
-        @"union": InnerUnion,
+    tag: Int,
+    @"union": InnerUnion,
 
-        const Self = @This();
+pub fn _init(value: c.type) Self {
+            return .{ .tag = @intFromEnum((if (comptime @typeInfo(Tag) == .@"enum" and (@typeInfo(@TypeOf(value)) == .int or @typeInfo(@TypeOf(value)) == .comptime_int)) @as(Tag, @enumFromInt(value)) else @as(Tag, value))), .@"union" = (switch ((if (comptime @typeInfo(Tag) == .@"enum" and (@typeInfo(@TypeOf(value)) == .int or @typeInfo(@TypeOf(value)) == .comptime_int)) @as(Tag, @enumFromInt(value)) else @as(Tag, value))) {
+inline else => |tag| @unionInit(InnerUnion, @tagName(tag), @field(value, @tagName(tag))),
+}) };
+    }
 
-        fn _init(value: c.type) Self {
-            return .{
-                .tag = @intFromEnum(@as(Tag, value)),
-                .@"union" = switch (value) {
-                    inline else => |v, tag| @unionInit(InnerUnion, @tagName(tag), v),
-                },
-            };
-        }
+pub fn _initShift(cp: u21, value: c.type) Self {
+            return .{ .tag = @intFromEnum((if (comptime @typeInfo(Tag) == .@"enum" and (@typeInfo(@TypeOf(value)) == .int or @typeInfo(@TypeOf(value)) == .comptime_int)) @as(Tag, @enumFromInt(value)) else @as(Tag, value))), .@"union" = (switch ((if (comptime @typeInfo(Tag) == .@"enum" and (@typeInfo(@TypeOf(value)) == .int or @typeInfo(@TypeOf(value)) == .comptime_int)) @as(Tag, @enumFromInt(value)) else @as(Tag, value))) {
+inline else => |tag| (if ((@FieldType(InnerUnion, @tagName(tag)) == ShiftMember)) @unionInit(InnerUnion, @tagName(tag), .init(cp, @field(value, @tagName(tag)))) else @unionInit(InnerUnion, @tagName(tag), @field(value, @tagName(tag)))),
+}) };
+    }
 
-        fn _initShift(cp: u21, value: c.type) Self {
-            return .{
-                .tag = @intFromEnum(@as(Tag, value)),
-                .@"union" = switch (value) {
-                    inline else => |v, tag| if (@FieldType(InnerUnion, @tagName(tag)) == ShiftMember)
-                        @unionInit(InnerUnion, @tagName(tag), .init(cp, v))
-                    else
-                        @unionInit(InnerUnion, @tagName(tag), v),
-                },
-            };
-        }
-
-        fn _unpack(self: Self) c.type {
+pub fn _unpack(self: @This()) c.type {
             const tag: Tag = @enumFromInt(self.tag);
-            return switch (tag) {
-                inline else => |comptime_tag| @unionInit(
-                    c.type,
-                    @tagName(comptime_tag),
-                    @field(self.@"union", @tagName(comptime_tag)),
-                ),
-            };
-        }
+            return (switch (tag) {
+inline else => |comptime_tag| @unionInit(c.type, @tagName(comptime_tag), @field(self.@"union", @tagName(comptime_tag))),
+});
+    }
 
-        fn _unshift(self: Self, cp: u21) c.type {
+pub fn _unshift(self: @This(), cp: u21) c.type {
             const tag: Tag = @enumFromInt(self.tag);
-            return switch (tag) {
-                inline else => |comptime_tag| if (@FieldType(InnerUnion, @tagName(comptime_tag)) == ShiftMember)
-                    @unionInit(
-                        c.type,
-                        @tagName(comptime_tag),
-                        @field(self.@"union", @tagName(comptime_tag)).unshift(cp),
-                    )
-                else
-                    @unionInit(
-                        c.type,
-                        @tagName(comptime_tag),
-                        @field(self.@"union", @tagName(comptime_tag)),
-                    ),
-            };
-        }
+            return (switch (tag) {
+inline else => |comptime_tag| (if ((@FieldType(InnerUnion, @tagName(comptime_tag)) == ShiftMember)) @unionInit(c.type, @tagName(comptime_tag), @field(self.@"union", @tagName(comptime_tag)).unshift(cp)) else @unionInit(c.type, @tagName(comptime_tag), @field(self.@"union", @tagName(comptime_tag)))),
+});
+    }
 
-        pub const Tracking = if (c.cp_packing == .shift) UnionShiftTracking else void;
-        pub const init = if (c.cp_packing == .shift) _initShift else _init;
-        pub const unpack = if (c.cp_packing == .shift) void_val else _unpack;
-        pub const unshift = if (c.cp_packing == .shift) _unshift else void_val;
-
-        pub fn autoHash(self: Self, hasher: anytype) void {
+pub fn autoHash(self: @This(), hasher: anytype) void {
             const tag: Tag = @enumFromInt(self.tag);
-            std.hash.autoHash(hasher, tag);
+            _ = std.hash.autoHash(hasher, tag);
             switch (tag) {
-                inline else => |comptime_tag| {
-                    std.hash.autoHash(
-                        hasher,
-                        @field(self.@"union", @tagName(comptime_tag)),
-                    );
-                },
-            }
-        }
+inline else => |comptime_tag| {
+_ = std.hash.autoHash(hasher, @field(self.@"union", @tagName(comptime_tag)));
+},
+}
+    }
 
-        pub fn eql(a: Self, b: Self) bool {
-            if (a.tag != b.tag) {
+pub fn eql(a: Self, b: Self) bool {
+            if ((a.tag != b.tag)) {
                 return false;
             }
             const tag: Tag = @enumFromInt(a.tag);
             switch (tag) {
-                inline else => |comptime_tag| {
-                    const a_v = @field(a.@"union", @tagName(comptime_tag));
-                    const b_v = @field(b.@"union", @tagName(comptime_tag));
-                    return std.meta.eql(a_v, b_v);
-                },
-            }
-        }
-    };
+inline else => |comptime_tag| {
+const a_v = @field(a.@"union", @tagName(comptime_tag));
+            const b_v = @field(b.@"union", @tagName(comptime_tag));
+            return std.meta.eql(a_v, b_v);
+},
+}
+    }
+    const Self = @This();
+    pub const Tracking = (if ((c.cp_packing == .shift)) UnionShiftTracking else void);
+    pub const init = (if ((c.cp_packing == .shift)) _initShift else _init);
+    pub const unpack = (if ((c.cp_packing == .shift)) void_val else _unpack);
+    pub const unshift = (if ((c.cp_packing == .shift)) _unshift else void_val);
+};
 }
 
 pub fn fieldInit(comptime field: []const u8, cp: u21, data: anytype, tracking: anytype, d: anytype) void {

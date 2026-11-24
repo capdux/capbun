@@ -376,11 +376,11 @@ pub fn _create(allocator: std.mem.Allocator) !*@This() { const self_ptr = try al
 pub fn getNativeHandle(self: *const @This()) ?*NativeSocketHandleType(is_ssl) {
                 {
                     return (switch (self.socket) {
-.connected => |socket| @as(?*NativeSocketHandleType(is_ssl), @ptrCast(@alignCast(socket.getNativeHandle()))),
-.connecting => |socket| @as(?*NativeSocketHandleType(is_ssl), @ptrCast(@alignCast(socket.getNativeHandle()))),
+.connected => |socket| @ptrCast(socket.getNativeHandle()),
+.connecting => |socket| @ptrCast(socket.getNativeHandle()),
 .detached => null,
-.upgradedDuplex => |socket| (if (is_ssl) @as(?*NativeSocketHandleType(is_ssl), @ptrCast(@alignCast(socket.ssl()))) else null),
-.pipe => |socket| (if ((is_ssl and bun.Environment.isWindows)) @as(?*NativeSocketHandleType(is_ssl), @ptrCast(@alignCast(socket.ssl()))) else null),
+.upgradedDuplex => |socket| (if (is_ssl) @ptrCast(socket.ssl()) else null),
+.pipe => |socket| (if ((is_ssl and bun.Environment.isWindows)) @ptrCast(socket.ssl()) else null),
 });
                 }
         }

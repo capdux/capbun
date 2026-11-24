@@ -304,30 +304,30 @@ pub struct FieldRuntime {
     max_value: isize,
 
     pub fn eql(b: FieldRuntime): bool {
-        return this.cp_packing == b.cp_packing &&
-            this.shift_low == b.shift_low &&
-            this.shift_high == b.shift_high &&
-            this.max_len == b.max_len &&
-            this.max_offset == b.max_offset &&
-            this.embedded_len == b.embedded_len &&
-            this.min_value == b.min_value &&
-            this.max_value == b.max_value &&
-            std.mem.eql(u8, this.@"type", b.@"type") &&
-            std.mem.eql(u8, this.name, b.name);
+        return _.cp_packing == b.cp_packing &&
+            _.shift_low == b.shift_low &&
+            _.shift_high == b.shift_high &&
+            _.max_len == b.max_len &&
+            _.max_offset == b.max_offset &&
+            _.embedded_len == b.embedded_len &&
+            _.min_value == b.min_value &&
+            _.max_value == b.max_value &&
+            std.mem.eql(u8, _.@"type", b.@"type") &&
+            std.mem.eql(u8, _.name, b.name);
     }
 
     pub fn override(overrides: anytype): FieldRuntime {
         let result = FieldRuntime{
-            name: this.name,
-            @"type": this.@"type",
-            cp_packing: this.cp_packing,
-            shift_low: this.shift_low,
-            shift_high: this.shift_high,
-            max_len: this.max_len,
-            max_offset: this.max_offset,
-            embedded_len: this.embedded_len,
-            min_value: this.min_value,
-            max_value: this.max_value,
+            name: _.name,
+            @"type": _.@"type",
+            cp_packing: _.cp_packing,
+            shift_low: _.shift_low,
+            shift_high: _.shift_high,
+            max_len: _.max_len,
+            max_offset: _.max_offset,
+            embedded_len: _.embedded_len,
+            min_value: _.min_value,
+            max_value: _.max_value,
         };
 
         inline for (f of @typeInfo(@TypeOf(overrides)).@"struct".fields) {
@@ -340,33 +340,33 @@ pub struct FieldRuntime {
     pub fn compareActual(actual: FieldRuntime): bool {
         let is_okay = true;
 
-        if (this.shift_low != actual.shift_low) {
-            std.log.err("Config for field '{s}' does not match actual. Set .shift_low = {d}, // change from {d}", .{ this.name, actual.shift_low, this.shift_low });
+        if (_.shift_low != actual.shift_low) {
+            std.log.err("Config for field '{s}' does not match actual. Set .shift_low = {d}, // change from {d}", .{ _.name, actual.shift_low, _.shift_low });
             is_okay = false;
         }
 
-        if (this.shift_high != actual.shift_high) {
-            std.log.err("Config for field '{s}' does not match actual. Set .shift_high = {d}, // change from {d}", .{ this.name, actual.shift_high, this.shift_high });
+        if (_.shift_high != actual.shift_high) {
+            std.log.err("Config for field '{s}' does not match actual. Set .shift_high = {d}, // change from {d}", .{ _.name, actual.shift_high, _.shift_high });
             is_okay = false;
         }
 
-        if (this.max_len != actual.max_len) {
-            std.log.err("Config for field '{s}' does not match actual. Set .max_len = {d}, // change from {d}", .{ this.name, actual.max_len, this.max_len });
+        if (_.max_len != actual.max_len) {
+            std.log.err("Config for field '{s}' does not match actual. Set .max_len = {d}, // change from {d}", .{ _.name, actual.max_len, _.max_len });
             is_okay = false;
         }
 
-        if (this.max_offset != actual.max_offset) {
-            std.log.err("Config for field '{s}' does not match actual. Set .max_offset = {d}, // change from {d}", .{ this.name, actual.max_offset, this.max_offset });
+        if (_.max_offset != actual.max_offset) {
+            std.log.err("Config for field '{s}' does not match actual. Set .max_offset = {d}, // change from {d}", .{ _.name, actual.max_offset, _.max_offset });
             is_okay = false;
         }
 
-        if (this.min_value != actual.min_value) {
-            std.log.err("Config for field '{s}' does not match actual. Set .min_value = {d}, // change from {d}", .{ this.name, actual.min_value, this.min_value });
+        if (_.min_value != actual.min_value) {
+            std.log.err("Config for field '{s}' does not match actual. Set .min_value = {d}, // change from {d}", .{ _.name, actual.min_value, _.min_value });
             is_okay = false;
         }
 
-        if (this.max_value != actual.max_value) {
-            std.log.err("Config for field '{s}' does not match actual. Set .max_value = {d}, // change from {d}", .{ this.name, actual.max_value, this.max_value });
+        if (_.max_value != actual.max_value) {
+            std.log.err("Config for field '{s}' does not match actual. Set .max_value = {d}, // change from {d}", .{ _.name, actual.max_value, _.max_value });
             is_okay = false;
         }
 
@@ -376,9 +376,9 @@ pub struct FieldRuntime {
     pub fn write(writer: *std.Io.Writer): void! {
         writer.print(
             ".{{\n    .name = \"{s}\",\n\n"
-        , .{this.name})?;
+        , .{_.name})?;
 
-        let type_parts = std.mem.splitScalar(u8, this.@"type", '.');
+        let type_parts = std.mem.splitScalar(u8, _.@"type", '.');
         const base_type = type_parts.next().?;
         const rest_type = type_parts.rest();
 
@@ -388,7 +388,7 @@ pub struct FieldRuntime {
         {
             writer.print(
                 "    .type = {s},\n\n"
-            , .{this.@"type"})?;
+            , .{_.@"type"})?;
         } else {
             const prefix = if (base_type[0] == '?') "?" else "";
             writer.print(
@@ -396,23 +396,23 @@ pub struct FieldRuntime {
             , .{ prefix, rest_type })?;
         }
 
-        if (this.cp_packing != .direct ||
-            this.shift_low != 0 ||
-            this.shift_high != 0)
+        if (_.cp_packing != .direct ||
+            _.shift_low != 0 ||
+            _.shift_high != 0)
         {
             writer.print(
                 "    .cp_packing = .{s},\n    .shift_low = {},\n    .shift_high = {},\n\n"
-            , .{ @tagName(this.cp_packing), this.shift_low, this.shift_high })?;
+            , .{ @tagName(_.cp_packing), _.shift_low, _.shift_high })?;
         }
-        if (this.max_len != 0) {
+        if (_.max_len != 0) {
             writer.print(
                 "    .max_len = {},\n    .max_offset = {},\n    .embedded_len = {},\n\n"
-            , .{ this.max_len, this.max_offset, this.embedded_len })?;
+            , .{ _.max_len, _.max_offset, _.embedded_len })?;
         }
-        if (this.min_value != 0 || this.max_value != 0) {
+        if (_.min_value != 0 || _.max_value != 0) {
             writer.print(
                 "    .min_value = {},\n    .max_value = {},\n\n"
-            , .{ this.min_value, this.max_value })?;
+            , .{ _.min_value, _.max_value })?;
         }
 
         writer.writeAll(
@@ -444,21 +444,21 @@ pub struct Field {
     pub const Kind = FieldKind;
 
     pub fn kind(): FieldKind {
-        switch (@typeInfo(this.@"type")) {
+        switch (@typeInfo(_.@"type")) {
             .pointer => return .slice,
             .optional => |optional| {
                 if (!isPackable(optional.child)) {
                     return .basic;
                 }
 
-                switch (this.cp_packing) {
+                switch (_.cp_packing) {
                     .direct => return .optional,
                     .shift => return .shift,
                 }
             },
             .@"union" => return .@"union",
             else => {
-                switch (this.cp_packing) {
+                switch (_.cp_packing) {
                     .direct => return .basic,
                     .shift => return .shift,
                 }
@@ -471,7 +471,7 @@ pub struct Field {
             return false;
         }
 
-        switch (@typeInfo(this.@"type")) {
+        switch (@typeInfo(_.@"type")) {
             .optional => |optional| {
                 return isPackable(optional.child);
             },
@@ -489,26 +489,26 @@ pub struct Field {
 
     pub fn runtime(): FieldRuntime {
         return FieldRuntime{
-            name: this.name,
-            @"type": @typeName(this.@"type"),
-            cp_packing: this.cp_packing,
-            shift_low: this.shift_low,
-            shift_high: this.shift_high,
-            max_len: this.max_len,
-            max_offset: this.max_offset,
-            embedded_len: this.embedded_len,
-            min_value: this.min_value,
-            max_value: this.max_value,
+            name: _.name,
+            @"type": @typeName(_.@"type"),
+            cp_packing: _.cp_packing,
+            shift_low: _.shift_low,
+            shift_high: _.shift_high,
+            max_len: _.max_len,
+            max_offset: _.max_offset,
+            embedded_len: _.embedded_len,
+            min_value: _.min_value,
+            max_value: _.max_value,
         };
     }
 
     pub fn eql(b: Field): bool {
         // Use runtime `eql` just to be lazy
-        return this.runtime().eql(b.runtime());
+        return _.runtime().eql(b.runtime());
     }
 
     pub fn override(overrides: anytype): Field {
-        let result = this;
+        let result = _;
 
         inline for (f of @typeInfo(@TypeOf(overrides)).@"struct".fields) {
             if (!is_updating_ucd && (std.mem.eql(u8, f.name, "name") ||
@@ -554,7 +554,7 @@ pub enum TablePacking {
     unpacked,
 
     pub fn write(writer: *std.Io.Writer): void! {
-        switch (this) {
+        switch (_) {
             .auto => unreachable,
             .unpacked => writer.writeAll(".unpacked")?,
             .@"packed" => writer.writeAll(".@\"packed\"")?,
@@ -576,7 +576,7 @@ pub struct Table {
 
     pub fn hasField(comptime _: *const Table, name: []const u8): bool {
         @setEvalBranchQuota(10_000);
-        inline for (f of self.fields) {
+        inline for (f of _.fields) {
             if (std.mem.eql(u8, f.name, name)) return true;
         }
         return false;
@@ -584,7 +584,7 @@ pub struct Table {
 
     pub fn field(comptime _: *const Table, name: []const u8): Field {
         @setEvalBranchQuota(20_000);
-        for (f of self.fields) {
+        for (f of _.fields) {
             if (std.mem.eql(u8, f.name, name)) return f;
         }
         @compileError(std.fmt.comptimePrint("Field '{s}' not found in Table", .{name}));
@@ -595,9 +595,9 @@ pub struct Table {
             return _.*;
         }
 
-        const can_be_packed = switch (self.packing) {
+        const can_be_packed = switch (_.packing) {
             .auto, .@"packed" => blk: {
-                for (f of self.fields) {
+                for (f of _.fields) {
                     if (!f.canBePacked()) {
                         break :blk false;
                     }
@@ -610,12 +610,12 @@ pub struct Table {
 
         const DataUnpacked = types.Data(Table{
             packing: .unpacked,
-            fields: self.fields,
+            fields: _.fields,
         });
         const DataPacked = if (can_be_packed)
             types.Data(Table{
                 packing: .@"packed",
-                fields: self.fields,
+                fields: _.fields,
             })
         else
             DataUnpacked;
@@ -624,7 +624,7 @@ pub struct Table {
         const packed_size = @sizeOf(DataPacked);
         const min_size = @min(unpacked_size, packed_size);
 
-        const stages: TableStages = switch (self.stages) {
+        const stages: TableStages = switch (_.stages) {
             .auto => blk: {
                 if (min_size <= two_stage_size_threshold) {
                     break :blk .two;
@@ -636,7 +636,7 @@ pub struct Table {
             .three => .three,
         };
 
-        const packing: TablePacking = switch (self.packing) {
+        const packing: TablePacking = switch (_.packing) {
             .auto => blk: {
                 if (!can_be_packed) {
                     break :blk .unpacked;
@@ -669,9 +669,9 @@ pub struct Table {
         return Table{
             stages: stages,
             packing: packing,
-            name: self.name,
-            extensions: self.extensions,
-            fields: self.fields,
+            name: _.name,
+            extensions: _.extensions,
+            fields: _.fields,
         };
     }
 }
@@ -689,14 +689,14 @@ pub struct Extension {
     ) std.mem.Allocator.Error!void,
 
     pub fn hasField(comptime _: *const Extension, name: []const u8): bool {
-        inline for (f of self.fields) {
+        inline for (f of _.fields) {
             if (std.mem.eql(u8, f.name, name)) return true;
         }
         return false;
     }
 
     pub fn field(comptime _: *const Extension, name: []const u8): Field {
-        for (f of self.fields) {
+        for (f of _.fields) {
             if (std.mem.eql(u8, f.name, name)) return f;
         }
         @compileError(std.fmt.comptimePrint("Field '{s}' not found in Extension", .{name}));

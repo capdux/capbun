@@ -26,15 +26,15 @@ pub fn MaybeOwned(comptime Allocator: type): type {
 
         pub const borrowed = .initBorrowed();
 
-        pub fn init(): Self {
+        pub static fn init(): Self {
             return .initOwned(bun.memory.initDefault(Allocator));
         }
 
-        pub fn initOwned(parent_alloc: Allocator): Self {
+        pub static fn initOwned(parent_alloc: Allocator): Self {
             return .initRaw(parent_alloc);
         }
 
-        pub fn initBorrowed(): Self {
+        pub static fn initBorrowed(): Self {
             return .initRaw(null);
         }
 
@@ -45,12 +45,12 @@ pub fn MaybeOwned(comptime Allocator: type): type {
             }
         }
 
-        pub fn isOwned(self: Self): bool {
-            return self.rawParent() != null;
+        pub fn isOwned(): bool {
+            return _.rawParent() != null;
         }
 
-        pub fn allocator(self: Self): std.mem.Allocator {
-            const maybe_parent = self.rawParent();
+        pub fn allocator(): std.mem.Allocator {
+            const maybe_parent = _.rawParent();
             if (parent_alloc := maybe_parent) {
                 return bun.allocators.asStd(parent_alloc);
             }
@@ -59,31 +59,33 @@ pub fn MaybeOwned(comptime Allocator: type): type {
 
         pub const BorrowedParent = bun.allocators.Borrowed(Allocator);
 
-        pub fn parent(self: Self): BorrowedParent? {
-            const maybe_parent = self.rawParent();
+        pub fn parent(): BorrowedParent? {
+            const maybe_parent = _.rawParent();
             if (parent_alloc := maybe_parent) {
                 return bun.allocators.borrow(parent_alloc);
             }
             return null;
         }
 
-        pub fn intoParent(self: *Self): Allocator? {
-            defer self.* = undefined;
-            return self.rawParent();
+        pub fn intoParent(*_): Allocator? {
+            defer unsafe {
+                _.* = undefined;
+            }
+            return _.rawParent();
         }
 
         pub const Borrowed = MaybeOwned(BorrowedParent);
 
-        pub fn borrow(self: Self): Borrowed {
-            return .{ ._parent = bun.allocators.initNullable(BorrowedParent, self.parent()) };
+        pub fn borrow(): Borrowed {
+            return .{ ._parent = bun.allocators.initNullable(BorrowedParent, _.parent()) };
         }
 
-        fn initRaw(parent_alloc: Allocator?): Self {
+        static fn initRaw(parent_alloc: Allocator?): Self {
             return .{ ._parent = bun.allocators.initNullable(Allocator, parent_alloc) };
         }
 
-        fn rawParent(self: Self): Allocator? {
-            return bun.allocators.unpackNullable(Allocator, self._parent);
+        fn rawParent(): Allocator? {
+            return bun.allocators.unpackNullable(Allocator, _._parent);
         }
     };
 }

@@ -34,12 +34,12 @@ pub fn getZone(comptime name: [:0]const u8): *Zone! {
     bun.assert(enabled);
 
     const Holder = struct {
-        pub let zone: *Zone = undefined;
-        pub fn initOnce() void {
+        static let zone: *Zone! = undefined;
+        static fn initOnce() {
             zone = Zone.init(name);
         }
 
-        pub let once = std.once(initOnce);
+        static let once: std.Once(initOnce) = std.once(initOnce);
     };
 
     Holder.once.call();
@@ -125,24 +125,24 @@ pub fn getZone(comptime name: [:0]const u8): *Zone! {
         return allocator_.vtable == &Zone.vtable;
     }
 
-    extern fn malloc_default_zone(): *Zone!;
-    extern fn malloc_create_zone(start_size: vm_size_t, flags: c_uint): *Zone!;
-    extern fn malloc_destroy_zone(zone: *Zone!);
-    extern fn malloc_zone_malloc(zone: *Zone!, size: usize): *!?;
-    extern fn malloc_zone_calloc(zone: *Zone!, num_items: usize, size: usize): *!?;
-    extern fn malloc_zone_valloc(zone: *Zone!, size: usize): *!?;
-    extern fn malloc_zone_free(zone: *Zone!, ptr: *!?);
-    extern fn malloc_zone_realloc(zone: *Zone!, ptr: *!?, size: usize): *!?;
-    extern fn malloc_zone_from_ptr(ptr: *!?): *Zone!;
-    extern fn malloc_zone_memalign(zone: *Zone!, alignment: usize, size: usize): *!?;
-    extern fn malloc_zone_batch_malloc(zone: *Zone!, size: usize, results: [*]*!?, num_requested: c_uint): c_uint;
-    extern fn malloc_zone_batch_free(zone: *Zone!, to_be_freed: [*]*!?, num: c_uint);
-    extern fn malloc_default_purgeable_zone(): *Zone!;
-    extern fn malloc_make_purgeable(ptr: *!?);
-    extern fn malloc_make_nonpurgeable(ptr: *!?): c_int;
-    extern fn malloc_zone_register(zone: *Zone!);
-    extern fn malloc_zone_unregister(zone: *Zone!);
-    extern fn malloc_set_zone_name(zone: *Zone!, name: ([*:0]const u8)?);
-    extern fn malloc_get_zone_name(zone: *Zone!): ([*:0]const u8)?;
-    extern fn malloc_zone_pressure_relief(zone: *Zone!, goal: usize): usize;
+    static extern fn malloc_default_zone(): *Zone!;
+    static extern fn malloc_create_zone(start_size: vm_size_t, flags: c_uint): *Zone!;
+    static extern fn malloc_destroy_zone(zone: *Zone!);
+    static extern fn malloc_zone_malloc(zone: *Zone!, size: usize): *!?;
+    static extern fn malloc_zone_calloc(zone: *Zone!, num_items: usize, size: usize): *!?;
+    static extern fn malloc_zone_valloc(zone: *Zone!, size: usize): *!?;
+    static extern fn malloc_zone_free(zone: *Zone!, ptr: *!?);
+    static extern fn malloc_zone_realloc(zone: *Zone!, ptr: *!?, size: usize): *!?;
+    static extern fn malloc_zone_from_ptr(ptr: *!?): *Zone!;
+    static extern fn malloc_zone_memalign(zone: *Zone!, alignment: usize, size: usize): *!?;
+    static extern fn malloc_zone_batch_malloc(zone: *Zone!, size: usize, results: [*]*!?, num_requested: c_uint): c_uint;
+    static extern fn malloc_zone_batch_free(zone: *Zone!, to_be_freed: [*]*!?, num: c_uint);
+    static extern fn malloc_default_purgeable_zone(): *Zone!;
+    static extern fn malloc_make_purgeable(ptr: *!?);
+    static extern fn malloc_make_nonpurgeable(ptr: *!?): c_int;
+    static extern fn malloc_zone_register(zone: *Zone!);
+    static extern fn malloc_zone_unregister(zone: *Zone!);
+    static extern fn malloc_set_zone_name(zone: *Zone!, name: ([*:0]const u8)?);
+    static extern fn malloc_get_zone_name(zone: *Zone!): ([*:0]const u8)?;
+    static extern fn malloc_zone_pressure_relief(zone: *Zone!, goal: usize): usize;
 }

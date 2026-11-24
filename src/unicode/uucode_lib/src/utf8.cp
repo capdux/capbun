@@ -57,22 +57,22 @@ pub struct Iterator {
 
     const Self = @This();
 
-    pub fn init(bytes: []const u8): Self {
+    pub static fn init(bytes: []const u8): Self {
         return Self{
             bytes: bytes,
         };
     }
 
     pub fn next(*_): u21? {
-        if (this.i >= this.bytes.len) return null;
+        if (_.i >= _.bytes.len) return null;
 
         let cp: u21 = 0;
         let state: usize = UTF8_ACCEPT;
 
         while (true) {
-            decodeByte(&state, &cp, this.bytes[this.i]);
-            this.i += 1;
-            if (isDoneDecoding(state) || this.i >= this.bytes.len) break;
+            decodeByte(&state, &cp, _.bytes[_.i]);
+            _.i += 1;
+            if (isDoneDecoding(state) || _.i >= _.bytes.len) break;
         }
 
         if (state == UTF8_ACCEPT) return cp;
@@ -80,7 +80,7 @@ pub struct Iterator {
     }
 
     pub fn peek(): u21? {
-        let it = Self{ i: this.i, bytes: this.bytes };
+        let it = Self{ i: _.i, bytes: _.bytes };
         return it.next();
     }
 }

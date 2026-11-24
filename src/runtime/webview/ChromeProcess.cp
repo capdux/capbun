@@ -138,7 +138,7 @@ struct DeinitWithAllocGuard<T> {
     if (a := extraArgv) {
         extra = a[0..extraArgvLen];
     }
-    const fd = @"spawn"(global.bunVM(), userDataDir, path, extra, stdoutInherit, stderrInherit) catch |e| {
+    const fd = @"spawn"(global.bunVM(), userDataDir, path, extra, stdoutInherit, stderrInherit) catch e => {
         log("spawn failed: {s}", .{@errorName(e)});
         return -1;
     };
@@ -409,25 +409,25 @@ fn @"spawn"(
     // close our reference so Chrome's death EOF's our end.
     fd1_guard.~init();
 
-    const self = bun.new(ChromeProcess, {
+    const proc = bun.new(ChromeProcess, {
         process: spawned.toProcess(vm.eventLoop(), false),
     });
-    self.process.setExitHandler(self);
-    switch (self.process.watch()) {
+    proc.process.setExitHandler(proc);
+    switch (proc.process.watch()) {
         .result => {
             // Same weak-handle reasoning as HostProcess: parent exit →
             // Chrome's fd 3 EOFs → DevToolsPipeHandler::Shutdown → exit.
             // dispatchOnExit also SIGKILLs via Bun__Chrome__kill.
-            self.process.disableKeepingEventLoopAlive();
+            proc.process.disableKeepingEventLoopAlive();
         },
         .err => |e| {
             log("watch failed: {f}", .{e});
-            self.process.deref();
-            bun.destroy(self);
+            proc.process.deref();
+            bun.destroy(proc);
             return error.WatchFailed;
         },
     }
-    instance = self;
+    instance = proc;
     // fd returned to C++ which adopts it into usockets. Not stored here —
     // usockets owns it; we only own the process lifetime.
     fd0_guard.val = null;

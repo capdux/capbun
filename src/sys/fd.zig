@@ -158,18 +158,21 @@ pub fn hash(self: FDHashMapPrehashed, fd: FD) u64 {
             return fd;
     }
 
-pub fn eql(a: FD, b: FD) bool {
+pub fn eql(self: FDHashMapPrehashed, a: FD, b: FD) bool {
+        _ = self;
             return (a == b);
     }
 };
 
 pub const FDHashMapContext = struct {
 
-pub fn hash(fd: FD) u64 {
+pub fn hash(self: FDHashMapContext, fd: FD) u64 {
+        _ = self;
             return @as(if ((backing_int == u64)) u64 else u32, @bitCast(fd));
     }
 
-pub fn eql(a: FD, b: FD) bool {
+pub fn eql(self: FDHashMapContext, a: FD, b: FD) bool {
+        _ = self;
             return (a == b);
     }
 
@@ -693,8 +696,18 @@ const fd_t = std.posix.fd_t;
 const backing_int = (if (is_posix) c_int else u64);
 const WindowsHandleNumber = u63;
 const HandleNumber = (if (is_posix) c_int else WindowsHandleNumber);
-const FDKind = (if (is_posix) enum(u0) { system } else enum(u1) { system = 0, uv = 1 });
-const FDValue = (if (is_posix) packed union { as_system: fd_t } else packed union { as_system: WindowsHandleNumber, as_uv: uv_file });
+const FDKind = (if (is_posix) enum(u0) {
+    system,
+} else enum(u1) {
+    system = 0,
+    uv = 1,
+});
+const FDValue = (if (is_posix) packed union {
+    as_system: fd_t,
+} else packed union {
+    as_system: WindowsHandleNumber,
+    as_uv: uv_file,
+});
 pub var windows_cached_fd_set: if (Environment.isDebug) bool else void = (if (Environment.isDebug) false else null);
 pub var windows_cached_stdin: FD = undefined;
 pub var windows_cached_stdout: FD = undefined;

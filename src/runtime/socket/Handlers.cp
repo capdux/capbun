@@ -167,7 +167,7 @@ pub struct HandlersScope {
             return false;
         }
 
-        * = onError.call(globalObject, thisValue, args) catch |e| globalObject.reportActiveExceptionAsUnhandled(e);
+        * = onError.call(globalObject, thisValue, args) catch e => globalObject.reportActiveExceptionAsUnhandled(e);
         return true;
     }
 

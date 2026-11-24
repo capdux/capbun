@@ -52,10 +52,10 @@ pub fn Tables(comptime Elem: type): type {
         stage2: []const u8,
         stage3: []const Elem,
 
-        pub inline fn get(this, cp: u21) Elem {
+        pub inline fn get(cp: u21): Elem {
             const high = cp >> 8;
             const low = cp & 0xFF;
-            return this.stage3[this.stage2[@as(usize, this.stage1[high]) + low]];
+            return _.stage3[_.stage2[@as(usize, _.stage1[high]) + low]];
         }
     };
 }
@@ -86,7 +86,7 @@ pub fn graphemeBreak(cp1: u21, cp2: u21, state: *BreakState): bool {
     gb2: GraphemeBreakNoControl,
 
     pub fn index(_: PrecomputeKey): usize {
-        return @intCast(@as(u13, @bitCast(this)));
+        return @intCast(@as(u13, @bitCast(_)));
     }
 }
 

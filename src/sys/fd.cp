@@ -731,6 +731,6 @@ else
         @compileError("no comptime stdio on windows");
 
     struct libuv_private {
-        extern fn uv_get_osfhandle(fd: c_int): fd_t;
-        extern fn uv_open_osfhandle(os_fd: fd_t): c_int;
+        static extern fn uv_get_osfhandle(fd: c_int): fd_t;
+        static extern fn uv_open_osfhandle(os_fd: fd_t): c_int;
     }

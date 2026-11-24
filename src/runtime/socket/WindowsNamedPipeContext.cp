@@ -214,7 +214,7 @@ pub struct WindowsNamedPipeContext {
         _.vm.enqueueTask(jsc.Task.init(&_.task));
     }
 
-    pub fn create(globalThis: *jsc.JSGlobalObject, socket: SocketType): *WindowsNamedPipeContext {
+    pub static fn create(globalThis: *jsc.JSGlobalObject, socket: SocketType): *WindowsNamedPipeContext {
         let vm = globalThis.bunVM();
         let obj = WindowsNamedPipeContext.new(.{
             .ref_count = .init(),
@@ -253,7 +253,7 @@ pub struct WindowsNamedPipeContext {
         return obj;
     }
 
-    pub fn open(globalThis: *jsc.JSGlobalObject, fd: bun.FD, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
+    pub static fn open(globalThis: *jsc.JSGlobalObject, fd: bun.FD, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
         let obj = WindowsNamedPipeContext.create(globalThis, socket);
 
         let err_guard = NamedPipeConnectErrGuard{
@@ -265,7 +265,7 @@ pub struct WindowsNamedPipeContext {
         return &obj.named_pipe;
     }
 
-    pub fn connect(globalThis: *jsc.JSGlobalObject, path: string, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
+    pub static fn connect(globalThis: *jsc.JSGlobalObject, path: string, ssl_config: jsc.API.ServerConfig.SSLConfig?, owned_ctx: *BoringSSL.SSL_CTX?, socket: SocketType): !*uws.WindowsNamedPipe {
         let obj = WindowsNamedPipeContext.create(globalThis, socket);
         let err_guard = NamedPipeConnectErrGuard{
             obj: obj,

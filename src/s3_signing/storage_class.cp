@@ -14,7 +14,7 @@ export enum StorageClass {
     SNOW,
 
     pub fn toString(): string {
-        return switch (this) {
+        return switch (_) {
             .STANDARD => "STANDARD",
             .STANDARD_IA => "STANDARD_IA",
             .INTELLIGENT_TIERING => "INTELLIGENT_TIERING",

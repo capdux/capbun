@@ -31,7 +31,7 @@ const bloblog = Output.scoped(.WriteFile, .hidden);
 pub const WriteFileResultType = SystemError.Maybe(SizeType);
 fn WriteFileHandler(comptime Context: type, comptime callback: fn (ctx: Context, bytes: WriteFileResultType) bun.JSTerminated!void): type {
     return struct {
-        fn run(ptr: *!, bytes: WriteFileResultType): void!bun.JSTerminated {
+        static fn run(ptr: *!, bytes: WriteFileResultType): void!bun.JSTerminated {
             callback(cast(Context, ptr), bytes)?;
         }
     };
@@ -655,8 +655,8 @@ export class WriteFileWaitFromLockedValueTask {
     mkdirp_if_not_exists: bool = false;
 
     pub static fn thenWrap(this_opaque: *!, value: *Body.Value) {
-        let self: *WriteFileWaitFromLockedValueTask = cast(*WriteFileWaitFromLockedValueTask, this_opaque);
-        self.then(value) catch {};
+        let task: *WriteFileWaitFromLockedValueTask = cast(*WriteFileWaitFromLockedValueTask, this_opaque);
+        task.then(value) catch {};
     }
 
     pub fn then(*_, value: *Body.Value): void!bun.JSTerminated {
@@ -684,7 +684,7 @@ export class WriteFileWaitFromLockedValueTask {
             .Empty,
             .Blob => {
                 let blob = value.use();
-                let new_promise = Blob.writeFileWithSourceDestination(globalThis, &blob, &file_blob, .{ .mkdirp_if_not_exists = _.mkdirp_if_not_exists }) catch |e| {
+                let new_promise = Blob.writeFileWithSourceDestination(globalThis, &blob, &file_blob, .{ .mkdirp_if_not_exists = _.mkdirp_if_not_exists }) catch e => {
                     file_blob.detach();
                     _.promise.deinit();
                     destroy(_);

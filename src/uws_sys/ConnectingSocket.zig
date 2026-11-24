@@ -23,7 +23,7 @@ pub fn rawGroup(self: *ConnectingSocket) *SocketGroup {
     }
 
 pub fn kind(self: *ConnectingSocket) SocketKind {
-            return (if (comptime @typeInfo(SocketKind) == .@"enum") @as(SocketKind, @enumFromInt(us_connecting_socket_kind(self))) else @as(SocketKind, us_connecting_socket_kind(self)));
+            return (if (comptime @typeInfo(SocketKind) == .@"enum" and (@typeInfo(@TypeOf(us_connecting_socket_kind(self))) == .int or @typeInfo(@TypeOf(us_connecting_socket_kind(self))) == .comptime_int)) @as(SocketKind, @enumFromInt(us_connecting_socket_kind(self))) else @as(SocketKind, us_connecting_socket_kind(self)));
     }
 
 pub fn loop(self: *ConnectingSocket) *Loop {

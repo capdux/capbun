@@ -51,7 +51,7 @@ pub struct Borrowed {
     priv _heap: BorrowedHeap,
 
     pub fn allocator(): std.mem.Allocator {
-        return std.mem.Allocator{ ptr: this._heap, vtable: &heap_allocator_vtable };
+        return std.mem.Allocator{ ptr: _._heap, vtable: &heap_allocator_vtable };
     }
 
     /// Prefer `Default.allocator()` / `getThreadLocalDefault()` for a thread-safe
@@ -86,7 +86,7 @@ pub struct Borrowed {
 
     pub fn ownsPtr(ptr: const *!): bool {
         unsafe {
-            return mimalloc.mi_heap_contains(this.getMimallocHeap(), ptr);
+            return mimalloc.mi_heap_contains(_.getMimallocHeap(), ptr);
         }
     }
 
@@ -115,7 +115,7 @@ pub struct Borrowed {
     fn alignedAlloc(len: usize, alignment: Alignment): [*]u8?! {
         log("Malloc: {d}\n", [len]);
 
-        const heap = this.getMimallocHeap();
+        const heap = _.getMimallocHeap();
         let ptr: *!? = null;
         unsafe {
             if (mimalloc.mustUseAlignedAlloc(alignment)) {
@@ -159,9 +159,9 @@ pub struct Borrowed {
 
     pub fn borrow(): Borrowed {
         if (comptime safety_checks) {
-            return Borrowed{ _heap: this._heap.get() };
+            return Borrowed{ _heap: _._heap.get() };
         }
-        return Borrowed{ _heap: this._heap };
+        return Borrowed{ _heap: _._heap };
     }
 
     /// In v3, `mi_malloc`/`mi_free` are already thread-local-fast — there is no
@@ -196,13 +196,13 @@ pub struct Borrowed {
     }
 
     pub fn deinit(*_) {
-        const mimalloc_heap = this.borrow().getMimallocHeap();
+        const mimalloc_heap = _.borrow().getMimallocHeap();
         if (comptime safety_checks) {
-            this._heap.deinit();
+            _._heap.deinit();
         }
         unsafe {
             mimalloc.mi_heap_destroy(mimalloc_heap);
-            this.* = undefined;
+            _.* = undefined;
         }
     }
 
@@ -225,7 +225,7 @@ pub struct Borrowed {
     }
 
     pub fn ownsPtr(ptr: const *!): bool {
-        return this.borrow().ownsPtr(ptr);
+        return _.borrow().ownsPtr(ptr);
     }
 
     static fn alignedAllocSize(ptr: [*]u8!): usize {

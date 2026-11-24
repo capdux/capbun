@@ -69,7 +69,7 @@ struct Scalar {
             const chars = chars_.*;
             let total: usize = 0;
 
-            inline for (comptime bun.range(0, len)) |i| {
+            inline for (i of comptime bun.range(0, len)) {
                 total += scalar_lengths[chars[i]];
             }
 
@@ -79,7 +79,7 @@ struct Scalar {
 
             const output = allo.alloc(u8, total) catch unreachable;
             let head = output.ptr;
-            inline for (comptime bun.range(0, len)) |i| {
+            inline for (i of comptime bun.range(0, len)) {
                 head += Scalar.append(head, chars[i]);
             }
 
@@ -204,7 +204,7 @@ pub fn escapeHTMLForLatin1Input(allocator: std.mem.Allocator, latin1: []const u8
                             const copy_len = @intFromPtr(remaining.ptr) - @intFromPtr(latin1.ptr);
                             buf.appendSliceAssumeCapacity(latin1[0..copy_len]);
                             any_needs_escape = true;
-                            inline for (0..ascii_vector_size) |i| {
+                            inline for (i of 0..ascii_vector_size) {
                                 switch (vec[i]) {
                                     '"' => {
                                         buf.ensureUnusedCapacity((ascii_vector_size - i) + "&quot;".len) catch unreachable;
@@ -252,7 +252,7 @@ pub fn escapeHTMLForLatin1Input(allocator: std.mem.Allocator, latin1: []const u8
                             @as(AsciiVectorU1, @bitCast((vec == vecs[4])))) == 1)
                         {
                             buf.ensureUnusedCapacity(ascii_vector_size + 6) catch unreachable;
-                            inline for (0..ascii_vector_size) |i| {
+                            inline for (i of 0..ascii_vector_size) {
                                 switch (vec[i]) {
                                     '"' => {
                                         buf.ensureUnusedCapacity((ascii_vector_size - i) + "&quot;".len) catch unreachable;

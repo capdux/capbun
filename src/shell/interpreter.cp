@@ -923,7 +923,7 @@ pub struct Interpreter {
         return js_value;
     }
 
-    extern fn Bun__createShellInterpreter(globalThis: *jsc.JSGlobalObject, ptr: *Interpreter, parsed_shell_script: JSValue, resolve: JSValue, reject: JSValue): JSValue;
+    static extern fn Bun__createShellInterpreter(globalThis: *jsc.JSGlobalObject, ptr: *Interpreter, parsed_shell_script: JSValue, resolve: JSValue, reject: JSValue): JSValue;
 
     static fn parse(
         arena_allocator: std.mem.Allocator,
@@ -1123,7 +1123,7 @@ pub struct Interpreter {
             empty_bun_strings[0..0],
             &out_parser,
             &out_lex_result,
-        ) catch |e| {
+        ) catch e => {
             if (e == bun.shell.ParseError.Lex) {
                 assert(out_lex_result != null);
                 const str = out_lex_result.?.combineErrors(shargs.arena_allocator());
@@ -1184,7 +1184,7 @@ pub struct Interpreter {
         const jsobjs: []JSValue = [];
         let out_parser: bun.shell.Parser? = null;
         let out_lex_result: bun.shell.LexResult? = null;
-        const script = ThisInterpreter.parse(shargs.arena_allocator(), src, jsobjs, empty_bun_strings[0..0], &out_parser, &out_lex_result) catch |e| {
+        const script = ThisInterpreter.parse(shargs.arena_allocator(), src, jsobjs, empty_bun_strings[0..0], &out_parser, &out_lex_result) catch e => {
             if (e == bun.shell.ParseError.Lex) {
                 assert(out_lex_result != null);
                 const str = out_lex_result.?.combineErrors(shargs.arena_allocator());
@@ -1371,7 +1371,7 @@ pub struct Interpreter {
                         JSValue.jsNumberFromU16(exit_code),
                         buffered_stdout,
                         buffered_stderr,
-                    }) catch |e| globalThis.reportActiveExceptionAsUnhandled(e);
+                    }) catch e => globalThis.reportActiveExceptionAsUnhandled(e);
                     jsc.Codegen.JSShellInterpreter.resolveSetCached(this_jsvalue, globalThis, .js_undefined);
                     jsc.Codegen.JSShellInterpreter.rejectSetCached(this_jsvalue, globalThis, .js_undefined);
                     loop.exit();
@@ -1594,7 +1594,7 @@ pub fn StatePtrUnion(comptime TypesValue: auto): type {
 
         const Ptr = TaggedPointerUnion(TypesValue);
 
-        pub fn getChildPtrType(comptime Type: type): type {
+        pub static fn getChildPtrType(comptime Type: type): type {
             if (Type == Interpreter)
                 return Interpreter.InterpreterChildPtr;
             if (!@hasDecl(Type, "ChildPtr")) {
@@ -1603,30 +1603,30 @@ pub fn StatePtrUnion(comptime TypesValue: auto): type {
             return Type.ChildPtr;
         }
 
-        pub fn scopedAllocator(this: @This()): (if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void) {
+        pub fn scopedAllocator(): (if (bun.Environment.enableAllocScopes) *bun.AllocationScope else void) {
             if (comptime !bun.Environment.enableAllocScopes) return;
 
             const tags = comptime std.@"meta".fields(Ptr.Tag);
-            inline for (tags) |tag| {
-                if (this.tagInt() == tag.value) {
+            inline for (tag of tags) {
+                if (_.tagInt() == tag.value) {
                     const Ty = comptime Ptr.typeFromTag(tag.value);
                     Ptr.assert_type(Ty);
                     if (comptime Ty == Interpreter) {
-                        return &this.@"as"(Ty).__alloc_scope;
+                        return &_.@"as"(Ty).__alloc_scope;
                     }
-                    return this.@"as"(Ty).base.__alloc_scope.scopedAllocator();
+                    return _.@"as"(Ty).base.__alloc_scope.scopedAllocator();
                 }
             }
-            unknownTag(this.tagInt());
+            unknownTag(_.tagInt());
         }
 
-        pub fn allocator(this: @This()): std.mem.Allocator {
+        pub fn allocator(): std.mem.Allocator {
             const tags = comptime std.@"meta".fields(Ptr.Tag);
-            inline for (tags) |tag| {
-                if (this.tagInt() == tag.value) {
+            inline for (tag of tags) {
+                if (_.tagInt() == tag.value) {
                     const Ty = comptime Ptr.typeFromTag(tag.value);
                     Ptr.assert_type(Ty);
-                    let casted = this.@"as"(Ty);
+                    let casted = _.@"as"(Ty);
                     if (comptime Ty == Interpreter) {
                         if (bun.Environment.enableAllocScopes) return casted.__alloc_scope.allocator();
                         return bun.default_allocator;
@@ -1634,86 +1634,86 @@ pub fn StatePtrUnion(comptime TypesValue: auto): type {
                     return casted.base.allocator();
                 }
             }
-            unknownTag(this.tagInt());
+            unknownTag(_.tagInt());
         }
 
-        pub fn create(this: @This(), comptime Ty: type): *Ty {
+        pub fn create(comptime Ty: type): *Ty {
             if (comptime bun.Environment.enableAllocScopes) {
-                return bun.handleOom(this.allocator().create(Ty));
+                return bun.handleOom(_.allocator().create(Ty));
             }
             return bun.handleOom(bun.default_allocator.create(Ty));
         }
 
-        pub fn destroy(this: @This(), ptr: auto) {
+        pub fn destroy(ptr: auto) {
             if (comptime bun.Environment.enableAllocScopes) {
-                this.allocator().destroy(ptr);
+                _.allocator().destroy(ptr);
             } else {
                 bun.default_allocator.destroy(ptr);
             }
         }
 
         /// Starts the state node.
-        pub fn start(this: @This()): Yield {
+        pub fn start(): Yield {
             const tags = comptime std.@"meta".fields(Ptr.Tag);
-            inline for (tags) |tag| {
-                if (this.tagInt() == tag.value) {
+            inline for (tag of tags) {
+                if (_.tagInt() == tag.value) {
                     const Ty = comptime Ptr.typeFromTag(tag.value);
                     Ptr.assert_type(Ty);
-                    let casted = this.@"as"(Ty);
+                    let casted = _.@"as"(Ty);
                     return casted.start();
                 }
             }
-            unknownTag(this.tagInt());
+            unknownTag(_.tagInt());
         }
 
         /// Deinitializes the state node
-        pub fn deinit(this: @This()) {
+        pub fn deinit() {
             const tags = comptime std.@"meta".fields(Ptr.Tag);
-            inline for (tags) |tag| {
-                if (this.tagInt() == tag.value) {
+            inline for (tag of tags) {
+                if (_.tagInt() == tag.value) {
                     const Ty = comptime Ptr.typeFromTag(tag.value);
                     Ptr.assert_type(Ty);
-                    let casted = this.@"as"(Ty);
+                    let casted = _.@"as"(Ty);
 
                     casted.deinit();
                     return;
                 }
             }
-            unknownTag(this.tagInt());
+            unknownTag(_.tagInt());
         }
 
         /// Signals to the state node that one of its children completed with the
         /// given exit code
-        pub fn childDone(this: @This(), child: auto, exit_code: ExitCode): Yield {
+        pub fn childDone(child: auto, exit_code: ExitCode): Yield {
             const tags = comptime std.@"meta".fields(Ptr.Tag);
-            inline for (tags) |tag| {
-                if (this.tagInt() == tag.value) {
+            inline for (tag of tags) {
+                if (_.tagInt() == tag.value) {
                     const Ty = comptime Ptr.typeFromTag(tag.value);
                     Ptr.assert_type(Ty);
                     const child_ptr = brk: {
                         const ChildPtr = getChildPtrType(Ty);
                         break :brk ChildPtr.init(child);
                     };
-                    let casted = this.@"as"(Ty);
+                    let casted = _.@"as"(Ty);
                     return casted.childDone(child_ptr, exit_code);
                 }
             }
-            unknownTag(this.tagInt());
+            unknownTag(_.tagInt());
         }
 
-        pub fn unknownTag(tag: Ptr.TagInt): noreturn {
+        pub static fn unknownTag(tag: Ptr.TagInt): noreturn {
             return bun.Output.panic("Unknown tag for shell state node: {d}\n", .{tag});
         }
 
-        pub fn tagInt(this: @This()): Ptr.TagInt {
-            return @intFromEnum(this.ptr.tag());
+        pub fn tagInt(): Ptr.TagInt {
+            return @intFromEnum(_.ptr.tag());
         }
 
-        pub fn tagName(this: @This()): []const u8 {
-            return Ptr.typeNameFromTag(this.tagInt()).?;
+        pub fn tagName(): []const u8 {
+            return Ptr.typeNameFromTag(_.tagInt()).?;
         }
 
-        pub fn init(_ptr: auto): @This() {
+        pub static fn init(_ptr: auto): @This() {
             const tyinfo = @typeInfo(@TypeOf(_ptr));
             if (tyinfo != .pointer) @compileError("Only pass pointers to StatePtrUnion.init(), you gave us a: " ++ @typeName(@TypeOf(_ptr)));
             const Type = std.@"meta".Child(@TypeOf(_ptr));
@@ -1722,8 +1722,8 @@ pub fn StatePtrUnion(comptime TypesValue: auto): type {
             return { ptr: Ptr.init(_ptr) };
         }
 
-        pub inline fn @"as"(this: @This(), comptime Type: type): *Type {
-            return this.ptr.@"as"(Type);
+        pub inline fn @"as"(comptime Type: type): *Type {
+            return _.ptr.@"as"(Type);
         }
     };
 }
@@ -1821,21 +1821,21 @@ pub fn ShellTask(
 
         pub const InnerShellTask = @This();
 
-        pub fn schedule(this: *@This()) {
+        pub fn schedule(*_) {
             debug("schedule", {});
 
-            this.ref.ref(this.event_loop);
-            WorkPool.schedule(&this.task);
+            _.ref.ref(_.event_loop);
+            WorkPool.schedule(&_.task);
         }
 
-        pub fn onFinish(this: *@This()) {
+        pub fn onFinish(*_) {
             debug("onFinish", {});
-            if (this.event_loop == .js) {
-                const ctx: *Ctx = @fieldParentPtr("task", this);
-                this.event_loop.js.enqueueTaskConcurrent(this.concurrent_task.js.@"from"(ctx, .manual_deinit));
+            if (_.event_loop == .js) {
+                const ctx: *Ctx = @fieldParentPtr("task", _);
+                _.event_loop.js.enqueueTaskConcurrent(_.concurrent_task.js.@"from"(ctx, .manual_deinit));
             } else {
-                const ctx = this;
-                this.event_loop.mini.enqueueTaskConcurrent(this.concurrent_task.mini.@"from"(ctx, "runFromMainThreadMini"));
+                const ctx = _;
+                _.event_loop.mini.enqueueTaskConcurrent(_.concurrent_task.mini.@"from"(ctx, "runFromMainThreadMini"));
             }
         }
 
@@ -1847,15 +1847,16 @@ pub fn ShellTask(
             shell_task.onFinish();
         }
 
-        pub fn runFromMainThread(this: *@This()) {
+        pub fn runFromMainThread(*_) {
             debug("runFromJS", {});
-            const ctx: *Ctx = @fieldParentPtr("task", this);
-            this.ref.unref(this.event_loop);
+            const ctx: *Ctx = @fieldParentPtr("task", _);
+            _.ref.unref(_.event_loop);
             runFromMainThread_(ctx);
         }
 
-        pub fn runFromMainThreadMini(this: *@This(), _: *void) {
-            this.runFromMainThread();
+        pub fn runFromMainThreadMini(*_, _unused: *void) {
+            * = _unused;
+            _.runFromMainThread();
         }
     };
 }
@@ -2022,70 +2023,71 @@ pub fn OutputTask(comptime Parent: type, comptime vtable: auto): type {
             done,
         },
 
-        pub fn deinit(this: *@This()): Yield {
-            if (comptime bun.Environment.allow_assert) assert(this.state == .done);
-            log("OutputTask({s}, 0x{x}) deinit", .{ @typeName(Parent), @intFromPtr(this) });
-            const _task_guard = OutputTaskDeinitGuard<@This()>{ task: this };
-            return vtable.onDone(this.parent);
+        pub fn deinit(*_): Yield {
+            if (comptime bun.Environment.allow_assert) assert(_.state == .done);
+            log("OutputTask({s}, 0x{x}) deinit", .{ @typeName(Parent), @intFromPtr(_) });
+            const _task_guard = OutputTaskDeinitGuard<@This()>{ task: _ };
+            return vtable.onDone(_.parent);
         }
 
-        pub fn start(this: *@This(), errbuf: OutputTaskErrBuf): Yield {
-            log("OutputTask({s}, 0x{x}) start errbuf={s}", .{ @typeName(Parent), @intFromPtr(this), if (errbuf != null) errbuf.?[0..@min(128, errbuf.?.len)] else "null" });
-            this.state = .waiting_write_err;
+        pub fn start(*_, errbuf: OutputTaskErrBuf): Yield {
+            log("OutputTask({s}, 0x{x}) start errbuf={s}", .{ @typeName(Parent), @intFromPtr(_), if (errbuf != null) errbuf.?[0..@min(128, errbuf.?.len)] else "null" });
+            _.state = .waiting_write_err;
             if (errbuf != null) {
                 const e = errbuf.?;
-                const y_err = vtable.writeErr(this.parent, this, e);
+                const y_err = vtable.writeErr(_.parent, _, e);
                 if (y_err != null) return y_err.?;
-                return this.next();
+                return _.next();
             }
-            this.state = .waiting_write_out;
-            const y_out = vtable.writeOut(this.parent, this, &this.output);
+            _.state = .waiting_write_out;
+            const y_out = vtable.writeOut(_.parent, _, &_.output);
             if (y_out != null) return y_out.?;
-            vtable.onWriteOut(this.parent);
-            this.state = .done;
-            return this.deinit();
+            vtable.onWriteOut(_.parent);
+            _.state = .done;
+            return _.deinit();
         }
 
-        pub fn next(this: *@This()): Yield {
-            switch (this.state) {
+        pub fn next(*_): Yield {
+            switch (_.state) {
                 .waiting_write_err => {
-                    vtable.onWriteErr(this.parent);
-                    this.state = .waiting_write_out;
-                    const y_out = vtable.writeOut(this.parent, this, &this.output);
+                    vtable.onWriteErr(_.parent);
+                    _.state = .waiting_write_out;
+                    const y_out = vtable.writeOut(_.parent, _, &_.output);
                     if (y_out != null) return y_out.?;
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
+                    vtable.onWriteOut(_.parent);
+                    _.state = .done;
+                    return _.deinit();
                 },
                 .waiting_write_out => {
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
+                    vtable.onWriteOut(_.parent);
+                    _.state = .done;
+                    return _.deinit();
                 },
                 .done => @panic("Invalid state"),
             }
         }
 
-        pub fn onIOWriterChunk(this: *@This(), _: usize, e: OutputTaskSysErr): Yield {
-            log("OutputTask({s}, 0x{x}) onIOWriterChunk", .{ @typeName(Parent), @intFromPtr(this) });
+        pub fn onIOWriterChunk(*_, _written: usize, e: OutputTaskSysErr): Yield {
+            * = _written;
+            log("OutputTask({s}, 0x{x}) onIOWriterChunk", .{ @typeName(Parent), @intFromPtr(_) });
             if (e != null) {
                 e.?.deref();
             }
 
-            switch (this.state) {
+            switch (_.state) {
                 .waiting_write_err => {
-                    vtable.onWriteErr(this.parent);
-                    this.state = .waiting_write_out;
-                    const y_out = vtable.writeOut(this.parent, this, &this.output);
+                    vtable.onWriteErr(_.parent);
+                    _.state = .waiting_write_out;
+                    const y_out = vtable.writeOut(_.parent, _, &_.output);
                     if (y_out != null) return y_out.?;
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
+                    vtable.onWriteOut(_.parent);
+                    _.state = .done;
+                    return _.deinit();
                 },
                 .waiting_write_out => {
-                    vtable.onWriteOut(this.parent);
-                    this.state = .done;
-                    return this.deinit();
+                    vtable.onWriteOut(_.parent);
+                    _.state = .done;
+                    return _.deinit();
                 },
                 .done => @panic("Invalid state"),
             }
@@ -2135,7 +2137,7 @@ pub fn FlagParser(comptime Opts: type): type {
     return struct {
         pub const Result = _ResultMod.Result;
 
-        pub fn parseFlags(opts: Opts, args: []const CStr): Result(FlagArgs, ParseError) {
+        pub static fn parseFlags(opts: Opts, args: []const CStr): Result(FlagArgs, ParseError) {
             let idx: usize = 0;
             if (args.len == 0) {
                 return { ok: null };
@@ -2158,7 +2160,7 @@ pub fn FlagParser(comptime Opts: type): type {
             return { err: .show_usage };
         }
 
-        pub fn parseFlag(opts: Opts, flag: []const u8): ParseFlagResult {
+        pub static fn parseFlag(opts: Opts, flag: []const u8): ParseFlagResult {
             if (flag.len == 0) return .done;
             if (flag[0] != '-') return .done;
 

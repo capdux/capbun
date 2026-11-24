@@ -55,7 +55,7 @@ pub fn postgresErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8
         return createPostgresError(globalObject, too_many_msg, PostgresErrorOptions{
             code: "ERR_POSTGRES_TOO_MANY_PARAMETERS",
             hint: "Reduce the number of rows in your batch insert so that total_rows * columns_per_row does not exceed 65535.",
-        }) catch |e| globalObject.takeError(e);
+        }) catch e => globalObject.takeError(e);
     } else if (pg_err == error.UnexpectedMessage) code = "ERR_POSTGRES_UNEXPECTED_MESSAGE"
     else if (pg_err == error.UNKNOWN_AUTHENTICATION_METHOD) code = "ERR_POSTGRES_UNKNOWN_AUTHENTICATION_METHOD"
     else if (pg_err == error.UNSUPPORTED_AUTHENTICATION_METHOD) code = "ERR_POSTGRES_UNSUPPORTED_AUTHENTICATION_METHOD"
@@ -72,5 +72,5 @@ pub fn postgresErrorToJS(globalObject: *jsc.JSGlobalObject, message: ([]const u8
     let buffer_message: [256]u8 = std.mem.zeroes([256]u8);
     const msg = message ?? (std.fmt.bufPrint(buffer_message[0..], "Failed to bind query: {s}", .{@errorName(pg_err)}) catch "Failed to bind query");
 
-    return createPostgresError(globalObject, msg, PostgresErrorOptions{ code: code }) catch |e| globalObject.takeError(e);
+    return createPostgresError(globalObject, msg, PostgresErrorOptions{ code: code }) catch e => globalObject.takeError(e);
 }

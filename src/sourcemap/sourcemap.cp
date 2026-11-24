@@ -117,11 +117,11 @@ pub struct ParseResultFail {
         return Logger.Data{
             location: Logger.Location{
                 file: path,
-                offset: this.loc.toUsize(),
+                offset: _.loc.toUsize(),
                 line: -1,
                 column: -1,
             },
-            text: this.msg,
+            text: _.msg,
         };
     }
 }
@@ -155,7 +155,7 @@ pub @opaque struct SourceProviderMap {
     pub const getSourceSlice = ZigSourceProvider__getSourceSlice;
 
     pub fn toSourceContentPtr(*_): ParsedSourceMap.SourceContentPtr {
-        return ParsedSourceMap.SourceContentPtr.fromProvider(this);
+        return ParsedSourceMap.SourceContentPtr.fromProvider(_);
     }
 
     pub fn getSourceMap(
@@ -166,7 +166,7 @@ pub @opaque struct SourceProviderMap {
     ): SourceMap.ParseUrl? {
         return SourceMap.getSourceMapImpl(
             SourceProviderMap,
-            this,
+            _,
             source_filename,
             load_hint,
             result,
@@ -180,7 +180,7 @@ pub @opaque struct DevServerSourceProvider {
     pub const getSourceMapJSON = DevServerSourceProvider__getSourceMapJSON;
 
     pub fn toSourceContentPtr(*_): ParsedSourceMap.SourceContentPtr {
-        return ParsedSourceMap.SourceContentPtr.fromDevServerProvider(this);
+        return ParsedSourceMap.SourceContentPtr.fromDevServerProvider(_);
     }
 
     pub fn getSourceMap(
@@ -191,7 +191,7 @@ pub @opaque struct DevServerSourceProvider {
     ): SourceMap.ParseUrl? {
         return SourceMap.getSourceMapImpl(
             DevServerSourceProvider,
-            this,
+            _,
             source_filename,
             load_hint,
             result,
@@ -204,17 +204,17 @@ pub enum LineColumnOffsetOptional {
     value: LineColumnOffset,
 
     pub fn advance(*_, input: []const u8) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .@"null" => {},
             .value => |*v| v.advance(input),
         }
     }
 
     pub fn reset(*_) {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .@"null" => {},
             .value => {
-                unsafe { this.* = LineColumnOffsetOptional{ value: {} }; }
+                unsafe { _.* = LineColumnOffsetOptional{ value: {} }; }
             },
         }
     }
@@ -228,16 +228,16 @@ pub struct LineColumnOffset {
 
     pub fn add(*_, b: LineColumnOffset) {
         if (b.lines.zeroBased() == 0) {
-            this.columns = this.columns.add(b.columns);
+            _.columns = _.columns.add(b.columns);
         } else {
-            this.lines = this.lines.add(b.lines);
-            this.columns = b.columns;
+            _.lines = _.lines.add(b.lines);
+            _.columns = b.columns;
         }
     }
 
     pub fn advance(*_, input: []const u8) {
-        let cur: LineColumnOffset = unsafe { this.* };
-        defer unsafe { this.* = cur; };
+        let cur: LineColumnOffset = unsafe { _.* };
+        defer unsafe { _.* = cur; };
 
         let offset: u32 = 0;
         while (i := strings.indexOfNewlineOrNonASCII(input, offset)) {
@@ -269,7 +269,7 @@ pub struct LineColumnOffset {
                 else => {
                     const c = cursor.c;
                     cur.columns = cur.columns.addScalar(switch (c) {
-                        0 ... 65535 => 1,
+                        0..=65535 => 1,
                         else => 2,
                     });
                 },
@@ -288,7 +288,7 @@ pub struct LineColumnOffset {
     }
 
     pub fn comesBefore(b: LineColumnOffset): bool {
-        return this.lines.zeroBased() < b.lines.zeroBased() || (this.lines.zeroBased() == b.lines.zeroBased() && this.columns.zeroBased() < b.columns.zeroBased());
+        return _.lines.zeroBased() < b.lines.zeroBased() || (_.lines.zeroBased() == b.lines.zeroBased() && _.columns.zeroBased() < b.columns.zeroBased());
     }
 
     pub static fn cmp(ctx: void, a: LineColumnOffset, b: LineColumnOffset): std.math.Order {
@@ -325,7 +325,7 @@ pub struct SourceMapPieces {
     }
 
     pub fn hasContent(*_): bool {
-        return (this.prefix.items.len + this.mappings.items.len + this.suffix.items.len) > 0;
+        return (_.prefix.items.len + _.mappings.items.len + _.suffix.items.len) > 0;
     }
 
     pub fn finalize(*_, allocator: std.mem.Allocator, _shifts: []SourceMapShifts): ([]const u8)! {
@@ -338,8 +338,8 @@ pub struct SourceMapPieces {
         let sfb = std.heap.stackFallback(16384, bun.default_allocator);
         let j = StringJoiner{ allocator: sfb.get() };
 
-        j.pushStatic(this.prefix.items);
-        const mappings = this.mappings.items;
+        j.pushStatic(_.prefix.items);
+        const mappings = _.mappings.items;
 
         while (current < mappings.len) {
             if (mappings[current] == ';') {
@@ -403,7 +403,7 @@ pub struct SourceMapPieces {
 
         j.pushStatic(mappings[start_of_run..]);
 
-        const str = j.doneWithEnd(allocator, this.suffix.items)?;
+        const str = j.doneWithEnd(allocator, _.suffix.items)?;
         bun.assert(str[0] == '{');
         return str;
     }
@@ -693,7 +693,7 @@ export @root struct SourceMap {
                         allocator,
                         found_url.slice(),
                         result,
-                    ) catch |e| {
+                    ) catch e => {
                         inline_err = e;
                         ParseUrl{}
                     };
@@ -720,7 +720,7 @@ export @root struct SourceMap {
                             allocator,
                             json_slice,
                             result,
-                        ) catch |e| {
+                        ) catch e => {
                             bun.Output.warn("Could not decode sourcemap in dev server runtime: {s} - {s}", [
                                 source_filename,
                                 @errorName(e),
@@ -741,7 +741,7 @@ export @root struct SourceMap {
                                 allocator,
                                 data,
                                 result,
-                            ) catch |e| {
+                            ) catch e => {
                                 bun.Output.warn("Could not decode sourcemap in '{s}': {s}", [
                                     source_filename,
                                     @errorName(e),
@@ -771,7 +771,7 @@ export @root struct SourceMap {
                         allocator,
                         data,
                         result,
-                    ) catch |e| {
+                    ) catch e => {
                         bun.Output.warn("Could not decode sourcemap in '{s}': {s}", [
                             source_filename,
                             @errorName(e),
@@ -808,7 +808,7 @@ export @root struct SourceMap {
         line: bun.Ordinal,
         column: bun.Ordinal,
     ): Mapping? {
-        return this.mapping.find(line, column);
+        return _.mapping.find(line, column);
     }
 
     pub static fn appendSourceMapChunk(

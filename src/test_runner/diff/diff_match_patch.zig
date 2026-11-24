@@ -629,13 +629,13 @@ pub fn diffBisect(dmp: DiffMatchPatch, allocator: std.mem.Allocator, before: []c
                 if ((@as(u64, @intCast(std.time.milliTimestamp())) > deadline)) {
                     break;
                 }
-                var k1 = ((0 - d) + k1start);
+                var k1 = ((-d) + k1start);
                 _ = &k1;
                 while ((k1 <= (d - k1end))) : (k1 = (k1 + 2)) {
                     const k1_offset = (v_offset + k1);
                     var x1: isize = 0;
                     _ = &x1;
-                    if (((k1 == (0 - d)) or ((k1 != d) and (v1.items[@as(usize, @intCast(@as(usize, @intCast((k1_offset - 1)))))] < v1.items[@as(usize, @intCast(@as(usize, @intCast((k1_offset + 1)))))])))) {
+                    if (((k1 == (-d)) or ((k1 != d) and (v1.items[@as(usize, @intCast(@as(usize, @intCast((k1_offset - 1)))))] < v1.items[@as(usize, @intCast(@as(usize, @intCast((k1_offset + 1)))))])))) {
                         x1 = v1.items[@as(usize, @intCast(@as(usize, @intCast((k1_offset + 1)))))];
                     } else {
                         x1 = (v1.items[@as(usize, @intCast(@as(usize, @intCast((k1_offset - 1)))))] + 1);
@@ -665,13 +665,13 @@ pub fn diffBisect(dmp: DiffMatchPatch, allocator: std.mem.Allocator, before: []c
                         }
                     }
                 }
-                var k2: isize = ((0 - d) + k2start);
+                var k2: isize = ((-d) + k2start);
                 _ = &k2;
                 while ((k2 <= (d - k2end))) : (k2 = (k2 + 2)) {
                     const k2_offset = (v_offset + k2);
                     var x2: isize = 0;
                     _ = &x2;
-                    if (((k2 == (0 - d)) or ((k2 != d) and (v2.items[@as(usize, @intCast(@as(usize, @intCast((k2_offset - 1)))))] < v2.items[@as(usize, @intCast(@as(usize, @intCast((k2_offset + 1)))))])))) {
+                    if (((k2 == (-d)) or ((k2 != d) and (v2.items[@as(usize, @intCast(@as(usize, @intCast((k2_offset - 1)))))] < v2.items[@as(usize, @intCast(@as(usize, @intCast((k2_offset + 1)))))])))) {
                         x2 = v2.items[@as(usize, @intCast(@as(usize, @intCast((k2_offset + 1)))))];
                     } else {
                         x2 = (v2.items[@as(usize, @intCast(@as(usize, @intCast((k2_offset - 1)))))] + 1);
@@ -1449,7 +1449,7 @@ pub fn diffCleanupEfficiency(dmp: DiffMatchPatch, allocator: std.mem.Allocator, 
                     } else {
                         post_ins = true;
                     }
-                    if (((last_equality.len != 0) and ((((pre_ins and pre_del) and post_ins) and post_del) or ((last_equality.len < (dmp.config.diff_edit_cost / 2)) and (((((if (comptime @typeInfo(Unit) == .@"enum") @as(Unit, @enumFromInt(@intFromBool(pre_ins))) else @as(Unit, @intFromBool(pre_ins))) + (if (comptime @typeInfo(Unit) == .@"enum") @as(Unit, @enumFromInt(@intFromBool(pre_del))) else @as(Unit, @intFromBool(pre_del)))) + (if (comptime @typeInfo(Unit) == .@"enum") @as(Unit, @enumFromInt(@intFromBool(post_ins))) else @as(Unit, @intFromBool(post_ins)))) + (if (comptime @typeInfo(Unit) == .@"enum") @as(Unit, @enumFromInt(@intFromBool(post_del))) else @as(Unit, @intFromBool(post_del)))) == 3))))) {
+                    if (((last_equality.len != 0) and ((((pre_ins and pre_del) and post_ins) and post_del) or ((last_equality.len < (dmp.config.diff_edit_cost / 2)) and (((((if (comptime @typeInfo(Unit) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(pre_ins))) == .int or @typeInfo(@TypeOf(@intFromBool(pre_ins))) == .comptime_int)) @as(Unit, @enumFromInt(@intFromBool(pre_ins))) else @as(Unit, @intFromBool(pre_ins))) + (if (comptime @typeInfo(Unit) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(pre_del))) == .int or @typeInfo(@TypeOf(@intFromBool(pre_del))) == .comptime_int)) @as(Unit, @enumFromInt(@intFromBool(pre_del))) else @as(Unit, @intFromBool(pre_del)))) + (if (comptime @typeInfo(Unit) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(post_ins))) == .int or @typeInfo(@TypeOf(@intFromBool(post_ins))) == .comptime_int)) @as(Unit, @enumFromInt(@intFromBool(post_ins))) else @as(Unit, @intFromBool(post_ins)))) + (if (comptime @typeInfo(Unit) == .@"enum" and (@typeInfo(@TypeOf(@intFromBool(post_del))) == .int or @typeInfo(@TypeOf(@intFromBool(post_del))) == .comptime_int)) @as(Unit, @enumFromInt(@intFromBool(post_del))) else @as(Unit, @intFromBool(post_del)))) == 3))))) {
                         _ = try diffs.ensureUnusedCapacity(allocator, 1);
                         _ = diffs.insertAssumeCapacity(equalities.items[@as(usize, @intCast((equalities.items.len - 1)))], .{ .operation = .delete, .text = try allocator.dupe(Unit, last_equality) });
                         diffs.items[@as(usize, @intCast((equalities.items[@as(usize, @intCast((equalities.items.len - 1)))] + 1)))].operation = .insert;

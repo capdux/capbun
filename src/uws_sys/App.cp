@@ -173,7 +173,7 @@ pub fn NewApp(comptime ssl: bool): type {
             const app = uws_create_app(ssl_flag, opts);
             if (app == null) return null;
             const Self = @This();
-            const Ptr = ?*Self;
+            const Ptr = @FieldType(struct { p: (*Self)? }, "p");
             return bun.cast(Ptr, app);
         }
 

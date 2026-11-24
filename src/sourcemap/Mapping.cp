@@ -18,9 +18,9 @@ pub struct MappingWithoutName {
 
     pub fn toNamed(_: &MappingWithoutName): Mapping {
         return Mapping{
-            generated: this.generated,
-            original: this.original,
-            source_index: this.source_index,
+            generated: _.generated,
+            original: _.original,
+            source_index: _.source_index,
             name_index: -1,
         };
     }
@@ -35,14 +35,14 @@ pub enum ListValue {
     }
 
     pub fn memoryCost(_: &ListValue): usize {
-        return switch (unsafe { this.* }) {
+        return switch (unsafe { _.* }) {
             .without_names => |*list| list.memoryCost(),
             .with_names => |*list| list.memoryCost(),
         };
     }
 
     pub fn ensureTotalCapacity(*_, allocator: std.mem.Allocator, count: usize)! {
-        switch (unsafe { this.* }) {
+        switch (unsafe { _.* }) {
             .without_names => |*list| list.ensureTotalCapacity(allocator, count)?,
             .with_names => |*list| list.ensureTotalCapacity(allocator, count)?,
         }
@@ -80,8 +80,8 @@ struct SortContext {
     generated: []const LineColumnOffset,
 
     pub fn lessThan(a_index: usize, b_index: usize): bool {
-        const a = this.generated[a_index];
-        const b = this.generated[b_index];
+        const a = _.generated[a_index];
+        const b = _.generated[b_index];
 
         if (a.lines.zeroBased() != b.lines.zeroBased()) {
             return a.lines.zeroBased() < b.lines.zeroBased();
@@ -101,9 +101,9 @@ pub struct List {
     pub const Value = ListValue;
 
     pub fn ensureWithNames(*_, allocator: std.mem.Allocator)! {
-        if (this.impl == .with_names) return;
+        if (_.impl == .with_names) return;
 
-        let without_names = this.impl.without_names;
+        let without_names = _.impl.without_names;
         let with_names = WithNamesList{};
         with_names.ensureTotalCapacity(allocator, without_names.len)?;
         let without_names_guard = WithoutNamesGuard{
@@ -120,7 +120,7 @@ pub struct List {
         @memcpy(new_slices.items(.source_index), old_slices.items(.source_index));
         @memset(new_slices.items(.name_index), -1);
 
-        this.impl = Value{ with_names: with_names };
+        _.impl = Value{ with_names: with_names };
     }
 
     static fn findIndexFromGenerated(line_column_offsets: []const LineColumnOffset, line: bun.Ordinal, column: bun.Ordinal): usize? {
@@ -148,21 +148,21 @@ pub struct List {
     }
 
     pub fn findIndex(_: &List, line: bun.Ordinal, column: bun.Ordinal): usize? {
-        return switch (this.impl) {
+        return switch (_.impl) {
             .without_names => |*list| findIndexFromGenerated(list.items(.generated), line, column),
             .with_names => |*list| findIndexFromGenerated(list.items(.generated), line, column),
         };
     }
 
     pub fn sort(*_) {
-        switch (this.impl) {
+        switch (_.impl) {
             .without_names => |*list| list.sort(SortContext{ generated: list.items(.generated) }),
             .with_names => |*list| list.sort(SortContext{ generated: list.items(.generated) }),
         }
     }
 
     pub fn append(*_, allocator: std.mem.Allocator, mapping: *const Mapping)! {
-        switch (this.impl) {
+        switch (_.impl) {
             .without_names => |*list| {
                 list.append(allocator, MappingWithoutName{
                     generated: mapping.generated,
@@ -177,7 +177,7 @@ pub struct List {
     }
 
     pub fn find(_: &List, line: bun.Ordinal, column: bun.Ordinal): Mapping? {
-        switch (this.impl) {
+        switch (_.impl) {
             .without_names => |*list| {
                 if (i := findIndexFromGenerated(list.items(.generated), line, column)) {
                     const item: MappingWithoutName = list.get(i);
@@ -195,61 +195,61 @@ pub struct List {
     }
 
     pub fn generated(_: &List): []const LineColumnOffset {
-        return switch (this.impl) {
+        return switch (_.impl) {
             .without_names => |*list| list.items(.generated),
             .with_names => |*list| list.items(.generated),
         };
     }
 
     pub fn original(_: &List): []const LineColumnOffset {
-        return switch (this.impl) {
+        return switch (_.impl) {
             .without_names => |*list| list.items(.original),
             .with_names => |*list| list.items(.original),
         };
     }
 
     pub fn sourceIndex(_: &List): []const i32 {
-        return switch (this.impl) {
+        return switch (_.impl) {
             .without_names => |*list| list.items(.source_index),
             .with_names => |*list| list.items(.source_index),
         };
     }
 
     pub fn nameIndex(_: &List): []const i32 {
-        return switch (this.impl) {
+        return switch (_.impl) {
             .without_names => |*list| list.items(.name_index),
             .with_names => |*list| list.items(.name_index),
         };
     }
 
     pub fn deinit(*_, allocator: std.mem.Allocator) {
-        switch (this.impl) {
+        switch (_.impl) {
             .without_names => |*list| list.deinit(allocator),
             .with_names => |*list| list.deinit(allocator),
         }
 
-        this.names_buffer.deinit(allocator);
-        allocator.free(this.names);
+        _.names_buffer.deinit(allocator);
+        allocator.free(_.names);
     }
 
     pub fn getName(*_, index: i32): ([]const u8)? {
         if (index < 0) return null;
         const i = index as usize;
-        if (i >= this.names.len) return null;
-        if (this.impl == .with_names) {
+        if (i >= _.names.len) return null;
+        if (_.impl == .with_names) {
             const sliceFn = bun.Semver.String.slice;
-            return sliceFn(unsafe { &this.names[i] }, this.names_buffer.slice());
+            return sliceFn(unsafe { &_.names[i] }, _.names_buffer.slice());
         }
         return null;
     }
 
     pub fn memoryCost(_: &List): usize {
-        return this.impl.memoryCost() + this.names_buffer.memoryCost() +
-            (this.names.len * @sizeOf(bun.Semver.String));
+        return _.impl.memoryCost() + _.names_buffer.memoryCost() +
+            (_.names.len * @sizeOf(bun.Semver.String));
     }
 
     pub fn ensureTotalCapacity(*_, allocator: std.mem.Allocator, count: usize)! {
-        this.impl.ensureTotalCapacity(allocator, count)?;
+        _.impl.ensureTotalCapacity(allocator, count)?;
     }
 }
 
@@ -260,15 +260,15 @@ pub struct Lookup {
     name: ([]const u8)? = null,
 
     pub fn displaySourceURLIfNeeded(base_filename: []const u8): bun.String? {
-        const source_map_opt = this.source_map;
+        const source_map_opt = _.source_map;
         if (source_map_opt == null) return null;
         const source_map = source_map_opt.?;
         if (source_map.external_source_names.len == 0)
             return null;
-        if (this.mapping.source_index >= source_map.external_source_names.len)
+        if (_.mapping.source_index >= source_map.external_source_names.len)
             return null;
 
-        const src_name = source_map.external_source_names[this.mapping.source_index as usize];
+        const src_name = source_map.external_source_names[_.mapping.source_index as usize];
 
         if (source_map.is_standalone_module_graph) {
             return bun.String.cloneUTF8(src_name);
@@ -284,11 +284,11 @@ pub struct Lookup {
 
     pub fn getSourceCode(base_filename: []const u8): bun.jsc.ZigString.Slice? {
         const bytes = bytes: {
-            if (code := this.prefetched_source_code) {
+            if (code := _.prefetched_source_code) {
                 break :bytes code;
             }
 
-            const source_map_opt = this.source_map;
+            const source_map_opt = _.source_map;
         if (source_map_opt == null) return null;
         const source_map = source_map_opt.?;
             assert(source_map.isExternal());
@@ -297,7 +297,7 @@ pub struct Lookup {
             if (provider_opt == null) return null;
             const provider = provider_opt.?;
 
-            const index = this.mapping.source_index;
+            const index = _.mapping.source_index;
 
             if (source_map.is_standalone_module_graph) {
                 const serialized = source_map.standaloneModuleGraphData();
@@ -359,27 +359,27 @@ export @root struct Mapping {
     name_index: i32 = -1,
 
     @inline pub fn generatedLine(_: &Mapping): i32 {
-        return this.generated.lines.zeroBased();
+        return _.generated.lines.zeroBased();
     }
 
     @inline pub fn generatedColumn(_: &Mapping): i32 {
-        return this.generated.columns.zeroBased();
+        return _.generated.columns.zeroBased();
     }
 
     @inline pub fn sourceIndex(_: &Mapping): i32 {
-        return this.source_index;
+        return _.source_index;
     }
 
     @inline pub fn originalLine(_: &Mapping): i32 {
-        return this.original.lines.zeroBased();
+        return _.original.lines.zeroBased();
     }
 
     @inline pub fn originalColumn(_: &Mapping): i32 {
-        return this.original.columns.zeroBased();
+        return _.original.columns.zeroBased();
     }
 
     @inline pub fn nameIndex(_: &Mapping): i32 {
-        return this.name_index;
+        return _.name_index;
     }
 
     pub static fn parse(
@@ -605,7 +605,7 @@ export @root struct Mapping {
                 original: original,
                 source_index: source_index,
                 name_index: name_index,
-            } }) catch |e| bun.handleOom(e);
+            } }) catch e => bun.handleOom(e);
         }
 
         if (needs_sort && options.sort) {
