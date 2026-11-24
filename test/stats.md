@@ -235,3 +235,5 @@
 | `test/js/node/zlib/` (7 files) & `bun/archive.test.ts` | release | 502 | 1 | 3 skip | **502/0 逻辑**（`zlib` 其余 4 文件 **14/0**、`archive` **100/0**、`leak.test.ts` 单跑 **8/0**） |
 
 | `test/napi/` (全部 59 files, 串行) | release | 527 | 0 | 25 todo | **527/0 全绿**（1246 expects，113.00s，exit 0；消除 `--max-concurrency=2` 下 `node-gyp` 目录竞争） |
+
+| `test/js/third_party/{esbuild,rollup-v4,webpack}` | release | 2 | 0 | 2 skip | **2/0 全绿**（`2.74s`，exit 0） |
